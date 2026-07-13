@@ -231,7 +231,7 @@ public sealed class AspectRunnerService
                 var stepThinkingLevel = thinkingLevelForAspect?.Invoke(entry.Def.Id);
                 var stepPrompt = promptForAspect?.Invoke(entry.Def.Id);
                 var stepCli = cliForAspect?.Invoke(entry.Def.Id);
-                if (string.IsNullOrWhiteSpace(stepCli)) stepCli = CliTypes.Claude;
+                if (string.IsNullOrWhiteSpace(stepCli)) stepCli = cliBinary;
                 return RunOneAspectAsync(entry.Index, entry.Def, inputs, stepCli, stepModel, stepThinkingLevel,
                     stepPrompt, perAspectTimeout, gate, now, ct);
             })

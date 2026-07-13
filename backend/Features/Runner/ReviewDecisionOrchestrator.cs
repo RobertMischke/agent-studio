@@ -1573,6 +1573,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var buildGateResult = await RunBuildTestGatePostStepAsync(workspace, entry, current, ct);
         if (buildGateResult?.Verdict == BuildTestGateVerdict.Fail)
         {
+            // The quality grade is reporting evidence, not a success gate. A
+            // red deterministic build must stay loud and still receive that
+            // evidence before the task is reissued / escalated. The aspect pool
+            // is intentionally bypassed on this terminal branch.
+            await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
             await HandleBuildTestGateFailureAsync(workspace, entry, pending, current, buildGateResult, ct);
             return;
         }
@@ -1633,6 +1638,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct,
             modelForAspect, thinkingLevelForAspect, promptForAspect, cliForAspect);
 
+        // Grade the settled change set before any aspect-infrastructure
+        // short-circuit. The grade is independent reporting evidence; a dead
+        // aspect reviewer must not silently erase it. Keeping the call here also
+        // preserves the normal ordering (after aspects) without running twice.
+        await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+
         // Aspect-verdict infra crash (AGT-2021): one or more aspects produced no
         // verdict because the reviewing CLI died - even after the aspect runner's
         // single environmental retry. This is an INFRASTRUCTURE fault (the backend
@@ -1644,7 +1655,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reissue budget (an Escalate decision, which resets the attempt chain).
         if (report.HasInfraFailure)
         {
-            _pipelineLog?.Complete(current.FolderPath);
+            _pipelineLog?.Complete(
+                current.FolderPath,
+                pendingStepReason: "Not run because aspect review infrastructure failed after its retry budget was exhausted.");
             await HandleAspectInfraCrashAsync(workspace, entry, pending, current, report, ct);
             return;
         }
@@ -1693,15 +1706,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // not clean stale targets: missing pages/tasks remain useful history.
         RunWikiTaskCrossReferenceStep(entry, current);
 
-        // Code-review quality-grade post-step (ASS-1657): the first-class
-        // automatic review that assigns an A/B/C/D grade to the task's change
-        // set with a quality-first model (Opus by default), recorded on the
-        // pipeline so the grade shows in the Overview and as a card badge. It
-        // runs after the aspects and before the Complete mark so its step record
-        // lands in the in-flight pipeline-execution.json. Reporting only - the
-        // grade never gates the lane decision below.
-        await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
-
         // Task-spawner post-step (AGT-2028): opt-in, quality-first relevance
         // judgment that, on a conservative yes, spawns a follow-up card in a
         // configured target project (e.g. "we changed X -> update the website").
@@ -1710,7 +1714,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // record lands in the in-flight pipeline-execution.json.
         await RunTaskSpawnerPostStepAsync(entry, current, report, taskBody, statusSummary, diffSummary, resultsInventory, ct);
 
-        _pipelineLog?.Complete(current.FolderPath);
+        _pipelineLog?.Complete(
+            current.FolderPath,
+            pendingStepReason: "Not run in this completed pipeline attempt.");
 
         if (report.Overall == AspectStatus.Block)
         {
@@ -2818,7 +2824,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         CompletionGate.Decision gate,
         CancellationToken ct)
     {
-        _pipelineLog?.Complete(current.FolderPath);
+        _pipelineLog?.Complete(
+            current.FolderPath,
+            pendingStepReason: "Not run because the completion gate stopped this pipeline attempt: " + gate.Reason);
 
         var findingsBlock = string.Join("; ", gate.Findings.Take(CompletionGate.MaxFindings));
         var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
@@ -4037,7 +4045,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         BuildTestGateResult result,
         CancellationToken ct)
     {
-        _pipelineLog?.Complete(current.FolderPath);
+        _pipelineLog?.Complete(
+            current.FolderPath,
+            pendingStepReason: "Not run because the build/test gate stopped this pipeline attempt: " + result.Reason);
 
         var priorBuildGateReissues = ReviewDecisionLog.ReadAll(workspace, entry.Name)
             .Count(r => r.JobId == current.Id

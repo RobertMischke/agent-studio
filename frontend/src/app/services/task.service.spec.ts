@@ -154,6 +154,23 @@ describe('TaskService', () => {
     expect(service.loading()).toBe(false);
   });
 
+  it('coalesces overlapping board and runner refreshes into one trailing request', () => {
+    service.refresh(true);
+    service.refresh(true);
+    service.refresh(true);
+
+    const firstGrouped = http.expectOne('/api/tasks/grouped');
+    const firstRunner = http.expectOne('/api/runner/status');
+
+    firstGrouped.flush(emptyGrouped);
+    firstRunner.flush({ projects: {} });
+
+    http.expectOne('/api/tasks/grouped').flush(emptyGrouped);
+    http.expectOne('/api/runner/status').flush({ projects: {} });
+    http.expectNone('/api/tasks/grouped');
+    http.expectNone('/api/runner/status');
+  });
+
   it('calls the file-source history endpoints with encoded paths and source params', () => {
     let historyCount = 0;
     service

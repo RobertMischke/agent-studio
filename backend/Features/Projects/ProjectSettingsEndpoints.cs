@@ -159,10 +159,15 @@ public static class ProjectSettingsEndpoints
             {
                 var resolved = PipelineStepModelDefaults.Resolve(projectSettings, s);
                 var configured = PipelineStepConfigResolver.Lookup(projectSettings, s.Id);
-                var cliType = configured?.CliType ?? s.CliType ?? (resolved is null ? null : CliTypes.Claude);
+                var cliType = configured?.CliType ?? s.CliType ?? PipelineStepModelDefaults.RuntimeDefaultCliFor(s);
                 var thinking = resolved is null
                     ? null
-                    : PipelineStepConfigResolver.ResolveThinkingLevelWithSource(projectSettings, s, cliType, resolved.Model);
+                    : PipelineStepConfigResolver.ResolveThinkingLevelWithSource(
+                        projectSettings,
+                        s,
+                        cliType,
+                        resolved.Model,
+                        PipelineStepModelDefaults.RuntimeDefaultThinkingLevelFor(s));
                 return new
                 {
                     id = s.Id,

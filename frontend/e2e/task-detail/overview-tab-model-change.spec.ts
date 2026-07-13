@@ -1,5 +1,4 @@
-import type { Page } from '@playwright/test';
-import { test, expect } from '../fixtures/dev-backend';
+import { test, expect, type Page } from '@playwright/test';
 import { api } from '../helpers/api';
 import { createJob, getJob, moveJob } from '../helpers/jobs';
 
@@ -41,10 +40,6 @@ async function activateActivityTab(page: Page): Promise<void> {
 }
 
 test.describe('Overview tab — model picker', () => {
-  test.beforeEach(async ({ devBackend }) => {
-    expect(devBackend.port).toBe(5030);
-  });
-
   test('clicking a model in the Overview picker persists immediately', async ({ page }, testInfo) => {
     // Operator expectation, per the bug report: "Klick anderes Modell ->
     // Overview zeigt neuen Wert + reload bestaetigt". The picker must

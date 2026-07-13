@@ -30,10 +30,11 @@ public static class TaskCodeReviewEndpoints
     public const string TimeoutSecondsConfigKey = "CodeReviewStep:PerRunTimeoutSeconds";
 
     /// <summary>Hard fallback when neither config nor request specifies a CLI.</summary>
-    public const string DefaultCliFallback = "claude";
+    public const string DefaultCliFallback = CliTypes.Codex;
 
     /// <summary>Hard fallback when neither config nor request specifies a model.</summary>
-    public const string DefaultModelFallback = GenericCliExecutionService.DefaultOpusModel;
+    public static string DefaultModelFallback =>
+        ModelMetadataRegistry.DefaultForCli(DefaultCliFallback) ?? ModelIds.Gpt55;
 
     /// <summary>Default per-run wall-clock cap when configuration omits it.</summary>
     public const int DefaultTimeoutSecondsFallback = 600;
@@ -207,7 +208,7 @@ public static class TaskCodeReviewEndpoints
             var model = !string.IsNullOrWhiteSpace(body?.Model)
                 ? body!.Model!
                 : configuration[DefaultModelConfigKey] ?? DefaultModelFallback;
-            var thinkingLevel = CliThinkingLevels.Normalize(cli, model, body?.ThinkingLevel);
+            var thinkingLevel = ModelMetadataRegistry.ResolveThinkingLevel(cli, model, body?.ThinkingLevel);
             var timeoutSeconds = configuration.GetValue<int?>(TimeoutSecondsConfigKey)
                 ?? DefaultTimeoutSecondsFallback;
 
