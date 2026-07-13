@@ -136,7 +136,10 @@ public sealed class TaskIndexCache
             Task? coldStartRefresh = null;
             lock (_lock)
             {
-                if (!_dirty && DateTime.UtcNow - _snapshotAtUtc < _safetyTtl)
+                if (!_dirty
+                    && Volatile.Read(ref _publishedMutationGen)
+                    >= Volatile.Read(ref _requiredMutationGen)
+                    && DateTime.UtcNow - _snapshotAtUtc < _safetyTtl)
                 {
                     Interlocked.Increment(ref Hits);
                     return;
@@ -228,15 +231,18 @@ public sealed class TaskIndexCache
     /// </summary>
     public void Invalidate(InvalidationSource source = InvalidationSource.Mutation)
     {
-        if (source == InvalidationSource.Mutation)
-            Interlocked.Increment(ref _requiredMutationGen);
-        // Bump the invalidation generation BEFORE setting _dirty so the
-        // refresher's post-scan check (see GetSnapshot) sees a strictly
-        // higher value than its captured `genBefore`. Without the bump,
-        // a concurrent refresher could observe the same generation it
-        // captured before the disk walk and still clear _dirty.
-        Interlocked.Increment(ref _invalidationGen);
-        lock (_lock) { _dirty = true; }
+        // Publish the required mutation generation, general invalidation
+        // generation and dirty bit under the same lock. A reader can therefore
+        // never observe the old clean snapshot in the middle of a mutation
+        // invalidation. The refresher still uses generation comparisons because
+        // its disk walk intentionally runs outside this lock.
+        lock (_lock)
+        {
+            if (source == InvalidationSource.Mutation)
+                Interlocked.Increment(ref _requiredMutationGen);
+            Interlocked.Increment(ref _invalidationGen);
+            _dirty = true;
+        }
         if (source == InvalidationSource.External)
             Interlocked.Increment(ref ExternalInvalidations);
         else

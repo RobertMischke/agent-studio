@@ -41,6 +41,27 @@ These are non-negotiable. If a PR violates one, push back without ceremony.
 
 ## Patterns to follow
 
+### Orchestrator API load shedding
+
+- The board refreshes only `/api/tasks/grouped`. `TaskService` derives the flat
+  task list from that response, so one heartbeat never requests the same task
+  snapshot twice.
+- Task-index watcher events invalidate the snapshot only for semantic
+  `task.json` changes and task-folder moves or deletes. Heartbeats such as
+  `lastProgressAt`, logs, results, and generated sidecars must not trigger a
+  full workspace scan. Bursts are coalesced per task.
+- Snapshot refreshes are single-flight. External readers may use the last
+  published snapshot while a refresh is running; mutation paths wait for the
+  required generation so read-after-write remains consistent.
+- Board merge and publish projections are keyed by lightweight Git ref
+  fingerprints. An unchanged board heartbeat starts no Git process. Ref
+  movement invalidates immediately, while a 10-minute TTL remains as a safety
+  refresh for unusual repository layouts. Cold projections use bounded Git
+  concurrency and combine related reachability checks.
+- A task detail view fetches an inactive task once. Recurring task polling is
+  reserved for preparation, active progress, auto-review, or a running
+  execution, and requests for the same task must never overlap.
+
 ### Polling
 
 - Use `setVisibleInterval(fn, ms)` instead of `setInterval` for any

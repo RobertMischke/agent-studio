@@ -76,4 +76,19 @@ public sealed class GenerationSingleFlightCacheTests
 
         Assert.Equal(7, cache.GetOrCreate("repo", TimeSpan.FromMinutes(1), () => 7));
     }
+
+    [Fact]
+    public void VersionChangeReplacesLogicalValueInsteadOfRetainingEveryRefRevision()
+    {
+        var cache = new GenerationSingleFlightCache<int>();
+
+        Assert.Equal(1, cache.GetOrCreateVersioned(
+            "repo", "ref-a", TimeSpan.FromHours(1), () => 1));
+        Assert.Equal(2, cache.GetOrCreateVersioned(
+            "repo", "ref-b", TimeSpan.FromHours(1), () => 2));
+
+        Assert.Equal(1, cache.ValueCount);
+        Assert.Equal(2, cache.GetOrCreateVersioned(
+            "repo", "ref-b", TimeSpan.FromHours(1), () => 3));
+    }
 }

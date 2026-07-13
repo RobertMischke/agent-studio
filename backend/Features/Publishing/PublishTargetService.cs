@@ -37,7 +37,7 @@ public sealed class PublishTargetService
 
     // Repository refs/tags are fingerprinted without a git process. Keep the
     // value warm across board heartbeats; the TTL is only a safety refresh.
-    internal static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
+    internal static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
     private readonly GenerationSingleFlightCache<ProjectPublishComputation> _cache;
     private int _computationCount;
 

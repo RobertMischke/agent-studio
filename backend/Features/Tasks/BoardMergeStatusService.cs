@@ -46,7 +46,7 @@ public sealed class BoardMergeStatusService
     // Ref fingerprints invalidate immediately when develop/main moves. The long
     // TTL is only a safety refresh for unusual git layouts the fingerprint
     // cannot observe, not the normal board-poll invalidation mechanism.
-    internal static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
+    internal static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
 
     private readonly GenerationSingleFlightCache<RepoReachability> _cache;
     private int _computationCount;

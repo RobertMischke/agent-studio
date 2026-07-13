@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AgentStudio.Publishing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 using Xunit;
 
@@ -157,6 +158,25 @@ public class PublishTargetServiceTests : IDisposable
     }
 
     [Fact]
+    public void Derive_WarmHeartbeatBeyondFormerTtl_DoesNotRecomputeGitProjection()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteWorkflow(repoRoot, "release.yml", NuGetReleaseWorkflow);
+        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg"));
+        CommitAll(repoRoot, "seed");
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-07-13T12:00:00Z"));
+        var service = BuildService(repoRoot, watchPath, time);
+
+        service.GetProjectPublishStatus("Demo");
+        Assert.Equal(1, service.ComputationCount);
+
+        time.Advance(TimeSpan.FromMinutes(5));
+        service.GetProjectPublishStatus("Demo");
+
+        Assert.Equal(1, service.ComputationCount);
+    }
+
+    [Fact]
     public void TaskPublishable_MapsCompletedTaskToTheTargetItsCommitTouched()
     {
         var (repoRoot, watchPath) = SetupRepo();
@@ -279,7 +299,10 @@ public class PublishTargetServiceTests : IDisposable
         return (repoRoot, watchPath);
     }
 
-    private static PublishTargetService BuildService(string repoRoot, string watchPath)
+    private static PublishTargetService BuildService(
+        string repoRoot,
+        string watchPath,
+        TimeProvider? timeProvider = null)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -293,7 +316,11 @@ public class PublishTargetServiceTests : IDisposable
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
-        return new PublishTargetService(git, settings, NullLogger<PublishTargetService>.Instance);
+        return new PublishTargetService(
+            git,
+            settings,
+            NullLogger<PublishTargetService>.Instance,
+            timeProvider ?? TimeProvider.System);
     }
 
     private static TaskInfo CompletedTask(string id, string watchPath, string sha) => new()
