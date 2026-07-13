@@ -43,18 +43,32 @@ public sealed class BoardMergeStatusService
     /// are infrequent relative to the board poll, so a few seconds of staleness is
     /// invisible while it collapses a burst of polls to a single pair of reads.
     /// </summary>
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(8);
+    // Ref fingerprints invalidate immediately when develop/main moves. The long
+    // TTL is only a safety refresh for unusual git layouts the fingerprint
+    // cannot observe, not the normal board-poll invalidation mechanism.
+    internal static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
 
-    private readonly GenerationSingleFlightCache<RepoReachability> _cache = new();
+    private readonly GenerationSingleFlightCache<RepoReachability> _cache;
+    private int _computationCount;
 
     public BoardMergeStatusService(
         GitService git,
         ProjectSettingsService settings,
         ILogger<BoardMergeStatusService> logger)
+        : this(git, settings, logger, TimeProvider.System)
+    {
+    }
+
+    internal BoardMergeStatusService(
+        GitService git,
+        ProjectSettingsService settings,
+        ILogger<BoardMergeStatusService> logger,
+        TimeProvider timeProvider)
     {
         _git = git;
         _settings = settings;
         _logger = logger;
+        _cache = new GenerationSingleFlightCache<RepoReachability>(timeProvider);
     }
 
     /// <summary>
@@ -95,8 +109,12 @@ public sealed class BoardMergeStatusService
             {
                 var configuredBranch = ConfiguredIntegrationBranch(pair.Value[0].ProjectName);
                 var cacheKey = $"{pair.Key}\0{configuredBranch}";
-                reaches[pair.Key] = _cache.GetOrCreate(
+                var refFingerprint = ReadOnlyGitRefFingerprint.Capture(
+                    pair.Key,
+                    [configuredBranch, ReleaseBranch]);
+                reaches[pair.Key] = _cache.GetOrCreateVersioned(
                     cacheKey,
+                    refFingerprint,
                     CacheTtl,
                     () => ComputeReachability(pair.Key, configuredBranch));
             });
@@ -172,17 +190,19 @@ public sealed class BoardMergeStatusService
     /// </summary>
     private RepoReachability ComputeReachability(string root, string configuredBranch)
     {
+        Interlocked.Increment(ref _computationCount);
         return ReadOnlyGitConcurrencyLimiter.Run(() =>
         {
             // Branch resolution is part of the cached computation. Previously
             // every board request resolved it before checking the reachability
             // cache, which still spawned git processes on an otherwise-hot hit.
             var integrationBranch = _git.ResolveIntegrationBranch(root, configuredBranch);
-            var integration = _git.GetAncestorShaSet(root, integrationBranch);
-            integration.UnionWith(_git.GetAncestorShaSet(root, "origin/" + integrationBranch));
-
-            var release = _git.GetAncestorShaSet(root, ReleaseBranch);
-            release.UnionWith(_git.GetAncestorShaSet(root, "origin/" + ReleaseBranch));
+            var integration = _git.GetAncestorShaSet(
+                root,
+                [integrationBranch, "origin/" + integrationBranch]);
+            var release = _git.GetAncestorShaSet(
+                root,
+                [ReleaseBranch, "origin/" + ReleaseBranch]);
             return new RepoReachability(integrationBranch, integration, release);
         });
     }
@@ -197,6 +217,8 @@ public sealed class BoardMergeStatusService
 
     /// <summary>Drops the cached reachability sets. Tests use this to force a fresh read.</summary>
     internal void InvalidateCache() => _cache.Invalidate();
+
+    internal int ComputationCount => Volatile.Read(ref _computationCount);
 
     private static string Short(string sha) => sha.Length > 7 ? sha[..7] : sha;
 

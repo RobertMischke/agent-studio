@@ -80,7 +80,8 @@ public static class ReviewDecisionLog
         var entry = EntryFor(path);
         lock (entry.Gate)
         {
-            var cachedBefore = entry.Initialized && TryOpenJournal(path, out var beforeStream);
+            FileStream? beforeStream = null;
+            var cachedBefore = entry.Initialized && TryOpenJournal(path, out beforeStream);
             JournalSnapshot before = default;
             if (cachedBefore)
             {
@@ -118,9 +119,15 @@ public static class ReviewDecisionLog
                     var expectedLength = before.Length + payload.Length;
                     var identityMatches = !entry.Exists
                         || before.CreationTimeUtc == after.CreationTimeUtc;
-                    if (identityMatches && after.Length == expectedLength)
+                    var previousContentMatches = !entry.Exists
+                        || string.Equals(
+                            ComputeFingerprint(afterStream!, before.Length),
+                            before.Fingerprint,
+                            StringComparison.Ordinal);
+                    if (identityMatches && previousContentMatches && after.Length == expectedLength)
                     {
-                        entry.Latest = entry.Latest.SetItem(record.JobId, record);
+                        if (!string.IsNullOrEmpty(record.JobId))
+                            entry.Latest = entry.Latest.SetItem(record.JobId, record);
                         entry.Snapshot = after;
                         entry.Exists = true;
                         entry.Initialized = true;
@@ -299,7 +306,8 @@ public static class ReviewDecisionLog
             try
             {
                 var record = JsonSerializer.Deserialize<ReviewDecisionRecord>(line, Json);
-                if (record != null) latest[record.JobId] = record;
+                if (record != null && !string.IsNullOrEmpty(record.JobId))
+                    latest[record.JobId] = record;
             }
             catch (JsonException __ex)
             {

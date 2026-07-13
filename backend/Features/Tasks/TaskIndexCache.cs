@@ -14,24 +14,22 @@ namespace AgentStudio.Tasks;
 ///
 /// <para><b>Consistency model:</b> read-after-write is guaranteed for any
 /// mutation that calls <see cref="Invalidate"/>. The FileSystemWatcher
-/// signal (debounced 500 ms in <see cref="TaskWatcherService"/>) covers
+/// signal (trailing-edge debounced in <see cref="TaskWatcherService"/>) covers
 /// external changes - things touched outside the API. There is also a
 /// safety re-scan TTL (default 30 s) so a missed watcher event cannot
 /// produce an indefinitely stale view.</para>
 ///
 /// <para><b>Concurrency:</b> the cache slot is an <see cref="ImmutableList{T}"/>
 /// updated under a coarse lock; readers under the lock get a stable
-/// snapshot. Refresh is single-flight: while one thread is rescanning,
-/// other readers see the previous snapshot rather than queueing behind
-/// the disk walk. This is intentional - the worst case is one extra
-/// poll cycle returning slightly older data; correctness across mutations
-/// is still guaranteed because <see cref="Invalidate"/> blocks the next
-/// read into the rescan path.</para>
+/// snapshot. Refresh is single-flight. While one thread is rescanning,
+/// readers dirtied only by external watcher churn see the previous snapshot
+/// rather than queueing behind the disk walk. A reader whose required mutation
+/// generation is newer than the published snapshot awaits that same refresh
+/// without spinning and, when necessary, admits exactly one follow-up refresh.
+/// This preserves API read-after-write without a thundering herd.</para>
 /// </summary>
 public sealed class TaskIndexCache
 {
-    private readonly TaskScannerService _scanner;
-    private readonly ILogger<TaskIndexCache> _logger;
     private readonly TimeSpan _safetyTtl;
     private readonly Func<List<TaskInfo>> _scanAllJobsRaw;
 
@@ -49,10 +47,10 @@ public sealed class TaskIndexCache
     private bool _dirty = true;
     private bool _hasSnapshot;
 
-    // Single-flight refresh ownership. Readers never spin: while a refresh is
-    // in progress they return the last good snapshot immediately. The only
-    // exception is cold start, where no snapshot exists yet; those callers
-    // await the same completion source without consuming CPU.
+    // Single-flight refresh ownership. Readers never spin. External-only
+    // readers return the last good snapshot immediately; cold-start and
+    // mutation-freshness readers await the same completion source without
+    // consuming CPU.
     private TaskCompletionSource<bool>? _refreshCompletion;
 
     // Invalidation generation counter. Incremented on every Invalidate so the
@@ -67,6 +65,11 @@ public sealed class TaskIndexCache
     // 30s safety TTL, producing the "optimistic reorder reverts to the old
     // order after the next poll" symptom.
     private long _invalidationGen;
+    // Mutation invalidations carry the stronger read-after-write contract.
+    // A reader may return stale data for external watcher churn, but never
+    // while the published snapshot predates an API mutation.
+    private long _requiredMutationGen;
+    private long _publishedMutationGen;
 
     // Cheap diagnostics so a perf regression here is visible in /healthz or
     // a future debug endpoint without spinning up a profiler.
@@ -87,8 +90,6 @@ public sealed class TaskIndexCache
         IConfiguration config,
         Func<List<TaskInfo>> scanAllJobsRaw)
     {
-        _scanner = scanner;
-        _logger = logger;
         _scanAllJobsRaw = scanAllJobsRaw;
         var ttlSec = int.TryParse(config["TaskIndexCache:SafetyTtlSeconds"], out var v) ? v : 30;
         _safetyTtl = TimeSpan.FromSeconds(Math.Max(1, ttlSec));
@@ -122,10 +123,10 @@ public sealed class TaskIndexCache
     /// <summary>
     /// Ensures both partitions (<see cref="_snapshot"/> + <see cref="_archiveSnapshot"/>)
     /// reflect a scan taken after the last <see cref="Invalidate"/> / safety-TTL
-    /// expiry. Single-flight: only one thread does the disk walk. Concurrent
-    /// readers receive the last good snapshot instead of waiting or spinning;
-    /// cold-start readers share one non-spinning wait because no stale snapshot
-    /// exists yet.
+    /// expiry. Single-flight: only one thread does the disk walk. External-only
+    /// readers receive the last good snapshot instead of waiting or spinning.
+    /// Cold-start and mutation-freshness readers share one non-spinning wait
+    /// because stale data is not valid for them.
     /// </summary>
     private void EnsureFresh()
     {
@@ -143,7 +144,9 @@ public sealed class TaskIndexCache
 
                 if (_refreshCompletion != null)
                 {
-                    if (_hasSnapshot)
+                    if (_hasSnapshot
+                        && Volatile.Read(ref _publishedMutationGen)
+                        >= Volatile.Read(ref _requiredMutationGen))
                     {
                         Interlocked.Increment(ref Hits);
                         Interlocked.Increment(ref StaleHits);
@@ -179,6 +182,7 @@ public sealed class TaskIndexCache
             // They collapse into one dirty bit, so after this single-flight
             // finishes at most one follow-up refresh can be admitted.
             var genBefore = Volatile.Read(ref _invalidationGen);
+            var mutationGenBefore = Volatile.Read(ref _requiredMutationGen);
             var fresh = _scanAllJobsRaw();
             var board = new List<TaskInfo>(fresh.Count);
             var archive = new List<TaskInfo>();
@@ -196,6 +200,7 @@ public sealed class TaskIndexCache
                 _archiveSnapshot = archive.ToImmutableList();
                 _snapshotAtUtc = DateTime.UtcNow;
                 _hasSnapshot = true;
+                _publishedMutationGen = Math.Max(_publishedMutationGen, mutationGenBefore);
                 _dirty = Volatile.Read(ref _invalidationGen) != genBefore;
                 if (ReferenceEquals(_refreshCompletion, completion))
                     _refreshCompletion = null;
@@ -223,6 +228,8 @@ public sealed class TaskIndexCache
     /// </summary>
     public void Invalidate(InvalidationSource source = InvalidationSource.Mutation)
     {
+        if (source == InvalidationSource.Mutation)
+            Interlocked.Increment(ref _requiredMutationGen);
         // Bump the invalidation generation BEFORE setting _dirty so the
         // refresher's post-scan check (see GetSnapshot) sees a strictly
         // higher value than its captured `genBefore`. Without the bump,

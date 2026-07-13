@@ -2,6 +2,7 @@
 
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace AgentStudio.Runner;
@@ -2182,6 +2183,7 @@ public class ProjectRunner
             claimedRunThisCall = _activeRuns.TryClaim(new ActiveRun
             {
                 JobId = jobId,
+                JobFolder = jobFolder,
                 Intent = intent,
                 Followup = followupPrompt,
                 Plan = plan,
@@ -3279,12 +3281,13 @@ public class ProjectRunner
         if (string.IsNullOrWhiteSpace(jobId)) return false;
         if (_activeRuns.Contains(jobId)) return false;
 
-        var claimed = _activeRuns.TryClaim(new ActiveRun
+        var recoveredRun = new ActiveRun
         {
             JobId = jobId,
             CliType = cliType,
             Intent = RunIntent.AutoPickup,
-        });
+        };
+        var claimed = _activeRuns.TryClaim(recoveredRun);
         if (!claimed) return false;
 
         var slotMax = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism);
@@ -3297,6 +3300,7 @@ public class ProjectRunner
         catch (Exception ex) { _logger.LogDebug(ex, "RegisterRecoveredRun: FindJob threw for {JobId}", jobId); }
         if (info != null && !string.IsNullOrWhiteSpace(info.FolderPath))
         {
+            recoveredRun.JobFolder = info.FolderPath;
             _timeline?.Append(
                 info.FolderPath,
                 TimelineEventKinds.RunnerSlotAdmission,
@@ -6335,6 +6339,9 @@ public class ProjectRunner
     /// </summary>
     /// <returns>True if the runner was holding this job and the latch was cleared.</returns>
     public bool ClearActiveJobIfMatches(string jobId, string reason)
+        => ClearActiveJobIfMatches(jobId, reason, appendChatLog: true);
+
+    private bool ClearActiveJobIfMatches(string jobId, string reason, bool appendChatLog)
     {
         if (string.IsNullOrEmpty(jobId)) return false;
         if (_activeJobId != jobId) return false;
@@ -6365,11 +6372,14 @@ public class ProjectRunner
         // is gone (delete + folder-rm), we skip silently.
         try
         {
-            var movedInfo = _scanner.FindJob(jobId, Entry.Path);
-            if (movedInfo != null)
+            if (appendChatLog)
             {
-                _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision,
-                    $"Runner active state cleared: {reason}");
+                var movedInfo = _scanner.FindJob(jobId, Entry.Path);
+                if (movedInfo != null)
+                {
+                    _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision,
+                        $"Runner active state cleared: {reason}");
+                }
             }
         }
         catch (Exception ex)
@@ -6386,8 +6396,8 @@ public class ProjectRunner
     /// points at a job whose folder is no longer in <c>3-progress</c>
     /// (deleted, moved by an external script, archived by the boot-time
     /// stuck-folder sweep), release the latch so the next pickup tick can
-    /// choose freely. Cheap when there is no active job; costs one
-    /// <see cref="TaskScannerService.FindJob"/> when there is.
+    /// choose freely. The admission path captures the concrete task folder,
+    /// so this check does not enter the global task index.
     /// </summary>
     /// <returns>True if the latch was held and got cleared by this call.</returns>
     public bool ReconcileActiveJobAgainstDisk()
@@ -6396,42 +6406,57 @@ public class ProjectRunner
         if (jobId == null) return false;
         if (_processing) return false;
 
-        TaskInfo? info = null;
-        try { info = _scanner.FindJob(jobId, Entry.Path); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Reconcile: FindJob threw for {JobId}", jobId); }
+        var folder = _activeRuns.Get(jobId)?.JobFolder;
+        if (string.IsNullOrWhiteSpace(folder))
+            folder = FindLegacyActiveFolder(jobId);
 
-        // Use the PHYSICAL lane, not the scanner's resolved State. The wedge
-        // this guard detects is an external mover (boot-time stuck-folder sweep,
-        // a hand edit) that drags the active folder out of 3-progress WITHOUT
-        // rewriting task.json. The scanner prefers task.json's "state" field, so
-        // it can still report "3-progress" from the stale json even though the
-        // folder now sits under another lane. In the legacy lane layout the
-        // folder's parent directory IS the lane, so that is authoritative; in
-        // the flat layout there is no lane folder and we fall back to State.
-        var physicalLane = ResolvePhysicalLane(info);
-        if (info != null && physicalLane == TaskStates.Progress) return false;
+        var physicalLane = ResolvePhysicalLane(folder);
+        if (physicalLane == TaskStates.Progress) return false;
 
-        var reason = info == null
+        var reason = physicalLane == null
             ? "active job folder no longer exists"
             : $"active job moved out of 3-progress (now in {physicalLane})";
-        return ClearActiveJobIfMatches(jobId, reason);
+        // Do not perform the best-effort chat lookup on a watcher callback:
+        // FindJob would re-enter the just-invalidated global index.
+        return ClearActiveJobIfMatches(jobId, reason, appendChatLog: false);
     }
 
     /// <summary>
-    /// The lane a job physically sits in. In the legacy lane layout
-    /// (<c>&lt;watchPath&gt;/&lt;state&gt;/&lt;slug&gt;</c>) the folder's parent
-    /// directory name is the lane and is authoritative over a possibly-stale
-    /// <c>task.json</c> "state" field. In the flat layout the parent is a
-    /// storage bucket (not a known lane), so the resolved
-    /// <see cref="TaskInfo.State"/> is used instead.
+    /// Finds the legacy lane folder without scanning any sibling task. Runtime
+    /// admissions already carry <see cref="ActiveRun.JobFolder"/>; this fallback
+    /// exists for test seams and old recovered in-memory records only.
     /// </summary>
-    private static string? ResolvePhysicalLane(TaskInfo? info)
+    private string? FindLegacyActiveFolder(string jobId)
     {
-        if (info == null) return null;
-        var parent = Path.GetFileName(Path.GetDirectoryName(info.FolderPath) ?? string.Empty);
+        foreach (var state in TaskStates.All)
+        {
+            var candidate = Path.Combine(Entry.Path, state, jobId);
+            if (Directory.Exists(candidate)) return candidate;
+        }
+        return null;
+    }
+
+    private static string? ResolvePhysicalLane(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return null;
+        var parent = Path.GetFileName(Path.GetDirectoryName(folder) ?? string.Empty);
         if (!string.IsNullOrEmpty(parent) && Array.IndexOf(TaskStates.All, parent) >= 0)
             return parent;
-        return info.State;
+
+        try
+        {
+            var taskJson = Path.Combine(folder, "task.json");
+            if (!File.Exists(taskJson)) return null;
+            using var document = JsonDocument.Parse(File.ReadAllText(taskJson));
+            return document.RootElement.TryGetProperty("state", out var state)
+                   && state.ValueKind == JsonValueKind.String
+                ? state.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>Test seam: lets a unit test prime the active-job latch
@@ -6442,6 +6467,7 @@ public class ProjectRunner
         {
             JobId = jobId,
             CliType = cliType,
+            JobFolder = FindLegacyActiveFolder(jobId),
             Parallelism = predictedScope == null ? TaskParallelism.Default : new TaskParallelism(false, predictedScope)
         });
     }

@@ -42,7 +42,7 @@ public sealed class GenerationSingleFlightCacheTests
     }
 
     [Fact]
-    public void Invalidate_StartsNewGenerationAndOldFlightCannotRepublish()
+    public async Task Invalidate_StartsNewGenerationAndOldFlightCannotRepublish()
     {
         var cache = new GenerationSingleFlightCache<int>();
         using var oldEntered = new ManualResetEventSlim();
@@ -60,7 +60,7 @@ public sealed class GenerationSingleFlightCacheTests
 
         Assert.Equal(2, cache.GetOrCreate("repo", TimeSpan.FromMinutes(1), () => 2));
         releaseOld.Set();
-        Assert.Equal(1, old.GetAwaiter().GetResult());
+        Assert.Equal(1, await old);
 
         Assert.Equal(2, cache.GetOrCreate("repo", TimeSpan.FromMinutes(1), () => 3));
     }

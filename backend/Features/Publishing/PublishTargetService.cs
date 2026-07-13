@@ -35,17 +35,30 @@ public sealed class PublishTargetService
     /// <summary>Repo-root directories that are never package source ("Package-Quellpfade").</summary>
     private static readonly string[] PackageMetaExcludes = [".github", "docs", ".orchestrator"];
 
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(5);
-    private readonly GenerationSingleFlightCache<ProjectPublishComputation> _cache = new();
+    // Repository refs/tags are fingerprinted without a git process. Keep the
+    // value warm across board heartbeats; the TTL is only a safety refresh.
+    internal static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
+    private readonly GenerationSingleFlightCache<ProjectPublishComputation> _cache;
+    private int _computationCount;
 
     public PublishTargetService(
         GitService git,
         ProjectSettingsService settings,
         ILogger<PublishTargetService> logger)
+        : this(git, settings, logger, TimeProvider.System)
+    {
+    }
+
+    internal PublishTargetService(
+        GitService git,
+        ProjectSettingsService settings,
+        ILogger<PublishTargetService> logger,
+        TimeProvider timeProvider)
     {
         _git = git;
         _settings = settings;
         _logger = logger;
+        _cache = new GenerationSingleFlightCache<ProjectPublishComputation>(timeProvider);
     }
 
     /// <summary>
@@ -75,19 +88,31 @@ public sealed class PublishTargetService
         if (string.IsNullOrWhiteSpace(projectName))
             return ProjectPublishComputation.Empty(projectName ?? "", "projectName is required");
 
-        return _cache.GetOrCreate(projectName, CacheTtl, () =>
+        var root = _git.ResolveProjectRepoRoot(projectName);
+        var configuredBranch = ConfiguredIntegrationBranch(projectName);
+        var refFingerprint = string.IsNullOrWhiteSpace(root)
+            ? "missing"
+            : ReadOnlyGitRefFingerprint.Capture(
+                root,
+                [configuredBranch, BoardMergeStatusService.ReleaseBranch, "gh-pages"],
+                includeTags: true);
+        var cacheKey = $"{projectName}\0{configuredBranch}";
+
+        return _cache.GetOrCreateVersioned(cacheKey, refFingerprint, CacheTtl, () =>
         {
             using var _t = GitProcessTelemetry.BeginRequest("publish/derive", _logger);
-            return ReadOnlyGitConcurrencyLimiter.Run(() => Compute(projectName));
+            return ReadOnlyGitConcurrencyLimiter.Run(() => Compute(projectName, root));
         });
     }
 
     /// <summary>Drops the cached computations. Tests use this after mutating a fixture repo.</summary>
     internal void InvalidateCache() => _cache.Invalidate();
 
-    private ProjectPublishComputation Compute(string projectName)
+    internal int ComputationCount => Volatile.Read(ref _computationCount);
+
+    private ProjectPublishComputation Compute(string projectName, string? root)
     {
-        var root = _git.ResolveProjectRepoRoot(projectName);
+        Interlocked.Increment(ref _computationCount);
         if (string.IsNullOrWhiteSpace(root))
             return ProjectPublishComputation.Empty(projectName, "Project has no configured git repository.");
         if (!_git.IsGitRepo(root))
@@ -283,8 +308,15 @@ public sealed class PublishTargetService
 
     private string ResolveIntegrationBranch(string projectName, string root)
     {
+        return _git.ResolveIntegrationBranch(root, ConfiguredIntegrationBranch(projectName));
+    }
+
+    private string ConfiguredIntegrationBranch(string projectName)
+    {
         var configured = _settings.Get(projectName).IntegrationBranch;
-        return _git.ResolveIntegrationBranch(root, configured);
+        return string.IsNullOrWhiteSpace(configured)
+            ? new ProjectSettings().IntegrationBranch
+            : configured.Trim();
     }
 
     private static string? StripV(string? tag)

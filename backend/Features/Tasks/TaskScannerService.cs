@@ -48,6 +48,13 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     private readonly ConcurrentDictionary<string, byte> _warnedMissingWatchPaths = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Invalid phase metadata is persisted until a mutation repairs the task.
+    /// A full index refresh may inspect that same task many times per second,
+    /// so warn once per task/state/value tuple instead of once per scan.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _warnedInvalidPhases = new(StringComparer.OrdinalIgnoreCase);
+
     public TaskScannerService(
         IConfiguration config,
         ILogger<TaskScannerService> logger,
@@ -752,12 +759,16 @@ public class TaskScannerService : ITaskScanner
         if (string.IsNullOrWhiteSpace(value)) return null;
         if (!LifecyclePhases.All.Contains(value))
         {
-            _logger.LogWarning("Unknown phase '{Phase}' in {Dir}; ignoring", value, jobDir);
+            var warningKey = $"unknown\n{jobDir}\n{state}\n{value}";
+            if (_warnedInvalidPhases.TryAdd(warningKey, 0))
+                _logger.LogWarning("Unknown phase '{Phase}' in {Dir}; ignoring", value, jobDir);
             return null;
         }
         if (!LifecyclePhases.IsAllowed(state, value))
         {
-            _logger.LogWarning("Phase '{Phase}' is not allowed for state '{State}' in {Dir}; ignoring", value, state, jobDir);
+            var warningKey = $"state\n{jobDir}\n{state}\n{value}";
+            if (_warnedInvalidPhases.TryAdd(warningKey, 0))
+                _logger.LogWarning("Phase '{Phase}' is not allowed for state '{State}' in {Dir}; ignoring", value, state, jobDir);
             return null;
         }
         return value;

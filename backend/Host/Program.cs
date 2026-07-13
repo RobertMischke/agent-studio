@@ -952,10 +952,10 @@ transitionsForRunner.OnJobMoved += (projectName, jobId, _, toState) =>
         publishActionsForTransitions.HandleTaskAccepted(projectName, jobId);
 };
 
-// Defensive: when a non-API folder change touches the watch tree (external
-// script, manual edit, boot-time stuck-folder sweep), sweep every runner so
-// a stale active-job latch is cleared before the next pickup tick.
-watcher.OnJobChanged += _ => runnerForTransitions.ReconcileAllRunners();
+// Defensive: when a non-API task change touches the watch tree, reconcile only
+// the affected project's active runner against its captured task folder. This
+// deliberately avoids a global FindJob/index scan on the watcher callback.
+watcher.OnJobChanged += path => runnerForTransitions.ReconcileRunnerForPath(path);
 
 // Wire up CLI events → SignalR push (across all CLI backends via the router)
 var cliRouter = app.Services.GetRequiredService<CliRouter>();

@@ -20,6 +20,7 @@ public sealed class TaskWatcherServiceTests : IDisposable
             {
                 ["WatchPaths:0:Name"] = "watcher-test",
                 ["WatchPaths:0:Path"] = _watchPath,
+                ["TaskWatcher:DebounceMs"] = "80",
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
@@ -84,6 +85,46 @@ public sealed class TaskWatcherServiceTests : IDisposable
 
         Assert.True(_watcher.ShouldNotifyIndexChange(
             _watchPath, deletedPath, WatcherChangeTypes.Deleted));
+    }
+
+    [Fact]
+    public async Task RelevantBurst_DispatchesOnceAfterTheQuietWindow()
+    {
+        var fired = 0;
+        var dispatched = new TaskCompletionSource<string>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _watcher.OnJobChanged += path =>
+        {
+            Interlocked.Increment(ref fired);
+            dispatched.TrySetResult(path);
+        };
+
+        var taskJson = WriteTaskJson("original", DateTime.UtcNow);
+        _watcher.HandleChange(_watchPath, taskJson, WatcherChangeTypes.Changed);
+        await Task.Delay(30);
+        WriteTaskJson("renamed", DateTime.UtcNow.AddSeconds(1));
+        var quietWindow = System.Diagnostics.Stopwatch.StartNew();
+        _watcher.HandleChange(_watchPath, taskJson, WatcherChangeTypes.Changed);
+
+        Assert.Equal(0, Volatile.Read(ref fired));
+        Assert.Equal(taskJson, await dispatched.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.True(quietWindow.Elapsed >= TimeSpan.FromMilliseconds(60));
+        await Task.Delay(120);
+        Assert.Equal(1, Volatile.Read(ref fired));
+    }
+
+    [Fact]
+    public async Task Dispose_CancelsPendingDispatch()
+    {
+        var fired = 0;
+        _watcher.OnJobChanged += _ => Interlocked.Increment(ref fired);
+        var taskJson = WriteTaskJson("original", DateTime.UtcNow);
+        _watcher.HandleChange(_watchPath, taskJson, WatcherChangeTypes.Changed);
+
+        _watcher.Dispose();
+        await Task.Delay(150);
+
+        Assert.Equal(0, Volatile.Read(ref fired));
     }
 
     private string WriteTaskJson(string title, DateTime lastProgressAt)

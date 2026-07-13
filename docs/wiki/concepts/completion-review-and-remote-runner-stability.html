@@ -224,6 +224,74 @@
     .flow-step b { display: block; margin-bottom: 5px; font-weight: 500; }
     .flow-step span { color: var(--muted); font-size: 0.82rem; }
 
+    .topology {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.85fr) 76px minmax(430px, 1.8fr) 76px minmax(180px, 0.8fr);
+      align-items: stretch;
+      gap: 10px;
+      margin: 22px 0 12px;
+    }
+    .topology-node,
+    .remote-plane {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .topology-node p:last-child,
+    .topology-node ul:last-child,
+    .remote-plane p:last-child { margin-bottom: 0; }
+    .topology-node ul { margin: 0.65rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.82rem; }
+    .topology-node.tint-blue { background: var(--blue-soft); }
+    .topology-node.tint-green { background: var(--green-soft); }
+    .topology-arrow {
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      text-align: center;
+      font: 500 0.72rem/1.5 var(--mono);
+    }
+    .arrow-vertical { display: none; }
+    .remote-plane { background: var(--surface-soft); }
+    .remote-flow {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr);
+      align-items: stretch;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .remote-worker {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    .remote-worker strong { display: block; margin-bottom: 5px; }
+    .remote-worker span { color: var(--muted); font-size: 0.8rem; }
+    .result-envelope {
+      display: grid;
+      place-items: center;
+      padding: 8px;
+      border-radius: 10px;
+      background: var(--green-soft);
+      color: var(--green);
+      text-align: center;
+      font: 500 0.72rem/1.5 var(--mono);
+    }
+    .local-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      align-items: center;
+      margin: 10px 0 20px;
+      padding: 10px 14px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+    .local-strip strong { color: var(--text); }
+
     .glossary dt { margin-bottom: 0.35rem; font-weight: 500; }
     .glossary dd { margin: 0; color: var(--muted); }
     .glossary .card { min-height: 170px; }
@@ -300,6 +368,10 @@
       .grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .flow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .flow-step:nth-child(3)::after { display: none; }
+      .topology { grid-template-columns: 1fr; }
+      .topology-arrow { min-height: 36px; }
+      .arrow-horizontal { display: none; }
+      .arrow-vertical { display: inline; }
     }
     @media (max-width: 720px) {
       .page { padding: 12px 14px 64px; }
@@ -310,6 +382,8 @@
       .flow-step { min-height: auto; }
       .flow-step:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -18px; }
       .flow-step:nth-child(3)::after { display: block; }
+      .remote-flow { grid-template-columns: 1fr; }
+      .result-envelope { min-height: 52px; }
       .layer { grid-template-columns: 1fr; gap: 6px; }
       .timeline-row { grid-template-columns: 1fr; gap: 5px; }
       .source-list { columns: 1; }
@@ -335,6 +409,7 @@
     <div class="chips" aria-label="Document status">
       <span class="chip"><span class="dot green"></span>Analysis and proposal</span>
       <span class="chip"><span class="dot amber"></span>Remote parallelism unchanged</span>
+      <span class="chip"><span class="dot green"></span>Fully remote review target</span>
       <span class="chip"><span class="dot"></span>Observation only</span>
       <span class="chip">No issues created yet</span>
     </div>
@@ -349,7 +424,7 @@
       <a href="#authority">4. Facts versus judgment</a>
       <a href="#semantic">5. Raw prose and semantic completion</a>
       <a href="#gates">6. Build and visual-evidence gates</a>
-      <a href="#exact-review">7. Exact-revision Auto Review</a>
+      <a href="#exact-review">7. Fully remote exact-revision review</a>
       <a href="#retry">8. Retry budgets</a>
       <a href="#abort">9. CLI aborts</a>
       <a href="#host">10. Remote Host target</a>
@@ -423,6 +498,11 @@
         <div class="flow-step tint-red"><b>Historical double-fail</b><span>An old reissue can make the next event count as “twice,” then escalate.</span></div>
       </div>
 
+      <div class="principle">
+        <strong>This flow reconstructs the current failure, not the target architecture.</strong>
+        <p>Today, verifier work can fall back to the Task Server's shared checkout. In the target, the Task Server remains the control plane and all repository materialization, build, test, visual inspection, and semantic review work runs in a claimed Remote ReviewAttempt.</p>
+      </div>
+
       <p><strong>Confidence boundary:</strong> this analysis does not claim that every red test was false. It says the verdict is not attributable to the submitted task while the tested revision and environment are not bound to that task.</p>
     </section>
 
@@ -440,11 +520,11 @@
         </div>
         <div class="card">
           <dt>Materialize that SHA</dt>
-          <dd>The review server fetches the commit and creates a temporary folder containing exactly that version. “Not materializable” simply means the server was told the address but cannot open the package: it was never pushed, cannot be fetched, was deleted, or belongs to another repository.</dd>
+          <dd>An assigned Remote Review Executor fetches the commit or durable result bundle and creates an isolated workspace containing exactly that version. The Task Server records the expected identity, leases the review, and accepts the fenced result; it needs no repository checkout. “Not materializable” means no eligible review worker can reconstruct that exact submitted revision from its declared durable source.</dd>
         </div>
         <div class="card">
           <dt>Claim</dt>
-          <dd>A claim is a technical reservation. The server grants one runner a time-limited execution lease for a Ready task and moves the task to Progress. It answers “who may work on this?” It does not mean the CLI has already started or that the work will succeed.</dd>
+          <dd>A claim is a technical reservation for one attempt. An execution claim grants a runner a time-limited lease and may move a Ready task to Progress. A separate review claim reserves one submitted result while the task is in Auto Review. Neither claim means its process has already started or will succeed.</dd>
         </div>
         <div class="card">
           <dt>Progress</dt>
@@ -462,7 +542,7 @@
 
       <div class="grid two" style="margin-top: 14px;">
         <article class="card tint-blue">
-          <h3>Claim lifecycle below the Progress lane</h3>
+          <h3>Execution claim lifecycle below the Progress lane</h3>
           <div class="state-strip" aria-label="Claim lifecycle">
             <span class="state">claimed</span><span class="arrow">→</span>
             <span class="state">preparing</span><span class="arrow">→</span>
@@ -659,15 +739,15 @@
 
       <div class="principle">
         <strong>Remote parallelism is not changed by this proposal.</strong>
-        <p>The current evidence shows a strong server-side review and checkout-binding problem. It does not yet prove that Remote Host coding concurrency itself is the root cause. Keep the configured parallelism, collect overlap and resource data, and distinguish runner concurrency from review-gate concurrency.</p>
+        <p>The evidence shows a current post-processing location and revision-binding defect: verifier commands are launched from the Task Server's shared development checkout. The target keeps orchestration central but moves all repository execution to claimed Remote Review Executors. This does not yet prove that Remote Host coding concurrency itself is the root cause. Keep the configured parallelism, collect overlap and resource data, and distinguish coding concurrency from review concurrency.</p>
       </div>
     </section>
 
     <section id="exact-review">
       <div class="section-head">
         <p class="eyebrow">7 · Exact-revision Auto Review</p>
-        <h2>“Binding” means reviewing the submitted object, not imposing rigid quality rules</h2>
-        <p>The exact-SHA requirement is about evidence identity. It does not make the semantic verdict rigid and it does not remove Human Review.</p>
+        <h2>The Task Server identifies the object; a Remote Review Executor opens it</h2>
+        <p>The target is fully remote. Exact-SHA binding is about evidence identity, not rigid quality rules: no source checkout, build, test, visual inspection, or semantic repository review is required on the local workstation or the Task Server.</p>
       </div>
 
       <div class="grid two">
@@ -681,34 +761,102 @@
         </article>
       </div>
 
-      <h3 style="margin-top: 2rem;">Required Auto Review sequence</h3>
+      <h3 style="margin-top: 2rem;">Control plane and remote execution plane</h3>
+      <div class="topology" role="group" aria-label="The Task Server is a control plane. A remote coding worker publishes an immutable result. A separately claimed remote review worker materializes and reviews that exact result. The Task Server validates the report before Human Review.">
+        <article class="topology-node tint-blue">
+          <span class="label">Control plane</span>
+          <h3>Task Server</h3>
+          <p>Owns authority and coordination, not project execution.</p>
+          <ul>
+            <li>Task state and policy</li>
+            <li>RunAttempt and ReviewAttempt leases and fences</li>
+            <li>Result identity, report validation, and lane changes</li>
+            <li>No repository checkout, tool process, or review model call</li>
+          </ul>
+        </article>
+
+        <div class="topology-arrow" aria-hidden="true">
+          <span class="arrow-horizontal">claims →<br />← facts</span>
+          <span class="arrow-vertical">↓ claims · ↑ facts</span>
+        </div>
+
+        <section class="remote-plane" aria-label="Remote execution plane">
+          <span class="label">Remote execution plane</span>
+          <h3>All implementation and review work stays remote</h3>
+          <div class="remote-flow">
+            <div class="remote-worker">
+              <strong>Coding Executor</strong>
+              <span>Fresh coding worktree, agent CLI, commit, and durable publish.</span>
+            </div>
+            <div class="result-envelope">immutable result SHA<br />or bundle + manifest<br />→</div>
+            <div class="remote-worker">
+              <strong>Review Executor</strong>
+              <span>Fresh exact-SHA worktree, completion model, build/test, requirement, code, evidence, and vision aspects.</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="topology-arrow" aria-hidden="true">
+          <span class="arrow-horizontal">report via<br />server →</span>
+          <span class="arrow-vertical">↓ server validates</span>
+        </div>
+
+        <article class="topology-node tint-green">
+          <span class="label">Decision surface</span>
+          <h3>Human Review</h3>
+          <p>Receives the validated verdict, exact revision, evidence references, concerns, and uncertainty. The browser is a control and review surface, not an execution host.</p>
+        </article>
+      </div>
+
+      <div class="local-strip">
+        <strong>Local workstation:</strong>
+        <span>UI and operator controls only in the normal path. No local materialization is required.</span>
+      </div>
+
+      <div class="grid two">
+        <article class="card">
+          <span class="label">Valid first placement</span>
+          <h3>Same Remote Host, separate review role</h3>
+          <p>The Coding Executor and Review Executor may initially share one physical Remote Host. They still need separate attempts, leases, containment units, worktrees, output and cache namespaces, credentials, and resource quotas. A shared Git object cache is only an optimization after durable handoff has been confirmed.</p>
+          <p>This is fully remote, but both roles still share a host failure domain.</p>
+        </article>
+        <article class="card tint-green">
+          <span class="label">Stronger stability target</span>
+          <h3>Dedicated Remote Review pool</h3>
+          <p>Capability-routed review workers provide independent capacity, controlled toolchains, read-only credentials, and better isolation from coding load and cache failures. High-risk projects can require a different host; ordinary projects may use any eligible worker.</p>
+          <p>The topology changes placement, not the contract: both modes consume a ReviewAttempt and inspect the same immutable result.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Required fully remote Auto Review sequence</h3>
       <div class="flow" aria-label="Target exact-revision review flow">
-        <div class="flow-step"><b>1. Remote result</b><span>Persist run, attempt, branch, base SHA, and immutable result SHA.</span></div>
-        <div class="flow-step"><b>2. Fetch</b><span>Retrieve that commit from the declared origin and verify repository identity.</span></div>
-        <div class="flow-step"><b>3. Materialize</b><span>Create an isolated temporary review worktree at exactly that SHA.</span></div>
-        <div class="flow-step"><b>4. Verify</b><span>Run applicable build/tests and record expected SHA equals tested SHA.</span></div>
-        <div class="flow-step"><b>5. Interpret</b><span>Semantic judge reads task, final prose, facts, diff, and artifact manifest.</span></div>
-        <div class="flow-step tint-green"><b>6. Human Review</b><span>Advance with verdict, concerns, evidence references, and uncertainty.</span></div>
+        <div class="flow-step"><b>1. Publish</b><span>The Remote Coding Executor publishes an immutable result SHA or durable bundle plus manifest.</span></div>
+        <div class="flow-step"><b>2. Record and claim</b><span>The Task Server persists the result envelope and grants a fenced ReviewAttempt to an eligible remote worker.</span></div>
+        <div class="flow-step"><b>3. Materialize remotely</b><span>The Review Executor reconstructs a fresh workspace and proves repository, HEAD, and tree identity.</span></div>
+        <div class="flow-step"><b>4. Verify remotely</b><span>Build, test, visual checks, and artifact validation run there; expected SHA must equal tested SHA.</span></div>
+        <div class="flow-step"><b>5. Interpret remotely</b><span>The completion judge and all applicable aspects read task, ending prose, facts, diff, and artifacts.</span></div>
+        <div class="flow-step tint-green"><b>6. Report and route</b><span>The worker submits a fenced report; the Task Server validates it and advances to Human Review.</span></div>
       </div>
 
       <div class="grid two">
         <article class="card tint-red">
-          <h3>If the SHA cannot be materialized</h3>
+          <h3>If no Remote Review Executor can reconstruct the result</h3>
           <ol>
-            <li>Retry fetch with bounded backoff.</li>
-            <li>Ask the same runner to republish the branch or upload a durable bundle.</li>
-            <li>Preserve the task and attempt as waiting for submission recovery.</li>
-            <li>Do not silently test the shared development checkout.</li>
+            <li>Retry the declared immutable ref or bundle with bounded backoff.</li>
+            <li>Ask the originating Coding Executor to republish the branch or durable bundle.</li>
+            <li>Reschedule a ReviewAttempt on the same SHA, potentially on another eligible worker.</li>
+            <li>Keep the task in Auto Review while submission recovery is pending.</li>
+            <li>Never materialize or run repository commands on the Task Server in the authoritative path. An operator-only diagnostic cannot publish a review verdict.</li>
           </ol>
         </article>
         <article class="card tint-green">
           <h3>What “no full rerun after gate infrastructure failure” means</h3>
-          <p>If commit A exists and the grading machine jams, re-run the grading machine on commit A. Do not ask the coding agent to rewrite the answer as commit B.</p>
+          <p>If commit A exists and the remote grading worker jams, run another ReviewAttempt on commit A. Do not ask the coding agent to rewrite the answer as commit B.</p>
           <p>A coding rerun remains correct when the exact revision reproducibly fails, a requirement is genuinely missing, the original CLI died before durable output, or no recoverable commit or workspace exists.</p>
         </article>
       </div>
 
-      <p>The existence of many successful tasks does not contradict this distinction. It shows that implementation frequently succeeds. Reliability work protects that successful output from being discarded when a later verifier, network path, or review model fails.</p>
+      <p>The existence of many successful tasks does not contradict this distinction. It shows that implementation frequently succeeds. A coding slot can be released after durable handoff while the task remains in Auto Review and a separate remote review slot works. Reliability work protects that successful output from being discarded when a later verifier, network path, or review model fails.</p>
     </section>
 
     <section id="retry">
@@ -783,15 +931,15 @@
     <section id="host">
       <div class="section-head">
         <p class="eyebrow">10 · Remote Host stability target</p>
-        <h2>Parallel execution needs a durable attempt, durable delivery, and honest ownership</h2>
-        <p>The existing decoupled-lifecycle concept is the correct architectural base. The missing work is turning its restart, fencing, journal, and process-containment prerequisites into the productive path.</p>
+        <h2>Parallel remote coding and remote review need durable, separate attempts</h2>
+        <p>The Task Server is the durable control plane. Remote Hosts are the repository and CLI execution plane. The server stores identities, leases, fences, facts, policies, and verdicts, but never needs a project checkout. The existing decoupled-lifecycle concept is the correct architectural base.</p>
       </div>
 
       <div class="grid three">
         <article class="card">
-          <span class="label">Server authority</span>
-          <h3>Persisted RunAttempt</h3>
-          <p>Store attempt ID, runner and instance IDs, lease, monotonic fence, CLI session, base and result SHA, lifecycle state, last heartbeat, and terminal facts. It must survive a backend restart.</p>
+          <span class="label">Control-plane authority</span>
+          <h3>Persisted RunAttempt and ReviewAttempt</h3>
+          <p>Store separate coding and review attempt IDs, executor and instance IDs, leases, monotonic fences, lifecycle state, and terminal facts. RunAttempt binds base and result SHA; ReviewAttempt binds expected and tested SHA, policy, evidence digest, and verdict. Both survive a backend restart.</p>
         </article>
         <article class="card">
           <span class="label">Host durability</span>
@@ -816,20 +964,34 @@
         <article class="card">
           <span class="label">Lifecycle isolation</span>
           <h3>Separate host services</h3>
-          <p>Tunnel, runner control loop, and per-session process holder need independent supervised lifecycles. A transient claim failure must not terminate healthy active slots.</p>
+          <p>Tunnel, coding control loop, review control loop, and per-attempt process holder need independent supervised lifecycles. A transient claim failure must not terminate healthy active slots.</p>
         </article>
       </div>
 
-      <h3 style="margin-top: 2rem;">Canonical attempt state</h3>
-      <div class="state-strip" aria-label="Target remote attempt states">
-        <span class="state">claimed</span><span class="arrow">→</span>
-        <span class="state">preparing</span><span class="arrow">→</span>
-        <span class="state">running</span><span class="arrow">→</span>
-        <span class="state">uploading</span><span class="arrow">→</span>
-        <span class="state">verifying</span><span class="arrow">→</span>
-        <span class="state">completion pending</span><span class="arrow">→</span>
-        <span class="state">terminal</span>
-      </div>
+      <h3 style="margin-top: 2rem;">Two canonical attempts linked by one immutable result</h3>
+      <article class="card">
+        <h4>RunAttempt: produces and durably hands off a revision</h4>
+        <div class="state-strip" aria-label="Target remote coding attempt states">
+          <span class="state">claimed</span><span class="arrow">→</span>
+          <span class="state">preparing</span><span class="arrow">→</span>
+          <span class="state">running</span><span class="arrow">→</span>
+          <span class="state">publishing</span><span class="arrow">→</span>
+          <span class="state">handed off</span><span class="arrow">→</span>
+          <span class="state">terminal</span>
+        </div>
+
+        <h4 style="margin-top: 1.5rem;">ReviewAttempt: inspects exactly that immutable revision</h4>
+        <div class="state-strip" aria-label="Target remote review attempt states">
+          <span class="state">claimed</span><span class="arrow">→</span>
+          <span class="state">materializing</span><span class="arrow">→</span>
+          <span class="state">verifying</span><span class="arrow">→</span>
+          <span class="state">interpreting</span><span class="arrow">→</span>
+          <span class="state">reporting</span><span class="arrow">→</span>
+          <span class="state">terminal</span>
+        </div>
+
+        <p class="muted small">The Task Server links both through the immutable result envelope. A review infrastructure retry creates another ReviewAttempt on the same SHA. Only a reproducible product finding or genuinely missing requirement creates a new coding RunAttempt.</p>
+      </article>
 
       <p>Heartbeat loss alone means <code>process-unknown</code>, not “dead.” A replacement must not begin solely because time elapsed. Durable fence continuity protects server writes; a changed host boot ID, service-manager proof of an empty containment unit, or audited host fencing proves that external execution cannot overlap.</p>
     </section>
@@ -844,7 +1006,7 @@
       <article class="card live">
         <span class="label">Read-only live sample · 2026-07-13, 19:25-19:35 CEST</span>
         <div class="grid three">
-          <div><strong>4 to 5 active slots</strong><p class="small muted">A freed slot was reused while its predecessor was still in centralized Auto Review.</p></div>
+          <div><strong>4 to 5 active slots</strong><p class="small muted">A freed slot was reused while its predecessor was still in the current Task-Server Auto Review implementation.</p></div>
           <div><strong>CPU 16.3% to 98.2%</strong><p class="small muted">Load1 rose as high as 23.24 on 12 cores; swap stayed zero and I/O wait stayed low.</p></div>
           <div><strong>Productive runs, failed handoffs</strong><p class="small muted">Remote execution reached <code>TASK_DONE</code> while post-review repeatedly reopened or escalated the cards.</p></div>
         </div>
@@ -879,7 +1041,7 @@
         <article class="card"><h3>Lane effect</h3><p>Every state transition, its actor, the decision input digest, and whether task or infrastructure budget changed.</p></article>
       </div>
 
-      <p>The monitoring question is not simply “did a task fail while many slots were active?” It is: “for the exact submitted revision, did failures correlate with Remote CLI overlap, server-side gate overlap, resource pressure, wrong checkout selection, or a reproducible product defect?”</p>
+      <p>The monitoring question is not simply “did a task fail while many slots were active?” It is: “for the exact submitted revision, did failures correlate with Remote CLI overlap, current Task-Server gate overlap, resource pressure, wrong checkout selection, or a reproducible product defect?”</p>
     </section>
 
     <section id="delivery">
@@ -893,12 +1055,12 @@
         <table>
           <thead><tr><th>Package</th><th>Reuse or create</th><th>Acceptance boundary</th></tr></thead>
           <tbody>
-            <tr><td>Exact-SHA Remote Review</td><td>Extend AGT-2121</td><td>Remote completion persists immutable result SHA; every review command runs on that SHA; no shared-checkout fallback.</td></tr>
-            <tr><td>Build/Test Gate Coordination</td><td>Split under AGT-2155</td><td>Isolated outputs, resource-keyed queue, cross-backend review claim, and complete overlap telemetry without changing Remote execution parallelism.</td></tr>
+            <tr><td>Exact-SHA Remote Review</td><td>Extend AGT-2121</td><td>The Task Server persists an immutable result envelope and issues a remote review claim. Every aspect runs in an isolated Remote ReviewAttempt at that exact SHA; the Task Server performs no checkout, materialization, or repository command.</td></tr>
+            <tr><td>Build/Test Gate Coordination</td><td>Split under AGT-2155</td><td>Isolated outputs, a server-issued remote review lease, per-repository coordination across review workers, and complete overlap telemetry without changing Remote coding parallelism.</td></tr>
             <tr><td>Gate Failure Taxonomy</td><td>Split under AGT-2155 and link AGT-1944</td><td>Product, infrastructure, cancellation, timeout, OOM, process launch, and lock failures route differently.</td></tr>
             <tr><td>Semantic Completion Judge</td><td>Harden AGT-2168</td><td>Raw prose is interpreted by a cheap model over the final attempt window plus hard facts; keyword rules cannot decide the lane.</td></tr>
             <tr><td>Visual Evidence Policy</td><td>Extend the evidence-gate work</td><td>Evidence modality follows task and diff semantics; backend bugs are not image-blocked; referenced artifacts are verified.</td></tr>
-            <tr><td>Persisted RunAttempt and Fencing</td><td>New Remote P0 under the Remote epic</td><td>Lease, fence, authority epoch, attempt state, and every state-affecting write survive and respect restart.</td></tr>
+            <tr><td>Persisted RunAttempt, ReviewAttempt, and Fencing</td><td>New Remote P0 under the Remote epic</td><td>Coding and review have separate persisted identities, leases, fences, states, and retry paths. Every state-affecting write survives and respects restart.</td></tr>
             <tr><td>Runner Journal and Outbox</td><td>New Remote P0, building on AGT-2147</td><td>Logs, artifacts, terminal facts, and completion replay idempotently; worktree removal follows confirmed durable handoff.</td></tr>
             <tr><td>CLI Outcome and Capability Drain</td><td>New slice linked to AGT-2170, AGT-2070, and AGT-2148</td><td>401, quota, timeout, OOM, shutdown, lease loss, and explicit blockers each have one typed route and budget effect.</td></tr>
             <tr><td>Host-to-Task Truth</td><td>Extend AGT-2173 and AGT-2142</td><td>Host, capability, slot, lease, attempt, worktree, SHA, and task state reconcile in one view.</td></tr>
@@ -909,8 +1071,9 @@
 
       <h3 style="margin-top: 2rem;">Release evidence, not calendar optimism</h3>
       <ul class="checklist">
-        <li>Zero Remote review commands in the shared development checkout.</li>
+        <li>Zero project checkout, materialization, build/test, visual inspection, or semantic repository review on the Task Server; 100% occur in fenced Remote ReviewAttempts.</li>
         <li>Expected result SHA equals tested SHA for every gate.</li>
+        <li>A ReviewAttempt infrastructure retry keeps the task in Auto Review and does not start a new coding RunAttempt.</li>
         <li>Infrastructure failures consume zero coding-rework budget.</li>
         <li>Keyword-only and prompt-echo fixtures produce zero lane decisions.</li>
         <li>Every Remote attempt appears in canonical run history.</li>
@@ -933,6 +1096,7 @@
         <article class="card"><h3>Accept with concerns</h3><p>Should a high-confidence complete verdict with non-blocking concerns always wait in Human Review, or can selected low-risk projects auto-accept under explicit policy?</p></article>
         <article class="card"><h3>Retry ceilings</h3><p>Choose the specific per-fingerprint retry count and the task-level semantic churn ceiling. Infrastructure retries remain separately bounded.</p></article>
         <article class="card"><h3>Host restart resume</h3><p>Recommended default: automatic resume is project opt-in and globally off until provider-specific resume, process containment, and fencing probes are green.</p></article>
+        <article class="card"><h3>Remote review placement</h3><p>The fully remote contract is fixed; placement is the open choice. Recommended rollout: allow an isolated review role on existing Remote Hosts first, add a dedicated review pool, and let high-risk project policy require a different host failure domain.</p></article>
       </div>
     </section>
 
@@ -943,8 +1107,9 @@
       </div>
 
       <div class="timeline">
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Fully remote target clarified.</strong> Exact-SHA materialization and all completion, build/test, evidence, vision, and quality aspects run inside a fenced Remote ReviewAttempt. The Task Server remains the authority and scheduler but owns no project checkout. Coding and review may initially share a physical Remote Host only as isolated roles; a dedicated review pool is the stronger stability target.</div><div class="timeline-action">Target corrected</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Authority inversion confirmed.</strong> LLM aspect prompts describe concerns as non-blocking and Human Review as final, while deterministic evidence and solution-quality gates can turn concern wording and keyword matches into reissue.</div><div class="timeline-action">Open design decision</div></div>
-        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Live parallel sample.</strong> Four to five active Remote slots produced <code>TASK_DONE</code> handoffs for AGT-2156 and AGT-2160 while AGT-2155, AGT-2156, and AGT-2160 repeated post-review gate failure paths and AGT-2168 repeated the prose-gate loop. A later host sample reached 98.2% CPU and load1 23.24 without losing its four leases. This supports measuring host pressure while still separating Remote execution concurrency from server-side review correctness.</div><div class="timeline-action">Observed read-only</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Live parallel sample.</strong> Four to five active Remote slots produced <code>TASK_DONE</code> handoffs for AGT-2156 and AGT-2160 while AGT-2155, AGT-2156, and AGT-2160 repeated post-review gate failure paths and AGT-2168 repeated the prose-gate loop. A later host sample reached 98.2% CPU and load1 23.24 without losing its four leases. This supports measuring host pressure while still separating Remote execution concurrency from the current Task-Server review implementation.</div><div class="timeline-action">Observed read-only</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Incident inventory.</strong> Twenty-four unique manual resets split into 18 build/test double-fail cases, one direct prose case, and five other incomplete closure paths. Eighty-eight of 91 observed verify commands ran in the shared development checkout.</div><div class="timeline-action">Root causes separated</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Semantic target revised.</strong> Raw prose remains a supported evidence source. Keywords become retrieval signals only. A cheap model interprets the current attempt ending together with immutable process, Git, command, and artifact facts.</div><div class="timeline-action">Proposed</div></div>
       </div>

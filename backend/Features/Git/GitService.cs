@@ -4232,11 +4232,28 @@ public class GitService
     /// "unknown -&gt; not contained" behaviour elsewhere.
     /// </summary>
     public HashSet<string> GetAncestorShaSet(string repoRoot, string tipRef)
+        => GetAncestorShaSet(repoRoot, (IReadOnlyCollection<string>)[tipRef]);
+
+    /// <summary>
+    /// Union of the commits reachable from several refs in one
+    /// <c>git rev-list --ignore-missing</c> process. Missing local/origin mirrors
+    /// do not discard the refs that do exist.
+    /// </summary>
+    public HashSet<string> GetAncestorShaSet(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return set;
-        if (!IsLikelyBranchName(tipRef)) return set;
-        var (output, _, code) = RunGitArgs(repoRoot, "rev-list", tipRef);
+        var refs = tipRefs
+            .Where(IsLikelyBranchName)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (refs.Length == 0) return set;
+
+        var args = new List<string> { "rev-list", "--ignore-missing" };
+        args.AddRange(refs);
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return set;
         foreach (var line in output.Split('\n'))
         {

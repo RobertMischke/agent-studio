@@ -303,6 +303,43 @@ public class TaskIndexCacheTests : IDisposable
         Assert.Equal(3, Volatile.Read(ref scans));
     }
 
+    [Fact]
+    public async Task MutationDuringInFlightRefresh_WaitsAndDrivesOneFreshFollowup()
+    {
+        var secondScanEntered = new ManualResetEventSlim(false);
+        var releaseSecondScan = new ManualResetEventSlim(false);
+        var scans = 0;
+        var cache = new TaskIndexCache(
+            _scanner,
+            NullLogger<TaskIndexCache>.Instance,
+            _config,
+            () =>
+            {
+                var scan = Interlocked.Increment(ref scans);
+                if (scan == 2)
+                {
+                    secondScanEntered.Set();
+                    Assert.True(releaseSecondScan.Wait(TimeSpan.FromSeconds(5)));
+                }
+                return [new TaskInfo { Id = $"job-{scan}", State = TaskStates.Ready }];
+            });
+
+        Assert.Equal("job-1", Assert.Single(cache.GetSnapshot()).Id);
+        cache.Invalidate(TaskIndexCache.InvalidationSource.External);
+        var externalRefresh = Task.Run(() => cache.GetSnapshot());
+        Assert.True(secondScanEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        cache.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        var postMutationReader = Task.Run(() => cache.GetSnapshot());
+        Assert.NotSame(postMutationReader, await Task.WhenAny(
+            postMutationReader, Task.Delay(TimeSpan.FromMilliseconds(150))));
+
+        releaseSecondScan.Set();
+        _ = await externalRefresh;
+        Assert.Equal("job-3", Assert.Single(await postMutationReader).Id);
+        Assert.Equal(3, Volatile.Read(ref scans));
+    }
+
     private void WriteJob(string state, string slug, string title)
     {
         var dir = Path.Combine(_watchPath, state, slug);

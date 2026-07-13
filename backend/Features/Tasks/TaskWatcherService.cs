@@ -7,11 +7,13 @@ namespace AgentStudio.Tasks;
 /// <summary>
 /// Watches the resolved job-folder paths configured under
 /// <c>WatchPaths</c> and fans out a single <see cref="OnJobChanged"/>
-/// event whenever something inside a job folder appears, disappears, or
-/// changes on disk. Subscribers include
+/// event when task.json semantics or task-folder structure changes on disk.
+/// High-churn logs and generated sidecars remain available through the raw
+/// <see cref="OnPathChanged"/> stream but cannot invalidate the task index.
+/// Subscribers include
 /// <see cref="TaskIndexCache.Invalidate"/> (Cycle 1 cache invalidation),
 /// the SignalR hub (broadcasts <c>jobsChanged</c> to clients), and
-/// <see cref="TaskRunnerService.ReconcileAllRunners"/> (releases the
+/// <see cref="TaskRunnerService.ReconcileRunnerForPath"/> (releases the
 /// runner's active-job latch when the folder leaves <c>3-progress</c>
 /// outside the API).
 ///
@@ -70,20 +72,7 @@ public class TaskWatcherService : BackgroundService
         {
             EnsureWatching(entry);
         }
-        stoppingToken.Register(() =>
-        {
-            FileSystemWatcher[] watchers;
-            lock (_lock)
-            {
-                watchers = _watchers.ToArray();
-                _watchers.Clear();
-            }
-            foreach (var watcher in watchers)
-            {
-                try { watcher.Dispose(); }
-                catch (Exception __ex) { SilentCatch.Note(__ex, "TaskWatcherService: watcher dispose"); }
-            }
-        });
+        stoppingToken.Register(DisposeResources);
         return Task.CompletedTask;
     }
 
@@ -163,9 +152,16 @@ public class TaskWatcherService : BackgroundService
 
     private DateTime _lastEvent = DateTime.MinValue;
     private readonly Lock _lock = new();
-    private readonly Dictionary<string, DateTime> _lastNotifiedByTask = new(PathComparer);
+    private readonly Dictionary<string, PendingDispatch> _pendingDispatches = new(PathComparer);
+    private bool _disposed;
 
-    private void HandleChange(
+    private sealed class PendingDispatch(string path, Timer timer)
+    {
+        public string Path { get; set; } = path;
+        public Timer Timer { get; } = timer;
+    }
+
+    internal void HandleChange(
         string watchPath,
         string path,
         WatcherChangeTypes changeType,
@@ -179,34 +175,81 @@ public class TaskWatcherService : BackgroundService
     }
 
     /// <summary>
-    /// Coalesces bursty FileSystemWatcher events into a single
-    /// <see cref="OnJobChanged"/> invocation per task and debounce window.
+    /// Coalesces bursty FileSystemWatcher events into a single trailing-edge
+    /// <see cref="OnJobChanged"/> invocation per task after a quiet window.
     /// Filtering happens before this method so generated sidecars never enter
     /// the task-index invalidation path.
     /// </summary>
     private void Debounce(string path)
     {
-        if (IsNoiseyPath(path)) return;
-
+        string key;
         lock (_lock)
         {
-            var now = DateTime.UtcNow;
-            var key = string.Equals(Path.GetFileName(path), "task.json", StringComparison.OrdinalIgnoreCase)
+            if (_disposed) return;
+            key = string.Equals(Path.GetFileName(path), "task.json", StringComparison.OrdinalIgnoreCase)
                 ? Path.GetDirectoryName(path) ?? path
                 : path;
-            if (_lastNotifiedByTask.TryGetValue(key, out var last) && now - last < _debounce) return;
-            _lastNotifiedByTask[key] = now;
-            _lastEvent = now;
-        }
+            if (_pendingDispatches.TryGetValue(key, out var pending))
+            {
+                pending.Path = path;
+                pending.Timer.Change(_debounce, Timeout.InfiniteTimeSpan);
+                return;
+            }
 
-        _logger.LogDebug("Watcher fired for {Path}", path);
+            var timer = new Timer(
+                _ => DispatchPending(key),
+                null,
+                _debounce,
+                Timeout.InfiniteTimeSpan);
+            _pendingDispatches[key] = new PendingDispatch(path, timer);
+        }
+    }
+
+    private void DispatchPending(string key)
+    {
+        PendingDispatch? pending;
+        lock (_lock)
+        {
+            if (_disposed || !_pendingDispatches.Remove(key, out pending)) return;
+            _lastEvent = DateTime.UtcNow;
+        }
+        pending.Timer.Dispose();
+
+        _logger.LogDebug("Watcher fired for {Path}", pending.Path);
         // FileSystemWatcher delivers callbacks on the thread pool. An
         // unhandled exception escaping a subscriber goes through
         // AppDomain.UnhandledException and terminates the host - the
         // silent-kill class we are guarding against. Log and swallow so a
         // single bad subscriber cannot crash the process.
-        try { OnJobChanged?.Invoke(path); }
-        catch (Exception ex) { _logger.LogWarning(ex, "OnJobChanged subscriber threw for {Path}", path); }
+        try { OnJobChanged?.Invoke(pending.Path); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnJobChanged subscriber threw for {Path}", pending.Path); }
+    }
+
+    private void DisposeResources()
+    {
+        FileSystemWatcher[] watchers;
+        Timer[] timers;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            watchers = _watchers.ToArray();
+            timers = _pendingDispatches.Values.Select(p => p.Timer).ToArray();
+            _watchers.Clear();
+            _pendingDispatches.Clear();
+        }
+        foreach (var timer in timers) timer.Dispose();
+        foreach (var watcher in watchers)
+        {
+            try { watcher.Dispose(); }
+            catch (Exception ex) { SilentCatch.Note(ex, "TaskWatcherService: watcher dispose"); }
+        }
+    }
+
+    public override void Dispose()
+    {
+        DisposeResources();
+        base.Dispose();
     }
 
     /// <summary>

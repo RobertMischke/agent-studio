@@ -46,6 +46,13 @@ internal sealed class ActiveRun
     public string? PickupLockFolder { get; set; }
 
     /// <summary>
+    /// Canonical task folder captured at admission time. Watcher reconciliation
+    /// uses this path directly so an external move cannot force a global task
+    /// index scan merely to decide whether the active latch is still valid.
+    /// </summary>
+    public string? JobFolder { get; set; }
+
+    /// <summary>
     /// ADR-0052 slice 2: parallelisability facts (exclusive / predicted scope /
     /// read-only) so <see cref="ParallelSlotPolicy"/> can prove this run disjoint
     /// from a candidate before a second slot is admitted. Default = unknown scope.
