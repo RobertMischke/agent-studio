@@ -48,7 +48,6 @@ Import via `from './features/project-detail'`. See [`index.ts`](./index.ts).
 `components/project-overview-dashboard/` composes compact projections of the
 project's existing detail truths:
 
-- delivered tasks from `GET /api/projects/{projectName}/throughput`;
 - token totals from `GET /api/projects/{projectName}/token-usage/summary`;
 - last deployment and pending delta from
   `GET /api/projects/{projectName}/deployment/summary`;
@@ -76,8 +75,9 @@ Every Overview request has an independent unavailable state. Detail links emit
 rail navigation or task navigation through the shell. The Visual Evidence queue
 projects delivered task screenshots and stores review receipts in each task's
 existing append-only `results/review-evidence.jsonl`; it does not introduce a
-second screenshot store. Because that projection walks delivered and archived
-task result trees, the backend keeps a ten-second per-project snapshot. The
+second screenshot store. The projection checks a bounded set of recent
+delivered tasks and returns at most four of the newest screenshots. The backend
+keeps a ten-second per-project snapshot. The
 Overview refresh bypasses this cache, acknowledgements invalidate it, and the
 client leaves the loading state after fifteen seconds if the filesystem read
 does not finish. Git branch inventory has its own three-second backend cache;

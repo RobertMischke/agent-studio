@@ -29,10 +29,7 @@ describe('ProjectOverviewDashboardComponent', () => {
     fixture.detectChanges();
 
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/projects/Demo%20Project/throughput').flush({
-      project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z',
-      completedLast24h: 7, completedLast7d: 31, recentCompletions: [],
-    });
+    http.expectNone('/api/projects/Demo%20Project/throughput');
     http.expectOne('/api/projects/Demo%20Project/token-usage/summary').flush(tokenSummary());
     http.expectOne('/api/projects/Demo%20Project/deployment/summary').flush({
       project: 'Demo Project', available: true, reason: null,
@@ -60,15 +57,17 @@ describe('ProjectOverviewDashboardComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('[data-testid="project-overview-throughput-24h"]')?.textContent).toContain('7');
-    expect(host.querySelector('[data-testid="project-overview-throughput-7d"]')?.textContent).toContain('31');
+    expect(host.querySelector('[data-testid="project-overview-throughput"]')).toBeNull();
+    expect(host.textContent).not.toContain('Delivered tasks');
     expect(host.querySelector('[data-testid="project-overview-tokens-24h"]')?.textContent).toContain('124K');
     expect(host.querySelector('[data-testid="project-overview-tokens-7d"]')?.textContent).toContain('831K');
     expect(host.querySelector('[data-testid="project-overview-deployment"]')?.textContent).toContain('3 changes ready to deploy');
     expect(host.querySelector('[data-testid="project-overview-last-deployment-details"]')?.textContent).toContain('Previously deployed change');
     expect(host.querySelector('[data-testid="project-overview-wiki"]')?.textContent).toContain('Operator dashboard concept');
     expect(host.querySelector('[data-testid="project-overview-planning-agt-2200"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="project-overview-evidence-count"]')?.textContent).toContain('1 unseen');
+    expect(host.querySelector('[data-testid="project-overview-evidence-count"]')?.textContent).toContain('4 unseen');
+    expect(host.querySelectorAll('[data-testid^="project-overview-evidence-visual-screenshot-demo-"]')).toHaveLength(4);
+    expect(host.querySelector('[data-testid="project-overview-evidence-visual-screenshot-demo-5"]')).toBeNull();
     const branchState = host.querySelector('[data-testid="project-overview-remote-truth"]')?.textContent ?? '';
     expect(branchState).toContain('2 to push');
     expect(branchState).toContain('3 to pull');
@@ -157,9 +156,7 @@ function snapshot() {
 }
 
 function flushEmpty(http: HttpTestingController): void {
-  http.expectOne('/api/projects/Demo%20Project/throughput').flush({
-    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', completedLast24h: 0, completedLast7d: 0, recentCompletions: [],
-  });
+  http.expectNone('/api/projects/Demo%20Project/throughput');
   http.expectOne('/api/projects/Demo%20Project/token-usage/summary').flush(tokenSummary());
   http.expectOne('/api/projects/Demo%20Project/deployment/summary').flush({
     project: 'Demo Project', available: false, reason: 'No history.', source: 'logs/stable-restarts.jsonl',
@@ -189,11 +186,12 @@ function gitInventory() {
 
 function evidenceQueue() {
   return {
-    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', unseenCount: 1,
-    items: [{
-      id: 'visual-screenshot-demo', jobId: 'agt-2199', jobTitle: 'Delivered UI', watchPath: 'C:/tasks/demo',
-      fileName: 'overview--real.png', relativePath: 'results/overview--real.png', url: '/shot.png',
-      caption: 'Delivered overview', testStatus: 'passed', source: 'real', capturedAt: '2026-07-11T11:00:00Z', reviewStatus: 'unseen',
-    }],
+    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', unseenCount: 5,
+    items: Array.from({ length: 5 }, (_, index) => ({
+      id: `visual-screenshot-demo-${index + 1}`, jobId: 'agt-2199', jobTitle: 'Delivered UI', watchPath: 'C:/tasks/demo',
+      fileName: `overview-${index + 1}--real.png`, relativePath: `results/overview-${index + 1}--real.png`, url: '/shot.png',
+      caption: `Delivered overview ${index + 1}`, testStatus: 'passed', source: 'real',
+      capturedAt: `2026-07-11T${String(11 - index).padStart(2, '0')}:00:00Z`, reviewStatus: 'unseen',
+    })),
   };
 }

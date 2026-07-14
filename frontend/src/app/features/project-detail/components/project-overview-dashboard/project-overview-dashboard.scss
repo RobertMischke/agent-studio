@@ -159,7 +159,6 @@
 
 .operator-dashboard__metric-lines {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--studio-spacing-2);
   margin-top: var(--studio-spacing-3);
 }
@@ -180,10 +179,6 @@
   height: 32px;
   place-items: center;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--studio-success) 14%, transparent);
-  color: var(--studio-success);
-}
-.operator-dashboard__metric-icon--tokens {
   background: color-mix(in srgb, var(--studio-accent) 14%, transparent);
   color: var(--studio-accent);
 }
