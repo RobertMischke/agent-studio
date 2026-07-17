@@ -194,6 +194,13 @@ builder.Services.AddSingleton<AgentStudio.Registry.OrchestratorDefaultsProvider>
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlDetectionService>();
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlProcessService>();
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlReadinessService>();
+// AGT-2180: bounded HTTP client shared by the readiness probe and the URL
+// diagnostics (an unconfigured named client would wait 100 s per probe).
+builder.Services.AddHttpClient("project-url-readiness", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(3);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("AgentStudio-URLPreview/1.0");
+});
 builder.Services.AddSingleton<AgentStudio.Tasks.TaskKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered

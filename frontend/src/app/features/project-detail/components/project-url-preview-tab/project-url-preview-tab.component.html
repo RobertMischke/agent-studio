@@ -15,7 +15,7 @@
         <span class="url-preview__identity">
           {{ projectName() }} / {{ urlRecord()?.label ?? urlId() }}
         </span>
-        <span class="url-preview__url">{{ urlRecord()?.url ?? 'Loading URL…' }}</span>
+        <span class="url-preview__url">{{ urlRecord() ? displayUrl() : 'Loading URL…' }}</span>
       </div>
       <span class="url-preview__pill"
             [attr.data-status]="statusPill()"
@@ -86,7 +86,7 @@
                   title="Embedded preview of {{ urlRecord()?.url }}"
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                   referrerpolicy="no-referrer"
-                  (load)="onFrameLoad()"></iframe>
+                  (load)="onFrameLoad($event)"></iframe>
 
           @if (frameState() === 'loading') {
             <div class="url-preview__overlay" data-testid="url-preview-loading">
@@ -114,6 +114,7 @@
           </div>
         } @else {
           <div class="url-preview__state"
+               [attr.data-diagnosis]="diagnostic()?.classification ?? 'not-started'"
                [attr.data-testid]="readiness().kind === 'http-error'
                  ? 'url-preview-http-error'
                  : readiness().kind === 'frame-blocked'
@@ -162,15 +163,15 @@
               <p class="url-preview__state-note url-preview__state-note--wide">
                 @if (readiness().kind === 'http-error') {
                   The server responded with <strong>HTTP {{ readiness().statusCode }}</strong> at
-                  <code>{{ urlRecord()?.url }}</code>. The error document was not loaded in the preview.
+                  <code data-testid="url-preview-affected-url">{{ displayUrl() }}</code>. The error document was not loaded in the preview.
                 } @else if (readiness().kind === 'frame-blocked') {
                   The server returned HTTP {{ readiness().statusCode }}, but its response policy refuses this
                   cross-origin iframe. {{ readiness().detail }}
                 } @else if (readiness().kind === 'timeout') {
                   The server did not return an HTTP response before the readiness timeout at
-                  <code>{{ urlRecord()?.url }}</code>.
+                  <code data-testid="url-preview-affected-url">{{ displayUrl() }}</code>.
                 } @else {
-                  No server is responding at <code>{{ urlRecord()?.url }}</code>.
+                  No server is responding at <code data-testid="url-preview-affected-url">{{ displayUrl() }}</code>.
                 }
               </p>
 
@@ -182,6 +183,14 @@
                 <div class="url-preview__progress" role="status">
                   <span class="url-preview__spinner url-preview__spinner--small" aria-hidden="true"></span>
                   Waiting for the server to accept connections
+                </div>
+              }
+
+              @if (!building() && !startFailure() && diagnostic(); as diag) {
+                <div class="url-preview__recommendation" data-testid="url-preview-recommendation">
+                  <span class="url-preview__recommendation-label">{{ diagnosis().status }} — {{ diagnosis().title }}</span>
+                  <p class="url-preview__recommendation-summary">{{ diag.summary }}</p>
+                  <p class="url-preview__recommendation-action">{{ diag.recommendedAction }}</p>
                 </div>
               }
 
@@ -198,7 +207,8 @@
                 </dl>
               } @else {
                 <p class="url-preview__state-note url-preview__state-note--wide">
-                  No start command is configured. Start the server manually, then reload.
+                  No start command is configured. Start the server manually and reload,
+                  or use the URL Preview quick setup in Settings.
                 </p>
               }
 
@@ -226,6 +236,16 @@
                     </button>
                   }
                 }
+                @if (!building() && detectedSuggestion()) {
+                  <button type="button" class="url-preview__btn url-preview__btn--ghost"
+                          data-testid="url-preview-apply-setup"
+                          (click)="applyDetectedSetup()">Apply detected setup</button>
+                }
+                @if (!building()) {
+                  <button type="button" class="url-preview__btn url-preview__btn--ghost"
+                          data-testid="url-preview-open-setup"
+                          (click)="openQuickSetup()">Open Settings</button>
+                }
                 <button type="button" class="url-preview__btn url-preview__btn--ghost"
                         data-testid="url-preview-failure-open-external"
                         (click)="openExternal()">Open externally</button>
@@ -233,6 +253,28 @@
                         data-testid="url-preview-edit-settings"
                         (click)="onSettings()">Settings</button>
               </div>
+
+              @if (diagnostic(); as detail) {
+                <details class="url-preview__diagnostics" [open]="detailsOpen()"
+                         (toggle)="detailsOpen.set($any($event.target).open)"
+                         data-testid="url-preview-details">
+                  <summary>Technical details</summary>
+                  <dl class="url-preview__evidence">
+                    <div><dt>Command</dt><dd><code>{{ detail.command ?? 'Not configured' }}</code></dd></div>
+                    <div><dt>Working directory</dt><dd><code>{{ detail.cwd ?? 'Project root' }}</code></dd></div>
+                    <div><dt>Port</dt><dd>{{ detail.configuredPort ?? 'From URL' }}</dd></div>
+                    <div><dt>Process</dt><dd>{{ detail.processCreated ? 'Created' : 'Not created' }} @if (detail.exitCode !== null) { · exit {{ detail.exitCode }} }</dd></div>
+                    <div><dt>Readiness</dt><dd>Port {{ detail.portReachable ? 'reachable' : 'not reachable' }} · HTTP {{ detail.httpStatus ?? 'none' }}</dd></div>
+                    <div><dt>Embedded page</dt><dd>{{ detail.iframeReady === true ? 'Ready' : detail.iframeReady === false ? 'Blocked or not renderable' : 'Not checked' }}</dd></div>
+                    @if (detail.framePolicy) { <div><dt>Frame policy</dt><dd><code>{{ detail.framePolicy }}</code></dd></div> }
+                  </dl>
+                  @if (detail.stdoutTail) { <pre class="url-preview__tail"><code>{{ detail.stdoutTail }}</code></pre> }
+                  @if (detail.stderrTail) { <pre class="url-preview__tail url-preview__tail--error"><code>{{ detail.stderrTail }}</code></pre> }
+                  <button type="button" class="url-preview__btn url-preview__btn--ghost"
+                          data-testid="url-preview-copy-diagnostics"
+                          (click)="copyDiagnostics()">{{ copied() ? 'Copied' : 'Copy diagnostics' }}</button>
+                </details>
+              }
             </section>
           </div>
         }

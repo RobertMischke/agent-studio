@@ -62,7 +62,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Fact]
     public void Start_ReturnsCommandAndEffectiveWorkingDirectory()
     {
-        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
         var url = new ProjectUrlRecord
         {
             Id = "url-1",
@@ -82,7 +82,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Fact]
     public async Task Start_CapturesOutputAndCompletionInTheSessionSnapshot()
     {
-        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
         var started = service.Start(Project(repositoryPath: _root), Url("url-output", EchoCommand()));
 
         var settled = await WaitForAsync(service, started.UrlId, snapshot =>
@@ -97,7 +97,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Fact]
     public void Stop_TerminatesTheOwnedProcessTreeAndRetainsItsSnapshot()
     {
-        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
         var started = service.Start(Project(repositoryPath: _root), Url("url-stop", LongRunningCommand()));
 
         var stopped = service.Stop(started.ProjectId, started.UrlId);
@@ -116,7 +116,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Fact]
     public void StopProject_TerminatesEveryOwnedUrlProcess()
     {
-        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
         var project = Project(repositoryPath: _root);
         service.Start(project, Url("url-one", LongRunningCommand()));
         service.Start(project, Url("url-two", LongRunningCommand()));
@@ -130,7 +130,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Fact]
     public void Dispose_TerminatesOwnedProcessesSoHostShutdownCannotOrphanThem()
     {
-        var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance, new PassiveHttpClientFactory());
         var started = service.Start(
             Project(repositoryPath: _root),
             Url("url-shutdown", LongRunningCommand()));
@@ -199,5 +199,11 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
             await Task.Delay(25, timeout.Token);
         }
         throw new TimeoutException("Process did not reach the expected state.");
+    }
+
+    /// <summary>The direct-lifecycle tests never issue HTTP probes.</summary>
+    private sealed class PassiveHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
     }
 }

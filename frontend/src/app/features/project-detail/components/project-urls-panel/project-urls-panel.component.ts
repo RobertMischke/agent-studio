@@ -16,6 +16,7 @@ import { TaskService } from '../../../../services/task.service';
 import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { ProjectUrlProbeService, type ProjectUrlStatus } from '../../../../services/project-url-probe.service';
 import { WorkspaceManagerService } from '../../../shell';
+import { ProjectUrlRecoveryService } from '../../services/project-url-recovery.service';
 import type {
   ProjectUrlStartRule,
   ProjectUrlSuggestion,
@@ -33,9 +34,8 @@ type UrlPill = ProjectUrlStatus | 'building';
  * Open / Restart / Edit / Remove actions, and an "Add URL" affordance that
  * offers repo-detected suggestions plus a manual form. Adding or removing a
  * URL bumps the registry-changed counter so the Explorer tree reflects it
- * without a reload. Running/offline is decided by a lightweight HTTP probe
- * (see {@link ProjectUrlProbeService}), so an externally started dev server
- * still shows as running.
+ * without a reload. Running/offline is projected from the structured backend
+ * readiness diagnostic through {@link ProjectUrlProbeService}.
  */
 @Component({
   selector: 'app-project-urls-panel',
@@ -48,6 +48,7 @@ type UrlPill = ProjectUrlStatus | 'building';
 })
 export class ProjectUrlsPanelComponent {
   readonly projectName = input.required<string>();
+  readonly quickSetup = input(false);
 
   /** AGT-2067 — open this URL as an embedded preview tab (primary action).
    *  The Hub view (which owns the tab state) turns it into a `url-preview` tab;
@@ -58,6 +59,7 @@ export class ProjectUrlsPanelComponent {
   private readonly lookup = inject(ProjectLookupService);
   private readonly probe = inject(ProjectUrlProbeService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
+  private readonly recovery = inject(ProjectUrlRecoveryService);
 
   readonly projectId = signal<string | null>(null);
   readonly urls = signal<readonly RegistryProjectUrl[]>([]);
@@ -74,6 +76,13 @@ export class ProjectUrlsPanelComponent {
   readonly formLabel = signal('');
   readonly formUrl = signal('');
   readonly formCommand = signal('');
+  readonly formCwd = signal('');
+  readonly formPort = signal<number | null>(null);
+  readonly formHealthUrl = signal('');
+  readonly formTimeout = signal(20);
+  readonly formSource = signal('manual');
+  readonly testing = signal(false);
+  readonly testDiagnostic = signal<import('../../../../models/task.model').ProjectUrlDiagnostic | null>(null);
 
   readonly runningCount = computed(() =>
     this.urls().filter(u => this.pillFor(u) === 'running').length);
@@ -111,6 +120,15 @@ export class ProjectUrlsPanelComponent {
   private applyProject(project: RegistryProjectSummary | null): void {
     this.projectId.set(project?.id ?? null);
     this.urls.set([...(project?.urls ?? [])].sort((a, b) => a.sortOrder - b.sortOrder));
+    const requested = this.quickSetup() ? this.recovery.takeQuickSetupRequest() : null;
+    const requestedUrl = requested && project?.urls.find(url => url.id === requested.urlId);
+    if (requestedUrl) {
+      this.startEdit(requestedUrl);
+      if (requested.suggestion) this.prefillStartRule(requested.suggestion);
+      else this.loadSuggestions(true);
+      return;
+    }
+    if (this.quickSetup() && project && project.urls.length === 0 && !this.addOpen()) this.openAdd();
   }
 
   // ----- status -----
@@ -184,6 +202,11 @@ export class ProjectUrlsPanelComponent {
     this.formLabel.set(url.label);
     this.formUrl.set(url.url);
     this.formCommand.set(url.startRule?.command ?? '');
+    this.formCwd.set(url.startRule?.cwd ?? '');
+    this.formPort.set(url.startRule?.port ?? null);
+    this.formHealthUrl.set(url.startRule?.healthUrl ?? url.url);
+    this.formTimeout.set(url.startRule?.readinessTimeoutSeconds ?? 20);
+    this.formSource.set(url.startRule?.source ?? 'manual');
     this.suggestions.set([]);
     this.addOpen.set(true);
   }
@@ -198,12 +221,30 @@ export class ProjectUrlsPanelComponent {
     this.formLabel.set('');
     this.formUrl.set('');
     this.formCommand.set('');
+    this.formCwd.set('');
+    this.formPort.set(null);
+    this.formHealthUrl.set('');
+    this.formTimeout.set(20);
+    this.formSource.set('manual');
+    this.testDiagnostic.set(null);
   }
 
   fillFromSuggestion(s: ProjectUrlSuggestion): void {
     this.formLabel.set(s.label);
     if (s.url) this.formUrl.set(s.url);
     this.formCommand.set(s.command);
+    this.formCwd.set(s.cwd ?? '');
+    this.formPort.set(s.port);
+    this.formHealthUrl.set(s.url ?? this.formUrl());
+    this.formSource.set(s.source);
+  }
+
+  private prefillStartRule(s: ProjectUrlSuggestion): void {
+    this.formCommand.set(s.command);
+    this.formCwd.set(s.cwd ?? '');
+    this.formPort.set(s.port);
+    this.formHealthUrl.set(s.url ?? this.formUrl());
+    this.formSource.set(s.source);
   }
 
   get canSave(): boolean {
@@ -216,7 +257,12 @@ export class ProjectUrlsPanelComponent {
     this.saving.set(true);
     const command = this.formCommand().trim();
     const startRule: ProjectUrlStartRule | null = command
-      ? { command, cwd: null, port: null, source: 'manual' }
+      ? {
+          command, cwd: this.formCwd().trim() || null, port: this.formPort(),
+          healthUrl: this.formHealthUrl().trim() || null,
+          readinessTimeoutSeconds: Math.max(2, Math.min(120, this.formTimeout() || 20)),
+          source: this.formSource(),
+        }
       : null;
     const body = { label: this.formLabel().trim(), url: this.formUrl().trim(), startRule };
     const editing = this.editingId();
@@ -234,6 +280,26 @@ export class ProjectUrlsPanelComponent {
     });
   }
 
+  testSetup(): void {
+    const projId = this.projectId();
+    if (!projId || !this.canSave || this.testing()) return;
+    const command = this.formCommand().trim();
+    const startRule: ProjectUrlStartRule | null = command ? {
+      command, cwd: this.formCwd().trim() || null, port: this.formPort(),
+      healthUrl: this.formHealthUrl().trim() || null,
+      readinessTimeoutSeconds: Math.max(2, Math.min(120, this.formTimeout() || 20)),
+      source: this.formSource(),
+    } : null;
+    this.testing.set(true);
+    this.testDiagnostic.set(null);
+    this.jobService.testProjectUrlSetup(projId, {
+      label: this.formLabel().trim(), url: this.formUrl().trim(), startRule,
+    }).subscribe({
+      next: result => { this.testDiagnostic.set(result); this.testing.set(false); },
+      error: () => { this.testing.set(false); },
+    });
+  }
+
   remove(url: RegistryProjectUrl): void {
     const projId = this.projectId();
     if (!projId) return;
@@ -245,11 +311,22 @@ export class ProjectUrlsPanelComponent {
     });
   }
 
-  private loadSuggestions(): void {
+  private loadSuggestions(prefillStartRule = false): void {
     const projId = this.projectId();
     if (!projId) { this.suggestions.set([]); return; }
     this.jobService.getProjectUrlSuggestions(projId).subscribe({
-      next: list => this.suggestions.set(list ?? []),
+      next: list => {
+        const values = list ?? [];
+        this.suggestions.set(values);
+        if (prefillStartRule && values[0]) {
+          const configuredPort = this.formPort();
+          this.prefillStartRule(values.find(value => value.port === configuredPort) ?? values[0]);
+          return;
+        }
+        if (this.quickSetup() && !this.editingId() && !this.formCommand() && values[0]) {
+          this.fillFromSuggestion(values[0]);
+        }
+      },
       error: () => this.suggestions.set([]),
     });
   }

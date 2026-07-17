@@ -1,26 +1,89 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace AgentStudio.Registry;
+
+/// <summary>AGT-2180 — stable classification vocabulary for URL Preview diagnostics.</summary>
+public static class ProjectUrlDiagnosisClasses
+{
+    public const string NotStarted = "not-started";
+    public const string Starting = "starting";
+    public const string CommandUnavailable = "command-unavailable";
+    public const string InvalidCwd = "invalid-cwd";
+    public const string ProcessExited = "process-exited";
+    public const string PortNeverOpened = "port-never-opened";
+    public const string Timeout = "timeout";
+    public const string HttpError = "http-error-response";
+    public const string ContentNotRenderable = "content-not-renderable";
+    public const string InvalidConfiguration = "invalid-configuration";
+    public const string Running = "running";
+}
+
+/// <summary>
+/// AGT-2180 — bounded, redacted evidence snapshot explaining why a preview is
+/// (not) ready. This is the actionable-diagnostics contract consumed by the
+/// Preview offline card and the Settings quick setup.
+/// </summary>
+public sealed record ProjectUrlDiagnostic
+{
+    public string Classification { get; init; } = ProjectUrlDiagnosisClasses.NotStarted;
+    public string Summary { get; init; } = "The preview service is not reachable.";
+    public string RecommendedAction { get; init; } = "Start the service or review URL Preview setup.";
+    public string? Command { get; init; }
+    public string? Cwd { get; init; }
+    public string? Url { get; init; }
+    public int? ConfiguredPort { get; init; }
+    public bool ProcessCreated { get; init; }
+    public int? ExitCode { get; init; }
+    public string StdoutTail { get; init; } = "";
+    public string StderrTail { get; init; } = "";
+    public bool TimedOut { get; init; }
+    public bool PortReachable { get; init; }
+    public int? HttpStatus { get; init; }
+    public bool ContentReady { get; init; }
+    /// <summary>Browser embedding evidence when response headers or the iframe can decide it.</summary>
+    public bool? IframeReady { get; init; }
+    /// <summary>Bounded blocking X-Frame-Options/CSP evidence, when present.</summary>
+    public string? FramePolicy { get; init; }
+    public DateTimeOffset CheckedAt { get; init; } = DateTimeOffset.UtcNow;
+}
 
 /// <summary>
 /// Owns the dev-server processes launched for project URLs. Sessions remain
 /// observable after the initiating request finishes, can be stopped explicitly,
 /// and are terminated with the backend host so a preview cannot become an
 /// orphaned child process.
+///
+/// <para>AGT-2180 layers actionable diagnostics on top of the owned sessions:
+/// <see cref="ProbeAsync"/> validates TCP, HTTP, and bounded content readiness
+/// so an open port or an error page is never mislabeled as Running, and
+/// <see cref="StartAsync"/>/<see cref="TestAsync"/> run a bounded start
+/// validation whose evidence (exit code, output tails) is redacted before it
+/// leaves the host.</para>
 /// </summary>
 public sealed class ProjectUrlProcessService : IDisposable
 {
     private const int MaxOutputLines = 1000;
+    internal const int OutputTailLimit = 8_192;
+    private static readonly Regex SecretRegex = new(
+        @"(?im)(?<userinfo>https?://)[^/\s:@]+(?::[^/\s@]*)?@|(?<bearer>bearer\s+)[a-z0-9._~+/=-]+|(?<key>(?:api[_-]?key|token|password|secret|authorization)\s*[:=]\s*)(?<value>(?:bearer\s+)?[^\s\r\n]+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly ILogger<ProjectUrlProcessService> _logger;
+    private readonly IHttpClientFactory _httpFactory;
     private readonly ConcurrentDictionary<string, Session> _sessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ProjectUrlDiagnostic> _latest = new(StringComparer.Ordinal);
     private readonly object _lifecycleGate = new();
     private int _disposed;
 
-    public ProjectUrlProcessService(ILogger<ProjectUrlProcessService> logger)
+    public ProjectUrlProcessService(ILogger<ProjectUrlProcessService> logger, IHttpClientFactory httpFactory)
     {
         _logger = logger;
+        _httpFactory = httpFactory;
     }
 
     /// <summary>
@@ -136,25 +199,329 @@ public sealed class ProjectUrlProcessService : IDisposable
         }
     }
 
-    /// <summary>Resolve only from explicit URL configuration or project source roots.</summary>
-    public static string ResolveWorkingDirectory(ProjectRecord project, ProjectUrlStartRule rule)
+    // ── AGT-2180: actionable diagnostics on top of the owned sessions ──────
+
+    /// <summary>Last published diagnostic for a URL, if any (no probe).</summary>
+    public ProjectUrlDiagnostic? Latest(ProjectRecord project, ProjectUrlRecord url) =>
+        _latest.TryGetValue(Key(project.Id, url.Id), out var value) ? value : null;
+
+    /// <summary>
+    /// Probe the URL's TCP, HTTP, and bounded content readiness without
+    /// touching any process. Session evidence (exit code, output tails) is
+    /// folded in when Studio owns a process for the URL.
+    /// </summary>
+    public async Task<ProjectUrlDiagnostic> ProbeAsync(ProjectRecord project, ProjectUrlRecord url, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(rule.Cwd))
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(url);
+        var seed = Latest(project, url);
+        var snapshot = Get(project.Id, url.Id);
+        if (snapshot != null)
         {
-            if (!Directory.Exists(rule.Cwd))
-                throw new InvalidOperationException($"Working directory does not exist: {rule.Cwd}");
-            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(rule.Cwd));
+            var (stdoutTail, stderrTail) = OutputTails(project.Id, url.Id);
+            seed = (seed ?? Base(url.StartRule, url.Url, url.StartRule?.Cwd)) with
+            {
+                ProcessCreated = true,
+                ExitCode = snapshot.ExitCode,
+                StdoutTail = Redact(stdoutTail),
+                StderrTail = Redact(stderrTail),
+            };
+        }
+        var evidence = await ProbeTargetAsync(url.StartRule, url.Url, seed, cancellationToken);
+        return Save(project.Id, url.Id, evidence);
+    }
+
+    /// <summary>
+    /// Start the owned session and validate process, TCP, HTTP, and bounded
+    /// content readiness before reporting Running. Returns the same redacted
+    /// diagnostic contract as <see cref="ProbeAsync"/>.
+    /// </summary>
+    public async Task<ProjectUrlDiagnostic> StartAsync(ProjectRecord project, ProjectUrlRecord url, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(url);
+        var rule = url.StartRule;
+        if (rule == null || string.IsNullOrWhiteSpace(rule.Command))
+            return Save(project.Id, url.Id, InvalidDiagnostic(rule, url.Url, "A start command is required."));
+        if (!Uri.TryCreate(rule.HealthUrl ?? url.Url, UriKind.Absolute, out var target) ||
+            (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps) ||
+            rule.Port is <= 0 or > 65535)
+            return Save(project.Id, url.Id, InvalidDiagnostic(rule, url.Url, "The URL, health target, or port is invalid."));
+
+        var cwd = ResolveDiagnosticCwd(project, rule.Cwd);
+        if (cwd == null || !Directory.Exists(cwd))
+            return Save(project.Id, url.Id, new ProjectUrlDiagnostic
+            {
+                Classification = ProjectUrlDiagnosisClasses.InvalidCwd,
+                Summary = "The configured working directory does not exist.",
+                RecommendedAction = "Open Settings and choose an existing project folder.",
+                Command = Redact(rule.Command), Cwd = Redact(cwd ?? rule.Cwd), Url = Redact(url.Url), ConfiguredPort = rule.Port,
+            });
+
+        try
+        {
+            Start(project, url with { StartRule = rule with { Cwd = cwd } });
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
+            {
+                Classification = ProjectUrlDiagnosisClasses.CommandUnavailable,
+                Summary = "The start command could not be launched.",
+                RecommendedAction = "Check the command and local tool installation in Settings.",
+                StderrTail = Redact(ex.Message),
+            });
         }
 
-        foreach (var candidate in new[] { project.RepositoryPath, project.RootPath })
-            if (!string.IsNullOrWhiteSpace(candidate) && Directory.Exists(candidate))
-                return Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+        Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
+        {
+            Classification = ProjectUrlDiagnosisClasses.Starting,
+            Summary = "The start command is running. Waiting for HTTP readiness.",
+            RecommendedAction = "Wait for the readiness check to finish.",
+            ProcessCreated = true,
+        });
 
-        var configured = project.RepositoryPath ?? project.RootPath;
-        throw new InvalidOperationException(configured == null
-            ? "No working directory is configured. Set a URL cwd or project repository/root path."
-            : $"Working directory does not exist: {configured}");
+        var timeout = TimeSpan.FromSeconds(Math.Clamp(rule.ReadinessTimeoutSeconds <= 0 ? 20 : rule.ReadinessTimeoutSeconds, 2, 120));
+        var deadline = DateTime.UtcNow + timeout;
+        var everPortReachable = false;
+        try
+        {
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var current = Get(project.Id, url.Id);
+                if (current == null || !ProjectUrlProcessStates.IsActive(current.State))
+                {
+                    var (stdoutTail, stderrTail) = OutputTails(project.Id, url.Id);
+                    var unavailable = current?.ExitCode is 126 or 127
+                        || stderrTail.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                        || stderrTail.Contains("not recognized", StringComparison.OrdinalIgnoreCase);
+                    return Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
+                    {
+                        Classification = unavailable ? ProjectUrlDiagnosisClasses.CommandUnavailable : ProjectUrlDiagnosisClasses.ProcessExited,
+                        Summary = unavailable ? "The start command is not available in this environment." : "The service process exited before the preview became ready.",
+                        RecommendedAction = unavailable ? "Install the command or correct the start command in Settings." : "Review the process output, correct the setup, then Retry.",
+                        ProcessCreated = true, ExitCode = current?.ExitCode,
+                        StdoutTail = Redact(stdoutTail), StderrTail = Redact(stderrTail),
+                    });
+                }
+
+                var port = rule.Port ?? target.Port;
+                everPortReachable |= await IsPortReachableAsync(target.Host, port, cancellationToken);
+                if (everPortReachable)
+                {
+                    var (stdoutTail, stderrTail) = OutputTails(project.Id, url.Id);
+                    var ready = await ProbeTargetAsync(rule, url.Url, Base(rule, url.Url, cwd) with
+                    {
+                        ProcessCreated = true, PortReachable = true,
+                        StdoutTail = Redact(stdoutTail), StderrTail = Redact(stderrTail),
+                    }, cancellationToken);
+                    if (ready.Classification is ProjectUrlDiagnosisClasses.Running
+                        or ProjectUrlDiagnosisClasses.HttpError
+                        or ProjectUrlDiagnosisClasses.ContentNotRenderable)
+                        return Save(project.Id, url.Id, ready);
+                }
+                await Task.Delay(250, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            var (stdoutTail, stderrTail) = OutputTails(project.Id, url.Id);
+            return Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
+            {
+                Classification = ProjectUrlDiagnosisClasses.Timeout,
+                Summary = "Startup validation was cancelled before readiness was confirmed.",
+                RecommendedAction = "Retry the bounded validation.",
+                ProcessCreated = true, TimedOut = true,
+                StdoutTail = Redact(stdoutTail), StderrTail = Redact(stderrTail),
+            });
+        }
+
+        var (finalStdout, finalStderr) = OutputTails(project.Id, url.Id);
+        return Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
+        {
+            Classification = everPortReachable ? ProjectUrlDiagnosisClasses.Timeout : ProjectUrlDiagnosisClasses.PortNeverOpened,
+            Summary = everPortReachable
+                ? "The port opened, but HTTP content did not become ready before the timeout."
+                : "The process stayed alive, but the configured port never opened.",
+            RecommendedAction = "Verify the port, URL, and readiness target in Settings, then Retry.",
+            ProcessCreated = true, TimedOut = true, PortReachable = everPortReachable,
+            StdoutTail = Redact(finalStdout), StderrTail = Redact(finalStderr),
+        });
     }
+
+    /// <summary>
+    /// Validate a candidate configuration for the Settings quick setup. The
+    /// spawned validation process never outlives the request — saving and
+    /// starting the real URL is a separate action.
+    /// </summary>
+    public async Task<ProjectUrlDiagnostic> TestAsync(ProjectRecord project, ProjectUrlRecord candidate, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await StartAsync(project, candidate, cancellationToken);
+        }
+        finally
+        {
+            Stop(project.Id, candidate.Id);
+        }
+    }
+
+    private async Task<ProjectUrlDiagnostic> ProbeTargetAsync(ProjectUrlStartRule? rule, string url, ProjectUrlDiagnostic? seed, CancellationToken cancellationToken)
+    {
+        if (!Uri.TryCreate(rule?.HealthUrl ?? url, UriKind.Absolute, out var target) ||
+            (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
+            return InvalidDiagnostic(rule, url, "The URL or health target is not a valid HTTP address.");
+
+        var port = rule?.Port ?? target.Port;
+        var portReachable = await IsPortReachableAsync(target.Host, port, cancellationToken);
+        var basis = (seed ?? Base(rule, url, rule?.Cwd)) with { PortReachable = portReachable };
+        if (!portReachable)
+            return basis with
+            {
+                Classification = seed?.ProcessCreated == true ? ProjectUrlDiagnosisClasses.PortNeverOpened : ProjectUrlDiagnosisClasses.NotStarted,
+                Summary = "Nothing is accepting connections at the configured preview address.",
+                RecommendedAction = rule == null ? "Open Settings and add a start configuration." : "Start the service or review its setup.",
+            };
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, target);
+            using var response = await _httpFactory.CreateClient("project-url-readiness")
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            var status = (int)response.StatusCode;
+            if (status >= 400)
+                return basis with
+                {
+                    Classification = ProjectUrlDiagnosisClasses.HttpError,
+                    Summary = $"The service responded with HTTP {status}.",
+                    RecommendedAction = "Correct the health target or fix the server response, then Retry.", HttpStatus = status,
+                };
+            var framePolicy = BlockingFramePolicy(response);
+            if (framePolicy != null)
+                return basis with
+                {
+                    Classification = ProjectUrlDiagnosisClasses.ContentNotRenderable,
+                    Summary = "The page is healthy, but its response headers block embedded previews.",
+                    RecommendedAction = "Allow the Agent Studio origin in the page's frame policy, or open it externally.",
+                    HttpStatus = status, ContentReady = true, IframeReady = false, FramePolicy = framePolicy,
+                };
+            var bytes = await ReadBoundedAsync(response.Content, 4096, cancellationToken);
+            var media = response.Content.Headers.ContentType?.MediaType ?? "";
+            var sample = Encoding.UTF8.GetString(bytes);
+            var meaningfulHtml = Regex.IsMatch(sample,
+                @"<(?!/?(?:html|head|body|meta|link|script|style|title)\b)[a-z][^>]*>",
+                RegexOptions.IgnoreCase);
+            var renderable = bytes.Length > 0 && (media.StartsWith("text/", StringComparison.OrdinalIgnoreCase)
+                ? (!media.Contains("html", StringComparison.OrdinalIgnoreCase) || meaningfulHtml)
+                : media.Length == 0 && meaningfulHtml);
+            if (!renderable)
+                return basis with
+                {
+                    Classification = ProjectUrlDiagnosisClasses.ContentNotRenderable,
+                    Summary = "The service responded, but it did not return renderable page content.",
+                    RecommendedAction = "Choose a page URL that returns HTML, or open the target externally.",
+                    HttpStatus = status, ContentReady = false, IframeReady = false,
+                };
+            return basis with
+            {
+                Classification = ProjectUrlDiagnosisClasses.Running,
+                Summary = "The preview service is ready and returned renderable content.",
+                RecommendedAction = "No recovery action is needed.", HttpStatus = status, ContentReady = true,
+            };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return basis with
+            {
+                Classification = ProjectUrlDiagnosisClasses.Timeout,
+                Summary = "The port accepted a connection, but the HTTP readiness check did not complete.",
+                RecommendedAction = "Verify the health target and readiness timeout.", TimedOut = ex is TaskCanceledException,
+                StderrTail = Redact(ex.Message),
+            };
+        }
+    }
+
+    internal static ProjectUrlDiagnostic InvalidDiagnostic(ProjectUrlStartRule? rule, string? url, string summary) => new()
+    {
+        Classification = ProjectUrlDiagnosisClasses.InvalidConfiguration,
+        Summary = summary,
+        RecommendedAction = "Open Settings and complete URL Preview quick setup.",
+        Command = Redact(rule?.Command), Cwd = Redact(rule?.Cwd), Url = Redact(url), ConfiguredPort = rule?.Port,
+    };
+
+    internal static string Redact(string? value)
+    {
+        var redacted = SecretRegex.Replace(value ?? "", match => match.Groups["bearer"].Success
+            ? match.Groups["bearer"].Value + "[REDACTED]"
+            : match.Groups["userinfo"].Success
+                ? match.Groups["userinfo"].Value + "[REDACTED]@"
+                : match.Groups["key"].Value + "[REDACTED]");
+        return Tail(redacted, OutputTailLimit);
+    }
+
+    internal static string Tail(string value, int limit) => value.Length <= limit ? value : "…" + value[^limit..];
+
+    private static ProjectUrlDiagnostic Base(ProjectUrlStartRule? rule, string url, string? cwd) => new()
+    {
+        Command = Redact(rule?.Command), Cwd = Redact(cwd), Url = Redact(url), ConfiguredPort = rule?.Port,
+    };
+
+    private static string? BlockingFramePolicy(HttpResponseMessage response)
+    {
+        if (response.Headers.TryGetValues("X-Frame-Options", out var xfoValues))
+        {
+            var xfo = string.Join(", ", xfoValues);
+            if (xfo.Contains("DENY", StringComparison.OrdinalIgnoreCase) ||
+                xfo.Contains("SAMEORIGIN", StringComparison.OrdinalIgnoreCase))
+                return Tail($"X-Frame-Options: {xfo}", 512);
+        }
+
+        if (!response.Headers.TryGetValues("Content-Security-Policy", out var cspValues))
+            return null;
+        var csp = string.Join("; ", cspValues);
+        var ancestors = Regex.Match(csp, @"(?:^|;)\s*frame-ancestors\s+(?<sources>[^;]+)", RegexOptions.IgnoreCase);
+        if (!ancestors.Success) return null;
+        var sources = ancestors.Groups["sources"].Value.Trim();
+        if (sources.Contains("'none'", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(sources, "'self'", StringComparison.OrdinalIgnoreCase))
+            return Tail($"Content-Security-Policy: frame-ancestors {sources}", 512);
+        return null;
+    }
+
+    private ProjectUrlDiagnostic Save(string projectId, string urlId, ProjectUrlDiagnostic value)
+    {
+        _latest[Key(projectId, urlId)] = value;
+        return value;
+    }
+
+    /// <summary>Diagnostic-path cwd resolution: relative values resolve against the project source roots.</summary>
+    private static string? ResolveDiagnosticCwd(ProjectRecord project, string? configured) =>
+        string.IsNullOrWhiteSpace(configured) ? project.RepositoryPath ?? project.RootPath :
+        Path.IsPathRooted(configured) ? configured : Path.Combine(project.RepositoryPath ?? project.RootPath ?? "", configured);
+
+    private static async Task<bool> IsPortReachableAsync(string host, int port, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var tcp = new TcpClient();
+            await tcp.ConnectAsync(host, port, cancellationToken).AsTask().WaitAsync(TimeSpan.FromMilliseconds(350), cancellationToken);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private static async Task<byte[]> ReadBoundedAsync(HttpContent content, int limit, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        var buffer = new byte[limit];
+        var read = await stream.ReadAsync(buffer.AsMemory(0, limit), cancellationToken);
+        return buffer[..read];
+    }
+
+    private (string Stdout, string Stderr) OutputTails(string projectId, string urlId)
+        => _sessions.TryGetValue(Key(projectId, urlId), out var session)
+            ? (session.StdoutTail.Value, session.StderrTail.Value)
+            : ("", "");
 
     internal static ProcessStartInfo BuildStartInfo(string command, string cwd)
     {
@@ -180,6 +547,26 @@ public sealed class ProjectUrlProcessService : IDisposable
             psi.ArgumentList.Add(command);
         }
         return psi;
+    }
+
+    /// <summary>Resolve only from explicit URL configuration or project source roots.</summary>
+    public static string ResolveWorkingDirectory(ProjectRecord project, ProjectUrlStartRule rule)
+    {
+        if (!string.IsNullOrWhiteSpace(rule.Cwd))
+        {
+            if (!Directory.Exists(rule.Cwd))
+                throw new InvalidOperationException($"Working directory does not exist: {rule.Cwd}");
+            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(rule.Cwd));
+        }
+
+        foreach (var candidate in new[] { project.RepositoryPath, project.RootPath })
+            if (!string.IsNullOrWhiteSpace(candidate) && Directory.Exists(candidate))
+                return Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidate));
+
+        var configured = project.RepositoryPath ?? project.RootPath;
+        throw new InvalidOperationException(configured == null
+            ? "No working directory is configured. Set a URL cwd or project repository/root path."
+            : $"Working directory does not exist: {configured}");
     }
 
     private void RetirePrevious(string key)
@@ -242,11 +629,17 @@ public sealed class ProjectUrlProcessService : IDisposable
         if (line == null) return;
         lock (session.Gate) AppendOutputLocked(session, line);
         if (isError)
+        {
+            session.StderrTail.Append(line);
             _logger.LogWarning("project-url-error project={ProjectId} url={UrlId} text={Text}",
                 session.ProjectId, session.UrlId, line);
+        }
         else
+        {
+            session.StdoutTail.Append(line);
             _logger.LogDebug("project-url-output project={ProjectId} url={UrlId} text={Text}",
                 session.ProjectId, session.UrlId, line);
+        }
     }
 
     private static void AppendOutputLocked(Session session, string line)
@@ -296,6 +689,23 @@ public sealed class ProjectUrlProcessService : IDisposable
 
     private static string Key(string projectId, string urlId) => $"{projectId}::{urlId}";
 
+    /// <summary>Bounded string tail used for redacted stdout/stderr diagnostics.</summary>
+    private sealed class TailBuffer(int limit)
+    {
+        private readonly StringBuilder _value = new();
+        private readonly object _gate = new();
+        public string Value { get { lock (_gate) return Tail(_value.ToString(), limit); } }
+        public void Append(string? line)
+        {
+            if (line == null) return;
+            lock (_gate)
+            {
+                _value.AppendLine(line);
+                if (_value.Length > limit * 2) _value.Remove(0, _value.Length - limit);
+            }
+        }
+    }
+
     private sealed class Session(
         string projectId,
         string urlId,
@@ -315,6 +725,8 @@ public sealed class ProjectUrlProcessService : IDisposable
         public int? ExitCode { get; set; }
         public string State { get; set; } = ProjectUrlProcessStates.Starting;
         public List<string> Output { get; } = [];
+        public TailBuffer StdoutTail { get; } = new(OutputTailLimit);
+        public TailBuffer StderrTail { get; } = new(OutputTailLimit);
     }
 }
 

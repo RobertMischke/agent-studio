@@ -1,1 +1,110 @@
 @use './project-url-preview-tab.layout';
+
+// ── AGT-2180: actionable diagnostics on the failure card ─────────────────
+.url-preview {
+  &__recommendation {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
+    width: 100%;
+    padding: var(--studio-spacing-3);
+    border: 1px solid var(--studio-border);
+    border-left: 3px solid var(--studio-accent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--studio-accent) 6%, transparent);
+    text-align: left;
+  }
+
+  &__recommendation-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--studio-fg-strong);
+  }
+
+  &__recommendation-summary {
+    margin: 0;
+    font-size: 12px;
+    color: var(--studio-fg-dim);
+  }
+
+  &__recommendation-action {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--studio-fg-strong);
+  }
+
+  &__diagnostics {
+    width: 100%;
+    text-align: left;
+
+    summary {
+      cursor: pointer;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--studio-fg-dim);
+
+      &:hover { color: var(--studio-fg-strong); }
+    }
+
+    > .url-preview__btn { margin-top: var(--studio-spacing-2); }
+  }
+
+  &__evidence {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
+    margin: var(--studio-spacing-2) 0 0;
+
+    div {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: var(--studio-spacing-2);
+      align-items: baseline;
+    }
+
+    dt {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--studio-fg-muted);
+    }
+
+    dd {
+      margin: 0;
+      font-size: 11.5px;
+      color: var(--studio-fg-dim);
+      overflow-wrap: anywhere;
+
+      code {
+        font-family: var(--font-mono);
+        font-size: 11px;
+      }
+    }
+  }
+
+  &__tail {
+    max-height: 160px;
+    margin: var(--studio-spacing-2) 0 0;
+    padding: var(--studio-spacing-2);
+    overflow: auto;
+    border: 1px solid var(--studio-border);
+    border-radius: 6px;
+    background: var(--studio-bg-surface);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: var(--studio-fg-dim);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+
+    &--error { color: var(--studio-warn); }
+  }
+
+  @media (max-width: 640px) {
+    &__evidence div {
+      grid-template-columns: 1fr;
+      gap: var(--studio-spacing-1);
+    }
+  }
+}

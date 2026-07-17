@@ -21,14 +21,16 @@ import {
   ProjectUrlProbeService,
   type ProjectUrlReadiness,
 } from '../../../../services/project-url-probe.service';
-import type { RegistryProjectUrl } from '../../../../models/task.model';
+import type { ProjectUrlDiagnostic, ProjectUrlSuggestion, RegistryProjectUrl } from '../../../../models/task.model';
 import { ProjectUrlLookupService } from '../../services/project-url-lookup.service';
 import { ProjectUrlProcessController } from '../../services/project-url-process.controller';
+import { ProjectUrlRecoveryService } from '../../services/project-url-recovery.service';
 import { ProjectUrlProcessConsoleComponent } from '../project-url-process-console/project-url-process-console';
 import {
   ProjectUrlSettingsDialogComponent,
   type ProjectUrlSettingsValue,
 } from '../project-url-settings-dialog/project-url-settings-dialog';
+import { diagnosticText, presentProjectUrlDiagnosis, safePreviewUrl } from './project-url-diagnostic.model';
 
 /** Address-bar status pill vocabulary for the embedded preview. */
 type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' | 'failed';
@@ -38,6 +40,10 @@ interface StartFailure {
   command: string;
   cwd: string;
 }
+
+/** Readiness kinds that warrant loading the full backend diagnosis. */
+const DIAGNOSABLE_KINDS: ReadonlySet<ProjectUrlReadiness['kind']> =
+  new Set(['offline', 'timeout', 'http-error', 'frame-blocked']);
 
 /**
  * AGT-2067 — embedded Project URL preview tab.
@@ -59,6 +65,13 @@ interface StartFailure {
  *   until `load` fires, and if `load` never fires within {@link LOAD_TIMEOUT_MS}
  *   while the server is reachable we surface a "may refuse to be embedded"
  *   banner (X-Frame-Options / CSP) with an always-available browser escape hatch.
+ *
+ * AGT-2180 layers actionable diagnostics on the failure states: whenever the
+ * readiness probe reports a failure kind, the backend diagnostic endpoint is
+ * queried and its classification, recommended action, and redacted evidence
+ * enrich the offline card. A repository-derived quick fix can be applied in
+ * place, and the Settings deep link hands the failing URL (plus any detected
+ * suggestion) to the Settings "URL Preview quick setup" section.
  */
 @Component({
   selector: 'app-project-url-preview-tab',
@@ -85,6 +98,7 @@ export class ProjectUrlPreviewTabComponent {
 
   private readonly lookup = inject(ProjectUrlLookupService);
   private readonly probe = inject(ProjectUrlProbeService);
+  private readonly recovery = inject(ProjectUrlRecoveryService);
   private readonly taskService = inject(TaskService);
   private readonly sanitizer = inject(DomSanitizer);
   readonly process = inject(ProjectUrlProcessController);
@@ -108,12 +122,21 @@ export class ProjectUrlPreviewTabComponent {
   readonly settingsOpen = signal(false);
   readonly settingsSaving = signal(false);
   readonly settingsError = signal<string | null>(null);
+  /** AGT-2180 — latest backend diagnosis for the failure card, if fetched. */
+  readonly diagnostic = signal<ProjectUrlDiagnostic | null>(null);
+  readonly diagnosis = computed(() => presentProjectUrlDiagnosis(this.diagnostic()));
+  /** AGT-2180 — repository-derived quick fix detected for the failing URL. */
+  readonly detectedSuggestion = signal<ProjectUrlSuggestion | null>(null);
+  readonly detailsOpen = signal(false);
+  readonly copied = signal(false);
   /** Bumping this re-navigates the iframe (forces a fresh `[src]` reference). */
   private readonly reloadNonce = signal(0);
 
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
   private startDeadline = 0;
+  /** De-dupes diagnostic fetches per (project, url, readiness-kind) tuple. */
+  private lastDiagnosedKey: string | null = null;
 
   readonly readiness = computed<ProjectUrlReadiness>(() => {
     const projectId = this.projectId();
@@ -154,6 +177,9 @@ export class ProjectUrlPreviewTabComponent {
     void this.reloadNonce();
     return this.sanitizer.bypassSecurityTrustResourceUrl(u.url);
   });
+
+  /** Credential- and secret-redacted URL for preview chrome and cards. */
+  readonly displayUrl = computed(() => safePreviewUrl(this.urlRecord()?.url));
 
   readonly statusPill = computed<PreviewPill>(() => {
     if (this.building()) return 'building';
@@ -214,6 +240,21 @@ export class ProjectUrlPreviewTabComponent {
       this.loadTimer = setTimeout(() => this.onLoadTimeout(), this.LOAD_TIMEOUT_MS);
     });
 
+    // AGT-2180: whenever the readiness probe settles on a failure kind, fetch
+    // the full backend diagnosis (once per kind) so the offline card can show
+    // classification, recommended action, and redacted evidence.
+    effect(() => {
+      const projectId = this.projectId();
+      const url = this.urlRecord();
+      const kind = this.readiness().kind;
+      if (!projectId || !url || this.resolveState() !== 'resolved') return;
+      if (this.building() || !DIAGNOSABLE_KINDS.has(kind)) return;
+      const key = `${projectId}::${url.id}::${kind}`;
+      if (key === this.lastDiagnosedKey) return;
+      this.lastDiagnosedKey = key;
+      this.fetchDiagnostic(projectId, url.id);
+    });
+
     inject(DestroyRef).onDestroy(() => {
       this.clearLoadTimer();
       this.clearStartTimer();
@@ -227,6 +268,9 @@ export class ProjectUrlPreviewTabComponent {
     this.startFailure.set(null);
     this.menuOpen.set(false);
     this.settingsOpen.set(false);
+    this.diagnostic.set(null);
+    this.detectedSuggestion.set(null);
+    this.lastDiagnosedKey = null;
     this.resolveState.set('resolving');
     this.lookup.resolve(name, id).subscribe({
       next: res => {
@@ -257,9 +301,31 @@ export class ProjectUrlPreviewTabComponent {
 
   /** iframe finished (loaded a page — we cannot read cross-origin, only that it
    *  navigated). Clears the suspected-block timer. */
-  onFrameLoad(): void {
+  onFrameLoad(event?: Event): void {
     if (this.probeStatus() !== 'running') return;
+    const frame = event?.target as HTMLIFrameElement | null;
+    try {
+      // Same-origin only: a blank document is not a usable preview even when
+      // the transport probe reported healthy renderable content.
+      const body = frame?.contentDocument?.body;
+      if (body && body.children.length === 0 && !body.textContent?.trim()) {
+        this.frameState.set('blocked');
+        this.diagnostic.update(value => value ? {
+          ...value,
+          classification: 'content-not-renderable',
+          summary: 'The server returned a blank page that cannot be previewed.',
+          recommendedAction: 'Correct the page URL or open the target externally.',
+          contentReady: false, iframeReady: false,
+        } : value);
+        this.clearLoadTimer();
+        return;
+      }
+    } catch {
+      // Cross-origin frames are intentionally opaque. Backend content
+      // readiness and the bounded iframe timeout remain authoritative.
+    }
     this.frameState.set('loaded');
+    this.diagnostic.update(value => value ? { ...value, iframeReady: true } : value);
     this.clearLoadTimer();
   }
 
@@ -280,6 +346,7 @@ export class ProjectUrlPreviewTabComponent {
     const url = this.urlRecord();
     if (!projectId || !url) return;
     const wasRunning = this.probeStatus() === 'running';
+    this.lastDiagnosedKey = null;
     this.probe.refresh(projectId, url.id);
     if (wasRunning) {
       this.frameState.set('loading');
@@ -296,6 +363,7 @@ export class ProjectUrlPreviewTabComponent {
     const rule = u.startRule;
     this.clearStartTimer();
     this.startFailure.set(null);
+    this.lastDiagnosedKey = null;
     this.building.set(true);
     this.process.start(projId, u, this.effectiveCwd()).subscribe({
       next: () => this.afterStart(u.id),
@@ -315,8 +383,69 @@ export class ProjectUrlPreviewTabComponent {
         this.startFailure.set(failure);
         this.process.failStart(failure.explanation, failure.command, failure.cwd);
         this.building.set(false);
+        this.fetchDiagnostic(projId, u.id);
       },
     });
+  }
+
+  /** AGT-2180 — re-resolve possibly corrected setup, then start or re-diagnose. */
+  retry(): void {
+    if (this.building()) return;
+    const name = this.projectName();
+    const id = this.urlId();
+    this.building.set(true);
+    this.lookup.resolve(name, id).subscribe({
+      next: res => {
+        if (name !== this.projectName() || id !== this.urlId()) return;
+        this.building.set(false);
+        if (!res) {
+          this.resolveState.set('not-found');
+          return;
+        }
+        this.projectId.set(res.projectId);
+        this.urlRecord.set(res.url);
+        this.startFailure.set(null);
+        this.lastDiagnosedKey = null;
+        if (res.url.startRule) this.start();
+        else this.fetchDiagnostic(res.projectId, res.url.id);
+      },
+      error: () => {
+        if (name !== this.projectName() || id !== this.urlId()) return;
+        this.building.set(false);
+      },
+    });
+  }
+
+  /** AGT-2180 — apply the detected repository-derived setup, then start it. */
+  applyDetectedSetup(): void {
+    const projId = this.projectId();
+    const url = this.urlRecord();
+    const suggestion = this.detectedSuggestion();
+    if (!projId || !url || !suggestion || this.building()) return;
+    this.building.set(true);
+    this.recovery.apply(projId, url, suggestion).subscribe({
+      next: corrected => {
+        this.building.set(false);
+        if (corrected) this.urlRecord.set(corrected);
+        this.startFailure.set(null);
+        this.lastDiagnosedKey = null;
+        if (corrected?.startRule) this.start();
+        else if (corrected) this.fetchDiagnostic(projId, corrected.id);
+      },
+      error: error => {
+        this.building.set(false);
+        this.settingsError.set(this.errorMessage(error));
+      },
+    });
+  }
+
+  /** AGT-2180 — copy the full redacted diagnostic evidence to the clipboard. */
+  async copyDiagnostics(): Promise<void> {
+    const value = this.diagnostic();
+    if (!value) return;
+    await navigator.clipboard.writeText(diagnosticText(value));
+    this.copied.set(true);
+    setTimeout(() => this.copied.set(false), 1500);
   }
 
   stop(): void {
@@ -385,11 +514,38 @@ export class ProjectUrlPreviewTabComponent {
         cwd: this.effectiveCwd(),
       });
       this.building.set(false);
+      this.fetchDiagnostic(projectId, urlId);
       return;
     }
 
     this.probe.refresh(projectId, urlId);
     this.startTimer = setTimeout(() => this.checkStartReadiness(projectId, urlId), this.START_POLL_MS);
+  }
+
+  /** AGT-2180 — load the backend diagnosis and, when it points at a fixable
+   *  configuration, look for a repository-derived quick fix. */
+  private fetchDiagnostic(projectId: string, urlId: string): void {
+    this.taskService.diagnoseProjectUrl(projectId, urlId).subscribe({
+      next: result => {
+        if (this.projectId() !== projectId || this.urlRecord()?.id !== urlId) return;
+        this.diagnostic.set(result);
+        this.loadSuggestionFor(result);
+      },
+      error: () => { /* the readiness card remains authoritative without evidence */ },
+    });
+  }
+
+  private loadSuggestionFor(result: ProjectUrlDiagnostic): void {
+    const fixable: readonly ProjectUrlDiagnostic['classification'][] =
+      ['invalid-configuration', 'invalid-cwd', 'command-unavailable', 'port-never-opened', 'not-started'];
+    if (!fixable.includes(result.classification)) return;
+    const projectId = this.projectId();
+    const url = this.urlRecord();
+    if (!projectId || !url) return;
+    this.detectedSuggestion.set(null);
+    this.recovery.detect(projectId, url).subscribe({
+      next: suggestion => this.detectedSuggestion.set(suggestion),
+    });
   }
 
   openExternal(): void {
@@ -406,6 +562,13 @@ export class ProjectUrlPreviewTabComponent {
     this.settingsOpen.set(true);
   }
 
+  /** AGT-2180 — hand the failing URL and any detected suggestion to the
+   *  Settings "URL Preview quick setup" section, then deep-link there. */
+  openQuickSetup(): void {
+    this.recovery.requestQuickSetup(this.urlRecord()?.id ?? this.urlId(), this.detectedSuggestion());
+    this.openSettings.emit({ projectName: this.projectName() });
+  }
+
   saveSettings(value: ProjectUrlSettingsValue): void {
     const projectId = this.projectId();
     const current = this.urlRecord();
@@ -419,6 +582,7 @@ export class ProjectUrlPreviewTabComponent {
         this.urlRecord.set({ ...current, ...value });
         this.settingsOpen.set(false);
         this.frameState.set('loading');
+        this.lastDiagnosedKey = null;
         this.reloadNonce.update(n => n + 1);
         this.probe.refresh(projectId, current.id);
       },

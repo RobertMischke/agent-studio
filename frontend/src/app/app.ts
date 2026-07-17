@@ -2071,10 +2071,10 @@ export class App implements OnInit, OnDestroy {
 
   /**
    * AGT-2067 — settings-gear on the embedded URL preview deep-links to the
-   * Project Hub "Project URLs" management page for that project.
+   * Project Settings, where URL Preview quick setup is the first section.
    */
   onOpenUrlPreviewSettings(e: { projectName: string }): void {
-    this.studioTabState.open({ kind: 'hub', projectName: e.projectName, section: 'project-urls' });
+    this.studioTabState.open({ kind: 'hub', projectName: e.projectName, section: 'settings' });
   }
 
   private openWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {

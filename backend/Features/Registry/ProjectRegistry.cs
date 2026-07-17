@@ -712,6 +712,8 @@ public sealed class ProjectRegistry
             Command = command,
             Cwd = cwd,
             Port = rule.Port,
+            HealthUrl = string.IsNullOrWhiteSpace(rule.HealthUrl) ? null : ValidateUrl(rule.HealthUrl),
+            ReadinessTimeoutSeconds = Math.Clamp(rule.ReadinessTimeoutSeconds <= 0 ? 20 : rule.ReadinessTimeoutSeconds, 2, 120),
             Source = source,
         };
     }

@@ -27,6 +27,7 @@ import type {
   PromoteToCodingResponse,
   CreateRegistryProjectRequest,
   RegistryProjectSummary,
+  ProjectUrlDiagnostic,
   ProjectUrlStartRule,
   ProjectUrlSuggestion,
   ProjectUrlProcessSnapshot,
@@ -717,6 +718,19 @@ export class TaskService {
     return this.http.delete<ProjectUrlProcessSnapshot>(
       `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
   }
+
+  /** AGT-2180 — full actionable diagnosis (process, TCP, HTTP, content). */
+  diagnoseProjectUrl(projId: string, urlId: string) {
+    return this.http.get<ProjectUrlDiagnostic>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/diagnostic`);
+  }
+
+  /** AGT-2180 — bounded quick-setup validation; never persists the candidate. */
+  testProjectUrlSetup(projId: string, body: { label?: string; url: string; startRule: ProjectUrlStartRule | null }) {
+    return this.http.post<ProjectUrlDiagnostic>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/test`, body);
+  }
+
 
   /**
    * F46 — destructive project delete. The backend removes the on-disk
