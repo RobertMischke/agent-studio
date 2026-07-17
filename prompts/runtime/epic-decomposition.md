@@ -42,4 +42,4 @@ End your reply with a single fenced JSON block (and nothing after it) of exactly
 }
 ```
 
-The orchestrator parses that JSON block and creates one card per entry under this epic; an entry with a blank title is skipped. After the JSON block, end your reply with `[[TASK_DONE]]` on its own line (use `[[TASK_BLOCKED:<short reason>]]` only if the goal is too unclear to decompose).
+The orchestrator parses that JSON block and creates one card per entry under this epic; an entry with a blank title is skipped. After the JSON block, end your reply with `[[TASK_DONE]]` on its own line (use `[[TASK_BLOCKED:goal-too-unclear-to-decompose]]` only if the goal is too unclear to decompose, replacing the example reason with the actual short reason).

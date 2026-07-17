@@ -772,6 +772,24 @@
             <span class="lane">5e-escalated</span>; they cannot remain in progress indefinitely.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-12</td>
+          <td><code>AGT-2152</code><br><span class="small">literal BLOCKED reason placeholder</span></td>
+          <td>
+            Two runs emitted the prompt's literal <code>[[TASK_BLOCKED:&lt;short reason&gt;]]</code> example. The deterministic
+            escalation preserved that text, so the human-review reason said only <em>Agent emitted TASK_BLOCKED: &lt;short reason&gt;</em>
+            and discarded the useful explanation immediately before the sentinel.
+          </td>
+          <td>
+            Completion instructions presented angle-bracket placeholders as copyable terminal tokens. The review parser treated
+            every nonempty capture as a valid reason and had no fallback from a missing or placeholder reason to agent prose.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> runtime completion instructions now use concrete examples and explicitly require
+            replacing their reason. Empty and literal placeholder BLOCKED reasons recover the final agent paragraph, and parser
+            plus simulated auto-review tests prove the escalated record carries that useful text instead of the placeholder.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -255,7 +255,7 @@ public static class EvidenceGate
         {
             sb.AppendLine("Prove the fix with visual evidence: capture a screenshot or run the relevant Playwright e2e and save the artifact under this task's results/ folder (a PNG/JPG image, or results/playwright/<spec>/...). Reference it in your status before claiming done.");
         }
-        sb.AppendLine("Re-run the build and the tests and confirm both are green. If any item cannot be completed or verified, stop and end with [[TASK_BLOCKED:<short reason>]] instead of claiming done.");
+        sb.AppendLine("Re-run the build and the tests and confirm both are green. If any item cannot be completed or verified, stop and end with [[TASK_BLOCKED:missing-dependency-xyz]], replacing the example reason with the actual short reason, instead of claiming done.");
         return sb.ToString();
     }
 }

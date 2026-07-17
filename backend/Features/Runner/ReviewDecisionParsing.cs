@@ -77,7 +77,12 @@ public static class ReviewDecisionParsing
     public static BlockedState? FindUnresolvedBlocked(string log)
     {
         var hit = FindLatestUnresolvedSentinel(log, BlockedRegex);
-        return hit == null ? null : new BlockedState(hit.Value.LineNumber, hit.Value.Reason);
+        if (hit == null) return null;
+
+        var reason = IsMissingBlockedReason(hit.Value.Reason)
+            ? FindLastAgentParagraph(log, hit.Value.LineNumber - 1, BlockedRegex)
+            : hit.Value.Reason;
+        return new BlockedState(hit.Value.LineNumber, reason);
     }
 
     /// <summary>
@@ -173,6 +178,62 @@ public static class ReviewDecisionParsing
             if (LineHasFollowUpStream(lines[j])) return null;
         }
         return (lastAt.Value + 1, reason);
+    }
+
+    private static bool IsMissingBlockedReason(string? reason) =>
+        string.IsNullOrWhiteSpace(reason)
+        || string.Equals(reason.Trim(), "<short reason>", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Recovers a useful BLOCKED reason from the final agent paragraph when
+    /// the sentinel contains no reason or the prompt's literal placeholder.
+    /// Log prefixes are removed so escalation text contains only agent prose.
+    /// </summary>
+    private static string? FindLastAgentParagraph(string log, int sentinelIndex, Regex sentinelRegex)
+    {
+        var lines = log.Split('\n');
+        var paragraph = new List<string>();
+
+        for (var i = Math.Min(sentinelIndex, lines.Length - 1); i >= 0; i--)
+        {
+            var (isAgent, text) = ReadAgentLogLine(lines[i]);
+            if (!isAgent)
+            {
+                if (paragraph.Count > 0) break;
+                continue;
+            }
+
+            text = sentinelRegex.Replace(text, string.Empty).Trim();
+            if (text.Length == 0)
+            {
+                if (paragraph.Count > 0) break;
+                continue;
+            }
+
+            paragraph.Add(text);
+        }
+
+        if (paragraph.Count == 0) return null;
+        paragraph.Reverse();
+        return string.Join(" ", paragraph);
+    }
+
+    private static (bool IsAgent, string Text) ReadAgentLogLine(string line)
+    {
+        var streamStart = line.IndexOf("] [", StringComparison.Ordinal);
+        if (streamStart < 0) return (true, line.Trim());
+
+        var streamNameStart = streamStart + 3;
+        var streamEnd = line.IndexOf(']', streamNameStart);
+        if (streamEnd < 0) return (true, line.Trim());
+
+        var stream = line[streamNameStart..streamEnd];
+        var isAgent = !stream.Equals("system", StringComparison.OrdinalIgnoreCase)
+            && !stream.Equals("user", StringComparison.OrdinalIgnoreCase)
+            && !stream.Equals("orchestrator", StringComparison.OrdinalIgnoreCase)
+            && !stream.Equals("supervisor", StringComparison.OrdinalIgnoreCase);
+        var text = streamEnd + 1 < line.Length ? line[(streamEnd + 1)..].Trim() : string.Empty;
+        return (isAgent, text);
     }
 
     /// <summary>

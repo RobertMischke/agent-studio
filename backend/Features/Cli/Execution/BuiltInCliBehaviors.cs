@@ -930,8 +930,9 @@ internal static class BuiltInCliBehaviors
     {
         const string sentinelLine =
             "Orchestrator note: your reply MUST end with exactly one of `[[TASK_DONE]]`, " +
-            "`[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, or " +
-            "`[[TASK_NOOP]]` as the final line - this is required, not optional. The " +
+            "`[[TASK_BLOCKED:missing-dependency-xyz]]`, `[[TASK_NEEDS_INPUT:choose-primary-column]]`, or " +
+            "`[[TASK_NOOP]]` as the final line. Replace the example reason with the actual short reason; " +
+            "never emit the example text unchanged. This is required, not optional. The " +
             "orchestrator parses this token; without it the run lands in auto-review as " +
             "missing-terminal-sentinel.";
 

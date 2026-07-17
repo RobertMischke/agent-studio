@@ -111,7 +111,7 @@ public static class SolutionQualityGate
             sb.AppendLine($"- [ ] {finding}");
         }
         sb.AppendLine();
-        sb.AppendLine("Do not redo already-complete work. First compare against the current code/task state, then make only the missing or corrective change. If the task goal is already satisfied, prove that with evidence and end with [[TASK_DONE]]. If it cannot be completed, stop with [[TASK_BLOCKED:<short reason>]].");
+        sb.AppendLine("Do not redo already-complete work. First compare against the current code/task state, then make only the missing or corrective change. If the task goal is already satisfied, prove that with evidence and end with [[TASK_DONE]]. If it cannot be completed, stop with [[TASK_BLOCKED:missing-dependency-xyz]], replacing the example reason with the actual short reason.");
         return sb.ToString();
     }
 

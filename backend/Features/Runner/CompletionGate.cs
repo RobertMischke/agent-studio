@@ -296,7 +296,7 @@ public static class CompletionGate
             sb.AppendLine();
         }
         sb.AppendLine();
-        sb.AppendLine("If any item cannot be completed, stop and end with [[TASK_BLOCKED:<short reason>]] instead of claiming done.");
+        sb.AppendLine("If any item cannot be completed, stop and end with [[TASK_BLOCKED:missing-dependency-xyz]], replacing the example reason with the actual short reason, instead of claiming done.");
         return sb.ToString();
     }
 

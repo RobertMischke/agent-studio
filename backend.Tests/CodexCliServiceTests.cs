@@ -164,6 +164,8 @@ public class CodexCliServiceTests
         Assert.Contains("[[TASK_BLOCKED:", prefix);
         Assert.Contains("[[TASK_NEEDS_INPUT:", prefix);
         Assert.Contains("[[TASK_NOOP]]", prefix);
+        Assert.Contains("Replace the example reason", prefix);
+        Assert.DoesNotContain("<reason>", prefix);
         Assert.Contains("Time-box investigation", prefix);
         Assert.DoesNotContain("windows", prefix, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CreateProcessAsUserW", prefix);

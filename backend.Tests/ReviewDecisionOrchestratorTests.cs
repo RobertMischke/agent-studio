@@ -883,6 +883,24 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Blocked_PlaceholderReason_EscalatesWithLastAgentParagraph()
+    {
+        SeedReviewJobWithBlocked("missing-sdk", "<short reason>");
+        var logPath = TaskPathLog(TaskStates.AutoReview, "missing-sdk");
+        File.WriteAllText(logPath,
+            $"[12:00:00.000] [stdout] The required Contoso SDK is unavailable from every configured feed.{Environment.NewLine}" +
+            $"[12:00:01.000] [stdout] [[TASK_BLOCKED:<short reason>]]{Environment.NewLine}");
+        var orchestrator = BuildOrchestrator(cliResponse: "");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+        Assert.Contains("Contoso SDK is unavailable", record.Reason);
+        Assert.DoesNotContain("<short reason>", record.Reason);
+    }
+
+    [Fact]
     public async Task Blocked_DoesNotReprocess_OnceSupervisorEscalateLineIsPresent()
     {
         SeedReviewJobWithBlocked("already-escalated", "needs human");

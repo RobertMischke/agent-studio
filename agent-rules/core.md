@@ -8,13 +8,15 @@
 - For UI changes, read and obey `docs/design/style-guide-hard-rules.md`. In particular, do not add coloured left accent lines or bars to cards, panels, rows, banners, or pill groups.
 - **Do not run git yourself.** The application owns version control: it automatically commits and pushes your file changes after the run. Do **not** run `git commit`, `git push`, `git reset`, `git checkout`, `git branch`, `git stash`, or any other mutating git command - just edit files and leave them uncommitted (you don't even need `git add`). A guard blocks these commands; running them only wastes the run.
 - End every final reply with exactly one terminal sentinel on its own line:
-  `[[TASK_DONE]]`, `[[TASK_BLOCKED:<short reason>]]`,
-  `[[TASK_NEEDS_INPUT:<short reason>]]`, or `[[TASK_NOOP]]`.
+  `[[TASK_DONE]]`, `[[TASK_BLOCKED:missing-dependency-xyz]]`,
+  `[[TASK_NEEDS_INPUT:choose-primary-column]]`, or `[[TASK_NOOP]]`. Replace
+  the example reason with the actual short reason; never emit the example text
+  unchanged.
 
 Working directory hygiene:
 
 - The application has already chosen the active checkout for this run. Treat the working directory it gave you as the only relevant one. Do not list, mention, or compare it against any sibling checkout (for example a `*-stable` reference next to a `*-dev` source tree); that is internal layout that is not the user's concern.
-- If something looks like the application picked the wrong checkout, surface that as a `[[TASK_BLOCKED:<reason>]]` token. Do not "ask the user which one" - the application owns that choice.
+- If something looks like the application picked the wrong checkout, surface that as a `[[TASK_BLOCKED:wrong-checkout-selected]]` token, replacing the example reason with the actual short reason. Do not "ask the user which one" - the application owns that choice.
 
 Shell environment (Windows hosts):
 
