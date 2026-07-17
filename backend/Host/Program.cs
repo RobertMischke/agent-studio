@@ -88,11 +88,17 @@ builder.Logging.AddProvider(new BackendFileLoggerProvider(fileLogSink));
 // dropped and no behaviour change beyond the console format. The fully
 // configured logger also replaces the bootstrap Log.Logger in place, so the
 // static SilentCatch standard and other DI-less callers share this config.
+// preserveStaticLogger under a test host: parallel WebApplicationFactory
+// boots re-run these top-level statements concurrently, and two hosts racing
+// to swap-and-freeze the one static bootstrap Log.Logger throw "The logger
+// is already frozen" (flaky full-suite failures). Production keeps the
+// in-place swap so DI-less callers (SilentCatch) share the configured logger.
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Console(),
+    preserveStaticLogger: underTestHost,
     writeToProviders: true);
 
 // Last-resort safety nets: an uncaught exception in a fire-and-forget Task
