@@ -112,7 +112,6 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   setTargetState(state: string): void {
     this.newTargetState.set(state);
   }
-
   readonly cliTypeChange = output<CliType>();
   readonly modelSelectionTouched = output<void>();
   readonly cancelRequest = output<void>();

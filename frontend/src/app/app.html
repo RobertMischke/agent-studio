@@ -117,10 +117,8 @@
           }
           @if (studioTabState.activeTab()?.kind === 'task' && selectedJob(); as detail) {
             @let gitCommitCount = detail.info.commits?.length || (detail.info.commit ? 1 : 0);
-            <!-- Slim detail header inside the tab bar — pane toggles +
-                 activity link + pager + complete. Replaces the wide
-                 detail-header row that the reference design folded into
-                 the tab bar. -->
+            <!-- Slim detail header inside the tab bar: pane toggles, activity,
+                 pager, and completion replace the hidden wide detail header. -->
             @if (studioRunActivityBadge(); as ra) {
               <span class="studio-tab-action__run-activity"
                     [class]="'studio-tab-action__run-activity studio-tab-action__run-activity--' + ra.tone"
@@ -131,6 +129,9 @@
                 {{ ra.label }}
               </span>
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+            }
+            @if (detail.info.executionLocation && detail.info.executionLocation.state !== 'no-active-execution') {
+              <app-execution-location-badge data-testid="studio-execution-location" [execution]="detail.info.executionLocation" /><span class="studio-tab-actions-sep" aria-hidden="true"></span>
             }
             <div class="studio-tab-action__pane-toggles"
                  data-testid="studio-pane-toggles"

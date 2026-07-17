@@ -221,6 +221,25 @@ state.
   **not** workspace-shaped. See
   [ADR-0061](../architecture/decisions/adr-archive.md#adr-0061---orchestrator-settings-are-a-two-tier-config-project-override-wins-over-workspace-default-wins-over-platform-constant-2026-07-11).
 
+## Live execution ownership projection
+
+Every task read returns `executionLocation`, the canonical view of where a run
+actually executes. A live local CLI process or a fenced run lease is the source
+of truth. `ProjectSettings.executionRunner` is returned separately as
+`configuredRunnerId` and explains routing only; it never replaces the actual
+owner. This makes configured-vs-actual mismatches explicit during recovery or
+operator intervention.
+
+The projection distinguishes `local-running`, `remote-running`,
+`remote-disconnected`, `queued-remote`, `recovering`, and
+`no-active-execution`. Remote leases retain their last accepted heartbeat, so a
+missed heartbeat becomes acute only after the stale window. A renewed lease
+returns to healthy without a page reload through the normal task push/poll path.
+Run-start session events capture the execution projection so finished run
+history keeps its runner attribution with `historical: true` and renders
+quietly. The wire contract is
+[task-execution-location.schema.json](../schemas/task-execution-location.schema.json).
+
 ## Verification
 
 - Outcome and grammar changes need focused unit tests for analyzer, policy,

@@ -78,6 +78,7 @@ public class TaskRunnerService : BackgroundService
     private readonly RunLeaseService? _runLeases;
     private readonly RunnerIdentity? _runnerIdentity;
     private readonly ILoadThrottleGate? _loadThrottle;
+    private readonly AgentStudio.Clients.ClientIdentityStore? _clients;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -138,7 +139,8 @@ public class TaskRunnerService : BackgroundService
         CliQuotaFallbackService? quotaFallback = null,
         ILoadThrottleGate? loadThrottle = null,
         AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
-        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null)
+        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null,
+        AgentStudio.Clients.ClientIdentityStore? clients = null)
     {
         _config = config;
         _logger = logger;
@@ -180,6 +182,7 @@ public class TaskRunnerService : BackgroundService
         _orchestratorDefaults = orchestratorDefaults;
         _runLeases = runLeases;
         _runnerIdentity = runnerIdentity;
+        _clients = clients;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -832,6 +835,144 @@ public class TaskRunnerService : BackgroundService
             ? runner.GetRunActivity(jobId)
             : default;
     }
+
+    /// <summary>Build the canonical execution location from runtime ownership facts.</summary>
+    public AgentStudio.Shared.TaskExecutionLocation ResolveExecutionLocation(
+        AgentStudio.Shared.TaskInfo job,
+        AgentStudio.Shared.CliExecution? execution,
+        AgentStudio.Shared.TaskRunActivity? activity)
+    {
+        var inspection = _runLeases?.Inspect(job.TaskKey) ?? new RunLeaseInspection("none", null);
+        var configured = _projectSettings.Get(job.ProjectName).ExecutionRunner;
+        var client = inspection.Lease is null ? null : _clients?.Find(inspection.Lease.ClientId ?? inspection.Lease.RunnerId);
+        return ProjectExecutionLocation(
+            job, execution, activity, inspection, configured, _runnerIdentity,
+            client?.LastSeenAt, DateTime.UtcNow);
+    }
+
+    internal static AgentStudio.Shared.TaskExecutionLocation ProjectExecutionLocation(
+        AgentStudio.Shared.TaskInfo job,
+        AgentStudio.Shared.CliExecution? execution,
+        AgentStudio.Shared.TaskRunActivity? activity,
+        RunLeaseInspection inspection,
+        string? configuredRunnerId,
+        RunnerIdentity? localIdentity,
+        DateTime? clientLastSeenAt,
+        DateTime now)
+    {
+        var lease = inspection.Lease;
+        var branch = string.IsNullOrWhiteSpace(job.Provenance?.Branch) ? null : job.Provenance.Branch;
+        var baseProjection = new AgentStudio.Shared.TaskExecutionLocation
+        {
+            ConfiguredRunnerId = string.IsNullOrWhiteSpace(configuredRunnerId) ? null : configuredRunnerId,
+            SessionId = string.IsNullOrWhiteSpace(job.SessionName) ? null : job.SessionName,
+            Branch = branch,
+            WorktreePath = string.IsNullOrWhiteSpace(job.FolderPath) ? null : job.FolderPath,
+            LastActivityAt = job.LastActivity,
+        };
+
+        if (job.State == AgentStudio.Shared.TaskStates.Progress && lease is not null)
+        {
+            var remote = localIdentity is null
+                || !string.Equals(lease.RunnerId, localIdentity.RunnerId, StringComparison.OrdinalIgnoreCase);
+            var heartbeat = lease.LastHeartbeatAt;
+            var stale = inspection.State != "active" || now - heartbeat > TimeSpan.FromSeconds(75);
+            return baseProjection with
+            {
+                State = remote
+                    ? stale ? AgentStudio.Shared.TaskExecutionStates.RemoteDisconnected : AgentStudio.Shared.TaskExecutionStates.RemoteRunning
+                    : AgentStudio.Shared.TaskExecutionStates.LocalRunning,
+                ExecutionKind = remote ? "remote" : "local",
+                RunnerId = lease.RunnerId,
+                ClientId = lease.ClientId ?? lease.RunnerId,
+                HostDisplayName = string.IsNullOrWhiteSpace(lease.RunnerName) ? lease.Hostname : lease.RunnerName,
+                StartedAt = lease.AcquiredAt,
+                LastHeartbeat = heartbeat,
+                LastActivityAt = Max(heartbeat, clientLastSeenAt, job.LastActivity),
+                ProcessId = lease.Pid > 0 ? lease.Pid : null,
+                ConnectionState = stale ? "disconnected" : "connected",
+                LeaseState = inspection.State,
+                TrustReason = stale
+                    ? "The last fenced run lease owner is retained, but its heartbeat is stale or the lease expired."
+                    : "The task server currently holds a fenced run lease for this runner and has a recent heartbeat.",
+            };
+        }
+
+        var locallyRunning = job.State == AgentStudio.Shared.TaskStates.Progress
+            && (string.Equals(execution?.Status, "running", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(activity?.Kind, AgentStudio.Shared.TaskRunActivityKinds.Active, StringComparison.OrdinalIgnoreCase));
+        if (locallyRunning)
+        {
+            return baseProjection with
+            {
+                State = AgentStudio.Shared.TaskExecutionStates.LocalRunning,
+                ExecutionKind = "local",
+                RunnerId = localIdentity?.RunnerId,
+                ClientId = localIdentity?.RunnerId,
+                HostDisplayName = localIdentity?.RunnerName ?? localIdentity?.Hostname ?? "Local",
+                StartedAt = execution?.StartedAt,
+                LastActivityAt = Max(job.LastActivity, execution?.StartedAt),
+                ProcessId = execution is { ProcessId: > 0 } ? execution.ProcessId : activity?.ProcessId,
+                ConnectionState = "connected",
+                LeaseState = "local-process",
+                TrustReason = "The local CLI execution registry reports a live process for this task.",
+            };
+        }
+
+        if (job.State == AgentStudio.Shared.TaskStates.Ready && !string.IsNullOrWhiteSpace(configuredRunnerId))
+        {
+            return baseProjection with
+            {
+                State = AgentStudio.Shared.TaskExecutionStates.QueuedRemote,
+                ExecutionKind = "remote",
+                RunnerId = configuredRunnerId,
+                ClientId = configuredRunnerId,
+                HostDisplayName = configuredRunnerId,
+                ConnectionState = "queued",
+                LeaseState = "none",
+                TrustReason = "No execution is active. Project routing queues this task for the configured remote runner.",
+            };
+        }
+
+        if (job.State == AgentStudio.Shared.TaskStates.Progress)
+        {
+            return baseProjection with
+            {
+                State = AgentStudio.Shared.TaskExecutionStates.Recovering,
+                ConnectionState = "recovering",
+                TrustReason = "The task is in progress, but no live process or fenced run lease currently owns it.",
+            };
+        }
+
+        if (lease is not null)
+        {
+            var remote = localIdentity is null
+                || !string.Equals(lease.RunnerId, localIdentity.RunnerId, StringComparison.OrdinalIgnoreCase);
+            return baseProjection with
+            {
+                State = remote
+                    ? AgentStudio.Shared.TaskExecutionStates.RemoteRunning
+                    : AgentStudio.Shared.TaskExecutionStates.LocalRunning,
+                ExecutionKind = remote ? "remote" : "local",
+                RunnerId = lease.RunnerId,
+                ClientId = lease.ClientId ?? lease.RunnerId,
+                HostDisplayName = string.IsNullOrWhiteSpace(lease.RunnerName) ? lease.Hostname : lease.RunnerName,
+                StartedAt = lease.AcquiredAt,
+                LastHeartbeat = lease.LastHeartbeatAt,
+                LastActivityAt = Max(lease.LastHeartbeatAt, job.LastActivity),
+                ProcessId = lease.Pid > 0 ? lease.Pid : null,
+                ConnectionState = "historical",
+                LeaseState = inspection.State,
+                Historical = true,
+                TrustReason = "The task server retained the last fenced run lease owner after execution ended.",
+            };
+        }
+
+        return baseProjection;
+    }
+
+    private static DateTime? Max(params DateTime?[] values)
+        => values.Where(v => v.HasValue).Select(v => v!.Value).DefaultIfEmpty().Max() is var max && max != default ? max : null;
 
     public QuotaFallbackStatus? GetQuotaFallbackForJob(string jobId, string projectName)
     {

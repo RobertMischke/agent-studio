@@ -5,14 +5,16 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// AGT-2003 coverage for the lokal-vs-remote runner-badge projection
+/// AGT-2003 coverage for the local-vs-remote runner-badge projection
 /// (<see cref="TaskRunnerService.ProjectRunnerBadge"/>). A remote runner acquires
 /// the task's run lease before it spawns its CLI, so the projected badge is how
 /// the board card tells a card running on another host apart from a plain local
-/// run — the operator's missing "Abgleich im Stable Board".
+/// run, addressing the missing ownership comparison on the stable board.
 /// </summary>
 public sealed class RunnerBadgeProjectionTests
 {
+    private static readonly DateTime Now = new(2026, 7, 12, 12, 0, 0, DateTimeKind.Utc);
+
     [Fact]
     public void NoLease_ProjectsNull()
     {
@@ -82,6 +84,69 @@ public sealed class RunnerBadgeProjectionTests
         Assert.Equal("agent-runner-01", badge.RunnerName);
     }
 
+    [Fact]
+    public void ExecutionProjection_LocalProcess_IsCanonicalLocalRunning()
+    {
+        var task = ProgressTask();
+        var execution = new CliExecution { Status = "running", ProcessId = 42, StartedAt = Now.AddMinutes(-2) };
+
+        var result = TaskRunnerService.ProjectExecutionLocation(
+            task, execution, new TaskRunActivity { Kind = TaskRunActivityKinds.Active },
+            new RunLeaseInspection("none", null), "agent-runner-01", LocalIdentity(), null, Now);
+
+        Assert.Equal(TaskExecutionStates.LocalRunning, result.State);
+        Assert.Equal("local", result.ExecutionKind);
+        Assert.Equal(42, result.ProcessId);
+        Assert.Equal("agent-runner-01", result.ConfiguredRunnerId);
+    }
+
+    [Fact]
+    public void ExecutionProjection_RemoteLease_UsesActualOwner_WhenConfigurationDiffers()
+    {
+        var lease = Lease("agent-runner-02", "runner two", "linux-02") with { LastHeartbeatAt = Now.AddSeconds(-5) };
+
+        var result = TaskRunnerService.ProjectExecutionLocation(
+            ProgressTask(), null, null, new RunLeaseInspection("active", lease),
+            "agent-runner-01", LocalIdentity(), Now.AddSeconds(-4), Now);
+
+        Assert.Equal(TaskExecutionStates.RemoteRunning, result.State);
+        Assert.Equal("agent-runner-02", result.RunnerId);
+        Assert.Equal("agent-runner-01", result.ConfiguredRunnerId);
+        Assert.Contains("fenced run lease", result.TrustReason);
+    }
+
+    [Fact]
+    public void ExecutionProjection_StaleRemoteLease_IsDisconnected_AndRenewedLeaseRecovers()
+    {
+        var stale = Lease("agent-runner-01", "agent-runner-01", "linux-01") with { LastHeartbeatAt = Now.AddMinutes(-2) };
+        var disconnected = TaskRunnerService.ProjectExecutionLocation(
+            ProgressTask(), null, null, new RunLeaseInspection("active", stale),
+            "agent-runner-01", LocalIdentity(), Now.AddMinutes(-2), Now);
+        var renewed = TaskRunnerService.ProjectExecutionLocation(
+            ProgressTask(), null, null,
+            new RunLeaseInspection("active", stale with { LastHeartbeatAt = Now }),
+            "agent-runner-01", LocalIdentity(), Now, Now);
+
+        Assert.Equal(TaskExecutionStates.RemoteDisconnected, disconnected.State);
+        Assert.Equal("disconnected", disconnected.ConnectionState);
+        Assert.Equal(TaskExecutionStates.RemoteRunning, renewed.State);
+        Assert.Equal("connected", renewed.ConnectionState);
+    }
+
+    [Fact]
+    public void ExecutionProjection_ProgressWithoutOwner_IsRecovering_AndReadyRemoteIsQueued()
+    {
+        var recovering = TaskRunnerService.ProjectExecutionLocation(
+            ProgressTask(), null, new TaskRunActivity { Kind = TaskRunActivityKinds.NoActiveRun },
+            new RunLeaseInspection("none", null), "agent-runner-01", LocalIdentity(), null, Now);
+        var queued = TaskRunnerService.ProjectExecutionLocation(
+            ProgressTask() with { State = TaskStates.Ready }, null, null,
+            new RunLeaseInspection("none", null), "agent-runner-01", LocalIdentity(), null, Now);
+
+        Assert.Equal(TaskExecutionStates.Recovering, recovering.State);
+        Assert.Equal(TaskExecutionStates.QueuedRemote, queued.State);
+    }
+
     private static RunLeaseInfoDto Lease(string runnerId, string runnerName, string host)
         => new(
             TaskKey: "PT-578",
@@ -94,4 +159,19 @@ public sealed class RunnerBadgeProjectionTests
             FencingToken: 7,
             AcquiredAt: new DateTime(2026, 7, 9, 10, 0, 0, DateTimeKind.Utc),
             ExpiresAt: new DateTime(2026, 7, 9, 10, 2, 0, DateTimeKind.Utc));
+
+    private static TaskInfo ProgressTask() => new()
+    {
+        Id = "task-1",
+        TaskKey = "PT-578",
+        ProjectName = "demo",
+        State = TaskStates.Progress,
+        FolderPath = "/worktrees/PT-578",
+        LastActivity = Now.AddSeconds(-10),
+        SessionName = "session-safe",
+        Provenance = new TaskProvenance { Branch = "task/PT-578" },
+    };
+
+    private static RunnerIdentity LocalIdentity()
+        => new("stable@local", "Local", "local-host", "stable", "token", RunnerIdentity.CurrentProtocolVersion);
 }

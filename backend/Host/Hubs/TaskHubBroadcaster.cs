@@ -34,16 +34,22 @@ public sealed class TaskHubBroadcaster
     private readonly IHubContext<TaskHub> _hub;
     private readonly TaskScannerService _scanner;
     private readonly ILogger<TaskHubBroadcaster> _logger;
+    private readonly CliRouter? _router;
+    private readonly TaskRunnerService? _runners;
 
     public TaskHubBroadcaster(
         IHubContext<TaskHub> hub,
         TaskScannerService scanner,
         TaskChangeNotifier notifier,
-        ILogger<TaskHubBroadcaster> logger)
+        ILogger<TaskHubBroadcaster> logger,
+        CliRouter? router = null,
+        TaskRunnerService? runners = null)
     {
         _hub = hub;
         _scanner = scanner;
         _logger = logger;
+        _router = router;
+        _runners = runners;
 
         notifier.TaskCreated += OnCreated;
         notifier.TaskUpdated += OnUpdated;
@@ -84,7 +90,13 @@ public sealed class TaskHubBroadcaster
         // relocated the folder; in that case FindJob returns null and we
         // fall back to a bulk re-pull rather than dropping the event.
         var info = _scanner.FindJob(e.JobId, e.WatchPath);
-        if (info != null) Send(method, info);
+        if (info != null)
+        {
+            var projected = _router is not null && _runners is not null
+                ? AgentStudio.Tasks.TaskEndpointHelpers.WithRuntime(info, _router, _runners)
+                : info;
+            Send(method, projected);
+        }
         else Send("jobsBulkChanged");
     }
 

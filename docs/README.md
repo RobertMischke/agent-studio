@@ -26,6 +26,7 @@ Use this page as the first stop when you need the right document quickly.
 | [wiki/](wiki/README.md) | Living knowledge: common problems, explanatory concept pages, learnings, and migration notes. |
 | [research/](research/) | Dated deep dives and decision grounding material. |
 | [schemas/](schemas/README.md) | JSON schemas for wire and disk shapes. |
+| Task execution location schema | [schemas/task-execution-location.schema.json](schemas/task-execution-location.schema.json) |
 | [mockups/](mockups/) | Locked design references and click-dummies. |
 | [assets/](assets/README.md) | Image assets referenced by documentation pages. |
 | [proposals/](proposals/README.md) | Dated improvement proposals with durable approval status and implementation-card references. |

@@ -424,6 +424,54 @@ describe('RunTimelineComponent (smoke)', () => {
     expect(chip?.textContent?.trim()).toBe('lokal');
     http.verify();
   });
+
+  it('renders captured run ownership through the canonical quiet historical badge', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', taskInfo());
+    fixture.componentRef.setInput('runs', [{
+      ...runRecord(1, 'start', 'completed', null, 20),
+      executionLocation: {
+        state: 'remote-disconnected',
+        executionKind: 'remote',
+        runnerId: 'agent-runner-01',
+        clientId: 'runner-client-01',
+        hostDisplayName: 'Runner host 01',
+        configuredRunnerId: 'agent-runner-02',
+        startedAt: '2026-06-08T10:01:00Z',
+        lastHeartbeat: '2026-06-08T10:01:20Z',
+        lastActivityAt: '2026-06-08T10:01:21Z',
+        branch: 'task/ASS-1',
+        worktreePath: '/worktrees/ASS-1',
+        connectionState: 'historical',
+        leaseState: 'released',
+        trustReason: 'Captured from the fenced run lease.',
+        historical: true,
+      },
+    }]);
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('[data-testid="run-icon-1"]') as HTMLButtonElement).click();
+    TestBed.inject(HttpTestingController)
+      .expectOne(r => r.url.endsWith('/tasks/task-1/runs/1/commits'))
+      .flush({ commits: [] });
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector('[data-testid="execution-location-badge"]') as HTMLElement;
+    expect(badge.textContent).toContain('Remote · agent-runner-01');
+    expect(badge.classList.contains('execution-location--history')).toBe(true);
+    expect(badge.classList.contains('execution-location--acute')).toBe(false);
+    TestBed.inject(HttpTestingController).verify();
+  });
 });
 
 function taskInfo(): TaskInfo {

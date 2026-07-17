@@ -5,6 +5,7 @@ import { TaskService } from '../../../../../services/task.service';
 import { cliTypeIcon, cliTypeLabel, formatTime as formatTimeValue, formatTokens } from '../../../../../services/format.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { ExecutionLocationBadgeComponent } from '../../../../../components/execution-location-badge/execution-location-badge.component';
 import { RunExecutionContextComponent } from './run-execution-context/run-execution-context.component';
 /**
  * Run timeline panel rendered above the activity log in the protocol
@@ -31,7 +32,7 @@ import { RunExecutionContextComponent } from './run-execution-context/run-execut
 @Component({
   selector: 'app-run-timeline',
   standalone: true,
-  imports: [TooltipDirective, RunExecutionContextComponent],
+  imports: [TooltipDirective, ExecutionLocationBadgeComponent, RunExecutionContextComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-timeline.component.html',
   styleUrl: './run-timeline.component.scss'
@@ -239,15 +240,7 @@ export class RunTimelineComponent {
     this.runFilter.emit(r);
   }
 
-  /**
-   * AGT-2003 — which runner executed a run, for the run-detail header. The
-   * reliable signals are the live run lease (a remote runner holds it while it
-   * works; ADR-0060) and, historically, the out-of-band completion source a
-   * remote runner records when it hands a finished task back. Both attribute to
-   * the task's latest run, so earlier runs return null rather than guess. A
-   * local in-process run holds no lease and posts no external completion -> the
-   * latest still-running/just-finished run reads as "lokal".
-   */
+  /** Prefer the durable per-run owner; legacy latest runs use task-level facts. */
   runnerAttribution(r: RunRecord): { kind: 'remote' | 'local'; glyph: string; label: string; tooltip: string } | null {
     const job = this.job();
     if (!job) return null;

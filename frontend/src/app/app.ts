@@ -123,6 +123,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from './components/menu';
 import { CostBreakdownDialogComponent, type TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
 import { LoadingSurfaceComponent, PendingButtonDirective } from './components/async-feedback';
+import { ExecutionLocationBadgeComponent } from './components/execution-location-badge/execution-location-badge.component';
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];
@@ -186,6 +187,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     ProjectUrlPreviewTabComponent,
     WorkbenchViewerComponent,
     StudioIconComponent,
+    ExecutionLocationBadgeComponent,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole

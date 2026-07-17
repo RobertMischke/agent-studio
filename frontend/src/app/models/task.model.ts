@@ -405,6 +405,9 @@ export interface TaskInfo {
    */
   runner?: TaskRunnerInfo | null;
 
+  /** Canonical runtime-backed execution owner, health, and routing context. */
+  executionLocation?: TaskExecutionLocation | null;
+
   /**
    * AGT-2069: read-time spawn-visibility + spawn-contract projection, present
    * (non-null) only on planning-mode cards. Mirrors backend
@@ -433,6 +436,34 @@ export interface TaskRunnerInfo {
   fencingToken: number;
   /** UTC ISO instant the active lease was acquired. */
   acquiredAt: string;
+}
+
+export type TaskExecutionState =
+  | 'local-running'
+  | 'remote-running'
+  | 'remote-disconnected'
+  | 'queued-remote'
+  | 'recovering'
+  | 'no-active-execution';
+
+export interface TaskExecutionLocation {
+  state: TaskExecutionState;
+  executionKind: 'local' | 'remote' | 'none';
+  runnerId?: string | null;
+  clientId?: string | null;
+  hostDisplayName?: string | null;
+  configuredRunnerId?: string | null;
+  startedAt?: string | null;
+  lastHeartbeat?: string | null;
+  lastActivityAt?: string | null;
+  processId?: number | null;
+  sessionId?: string | null;
+  branch?: string | null;
+  worktreePath?: string | null;
+  connectionState: string;
+  leaseState: string;
+  trustReason: string;
+  historical?: boolean;
 }
 
 /**

@@ -32,7 +32,6 @@ import {
   buildPhaseBadge,
   buildPipelineDots,
   buildReviewBadge,
-  buildRunnerBadge,
   buildTagChips,
   buildTaskTypeChip,
   buildTokenBubble,
@@ -53,6 +52,7 @@ import { TaskStatusPopoverDirective } from '../../../../components/task-status-c
 import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
+import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
 import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -71,7 +71,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ThinkingLevelIndicatorComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ThinkingLevelIndicatorComponent, ExecutionLocationBadgeComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -362,13 +362,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly effectiveModelChip = computed(() =>
     buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId))
   );
-
-  /**
-   * AGT-2003 runner badge next to the CLI badge: "→ <runner>" when a remote
-   * runner holds the run lease, a quiet "lokal" chip for an in-process run,
-   * null otherwise. See {@link buildRunnerBadge}.
-   */
-  readonly runnerBadge = computed(() => buildRunnerBadge(this.job()));
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 

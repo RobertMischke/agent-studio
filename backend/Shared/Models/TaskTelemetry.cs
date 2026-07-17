@@ -59,6 +59,8 @@ public record SessionEvent
     /// <summary><c>start</c> | <c>continue</c> | <c>recovery</c></summary>
     public string Kind { get; init; } = "";
     public string? Cli { get; init; }
+    /// <summary>Runtime-backed execution owner captured at run start for durable history.</summary>
+    public TaskExecutionLocation? ExecutionLocation { get; init; }
     /// <summary>Session id we attempted to resume (null on fresh start / recovery).</summary>
     public string? InputSessionId { get; init; }
     /// <summary>Session id the CLI emitted in this run (filled after the run starts streaming).</summary>

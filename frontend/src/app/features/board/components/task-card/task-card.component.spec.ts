@@ -1077,7 +1077,7 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.destroy();
   });
 
-  // ── Runner badge (AGT-2003 — lokal vs remote next to the CLI badge) ─────
+  // ── Canonical execution-location badge ─────────────────────────────────
 
   it('renders a remote runner badge next to the CLI badge for a leased run', async () => {
     const fixture = await renderCard(makeJob({
@@ -1087,24 +1087,21 @@ describe('TaskCardComponent (smoke)', () => {
         startedAt: '2026-07-09T10:00:00Z', status: 'running',
         exitCode: null, durationSeconds: null, model: 'claude-sonnet-4.5', runOutcome: null,
       },
-      runner: {
-        runnerId: 'agent-runner-01@linux-host',
-        runnerName: 'agent-runner-01',
-        hostname: 'linux-host',
-        backendName: 'remote',
-        isRemote: true,
-        leaseId: 'lease-abc',
-        fencingToken: 7,
-        acquiredAt: '2026-07-09T10:00:00Z',
+      executionLocation: {
+        state: 'remote-running', executionKind: 'remote', runnerId: 'agent-runner-01',
+        clientId: 'runner-client-01', hostDisplayName: 'linux-host', configuredRunnerId: 'agent-runner-02',
+        startedAt: '2026-07-09T10:00:00Z', lastHeartbeat: '2026-07-09T10:01:00Z',
+        lastActivityAt: '2026-07-09T10:01:02Z', processId: 4242, sessionId: 'session-remote',
+        branch: 'task/AGT-2158', worktreePath: '/worktrees/AGT-2158',
+        connectionState: 'connected', leaseState: 'active',
+        trustReason: 'The task server holds the fenced run lease.',
       },
     }));
 
-    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-runner"]') as HTMLElement | null;
+    const pill = fixture.nativeElement.querySelector('[data-testid="execution-location-badge"]') as HTMLElement | null;
     expect(pill).not.toBeNull();
-    expect(pill?.getAttribute('data-runner-kind')).toBe('remote');
-    expect(pill?.className).toContain('task-card__runner-pill--remote');
+    expect(pill?.getAttribute('data-execution-state')).toBe('remote-running');
     expect(pill?.textContent).toContain('agent-runner-01');
-    expect(pill?.textContent).toContain('⇥');
   });
 
   it('treats a live remote lease as running when no local execution exists', async () => {
@@ -1138,18 +1135,24 @@ describe('TaskCardComponent (smoke)', () => {
         startedAt: '2026-07-09T10:00:00Z', status: 'running',
         exitCode: null, durationSeconds: null, model: null, runOutcome: null,
       },
-      runner: null,
+      executionLocation: {
+        state: 'local-running', executionKind: 'local', runnerId: 'stable@local',
+        hostDisplayName: 'Local workstation', startedAt: '2026-07-09T10:00:00Z',
+        lastActivityAt: '2026-07-09T10:01:02Z', processId: 4242,
+        connectionState: 'connected', leaseState: 'local-process',
+        trustReason: 'The local CLI registry reports a live process.',
+      },
     }));
 
-    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-runner"]') as HTMLElement | null;
+    const pill = fixture.nativeElement.querySelector('[data-testid="execution-location-badge"]') as HTMLElement | null;
     expect(pill).not.toBeNull();
-    expect(pill?.getAttribute('data-runner-kind')).toBe('local');
-    expect(pill?.textContent?.trim()).toBe('lokal');
+    expect(pill?.getAttribute('data-execution-state')).toBe('local-running');
+    expect(pill?.textContent?.trim()).toContain('Local');
   });
 
   it('shows no runner chip on an idle (not-running) card', async () => {
-    const fixture = await renderCard(makeJob({ state: '2-ready', execution: null, runner: null }));
-    expect(fixture.nativeElement.querySelector('[data-testid="task-card-runner"]')).toBeNull();
+    const fixture = await renderCard(makeJob({ state: '2-ready', execution: null, executionLocation: null }));
+    expect(fixture.nativeElement.querySelector('[data-testid="execution-location-badge"]')).toBeNull();
   });
 });
 

@@ -53,6 +53,7 @@ public static class LeaseEndpoints
             AgentStudio.Registry.ProjectRegistry projects,
             TaskTransitionService transitions,
             RunLeaseService leases,
+            TaskSessionLog sessions,
             HttpContext context,
             AgentStudio.Clients.ClientIdentityStore clients,
             AgentStudio.Clients.HostTelemetryStore telemetry,
@@ -144,7 +145,7 @@ public static class LeaseEndpoints
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
                 var acquire = leases.TryAcquire(new RunLeaseAcquireRequest(
                     taskKey, req.RunnerId.Trim(), req.RunnerName.Trim(), req.Hostname,
-                    req.Pid, req.BackendName, req.RequestedTtlSeconds));
+                    req.Pid, req.BackendName, req.RequestedTtlSeconds) { ClientId = clientId });
                 if (!acquire.Granted || acquire.Lease is null)
                     return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome));
 
@@ -165,6 +166,31 @@ public static class LeaseEndpoints
                     "remote-runner-task-claimed project={Project} projectId={ProjectId} task={TaskKey} runner={Runner} lease={LeaseId} token={FencingToken} repositorySource={RepositorySource} defaultBranch={DefaultBranch}",
                     candidate.ProjectName, repository.ProjectId, taskKey, req.RunnerName, acquire.Lease.LeaseId,
                     acquire.Lease.FencingToken, repository.Source, repository.DefaultBranch);
+                sessions.AppendSessionEvent(candidate.Id, new SessionEvent
+                {
+                    Ts = acquire.Lease.AcquiredAt,
+                    Kind = "start",
+                    Cli = "remote-runner",
+                    Cwd = candidate.FolderPath,
+                    ExecutionLocation = new TaskExecutionLocation
+                    {
+                        State = TaskExecutionStates.RemoteRunning,
+                        ExecutionKind = "remote",
+                        RunnerId = acquire.Lease.RunnerId,
+                        ClientId = acquire.Lease.ClientId ?? acquire.Lease.RunnerId,
+                        HostDisplayName = string.IsNullOrWhiteSpace(acquire.Lease.RunnerName) ? acquire.Lease.Hostname : acquire.Lease.RunnerName,
+                        ConfiguredRunnerId = settings.Get(candidate.ProjectName).ExecutionRunner,
+                        StartedAt = acquire.Lease.AcquiredAt,
+                        LastHeartbeat = acquire.Lease.LastHeartbeatAt,
+                        LastActivityAt = acquire.Lease.LastHeartbeatAt,
+                        ProcessId = acquire.Lease.Pid > 0 ? acquire.Lease.Pid : null,
+                        Branch = candidate.Provenance?.Branch,
+                        WorktreePath = candidate.FolderPath,
+                        ConnectionState = "connected",
+                        LeaseState = "active",
+                        TrustReason = "Captured from the fenced run lease granted by the task server.",
+                    },
+                }, candidate.WatchPath);
                 if (!string.IsNullOrWhiteSpace(clientId))
                     clients.RecordRunnerActivity(
                         clientId,

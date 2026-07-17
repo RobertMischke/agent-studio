@@ -39,12 +39,7 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
   selector: 'app-task-column, app-job-column',
   standalone: true,
   imports: [TaskCardComponent, TooltipDirective, InfoButtonComponent],
-  // Cycle 7b: OnPush. The board mounts ~10 columns and re-renders the
-  // full @for of cards every CD pass under Default. TaskCard is already
-  // OnPush; promoting the column propagates that benefit upward so a
-  // poll tick that didn't change THIS lane's jobs() input doesn't
-  // walk the lane's children either. Inputs are signal-based so OnPush
-  // marks dirty correctly without needing markForCheck.
+  // Signal inputs let OnPush skip unchanged lanes during board polling.
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-column.html',
   styleUrl: './task-column.scss'
@@ -58,24 +53,14 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   readonly jobs = input.required<TaskInfo[]>();
   readonly allBoardJobs = input<readonly TaskInfo[]>([]);
   readonly reorderDisabled = input<boolean>(false);
-  /**
-   * F35: resolved sort strategy governing this lane's card order. Drives
-   * the lane-header indicator icon + tooltip. `'mixed'` is a board-only
-   * marker meaning the active projects disagree on this lane's strategy.
-   * Empty string hides the indicator (e.g. board has no strategy data yet).
-   */
+  /** Resolved lane sort strategy; `mixed` means visible projects disagree. */
   readonly sortStrategy = input<string>('');
   readonly collapsed = input<boolean>(false);
   readonly compact = input<boolean>(false);
   readonly archiving = input<boolean>(false);
   /** F2: id of a just-created card to highlight + scroll into view. */
   readonly highlightJobId = input<string | null>(null);
-  /**
-   * Project for which the lane shows an auto-pickup toggle. `null` hides
-   * the chip — used when the board is scoped to "All projects" (no
-   * single project to attribute the toggle to). Only the In-Progress
-   * lane (state = '3-progress') reads these inputs today.
-   */
+  /** Project owning the In-Progress lane's auto-pickup toggle. */
   readonly autoProject = input<string | null>(null);
   /** Project scope for project-owned lane data such as the lazy archive feed. */
   readonly projectScope = input<string | null>(null);
@@ -149,21 +134,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
     };
   });
 
-  /**
-   * Three-pill status cluster for the In-Progress lane:
-   * - `running`: shown when the runner has an active execution. Includes
-   *   the JobId, an elapsed-time string, and the model.
-   * - `mode`: the pickup-mode pill (AUTO / MANUAL / PAUSED). Distinguishes
-   *   `manual` from circuit-breaker-induced halts: when the runner is in
-   *   `manual` because of a circuit-breaker reason it renders as PAUSED
-   *   with a different colour so the operator sees this was a system-
-   *   initiated halt, not a user toggle.
-   * - `queueSize`: count of items waiting in `2-ready` (`Q:5` badge).
-   *
-   * Rendered as a horizontal cluster on the lane header. Only active for
-   * `state() === '3-progress'` and only when a single project is in scope
-   * (the existing `autoProject()` gate).
-   */
+  /** Running, pickup-mode, and queue pills for a project-scoped In-Progress lane. */
   readonly statusCluster = computed(() => {
     if (this.state() !== TaskState.Progress || !this.autoProject()) return null;
     const status = this.runnerStatus();
