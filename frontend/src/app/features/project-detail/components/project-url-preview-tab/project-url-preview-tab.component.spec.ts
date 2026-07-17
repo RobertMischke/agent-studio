@@ -68,6 +68,17 @@ function mount(urlId = 'url-1') {
 const RUNNING_URL: RegistryProjectUrl = {
   id: 'url-1', label: 'Lab', url: 'http://localhost:4201', sortOrder: 0, startRule: null,
 };
+const SAME_ORIGIN_URL: RegistryProjectUrl = {
+  ...RUNNING_URL,
+  url: new URL('/url-preview-fixture/healthy', window.location.href).href,
+};
+
+function setFrameDocument(frame: HTMLIFrameElement, url: string, bodyHtml: string): void {
+  const doc = document.implementation.createHTMLDocument('fixture');
+  doc.body.innerHTML = bodyHtml;
+  Object.defineProperty(doc, 'URL', { configurable: true, value: url });
+  Object.defineProperty(frame, 'contentDocument', { configurable: true, value: doc });
+}
 const STARTABLE_URL: RegistryProjectUrl = {
   id: 'url-1', label: 'Website', url: 'http://localhost:4202', sortOrder: 0,
   startRule: { command: 'npm run website', cwd: null, port: null, source: 'manual' },
@@ -95,7 +106,7 @@ function processSnapshot(
 describe('ProjectUrlPreviewTabComponent', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('mounts the sandboxed iframe once the URL resolves (running / unknown)', () => {
+  it('mounts the sandboxed iframe with the exact configured URL once readiness is healthy', () => {
     const { fixture, http, probe } = mount();
     probe.status.set('running');
     http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([RUNNING_URL]));
@@ -104,10 +115,122 @@ describe('ProjectUrlPreviewTabComponent', () => {
     const el: HTMLElement = fixture.nativeElement;
     const frame = el.querySelector<HTMLIFrameElement>('[data-testid="url-preview-frame"]');
     expect(frame).toBeTruthy();
+    expect(frame?.getAttribute('src')).toBe(RUNNING_URL.url);
+    expect(frame?.src).toBe(new URL(RUNNING_URL.url).href);
     // Sandbox present, but no top-navigation escape.
     expect(frame?.getAttribute('sandbox')).toContain('allow-scripts');
     expect(frame?.getAttribute('sandbox')).not.toContain('allow-top-navigation');
     expect(el.querySelector('[data-testid="url-preview-addr"]')?.textContent).toContain('localhost:4201');
+  });
+
+  it('reload assigns the configured URL again and returns to navigating', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('running');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([RUNNING_URL]));
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const frame = el.querySelector<HTMLIFrameElement>('[data-testid="url-preview-frame"]')!;
+    fixture.componentInstance.onFrameLoad(frame);
+    expect(fixture.componentInstance.frameState()).toBe('unconfirmed');
+    const srcSetter = vi.spyOn(frame, 'src', 'set');
+
+    fixture.componentInstance.reload();
+
+    expect(srcSetter).toHaveBeenCalledWith(RUNNING_URL.url);
+    expect(fixture.componentInstance.frameState()).toBe('navigating');
+  });
+
+  it('confirms visible same-origin body content before reporting rendered', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('running');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([SAME_ORIGIN_URL]));
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const frame = el.querySelector<HTMLIFrameElement>('[data-testid="url-preview-frame"]')!;
+    setFrameDocument(frame, SAME_ORIGIN_URL.url, '<main><h1>Healthy embedded content</h1></main>');
+    fixture.componentInstance.onFrameLoad(frame);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.frameState()).toBe('rendered');
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-status"]')?.getAttribute('data-status'))
+      .toBe('rendered');
+  });
+
+  it('does not accept an about:blank load as successful navigation', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('running');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([SAME_ORIGIN_URL]));
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const frame = el.querySelector<HTMLIFrameElement>('[data-testid="url-preview-frame"]')!;
+    setFrameDocument(frame, 'about:blank', '');
+    fixture.componentInstance.onFrameLoad(frame);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.frameState()).toBe('blank');
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-blank"]')?.textContent)
+      .toContain('about:blank');
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-inline-reload"]')).toBeTruthy();
+  });
+
+  it('surfaces a likely frame-policy denial when a same-origin document is inaccessible', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('running');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([SAME_ORIGIN_URL]));
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const frame = el.querySelector<HTMLIFrameElement>('[data-testid="url-preview-frame"]')!;
+    Object.defineProperty(frame, 'contentDocument', { configurable: true, value: null });
+    fixture.componentInstance.onFrameLoad(frame);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.frameState()).toBe('blocked');
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-blocked"]')?.textContent)
+      .toContain('CSP or X-Frame-Options');
+  });
+
+  it('uses an actionable unconfirmed state for loaded cross-origin content', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('running');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([RUNNING_URL]));
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const frame = el.querySelector<HTMLIFrameElement>('[data-testid="url-preview-frame"]')!;
+    fixture.componentInstance.onFrameLoad(frame);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.frameState()).toBe('unconfirmed');
+    const fallback = fixture.nativeElement.querySelector('[data-testid="url-preview-unconfirmed"]');
+    expect(fallback?.textContent).toContain('browser origin rules');
+    expect(fallback?.textContent).toContain('Reload');
+    expect(fallback?.textContent).toContain('Open externally');
+  });
+
+  it('bounds a navigation that never fires load with an actionable error fallback', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fixture, http, probe } = mount();
+      probe.status.set('running');
+      http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([RUNNING_URL]));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.frameState()).toBe('navigating');
+      await vi.advanceTimersByTimeAsync(6000);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.frameState()).toBe('error');
+      const fallback = fixture.nativeElement.querySelector('[data-testid="url-preview-error"]');
+      expect(fallback?.textContent).toContain('did not finish navigating within 6 seconds');
+      expect(fallback?.textContent).toContain('Reload');
+      expect(fallback?.textContent).toContain('Open externally');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows a contained offline panel with project context and a Start button', () => {

@@ -1,4 +1,7 @@
-:host {
+// Encapsulation is None, so the element selector (not just :host) must carry
+// the sizing chain — otherwise the iframe collapses to a blank 0-height frame.
+:host,
+app-project-url-preview-tab {
   display: flex;
   flex: 1 1 auto;
   align-self: stretch;
@@ -107,7 +110,8 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
 
-    &[data-status='running'] {
+    &[data-status='running'],
+    &[data-status='rendered'] {
       background: color-mix(in srgb, var(--studio-accent-success) 16%, transparent);
       color: var(--studio-accent-success);
     }
@@ -117,7 +121,10 @@
       color: var(--studio-accent);
     }
 
-    &[data-status='blocked'] {
+    &[data-status='blocked'],
+    &[data-status='blank'],
+    &[data-status='error'],
+    &[data-status='unconfirmed'] {
       background: color-mix(in srgb, var(--studio-warn) 16%, transparent);
       color: var(--studio-warn);
     }
@@ -307,6 +314,12 @@
     flex: 1 1 auto;
     color: var(--studio-fg-strong);
     font-size: 12px;
+  }
+  &__banner-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--studio-spacing-2);
   }
   &__btn {
     flex: 0 0 auto;

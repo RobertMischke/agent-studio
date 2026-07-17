@@ -140,6 +140,14 @@ groups, and a failed domain reports an error without hiding successful domains.
   local-runner hot reload: changing the display name, repository checkout, or
   working directory requires a backend restart before the already-instantiated
   local runner may pick up work.
+- A Project URL opens in `project-url-preview-tab` with its configured URL as
+  the iframe source. Backend readiness only decides mounting: the mounted tab
+  remains `navigating` until the frame loads, confirms non-empty rendered
+  content for same-origin pages, and otherwise reports `blocked`, `blank`,
+  `error`, or `unconfirmed`. Cross-origin content is never labelled rendered
+  from a load event alone. Every unconfirmed or failed frame keeps Reload and
+  Open externally available. The sandbox permits application scripts, forms,
+  popups, and same-origin behavior, but never top navigation.
 - `frontend/src/app/services/task.service.ts`: task API integration, optimistic
   lane moves, reorder, and rollback.
 - `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model

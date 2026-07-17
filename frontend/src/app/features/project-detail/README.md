@@ -71,6 +71,14 @@ stdout/stderr console, explicit stop, and URL/command/CWD/port settings in
 place. Closing the console or tab does not detach the process; URL/project
 removal and backend shutdown stop its whole process tree.
 
+Once mounted, the frame reports embedded-browser truth states instead of
+trusting the load event: the tab assigns the exact configured URL, performs a
+real navigation on Reload, and uses same-origin DOM inspection to distinguish
+rendered content from blank, blocked, or browser error documents. Cross-origin
+loads remain explicitly unconfirmed after the bounded navigation check. Failed
+and unconfirmed states overlay an explanation with Reload and Open externally
+without weakening the iframe sandbox.
+
 Every Overview request has an independent unavailable state. Detail links emit
 rail navigation or task navigation through the shell. The Visual Evidence queue
 projects delivered task screenshots and stores review receipts in each task's
@@ -115,6 +123,10 @@ project sessions. Do not move them back into the operator Overview.
   `components/project-overview-dashboard/project-overview-dashboard.spec.ts`
 - Compact URL adapter contract:
   `components/project-overview-urls/project-overview-urls.spec.ts`
+- Embedded URL readiness contract:
+  `components/project-url-preview-tab/project-url-preview-tab.component.spec.ts`
+- Embedded URL browser regressions and screenshots:
+  `frontend/e2e/project/project-url-preview.spec.ts`
 - Production Playwright flow:
   `frontend/e2e/project/project-overview-dashboard.spec.ts`
 - Interactive mockup contract:

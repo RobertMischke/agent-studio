@@ -80,28 +80,38 @@
       }
       @default {
         @if (shouldEmbed()) {
-          <iframe class="url-preview__frame"
+          <!-- Sandboxed embed: allow the dev app to run + submit forms + open
+               popups, but never navigate the parent Studio window
+               (no allow-top-navigation). -->
+          <iframe #previewFrame class="url-preview__frame"
                   data-testid="url-preview-frame"
                   [src]="iframeSrc()"
                   title="Embedded preview of {{ urlRecord()?.url }}"
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                   referrerpolicy="no-referrer"
-                  (load)="onFrameLoad()"></iframe>
+                  (load)="onFrameLoad(previewFrame)"
+                  (error)="onFrameError()"></iframe>
 
-          @if (frameState() === 'loading') {
+          @if (frameState() === 'navigating') {
             <div class="url-preview__overlay" data-testid="url-preview-loading">
               <span class="url-preview__spinner" aria-hidden="true"></span>
-              <p class="url-preview__state-note">Loading {{ urlRecord()?.label }}…</p>
+              <p class="url-preview__state-note">{{ navigationDetail() }}</p>
             </div>
           }
 
-          @if (frameState() === 'blocked') {
-            <div class="url-preview__banner" role="alert" data-testid="url-preview-blocked">
+          @if (frameState() !== 'navigating' && frameState() !== 'rendered') {
+            <div class="url-preview__banner" role="alert"
+                 [attr.data-testid]="'url-preview-' + frameState()">
               <span class="url-preview__banner-text">
-                This page may block embedded previews through X-Frame-Options or CSP.
+                <b>{{ frameState() === 'unconfirmed' ? 'Content not confirmed.' : 'Preview unavailable.' }}</b>
+                {{ frameDetail() }}
               </span>
-              <button type="button" class="url-preview__btn url-preview__btn--warn"
-                      (click)="openExternal()">Open externally</button>
+              <span class="url-preview__banner-actions">
+                <button type="button" class="url-preview__btn url-preview__btn--ghost"
+                        data-testid="url-preview-inline-reload" (click)="reload()">Reload</button>
+                <button type="button" class="url-preview__btn url-preview__btn--warn"
+                        (click)="openExternal()">Open externally</button>
+              </span>
             </div>
           }
         } @else if (readinessPending()) {

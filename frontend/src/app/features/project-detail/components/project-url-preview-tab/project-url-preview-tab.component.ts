@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   ViewEncapsulation,
   computed,
   effect,
@@ -9,6 +10,7 @@ import {
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
@@ -29,9 +31,15 @@ import {
   ProjectUrlSettingsDialogComponent,
   type ProjectUrlSettingsValue,
 } from '../project-url-settings-dialog/project-url-settings-dialog';
+import {
+  inspectPreviewFrame,
+  type PreviewFrameState,
+} from './project-url-frame-readiness';
 
 /** Address-bar status pill vocabulary for the embedded preview. */
-type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' | 'failed';
+type PreviewPill =
+  | 'running' | 'rendered' | 'offline' | 'navigating' | 'checking' | 'building'
+  | 'blocked' | 'blank' | 'error' | 'unconfirmed' | 'failed';
 
 interface StartFailure {
   explanation: string;
@@ -50,15 +58,16 @@ interface StartFailure {
  * load / offline / blocked state machine.
  *
  * State machine (concept §1.3), driven by {@link ProjectUrlProbeService} plus
- * the iframe `load` event and a load-timeout heuristic:
+ * iframe navigation, DOM inspection where origin policy permits it, and a
+ * bounded load fallback:
  * - `resolving` → looking the URL record up in the registry;
  * - `not-found` → the URL was removed from the project (no stuck spinner);
  * - resolved + `offline` → "Not running" card with a **Start** button when the
  *   URL has a start rule, else a note that it has no start command;
  * - resolved + `running`/`unknown` → mount the iframe; a spinner overlays it
- *   until `load` fires, and if `load` never fires within {@link LOAD_TIMEOUT_MS}
- *   while the server is reachable we surface a "may refuse to be embedded"
- *   banner (X-Frame-Options / CSP) with an always-available browser escape hatch.
+ *   while it navigates. A load event triggers readiness inspection rather than
+ *   implying success. If navigation cannot settle within {@link LOAD_TIMEOUT_MS},
+ *   an actionable fallback replaces the unexplained loading canvas.
  */
 @Component({
   selector: 'app-project-url-preview-tab',
@@ -98,7 +107,8 @@ export class ProjectUrlPreviewTabComponent {
   readonly resolveState = signal<'resolving' | 'resolved' | 'not-found' | 'error'>('resolving');
   readonly projectId = signal<string | null>(null);
   readonly urlRecord = signal<RegistryProjectUrl | null>(null);
-  readonly frameState = signal<'loading' | 'loaded' | 'blocked'>('loading');
+  readonly frameState = signal<PreviewFrameState>('navigating');
+  readonly frameDetail = signal('Waiting for the embedded browser to navigate.');
   readonly building = signal(false);
   readonly repositoryPath = signal<string | null>(null);
   readonly rootPath = signal<string | null>(null);
@@ -110,6 +120,7 @@ export class ProjectUrlPreviewTabComponent {
   readonly settingsError = signal<string | null>(null);
   /** Bumping this re-navigates the iframe (forces a fresh `[src]` reference). */
   private readonly reloadNonce = signal(0);
+  readonly previewFrame = viewChild<ElementRef<HTMLIFrameElement>>('previewFrame');
 
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
@@ -159,7 +170,9 @@ export class ProjectUrlPreviewTabComponent {
     if (this.building()) return 'building';
     if (this.startFailure()) return 'failed';
     if (this.resolveState() !== 'resolved') return 'checking';
-    if (this.frameState() === 'blocked') return 'blocked';
+    // Embedded: the pill reports frame truth (navigating / rendered / blank /
+    // blocked / error / unconfirmed), never bare server reachability.
+    if (this.shouldEmbed()) return this.frameState();
     const s = this.probeStatus();
     return s === 'unknown' ? 'checking' : s;
   });
@@ -195,6 +208,10 @@ export class ProjectUrlPreviewTabComponent {
     ];
   });
 
+  readonly navigationDetail = computed(() => this.probeStatus() === 'running'
+    ? 'Server reachable. Waiting for the embedded browser to finish navigating…'
+    : 'Checking server reachability and embedded navigation…');
+
   constructor() {
     // Re-resolve whenever the bound project / url changes (established panel
     // pattern: an effect that fires an HTTP refresh on input change).
@@ -209,8 +226,8 @@ export class ProjectUrlPreviewTabComponent {
       const embed = this.shouldEmbed();
       this.reloadNonce(); // re-arm on reload
       this.clearLoadTimer();
+      this.beginNavigation();
       if (!embed) return;
-      this.frameState.set('loading');
       this.loadTimer = setTimeout(() => this.onLoadTimeout(), this.LOAD_TIMEOUT_MS);
     });
 
@@ -244,7 +261,7 @@ export class ProjectUrlPreviewTabComponent {
         this.urlRecord.set(res.url);
         this.repositoryPath.set(res.repositoryPath);
         this.rootPath.set(res.rootPath);
-        this.frameState.set('loading');
+        this.beginNavigation();
         this.resolveState.set('resolved');
         this.process.refresh(res.projectId, res.url.id);
       },
@@ -255,23 +272,29 @@ export class ProjectUrlPreviewTabComponent {
     });
   }
 
-  /** iframe finished (loaded a page — we cannot read cross-origin, only that it
-   *  navigated). Clears the suspected-block timer. */
-  onFrameLoad(): void {
-    if (this.probeStatus() !== 'running') return;
-    this.frameState.set('loaded');
+  /** A load event starts readiness inspection; it is not success by itself. */
+  onFrameLoad(frame: HTMLIFrameElement): void {
     this.clearLoadTimer();
+    const inspection = inspectPreviewFrame(frame, this.urlRecord()?.url ?? 'about:blank');
+    this.frameState.set(inspection.state);
+    this.frameDetail.set(inspection.detail);
+  }
+
+  onFrameError(): void {
+    this.clearLoadTimer();
+    this.frameState.set('error');
+    this.frameDetail.set('The embedded browser could not navigate to the configured URL.');
   }
 
   private onLoadTimeout(): void {
-    if (this.frameState() !== 'loading') return;
-    // Only escalate to "blocked" when the server is actually reachable; an
-    // unreachable server is an offline case, not an embed refusal.
+    if (this.frameState() !== 'navigating') return;
     if (this.probeStatus() === 'running') {
-      const url = this.urlRecord()?.url;
-      console.warn('[url-preview] suspected embed refusal (X-Frame-Options / CSP)', { url });
-      this.frameState.set('blocked');
+      this.frameState.set('error');
+      this.frameDetail.set('The server is reachable, but the frame did not finish navigating within 6 seconds.');
+      return;
     }
+    this.frameState.set('error');
+    this.frameDetail.set('The frame did not finish navigating within 6 seconds, and server reachability could not be confirmed.');
   }
 
   reload(): void {
@@ -279,12 +302,19 @@ export class ProjectUrlPreviewTabComponent {
     const projectId = this.projectId();
     const url = this.urlRecord();
     if (!projectId || !url) return;
-    const wasRunning = this.probeStatus() === 'running';
-    this.probe.refresh(projectId, url.id);
-    if (wasRunning) {
-      this.frameState.set('loading');
-      this.reloadNonce.update(n => n + 1);
+    const frame = this.previewFrame()?.nativeElement;
+    if (this.shouldEmbed() && frame) {
+      // A mounted frame reloads through a real navigation: assigning the same
+      // URL to the native src property preserves the configured URL exactly.
+      // A dead server surfaces through inspection or the probe's TTL re-check.
+      this.beginNavigation();
+      this.clearLoadTimer();
+      this.loadTimer = setTimeout(() => this.onLoadTimeout(), this.LOAD_TIMEOUT_MS);
+      frame.src = url.url;
+      return;
     }
+    // Card states re-check readiness so a recovered server can mount again.
+    this.probe.refresh(projectId, url.id);
   }
 
   /** Start or restart the owned process, expose its output in place, and keep
@@ -372,7 +402,7 @@ export class ProjectUrlPreviewTabComponent {
 
     if (this.probe.signalFor(projectId, urlId)().kind === 'healthy') {
       this.building.set(false);
-      this.frameState.set('loading');
+      this.beginNavigation();
       this.reloadNonce.update(n => n + 1);
       return;
     }
@@ -418,7 +448,7 @@ export class ProjectUrlPreviewTabComponent {
       next: () => {
         this.urlRecord.set({ ...current, ...value });
         this.settingsOpen.set(false);
-        this.frameState.set('loading');
+        this.beginNavigation();
         this.reloadNonce.update(n => n + 1);
         this.probe.refresh(projectId, current.id);
       },
@@ -446,4 +476,8 @@ export class ProjectUrlPreviewTabComponent {
     }
   }
 
+  private beginNavigation(): void {
+    this.frameState.set('navigating');
+    this.frameDetail.set('Waiting for the embedded browser to navigate.');
+  }
 }
