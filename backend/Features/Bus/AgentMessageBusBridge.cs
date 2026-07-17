@@ -129,6 +129,7 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.WatchdogTimeout   => "High",
             OrchestratorMessageKind.EmptyFastExit     => "High",
             OrchestratorMessageKind.InfraCrash        => "High",
+            OrchestratorMessageKind.AuthRefreshFailed => "High",
             OrchestratorMessageKind.IntegrationConflict => "High",
             OrchestratorMessageKind.IntegrationError  => "High",
             OrchestratorMessageKind.Reissue           => "Warn",

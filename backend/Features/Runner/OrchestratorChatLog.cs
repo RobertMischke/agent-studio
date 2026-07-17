@@ -222,6 +222,14 @@ public enum OrchestratorMessageKind
     /// </summary>
     QuotaExhausted,
     /// <summary>
+    /// The agent CLI could not launch because its OAuth session expired and the
+    /// token refresh failed (AGT-2066 token roulette). Shared across every
+    /// parallel run and non-retryable, so the orchestrator STOPS immediately
+    /// (the breaker) and routes to human review with a re-auth instruction
+    /// rather than burning further launch budgets.
+    /// </summary>
+    AuthRefreshFailed,
+    /// <summary>
     /// A transient environmental fault (host file lock / MSB302x copy-lock,
     /// network glitch) failed the run. The condition clears on its own, so the
     /// orchestrator retries the task with exponential backoff before escalating -
@@ -285,6 +293,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Quarantined       => "quarantined",
         OrchestratorMessageKind.ModelInvalid      => "model-invalid",
         OrchestratorMessageKind.QuotaExhausted    => "quota-exhausted",
+        OrchestratorMessageKind.AuthRefreshFailed => "auth-refresh-failed",
         OrchestratorMessageKind.EnvironmentalRetry => "environmental-retry",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
@@ -314,6 +323,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Quarantined       => "quarantined",
         OrchestratorMessageKind.ModelInvalid      => "model-invalid",
         OrchestratorMessageKind.QuotaExhausted    => "quota-exhausted",
+        OrchestratorMessageKind.AuthRefreshFailed => "auth-refresh-failed",
         OrchestratorMessageKind.EnvironmentalRetry => "environmental-retry",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",

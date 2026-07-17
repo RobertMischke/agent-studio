@@ -38,6 +38,10 @@ public class RunQuarantineBreakerTests
     // retry-with-backoff; it must not accrue toward the quarantine streak
     // (AGT-1944).
     [InlineData(RunIssueKind.EnvironmentalTransient)]
+    // A failed OAuth-session refresh is a shared credential/infra fault the task
+    // cannot fix by re-running; it routes to human review on its own and must
+    // not accrue toward the quarantine streak (AGT-2066).
+    [InlineData(RunIssueKind.AuthRefreshFailed)]
     [InlineData(RunIssueKind.SilentCompletion)]
     [InlineData(RunIssueKind.Quarantined)]
     public void RoutedOrTerminalKinds_DoNotCountTowardStreak(RunIssueKind kind)

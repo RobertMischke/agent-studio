@@ -5356,7 +5356,7 @@ public class ProjectRunner
                     // exhausted into the same rejection; the quarantine breaker
                     // exists precisely to STOP re-running this task. All go
                     // directly to human review.
-                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
+                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.AuthRefreshFailed or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         _projectSettings.Get(ProjectName),
@@ -5811,6 +5811,10 @@ public class ProjectRunner
                      // catch-all (AGT-1941: codex model-invalid / claude quota).
                      or RunIssueKind.ModelInvalid
                      or RunIssueKind.QuotaExhausted
+                     // A failed OAuth-session refresh (AGT-2066 breaker) is
+                     // non-retryable and must reach human review with a re-auth
+                     // instruction instead of stranding in 3-progress.
+                     or RunIssueKind.AuthRefreshFailed
                      // A transient environmental fault that persisted after the
                      // bounded retry-with-backoff, and a CLI launch/resume failure
                      // that persisted after the fresh-start retry, both reach human
@@ -5899,6 +5903,7 @@ public class ProjectRunner
         RunIssueKind.ContextOverflow          => "context-overflow",
         RunIssueKind.ModelInvalid             => "model-invalid",
         RunIssueKind.QuotaExhausted           => "quota-exhausted",
+        RunIssueKind.AuthRefreshFailed        => "auth-refresh-failed",
         RunIssueKind.EnvironmentalTransient   => "environmental",
         RunIssueKind.Quarantined              => "quarantined",
         RunIssueKind.AgentGitViolation        => "agent-git-violation",
@@ -5919,6 +5924,7 @@ public class ProjectRunner
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
         RunIssueKind.ModelInvalid       => HumanReviewEscalationCategories.ModelInvalid,
         RunIssueKind.QuotaExhausted     => HumanReviewEscalationCategories.QuotaExhausted,
+        RunIssueKind.AuthRefreshFailed  => HumanReviewEscalationCategories.AuthRefreshFailed,
         RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
         RunIssueKind.AgentGitViolation  => HumanReviewEscalationCategories.AgentGitViolation,
         RunIssueKind.InfraCrash         => HumanReviewEscalationCategories.InfraCrash,

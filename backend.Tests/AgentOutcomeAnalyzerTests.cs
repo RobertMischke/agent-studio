@@ -317,6 +317,46 @@ public class AgentOutcomeAnalyzerTests
         Assert.NotEqual(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
     }
 
+    // ---- AGT-2066 WÄCHTER: OAuth-refresh launch failure -------------------
+    // The exact incident signature: a claude launch dies with "OAuth session
+    // expired and could not be refreshed". This is a dead/rotated shared token
+    // no re-issue can revive, so it must be the typed, NON-RETRYABLE
+    // AuthRefreshFailed - NOT the generic CliLaunchFailed, which would rebuild
+    // from disk and RETRY (burning a launch budget per card, 17 cards in the
+    // 2026-07-10 incident).
+
+    [Fact]
+    public void FailedLaunch_OAuthSessionExpired_IsAuthRefreshFailed_NotCliLaunchFailed()
+    {
+        var lines = Lines("OAuth session expired and could not be refreshed");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 0.4);
+        Assert.Equal(RunIssueKind.AuthRefreshFailed, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void FailedLaunch_CouldNotBeRefreshedNeedle_IsAuthRefreshFailed_RegardlessOfDuration()
+    {
+        // The needle is definitive even when the run did not die near-instantly,
+        // so it wins over the generic launch-failure duration heuristic.
+        var lines = Lines("Refreshing credentials...", "Error: the credentials could not be refreshed.");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 8.0);
+        Assert.Equal(RunIssueKind.AuthRefreshFailed, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void HealthyRun_MentioningRefresh_IsNotAuthRefreshFailed()
+    {
+        // Gating on `failed` keeps a completed run that merely discusses token
+        // refresh in its prose from tripping the breaker.
+        var lines = Lines("I checked how the CLI handles a token that could not be refreshed and documented it. [[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 42.0);
+        Assert.NotEqual(RunIssueKind.AuthRefreshFailed, outcome.IssueKind);
+        Assert.True(outcome.MatchedSentinel);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
+
     // ---- Case (c): successful run, no sentinel, inconclusive text ---------
     // A clean exit whose text the heuristic cannot map to any shape stays
     // MissingTerminalSentinel so the orchestrator drives it to a structured
