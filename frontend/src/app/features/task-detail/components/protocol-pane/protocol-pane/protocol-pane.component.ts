@@ -14,15 +14,11 @@ import {
 } from '@angular/core';
 import type {
   CliOutputLine,
-  ContinueMode,
   TaskDetail,
   TaskSummaryStatus,
   ReviewEvidenceEntry,
-  CliType,
 } from '../../../../../models/task.model';
 import { TaskState } from '../../../../../models/task.model';
-import type { CliModelInfo } from '../../../../cli';
-import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import type { RunRecord } from '../../../../../features/run-timeline';
 import { deriveWatchdogPill } from '../watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
@@ -43,17 +39,9 @@ import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.componen
 import { FeatureFlagsService } from '../../../../../services/feature-flags.service';
 import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-debug';
 import { TaskService } from '../../../../../services/task.service';
-import type {
-  ChatContextUsage,
-  ChatPermissionOption,
-  ConversationEvent,
-  RawLineRange,
-} from 'coding-agent-chat/core';
+import type { ConversationEvent, RawLineRange } from 'coding-agent-chat/core';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
-import { ContextRingComponent, PermissionSelectComponent } from 'coding-agent-chat/composer';
 import { projectConversation } from 'coding-agent-chat/core';
-import type { ContextUsageSnapshot } from '../../../../../models/task.model';
-import { toChatContextUsage } from '../../../context-usage.mapper';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { ResultViewComponent } from '../result-view/result-view.component';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
@@ -82,35 +70,6 @@ import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.c
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 import { taskNavigationHref, taskUrl } from '../../../state/task-url';
 export type InspectorTab = 'protocol' | 'activity';
-
-/**
- * Display metadata for the runner's permission-mode vocabulary
- * (yolo / workspace-write / read-only / custom). Unknown ids coming from
- * the backend still render, just without description/tone.
- */
-const PERMISSION_OPTION_META: Record<string, ChatPermissionOption> = {
-  yolo: {
-    id: 'yolo',
-    label: 'YOLO',
-    tone: 'warn',
-    description: 'Skip every permission, sandbox, and trust prompt.',
-  },
-  'workspace-write': {
-    id: 'workspace-write',
-    label: 'Workspace write',
-    description: 'Auto-approve edits inside the workspace; other tools stay gated.',
-  },
-  'read-only': {
-    id: 'read-only',
-    label: 'Read-only',
-    description: 'Plan/inspect posture — the agent may not freely mutate.',
-  },
-  custom: {
-    id: 'custom',
-    label: 'Custom (global config)',
-    description: "Inject nothing; defer to the CLI's own global configuration.",
-  },
-};
 
 /**
  * Sub-view of the Activity tab: the agent's own task Plan, the compact
@@ -159,9 +118,6 @@ interface InterimSummaryState {
     ProtocolVerdictBannerComponent,
     PaneHeaderComponent,
     PaneTabsComponent,
-    CliModelSelectorComponent,
-    ContextRingComponent,
-    PermissionSelectComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -175,17 +131,12 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly activeInspectorTab = input<InspectorTab>('protocol');
   readonly followupPrompt = input<string>('');
-  readonly continueMode = input<ContinueMode>('continue');
   readonly canSendChat = input(false);
   readonly chatSendLabel = input<string>('Send');
+  readonly chatError = input<string | null>(null);
   readonly queuedFollowUp = input<boolean>(false);
 
   readonly regenerating = input(false);
-  // F44: forwarded straight to <app-cli-model-selector>.
-  readonly cliType = input<CliType | null>(null);
-  readonly model = input<string | null>(null);
-  readonly thinkingLevel = input<string | null>(null);
-  readonly availableModels = input<readonly CliModelInfo[]>([]);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
@@ -196,16 +147,10 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly activeInspectorTabChange = output<InspectorTab>();
   readonly followupPromptChange = output<string>();
-  readonly continueModeChange = output<ContinueMode>();
 
   readonly openLogOverlay = output<void>();
   readonly sendChat = output<void>();
-  readonly stopJob = output<void>();
   readonly regenerateSummary = output<void>();
-  /** Atomic CLI + model commit from the unified <app-cli-model-selector>
-   *  picker. The parent applies both changes in one PUT sequence; the
-   *  selector guarantees only truly-changed configurations are emitted. */
-  readonly agentConfigCommit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
 
   // Live data — injected from the parent's local providers.
   private readonly claudePoll = inject(ClaudeSessionPollService);
@@ -239,25 +184,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       if (id !== this.activityViewJobId) {
         this.activityViewJobId = id;
         this.activityViewOverride.set(null);
-        this.contextRefreshResult.set(null);
       }
-    });
-    // Load the project's per-CLI permission modes once per project; the
-    // composer's permission chip reads/writes the project-level setting.
-    effect(() => {
-      const project = this.detail().info.projectName;
-      if (!project || project === this.permissionProject()) return;
-      this.permissionProject.set(project);
-      this.permissionState.set(null);
-      this.jobs.getProjectCliModes(project).subscribe({
-        next: (res) => {
-          if (this.permissionProject() !== project) return;
-          this.permissionState.set({ resolved: res.resolved, available: res.available });
-        },
-        error: () => {
-          // Chip simply stays hidden when the modes cannot be loaded.
-        },
-      });
     });
     effect(() => {
       if (this.outcomeIssueModalOpen()) {
@@ -281,71 +208,6 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /** Set after "Create follow-up" returns; used to render the success banner. */
   readonly followupCreated = signal<{ jobId: string; taskKey?: string; targetState: string } | null>(null);
-
-  // --- Composer footer: context ring -------------------------------------
-  /** Snapshot returned by an explicit refresh; wins over the detail's copy
-   *  until the next task switch (the constructor effect clears it). */
-  private readonly contextRefreshResult = signal<ContextUsageSnapshot | null>(null);
-  readonly contextBusy = signal<boolean>(false);
-  readonly chatContextUsage = computed<ChatContextUsage | null>(() =>
-    toChatContextUsage(this.contextRefreshResult() ?? this.detail().contextUsage),
-  );
-
-  onContextRefresh(): void {
-    if (this.contextBusy()) return;
-    const job = this.detail().info;
-    this.contextBusy.set(true);
-    this.jobs.refreshContextUsage(job.id, job.watchPath).subscribe({
-      next: (snapshot) => {
-        this.contextBusy.set(false);
-        if (this.detail().info.id !== job.id) return;
-        this.contextRefreshResult.set(snapshot);
-      },
-      error: () => this.contextBusy.set(false),
-    });
-  }
-
-  // --- Composer footer: permission mode ----------------------------------
-  /** Which project the loaded permission state belongs to. */
-  private readonly permissionProject = signal<string | null>(null);
-  private readonly permissionState = signal<{
-    resolved: Record<string, { mode: string; source: string; args: string[] }>;
-    available: string[];
-  } | null>(null);
-
-  readonly permissionOptions = computed<readonly ChatPermissionOption[]>(() => {
-    const state = this.permissionState();
-    if (!state) return [];
-    return state.available.map((id) => PERMISSION_OPTION_META[id] ?? { id, label: id });
-  });
-
-  /** Effective mode for the task's current CLI, or null while unknown. */
-  readonly permissionMode = computed<string | null>(() => {
-    const state = this.permissionState();
-    const cli = this.cliType();
-    if (!state || !cli) return null;
-    return state.resolved[cli]?.mode ?? null;
-  });
-
-  onPermissionModeChange(mode: string): void {
-    const project = this.permissionProject();
-    const cli = this.cliType();
-    if (!project || !cli) return;
-    this.jobs.setProjectCliMode(project, cli, mode).subscribe({
-      next: (res) => {
-        const state = this.permissionState();
-        if (!state || this.permissionProject() !== project) return;
-        this.permissionState.set({
-          ...state,
-          resolved: { ...state.resolved, [res.cli]: { mode: res.mode, source: res.source, args: res.args } },
-        });
-      },
-      error: () => {
-        // Leave the previous mode visible; the settings panel remains the
-        // fallback surface for diagnosing failed writes.
-      },
-    });
-  }
 
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;
@@ -620,56 +482,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     return severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
   });
 
-  /**
-   * Order + labels for the mode pills above the chat input. Each option has a
-   * short icon glyph, a one-word title for the pill, and a tooltip the user
-   * sees on hover so the meaning is discoverable without leaving the page.
-   */
-  readonly modeOptions: readonly {
-    id: ContinueMode;
-    title: string;
-    icon: string;
-    tooltip: string;
-  }[] = [
-    {
-      id: 'continue',
-      title: 'Continue',
-      icon: '➤',
-      tooltip: 'Send as the next conversation turn (default).',
-    },
-    {
-      id: 'steer',
-      title: 'Steer',
-      icon: '↺',
-      tooltip: 'Course correction: agent overrides its current plan and adopts your direction.',
-    },
-    {
-      id: 'extend',
-      title: 'Extend',
-      icon: '＋',
-      tooltip:
-        'Add to the task. Backend writes a new prompt-N.md so the task description grows blog-style.',
-    },
-    {
-      id: 'newTask',
-      title: 'New task',
-      icon: '✦',
-      tooltip: 'Start a new sub-task in the same session. Prior context preserved, new request.',
-    },
-  ];
-
-  /** Compose-area placeholder, mode-aware. */
+  /** The open task is implicit; a running task is paused by the Send flow. */
   composePlaceholder(): string {
-    switch (this.continueMode()) {
-      case 'steer':
-        return 'Course correction — what should the agent do differently? Ctrl+Enter to send.';
-      case 'extend':
-        return 'Extend the task — this becomes a new prompt-N.md alongside the original. Ctrl+Enter to send.';
-      case 'newTask':
-        return 'New sub-task in this session — describe the new request. Ctrl+Enter to send.';
-      default:
-        return 'Type a follow-up — Ctrl+Enter to send. Sends while running pauses the agent first.';
-    }
+    return this.isRunning()
+      ? 'Message this task. Sending pauses the current run first. Ctrl+Enter to send.'
+      : 'Message this task. Ctrl+Enter to send.';
   }
 
   // While the job is in 3-progress, the live Activity feed is what the user

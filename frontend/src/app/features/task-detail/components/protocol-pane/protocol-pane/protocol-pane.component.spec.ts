@@ -20,6 +20,37 @@ import { outcomeIssueExplanation } from './protocol-pane-view-model';
  * stable across template tweaks.
  */
 describe('ProtocolPaneComponent (smoke)', () => {
+  it('exposes only the simple task-chat inputs and send output', () => {
+    type RemovedControlApi =
+      | 'continueMode'
+      | 'continueModeChange'
+      | 'modeOptions'
+      | 'cliType'
+      | 'model'
+      | 'thinkingLevel'
+      | 'availableModels'
+      | 'stopJob'
+      | 'agentConfigCommit'
+      | 'permissionOptions'
+      | 'permissionMode'
+      | 'onPermissionModeChange'
+      | 'chatContextUsage'
+      | 'contextBusy'
+      | 'onContextRefresh';
+    type RemovedControlsAbsent =
+      Extract<keyof ProtocolPaneComponent, RemovedControlApi> extends never ? true : false;
+    type SimpleChatApiPresent =
+      Exclude<
+        'followupPrompt' | 'canSendChat' | 'chatSendLabel' | 'followupPromptChange' | 'sendChat',
+        keyof ProtocolPaneComponent
+      > extends never ? true : false;
+
+    const removedControlsAbsent: RemovedControlsAbsent = true;
+    const simpleChatApiPresent: SimpleChatApiPresent = true;
+    expect(removedControlsAbsent).toBe(true);
+    expect(simpleChatApiPresent).toBe(true);
+  });
+
   // TODO(11c): ProtocolPaneComponent injects ClaudeSessionPollService
   // which currently has no providedIn:'root' — needs a stub provider
   // in this spec. Skipped until a hand-tuned spec is added.

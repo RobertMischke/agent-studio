@@ -1,6 +1,5 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { createJob, deleteJob, JobInfo } from '../helpers/jobs';
-import { apiRoundtrip } from '../helpers/timing';
 
 /**
  * Test that demonstrates Playwright artifacts are harvested into the job
@@ -26,10 +25,7 @@ test.describe('Job artifacts harvesting (images-and-protocol)', () => {
     if (job) await deleteJob(job);
   });
 
-  test('Playwright artifacts are copied to job results and displayed in protocol', async ({
-    page,
-    baseURL
-  }) => {
+  test('Playwright artifacts are copied to job results and displayed in protocol', async ({ page }) => {
     // Create a simple job that runs a CLI command (we'll mock this with a no-op
     // for now; in a real scenario, an agent would run and take screenshots).
     job = await createJob({
@@ -65,7 +61,7 @@ test.describe('Job artifacts harvesting (images-and-protocol)', () => {
     await page.waitForTimeout(2000);
 
     // Stop the job (to finalize the run)
-    const stopButton = page.locator('[data-testid="activity-chat-stop"]');
+    const stopButton = page.getByRole('button', { name: /stop/i }).first();
     if (await stopButton.isVisible()) {
       await stopButton.click();
     }

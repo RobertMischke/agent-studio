@@ -6,8 +6,8 @@ import { createJob } from '../helpers/jobs';
  * Cross-surface parity for the unified `<app-cli-model-selector>` chip
  * (see `docs/frontend/audits/cli-model-selector-audit.md`). The same control renders in
  * the status bar (defaults), the create-task dialog (agent for new task),
- * the job-detail command-deck (agent for this job), the chat composer
- * and overview Agent row (configure agent), and the code-review panel
+ * the job-detail command-deck (agent for this job), the overview Agent row
+ * (configure agent), and the code-review panel
  * (review agent).
  *
  * This spec opens two distinct call-sites - the status-bar defaults chip
@@ -90,7 +90,7 @@ test.describe('CLI + model selector parity across sites', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('command-deck and chat-compose chips on a job-detail share the same popover shape', async ({ page }) => {
+  test('command-deck chip on a job-detail uses the shared popover shape', async ({ page }) => {
     const watchPath = await pickWatchPath();
     const job = await createJob({
       title: `selector-parity-${Date.now()}`,
@@ -112,20 +112,6 @@ test.describe('CLI + model selector parity across sites', () => {
       await expect(cmdChip).toBeVisible();
       await cmdChip.click();
       await assertSelectorShape(page, 'commandbar-agent-picker');
-      await page.keyboard.press('Escape');
-
-      // Site 4: chat-compose model chip (lives inside the protocol pane's
-      // chat composer; the overview Agent row uses the same testid).
-      const activityTab = page.getByTestId('inspector-tab-activity');
-      if (await activityTab.isVisible().catch(() => false)) {
-        await activityTab.click();
-      }
-      const composeChip = page.locator('[data-testid="chat-compose-model"]').first();
-      await expect(composeChip).toBeVisible();
-      await composeChip.click();
-      // The chat composer uses the legacy `chat-model-picker` testid prefix
-      // (preserved during the migration so existing specs keep working).
-      await assertSelectorShape(page, 'chat-model-picker');
       await page.keyboard.press('Escape');
     } finally {
       await deleteJob(job.id, watchPath);

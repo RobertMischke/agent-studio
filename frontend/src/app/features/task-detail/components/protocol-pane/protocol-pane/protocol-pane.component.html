@@ -517,71 +517,37 @@
                 }
               }
               <div class="chat-compose" data-testid="activity-chat-compose">
-                <div class="chat-mode" role="group" aria-label="How should the follow-up be interpreted?"
-                     data-testid="activity-chat-mode">
-                  <span class="chat-mode__label">Mode</span>
-                  @for (m of modeOptions; track m.id) {
-                    <button type="button"
-                            class="chat-mode__pill"
-                            [class.chat-mode__pill--active]="continueMode() === m.id"
-                            [attr.data-mode]="m.id"
-                            [attr.data-testid]="'activity-chat-mode-' + m.id"
-                            [cacTooltip]="m.tooltip"
-                            (click)="continueModeChange.emit(m.id)">
-                      <span class="chat-mode__icon" aria-hidden="true">{{ m.icon }}</span>
-                      <span class="chat-mode__title">{{ m.title }}</span>
-                    </button>
-                  }
-                </div>
-                <textarea class="chat-compose__input"
-                          data-testid="activity-chat-input"
-                          rows="2"
-                          [placeholder]="composePlaceholder()"
-                          [value]="followupPrompt()"
-                          (input)="followupPromptChange.emit($any($event.target).value)"
-                          (keydown.control.enter)="sendChat.emit()"
-                          (keydown.meta.enter)="sendChat.emit()"></textarea>
-                <div class="chat-compose__actions">
-                  @if (permissionOptions().length > 0) {
-                    <cac-permission-select
-                      [options]="permissionOptions()"
-                      [value]="permissionMode()"
-                      [disabled]="isRunning()"
-                      disabledReason="Stop the run first to change the permission mode."
-                      triggerTestid="chat-compose-permission"
-                      pickerTestidPrefix="chat-permission-picker"
-                      (valueChange)="onPermissionModeChange($event)" />
-                  }
-                  <app-cli-model-selector
-                    [cliType]="cliType()"
-                    [model]="model()"
-                    [thinkingLevel]="thinkingLevel()"
-                    [availableModels]="availableModels()"
-                    [disabled]="isRunning()"
-                    triggerTestid="chat-compose-model"
-                    pickerTestidPrefix="chat-model-picker"
-                    (commit)="agentConfigCommit.emit($event)" />
-                  <cac-context-ring
-                    [usage]="chatContextUsage()"
-                    [busy]="contextBusy()"
-                    triggerTestid="chat-compose-context"
-                    popoverTestidPrefix="chat-context-popover"
-                    (refreshRequested)="onContextRefresh()" />
-                  <span class="chat-compose__spacer"></span>
-                  @if (isRunning()) {
-                    <button type="button"
-                            class="btn-sm chat-compose__stop"
-                            data-testid="activity-chat-stop"
-                            (click)="stopJob.emit()">⏸ Pause</button>
-                  }
+                <div class="chat-compose__row">
+                  <textarea class="chat-compose__input"
+                            data-testid="activity-chat-input"
+                            rows="2"
+                            aria-label="Message this task"
+                            [placeholder]="composePlaceholder()"
+                            [value]="followupPrompt()"
+                            (input)="followupPromptChange.emit($any($event.target).value)"
+                            (keydown.control.enter)="sendChat.emit()"
+                            (keydown.meta.enter)="sendChat.emit()"></textarea>
                   <button type="button"
                           class="btn-sm btn-sm--primary chat-compose__send"
                           data-testid="activity-chat-send"
+                          aria-keyshortcuts="Control+Enter Meta+Enter"
+                          [attr.title]="isRunning() ? 'Pause the current run and send this message' : 'Send message'"
                           [disabled]="!canSendChat()"
                           (click)="sendChat.emit()">
                     {{ chatSendLabel() }}
                   </button>
                 </div>
+                @if (chatError()) {
+                  <p class="chat-compose__status chat-compose__status--error"
+                     data-testid="activity-chat-error" role="alert">
+                    {{ chatError() }} Your draft was restored. Edit it or Send again to retry.
+                  </p>
+                } @else if (queuedFollowUp()) {
+                  <p class="chat-compose__status"
+                     data-testid="activity-chat-queued" role="status">
+                    Message queued. It will send when this task can continue.
+                  </p>
+                }
               </div>
             </section>
           </div>

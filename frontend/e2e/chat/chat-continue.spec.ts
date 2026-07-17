@@ -67,13 +67,6 @@ async function openJobDetail(page: Page, target: ContinuableJob): Promise<void> 
   }
 }
 
-async function dismissErrorDialog(page: Page): Promise<void> {
-  const closeBtn = page.locator('.error-dialog .error-dialog__close').first();
-  if (await closeBtn.isVisible().catch(() => false)) {
-    await closeBtn.click({ force: true }).catch(() => undefined);
-  }
-}
-
 async function stopAnyLiveRun(target: ContinuableJob): Promise<void> {
   await fetch(
     `${BACKEND}/api/tasks/${encodeURIComponent(target.id)}/stop?watchPath=${encodeURIComponent(target.watchPath)}`,
@@ -91,14 +84,17 @@ test.describe('Activity tab — interactive chat continuation', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/api/tasks/*/continue**', async route => {
       const body = JSON.stringify({
-        jobId: 'stub',
-        jobKey: 'stub',
-        processId: 0,
-        startedAt: new Date().toISOString(),
-        status: 'running',
-        exitCode: null,
-        durationSeconds: null,
-        model: 'claude-opus-4-7'
+        status: 'started',
+        execution: {
+          jobId: 'stub',
+          jobKey: 'stub',
+          processId: 0,
+          startedAt: new Date().toISOString(),
+          status: 'running',
+          exitCode: null,
+          durationSeconds: null,
+          model: 'claude-opus-4-7'
+        }
       });
       await route.fulfill({ status: 200, contentType: 'application/json', body });
     });
@@ -147,8 +143,10 @@ test.describe('Activity tab — interactive chat continuation', () => {
     const response = await responsePromise;
     expect(response.status(), 'POST /continue should succeed').toBe(200);
 
-    // Send label flips to "Pause & Send" once isRunning catches up.
-    await expect(send).toContainText(/Pause/, { timeout: 5000 });
+    // A live run still has the same single Send action. Its title explains
+    // that the safe flow pauses the current run before the next message.
+    await expect(send).toHaveText('Send', { timeout: 5000 });
+    await expect(send).toHaveAttribute('title', /Pause the current run/i);
 
     await page.screenshot({ path: 'test-results/chat-continue-after-send.png', fullPage: false });
 
@@ -207,7 +205,7 @@ test.describe('Continue persists user prompt to cli-output.log', () => {
     const followup = `e2e-persist probe ${Date.now()}`;
 
     // Snapshot BEFORE so we can assert this exact follow-up was added.
-    const before = await api<Array<{ stream: string; text: string }>>(
+    const before = await api<{ stream: string; text: string }[]>(
       `/api/tasks/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
     );
     const beforeMatches = before.filter(l => l.stream === 'user' && l.text.includes(followup));
@@ -222,7 +220,7 @@ test.describe('Continue persists user prompt to cli-output.log', () => {
     // that the agent finishes.
     await stopAnyLiveRun(target);
 
-    const after = await api<Array<{ stream: string; text: string }>>(
+    const after = await api<{ stream: string; text: string }[]>(
       `/api/tasks/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
     );
     const afterMatches = after.filter(l => l.stream === 'user' && l.text.includes(followup));

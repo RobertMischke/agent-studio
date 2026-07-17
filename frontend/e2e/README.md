@@ -221,7 +221,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `token-popover-viewport.spec.ts` | Token popover open/close + viewport (ASS-1700) |
 | `tooltip-standard.spec.ts` | canonical tooltip layer is lazy, instant, singleton, and visually shared across surfaces |
 
-### `chat/` - 27 specs
+### `chat/` - 28 specs
 
 | Spec | Summary |
 |------|---------|
@@ -251,6 +251,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `next-gen-chat-angular-prototype.spec.ts` | @mockup next-gen chat Angular prototype |
 | `next-gen-chat-task-host.spec.ts` | Next-gen chat task host adapter (Frontend:NextGenChat) |
 | `next-gen-chat-workbench-regression.spec.ts` | @regression next-gen chat workbench |
+| `task-detail-simple-chat.spec.ts` | Task detail Activity chat is message-only |
 | `token-bubble.spec.ts` | Token bubble on job cards |
 
 ### `cli/` - 16 specs
@@ -485,7 +486,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `watchdog-notification-operator-copy.spec.ts` | watchdog Suspicious notification reads in operator-friendly English |
 | `workspace-banner-long-message.spec.ts` | workspace banner clamps long auto-review verdict and keeps project below body |
 
-### `task-detail/` - 89 specs
+### `task-detail/` - 88 specs
 
 | Spec | Summary |
 |------|---------|
@@ -511,7 +512,6 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `escalation-summary.spec.ts` | Escalation summary panel - collapsible + compact |
 | `external-lane-change-keeps-task.spec.ts` | External lane change keeps task in view |
 | `f30-detail-header-and-tabs.spec.ts` | F30 - Task-detail header + tabs redesign |
-| `f44-model-badge-at-composer.spec.ts` | F44 - chat-composer model badge |
 | `f48-files-tab.spec.ts` | F48 Files tab - rename + only-prompt + hint |
 | `file-source-history.spec.ts` | File source history viewer |
 | `flush-panes-visual.spec.ts` | Flush panes - no card chrome |
