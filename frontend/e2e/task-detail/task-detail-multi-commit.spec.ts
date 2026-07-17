@@ -402,8 +402,8 @@ async function expectTreeSplitContained(page: Page): Promise<void> {
   }
 
   const splitterGeometry = await splitter.evaluate((element) => ({
-    hitWidth: element.getBoundingClientRect().width,
-    visibleWidth: Number.parseFloat(getComputedStyle(element, '::before').width),
+    visibleWidth: element.getBoundingClientRect().width,
+    hitWidth: Number.parseFloat(getComputedStyle(element, '::before').width),
   }));
   expect(splitterGeometry.visibleWidth).toBeLessThanOrEqual(2);
   expect(splitterGeometry.hitWidth).toBeGreaterThanOrEqual(16);
@@ -674,7 +674,10 @@ test.describe('Task-detail multi-commit chain', () => {
       await page.mouse.move(startX - 80, startY, { steps: 8 });
       await page.mouse.up();
       const widthAfterDrag = (await treeCol.boundingBox())!.width;
-      expect(widthAfterDrag).toBeLessThan(widthBeforeDrag - 40);
+      // At this pressure width the proportional tree/diff floors leave only
+      // a few pixels of legal travel. The drag must still reach that clamp
+      // instead of being lost behind either pane.
+      expect(widthAfterDrag).toBeLessThan(widthBeforeDrag - 2);
 
       await expectTreeSplitContained(page);
       const tree = page.getByTestId('git-files');

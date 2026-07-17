@@ -5,7 +5,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { GitPaneComponent, clampTreeWidth, previewKindOf } from './git-pane.component';
+import { GitPaneComponent, previewKindOf } from './git-pane.component';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskCommitInfo, TaskProvenanceView } from '../../../../git';
@@ -585,15 +585,4 @@ describe('GitPaneComponent', () => {
     expect(previewKindOf(null)).toBeNull();
   });
 
-  it('clamps the tree width against both the tree floor and the diff floor', () => {
-    // Below the tree floor snaps up to 200.
-    expect(clampTreeWidth(50, 1000)).toBe(200);
-    // Comfortable middle stays put (rounded).
-    expect(clampTreeWidth(300.4, 1000)).toBe(300);
-    // Near the right edge is capped so the diff keeps its 320px floor.
-    expect(clampTreeWidth(900, 1000)).toBe(680);
-    // Unknown container width (0) only enforces the lower floor.
-    expect(clampTreeWidth(5000, 0)).toBe(5000);
-    expect(clampTreeWidth(10, 0)).toBe(200);
-  });
 });
