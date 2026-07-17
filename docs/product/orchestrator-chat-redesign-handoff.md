@@ -137,7 +137,7 @@ The user expands an event bubble to see why the orchestrator reissued a prompt, 
 
 ### Convert Conversation To Work
 
-The user asks the orchestrator to make a task from a message or reply. The app creates a draft first, then lets the user place it in the queue.
+The user asks the orchestrator to create work through the canonical composer and its slash-command contract. The chat footer does not add a second host-only task-draft workflow.
 
 ## Roadmap
 

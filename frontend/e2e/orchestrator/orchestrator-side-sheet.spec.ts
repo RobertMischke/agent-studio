@@ -71,10 +71,12 @@ test.describe('Orchestrator side sheet', () => {
       /Ask the orchestrator/
     );
 
-    // Phase 5: "Make a task from this reply" button is rendered but
-    // disabled until at least one orchestrator reply with text exists.
-    const makeTaskBtn = page.getByTestId('orch-side-sheet-make-task');
-    await expect(makeTaskBtn).toBeVisible();
+    // Studio uses the standard CAC composer/footer with no host-only task
+    // conversion controls or duplicate /task button.
+    await expect(page.getByTestId('chat-composer-foot')).toHaveCount(1);
+    await expect(page.getByText('Make a task from your message', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('chat-toolbar-task')).toHaveCount(0);
 
     // Compact-bubble polish demo: type into the composer so the layout
     // captures show the active state with text in the input.

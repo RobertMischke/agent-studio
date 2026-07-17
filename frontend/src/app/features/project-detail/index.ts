@@ -36,6 +36,7 @@ export { ProjectWorkflowSectionComponent } from './components/project-workflow-s
 export {
   DEFAULT_PROJECT_RAIL_KEY,
   isProjectRailKey,
+  projectRailLabel,
   toProjectSlug,
   type ProjectRailKey,
 } from './components/project-shell/project-shell.config';

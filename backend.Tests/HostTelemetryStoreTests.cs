@@ -33,11 +33,15 @@ public sealed class HostTelemetryStoreTests : IDisposable
     public void Compact_DropsExpiredPoints_AndDownsamplesHistoricPoints()
     {
         var now = DateTime.UtcNow;
+        var fiveMinuteTicks = TimeSpan.FromMinutes(5).Ticks;
+        var historicBase = new DateTime(
+            now.AddHours(-72).Ticks - now.AddHours(-72).Ticks % fiveMinuteTicks,
+            DateTimeKind.Utc);
         var source = new List<HostTelemetrySample>
         {
             Sample(now.AddDays(-15)),
-            Sample(now.AddHours(-72).AddMinutes(1), cpu: 20),
-            Sample(now.AddHours(-72).AddMinutes(2), cpu: 40),
+            Sample(historicBase.AddMinutes(1), cpu: 20),
+            Sample(historicBase.AddMinutes(2), cpu: 40),
             Sample(now.AddMinutes(-1), cpu: 60),
         };
 
