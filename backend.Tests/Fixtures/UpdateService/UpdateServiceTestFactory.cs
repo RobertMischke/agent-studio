@@ -74,6 +74,10 @@ public sealed class UpdateServiceTestFactory : WebApplicationFactory<UpdSvc::Pro
                 ["UpdateService:ProbeIntervalSeconds"] = "5",
                 ["UpdateService:AutoRollback"]       = _autoRollback ? "true" : "false",
                 ["UpdateService:Mode"]               = _mode,
+                // The established integration harness exercises the legacy
+                // branch-update pipeline. Immutable-release behavior has its
+                // own contract tests and requires signed fixture manifests.
+                ["UpdateService:RequireReleaseManifest"] = "false",
             });
         });
 

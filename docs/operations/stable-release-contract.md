@@ -25,7 +25,11 @@ node scripts/release/generate-build-manifest.mjs \
 ```
 
 The generator uses create-new semantics and refuses to overwrite an existing
-manifest. The backend copies it beside the published assembly and exposes the
+manifest. It derives CAR and CAC versions and integrity from
+`backend/packages.lock.json` and `frontend/package-lock.json`, then refuses any
+supplied metadata that differs. Stable restores with `dotnet restore
+--locked-mode` and `npm ci`, so deployment never rewrites a lockfile. The
+backend copies the manifest beside the published assembly and exposes the
 same identity from `GET /api/system/about` and `GET /api/system/version`.
 `GET /healthz` remains body-compatible and adds tag and commit response headers.
 
@@ -47,14 +51,23 @@ are hard failures.
 
 The outer updater downloads the candidate release asset to the configured
 candidate-manifest cache using create/replace-by-tag semantics. The Update
-Service never manufactures it from a branch checkout. That avoids both moving
-branch identity and a self-referential manifest commit.
+Service never manufactures it from a branch checkout. It fetches the manifest's
+exact tag without overwriting an existing tag, verifies the dereferenced tag
+commit, checks out that commit detached, and installs the candidate manifest.
+It does not use branch distance to decide whether a release is available. That
+avoids both moving branch identity and a self-referential manifest commit.
 
-Before mutation, copy the installed manifest and immutable release artifact to
-the run folder as the rollback target. After restart, compare the complete
-running about response with the intended candidate manifest. Health alone is
-not success. Append the intended identity, observed identity, direction, and
-rollback outcome to deployment history.
+Before mutation, copy the installed manifest and create a self-contained Git
+bundle for the installed commit in the run folder. Together they are the exact
+rollback target even if the source ref later disappears. Rollback restores the
+manifest, can recover the commit from the bundle, and must pass the same runtime
+identity comparison after restart. Health alone is not success. Append the full
+intended and observed identities, direction, and rollback outcome to deployment
+history.
+
+Offline mode is an explicit updater input (`ReleaseMetadataOffline`), not an
+inference from cache presence or age. It is accepted only when both cached
+manifests and the cached latest-approved tag still pass the same comparison.
 
 ## Migration
 

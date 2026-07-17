@@ -43,7 +43,7 @@ public sealed record UpdateStatus(
 public sealed record RuntimeVersion(
     string Version,
     string Commit,
-    DateTime DeployedAt,
+    DateTime? DeployedAt,
     string? Tag = null,
     bool Dirty = false,
     DateTimeOffset? BuiltAt = null,
@@ -77,7 +77,9 @@ public sealed record UpdateHistoryEntry(
     string? IntendedTag = null,
     string? ObservedTag = null,
     string? ReleaseDirection = null,
-    string? ManifestIntegrity = null
+    string? ManifestIntegrity = null,
+    ReleaseManifest? IntendedRelease = null,
+    ReleaseManifest? ObservedRelease = null
 );
 
 public sealed record TriggerRequest(string? Reason, bool Force);

@@ -50,6 +50,7 @@ public sealed record ReleaseComparison(
 public static class StableReleaseContract
 {
     private static readonly Regex VersionPattern = new("^(?<major>0|[1-9][0-9]*)\\.(?<minor>0|[1-9][0-9]*)\\.(?<patch>0|[1-9][0-9]*)(?:[-+].*)?$", RegexOptions.Compiled);
+    private static readonly Regex TagPattern = new("^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$", RegexOptions.Compiled);
 
     public static ReleaseManifest Read(string json)
     {
@@ -67,19 +68,26 @@ public static class StableReleaseContract
         bool allowDowngrade = false)
     {
         var errors = new List<string>();
-        Validate(candidate, "candidate", errors, requireClean: true);
-        Validate(installed, "installed", errors, requireClean: false);
-        Validate(running, "running", errors, requireClean: false);
+        Validate(candidate, "candidate", errors, allowLegacy: false);
+        Validate(installed, "installed", errors, allowLegacy: true);
+        Validate(running, "running", errors, allowLegacy: true);
 
-        if (candidate is not null && !string.IsNullOrWhiteSpace(latestApprovedTag)
-            && !string.Equals(candidate.Tag, latestApprovedTag, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(latestApprovedTag))
+            errors.Add(offline
+                ? "cached latest approved tag is missing"
+                : "latest approved tag is missing");
+        else if (candidate is not null && !string.Equals(candidate.Tag, latestApprovedTag, StringComparison.Ordinal))
             errors.Add($"candidate tag {candidate.Tag} does not equal latest approved tag {latestApprovedTag}");
 
         if (running is not null && installed is not null && !IdentityEquals(running, installed))
             errors.Add("running identity diverges from the installed manifest");
 
-        var direction = Classify(installed?.Version, candidate?.Version,
-            installed?.Commit, candidate?.Commit);
+        var direction = installed?.Legacy == true && candidate is not null
+            ? ReleaseDirection.Upgrade
+            : Classify(installed?.Version, candidate?.Version, installed?.Commit, candidate?.Commit);
+        if (direction == ReleaseDirection.SameVersion && installed is not null && candidate is not null
+            && !IdentityEquals(installed, candidate))
+            direction = ReleaseDirection.Divergence;
         if (direction == ReleaseDirection.Downgrade && !allowDowngrade)
             errors.Add("downgrade requires explicit approval");
         if (direction == ReleaseDirection.Divergence)
@@ -100,7 +108,7 @@ public static class StableReleaseContract
     public static bool IdentityEquals(ReleaseManifest left, ReleaseManifest right) =>
         left == right;
 
-    private static void Validate(ReleaseManifest? manifest, string name, List<string> errors, bool requireClean)
+    private static void Validate(ReleaseManifest? manifest, string name, List<string> errors, bool allowLegacy)
     {
         if (manifest is null)
         {
@@ -108,23 +116,35 @@ public static class StableReleaseContract
             return;
         }
         if (manifest.SchemaVersion != 1) errors.Add($"{name} schemaVersion is unsupported");
+        if (manifest.Legacy && allowLegacy)
+        {
+            if (string.IsNullOrWhiteSpace(manifest.Commit) || manifest.Commit == "unknown")
+                errors.Add($"{name} legacy migration commit is missing");
+            return;
+        }
         if (manifest.Legacy || string.IsNullOrWhiteSpace(manifest.Tag) || manifest.Tag == "untagged")
             errors.Add($"{name} immutable release tag is missing");
-        if (requireClean && manifest.Dirty) errors.Add($"{name} build is dirty");
+        if (manifest.Dirty) errors.Add($"{name} build is dirty");
+        if (!string.Equals(manifest.Application, "Agent Studio", StringComparison.Ordinal))
+            errors.Add($"{name} application identity is invalid");
+        if (manifest.BuiltAt is null) errors.Add($"{name} build time is missing");
+        if (!TagPattern.IsMatch(manifest.Tag ?? "")) errors.Add($"{name} release tag is invalid");
         if (!TagMatchesVersion(manifest.Tag, manifest.Version))
             errors.Add($"{name} tag/version mismatch ({manifest.Tag} vs {manifest.Version})");
-        ValidateArtifact(manifest.CodingAgentRunner, $"{name} CodingAgentRunner", errors);
-        ValidateArtifact(manifest.CodingAgentChat, $"{name} Coding Agent Chat", errors);
+        ValidateArtifact(manifest.CodingAgentRunner, $"{name} CodingAgentRunner", "CodingAgentRunner", errors);
+        ValidateArtifact(manifest.CodingAgentChat, $"{name} Coding Agent Chat", "coding-agent-chat", errors);
         if (!IsIntegrity(manifest.Integrity)) errors.Add($"{name} application integrity is missing or invalid");
     }
 
-    private static void ValidateArtifact(ReleaseArtifact? artifact, string name, List<string> errors)
+    private static void ValidateArtifact(ReleaseArtifact? artifact, string name, string expectedName, List<string> errors)
     {
         if (artifact is null)
         {
             errors.Add($"{name} package identity is missing");
             return;
         }
+        if (!string.Equals(artifact.Name, expectedName, StringComparison.Ordinal))
+            errors.Add($"{name} package name mismatch ({artifact.Name} vs {expectedName})");
         if (string.IsNullOrWhiteSpace(artifact.Version) || string.IsNullOrWhiteSpace(artifact.Commit)
             || string.IsNullOrWhiteSpace(artifact.Tag) || artifact.Tag == "untagged")
             errors.Add($"{name} version/tag/commit is incomplete");

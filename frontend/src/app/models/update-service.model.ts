@@ -47,7 +47,7 @@ export interface ReleaseComparison {
 export interface RuntimeVersion {
   version: string;
   commit: string;
-  deployedAt: string;
+  deployedAt: string | null;
   tag?: string | null;
   dirty?: boolean;
   builtAt?: string | null;

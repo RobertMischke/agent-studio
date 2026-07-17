@@ -55,7 +55,9 @@ public sealed class UpdateOrchestrator
     public (string RunId, string Phase, string Message) StartTrigger(string trigger, bool force, CancellationToken ct)
     {
         var (_, behindBy) = RefreshGitStatus();
-        if (behindBy <= 0)
+        // Release-mode updates are driven by an approved immutable tag, not by
+        // whether this checkout happens to be behind the moving main branch.
+        if (!_options.RequireReleaseManifest && behindBy <= 0)
         {
             _logger.LogInformation("Update trigger ignored because stable is not behind origin (behindBy={BehindBy})", behindBy);
             return ("(none)", _store.Get().Phase, "already up to date");
@@ -141,7 +143,7 @@ public sealed class UpdateOrchestrator
         try
         {
             var (_, behindBy) = RefreshGitStatus();
-            if (behindBy <= 0 && !force)
+            if (!_options.RequireReleaseManifest && behindBy <= 0 && !force)
             {
                 _logger.LogInformation(
                     "Update run {RunId} ignored at execution time because stable is not behind origin (behindBy={BehindBy})",
@@ -173,7 +175,8 @@ public sealed class UpdateOrchestrator
                 if (!release.Allowed)
                 {
                     FinishFailed(runId, startedAt, headBefore, headBefore, trigger,
-                        $"release preflight refused: {string.Join("; ", release.Errors)}", null, folder, preSnapshot);
+                        $"release preflight refused: {string.Join("; ", release.Errors)}", null, folder, preSnapshot,
+                        release.Candidate, release.Running, release.Direction.ToString());
                     return;
                 }
                 intendedRelease = release.Candidate;
@@ -183,6 +186,28 @@ public sealed class UpdateOrchestrator
                 if (intendedRelease is not null)
                     folder.WriteOutput("intended-build-manifest.json", System.Text.Json.JsonSerializer.Serialize(intendedRelease,
                         new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase, WriteIndented = true }));
+
+                if (release.Direction == ReleaseDirection.SameVersion)
+                {
+                    FinishHistory(runId, startedAt, headBefore, headBefore, "no-op", null, trigger,
+                        null, null, folder.Root, intendedRelease?.Tag, release.Running?.Tag,
+                        release.Direction.ToString(), intendedRelease?.Integrity, intendedRelease, release.Running);
+                    FinishDone(runId, startedAt, headBefore, headBefore,
+                        $"release {intendedRelease?.Tag ?? "unknown"} is already running", null);
+                    return;
+                }
+
+                var rollbackBundle = Path.Combine(folder.Root, "rollback-source.bundle");
+                var (bundleRc, bundleOut) = await RunProcessAsync(
+                    "git", new[] { "bundle", "create", rollbackBundle, "HEAD" },
+                    _options.StableCheckoutDir, ct);
+                folder.WriteOutput("rollback-source-output.txt", bundleOut);
+                if (bundleRc != 0)
+                {
+                    FinishFailed(runId, startedAt, headBefore, headBefore, trigger,
+                        $"could not preserve immutable rollback source (rc={bundleRc})", null, folder, preSnapshot);
+                    return;
+                }
             }
             var preModes = await _backend.ReadProjectModesAsync(ct) ?? new Dictionary<string, string>();
             var shouldQuiesceRunners = ShouldQuiesceRunners();
@@ -205,11 +230,18 @@ public sealed class UpdateOrchestrator
                     runId);
             }
 
-            // PHASE 3 — pulling
-            SetPhase("pulling", "git fetch + merge --ff-only", runId, startedAt);
+            // PHASE 3 — install the exact immutable release commit. Legacy
+            // mode retains the old origin/main path only when the release gate
+            // is explicitly disabled for a development/test installation.
+            SetPhase("pulling", intendedRelease is null
+                ? "git fetch + merge --ff-only"
+                : $"fetching immutable release {intendedRelease.Tag}", runId, startedAt);
+            var installCommand = intendedRelease is null
+                ? "git fetch origin main && git merge --ff-only FETCH_HEAD"
+                : BuildInstallReleaseCommand(intendedRelease);
             var (pullRc, pullOut) = await RunBashAsync(
                 "-c",
-                $"git fetch origin main && git merge --ff-only FETCH_HEAD",
+                installCommand,
                 _options.StableCheckoutDir, ct);
             folder.WriteOutput("pull-output.txt", pullOut);
             if (pullRc != 0)
@@ -218,11 +250,25 @@ public sealed class UpdateOrchestrator
                     $"git pull failed (rc={pullRc})", null, folder, preSnapshot);
                 return;
             }
+            if (intendedRelease is not null)
+            {
+                try
+                {
+                    File.Copy(_options.CandidateManifestFile,
+                        Path.Combine(_options.StableCheckoutDir, _options.BuildManifestFile), overwrite: true);
+                }
+                catch (Exception ex)
+                {
+                    FinishFailed(runId, startedAt, headBefore, _git.HeadShort(), trigger,
+                        $"could not install candidate build manifest: {ex.Message}", null, folder, preSnapshot);
+                    return;
+                }
+            }
             var headAfterPull = _git.HeadShort();
             _store.SetHead(headAfterPull);
 
             // PHASE 4 — building
-            SetPhase("building", "npm install (frontend deps)", runId, startedAt);
+            SetPhase("building", "locked dependency restore", runId, startedAt);
             var (buildRc, buildOut, buildRan) = await MaybeRunNpmInstallAsync(headBefore, headAfterPull, ct);
             if (buildRan) folder.WriteOutput("npm-install-output.txt", buildOut);
             if (buildRc != 0)
@@ -251,7 +297,8 @@ public sealed class UpdateOrchestrator
                     $"timeout after {_options.HealthWaitSeconds}s",
                     "/healthz=200");
                 FinishFailed(runId, startedAt, headBefore, headAfterPull, trigger,
-                    "backend did not come back healthy", new[] { failure }, folder, preSnapshot);
+                    "backend did not come back healthy", new[] { failure }, folder, preSnapshot,
+                    intendedRelease, null, releaseComparison?.Direction.ToString());
 
                 if (_options.AutoRollback)
                     await RunRollbackAsync(runId, manual: false, ct);
@@ -265,7 +312,8 @@ public sealed class UpdateOrchestrator
                 {
                     var failure = new VerificationFailure("runtime-identity", observedRelease?.Tag ?? "missing", intendedRelease.Tag);
                     FinishFailed(runId, startedAt, headBefore, headAfterPull, trigger,
-                        "runtime identity does not equal intended build manifest", new[] { failure }, folder, preSnapshot);
+                        "runtime identity does not equal intended build manifest", new[] { failure }, folder, preSnapshot,
+                        intendedRelease, observedRelease, releaseComparison?.Direction.ToString());
                     if (_options.AutoRollback) await RunRollbackAsync(runId, manual: false, ct);
                     return;
                 }
@@ -306,7 +354,8 @@ public sealed class UpdateOrchestrator
             folder.WriteSummary(BuildSummaryMarkdown(runId, trigger, startedAt, headBefore, headAfter, preSnapshot, postSnapshot, verification, null));
 
             FinishHistory(runId, startedAt, headBefore, headAfter, "ok", null, trigger, null, null, folder.Root,
-                intendedRelease?.Tag, observedRelease?.Tag, releaseComparison?.Direction.ToString(), intendedRelease?.Integrity);
+                intendedRelease?.Tag, observedRelease?.Tag, releaseComparison?.Direction.ToString(), intendedRelease?.Integrity,
+                intendedRelease, observedRelease);
             FinishDone(runId, startedAt, headBefore, headAfter,
                 $"updated {headBefore} -> {headAfter}", null);
         }
@@ -332,6 +381,7 @@ public sealed class UpdateOrchestrator
         var headBefore = _git.HeadShort();
         var rollbackStartedAt = DateTime.UtcNow;
         var rollbackTrigger = manual ? "manual-rollback" : "auto-rollback";
+        var rollbackManifest = ReadReleaseManifest(Path.Combine(folder.Root, "rollback-build-manifest.json"));
 
         // Read the snapshot SHA + project modes from disk so manual rollback
         // works even after a process restart. Modes feed phase-6 (strict
@@ -359,7 +409,22 @@ public sealed class UpdateOrchestrator
             folder.WriteOutput("rollback-stop-output.txt", stopOut);
             // Continue regardless: a stable that's already down is not an error.
 
-            var (rsRc, rsOut) = await RunBashAsync("-c", $"git reset --hard {targetSha}", _options.StableCheckoutDir, ct);
+            var (rsRc, rsOut) = await RunProcessAsync(
+                "git", new[] { "reset", "--hard", targetSha }, _options.StableCheckoutDir, ct);
+            if (rsRc != 0 && File.Exists(Path.Combine(folder.Root, "rollback-source.bundle")))
+            {
+                var (fetchRc, fetchOut) = await RunProcessAsync(
+                    "git", new[] { "fetch", Path.Combine(folder.Root, "rollback-source.bundle"), "HEAD" },
+                    _options.StableCheckoutDir, ct);
+                rsOut += $"\n--- bundle recovery (rc={fetchRc}) ---\n{fetchOut}";
+                if (fetchRc == 0)
+                {
+                    var retry = await RunProcessAsync(
+                        "git", new[] { "reset", "--hard", targetSha }, _options.StableCheckoutDir, ct);
+                    rsRc = retry.Rc;
+                    rsOut += $"\n--- reset retry (rc={rsRc}) ---\n{retry.Output}";
+                }
+            }
             folder.WriteOutput("rollback-reset-output.txt", rsOut);
             if (rsRc != 0)
             {
@@ -373,6 +438,12 @@ public sealed class UpdateOrchestrator
 
             var headAfterReset = _git.HeadShort();
             _store.SetHead(headAfterReset);
+
+            if (rollbackManifest is not null)
+            {
+                File.Copy(Path.Combine(folder.Root, "rollback-build-manifest.json"),
+                    Path.Combine(_options.StableCheckoutDir, _options.BuildManifestFile), overwrite: true);
+            }
 
             var (startRc, startOut) = await RunRestartAsync(ct);
             folder.WriteOutput("rollback-start-output.txt", startOut);
@@ -393,6 +464,24 @@ public sealed class UpdateOrchestrator
                 folder.WriteRollbackResult(failedStart);
                 AppendRollbackHistory(parentRunId, rollbackTrigger, startedAt, headBefore, headAfterReset, failedStart, folder.Root);
                 return;
+            }
+
+            if (rollbackManifest is not null)
+            {
+                var observedRollback = ReleasePreflightService.ToManifest(await _backend.ReadRuntimeVersionAsync(ct));
+                if (observedRollback is null || !StableReleaseContract.IdentityEquals(observedRollback, rollbackManifest))
+                {
+                    var mismatch = new[]
+                    {
+                        new VerificationFailure("runtime-identity", observedRollback?.Tag ?? "missing", rollbackManifest.Tag)
+                    };
+                    var failedIdentity = new RollbackResult(parentRunId, "failed",
+                        headBefore, headAfterReset, startedAt, DateTime.UtcNow,
+                        "runtime identity does not equal rollback manifest", mismatch);
+                    folder.WriteRollbackResult(failedIdentity);
+                    AppendRollbackHistory(parentRunId, rollbackTrigger, startedAt, headBefore, headAfterReset, failedIdentity, folder.Root);
+                    return;
+                }
             }
 
             // PHASE 6' — re-run the strict 6-check matrix against the reverted
@@ -605,20 +694,63 @@ public sealed class UpdateOrchestrator
         }
     }
 
+    private static async Task<(int Rc, string Output)> RunProcessAsync(
+        string fileName, IReadOnlyList<string> args, string workingDir, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        try
+        {
+            using var process = Process.Start(psi)!;
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+            await process.WaitForExitAsync(ct);
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+            return (process.ExitCode, stdout + (string.IsNullOrWhiteSpace(stderr) ? "" : $"\n{stderr}"));
+        }
+        catch (Exception ex)
+        {
+            return (-1, $"{fileName} launch failed: {ex.Message}");
+        }
+    }
+
+    private static string BuildInstallReleaseCommand(ReleaseManifest release)
+    {
+        var tagRef = $"refs/tags/{release.Tag}";
+        var dereferenced = $"{tagRef}^{{commit}}";
+        var refSpec = $"{tagRef}:{tagRef}";
+        return $"git fetch --no-tags origin {ShellQuote(refSpec)} && "
+            + $"test \"$(git rev-parse {ShellQuote(dereferenced)})\" = {ShellQuote(release.Commit)} && "
+            + $"git checkout --detach --force {ShellQuote(release.Commit)}";
+    }
+
+    private static string ShellQuote(string value) => $"'{value.Replace("'", "'\\''")}'";
+
+    private static ReleaseManifest? ReadReleaseManifest(string path)
+    {
+        if (!File.Exists(path)) return null;
+        try { return StableReleaseContract.Read(File.ReadAllText(path)); }
+        catch { return null; }
+    }
+
     private async Task<(int Rc, string Output, bool Ran)> MaybeRunNpmInstallAsync(string before, string after, CancellationToken ct)
     {
-        // Always run npm install (idempotent: fast when the dep tree already
-        // matches the lock, installs anything missing otherwise). The previous
-        // "only if frontend/package-lock.json changed in this pull" optimisation
-        // skipped installs when node_modules had drifted from the lock (a dep
-        // added in a commit window a prior update skipped), leaving the frontend
-        // build failing on a missing module after a successful-looking update
-        // (the 2026-06-02 @microsoft/signalr incident). npm install IS the cheap
-        // check-and-fix; a non-zero rc aborts the update before the restart.
+        // Restore both package graphs from lockfiles. npm ci also removes a
+        // drifted node_modules tree; neither command is allowed to rewrite its
+        // lock as part of a Stable deployment.
         _ = before;
         _ = after;
         var (rc, output) = await RunBashAsync("-c",
-            "cd frontend && npm install",
+            "dotnet restore backend/OrchestratorApi.csproj --locked-mode && cd frontend && npm ci",
             _options.StableCheckoutDir, ct);
         return (rc, output, true);
     }
@@ -659,10 +791,13 @@ public sealed class UpdateOrchestrator
     }
 
     private void FinishFailed(string runId, DateTime startedAt, string headBefore, string headAfter, string trigger,
-        string error, IReadOnlyList<VerificationFailure>? failures, RunFolder folder, UpdateRunSnapshot? preSnapshot)
+        string error, IReadOnlyList<VerificationFailure>? failures, RunFolder folder, UpdateRunSnapshot? preSnapshot,
+        ReleaseManifest? intendedRelease = null, ReleaseManifest? observedRelease = null, string? releaseDirection = null)
     {
         var now = DateTime.UtcNow;
-        FinishHistory(runId, startedAt, headBefore, headAfter, "failed", error, trigger, failures, null, folder.Root);
+        FinishHistory(runId, startedAt, headBefore, headAfter, "failed", error, trigger, failures, null, folder.Root,
+            intendedRelease?.Tag, observedRelease?.Tag, releaseDirection, intendedRelease?.Integrity,
+            intendedRelease, observedRelease);
 
         // Always write a summary so the operator has a quick read.
         try
@@ -684,7 +819,8 @@ public sealed class UpdateOrchestrator
 
     private void FinishHistory(string runId, DateTime startedAt, string headBefore, string headAfter, string status,
         string? error, string trigger, IReadOnlyList<VerificationFailure>? failures, string? rollbackStatus, string? runFolder,
-        string? intendedTag = null, string? observedTag = null, string? releaseDirection = null, string? manifestIntegrity = null)
+        string? intendedTag = null, string? observedTag = null, string? releaseDirection = null, string? manifestIntegrity = null,
+        ReleaseManifest? intendedRelease = null, ReleaseManifest? observedRelease = null)
     {
         var finishedAt = DateTime.UtcNow;
         var entry = new UpdateHistoryEntry(
@@ -703,7 +839,9 @@ public sealed class UpdateOrchestrator
             IntendedTag: intendedTag,
             ObservedTag: observedTag,
             ReleaseDirection: releaseDirection,
-            ManifestIntegrity: manifestIntegrity);
+            ManifestIntegrity: manifestIntegrity,
+            IntendedRelease: intendedRelease,
+            ObservedRelease: observedRelease);
         _store.AppendHistory(entry);
     }
 

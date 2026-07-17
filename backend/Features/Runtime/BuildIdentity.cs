@@ -50,7 +50,7 @@ public sealed record BuildIdentity(
             ?? "unknown";
         return new BuildIdentity(
             1, "Agent Studio", "untagged", "0.0.0-migration", commit, true, null,
-            "unverified", Missing("CodingAgentRunner"), Missing("@coding-agent/chat"), Legacy: true);
+            "unverified", Missing("CodingAgentRunner"), Missing("coding-agent-chat"), Legacy: true);
     }
 
     public static void Validate(BuildIdentity manifest)
@@ -61,14 +61,21 @@ public sealed record BuildIdentity(
         Required(manifest.Version, "version");
         Required(manifest.Commit, "commit");
         Required(manifest.Integrity, "integrity");
-        ValidateArtifact(manifest.CodingAgentRunner, "codingAgentRunner");
-        ValidateArtifact(manifest.CodingAgentChat, "codingAgentChat");
+        if (!string.Equals(manifest.Application, "Agent Studio", StringComparison.Ordinal))
+            throw new InvalidDataException("Build manifest application must be Agent Studio.");
+        if (!manifest.Legacy && !string.Equals(manifest.Tag, $"v{manifest.Version}", StringComparison.Ordinal))
+            throw new InvalidDataException("Build manifest tag/version mismatch.");
+        if (!manifest.Legacy && manifest.BuiltAt is null)
+            throw new InvalidDataException("Build manifest is missing builtAt.");
+        ValidateIntegrity(manifest.Integrity, "integrity", manifest.Legacy);
+        ValidateArtifact(manifest.CodingAgentRunner, "codingAgentRunner", "CodingAgentRunner", manifest.Legacy);
+        ValidateArtifact(manifest.CodingAgentChat, "codingAgentChat", "coding-agent-chat", manifest.Legacy);
     }
 
     private static ReleaseArtifactIdentity Missing(string name) =>
         new(name, "unknown", "untagged", "unknown", "unverified");
 
-    private static void ValidateArtifact(ReleaseArtifactIdentity artifact, string field)
+    private static void ValidateArtifact(ReleaseArtifactIdentity artifact, string field, string expectedName, bool legacy)
     {
         if (artifact is null) throw new InvalidDataException($"Build manifest is missing {field}.");
         Required(artifact.Name, $"{field}.name");
@@ -76,6 +83,19 @@ public sealed record BuildIdentity(
         Required(artifact.Tag, $"{field}.tag");
         Required(artifact.Commit, $"{field}.commit");
         Required(artifact.Integrity, $"{field}.integrity");
+        if (!string.Equals(artifact.Name, expectedName, StringComparison.Ordinal))
+            throw new InvalidDataException($"Build manifest {field}.name mismatch.");
+        if (!legacy && !string.Equals(artifact.Tag, $"v{artifact.Version}", StringComparison.Ordinal))
+            throw new InvalidDataException($"Build manifest {field} tag/version mismatch.");
+        ValidateIntegrity(artifact.Integrity, $"{field}.integrity", legacy);
+    }
+
+    private static void ValidateIntegrity(string value, string field, bool legacy)
+    {
+        if (legacy && value == "unverified") return;
+        if (!value.StartsWith("sha256-", StringComparison.OrdinalIgnoreCase)
+            && !value.StartsWith("sha512-", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Build manifest {field} is invalid.");
     }
 
     private static void Required(string? value, string field)

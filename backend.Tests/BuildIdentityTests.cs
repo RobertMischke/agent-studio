@@ -21,4 +21,18 @@ public sealed class BuildIdentityTests
         Assert.Equal("untagged", identity.Tag);
         Assert.Null(identity.BuiltAt);
     }
+
+    [Fact]
+    public void ManifestWithMismatchedPackageIdentity_IsRejected()
+    {
+        var identity = new BuildIdentity(
+            1, "Agent Studio", "v1.2.0", "1.2.0", "abcdef0", false,
+            DateTimeOffset.Parse("2026-07-17T10:00:00Z"), "sha256-app",
+            new ReleaseArtifactIdentity("CodingAgentRunner", "0.5.0", "v0.5.0", "car0000", "sha512-car"),
+            new ReleaseArtifactIdentity("local-dist", "0.1.0", "v0.1.0", "cac0000", "sha512-cac"));
+
+        var error = Assert.Throws<InvalidDataException>(() => BuildIdentity.Validate(identity));
+
+        Assert.Contains("codingAgentChat.name mismatch", error.Message);
+    }
 }

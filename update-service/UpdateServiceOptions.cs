@@ -30,6 +30,13 @@ public sealed class UpdateServiceOptions
     public string BuildManifestFile { get; set; } = "build-manifest.json";
     public string CandidateManifestFile { get; set; } = @"C:\Projects\agent-taskboard-workspace\.metadata\stable-candidate-manifest.json";
     public string ApprovedTagFile { get; set; } = @"C:\Projects\agent-taskboard-workspace\.metadata\stable-approved-tag";
+    /// <summary>
+    /// Set by the outer updater when release-channel refresh could not reach
+    /// the registry and the preflight is deliberately using cached immutable
+    /// manifests plus a cached approved tag. This is explicit state, never
+    /// inferred from file timestamps or cache presence.
+    /// </summary>
+    public bool ReleaseMetadataOffline { get; set; } = false;
 
     public int ProbeIntervalSeconds { get; set; } = 30;
     public int HealthWaitSeconds { get; set; } = 180;

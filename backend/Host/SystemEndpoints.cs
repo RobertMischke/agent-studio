@@ -2,8 +2,6 @@
 
 namespace AgentStudio.Host;
 
-using System.Reflection;
-
 /// <summary>
 /// Cross-cutting routes that don't fit any of the resource-scoped
 /// groups: workspace enumeration, environment flags consumed by the
@@ -37,7 +35,11 @@ public static class SystemEndpoints
         // Runtime identity comes only from the immutable manifest copied beside
         // the running backend. Checkout state and folder timestamps are not
         // evidence of what this process loaded.
-        BuildIdentity ReadBuildIdentity() => BuildIdentity.Load(app.Configuration);
+        // Capture once at process start. Re-reading a mutable file on every
+        // request would report the checkout/cache identity rather than the
+        // code this process actually loaded.
+        var buildIdentity = BuildIdentity.Load(app.Configuration);
+        BuildIdentity ReadBuildIdentity() => buildIdentity;
         object About() {
             var identity = ReadBuildIdentity();
             return new {

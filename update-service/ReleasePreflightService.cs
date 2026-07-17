@@ -17,12 +17,17 @@ public sealed class ReleasePreflightService
     {
         var running = ToManifest(await _backend.ReadRuntimeVersionAsync(ct));
         var installed = ReadFile(Path.Combine(_options.StableCheckoutDir, _options.BuildManifestFile));
+        // Migration from a pre-contract installation has no on-disk manifest.
+        // The boot-captured runtime identity is the only truthful rollback
+        // anchor, so preserve it as the installed identity for this first hop.
+        if (installed is null && running?.Legacy == true)
+            installed = running;
         var candidate = ReadFile(_options.CandidateManifestFile);
         var approved = File.Exists(_options.ApprovedTagFile)
             ? File.ReadAllText(_options.ApprovedTagFile).Trim()
             : null;
-        var offline = candidate is null;
-        return StableReleaseContract.Compare(running, installed, candidate, approved, offline, allowDowngrade);
+        return StableReleaseContract.Compare(
+            running, installed, candidate, approved, _options.ReleaseMetadataOffline, allowDowngrade);
     }
 
     public static ReleaseManifest? ToManifest(RuntimeVersion? runtime)
