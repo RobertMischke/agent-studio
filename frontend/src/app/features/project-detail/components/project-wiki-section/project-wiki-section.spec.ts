@@ -259,6 +259,29 @@ describe('ProjectWikiSectionComponent', () => {
     clearWikiStorage();
   });
 
+  it('shows branch and commit and disables writes for a non-checkout source', async () => {
+    const readonlyTree: WikiTree = {
+      ...TREE,
+      source: {
+        mode: 'branch', branch: 'origin/develop', commit: 'abcdef1234567890',
+        shortCommit: 'abcdef12', writable: false, error: null,
+      },
+    };
+    const { fixture, http } = await setup(readonlyTree);
+
+    expect(el(fixture).querySelector('[data-testid="project-wiki-source"]')?.textContent).toContain('origin/develop @ abcdef12');
+    expect((el(fixture).querySelector('[data-testid="project-wiki-new-page"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((el(fixture).querySelector('[data-testid="project-wiki-new-folder"]') as HTMLButtonElement).disabled).toBe(true);
+
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')?.click();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md').flush({ relPath: 'concepts/overview.md', content: '# Read only' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+    expect((el(fixture).querySelector('[data-testid="project-wiki-edit"]') as HTMLButtonElement).disabled).toBe(true);
+    http.verify();
+  });
+
   it('renders the physical folder tree with folders collapsed by default and md/html/json files when expanded', async () => {
     const { fixture, http } = await setup();
     let text = el(fixture).querySelector('[data-testid="project-wiki-tree"]')?.textContent ?? '';

@@ -261,6 +261,19 @@ public class ProjectRegistryTests : IDisposable
     }
 
     [Fact]
+    public void SetWikiSourceBranch_PersistsAndCheckoutIsNull()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        Assert.Null(p.WikiSourceBranch);
+        Assert.Equal("origin/develop", reg.SetWikiSourceBranch(p.Id, " origin/develop ").WikiSourceBranch);
+        Assert.Equal("origin/develop", Build().FindById(p.Id)!.WikiSourceBranch);
+        Assert.Null(reg.SetWikiSourceBranch(p.Id, null).WikiSourceBranch);
+        Assert.Throws<ArgumentException>(() => reg.SetWikiSourceBranch(p.Id, "develop^{tree}"));
+    }
+
+    [Fact]
     public void SetWorkspace_ReassignsAndRefusesUnknownWorkspace()
     {
         var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);

@@ -143,6 +143,16 @@ export interface WikiTree {
   baseDir: string;
   exists: boolean;
   root: WikiTreeNode[];
+  source?: WikiSourceInfo | null;
+}
+
+export interface WikiSourceInfo {
+  mode: 'checkout' | 'branch';
+  branch: string;
+  commit: string | null;
+  shortCommit: string | null;
+  writable: boolean;
+  error: string | null;
 }
 
 /** One recently-edited wiki page (page / git author / when), newest first. */

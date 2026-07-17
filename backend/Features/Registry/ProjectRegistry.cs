@@ -359,6 +359,11 @@ public sealed class ProjectRegistry
             ? ValidateRepositoryUrl(update.ClearRepositoryUrl == true ? null : update.RepositoryUrl)
             : null;
 
+        var updateWikiSourceBranch = update.WikiSourceBranch != null || update.ClearWikiSourceBranch == true;
+        var wikiSourceBranch = updateWikiSourceBranch
+            ? ValidateWikiSourceBranch(update.ClearWikiSourceBranch == true ? null : update.WikiSourceBranch)
+            : null;
+
         var updateCliDefault = update.CliDefault != null || update.ClearCliDefault == true;
         var cliDefault = update.ClearCliDefault == true || string.IsNullOrWhiteSpace(update.CliDefault)
             ? null
@@ -388,6 +393,7 @@ public sealed class ProjectRegistry
                 WorkspaceId = updateWorkspace ? workspaceId! : current.WorkspaceId,
                 RepositoryPath = updateRepositoryPath ? repositoryPath : current.RepositoryPath,
                 RootPath = updateRootPath ? rootPath : current.RootPath,
+                WikiSourceBranch = updateWikiSourceBranch ? wikiSourceBranch : current.WikiSourceBranch,
                 Urls = updateRepositoryUrl
                     ? ApplyRepositoryUrl(current.Urls, repositoryUrl)
                     : current.Urls,
@@ -509,6 +515,29 @@ public sealed class ProjectRegistry
             if (!Directory.Exists(Path.Combine(trimmed, ".git")) && !File.Exists(Path.Combine(trimmed, ".git")))
                 throw new ArgumentException(
                     "repositoryPath must point at a git checkout (no .git found)", nameof(repositoryPath));
+        }
+        return trimmed;
+    }
+
+    /// <summary>Sets the optional read-only git ref used by the whole wiki.</summary>
+    public ProjectRecord SetWikiSourceBranch(string id, string? branch)
+    {
+        var trimmed = ValidateWikiSourceBranch(branch);
+        return MutateLocked(id, p => p with { WikiSourceBranch = trimmed },
+            trimmed == null ? "wiki-source-checkout" : "wiki-source-branch-set");
+    }
+
+    internal static string? ValidateWikiSourceBranch(string? branch)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(branch) ? null : branch.Trim();
+        if (trimmed != null)
+        {
+            if (trimmed.Length > 200
+                || trimmed.StartsWith("-", StringComparison.Ordinal)
+                || trimmed.Contains("..", StringComparison.Ordinal)
+                || trimmed.Any(char.IsWhiteSpace)
+                || trimmed.IndexOfAny(['~', '^', ':', '?', '*', '[', '\\']) >= 0)
+                throw new ArgumentException("wikiSourceBranch must be a plain git branch or remote-tracking ref", nameof(branch));
         }
         return trimmed;
     }

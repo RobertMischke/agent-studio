@@ -91,7 +91,9 @@ groups, and a failed domain reports an error without hiding successful domains.
   also writes a dated JSON envelope under `architecture/project-map-history/`.
   The former Runtime Prompts placeholder rail is intentionally removed. The Wiki / Docs rail
   (`project-detail/components/project-wiki-section/`) renders the physical
-  `docs/` folder tree directly, supports real create / move / rename / delete
+  `docs/` folder tree from the project's checkout or configured
+  `wikiSourceBranch`. The Wiki header shows the effective branch and commit;
+  non-checkout sources are read-only. Checkout sources support real create / move / rename / delete
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/contracts/wiki-tree.md](../contracts/wiki-tree.md).

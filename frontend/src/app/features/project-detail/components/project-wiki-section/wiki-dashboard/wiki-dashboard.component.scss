@@ -106,11 +106,11 @@
   font-variant-numeric: tabular-nums;
 }
 .wdash__grade[data-tone='warn'] {
-  background: color-mix(in srgb, var(--studio-warn, orange) 22%, transparent);
+  background: color-mix(in srgb, var(--studio-warn) 22%, transparent);
   color: var(--studio-fg);
 }
 .wdash__grade[data-tone='bad'] {
-  background: color-mix(in srgb, var(--studio-danger, crimson) 24%, transparent);
+  background: color-mix(in srgb, var(--studio-error) 24%, transparent);
   color: var(--studio-fg);
 }
 

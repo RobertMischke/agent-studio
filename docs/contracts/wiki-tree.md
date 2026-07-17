@@ -1,9 +1,16 @@
 # Wiki Tree, Rendering & Per-Doc History
 
-The project-level **Wiki / Docs** rail renders the watched project's physical
-`docs/` folder tree. The filesystem is the organization model: directories are
-categories, Markdown and self-contained HTML files are pages, and the path shown
-in the UI is the path in Git.
+The project-level **Wiki / Docs** rail renders the watched project's complete
+`docs/` tree from one project-wide source. `wikiSourceBranch = null` preserves
+the legacy checkout-backed behavior. A configured git ref such as
+`origin/develop` reads tree, content, assets, Pulse inputs, and history from that
+ref without switching the working tree.
+
+Branch-backed reads resolve the ref to a commit and materialize `docs/` once as
+a SHA-addressed read-only snapshot through the shared Git info cache path. Warm
+navigation reuses that snapshot. The Wiki header reports the source branch and
+short commit, so Stable and Dev never imply a source from their deployment
+checkout.
 
 There is no app-owned organization manifest, no virtual grouping layer, and no
 compatibility shim for historical root-level pages. If the Wiki should show a
@@ -63,6 +70,14 @@ Returns the recursive physical docs tree.
   "projectName": "Agent Task Processor",
   "baseDir": "C:/repo/docs",
   "exists": true,
+  "source": {
+    "mode": "branch",
+    "branch": "origin/develop",
+    "commit": "8d10db4e...",
+    "shortCommit": "8d10db4e",
+    "writable": false,
+    "error": null
+  },
   "root": [
     {
       "name": "architecture",
@@ -158,6 +173,15 @@ This is how Wiki organization changes are made: move the actual path.
 ### `DELETE /wiki/files/{relPath}`
 
 Deletes a real file or folder through `git rm` and commits the change.
+
+## Write policy
+
+Checkout-backed Wikis retain commit-backed page edits, creates, moves, deletes,
+and uploads. A branch-backed Wiki is deliberately read-only: all mutation
+endpoints reject the operation with an explicit divergence-prevention message,
+and the UI disables the corresponding controls. Operators switch the project
+setting back to Checkout before writing. The application never guesses a write
+branch and never writes into one checkout while displaying another ref.
 
 ## Frontend behavior
 

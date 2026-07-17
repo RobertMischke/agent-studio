@@ -49,11 +49,22 @@
   padding: 5px 8px;
   border-radius: 6px;
   color: var(--studio-fg);
-  background: var(--studio-bg-elevated, var(--studio-bg));
+  background: var(--studio-bg-elevated);
   border: 1px solid color-mix(in srgb, var(--studio-fg) 16%, transparent);
   max-width: 15rem;
 }
-.wgrade__select:disabled { opacity: 0.6; cursor: not-allowed; }
+.wgrade__select:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--studio-accent) 48%, var(--studio-border-strong));
+}
+.wgrade__select:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}
+.wgrade__select:disabled {
+  background: var(--studio-surface-muted);
+  color: var(--studio-fg-dim);
+  cursor: not-allowed;
+}
 
 .wgrade__btn {
   display: inline-flex;

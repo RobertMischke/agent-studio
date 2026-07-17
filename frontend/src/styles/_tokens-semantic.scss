@@ -46,6 +46,17 @@
   --studio-surface:         var(--studio-bg-elevated);
   --studio-surface-muted:   color-mix(in srgb, var(--studio-fg-dim) 7%, var(--studio-bg-elevated));
 
+  // Wiki reading surfaces share one semantic paper contract. The dark theme
+  // follows the Catppuccin editor palette instead of retaining light-only
+  // slate primitives inside the Wiki component.
+  --studio-wiki-bg:         var(--studio-bg-surface);
+  --studio-wiki-fg:         var(--studio-fg);
+  --studio-wiki-muted:      var(--studio-fg-dim);
+  --studio-wiki-soft:       var(--studio-surface-muted);
+  --studio-wiki-border:     var(--studio-border-strong);
+  --studio-wiki-link:       var(--studio-accent-3-strong);
+  --studio-wiki-gutter:     var(--studio-bg-elevated);
+
   // ---------------------------------------------------------------------------
   // Borders
   // ---------------------------------------------------------------------------
@@ -556,6 +567,16 @@
   --studio-bg-surface:      #ffffff;
   --studio-surface:         var(--studio-bg-surface);
   --studio-surface-muted:   color-mix(in srgb, var(--studio-fg-muted) 6%, var(--studio-bg-surface));
+
+  // Preserve the established light Wiki paper palette while exposing it
+  // through the same semantic contract as dark mode.
+  --studio-wiki-bg:         var(--color-grey-50);
+  --studio-wiki-fg:         var(--color-slate-900);
+  --studio-wiki-muted:      var(--color-slate-600);
+  --studio-wiki-soft:       var(--color-slate-50);
+  --studio-wiki-border:     var(--color-slate-200);
+  --studio-wiki-link:       var(--color-blue-500);
+  --studio-wiki-gutter:     var(--color-slate-50);
 
   // Borders
   --studio-border:        var(--color-grey-400);

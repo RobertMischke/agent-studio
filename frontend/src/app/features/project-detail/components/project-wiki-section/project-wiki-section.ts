@@ -41,6 +41,7 @@ import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.com
 import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiGradePanelComponent } from './wiki-grade-panel/wiki-grade-panel.component';
 import { ProjectStyleGuidesPanelComponent } from '../project-style-guides-panel/project-style-guides-panel';
+import { WikiSourceBadgeComponent } from './wiki-source-badge/wiki-source-badge.component';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -130,6 +131,7 @@ interface WikiMetricChip {
     WikiPulseComponent,
     WikiGradePanelComponent,
     ProjectStyleGuidesPanelComponent,
+    WikiSourceBadgeComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
@@ -278,6 +280,8 @@ export class ProjectWikiSectionComponent {
   readonly menuItems = computed<MenuItem[]>(() => {
     const t = this.menuTarget();
     if (!t) return [];
+    if (!this.wikiWritable())
+      return t.type === 'folder' ? [] : [{ kind: 'row', id: 'history', label: 'View history' }];
     if (t.type === 'folder') {
       // A fixed frame area still accepts subpages, but its own shape is locked:
       // no rename, no delete.
@@ -363,10 +367,14 @@ export class ProjectWikiSectionComponent {
   });
 
   readonly canEditDoc = computed(() =>
-    this.openedType() === 'md' && !this.revisionSha());
+    this.openedType() === 'md' && !this.revisionSha() && this.wikiWritable());
+
+  readonly wikiWritable = computed(() => this.tree()?.source?.writable !== false);
 
   readonly editDisabledReason = computed(() => {
     if (this.revisionSha()) return 'Old revisions are read-only.';
+    if (!this.wikiWritable())
+      return `This Wiki is read-only because its source is ${this.tree()?.source?.branch ?? 'a git branch'}, not the checkout.`;
     if (this.openedType() !== 'md') return 'Rich editing is currently available for Markdown pages.';
     return null;
   });
@@ -1068,11 +1076,13 @@ export class ProjectWikiSectionComponent {
   // ---- create page / folder ----
 
   promptNewPage(folderRel: string): void {
+    if (!this.wikiWritable()) return;
     const name = this.prompt('New page name (e.g. guide.md):', '');
     if (name) this.createPage(folderRel, name);
   }
 
   promptNewFolder(folderRel: string): void {
+    if (!this.wikiWritable()) return;
     const name = this.prompt('New category name:', '');
     if (name) this.createFolder(folderRel, name);
   }
@@ -1136,6 +1146,7 @@ export class ProjectWikiSectionComponent {
   // ---- drag and drop (file onto folder → git mv into the folder) ----
 
   onFileDragStart(ev: DragEvent, node: WikiTreeNode): void {
+    if (!this.wikiWritable()) return;
     if (node.type === 'folder' || !node.relPath || !ev.dataTransfer) return;
     if (node.immutable) return; // frame shells cannot be moved
     ev.dataTransfer.setData(FILE_DRAG_TYPE, node.relPath);

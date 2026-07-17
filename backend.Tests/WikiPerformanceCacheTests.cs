@@ -112,6 +112,108 @@ public class WikiPerformanceCacheTests : IDisposable
         Assert.Equal(1, rebuildRollup.Files);
     }
 
+    [Fact]
+    public void GetWikiTreeResult_HeadMovesOutsideDocs_RefreshesSourceCommitAndETag()
+    {
+        var repoRoot = Path.Combine(_tempDir, "tree-source-head");
+        var docsDir = Path.Combine(repoRoot, "docs");
+        Directory.CreateDirectory(docsDir);
+        InitRepo(repoRoot);
+        File.WriteAllText(Path.Combine(docsDir, "guide.md"), "# Guide\nbody");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "seed docs");
+
+        var entries = new[] { (Name: "Source", RootPath: repoRoot) };
+        var config = BuildConfig(entries);
+        var scanner = BuildScanner(entries);
+        var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        var docs = new ProjectDocsService(scanner, registry, NullLogger<ProjectDocsService>.Instance, git);
+
+        var first = docs.GetWikiTreeResult("Source");
+        Assert.NotNull(first);
+        var firstCommit = first!.Tree.Source?.Commit;
+
+        File.WriteAllText(Path.Combine(repoRoot, "README.md"), "non-wiki change\n");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "change outside docs");
+        git.InvalidateHeadKeyedCaches();
+
+        var refreshed = docs.GetWikiTreeResult("Source");
+        Assert.NotNull(refreshed);
+        Assert.NotEqual(firstCommit, refreshed!.Tree.Source?.Commit);
+        Assert.NotEqual(first.ETag, refreshed.ETag);
+        Assert.Equal(git.GetHeadShaCached(repoRoot), refreshed.Tree.Source?.Commit);
+    }
+
+    [Fact]
+    public void WikiBranchSnapshot_ReadsConfiguredCommit_WithoutSwitchingCheckout_AndCachesArchive()
+    {
+        var repoRoot = Path.Combine(_tempDir, "branch-source");
+        var docsDir = Path.Combine(repoRoot, "docs");
+        Directory.CreateDirectory(docsDir);
+        InitRepo(repoRoot);
+        File.WriteAllText(Path.Combine(docsDir, "source.md"), "# Main\nmain");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "main docs");
+        RunGit(repoRoot, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(docsDir, "source.md"), "# Develop\ndevelop");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "develop docs");
+        RunGit(repoRoot, "checkout -q main");
+
+        var git = BuildGitService(("Branch", repoRoot));
+        var first = git.GetWikiBranchSnapshotCached(repoRoot, "develop");
+        var second = git.GetWikiBranchSnapshotCached(repoRoot, "develop");
+
+        Assert.True(first.Success, first.Error);
+        Assert.Equal(first.RootPath, second.RootPath);
+        Assert.Contains("develop", File.ReadAllText(Path.Combine(first.RootPath, "docs", "source.md")));
+        Assert.Contains("main", File.ReadAllText(Path.Combine(repoRoot, "docs", "source.md")));
+        Assert.Equal("main", git.GetStatusForRepoRoot(repoRoot).Branch);
+    }
+
+    [Fact]
+    public void ConfiguredWikiBranch_DrivesTreeContentAndHistory_WithoutSwitchingCheckout()
+    {
+        var repoRoot = Path.Combine(_tempDir, "configured-branch-source");
+        var docsDir = Path.Combine(repoRoot, "docs");
+        Directory.CreateDirectory(docsDir);
+        InitRepo(repoRoot);
+        File.WriteAllText(Path.Combine(docsDir, "source.md"), "# Main\nmain\n");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "main docs");
+        RunGit(repoRoot, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(docsDir, "source.md"), "# Develop\ndevelop\n");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "develop docs");
+        RunGit(repoRoot, "checkout -q main");
+
+        var entries = new[] { (Name: "Configured", RootPath: repoRoot) };
+        var config = BuildConfig(entries);
+        var scanner = BuildScanner(entries);
+        var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var project = registry.EnsureProjectForStorage(
+            Path.Combine(repoRoot, ".orchestrator", "jobs"), "Configured", DefaultWorkspace.Id);
+        registry.SetWikiSourceBranch(project.Id, "develop");
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        var docs = new ProjectDocsService(scanner, registry, NullLogger<ProjectDocsService>.Instance, git);
+
+        var tree = docs.GetWikiTreeResult("Configured");
+        var content = docs.ReadWikiFile("Configured", "source.md");
+        var history = docs.GetWikiHistory("Configured", "source.md", git);
+
+        Assert.NotNull(tree);
+        Assert.Equal("branch", tree!.Tree.Source?.Mode);
+        Assert.Equal("develop", tree.Tree.Source?.Branch);
+        Assert.False(tree.Tree.Source?.Writable);
+        Assert.Equal("Develop", Assert.Single(tree.Tree.Root).Title);
+        Assert.Contains("develop", content?.Content);
+        Assert.Equal("develop docs", history?.History.Commits[0].Subject);
+        Assert.Contains("main", File.ReadAllText(Path.Combine(docsDir, "source.md")));
+        Assert.Equal("main", git.GetStatusForRepoRoot(repoRoot).Branch);
+    }
+
     // ---- Recent edits: HEAD-memoized, zero spawns while HEAD is unchanged ----
 
     [Fact]

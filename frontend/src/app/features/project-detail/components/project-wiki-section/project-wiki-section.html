@@ -1,5 +1,5 @@
 <section class="pwiki" data-testid="project-wiki-section">
-  <header class="pwiki__head">
+  <header class="pwiki__head" data-testid="project-wiki-header">
     @if (tree()) {
       <button class="pwiki__chrome-btn"
               type="button"
@@ -20,6 +20,7 @@
         }
       </div>
     </div>
+    @if (tree()?.source; as source) { <app-wiki-source-badge [source]="source" /> }
     @if (tree()) {
       <div class="pwiki__top-meta">
         @if (openedRel(); as rel) {
@@ -45,23 +46,28 @@
       </button>
       <button class="pwiki__new-group" type="button"
               (click)="promptNewPage('')"
+              [disabled]="!wikiWritable()"
+              [cacTooltip]="wikiWritable() ? 'Create a Wiki page' : editDisabledReason()"
               data-testid="project-wiki-new-page">
         <app-studio-icon name="plus" [size]="12"></app-studio-icon>
         <span>Page</span>
       </button>
       <button class="pwiki__new-group" type="button"
               (click)="promptNewFolder('')"
+              [disabled]="!wikiWritable()"
+              [cacTooltip]="wikiWritable() ? 'Create a Wiki category' : editDisabledReason()"
               data-testid="project-wiki-new-folder">
         <app-studio-icon name="folder" [size]="12"></app-studio-icon>
         <span>Category</span>
       </button>
     }
   </header>
-
   @if (loading()) {
     <p class="studio-empty">Loading...</p>
   } @else if (!tree()) {
     <p class="studio-empty">No data.</p>
+  } @else if (tree()!.source?.error; as sourceError) {
+    <p class="studio-empty" data-testid="project-wiki-source-error">{{ sourceError }}</p>
   } @else if (docCount() === 0) {
     <p class="studio-empty">
       No pages under <code>{{ tree()!.baseDir }}</code> yet.
@@ -101,7 +107,6 @@
                    data-testid="project-wiki-filter">
           </label>
         }
-
         <div class="pwiki__rows"
              role="tree"
              aria-label="Knowledge document tree">
@@ -119,7 +124,7 @@
                  [attr.aria-selected]="openedRel() === row.node.relPath ? 'true' : null"
                  [attr.data-testid]="'project-wiki-node-' + nodeId(row.node)"
                  [attr.data-wiki-row-id]="nodeId(row.node)"
-                 [draggable]="row.node.type !== 'folder'"
+                 [draggable]="wikiWritable() && row.node.type !== 'folder'"
                  (focusin)="focusTreeRow(row.node)"
                  (click)="focusTreeRowElement($event, row.node)"
                  (keydown)="onTreeKeydown($event)"
@@ -129,7 +134,6 @@
                  (dragleave)="onFolderDragLeave(row.node)"
                  (drop)="onFolderDrop($event, row.node)"
                  (contextmenu)="onContextMenu($event, row.node)">
-
               @if (row.node.type === 'folder' && row.hasChildren) {
                 <button class="pwiki__chevron" type="button"
                         tabindex="-1"
@@ -141,7 +145,6 @@
               } @else {
                 <span class="pwiki__chevron-spacer"></span>
               }
-
               @if (renamingId() === nodeId(row.node)) {
                 <input class="pwiki__rename-input"
                        type="text"
@@ -203,7 +206,6 @@
                   </span>
                 </div>
               }
-
               @if (row.node.immutable) {
                 <span class="pwiki__lock"
                       aria-label="Fixed frame page"
@@ -239,8 +241,7 @@
         <span aria-hidden="true"></span>
       </div>
       }
-
-      <div class="pwiki__viewer">
+      <div class="pwiki__viewer" data-testid="project-wiki-content-surface">
         @if (openedRel(); as rel) {
           <header class="pwiki__viewer-head">
             <div class="pwiki__tabs" role="tablist" aria-label="Page view modes">
@@ -287,7 +288,6 @@
               <span>Close</span>
             </button>
           </header>
-
           <div class="pwiki__workspace"
                [class.pwiki__workspace--aside-collapsed]="contextCollapsed()"
                [class.pwiki__workspace--resizing]="resizingPanel() === 'context'"

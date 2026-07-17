@@ -5,6 +5,7 @@
   flex-direction: column;
   gap: 16px;
   max-width: 100%;
+  color: var(--studio-fg);
 }
 
 /* ---- header ---- */
@@ -232,7 +233,7 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--studio-fg-muted);
-  background: var(--studio-bg-elevated, var(--studio-bg));
+  background: var(--studio-bg-elevated);
   padding: 2px 0 4px;
 }
 .wpulse__list {
