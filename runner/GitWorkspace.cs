@@ -106,6 +106,70 @@ public sealed class GitWorkspace
         }
     }
 
+    /// <summary>
+    /// Prepare a detached, disposable checkout for an Epic planning run. No
+    /// task branch is created or resumed and teardown never commits or pushes.
+    /// </summary>
+    public async Task<string> PrepareReadOnlyAsync(CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_gitRemote))
+            throw new InvalidOperationException("The claim has no repositoryUrl and RUNNER_GIT_REMOTE is not configured as a fallback.");
+
+        Directory.CreateDirectory(ProjectCachePath);
+        Directory.CreateDirectory(Path.Combine(ProjectCachePath, "worktrees"));
+        await GitMetadataGate.WaitAsync(ct);
+        try
+        {
+            if (!Directory.Exists(Path.Combine(SharedRepoPath, ".git")))
+                await Git(["clone", _gitRemote, SharedRepoPath], ProjectCachePath, ct);
+            else
+            {
+                await Git(["remote", "set-url", "origin", _gitRemote], SharedRepoPath, ct);
+                await Git(["fetch", "origin", "--prune"], SharedRepoPath, ct);
+            }
+
+            if (Directory.Exists(RepoPath))
+                await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
+            await TryGit(["worktree", "prune"], SharedRepoPath, ct);
+
+            var requested = string.IsNullOrWhiteSpace(_options.Branch) ? _baseBranch : _options.Branch!;
+            var branch = await BranchExistsOnOrigin(requested, ct)
+                ? requested
+                : await OriginDefaultBranch(ct) ?? _baseBranch;
+            _log($"git worktree add --detach {RepoPath} from origin/{branch} for read-only Epic planning");
+            await Git(["worktree", "add", "--detach", RepoPath, $"origin/{branch}"], SharedRepoPath, ct);
+            return branch;
+        }
+        finally
+        {
+            GitMetadataGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Remove a planning checkout without salvage. Returns true when the agent
+    /// changed tracked or untracked product-source files, which invalidates the
+    /// planning result but is never committed or pushed.
+    /// </summary>
+    public async Task<bool> TeardownReadOnlyAsync(CancellationToken ct)
+    {
+        await GitMetadataGate.WaitAsync(ct);
+        try
+        {
+            if (!Directory.Exists(RepoPath)) return false;
+            var status = (await Git(["status", "--porcelain=v1", "--untracked-files=all"], RepoPath, ct)).StdOut;
+            var mutated = !string.IsNullOrWhiteSpace(status);
+            _log($"epic-planning-checkout-teardown path={RepoPath} sourceMutated={mutated}");
+            await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
+            await TryGit(["worktree", "prune"], SharedRepoPath, ct);
+            return mutated;
+        }
+        finally
+        {
+            GitMetadataGate.Release();
+        }
+    }
+
     public async Task<WorktreeTeardownResult> TeardownAsync(string outcome, CancellationToken ct)
     {
         await GitMetadataGate.WaitAsync(ct);

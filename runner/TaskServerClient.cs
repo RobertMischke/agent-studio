@@ -195,6 +195,11 @@ public sealed class TaskServerClient : IDisposable
     public async Task<RemoteRunCompletionResponse?> CompleteRunAsync(RemoteRunCompletionRequest req, CancellationToken ct)
         => await PostJsonAsync<RemoteRunCompletionRequest, RemoteRunCompletionResponse>("/api/runner/completion", req, ct);
 
+    public async Task<RemoteEpicPlanningPromptResponse?> GetEpicPlanningPromptAsync(
+        RemoteEpicPlanningPromptRequest req, CancellationToken ct)
+        => await PostJsonAsync<RemoteEpicPlanningPromptRequest, RemoteEpicPlanningPromptResponse>(
+            "/api/runner/epic-planning-prompt", req, ct);
+
     public async Task<ExternalCompletionResponse?> CompleteAsync(string jobId, ExternalCompletionRequest req, CancellationToken ct)
         => await PostJsonAsync<ExternalCompletionRequest, ExternalCompletionResponse>(
             $"/api/tasks/{Uri.EscapeDataString(jobId)}/external-completion", req, ct);

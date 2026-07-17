@@ -121,7 +121,21 @@ public sealed record RunnerClaimResponse(
     string? Message = null,
     string? ProjectId = null,
     string? RepositoryUrl = null,
-    string? DefaultBranch = null);
+    string? DefaultBranch = null,
+    string? TaskKind = null);
+
+public sealed record RemoteEpicPlanningPromptRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string WorkingDirectory);
+
+public sealed record RemoteEpicPlanningPromptResponse(
+    string Prompt,
+    string? CliType,
+    string? Model,
+    string? ThinkingLevel);
 
 /// <summary>Runner -> Server: fenced normal completion after the remote CLI exits.</summary>
 public sealed record RemoteRunCompletionRequest(
@@ -135,7 +149,9 @@ public sealed record RemoteRunCompletionRequest(
     int? ExitCode = null,
     string? SalvageBranch = null,
     string? SalvageCommitSha = null,
-    string? SalvageBranchUrl = null);
+    string? SalvageBranchUrl = null,
+    IReadOnlyList<string>? OutputLines = null,
+    bool SourceMutated = false);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

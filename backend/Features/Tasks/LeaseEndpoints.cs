@@ -81,20 +81,33 @@ public static class LeaseEndpoints
                             : "runner is draining; no new leases are admitted"));
             if (req.AvailableSlots <= 0)
                 return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "telemetry recorded; no free host slots"));
-            if (client is not null && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase))
-            {
-                logger.LogWarning(
-                    "remote-runner-claim-refused-read-only runner={Runner} clientId={ClientId} detail={Detail}",
-                    req.RunnerName, clientId, client.RunnerGitDetail);
-                return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty,
-                    Message: $"runner is read-only: {client.RunnerGitDetail ?? "git push probe failed"}"));
-            }
-
             await ClaimGate.WaitAsync(ct);
             try
             {
                 var allWithArchive = scanner.ScanAllJobsWithArchive();
                 var waitsOn = TaskReferenceIndex.Build(allWithArchive);
+
+                // A daemon restart releases its lease but may leave the card in
+                // Progress. Requeue only server-assigned remote work whose lease
+                // is now free; the next claim mints a higher fence. This covers
+                // both coding tasks and Epic planning without touching locally
+                // owned Progress cards.
+                foreach (var interrupted in scanner.ScanAllJobs().Where(t => t.State == TaskStates.Progress))
+                {
+                    var project = settings.Get(interrupted.ProjectName);
+                    var assigned = project.ExecutionRunner;
+                    if (!project.RemoteExecutionEnabled
+                        || string.IsNullOrWhiteSpace(assigned)
+                        || (!string.Equals(assigned, req.RunnerName, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(assigned, req.RunnerId, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    var interruptedKey = interrupted.Key ?? interrupted.TaskKey ?? interrupted.Id;
+                    if (leases.Peek(interruptedKey).Outcome != "Free") continue;
+                    await transitions.MoveAsync(
+                        interrupted.Id, TaskStates.Ready, interrupted.WatchPath, ct,
+                        cause: $"remote-runner-lease-recovery:{req.RunnerName.Trim()}");
+                }
+
                 var eligible = scanner.ScanAllJobs()
                     .Where(t => t.State == TaskStates.Ready)
                     .Where(t =>
@@ -106,7 +119,6 @@ public static class LeaseEndpoints
                                && (string.Equals(assigned, req.RunnerName, StringComparison.OrdinalIgnoreCase)
                                    || string.Equals(assigned, req.RunnerId, StringComparison.OrdinalIgnoreCase))
                                && AgentTypes.IsAutoPickupEligible(t.Agent)
-                               && !TaskKinds.IsEpic(t.Kind)
                                && !TaskSlugs.IsHumanDecisionNeeded(t.Id)
                                && BuildProfileGate.AllowsAutoPickup(project.BuildProfile)
                                && (!project.IntakeEnabled.GetValueOrDefault()
@@ -118,8 +130,19 @@ public static class LeaseEndpoints
 
                 TaskInfo? candidate = null;
                 RemoteProjectRepository? repository = null;
+                var readOnlyCodingSkipped = false;
                 foreach (var task in eligible)
                 {
+                    if (client is not null
+                        && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase)
+                        && !TaskKinds.IsEpic(task.Kind))
+                    {
+                        readOnlyCodingSkipped = true;
+                        logger.LogWarning(
+                            "remote-runner-coding-claim-refused-read-only runner={Runner} clientId={ClientId} task={TaskKey} detail={Detail}",
+                            req.RunnerName, clientId, task.Key ?? task.Id, client.RunnerGitDetail);
+                        continue;
+                    }
                     var registryProject = projects.FindByStorageLocation(task.WatchPath)
                                           ?? projects.FindByIdOrDisplayName(task.ProjectName);
                     repository = RemoteProjectRepositoryResolver.Resolve(
@@ -138,7 +161,11 @@ public static class LeaseEndpoints
                 }
 
                 if (candidate is null || repository is null)
-                    return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty));
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.Empty,
+                        Message: readOnlyCodingSkipped
+                            ? $"runner is read-only: {client?.RunnerGitDetail ?? "git push probe failed"}"
+                            : null));
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
@@ -179,12 +206,52 @@ public static class LeaseEndpoints
                     acquire.Lease,
                     ProjectId: repository.ProjectId,
                     RepositoryUrl: repository.RepositoryUrl,
-                    DefaultBranch: repository.DefaultBranch));
+                    DefaultBranch: repository.DefaultBranch,
+                    TaskKind: candidate.Kind));
             }
             finally
             {
                 ClaimGate.Release();
             }
+        });
+
+        app.MapPost("/api/runner/epic-planning-prompt", (
+            RemoteEpicPlanningPromptRequest req,
+            TaskScannerService scanner,
+            RunLeaseService leases,
+            RuntimePromptService prompts,
+            AgentStudio.Projects.ProjectSettingsService settings) =>
+        {
+            if (!leases.IsCurrent(req.TaskKey, req.LeaseId, req.FencingToken, req.RunnerId))
+                return Results.Conflict(new { error = "Lease id, fencing token, or runner id does not match the current holder." });
+            var epic = scanner.ScanAllJobs().FirstOrDefault(t =>
+                string.Equals(t.TaskKey, req.TaskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Id, req.TaskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Key, req.TaskKey, StringComparison.OrdinalIgnoreCase));
+            if (epic is null) return Results.NotFound();
+            if (!TaskKinds.IsEpic(epic.Kind))
+                return Results.BadRequest(new { error = "The claimed task is not an Epic planning run." });
+
+            var goal = File.Exists(Path.Combine(epic.FolderPath, "prompt.md"))
+                ? File.ReadAllText(Path.Combine(epic.FolderPath, "prompt.md"))
+                : string.Empty;
+            var rendered = prompts.Render(RuntimePromptService.EpicDecomposition, new Dictionary<string, string?>
+            {
+                ["title"] = string.IsNullOrWhiteSpace(epic.Title) ? "(untitled)" : epic.Title,
+                ["prompt_text"] = goal,
+                ["working_directory"] = req.WorkingDirectory,
+                ["repository_path"] = req.WorkingDirectory,
+                ["job_folder"] = "server-managed task folder",
+                ["prompt_path"] = "prompt.md via the runner API",
+                ["attachments_list"] = "",
+                ["mode_framing"] = prompts.RenderModeFraming(TaskModes.Planning, epic.AllowWebAccess),
+            });
+            var project = settings.Get(epic.ProjectName);
+            return Results.Ok(new RemoteEpicPlanningPromptResponse(
+                rendered,
+                epic.CliType,
+                project.EpicPlanningModel ?? epic.Model,
+                project.EpicPlanningThinkingLevel ?? epic.ThinkingLevel));
         });
 
         app.MapPost("/api/runner/completion", async (
@@ -194,6 +261,10 @@ public static class LeaseEndpoints
             RunLeaseService leases,
             TimelineLog timeline,
             WorkspaceArtifactCommitService artifactCommits,
+            AgentStudio.Projects.ProjectSettingsService projectSettings,
+            TaskMutationService mutations,
+            TaskStateMachine states,
+            OrchestratorChatLog chatLog,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
@@ -212,6 +283,7 @@ public static class LeaseEndpoints
                     req.TaskKey, reportedOutcome, TaskStates.Progress, $"No task '{req.TaskKey}'."));
 
             var outcome = reportedOutcome.Trim().ToLowerInvariant();
+            var isEpicPlanning = TaskKinds.IsEpic(task.Kind);
             var targetState = outcome switch
             {
                 "done" or "noop" => TaskStates.AutoReview,
@@ -265,6 +337,49 @@ public static class LeaseEndpoints
                 TimelineActors.Agent,
                 summary: $"remote run {outcome} on {source}",
                 details: details);
+
+            if (isEpicPlanning)
+            {
+                // Epic planning has no coding transition side effects. Move the
+                // container first through the lane authority, then finalize the
+                // plan against its rebound folder. Invalid output immediately
+                // recovers that same Epic from AutoReview to Backlog inside the
+                // shared lifecycle.
+                var planningMove = states.MoveJob(
+                    task.Id, TaskStates.AutoReview, task.WatchPath,
+                    cause: $"remote-epic-planning-completion:{source}");
+                if (planningMove.Status != MoveJobStatus.Success)
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey, reportedOutcome, task.State,
+                        $"Epic planning lane move refused: {planningMove.Status} {planningMove.Message}"));
+                task = scanner.FindJob(task.Id, task.WatchPath) ?? task;
+                var invalidationReason = req.SourceMutated
+                    ? "Epic planning mutated the read-only product checkout"
+                    : outcome is not ("done" or "noop")
+                        ? $"Epic planning ended with non-success outcome '{outcome}'"
+                        : null;
+                var finalized = EpicDecompositionLifecycle.Finalize(
+                    task, req.OutputLines, req.LeaseId, projectSettings, mutations, scanner,
+                    states, timeline, chatLog,
+                    loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteEpicPlanning"),
+                    invalidationReason);
+                if (!finalized.Valid)
+                {
+                    loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                        "remote-epic-planning-invalid task={TaskKey} runner={Runner} sourceMutated={SourceMutated} reason={Reason}",
+                        req.TaskKey, source, req.SourceMutated, finalized.Error);
+                    return Results.Ok(new RemoteRunCompletionResponse(
+                        req.TaskKey, reportedOutcome, TaskStates.Backlog,
+                        req.SourceMutated
+                            ? "Epic planning attempted to mutate the read-only checkout; no children were created."
+                            : finalized.Error));
+                }
+                loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogInformation(
+                    "remote-epic-planning-completion project={Project} task={TaskKey} runner={Runner} children={Children} token={FencingToken}",
+                    task.ProjectName, req.TaskKey, source, finalized.CreatedTaskIds.Count, req.FencingToken);
+                return Results.Ok(new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, TaskStates.AutoReview));
+            }
 
             var move = await transitions.MoveAsync(
                 task.Id, targetState, task.WatchPath, ct,

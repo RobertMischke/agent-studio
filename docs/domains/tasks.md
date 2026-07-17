@@ -117,6 +117,14 @@ cannot erase an operator decision.
 - Manual Epic creation requires a title and goal description. If a planning
   run parses no sub-tasks, the runner records the failed decomposition and
   returns the Epic to `0-backlog` instead of leaving an empty completion.
+- A remotely assigned Ready Epic is claimable for planning even though local
+  auto-pickup still skips Epic containers. Local and remote completion both use
+  `EpicDecompositionLifecycle`, `EpicDecompositionParser`, and
+  `EpicSubTaskFactory`. Valid plans create child coding cards with the Epic's
+  project, `epicId`, CLI, and model defaults, append
+  `.metadata/spawned-tasks.jsonl` planning-spawn evidence, and move the Epic to
+  `4-auto-review`. Empty, invalid, or source-mutating plans record a failed
+  decomposition and return the Epic to `0-backlog`.
 - Empty Epic cleanup uses the Task API to move records to `7-archive`; it never
   deletes the task folder. Archived zero-member cleanup records are omitted
   from the overview, while completed Epics with historical children remain.

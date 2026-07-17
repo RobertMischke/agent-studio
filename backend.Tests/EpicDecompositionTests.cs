@@ -332,6 +332,39 @@ public class EpicDecompositionTests : IDisposable
         Assert.All(created, id => Assert.Equal("epic-e2e", scanner.FindJob(id, _watchPath)!.EpicId));
     }
 
+    [Fact]
+    public void Finalize_RebindsMovedEpicBeforeWritingPlanningSpawnEvidence()
+    {
+        var (scanner, mutations) = Build();
+        var machine = _machine!;
+        var ready = CreateEpic("epic-rebound", cli: "codex", model: "gpt-5");
+        Assert.Equal(MoveJobStatus.Success,
+            machine.MoveJob(ready.Id, TaskStates.Progress, _watchPath).Status);
+        var staleProgressSnapshot = scanner.FindJob(ready.Id, _watchPath)!;
+        Assert.Equal(MoveJobStatus.Success,
+            machine.MoveJob(ready.Id, TaskStates.AutoReview, _watchPath).Status);
+
+        var finalized = EpicDecompositionLifecycle.Finalize(
+            staleProgressSnapshot,
+            ["{\"subTasks\":[{\"title\":\"Child\",\"prompt\":\"Implement it.\"}]}"],
+            "run-1",
+            new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, BuildConfig()),
+            mutations,
+            scanner,
+            machine,
+            timeline: null,
+            chatLog: null,
+            NullLogger.Instance);
+
+        Assert.True(finalized.Valid);
+        Assert.False(Directory.Exists(Path.Combine(
+            _watchPath, TaskStates.Progress, staleProgressSnapshot.Id)));
+        var current = scanner.FindJob(ready.Id, _watchPath)!;
+        Assert.Equal(TaskStates.AutoReview, current.State);
+        Assert.Single(File.ReadAllLines(Path.Combine(
+            current.FolderPath, ".metadata", "spawned-tasks.jsonl")));
+    }
+
     // ---- harness -----------------------------------------------------------
 
     private TaskInfo CreateEpic(string id, string? cli = null, string? model = null)
@@ -352,6 +385,7 @@ public class EpicDecompositionTests : IDisposable
 
     private TaskScannerService? _scanner;
     private TaskMutationService? _mutations;
+    private TaskStateMachine? _machine;
 
     private (TaskScannerService scanner, TaskMutationService mutations) Build()
     {
@@ -365,6 +399,7 @@ public class EpicDecompositionTests : IDisposable
         machine.EnsureStateFoldersAndMigrate();
         _scanner = scanner;
         _mutations = mutations;
+        _machine = machine;
         return (scanner, mutations);
     }
 

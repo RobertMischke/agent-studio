@@ -104,6 +104,15 @@ state.
   consult the same record; assigned remote-capable projects are never locally
   auto-picked. Lease fencing is the hard split-brain guard below that policy.
 
+- A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
+  occupies a normal host slot and holds the same fenced lease, heartbeat,
+  cancellation, drain, and telemetry contract as a coding task, but it is not a
+  coding work item. The server renders `epic-decomposition.md`, and the remote
+  host runs it in a detached disposable checkout. No task branch, salvage
+  commit, or push is created. Only the children produced by the plan enter the
+  coding pipeline. An interrupted assigned card whose lease is free is requeued
+  to Ready inside the next atomic claim before a higher fence is issued.
+
 - Sentinel matches are authoritative. When adding a sentinel, update
   [docs/contracts/agent-task.md](../contracts/agent-task.md) and
   `AgentOutcomeAnalyzer.SentinelRegex`.
@@ -207,10 +216,14 @@ state.
   is verified before removal. A failed check or push keeps the worktree and
   records a `worktree-blocked` gate item with host and path. Successful salvage
   branches are linked from the card's `results/deliverables.md`.
+  Epic planning is the deliberate exception: its detached checkout is checked
+  for mutations and discarded without salvage. Any mutation invalidates the
+  plan and returns the Epic to Backlog because planning is source-read-only.
 - Remote daemon admission is write-capability gated. Startup keeps the fetch URL
   and Git `pushurl` separate, performs one push dry-run, and publishes the result
-  on its client identity. A reported `read-only` identity receives no claims;
-  Remote Hosts surfaces the same state for operator repair.
+  on its client identity. A reported `read-only` identity receives no coding
+  claims, but may receive read-only Epic planning claims. Remote Hosts surfaces
+  the same state for operator repair.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through
   `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider

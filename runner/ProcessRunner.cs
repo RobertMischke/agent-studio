@@ -65,8 +65,21 @@ public static class ProcessRunner
 
         if (stdin != null)
         {
-            await process.StandardInput.WriteAsync(stdin);
-            process.StandardInput.Close();
+            try
+            {
+                await process.StandardInput.WriteAsync(stdin);
+            }
+            catch (IOException)
+            {
+                // A child may close stdin as it exits after already producing a
+                // terminal response. Preserve its captured output and exit code
+                // instead of replacing that truthful result with a pipe error.
+            }
+            finally
+            {
+                try { process.StandardInput.Close(); }
+                catch (IOException) { /* the child already closed its pipe */ }
+            }
         }
 
         try

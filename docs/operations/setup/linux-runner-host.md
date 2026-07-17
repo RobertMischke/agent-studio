@@ -315,6 +315,21 @@ The daemon registers once, polls `POST /api/runner/claim`, and fills free host
 slots. The server only returns pickup-eligible `2-ready` cards from assigned,
 remote-capable projects and moves a successful fenced claim to `3-progress`.
 
+Ready Epic containers are eligible for a special remote planning claim. They
+consume one slot and use the normal lease, heartbeat, telemetry, drain, and
+cancellation lifecycle. The server supplies the same rendered Epic
+decomposition prompt used by the local runner. The daemon creates a bounded,
+detached checkout for read-only repository inspection and removes it after the
+run without creating or pushing a runner branch. A valid plan creates child
+coding cards and sends the Epic to auto-review. Empty or invalid output, or any
+attempted source mutation, returns the Epic to Backlog.
+
+The startup Git push probe still describes coding capability. A host whose
+identity reports `read-only` may claim Epic planning, but it receives no normal
+coding claims until push capability is restored. After a daemon interruption,
+the next claim requeues assigned Progress work once its lease is free and
+issues a higher fencing token.
+
 ### systemd deployment
 
 Install the shipped unit and an environment file, then enable it:
