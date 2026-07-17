@@ -9,13 +9,13 @@
     @if (h.role === 'remote') {
       <span class="host__badge" [attr.data-tone]="h.gitPushStatus === 'ready' ? 'ok' : 'error'"
             data-testid="remote-host-git-status"
-            [attr.title]="h.gitPushDetail || 'No successful push probe has been reported'">
+            [appTooltip]="h.gitPushDetail || 'No successful push probe has been reported'">
         Writable: {{ h.gitPushStatus === 'ready' ? 'yes' : 'no' }}
       </span>
     }
     <span class="host__spacer"></span>
     @if (h.address) {
-      <span class="host__addr" [attr.title]="h.address">{{ h.address }}</span>
+      <span class="host__addr" [appTooltip]="h.address">{{ h.address }}</span>
     }
   </header>
 
@@ -87,7 +87,7 @@
       @if (h.telemetry.findings.length) {
         <div class="telemetry__findings" data-testid="remote-host-findings">
           @for (finding of h.telemetry.findings; track finding.kind) {
-            <span class="host__badge" data-tone="warn" [attr.title]="finding.since + ' to ' + finding.until">
+            <span class="host__badge" data-tone="warn" [appTooltip]="finding.since + ' to ' + finding.until">
               {{ finding.label }} · since {{ finding.since | date:'short' }}
             </span>
           }
@@ -110,7 +110,7 @@
     <ul class="chips chips--quota" aria-label="Per-CLI quota" data-testid="remote-host-quotas">
       @for (q of h.cliQuotas; track q.cliType + '|' + q.windowLabel) {
         <li class="chip chip--quota" [attr.data-tone]="quotaTone(q.usedPct)"
-            [attr.title]="q.resetLabel ? 'resets ' + q.resetLabel : null">
+            [appTooltip]="q.resetLabel ? 'resets ' + q.resetLabel : null">
           <span class="chip__icon" aria-hidden="true">{{ cliIcon(q.cliType) }}</span>
           <span class="chip__cli">{{ cliLabel(q.cliType) }}</span>
           <span class="chip__win">{{ q.windowLabel }}</span>

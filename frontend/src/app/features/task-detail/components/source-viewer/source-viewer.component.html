@@ -16,7 +16,7 @@
       <header class="sv__header">
         <div class="sv__title">
           <span class="sv__title-file" data-testid="source-viewer-file">{{ fileName() }}</span>
-          <code class="sv__title-path" [attr.title]="path()">{{ path() }}</code>
+          <code class="sv__title-path" [appTooltip]="path()">{{ path() }}</code>
           @if (activeLine(); as ln) {
             <span class="sv__title-line">:{{ ln }}</span>
           }

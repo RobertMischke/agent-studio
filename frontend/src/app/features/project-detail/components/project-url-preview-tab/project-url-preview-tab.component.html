@@ -83,7 +83,8 @@
           <iframe class="url-preview__frame"
                   data-testid="url-preview-frame"
                   [src]="iframeSrc()"
-                  title="Embedded preview of {{ urlRecord()?.url }}"
+                  aria-label="Embedded preview of {{ urlRecord()?.url }}"
+                  [appTooltip]="'Embedded preview of ' + urlRecord()?.url"
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                   referrerpolicy="no-referrer"
                   (load)="onFrameLoad()"></iframe>

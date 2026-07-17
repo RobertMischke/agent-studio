@@ -305,8 +305,8 @@
   --notify-accent-tint:         rgba(139, 92, 246, 0.18);
 
   // ---------------------------------------------------------------------------
-  // Tooltip surface — used by the singleton <app-tooltip> injected by
-  // TooltipController. Dark theme matches the Mocha crust with a frosted
+  // Tooltip surface used by the canonical [appTooltip] overlay and compact
+  // reference popovers. Dark theme matches the Mocha crust with a frosted
   // backdrop; light theme flips to a white shell.
   // ---------------------------------------------------------------------------
   --studio-tooltip-bg:     rgba(15, 17, 28, 0.96);

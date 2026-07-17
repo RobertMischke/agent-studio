@@ -221,14 +221,14 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
 
 // Clickable source reference. The host (beautiful-results.component) listens
 // for clicks on `[data-results-source]` via event delegation and emits an
-// `openSource` event with the path + line, so no Angular binding has to be
-// threaded into the sanitized HTML.
+// `openSource` event with the path + line. This sanitized HTML lives outside
+// Angular's template compiler, so [appTooltip] cannot attach here. The visible
+// source text plus aria-label carry the same meaning without a native title.
 function renderSourceLink(path: string, line: number | null, inner: string): string {
   const lineAttr = line != null ? ` data-results-line="${escapeAttr(String(line))}"` : '';
   const label = line != null ? `${path}:${line}` : path;
   return `<button type="button" class="results-source-link"`
     + ` data-results-source="${escapeAttr(path)}"${lineAttr}`
-    + ` title="Open ${escapeAttr(label)} in source viewer"`
     + ` aria-label="Open ${escapeAttr(label)} in source viewer">${inner}</button>`;
 }
 

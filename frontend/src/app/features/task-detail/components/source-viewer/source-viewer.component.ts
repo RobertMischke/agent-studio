@@ -16,6 +16,7 @@ import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { detectLanguage } from '../protocol-pane/run-git-viewer/diff-utils';
 import { highlightBlock } from '../beautiful-results/highlight-lazy';
 import { splitHighlightedLines, splitPlainLines } from './source-highlight';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 
 export interface SourceViewerRequest {
   path: string;
@@ -42,7 +43,7 @@ const HIGHLIGHT_CHAR_LIMIT = 200_000;
   selector: 'app-source-viewer',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [OverlayPortalDirective],
+  imports: [OverlayPortalDirective, AppTooltipDirective],
   templateUrl: './source-viewer.component.html',
   styleUrl: './source-viewer.component.scss',
 })

@@ -13,8 +13,8 @@ import {
   codeReviewVerdictTone,
   type CodeReviewVerdictTone,
 } from '../../code-review-verdict.util';
-
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { AppTooltipDirective } from '../../../../../components/tooltip/app-tooltip.directive';
 import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
 import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
 import { coalesceDiffByFile } from '../../../../../utils/coalesce-diff';
@@ -45,7 +45,7 @@ import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../..
   selector: 'app-git-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, NgTemplateOutlet, GitFileTreeComponent, TooltipDirective, MarkdownViewComponent],
+  imports: [DatePipe, NgTemplateOutlet, GitFileTreeComponent, TooltipDirective, AppTooltipDirective, MarkdownViewComponent],
   templateUrl: './git-pane.component.html',
   styleUrls: ['./git-pane.component.scss']
 })

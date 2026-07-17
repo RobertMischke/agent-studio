@@ -19,7 +19,7 @@
           <span class="cli-wm__icon" aria-hidden="true">{{ icon(cli) }}</span>
           <span class="cli-wm__name">{{ label(cli) }}</span>
           @if (report.root) {
-            <code class="cli-wm__root" [attr.title]="report.root">{{ report.root }}</code>
+            <code class="cli-wm__root" [appTooltip]="report.root">{{ report.root }}</code>
           }
           @if (!report.available) {
             <span class="cli-wm__badge cli-wm__badge--absent">no config root</span>
@@ -53,7 +53,7 @@
                   @if (entry.lastModifiedUtc) { · {{ formatRelative(entry.lastModifiedUtc) }} }
                 </span>
               </div>
-              <code class="cli-wm__path" [attr.title]="entry.path">{{ entry.path }}</code>
+              <code class="cli-wm__path" [appTooltip]="entry.path">{{ entry.path }}</code>
               @if (entry.preview) {
                 <pre class="cli-wm__preview">{{ entry.preview }}</pre>
               }
@@ -92,7 +92,7 @@
               } @else {
                 <span class="cli-wm__protected-tag"
                       [attr.data-testid]="'cli-wm-protected-' + cli + '-' + entry.kind"
-                      title="Protected: never deleted by this panel">
+                      appTooltip="Protected: never deleted by this panel">
                   protected
                 </span>
               }

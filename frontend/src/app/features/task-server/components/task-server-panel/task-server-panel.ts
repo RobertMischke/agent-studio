@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { TaskServerService } from '../../services/task-server.service';
 import { TaskServerClientsCardComponent } from '../task-server-clients-card/task-server-clients-card';
 import { TaskServerManagementPanelComponent } from '../task-server-management-panel/task-server-management-panel';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import {
   evidenceStateLabel,
   evidenceStateTone,
@@ -33,7 +34,7 @@ import {
 @Component({
   selector: 'app-task-server-panel',
   standalone: true,
-  imports: [TaskServerClientsCardComponent, TaskServerManagementPanelComponent],
+  imports: [TaskServerClientsCardComponent, TaskServerManagementPanelComponent, AppTooltipDirective],
   templateUrl: './task-server-panel.html',
   styleUrl: './task-server-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

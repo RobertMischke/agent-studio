@@ -22,6 +22,7 @@ import { ConversationViewComponent } from 'coding-agent-chat/conversation';
 import { ChatEvent, ChatSubmitEvent, ChatToolbarItem } from 'coding-agent-chat/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
 import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
@@ -46,6 +47,7 @@ import {
     ChatComponent,
     ConversationViewComponent,
     TooltipDirective,
+    AppTooltipDirective,
     SidesheetComponent,
     OrchestratorContextHeaderComponent,
     ChatSwitcherRailComponent,

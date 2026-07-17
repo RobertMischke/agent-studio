@@ -13,8 +13,8 @@ import {
 import { TaskState } from '../../../../models/task.model';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 /**
  * Project-level Steering Docs surface. Shows the agent-facing
  * instruction sources for a watched project (README, AGENTS, ROADMAP,
@@ -78,7 +78,7 @@ const ACTIONS: SteeringAction[] = [
 @Component({
   selector: 'app-project-steering-docs-section',
   standalone: true,
-  imports: [TooltipDirective, MarkdownViewComponent, StudioIconComponent],
+  imports: [TooltipDirective, AppTooltipDirective, MarkdownViewComponent, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-steering-docs-section.html',
   styleUrl: './project-steering-docs-section.scss'

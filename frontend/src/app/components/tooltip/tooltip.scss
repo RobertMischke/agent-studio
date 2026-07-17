@@ -1,0 +1,26 @@
+.app-tooltip-overlay {
+  position: fixed;
+  z-index: var(--studio-z-overlay-root);
+  max-width: min(28rem, calc(100vw - (2 * var(--studio-spacing-4))));
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid var(--studio-tooltip-border);
+  border-radius: 6px;
+  background: var(--studio-tooltip-bg);
+  box-shadow: var(--elevation-tooltip);
+  color: var(--studio-tooltip-fg);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  animation: app-tooltip-enter 80ms ease-out;
+}
+
+@keyframes app-tooltip-enter {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tooltip-overlay { animation-duration: 0ms; }
+}

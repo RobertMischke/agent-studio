@@ -166,7 +166,7 @@
                      role="button"
                      tabindex="-1"
                      (click)="openFile(row.node.relPath!, row.node.type)"
-                     [attr.title]="row.node.relPath"
+                     [appTooltip]="row.node.relPath"
                      [attr.data-testid]="'project-wiki-file-' + row.node.relPath">
                   <span class="pwiki__file-type"
                         [attr.aria-label]="fileTypeLabel(row.node)"
@@ -322,7 +322,7 @@
                             data-testid="project-wiki-report-frame"
                             sandbox="allow-scripts"
                             [srcdoc]="trustedReportHtml()"
-                    title="Document metadata reasoning report"></iframe>
+                            aria-label="Document metadata reasoning report" appTooltip="Document metadata reasoning report"></iframe>
                   }
                 </div>
               } @else if (viewerTab() === 'edit') {
@@ -381,7 +381,7 @@
                         data-testid="project-wiki-html-frame"
                         sandbox="allow-scripts"
                         [srcdoc]="trustedHtml()"
-                title="HTML knowledge page"></iframe>
+                        aria-label="HTML knowledge page" appTooltip="HTML knowledge page"></iframe>
               } @else if (openedType() === 'json') {
                 <div class="pwiki__json-preview" data-testid="project-wiki-json-preview">
                   <pre>{{ displayJson() }}</pre>

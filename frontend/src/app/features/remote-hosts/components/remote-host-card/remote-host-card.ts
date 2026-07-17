@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import type { CliType } from '../../../../models/task.model';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import {
   clampPct,
   diskUsedPct,
@@ -41,7 +42,7 @@ interface Meter {
 @Component({
   selector: 'app-remote-host-card',
   standalone: true,
-  imports: [DatePipe],
+  imports: [DatePipe, AppTooltipDirective],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
   host: { '[attr.data-tone]': 'tone()', '[attr.data-host]': 'host().id' },

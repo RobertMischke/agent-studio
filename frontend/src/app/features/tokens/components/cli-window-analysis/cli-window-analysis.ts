@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenTimeline } from '../../models/tokens.model';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 
 type AnalysisPeriod = '1h' | '24h' | '7d';
 
@@ -10,6 +11,7 @@ interface StreamPart { label: string; tokens: number; pct: number; }
 @Component({
   selector: 'app-cli-window-analysis',
   standalone: true,
+  imports: [AppTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cli-window-analysis.html',
   styleUrl: './cli-window-analysis.scss',

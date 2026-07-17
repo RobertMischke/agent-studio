@@ -40,7 +40,7 @@
           <dt>Executable</dt>
           <dd>
             @if (g.executablePath) {
-              <code [attr.title]="g.executablePath">{{ g.executablePath }}</code>
+              <code [appTooltip]="g.executablePath">{{ g.executablePath }}</code>
             } @else {
               <span class="cli-paths__muted">not resolved</span>
             }
@@ -56,7 +56,7 @@
             @for (r of g.roots; track r.rootPath) {
               <li class="cli-paths__root">
                 <span class="cli-paths__root-project">{{ r.projectName }}</span>
-                <code class="cli-paths__root-path" [attr.title]="r.rootPath">{{ r.rootPath }}</code>
+                <code class="cli-paths__root-path" [appTooltip]="r.rootPath">{{ r.rootPath }}</code>
                 <span class="cli-paths__root-sessions">{{ r.sessionCount }} session{{ r.sessionCount === 1 ? '' : 's' }}</span>
               </li>
             }

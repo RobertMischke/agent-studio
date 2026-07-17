@@ -19,6 +19,7 @@ import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { CLI_TYPES, CliType, TaskState } from '../../../../models/task.model';
 import {
   WikiFileSaveResult,
@@ -126,6 +127,7 @@ interface WikiMetricChip {
     OverlayPortalDirective,
     StudioIconComponent,
     TooltipDirective,
+    AppTooltipDirective,
     WikiDocHistoryComponent,
     WikiPulseComponent,
     WikiGradePanelComponent,

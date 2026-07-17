@@ -3,6 +3,7 @@ import { TaskService } from '../../../../services/task.service';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import type { CliType } from '../../../../models/task.model';
 import type { CliUsageReport, CliUsageSection } from '../../../../features/cli';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 
 /** One filesystem root a CLI holds session state for. */
 interface CliPathRow {
@@ -35,7 +36,7 @@ interface CliPathGroup {
 @Component({
   selector: 'app-cli-paths-panel',
   standalone: true,
-  imports: [],
+  imports: [AppTooltipDirective],
   templateUrl: './cli-paths-panel.html',
   styleUrl: './cli-paths-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

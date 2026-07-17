@@ -7,7 +7,7 @@ const EMPTY_GROUPED = {
   codeNotComplete: [], completed: [], archive: [],
 };
 
-test('restored task tab hides its watch path and centres its key', async ({ page }) => {
+test('restored task tab hides its watch path and uses the canonical tooltip in both themes', async ({ page }) => {
   await page.route('**/api/**', route => {
     const url = route.request().url();
     const body = url.includes('/api/tasks/grouped') ? EMPTY_GROUPED
@@ -28,12 +28,19 @@ test('restored task tab hides its watch path and centres its key', async ({ page
   });
 
   await page.goto('/');
+  // The deliberately skeletal API fixture can surface an unrelated global
+  // error dialog while the restored-tab projection still renders correctly.
+  await page.addStyleTag({ content: 'app-error-dialog { display: none !important; }' });
   const taskTab = page.getByTestId(/studio-tab-task:.*ASS-1766/);
   await expect(taskTab).toBeVisible();
   await expect(taskTab.locator('.studio-tab__title')).toHaveText('ASS-1766');
   await expect(taskTab).not.toContainText('C:\\Projects');
-  await expect(taskTab).toHaveAttribute('title', 'ASS-1766');
-  await expect(taskTab.locator('.studio-tab__title')).toHaveAttribute('title', 'ASS-1766');
+  await expect(taskTab).not.toHaveAttribute('title', /.+/);
+
+  await taskTab.focus();
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toHaveText('ASS-1766');
+  await expect(taskTab).toHaveAttribute('aria-describedby', await tooltip.getAttribute('id') ?? 'missing');
 
   const hubTab = page.getByTestId(/studio-tab-hub:Agent Software Studio/);
   const icon = hubTab.locator('app-studio-icon');
@@ -45,8 +52,10 @@ test('restored task tab hides its watch path and centres its key', async ({ page
 
   const resultsDir = process.env.JOB_RESULTS_DIR;
   if (resultsDir) {
-    await page.locator('.studio-tabbar').screenshot({
-      path: path.join(resultsDir, 'studio-tabs-after--mocked.png'),
-    });
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate(value => document.documentElement.setAttribute('data-studio-theme', value), theme);
+      await expect(tooltip).toBeVisible();
+      await page.screenshot({ path: path.join(resultsDir, `app-tooltip-${theme}.png`) });
+    }
   }
 });

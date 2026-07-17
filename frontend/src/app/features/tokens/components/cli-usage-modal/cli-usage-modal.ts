@@ -3,6 +3,7 @@ import type { CliType } from '../../../../models/task.model';
 import type { QuotaWindow } from '../../../../features/quota';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../models/tokens.model';
 import { CostBreakdownService } from '../../services/cost-breakdown.service';
@@ -68,7 +69,7 @@ interface UsageTotals {
   selector: 'app-cli-usage-modal',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DialogComponent, TooltipDirective],
+  imports: [DialogComponent, TooltipDirective, AppTooltipDirective],
   templateUrl: './cli-usage-modal.html',
   styleUrl: './cli-usage-modal.scss',
 })
