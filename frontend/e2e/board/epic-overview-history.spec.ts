@@ -79,22 +79,41 @@ test.describe('Epic overview history', () => {
     await expect(completed).toBeVisible();
     await expect(completed.getByText('1 completed')).toBeVisible();
     await expect(page.getByText('Account migration')).toHaveCount(0);
+    await expect(page.getByTestId('epic-overview-section-active')).toHaveCount(0);
+    await expect(page.getByTestId('epic-overview-completed-list')).toHaveCount(0);
     expect(completedRequests()).toBe(0);
+    const errorClose = page.getByTestId('error-dialog-close');
+    const resultsDir = process.env.JOB_RESULTS_DIR;
+    for (const theme of ['dark', 'light'] satisfies Theme[]) {
+      await setTheme(page, theme);
+      if (await errorClose.isVisible().catch(() => false)) await errorClose.click();
+      const filename = `epic-overview-collapsed-${theme}--mocked.png`;
+      const screenshotPath = resultsDir ? path.join(resultsDir, filename) : testInfo.outputPath(filename);
+      await page.screenshot({ path: screenshotPath, fullPage: false });
+      await testInfo.attach(`epic overview collapsed ${theme}`, { path: screenshotPath, contentType: 'image/png' });
+    }
+    if (await errorClose.isVisible().catch(() => false)) await errorClose.click();
     await completed.getByTestId('epic-overview-completed-toggle').click();
-    await expect(page.getByText('Account migration')).toBeVisible();
+    const completedList = completed.getByTestId('epic-overview-completed-list');
+    await expect(completedList.getByText('Account migration')).toBeVisible();
     await expect(page.getByTestId('epic-overview-completed-date')).toBeVisible();
+    expect(completedRequests()).toBe(1);
+    if (await errorClose.isVisible().catch(() => false)) await errorClose.click();
+    await completed.getByTestId('epic-overview-completed-toggle').click();
+    await expect(completedList).toHaveCount(0);
+    if (await errorClose.isVisible().catch(() => false)) await errorClose.click();
+    await completed.getByTestId('epic-overview-completed-toggle').click();
+    await expect(completedList.getByText('Account migration')).toBeVisible();
     expect(completedRequests()).toBe(1);
     await expect(screen.getByText('Old placeholder')).toHaveCount(0);
 
     const completedCard = page.locator('[data-testid="epic-overview-card"][data-epic-id="epic-completed"]');
     await expect(completedCard.getByTestId('epic-overview-card-count')).toHaveText('2 / 2 done');
-    const errorClose = page.getByTestId('error-dialog-close');
     if (await errorClose.isVisible().catch(() => false)) await errorClose.click();
     await completedCard.getByTestId('epic-overview-expand').click({ force: true });
     await expect(completedCard.getByTestId('epic-overview-open-sub')).toHaveCount(2);
     await expect(completedCard.getByTestId('epic-overview-sub-project')).toHaveCount(2);
 
-    const resultsDir = process.env.JOB_RESULTS_DIR;
     for (const theme of ['dark', 'light'] satisfies Theme[]) {
       await setTheme(page, theme);
       if (await errorClose.isVisible().catch(() => false)) await errorClose.click();

@@ -46,11 +46,41 @@
   } @else {
     <div class="epic-overview__sections" data-testid="epic-overview-list">
       <ul class="epic-overview__list" role="list" data-testid="epic-overview-active-list">
-      @for (epic of displayedEpics(); track trackByEpic($index, epic)) {
+      @for (epic of activeEpics(); track trackByEpic($index, epic)) {
+        <ng-container [ngTemplateOutlet]="epicCard" [ngTemplateOutletContext]="{ $implicit: epic }" />
+      }
+      </ul>
+      <section class="epic-overview__completed" data-testid="epic-overview-section-completed">
+        <button type="button"
+                class="epic-overview__completed-head"
+                data-testid="epic-overview-completed-toggle"
+                [attr.aria-expanded]="completedOpen()"
+                aria-controls="epic-overview-completed-list"
+                (click)="toggleCompleted()">
+          <app-studio-icon name="chevronRight" [size]="14"></app-studio-icon>
+          <span>Completed</span>
+          <span class="epic-overview__completed-count">{{ completedCount() }} completed</span>
+        </button>
+        @if (completedOpen() && completedLoading()) {
+          <div class="epic-overview__muted" data-testid="epic-overview-completed-loading">Loading completed epics…</div>
+        } @else if (completedOpen()) {
+          <ul class="epic-overview__list"
+              id="epic-overview-completed-list"
+              role="list"
+              data-testid="epic-overview-completed-list">
+            @for (epic of completedEpics(); track trackByEpic($index, epic)) {
+              <ng-container [ngTemplateOutlet]="epicCard" [ngTemplateOutletContext]="{ $implicit: epic }" />
+            }
+          </ul>
+        }
+      </section>
+    </div>
+  }
+
+  <ng-template #epicCard let-epic>
         @let identity = identityFor(epic.projectName);
         @let expanded = isExpanded(epic.id);
         <li class="epic-overview__card"
-            [class.epic-overview__card--completed]="epic.subTaskTotal > 0 && epic.completed === epic.subTaskTotal"
             data-testid="epic-overview-card"
             [attr.data-epic-id]="epic.id">
           <div class="epic-overview__card-head">
@@ -134,24 +164,7 @@
             }
           }
         </li>
-      }
-      </ul>
-      <section class="epic-overview__completed" data-testid="epic-overview-section-completed">
-        <button type="button"
-                class="epic-overview__completed-head"
-                data-testid="epic-overview-completed-toggle"
-                [attr.aria-expanded]="completedOpen()"
-                (click)="toggleCompleted()">
-          <app-studio-icon name="chevronRight" [size]="14"></app-studio-icon>
-          <span>Completed</span>
-          <span class="epic-overview__completed-count">{{ completedCount() }} completed</span>
-        </button>
-        @if (completedOpen() && completedLoading()) {
-          <div class="epic-overview__muted" data-testid="epic-overview-completed-loading">Loading completed epicsâ€¦</div>
-        }
-      </section>
-    </div>
-  }
+  </ng-template>
 
   @if (showCreate() && scopedProject(); as scope) {
     <app-epic-create-dialog

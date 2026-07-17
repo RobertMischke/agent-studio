@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -36,7 +37,7 @@ export interface EpicOverviewScope {
 @Component({
   selector: 'app-epic-overview-screen',
   standalone: true,
-  imports: [TooltipDirective, EpicCreateDialogComponent, StudioIconComponent],
+  imports: [NgTemplateOutlet, TooltipDirective, EpicCreateDialogComponent, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './epic-overview-screen.component.html',
   styleUrl: './epic-overview-screen.component.scss',
@@ -59,6 +60,7 @@ export class EpicOverviewScreenComponent implements OnInit {
   readonly completedEpics = signal<EpicRollup[]>([]);
   readonly completedCount = signal(0);
   readonly completedOpen = signal(false);
+  readonly completedLoaded = signal(false);
   readonly completedLoading = signal(false);
   readonly loading = signal(false);
   readonly error = signal(false);
@@ -81,10 +83,6 @@ export class EpicOverviewScreenComponent implements OnInit {
   readonly activeEpics = computed(() =>
     this.visibleEpics().filter((e) => e.subTaskTotal === 0 || e.completed < e.subTaskTotal),
   );
-  readonly displayedEpics = computed(() => this.completedOpen()
-    ? [...this.activeEpics(), ...this.completedEpics()]
-    : this.activeEpics());
-
   readonly totalEpics = computed(() => this.activeEpics().length + this.completedCount());
   /** Create is only offered when a single project is in scope. */
   readonly canCreate = computed(() => this.scopedProject() !== null);
@@ -119,12 +117,13 @@ export class EpicOverviewScreenComponent implements OnInit {
   toggleCompleted(): void {
     const open = !this.completedOpen();
     this.completedOpen.set(open);
-    if (!open || this.completedEpics().length > 0 || this.completedLoading()) return;
+    if (!open || this.completedLoaded() || this.completedLoading()) return;
     this.completedLoading.set(true);
     this.jobs.getEpics(false, 'completed', this.scopedProject()?.name).subscribe({
       next: (list) => {
         this.completedEpics.set(list ?? []);
         this.completedCount.set(list?.length ?? 0);
+        this.completedLoaded.set(true);
         this.completedLoading.set(false);
       },
       error: () => this.completedLoading.set(false),

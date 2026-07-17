@@ -81,7 +81,7 @@ async function deleteTask(jobId: string, watchPath: string): Promise<void> {
 async function cleanup(): Promise<void> {
   const all = await listTasks();
   const stale = all.filter(j => j.id.startsWith(PREFIX));
-  await Promise.all(stale.map(j => deleteTask(j.id, j.watchPath).catch(() => {})));
+  await Promise.all(stale.map(j => deleteTask(j.id, j.watchPath).catch(() => undefined)));
 }
 
 test.describe('Epic overview screen', () => {
@@ -167,6 +167,6 @@ test.describe('Epic overview screen', () => {
     // Clicking a sub-task closes the overview and opens that card's detail.
     await card.locator(`[data-testid="epic-overview-open-sub"][data-sub-id="${subIds[0]}"]`).click();
     await expect(screen).toHaveCount(0, { timeout: 10_000 });
-    await expect(page.locator('[data-testid="studio-task"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('studio-epic-subtask-detail')).toBeVisible({ timeout: 15_000 });
   });
 });
