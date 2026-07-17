@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { PendingButtonDirective } from '../../../../components/async-feedback';
 import { TaskService } from '../../../../services/task.service';
-import type { CompiledDeploymentPrompt, ProjectDeploymentSummary, ProjectDeploymentTarget } from '../../../../models/project-overview.model';
+import type { ProjectDeploymentSummary, ProjectDeploymentTarget } from '../../../../models/project-overview.model';
 import { VisibleCliTaskService, type VisibleCliTaskCreated } from '../../../visible-cli-task';
 import type { WatchPathEntry } from '../../../../models/task.model';
+import { DeploymentDefinitionEditorComponent } from '../deployment-definition-editor/deployment-definition-editor';
 
 @Component({
   selector: 'app-project-deployment-panel',
   standalone: true,
-  imports: [DatePipe, DecimalPipe, FormsModule],
+  imports: [DatePipe, DecimalPipe, FormsModule, PendingButtonDirective, DeploymentDefinitionEditorComponent],
   templateUrl: './project-deployment-panel.component.html',
   styleUrl: './project-deployment-panel.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -28,9 +30,7 @@ export class ProjectDeploymentPanelComponent {
   readonly running = signal(false);
   readonly runError = signal<string | null>(null);
   readonly createdTask = signal<VisibleCliTaskCreated | null>(null);
-  readonly prompt = signal('');
-  readonly compiling = signal(false);
-  readonly compiled = signal<CompiledDeploymentPrompt | null>(null);
+  readonly visibleExecution = signal(true);
 
   constructor() {
     effect(() => this.load(this.projectName()));
@@ -50,34 +50,55 @@ export class ProjectDeploymentPanelComponent {
     ])));
     this.createdTask.set(null);
     this.runError.set(null);
+    this.visibleExecution.set(true);
   }
 
   setParameter(name: string, value: string | boolean): void {
     this.parameterValues.update(current => ({ ...current, [name]: value }));
   }
 
-  compilePrompt(): void {
-    if (!this.prompt().trim() || this.compiling()) return;
-    this.compiling.set(true);
-    this.tasks.compileProjectDeployment(this.projectName(), this.prompt()).subscribe({
-      next: compiled => {
-        this.compiled.set(compiled);
-        this.compiling.set(false);
-        if (compiled.runnable && compiled.command) {
-          this.chooseTarget({ id: 'prompt-preview', kind: 'prompt', template: null, source: 'prompt-preview', targetHostId: null, ...compiled });
-        }
-      },
-      error: () => {
-        this.compiled.set(null);
-        this.compiling.set(false);
-      },
-    });
-  }
-
   canRun(target: ProjectDeploymentTarget): boolean {
     const values = this.parameterValues();
-    return !this.createdTask() && target.runnable && !!target.command && target.parameters.every(parameter =>
-      !parameter.required || values[parameter.name] === true || String(values[parameter.name] ?? '').trim().length > 0);
+    return this.visibleExecution() && !this.createdTask() && target.runnable && !!target.command && target.parameters.every(parameter =>
+      !parameter.required || (this.isStableIdle(parameter.name)
+        ? values[parameter.name] === true
+        : parameter.type === 'boolean'
+          ? typeof values[parameter.name] === 'boolean'
+          : String(values[parameter.name] ?? '').trim().length > 0));
+  }
+
+  isStableIdle(name: string): boolean {
+    return name === 'stableIdle';
+  }
+
+  hasValueParameters(target: ProjectDeploymentTarget): boolean {
+    return target.parameters.some(parameter => !this.isStableIdle(parameter.name));
+  }
+
+  targetEnvironment(target: ProjectDeploymentTarget): string {
+    if (target.template === 'deploy-stable') return 'Stable environment';
+    return target.targetHostId || 'Repository environment';
+  }
+
+  targetStatus(target: ProjectDeploymentTarget): string {
+    if (target.template === 'deploy-stable') {
+      return this.parameterValues()['stableIdle'] === true ? 'Idle confirmed' : 'Idle required';
+    }
+    return target.runnable ? 'Ready' : 'Setup required';
+  }
+
+  targetStatusReady(target: ProjectDeploymentTarget): boolean {
+    return target.template !== 'deploy-stable' || this.parameterValues()['stableIdle'] === true;
+  }
+
+  parameterLabel(name: string): string {
+    if (name === 'stableIdle') return 'Require the stable environment to be idle before deployment';
+    return humanize(name);
+  }
+
+  parameterHelp(name: string): string {
+    if (name === 'stableIdle') return 'Prevents the deployment from interrupting active stable work.';
+    return `Value used by the repository deployment command for ${humanize(name).toLowerCase()}.`;
   }
 
   runSelected(): void {
@@ -138,4 +159,8 @@ export class ProjectDeploymentPanelComponent {
 function shellValue(value: string | boolean | undefined): string {
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   return `'${String(value ?? '').replace(/'/g, `'"'"'`)}'`;
+}
+
+function humanize(value: string): string {
+  return value.replace(/[-_]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, first => first.toUpperCase());
 }

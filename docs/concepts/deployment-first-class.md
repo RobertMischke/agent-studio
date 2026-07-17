@@ -4,9 +4,12 @@ Status: concept and initial workflow implemented, 2026-07-11. The shared
 Deployment contract now includes DEP-1 history and DEP-2 repository-derived
 targets. Runnable deploy-stable and descriptor targets launch normal visible
 CLI tasks (DEP-3), and the first bounded PDU compiler turns repository-script
-commands with declared typed slots into a human-reviewed run form. Package
-release targets remain delegated to Publishing. The richer shared live-progress
-presentation and broader natural-language compiler remain future refinements.
+commands with declared typed slots into a human-reviewed run form. Its operator
+surface uses labelled command and parameter controls, progressively discloses
+the generated source, and shows empty, loading, field-error, and valid preview
+states. Package release targets remain delegated to Publishing. The richer
+shared live-progress presentation and broader natural-language compiler remain
+future refinements.
 
 Promotion of the complete integration stream and the separate stable freeze use
 the decided [release-semantics contract](release-semantics.md). Deployment owns

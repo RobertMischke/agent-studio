@@ -110,10 +110,13 @@ groups, and a failed domain reports an error without hiding successful domains.
   `project-overview-urls/`, and delegates publishing actions to the existing
   `project-publish-panel/` instead of introducing competing state or commands.
 - `frontend/src/app/features/project-detail/components/project-deployment-panel/`:
-  the first-class, read-only Deployment destination. It consumes the same
+  the first-class Deployment destination. It consumes the same
   `GET /api/projects/{projectName}/deployment/summary` contract as Overview,
-  renders the bounded `deploy-stable` restart audit trail and current pending
-  delta, and intentionally exposes no run action in DEP-1.
+  renders repository-derived targets, launches runnable targets as visible CLI
+  tasks, and keeps the bounded `deploy-stable` audit trail separate from the
+  guided definition editor. The editor collects a repository script and typed,
+  operator-labelled parameters, validates them through the deployment compiler,
+  and previews the generated operator form before any definition is saved or run.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned

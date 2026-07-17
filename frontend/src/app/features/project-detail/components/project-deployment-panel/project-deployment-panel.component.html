@@ -5,9 +5,8 @@
       <h1>Deployment</h1>
       <p>Repository-derived targets, visible CLI-task runs, and the stable deployment audit trail.</p>
     </div>
-    <button type="button" data-testid="project-deployment-refresh" [disabled]="loading()" (click)="refresh()">
-      {{ loading() ? 'Refreshing...' : 'Refresh' }}
-    </button>
+    <button type="button" data-testid="project-deployment-refresh"
+      [appPendingButton]="loading()" pendingLabel="Refreshing..." (click)="refresh()">Refresh</button>
   </header>
 
   @if (requestFailed()) {
@@ -37,53 +36,104 @@
 
     @if (selectedTarget(); as target) {
       <section class="deployment__launcher" data-testid="project-deployment-launcher">
-        <div><p class="deployment__eyebrow">Selected target</p><h2>{{ target.title }}</h2><p>{{ target.summary }}</p></div>
+        <header class="deployment__selected-header">
+          <div><p class="deployment__eyebrow">Selected target</p><h2>{{ target.title }}</h2><p>{{ target.summary }}</p></div>
+        </header>
+
+        <div class="deployment__status-row" [attr.data-ready]="targetStatusReady(target)" aria-label="Target status">
+          <span class="deployment__dot" aria-hidden="true"></span>
+          <div><strong>{{ targetEnvironment(target) }}</strong><small>{{ target.source === 'repository-fact' ? 'Discovered from this repository' : target.source }}</small></div>
+          <span class="deployment__status-badge" [attr.data-ready]="targetStatusReady(target)">{{ targetStatus(target) }}</span>
+        </div>
+
         @for (parameter of target.parameters; track parameter.name) {
-          <label [attr.for]="'deployment-param-' + parameter.name">
-            <span>{{ parameter.name }}{{ parameter.required ? ' *' : '' }}</span>
-            @if (parameter.type === 'boolean') {
-              <input [id]="'deployment-param-' + parameter.name" type="checkbox" [attr.data-testid]="'deployment-param-' + parameter.name" [ngModel]="parameterValues()[parameter.name] === true" (ngModelChange)="setParameter(parameter.name, $event)" />
-            } @else if (parameter.type === 'enum') {
-              <select [id]="'deployment-param-' + parameter.name" [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)">
-                @for (option of parameter.options; track option) { <option [value]="option">{{ option }}</option> }
-              </select>
-            } @else {
-              <input [id]="'deployment-param-' + parameter.name" [type]="parameter.type === 'secret-ref' ? 'password' : 'text'" [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)" />
-            }
-          </label>
+          @if (isStableIdle(parameter.name)) {
+            <fieldset class="deployment__option-group">
+              <legend>Preconditions</legend>
+              <label class="deployment__option" [attr.for]="'deployment-param-' + parameter.name">
+                <input [id]="'deployment-param-' + parameter.name" type="checkbox"
+                  [attr.data-testid]="'deployment-param-' + parameter.name"
+                  [attr.aria-describedby]="'deployment-param-help-' + parameter.name"
+                  [ngModel]="parameterValues()[parameter.name] === true" (ngModelChange)="setParameter(parameter.name, $event)" />
+                <span><strong>{{ parameterLabel(parameter.name) }}</strong><small [id]="'deployment-param-help-' + parameter.name">{{ parameterHelp(parameter.name) }}</small></span>
+              </label>
+            </fieldset>
+          }
         }
+
+        @if (hasValueParameters(target)) {
+          <div class="deployment__values">
+            @for (parameter of target.parameters; track parameter.name) {
+              @if (!isStableIdle(parameter.name)) {
+                <label [attr.for]="'deployment-param-' + parameter.name">
+                  <span>{{ parameterLabel(parameter.name) }}{{ parameter.required ? ' *' : '' }}</span>
+                  @if (parameter.type === 'boolean') {
+                    <input [id]="'deployment-param-' + parameter.name" type="checkbox"
+                      [attr.data-testid]="'deployment-param-' + parameter.name"
+                      [attr.aria-describedby]="'deployment-param-help-' + parameter.name"
+                      [ngModel]="parameterValues()[parameter.name] === true" (ngModelChange)="setParameter(parameter.name, $event)" />
+                  } @else if (parameter.type === 'enum') {
+                    <select [id]="'deployment-param-' + parameter.name" [attr.data-testid]="'deployment-param-' + parameter.name"
+                      [attr.aria-describedby]="'deployment-param-help-' + parameter.name"
+                      [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)">
+                      @for (option of parameter.options; track option) { <option [value]="option">{{ option }}</option> }
+                    </select>
+                  } @else {
+                    <input [id]="'deployment-param-' + parameter.name" [attr.data-testid]="'deployment-param-' + parameter.name"
+                      [attr.aria-describedby]="'deployment-param-help-' + parameter.name"
+                      [type]="parameter.type === 'secret-ref' ? 'password' : 'text'"
+                      [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)" />
+                  }
+                  <small [id]="'deployment-param-help-' + parameter.name">{{ parameterHelp(parameter.name) }}</small>
+                </label>
+              }
+            }
+          </div>
+        }
+
+        <fieldset class="deployment__option-group">
+          <legend>Execution</legend>
+          <div class="deployment__execution-row">
+            <label class="deployment__option" for="deployment-visible-task">
+              <input id="deployment-visible-task" type="checkbox" data-testid="deployment-visible-task"
+                [checked]="visibleExecution()"
+                [attr.aria-describedby]="visibleExecution() ? 'deployment-visible-task-help' : 'deployment-visible-task-help deployment-visible-task-required'"
+                (change)="visibleExecution.set($any($event.target).checked)" />
+              <span><strong>Run as visible CLI task</strong><small id="deployment-visible-task-help">Adds live progress, outcomes, and chat to the project task list.</small></span>
+            </label>
+            @if (target.template !== 'tag-push-release') {
+              <button type="button" class="deployment__primary" data-testid="project-deployment-run"
+                [disabled]="!canRun(target)" [appPendingButton]="running()"
+                [attr.aria-describedby]="!visibleExecution() ? 'deployment-visible-task-required' : null"
+                pendingLabel="Creating deployment task..." (click)="runSelected()">Start deployment task</button>
+            }
+          </div>
+          @if (!visibleExecution()) {
+            <p id="deployment-visible-task-required" class="deployment__execution-guidance" role="status">
+              Visible task execution is required for this workflow. Turn this option on to start the deployment.
+            </p>
+          }
+        </fieldset>
         @if (target.template === 'tag-push-release') {
           <p class="deployment__notice">This target delegates to the guarded Publishing action. Deployment does not run package publishing commands.</p>
-        } @else {
-          <button type="button" data-testid="project-deployment-run" [disabled]="!canRun(target) || running()" (click)="runSelected()">
-            {{ running() ? 'Creating visible task...' : 'Run as visible CLI task' }}
-          </button>
         }
         @if (createdTask(); as task) { <p class="deployment__success" role="status" data-testid="project-deployment-created">Task {{ task.jobId }} queued. Open it from the project task list for live progress and chat.</p> }
         @if (runError(); as message) { <p class="deployment__error" role="alert">{{ message }}</p> }
       </section>
     }
 
-    <details class="deployment__prompt" data-testid="project-deployment-prompt">
-      <summary>Describe a deployment</summary>
-      <p>Compilation accepts a repository-owned script and typed slots. Example: <code>Command: bash scripts/deploy.sh --branch {{ '{{branch}}' }}</code> plus <code>Parameter: branch branch</code>.</p>
-      <textarea rows="5" [ngModel]="prompt()" (ngModelChange)="prompt.set($event)" aria-label="Deployment description"></textarea>
-      <button type="button" [disabled]="!prompt().trim() || compiling()" (click)="compilePrompt()">{{ compiling() ? 'Compiling...' : 'Compile typed UI' }}</button>
-      @if (compiled(); as result) {
-        @if (result.warnings.length) {
-          <ul class="deployment__warnings" role="status">@for (warning of result.warnings; track warning) { <li>{{ warning }}</li> }</ul>
-        } @else { <p class="deployment__success" role="status">Bounded schema compiled. Review the selected target fields before running.</p> }
-      }
-    </details>
+    <app-deployment-definition-editor [projectName]="projectName()" />
 
-    @if (!deployment.available || !deployment.lastDeployment) {
-      <div class="deployment__empty" role="status" data-testid="project-deployment-unavailable">
-        <h2>No deployment baseline yet</h2>
-        <p>{{ deployment.reason || 'No deploy-stable history is available for this project.' }}</p>
-        <small>Source: {{ deployment.source }}</small>
-      </div>
-    } @else {
-      <section class="deployment__target" aria-labelledby="deployment-target-title">
+    <section class="deployment__baseline" aria-labelledby="deployment-baseline-title">
+      <header><p class="deployment__eyebrow">Deployment history</p><h2 id="deployment-baseline-title">Stable baseline</h2></header>
+      @if (!deployment.available || !deployment.lastDeployment) {
+        <div class="deployment__empty" role="status" data-testid="project-deployment-unavailable">
+          <h2>No deployment baseline yet</h2>
+          <p>{{ deployment.reason || 'No deploy-stable history is available for this project.' }}</p>
+          <small>Source: {{ deployment.source }}</small>
+        </div>
+      } @else {
+        <section class="deployment__target" aria-labelledby="deployment-target-title">
         <div class="deployment__target-copy"><span class="deployment__dot" aria-hidden="true"></span><div><p class="deployment__eyebrow">Stable baseline</p><h2 id="deployment-target-title">deploy-stable</h2><p>Stable restart records, enriched by the project Git range.</p></div></div>
         <dl><div><dt>Deployed revision</dt><dd><code>{{ shortSha(deployment.lastDeployment.headAfter) }}</code></dd></div><div><dt>Pending delta</dt><dd data-testid="project-deployment-pending-count">{{ deployment.pendingCount ?? 'Unknown' }}</dd></div><div><dt>Source</dt><dd>{{ deployment.source }}</dd></div></dl>
         @if (deployment.reason) { <p class="deployment__notice" role="status">{{ deployment.reason }}</p> }
@@ -99,6 +149,7 @@
           }
         </ol>
       </section>
-    }
+      }
+    </section>
   }
 </section>

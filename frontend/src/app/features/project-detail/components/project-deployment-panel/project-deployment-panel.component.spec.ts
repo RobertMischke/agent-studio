@@ -36,6 +36,12 @@ describe('ProjectDeploymentPanelComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('deploy-stable');
     expect(fixture.nativeElement.textContent).not.toContain('Run deployment');
 
+    fixture.nativeElement.querySelector('[data-testid="deployment-visible-task"]').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Visible task execution is required for this workflow.');
+    expect(fixture.nativeElement.querySelector('[data-testid="project-deployment-run"]').getAttribute('aria-describedby'))
+      .toBe('deployment-visible-task-required');
+    fixture.nativeElement.querySelector('[data-testid="deployment-visible-task"]').click();
     fixture.nativeElement.querySelector('[data-testid="deployment-param-stableIdle"]').click();
     fixture.detectChanges();
     fixture.nativeElement.querySelector('[data-testid="project-deployment-run"]').click();
@@ -44,6 +50,25 @@ describe('ProjectDeploymentPanelComponent', () => {
     create.flush({ id: 'AGT-3000' });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="project-deployment-created"]').textContent).toContain('AGT-3000');
+  });
+
+  it('accepts false as a provided value for ordinary required yes-no parameters', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectDeploymentPanelComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProjectDeploymentPanelComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    fixture.detectChanges();
+    const target = {
+      id: 'docs', title: 'Docs', kind: 'template' as const, template: 'caddy-site', summary: 'Deploy docs.',
+      runnable: true, source: 'deployment.json', command: 'bash scripts/deploy.sh --reload {{reload}}', targetHostId: 'web',
+      parameters: [{ name: 'reload', type: 'boolean' as const, required: true, default: false, options: [] }],
+    };
+
+    fixture.componentInstance.chooseTarget(target);
+
+    expect(fixture.componentInstance.canRun(target)).toBe(true);
   });
 
   it('explains project-specific unavailable history', async () => {
