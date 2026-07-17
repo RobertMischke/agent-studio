@@ -16,6 +16,14 @@
 > remain applicable.
 >
 > Visual companion: [relationship and Wiki checkout mockup](mockups/project-relationship-model.html).
+>
+> **Cardinality refinement, 2026-07-13:**
+> [Solution Workspace And Component Project Model](solution-workspace-component-project-model.md)
+> supersedes this page's original project-to-repository 1:1 assumption. The
+> branch-context, revision-provenance, isolated Wiki checkout, and presentation
+> contracts below remain valid. A component project now reaches repository
+> context through a RepositoryBinding, and sibling projects may bind to one
+> monorepo with different code scopes.
 
 ## Historical decision summary
 
@@ -27,7 +35,8 @@ The product has one durable relationship spine:
 
 ```text
 Workspace 1 ── contains ──> N Projects
-Project   1 ── represents ─> 1 Git repository
+Project   1 ── owns ───────> N RepositoryBindings
+Binding   N ── targets ────> 1 Git repository
 Repository 1 ── has ──────> N branches and N checkouts/worktrees
 Branch    1 ── supplies ──> Wiki, Prompts, Tasks, URLs, and Project Hub context
 ```
@@ -47,10 +56,11 @@ Wiki, Prompts, Tasks, URLs, and Project Hub.
 
 | Entity | Cardinality and ownership | Durable responsibility |
 |---|---|---|
-| Workspace | Top-level surface; contains zero or more projects. A project belongs to exactly one workspace. | Organization, navigation, ordering, and workspace-level defaults. |
-| Project | Belongs to one workspace and represents exactly one Git repository. | Product settings, working branch, branch model, checkout configuration, URLs, task configuration, and surface navigation. |
-| Git repository | Exactly one canonical repository per project. | Versioned source, Docs, Wiki content, Prompts, branches, and history. |
-| Branch | Many per repository. Branch roles are declared by the project's branching model. | A named line of content and execution provenance. |
+| Workspace | Top-level solution surface; contains zero or more sibling component projects. A project belongs to exactly one workspace. | Organization, aggregate navigation, ordering, and workspace-level defaults. |
+| Project | Belongs to one workspace and owns one component backlog and lifecycle. | Task keys, Runner assignment, health, documentation context, release/deployment targets, and surface navigation. |
+| RepositoryBinding | Joins one component project to one repository with branch roles and a repository-relative code scope. | Repository selection and component context without becoming project identity. |
+| Git repository | Stable repository identity that may be targeted by bindings from several sibling projects. | Versioned source, Docs, Wiki content, Prompts, branches, and history. |
+| Branch | Many per repository. Branch roles are declared by the selected RepositoryBinding's branching model. | A named line of content and execution provenance. |
 | Checkout/worktree | Many per repository and always attached to a branch or explicit detached revision. | Filesystem projection for a specific purpose, never project identity. |
 | Task | Application-owned record for one project. | Planning and execution state, with an explicit base/content branch and, when running, a task branch/worktree. |
 | Project URL | Ordered project configuration entry. | URL plus the branch whose build or deployment it represents. |
@@ -67,6 +77,8 @@ Historical invariants:
    provenance in the API, even when the compact UI chooses not to show it.
 5. The Wiki checkout, runner checkout, and task worktrees are separate roles.
    A refresh or branch switch in one role must not mutate another.
+6. Integration admission is keyed by repository identity and integration
+   branch. Project identity is holder provenance, not a merge-queue partition.
 
 ### Relationship versus presentation
 
@@ -226,7 +238,7 @@ Each project can configure an isolated Wiki source with:
 
 | Field | Meaning |
 |---|---|
-| Repository URL/origin | Canonical clone/fetch URL for the same repository represented by the project. |
+| Repository URL/origin | Canonical clone/fetch URL for the repository selected by the Wiki source's RepositoryBinding. |
 | Checkout path | Local managed path. It must not equal or nest inside the runner checkout or a task worktree. |
 | Selected branch | Defaults to the project working branch; can be changed from the Wiki UI. |
 | Refresh policy | Manual plus a configurable interval. Refresh can be disabled. |
@@ -290,20 +302,27 @@ the distributed target. The remaining branch-context envelope still applies.
 
 ```text
 ProjectRecord
-  repositoryIdentity
-  repositoryOrigin
+  repositoryBindingIds[]
+  documentationContext { repositoryBindingId, docsRoots[], defaultBranchRole }
+  runningBranch?
+  wikiSource { repositoryBindingId, checkoutRole, branchOverride?, docsRoot, refreshPolicy }
+  urls[] { ..., repositoryBindingId, representedBranch }
+
+RepositoryBinding
+  repositoryId
+  codeScope { workingDirectory, include[], exclude[] }
   branchingModel
   workingBranch
-  runningBranch?
-  workingCheckoutPath?
-  wikiSource { checkoutPath, origin, branchOverride?, docsRoot, refreshPolicy }
-  urls[] { ..., representedBranch }
+  releaseBranch?
+
+RepositoryCheckout
+  repositoryId, runnerId, checkoutPath, observedRevision, health
 
 BranchContext
-  repositoryId, branch, role, revision, checkoutRole, observedAt, freshness
+  repositoryId, bindingId, branch, role, revision, checkoutRole, observedAt, freshness
 ```
 
-The registry may store local checkout configuration, while API readers receive
+Runner-local configuration stores checkout paths, while API readers receive
 resolved context. Branch names alone are insufficient for review or caching;
 revision is required. Secrets embedded in origins are redacted from logs and UI.
 
