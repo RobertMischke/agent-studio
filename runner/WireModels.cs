@@ -1,11 +1,9 @@
 namespace AgentRunner;
 
-// The small JSON wire contract the standalone runner (RM-5, Runner-Split C)
-// exchanges with the local Studio Task Server. It is a deliberate re-declaration
-// of the server-side records (backend/Shared/Lease/*, backend/Shared/Models/*)
-// rather than a project reference: the runner ships to a different host than the
-// server, so it must not drag the whole backend across the wire. Only the fields
-// this MVP actually reads or writes are modelled here.
+// Protocol-v0 compatibility declarations for the co-hosted legacy backend.
+// Separated Task Server protocol v1 uses the shared TaskServer.Contracts package.
+// Delete these declarations when the published compatibility window drops v0;
+// they must not become a second durable model or expand with new v1 features.
 //
 // The server serialises with the ASP.NET "web" defaults (camelCase names,
 // case-insensitive binding), so plain PascalCase records serialise/deserialise

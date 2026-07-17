@@ -46,6 +46,7 @@ if (options.HealthCheckOnly)
 
 try
 {
+    await client.EnsureCompatibleAsync(shutdown.Token);
     if (daemonMode)
     {
         await new RemoteRunnerDaemon(options, client, Log).RunAsync(shutdown.Token);

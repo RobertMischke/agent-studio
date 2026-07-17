@@ -1,0 +1,6 @@
+{
+  "fixtureVersion": 1,
+  "server": { "productVersion": "1.2.0", "protocolMinimum": 1, "protocolMaximum": 1 },
+  "studio": { "productVersion": "1.1.0", "protocolVersion": 1, "expected": "accepted" },
+  "runner": { "productVersion": "1.0.0", "protocolVersion": 1, "expected": "accepted" }
+}

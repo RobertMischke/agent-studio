@@ -3,6 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using Contract = AgentStudio.TaskServer.Contracts;
 
 namespace AgentRunner;
 
@@ -17,9 +20,14 @@ public sealed class TaskServerClient : IDisposable
     private static readonly JsonSerializerOptions Json = CreateJsonOptions();
     private readonly HttpClient _http;
     private readonly string? _configuredClientId;
+    private readonly RunnerOptions? _options;
+    private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
+    private bool _useV1;
 
     public TaskServerClient(RunnerOptions options)
     {
+        _options = options;
         _http = new HttpClient { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
         _configuredClientId = options.ClientId;
         if (!string.IsNullOrWhiteSpace(options.AuthToken))
@@ -29,6 +37,8 @@ public sealed class TaskServerClient : IDisposable
         // are attributed. RegisterAsync swaps in the server-assigned id before the
         // first write, since an unregistered id is rejected 401 on mutations.
         SetClientId(options.ClientId ?? options.RunnerId);
+        _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.HeaderName, RunnerOptions.ProtocolVersion.ToString());
+        _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.ClientVersionHeaderName, typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0");
     }
 
     /// <summary>
@@ -46,6 +56,35 @@ public sealed class TaskServerClient : IDisposable
     }
 
     /// <summary>
+    /// Negotiates the published version range before registration or claim. A
+    /// 404 keeps the local legacy profile working against the co-hosted backend;
+    /// a separated Task Server that answers the endpoint is authoritative and
+    /// rejects an unsupported runner before any work can be claimed.
+    /// </summary>
+    public async Task EnsureCompatibleAsync(CancellationToken ct)
+    {
+        var clientVersion = typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0";
+        using var response = await _http.PostAsJsonAsync(
+            "/api/v1/protocol/compatibility",
+            new Contract.ProtocolCompatibilityRequest("runner", clientVersion, RunnerOptions.ProtocolVersion),
+            Json,
+            ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _useV1 = false;
+            return;
+        }
+
+        var detail = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new TaskServerException((int)response.StatusCode, $"Task Server protocol negotiation failed: {Trim(detail)}");
+        var compatibility = JsonSerializer.Deserialize<Contract.ProtocolCompatibilityResponse>(detail, Json);
+        if (compatibility?.Supported != true)
+            throw new TaskServerException(426, compatibility?.Reason ?? "Task Server protocol is not compatible.");
+        _useV1 = true;
+    }
+
+    /// <summary>
     /// Register the runner as a client identity and adopt the server-assigned id as
     /// the X-Client-Id for every subsequent write. Idempotent on the display name;
     /// the registration route is an open path so it works with the provisional id.
@@ -54,6 +93,26 @@ public sealed class TaskServerClient : IDisposable
     /// </summary>
     public async Task<string> RegisterAsync(string displayName, string kind, CancellationToken ct)
     {
+        if (_useV1)
+        {
+            var options = _options ?? throw new InvalidOperationException("Runner options are unavailable for v1 registration.");
+            var runnerId = options.RunnerId;
+            var request = new Contract.RegisterRunnerRequest(
+                displayName,
+                options.Hostname,
+                RunnerInstanceId,
+                typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
+                RunnerOptions.ProtocolVersion,
+                ["claim", "events", "artifacts", "fenced-completion"]);
+            _ = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
+                HttpMethod.Put,
+                $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}",
+                request,
+                ct);
+            SetClientId(runnerId);
+            return runnerId;
+        }
+
         if (!string.IsNullOrWhiteSpace(_configuredClientId))
         {
             var escapedClientId = Uri.EscapeDataString(_configuredClientId);
@@ -113,6 +172,8 @@ public sealed class TaskServerClient : IDisposable
     /// <summary>The client id this runner presents as X-Client-Id (server-assigned after registration).</summary>
     public string ClientId { get; private set; } = string.Empty;
 
+    private string RunnerInstanceId => $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
+
     /// <summary>How long the liveness probe waits before it calls the server unreachable.</summary>
     private const int HealthProbeTimeoutSeconds = 10;
 
@@ -160,16 +221,55 @@ public sealed class TaskServerClient : IDisposable
     }
 
     public async Task<RunLeaseResponse> AcquireLeaseAsync(RunLeaseAcquireRequest req, CancellationToken ct)
-        => await PostJsonAsync<RunLeaseAcquireRequest, RunLeaseResponse>("/api/runner/lease/acquire", req, ct)
-           ?? new RunLeaseResponse("Invalid", false, null, "Empty lease response.");
+    {
+        if (_useV1)
+            throw new TaskServerException(409, "Protocol v1 admits work through server-side claims; direct task-key acquisition is not supported.");
+        return await PostJsonAsync<RunLeaseAcquireRequest, RunLeaseResponse>("/api/runner/lease/acquire", req, ct)
+               ?? new RunLeaseResponse("Invalid", false, null, "Empty lease response.");
+    }
 
     public async Task<RunnerClaimResponse> ClaimAsync(RunnerClaimRequest req, CancellationToken ct)
-        => await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>("/api/runner/claim", req, ct)
-           ?? new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "Empty claim response.");
+    {
+        if (!_useV1)
+            return await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>("/api/runner/claim", req, ct)
+                   ?? new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "Empty claim response.");
+
+        var claim = await PostJsonAsync<Contract.ClaimRequest, Contract.ClaimResponse>(
+            $"/api/v1/runners/{Uri.EscapeDataString(req.RunnerId)}/claims",
+            new Contract.ClaimRequest(req.RunnerId, RunnerInstanceId, req.RequestedTtlSeconds ?? 120, req.AvailableSlots),
+            ct);
+        if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
+            || claim.Task is null || claim.Run is null || claim.Lease is null)
+            return new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: claim?.Message ?? "No task available.");
+
+        var legacyLease = new RunLeaseInfoDto(
+            claim.Task.TaskKey,
+            claim.Lease.RunnerId,
+            _options?.RunnerName ?? req.RunnerName,
+            _options?.Hostname ?? req.Hostname,
+            Environment.ProcessId,
+            _options?.BackendName ?? req.BackendName,
+            claim.Lease.LeaseId,
+            claim.Lease.Fence,
+            claim.Lease.AcquiredAt,
+            claim.Lease.ExpiresAt);
+        _v1Leases[claim.Task.TaskKey] = (claim.Run.RunId, legacyLease);
+        if (!string.IsNullOrWhiteSpace(claim.Task.Body)) _v1TaskBodies[claim.Task.TaskKey] = claim.Task.Body;
+        return new RunnerClaimResponse(
+            RunnerClaimStatus.Claimed,
+            claim.Task.TaskKey,
+            claim.Task.TaskId,
+            ProjectName: claim.Task.ProjectId,
+            Lease: legacyLease,
+            ProjectId: claim.Task.ProjectId);
+    }
 
     public async Task ReportGitCapabilityAsync(string clientId, RunnerGitCapabilityRequest request, CancellationToken ct)
-        => _ = await PostJsonAsync<RunnerGitCapabilityRequest, object>(
+    {
+        if (_useV1) return;
+        _ = await PostJsonAsync<RunnerGitCapabilityRequest, object>(
             $"/api/clients/{Uri.EscapeDataString(clientId)}/runner-git-capability", request, ct);
+    }
 
     private static JsonSerializerOptions CreateJsonOptions()
     {
@@ -179,29 +279,138 @@ public sealed class TaskServerClient : IDisposable
     }
 
     public async Task<RunLeaseResponse> RenewLeaseAsync(RunLeaseHeartbeatRequest req, CancellationToken ct)
-        => await PostJsonAsync<RunLeaseHeartbeatRequest, RunLeaseResponse>("/api/runner/lease/renew", req, ct)
-           ?? new RunLeaseResponse("Invalid", false, null, "Empty renew response.");
+    {
+        if (!_useV1)
+            return await PostJsonAsync<RunLeaseHeartbeatRequest, RunLeaseResponse>("/api/runner/lease/renew", req, ct)
+                   ?? new RunLeaseResponse("Invalid", false, null, "Empty renew response.");
+        var authority = V1Authority(req.TaskKey);
+        var response = await PostJsonAsync<Contract.LeaseRenewRequest, Contract.LeaseResponse>(
+            $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/renew",
+            new Contract.LeaseRenewRequest(req.RunnerId, RunnerInstanceId, req.LeaseId, req.FencingToken, req.RequestedTtlSeconds ?? 120),
+            ct);
+        if (response?.Lease is not null)
+        {
+            var updated = authority.Lease with { ExpiresAt = response.Lease.ExpiresAt };
+            _v1Leases[req.TaskKey] = (authority.RunId, updated);
+            return new RunLeaseResponse("Renewed", true, updated);
+        }
+        return new RunLeaseResponse(response?.Status ?? "Invalid", false, authority.Lease, response?.Message);
+    }
 
     public async Task<RunLeaseResponse> ReleaseLeaseAsync(RunLeaseReleaseRequest req, CancellationToken ct)
-        => await PostJsonAsync<RunLeaseReleaseRequest, RunLeaseResponse>("/api/runner/lease/release", req, ct)
-           ?? new RunLeaseResponse("Invalid", false, null, "Empty release response.");
+    {
+        if (!_useV1)
+            return await PostJsonAsync<RunLeaseReleaseRequest, RunLeaseResponse>("/api/runner/lease/release", req, ct)
+                   ?? new RunLeaseResponse("Invalid", false, null, "Empty release response.");
+        if (!_v1Leases.TryGetValue(req.TaskKey, out var cached))
+            return new RunLeaseResponse("Released", false, null, "Run already completed and closed by Task Server.");
+        var authority = cached;
+        var response = await PostJsonAsync<Contract.LeaseReleaseRequest, Contract.LeaseResponse>(
+            $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/release",
+            new Contract.LeaseReleaseRequest(req.RunnerId, RunnerInstanceId, req.LeaseId, req.FencingToken, "released"),
+            ct);
+        _v1Leases.TryRemove(req.TaskKey, out _);
+        return new RunLeaseResponse(response?.Status ?? "Released", false, authority.Lease, response?.Message);
+    }
 
     public async Task<LogIngestResponse?> IngestLogsAsync(LogIngestRequest req, CancellationToken ct)
-        => await PostJsonAsync<LogIngestRequest, LogIngestResponse>("/api/runner/logs", req, ct);
+    {
+        if (!_useV1) return await PostJsonAsync<LogIngestRequest, LogIngestResponse>("/api/runner/logs", req, ct);
+        var authority = V1Authority(req.TaskKey);
+        var appended = 0;
+        foreach (var line in req.Lines)
+        {
+            var key = $"runner-log:{authority.RunId}:{line.Timestamp:O}:{appended}:{Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(line.Text)))[..12]}";
+            await PostJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
+                $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
+                new Contract.EventIngestRequest(
+                    $"evt_{Guid.NewGuid():N}",
+                    "runner.output",
+                    JsonSerializer.Serialize(line, Json),
+                    key,
+                    authority.Lease.FencingToken,
+                    line.Timestamp),
+                ct);
+            appended++;
+        }
+        return new LogIngestResponse(req.TaskKey, appended);
+    }
 
     public async Task<ArtifactIngestResponse?> UploadArtifactsAsync(ArtifactIngestRequest req, CancellationToken ct)
-        => await PostJsonAsync<ArtifactIngestRequest, ArtifactIngestResponse>("/api/runner/artifacts", req, ct);
+    {
+        if (!_useV1) return await PostJsonAsync<ArtifactIngestRequest, ArtifactIngestResponse>("/api/runner/artifacts", req, ct);
+        var authority = V1Authority(req.TaskKey);
+        var files = new List<string>();
+        foreach (var artifact in req.Artifacts)
+        {
+            var bytes = Convert.FromBase64String(artifact.ContentBase64);
+            var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            var key = $"runner-artifact:{authority.RunId}:{artifact.Path}:{sha}";
+            await PostJsonAsync<Contract.ArtifactIngestRequest, Contract.ArtifactDto>(
+                $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/artifacts",
+                new Contract.ArtifactIngestRequest(
+                    $"art_{Guid.NewGuid():N}",
+                    artifact.Path,
+                    MediaType(artifact.Path),
+                    artifact.ContentBase64,
+                    sha,
+                    key,
+                    authority.Lease.FencingToken),
+                ct);
+            files.Add(artifact.Path);
+        }
+        return new ArtifactIngestResponse(req.TaskKey, files.Count, files);
+    }
 
     public async Task<RemoteRunCompletionResponse?> CompleteRunAsync(RemoteRunCompletionRequest req, CancellationToken ct)
-        => await PostJsonAsync<RemoteRunCompletionRequest, RemoteRunCompletionResponse>("/api/runner/completion", req, ct);
+    {
+        if (!_useV1) return await PostJsonAsync<RemoteRunCompletionRequest, RemoteRunCompletionResponse>("/api/runner/completion", req, ct);
+        var authority = V1Authority(req.TaskKey);
+        _ = await PostJsonAsync<Contract.CompleteRunRequest, Contract.RunDto>(
+            $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
+            new Contract.CompleteRunRequest(req.RunnerId, RunnerInstanceId, req.LeaseId, req.FencingToken, req.Outcome, req.Reason),
+            ct);
+        _v1Leases.TryRemove(req.TaskKey, out _);
+        return new RemoteRunCompletionResponse(req.TaskKey, req.Outcome, "4-auto-review");
+    }
 
     public async Task<ExternalCompletionResponse?> CompleteAsync(string jobId, ExternalCompletionRequest req, CancellationToken ct)
-        => await PostJsonAsync<ExternalCompletionRequest, ExternalCompletionResponse>(
+    {
+        if (_useV1)
+        {
+            var authority = V1Authority(jobId);
+            var detail = JsonSerializer.Serialize(req, Json);
+            await PostJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
+                $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
+                new Contract.EventIngestRequest(
+                    $"evt_{Guid.NewGuid():N}",
+                    "runner.escalation",
+                    detail,
+                    $"runner-escalation:{authority.RunId}:{Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(detail)))[..16]}",
+                    authority.Lease.FencingToken),
+                ct);
+            _ = await PostJsonAsync<Contract.CompleteRunRequest, Contract.RunDto>(
+                $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
+                new Contract.CompleteRunRequest(
+                    authority.Lease.RunnerId,
+                    RunnerInstanceId,
+                    authority.Lease.LeaseId,
+                    authority.Lease.FencingToken,
+                    "blocked",
+                    req.Summary),
+                ct);
+            _v1Leases.TryRemove(jobId, out _);
+            return new ExternalCompletionResponse(jobId, "4-auto-review", req.Source);
+        }
+        return await PostJsonAsync<ExternalCompletionRequest, ExternalCompletionResponse>(
             $"/api/tasks/{Uri.EscapeDataString(jobId)}/external-completion", req, ct);
+    }
 
     /// <summary>Fetch a text file from the task's job folder, e.g. prompt.md. Returns null on 404.</summary>
     public async Task<string?> ReadTaskFileAsync(string jobId, string relativePath, CancellationToken ct)
     {
+        if (_useV1 && string.Equals(relativePath, "prompt.md", StringComparison.OrdinalIgnoreCase))
+            return _v1TaskBodies.TryGetValue(jobId, out var body) ? body : null;
         var url = $"/api/tasks/{Uri.EscapeDataString(jobId)}/files/{relativePath}";
         using var resp = await _http.GetAsync(url, ct);
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
@@ -210,8 +419,15 @@ public sealed class TaskServerClient : IDisposable
     }
 
     private async Task<TResp?> PostJsonAsync<TReq, TResp>(string url, TReq body, CancellationToken ct)
+        => await SendJsonAsync<TReq, TResp>(HttpMethod.Post, url, body, ct);
+
+    private async Task<TResp?> SendJsonAsync<TReq, TResp>(HttpMethod method, string url, TReq body, CancellationToken ct)
     {
-        using var resp = await _http.PostAsJsonAsync(url, body, Json, ct);
+        using var request = new HttpRequestMessage(method, url)
+        {
+            Content = JsonContent.Create(body, options: Json),
+        };
+        using var resp = await _http.SendAsync(request, ct);
         if (!resp.IsSuccessStatusCode)
         {
             var text = await resp.Content.ReadAsStringAsync(ct);
@@ -219,6 +435,22 @@ public sealed class TaskServerClient : IDisposable
         }
         return await resp.Content.ReadFromJsonAsync<TResp>(Json, ct);
     }
+
+    private (string RunId, RunLeaseInfoDto Lease) V1Authority(string taskKey)
+        => _v1Leases.TryGetValue(taskKey, out var authority)
+            ? authority
+            : throw new TaskServerException(409, $"No v1 run authority is cached for task '{taskKey}'.");
+
+    private static string MediaType(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".json" => "application/json",
+        ".html" or ".htm" => "text/html",
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".svg" => "image/svg+xml",
+        ".md" or ".txt" or ".log" => "text/plain",
+        _ => "application/octet-stream",
+    };
 
     private static string Trim(string s) => s.Length <= 300 ? s : s[..300] + "...";
 

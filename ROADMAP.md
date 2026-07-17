@@ -8,6 +8,13 @@ For **what the product is and what it can do today**, see [README.md](README.md)
 
 ### Task Access Layer
 
+The in-process filesystem layer below is the compatibility path for the legacy
+Studio backend. The independently deployed Task Server now owns the durable
+control-plane store described by
+[Distributed Agent Studio target architecture](docs/concepts/distributed-agent-studio-target-architecture.md).
+After a single-writer cutover, Studio and Runner consume that service and the
+legacy filesystem layer is no longer a second task truth.
+
 Today every backend service that touches tasks reads or writes the filesystem directly. Performance regressions surface when the kanban poll rescans disk per request; concurrent writers race; and any future multi-instance or multi-user story is gated on having one place that owns task state.
 
 A separate **Task Access Layer** (`backend/Services/TaskAccess/`) becomes the single point of access for every task operation. It boots once, loads every project's lane folders into a typed in-memory index, watches the filesystem for external changes, and exposes a typed API for find / list / mutate / transition / subscribe. No service, hosted service, or test is allowed to touch task folders directly; everything goes through `ITaskAccess`.
@@ -21,7 +28,9 @@ What the layer enables:
 Hard rules:
 
 - File on disk stays the source of truth on cold start. The in-memory index is a view.
-- No SQL, no LiteDB, no EF. Files plus an index, same convention as the supervisor and message-bus layers.
+- No SQL, no LiteDB, no EF inside the legacy Studio compatibility layer. This
+  restriction does not apply to the independently deployed Task Server, which
+  owns its own schema migrations, backup, restore, leases, and fences.
 - Single-state-machine authority moves into this layer. The runner still owns "one running task per project"; the layer enforces it on every mutation.
 
 Phasing is detailed in the queued task `task-access-api-layer-extraction`: ADR + skeleton, in-memory store, mutations and subscribers, consumer migration, default-on with multi-instance preparation.
@@ -667,7 +676,7 @@ The full V1 contract (endpoints, snapshot shape, command shape, sync cadence, fi
 
 ### Schema-First Communication and In-Memory Data Layer
 
-The product is accumulating cross-cutting structured data: agent messages, participant records, product runtime events, token aggregates per project, supervisor advisories and interventions, audit findings, architecture-quality scores, componentisation metrics. None of this should sit in a database. It should be many small JSON-schema-validated documents on disk, plus a strongly-typed in-memory layer that loads them at boot, supports query and aggregation, and writes back changes the same way the job system already does.
+The product is accumulating cross-cutting structured data: agent messages, participant records, product runtime events, token aggregates per project, supervisor advisories and interventions, audit findings, architecture-quality scores, componentisation metrics. These auxiliary evidence streams remain many small JSON-schema-validated documents on disk, plus a strongly-typed in-memory layer that loads them at boot and supports query and aggregation. This rule does not describe the separated Task Server control-plane store.
 
 - One schema per concept, named `<concept>.schema.json`, under `docs/schemas/`. Draft 2020-12. English. No em dashes.
 - An in-memory store is a typed view over disk; the file is always the source of truth.
