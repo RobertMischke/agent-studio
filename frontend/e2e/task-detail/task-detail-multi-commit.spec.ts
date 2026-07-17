@@ -69,7 +69,33 @@ const COMMITS: CommitFixture[] = [
 
 // Union of every file touched across the chain — what the aggregated
 // "All commits" file list surfaces.
-const AGGREGATE_FILES = ['src/feature.ts', 'src/feature.spec.ts', 'README.md', 'CHANGELOG.md'];
+const AGGREGATE_FILES = [
+  'src/feature.ts',
+  'src/feature.spec.ts',
+  'README.md',
+  'CHANGELOG.md',
+  'frontend/e2e/project/project-overview-dashboard.spec.ts',
+  'frontend/src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.spec.ts',
+  'frontend/src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.ts',
+  'frontend/src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.html',
+  'frontend/src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.scss',
+  'frontend/src/app/features/project-detail/components/project-overview-urls/project-overview-urls.spec.ts',
+  'frontend/src/app/features/project-detail/components/project-overview-urls/project-overview-urls.ts',
+  'frontend/src/app/features/project-detail/components/project-overview-urls/project-overview-urls.html',
+  'frontend/src/app/features/project-detail/components/project-overview-urls/project-overview-urls.scss',
+  'frontend/src/app/features/project-detail/components/project-deployment-panel/project-deployment-panel.spec.ts',
+  'frontend/src/app/features/project-detail/components/project-deployment-panel/project-deployment-panel.ts',
+  'frontend/src/app/features/project-detail/components/project-deployment-panel/project-deployment-panel.html',
+  'frontend/src/app/features/project-detail/components/project-deployment-panel/project-deployment-panel.scss',
+  'frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.spec.ts',
+  'frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.ts',
+  'frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.html',
+  'frontend/src/app/features/project-detail/components/project-git-panel/project-git-panel.component.scss',
+  'frontend/src/app/features/project-detail/components/project-shell/project-shell.component.spec.ts',
+  'frontend/src/app/features/project-detail/components/project-shell/project-shell.component.ts',
+  'frontend/src/app/features/project-detail/components/project-shell/project-shell.component.html',
+  'frontend/src/app/features/project-detail/components/project-shell/project-shell.component.scss',
+];
 
 // Graph-derived provenance (ASS-1724): the landed ladder shown above the
 // commit group. Mocked so `git.provenance()` resolves to a well-formed
@@ -100,6 +126,7 @@ function makeDetail() {
     info: {
       id: JOB_ID,
       jobKey: `${WATCH_PATH}::${JOB_ID}`,
+      taskKey: `${WATCH_PATH}::${JOB_ID}`,
       title: 'Multi-commit fixture',
       state: '5-human-review',
       agent: 'claude',
@@ -274,6 +301,7 @@ async function installWorktreeRoutes(page: Page) {
     info: {
       id: WORKTREE_JOB_ID,
       jobKey: `${WATCH_PATH}::${WORKTREE_JOB_ID}`,
+      taskKey: `${WATCH_PATH}::${WORKTREE_JOB_ID}`,
       title: 'Worktree commit menu fixture',
       state: '5-human-review',
       agent: 'codex',
@@ -325,6 +353,66 @@ async function installWorktreeRoutes(page: Page) {
 }
 
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
+
+async function expectTreeSplitContained(page: Page): Promise<void> {
+  const tree = page.getByTestId('git-files');
+  const treeCol = page.getByTestId('git-tree-col');
+  const splitter = page.getByTestId('git-tree-splitter');
+  const diffCol = page.getByTestId('git-diff-col');
+
+  const [treeBox, treeColBox, splitterBox, diffColBox] = await Promise.all([
+    tree.boundingBox(),
+    treeCol.boundingBox(),
+    splitter.boundingBox(),
+    diffCol.boundingBox(),
+  ]);
+  expect(treeBox && treeColBox && splitterBox && diffColBox, 'split panes have measurable bounds').toBeTruthy();
+
+  expect(treeBox!.x + treeBox!.width).toBeLessThanOrEqual(treeColBox!.x + treeColBox!.width + 1);
+  expect(splitterBox!.x).toBeGreaterThanOrEqual(treeColBox!.x + treeColBox!.width);
+  expect(diffColBox!.x).toBeGreaterThan(splitterBox!.x);
+  expect(Math.abs(splitterBox!.y - treeColBox!.y), 'splitter starts flush with tree pane').toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(splitterBox!.y + splitterBox!.height - (treeColBox!.y + treeColBox!.height)),
+    'splitter ends flush with tree pane',
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(splitterBox!.y + splitterBox!.height - (diffColBox!.y + diffColBox!.height)),
+    'splitter ends flush with diff pane',
+  ).toBeLessThanOrEqual(1);
+
+  const clip = await tree.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    overflowX: getComputedStyle(element).overflowX,
+  }));
+  expect(clip.overflowX).toBe('hidden');
+  expect(clip.scrollWidth).toBeLessThanOrEqual(clip.clientWidth + 1);
+
+  const hintBoxes = await page.getByTestId('git-tree-dir-hint').evaluateAll((elements) =>
+    elements.map((element) => {
+      const rect = element.getBoundingClientRect();
+      return { text: element.textContent?.trim() ?? '', right: rect.right };
+    }),
+  );
+  expect(hintBoxes.some((hint) => hint.text === 'project/')).toBe(true);
+  expect(hintBoxes.some((hint) => hint.text === 'project-overview-dashboard/')).toBe(true);
+  for (const hint of hintBoxes) {
+    expect(hint.right, `directory hint ${hint.text} stays inside the tree`).toBeLessThanOrEqual(treeColBox!.x + treeColBox!.width + 1);
+  }
+
+  const splitterGeometry = await splitter.evaluate((element) => ({
+    hitWidth: element.getBoundingClientRect().width,
+    visibleWidth: Number.parseFloat(getComputedStyle(element, '::before').width),
+  }));
+  expect(splitterGeometry.visibleWidth).toBeLessThanOrEqual(2);
+  expect(splitterGeometry.hitWidth).toBeGreaterThanOrEqual(16);
+}
+
+async function saveTreePressureShot(page: Page, name: string): Promise<void> {
+  if (!RESULTS_DIR) return;
+  await page.getByTestId('pane-git').screenshot({ path: path.join(RESULTS_DIR, `${name}--mocked.png`) });
+}
 
 async function expectedCommitChainMetas(page: Page): Promise<string[]> {
   return page.evaluate((commits) =>
@@ -539,6 +627,64 @@ test.describe('Task-detail multi-commit chain', () => {
       await page.getByTestId('git-view-body').screenshot({ path: path.join(RESULTS_DIR, 'tree-splitter-resized--mocked.png') });
     }
   });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`long tree stays clipped under width pressure and wide layout remains stable in ${theme} theme`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.addInitScript((selectedTheme) => {
+        try {
+          localStorage.setItem('atp.studio.theme', selectedTheme);
+          localStorage.setItem('taskboard.gitPane.treeWidth', '300');
+        } catch { /* private mode */ }
+      }, theme);
+      await installRoutes(page);
+      await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+      await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('git-diff')).toContainText('aggregated across all commits', { timeout: 5_000 });
+      await page.getByTestId('pane-maximize-git').click();
+
+      const treeCol = page.getByTestId('git-tree-col');
+      const wideTreeWidth = (await treeCol.boundingBox())!.width;
+      const wideDiffWidth = (await page.getByTestId('git-diff-col').boundingBox())!.width;
+      expect(wideTreeWidth).toBeGreaterThan(280);
+      expect(wideDiffWidth).toBeGreaterThan(wideTreeWidth);
+      await expectTreeSplitContained(page);
+      await saveTreePressureShot(page, `git-tree-split-wide-${theme}`);
+
+      await page.setViewportSize({ width: 760, height: 720 });
+      await expect.poll(async () => (await page.getByTestId('git-view-body').boundingBox())?.width)
+        .toBeLessThan(600);
+
+      const splitter = page.getByTestId('git-tree-splitter');
+      const splitterBox = (await splitter.boundingBox())!;
+      const startX = splitterBox.x + 3;
+      const startY = splitterBox.y + splitterBox.height / 2;
+      const hitTarget = await page.evaluate(({ x, y }) => {
+        const element = document.elementFromPoint(x, y);
+        return {
+          tag: element?.tagName ?? null,
+          testId: element?.closest('[data-testid]')?.getAttribute('data-testid') ?? null,
+        };
+      }, { x: startX, y: startY });
+      expect(hitTarget.testId, `expanded hit area belongs to the splitter (${hitTarget.tag})`).toBe('git-tree-splitter');
+
+      const widthBeforeDrag = (await treeCol.boundingBox())!.width;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX - 80, startY, { steps: 8 });
+      await page.mouse.up();
+      const widthAfterDrag = (await treeCol.boundingBox())!.width;
+      expect(widthAfterDrag).toBeLessThan(widthBeforeDrag - 40);
+
+      await expectTreeSplitContained(page);
+      const tree = page.getByTestId('git-files');
+      await tree.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+      await expect.poll(() => tree.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await expect(page.getByTestId('git-diff')).toContainText('aggregated across all commits');
+      await expectTreeSplitContained(page);
+      await saveTreePressureShot(page, `git-tree-split-narrow-scrolled-${theme}`);
+    });
+  }
 
   test('studio overflow menu exposes worktree commit actions', async ({ page }) => {
     await installWorktreeRoutes(page);
