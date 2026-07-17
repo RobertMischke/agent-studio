@@ -171,4 +171,6 @@ export interface ChatNavigationContext {
   currentTaskState?: string | null;
   currentLaneFilter?: string | null;
   viewportTimestamp?: string | null;
+  observedSurface?: string | null;
+  affectedComponent?: string | null;
 }

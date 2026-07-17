@@ -146,4 +146,9 @@
         (openReport)="openReport($event)" />
     }
   }
+  @defer (when activeRail() === 'ownership-routing') {
+    @if (activeRail() === 'ownership-routing') {
+      <app-ownership-mapping-panel [projectName]="projectName()" />
+    }
+  }
 </app-project-shell>

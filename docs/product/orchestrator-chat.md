@@ -150,6 +150,15 @@ Normal reads and chat turns stay cheap by using the existing quota cache. The
 side-sheet Refresh action calls this explicit path and shows the real capture
 time instead of a synthetic memory-age label.
 
+The digest and visible chat prompt also carry component ownership routes from
+Project Hub metadata. Navigation context answers where feedback was observed;
+the separate routing block answers which project owns the implementation and
+which consumers, packages, releases, environments, and deployment steps must
+be completed. The prompt contains stable project ids, repository/package
+identifiers, mapping evidence, confidence, and mapping version only. It does
+not include filesystem paths or secrets. A low-confidence or conflicting route
+instructs the orchestrator to ask before proposing or creating a task.
+
 ## Chat Switcher Rail
 
 The side sheet includes an optional, collapsed-by-default chat switcher. Its

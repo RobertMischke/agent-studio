@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { CliType, CLI_TYPES, PromoteToCodingResponse, TaskKind, TaskMode, TaskState, WatchPathEntry } from '../../../models/task.model';
+import { CliType, CLI_TYPES, ComponentRoutingRequest, ComponentRoutingResolution, PromoteToCodingResponse, TaskKind, TaskMode, TaskState, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { TaskService } from '../../../services/task.service';
@@ -32,6 +32,9 @@ export class CreateTaskFormService {
   private readonly errorDialog = inject(ErrorDialogService);
 
   readonly visible = signal(false);
+  readonly routing = signal<ComponentRoutingResolution | null>(null);
+  readonly routingPending = signal(false);
+  private routingRequest: ComponentRoutingRequest | null = null;
 
   // Plain mutable fields — these are [(ngModel)]-bound by the dialog and
   // mutated directly. Keeping them as fields (not signals) preserves the
@@ -151,6 +154,34 @@ export class CreateTaskFormService {
     this.newTitle = deriveDraftTitle(event.promptText);
     this.loadCreateModels(this.newCliType);
     this.visible.set(true);
+    this.routingPending.set(true);
+    this.routingRequest = {
+      observedSurface: 'Agent Studio Orchestrator chat',
+      component: event.promptText,
+      navigationProjectId: event.projectName,
+    };
+    this.jobService.resolveComponentRouting(this.routingRequest).subscribe({
+      next: (route) => {
+        this.routing.set(route);
+        if (route.primaryProject && !route.requiresQuestion) {
+          this.jobService.getRegistryWorkspaces({ includeArchived: true }).subscribe({
+            next: (workspaces) => {
+              const destination = workspaces.flatMap(workspace => workspace.projects)
+                .find(project => project.id === route.storageProjectId);
+              if (destination) this.newWatchPath = destination.storageLocation;
+              this.routingPending.set(false);
+            },
+            error: () => this.routingPending.set(false),
+          });
+        } else {
+          this.routingPending.set(false);
+        }
+      },
+      error: () => {
+        this.routingPending.set(false);
+        this.routing.set(null);
+      },
+    });
   }
 
   /**
@@ -230,6 +261,9 @@ export class CreateTaskFormService {
     this.availableModels.set([]);
     for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
     this.newAttachments = [];
+    this.routing.set(null);
+    this.routingPending.set(false);
+    this.routingRequest = null;
   }
 
   /**
@@ -238,6 +272,15 @@ export class CreateTaskFormService {
    * fire `submitted$` so the shell can refresh.
    */
   submit(): void {
+    const route = this.routing();
+    if (this.routingPending() || route?.requiresQuestion) {
+      this.errorDialog.show(new Error(route?.questionReason || 'Ownership routing is still being resolved.'), {
+        title: 'Resolve task ownership',
+        fallbackMessage: 'Choose the primary owner before creating this task.',
+        source: 'Task routing',
+      });
+      return;
+    }
     const attachments = this.newAttachments;
     const promptDraft = this.newPrompt.trim();
     const watchPath = this.newWatchPath;
@@ -266,6 +309,8 @@ export class CreateTaskFormService {
       epicId: this.newKind === 'task' && this.newEpicId ? this.newEpicId : undefined,
       mode: this.newMode,
       allowWebAccess: this.newAllowWebAccess,
+      routing: this.routingRequest ?? undefined,
+      requestedTaskPrefix: route?.allowedTicketPrefix ?? undefined,
     }).subscribe({
       next: (res) => {
         localStorage.setItem('lastCreateWatchPath', watchPath);

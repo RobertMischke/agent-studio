@@ -756,7 +756,23 @@ export class TaskService {
   }
 
   createJob(req: CreateTaskRequest) {
-    return this.http.post<{ id: string }>(`${this.baseUrl}/tasks`, req);
+    return this.http.post<{ id: string; routing?: import('../models/task.model').ComponentRoutingResolution | null }>(`${this.baseUrl}/tasks`, req);
+  }
+
+  resolveComponentRouting(body: import('../models/task.model').ComponentRoutingRequest) {
+    return this.http.post<import('../models/task.model').ComponentRoutingResolution>(
+      `${this.baseUrl}/component-routing/resolve`, body);
+  }
+
+  updateOwnershipMapping(
+    projectId: string,
+    mappingId: string,
+    body: import('../models/task.model').ComponentOwnershipMapping,
+  ) {
+    return this.http.put<import('../models/task.model').ComponentOwnershipMapping>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectId)}/ownership-mappings/${encodeURIComponent(mappingId)}`,
+      body,
+    );
   }
 
   /**

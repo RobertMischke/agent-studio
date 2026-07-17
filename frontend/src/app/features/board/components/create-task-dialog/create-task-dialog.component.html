@@ -241,12 +241,11 @@
         <div class="create-dialog__attachment-error" data-testid="create-attach-error">⚠ {{ attachmentError() }}</div>
       }
     </div>
-    <div class="create-dialog__actions">
+    <app-routing-preview [routing]="routing()" [pending]="routingPending()" /><div class="create-dialog__actions">
       <button class="btn" data-testid="create-cancel" (click)="cancelRequest.emit()">Cancel</button>
-      <button class="btn btn--primary"
-              data-testid="create-submit"
+      <button class="btn btn--primary" data-testid="create-submit"
               (click)="submitRequest.emit()"
-              [disabled]="!newTitle().trim()">Create</button>
+              [disabled]="!newTitle().trim() || routingPending() || routing()?.requiresQuestion">Create</button>
     </div>
     <input #fileInput
            type="file"

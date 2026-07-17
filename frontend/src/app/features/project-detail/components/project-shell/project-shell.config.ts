@@ -35,6 +35,7 @@ export type ProjectRailKey =
   | 'settings'
   | 'settings-defaults'
   | 'settings-overrides'
+  | 'ownership-routing'
   | 'orchestrator';
 
 export interface ProjectRailItem {
@@ -314,6 +315,17 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'Project overrides placeholder.',
     icon: '⚙',
     railIcon: 'settings',
+  },
+  {
+    key: 'ownership-routing',
+    group: 'config',
+    parent: 'settings',
+    label: 'Ownership Routing',
+    panelTitle: 'Component ownership and delivery',
+    description: 'Primary owners, consumers, packages, releases, and deployment chains',
+    empty: 'No ownership mappings are configured.',
+    icon: '⇢',
+    railIcon: 'branch',
   },
 ];
 

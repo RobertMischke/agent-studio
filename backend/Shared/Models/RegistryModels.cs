@@ -127,8 +127,55 @@ public record ProjectRecord
     /// via the AddUrl / UpdateUrl / RemoveUrl / ReorderUrls registry mutators.
     /// </summary>
     public IReadOnlyList<ProjectUrlRecord> Urls { get; init; } = [];
+    /// <summary>
+    /// Versioned component ownership and delivery-chain declarations for
+    /// components primarily owned by this project. These are product metadata,
+    /// not prompt text. The routing resolver reads the complete project
+    /// registry and returns the matching declaration to every consumer.
+    /// </summary>
+    public IReadOnlyList<ComponentOwnershipMapping> OwnershipMappings { get; init; } = [];
+    /// <summary>Append-only audit rows for edits to <see cref="OwnershipMappings"/>.</summary>
+    public IReadOnlyList<ComponentOwnershipMappingAudit> OwnershipMappingAudit { get; init; } = [];
     public bool Archived { get; init; }
     public DateTime CreatedAt { get; init; }
+}
+
+/// <summary>
+/// One editable ownership/dependency declaration stored with its primary
+/// project. Identifiers and package/repository names are stable and safe to
+/// place in an orchestrator prompt; filesystem paths and secrets are excluded.
+/// </summary>
+public record ComponentOwnershipMapping
+{
+    public string Id { get; init; } = "";
+    public IReadOnlyList<string> ObservedSurfaces { get; init; } = [];
+    public string Component { get; init; } = "";
+    public string? PackageOrModule { get; init; }
+    public string PrimaryProjectId { get; init; } = "";
+    public string? Repository { get; init; }
+    public IReadOnlyList<string> ConsumerProjectIds { get; init; } = [];
+    public IReadOnlyList<string> IntegrationHosts { get; init; } = [];
+    public string? ReleaseArtifact { get; init; }
+    public string? VersioningMechanism { get; init; }
+    public IReadOnlyList<string> DeploymentSteps { get; init; } = [];
+    public IReadOnlyList<string> Environments { get; init; } = [];
+    public string AllowedTicketPrefix { get; init; } = "";
+    public IReadOnlyList<string> Evidence { get; init; } = [];
+    public double Confidence { get; init; } = 1;
+    public IReadOnlyList<string> UnresolvedAlternatives { get; init; } = [];
+    public int Version { get; init; } = 1;
+    public DateTime UpdatedAt { get; init; }
+    public string UpdatedBy { get; init; } = "system";
+}
+
+public record ComponentOwnershipMappingAudit
+{
+    public string MappingId { get; init; } = "";
+    public int Version { get; init; }
+    public DateTime ChangedAt { get; init; }
+    public string ChangedBy { get; init; } = "system";
+    public string Action { get; init; } = "updated";
+    public ComponentOwnershipMapping Snapshot { get; init; } = new();
 }
 
 /// <summary>

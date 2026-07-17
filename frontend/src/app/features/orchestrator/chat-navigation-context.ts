@@ -10,6 +10,8 @@ export interface ChatNavigationContextInput {
   activeJobTitle: string | null;
   activeJobState?: string | null;
   laneFilter?: string | null;
+  observedSurface?: string | null;
+  affectedComponent?: string | null;
   /**
    * Override for tests. Production should leave this undefined so the
    * builder stamps the real wall-clock UTC ISO string at call time.
@@ -38,12 +40,16 @@ export function buildChatNavigationContext(
   const taskTitle = sanitize(input.activeJobTitle);
   const taskState = sanitize(input.activeJobState ?? null);
   const lane = sanitize(input.laneFilter ?? null);
+  const surface = sanitize(input.observedSurface ?? null);
+  const component = sanitize(input.affectedComponent ?? null);
 
   out.currentPage = taskId ? 'task-detail' : 'kanban-board';
   if (taskId) out.currentTaskId = taskId;
   if (taskTitle) out.currentTaskTitle = taskTitle;
   if (taskState) out.currentTaskState = taskState;
   if (lane) out.currentLaneFilter = lane;
+  out.observedSurface = surface ?? 'Agent Studio Orchestrator chat';
+  if (component) out.affectedComponent = component;
 
   const now = (input.now ?? (() => new Date()))();
   out.viewportTimestamp = now.toISOString();

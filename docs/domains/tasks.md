@@ -67,6 +67,20 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 - If an operation is missing from the API, create a follow-up task instead of
   reaching around the API.
 
+Task creation can carry a structured `routing` request with the observed
+surface, affected component, and navigation project. `ComponentRoutingService`
+resolves that request against versioned ownership mappings stored on project
+registry records. A confident cross-project match replaces the requested
+destination, validates the ticket prefix, and appends consumer integration and
+deployment acceptance criteria. Unknown, conflicting, or low-confidence
+ownership returns `409` with a routing question instead of silently using the
+navigation project.
+
+Cross-project `change-project` is also a re-key operation. The state machine
+reserves a destination-project key, stages source and destination folders under
+hidden names, promotes the complete destination, and rolls back on failure.
+This prevents the AGT-2166 archived-orphan/lost-task failure mode.
+
 ## Related Concepts
 
 - [../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance):

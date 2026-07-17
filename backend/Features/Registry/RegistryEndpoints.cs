@@ -73,6 +73,33 @@ public static class RegistryEndpoints
                 : Results.Ok(record);
         });
 
+        app.MapPost("/api/component-routing/resolve", (ComponentRoutingRequest body, ComponentRoutingService routing) =>
+            Results.Ok(routing.Resolve(body ?? new ComponentRoutingRequest())));
+
+        app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/ownership-mappings/{mappingId}",
+            (string projId, string mappingId, ComponentOwnershipMapping body, HttpContext ctx, ProjectRegistry projects) =>
+            {
+                if (body == null) return Results.BadRequest(new { error = "body required" });
+                try
+                {
+                    var actor = ctx.Request.Headers["X-Client-Id"].FirstOrDefault();
+                    var updated = projects.UpsertOwnershipMapping(projId, body with { Id = mappingId }, actor);
+                    return Results.Ok(updated.OwnershipMappings.First(row =>
+                        string.Equals(row.Id, mappingId, StringComparison.OrdinalIgnoreCase)));
+                }
+                catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+                catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+            });
+
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/ownership-mappings/audit",
+            (string projId, ProjectRegistry projects) =>
+            {
+                var project = projects.FindById(projId);
+                return project == null
+                    ? Results.NotFound(new { error = $"Unknown projectId '{projId}'" })
+                    : Results.Ok(project.OwnershipMappingAudit.OrderByDescending(row => row.ChangedAt));
+            });
+
         // ----- F45b workspace mutations (ADR-0042) -----
 
         app.MapPost("/api/workspaces", (RegistryCreateWorkspaceRequest body, WorkspaceRegistry workspaces) =>
@@ -698,6 +725,7 @@ public sealed record ProjectSummary
     public string? RepositoryUrl { get; init; }
     /// <summary>Configured watchable URLs, ordered; empty for most projects.</summary>
     public IReadOnlyList<ProjectUrlRecord> Urls { get; init; } = [];
+    public IReadOnlyList<ComponentOwnershipMapping> OwnershipMappings { get; init; } = [];
     public bool Archived { get; init; }
     public DateTime CreatedAt { get; init; }
 
@@ -718,6 +746,7 @@ public sealed record ProjectSummary
         RepositoryUrl = p.Urls.FirstOrDefault(url =>
             string.Equals(url.Id, "repo", StringComparison.OrdinalIgnoreCase))?.Url,
         Urls = [.. p.Urls.OrderBy(u => u.SortOrder)],
+        OwnershipMappings = p.OwnershipMappings,
         Archived = p.Archived,
         CreatedAt = p.CreatedAt,
     };

@@ -896,6 +896,9 @@ export interface CreateTaskRequest {
   mode?: TaskMode;
   /** Web access. When omitted, defaults by mode (research = on, else off). */
   allowWebAccess?: boolean;
+  /** Ownership-routing input. The backend resolves and validates the destination. */
+  routing?: ComponentRoutingRequest;
+  requestedTaskPrefix?: string;
 }
 
 /**
@@ -1021,6 +1024,62 @@ export interface RegistryProjectUrl {
   startRule: ProjectUrlStartRule | null;
 }
 
+export interface ComponentOwnershipMapping {
+  id: string;
+  observedSurfaces: string[];
+  component: string;
+  packageOrModule: string | null;
+  primaryProjectId: string;
+  repository: string | null;
+  consumerProjectIds: string[];
+  integrationHosts: string[];
+  releaseArtifact: string | null;
+  versioningMechanism: string | null;
+  deploymentSteps: string[];
+  environments: string[];
+  allowedTicketPrefix: string;
+  evidence: string[];
+  confidence: number;
+  unresolvedAlternatives: string[];
+  version: number;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface ComponentRoutingRequest {
+  observedSurface?: string | null;
+  component?: string | null;
+  navigationProjectId?: string | null;
+}
+
+export interface ComponentRoutingResolution {
+  observedSurface: string | null;
+  component: string | null;
+  packageOrModule: string | null;
+  navigationProject: { id: string; shortCode: string; displayName: string } | null;
+  primaryProject: { id: string; shortCode: string; displayName: string } | null;
+  primaryProjectId?: string | null;
+  projectShortCode?: string | null;
+  repository: string | null;
+  consumerProjects: { id: string; shortCode: string; displayName: string }[];
+  integrationHosts: string[];
+  releaseArtifact: string | null;
+  versioningMechanism: string | null;
+  deploymentSteps: string[];
+  environments: string[];
+  allowedTicketPrefix: string | null;
+  storageProjectId: string | null;
+  evidence: string[];
+  confidence: number;
+  routingConfidence?: number;
+  unresolvedAlternatives: string[];
+  requiresQuestion: boolean;
+  questionReason: string | null;
+  preview: string;
+  mappingId: string | null;
+  mappingVersion: number | null;
+}
+
 /** Mirrors backend `ProjectUrlSuggestion` from `GET .../url-suggestions`. */
 export interface ProjectUrlSuggestion {
   label: string;
@@ -1057,6 +1116,7 @@ export interface RegistryProjectSummary {
   repositoryUrl: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
+  ownershipMappings?: ComponentOwnershipMapping[];
   archived: boolean;
   createdAt: string;
 }

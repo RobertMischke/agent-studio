@@ -662,24 +662,116 @@ public class TaskStateMachine
         if (recheck == null) return false;
         if (WatchPathComparison.PathsEqual(recheck.WatchPath, canonicalTarget)) return true;
 
-        var jobFolderName = Path.GetFileName(recheck.FolderPath);
-        var targetDir = Path.Combine(canonicalTarget, recheck.State, jobFolderName);
+        var destinationProject = _projectRegistry?.FindByStorageLocation(canonicalTarget);
+        if (destinationProject == null)
+        {
+            _logger.LogWarning("change-project-rejected job={JobId} reason=destination-not-in-registry target={Target}", jobId, canonicalTarget);
+            return false;
+        }
 
-        if (Directory.Exists(targetDir)) return false;
+        // A cross-project move is a re-key, not a raw folder copy. Reserve a
+        // fresh destination key before touching the source. The monotonic
+        // counter may advance on a failed attempt, which is intentional: keys
+        // are never re-used.
+        string destinationKey;
+        int destinationNumber;
+        string targetDir;
+        do
+        {
+            var destinationSeq = _projectRegistry!.IssueNextTaskKey(destinationProject.Id);
+            destinationKey = $"{destinationProject.ShortCode}-{destinationSeq}";
+            TaskStorageLayout.TryParseKeyNumber(destinationKey, out destinationNumber);
+            targetDir = TaskStorageLayout.JobDir(canonicalTarget, destinationNumber, destinationKey);
+        } while (Directory.Exists(targetDir));
+
+        var operationId = Guid.NewGuid().ToString("N");
+        var sourceParent = Path.GetDirectoryName(recheck.FolderPath)!;
+        var sourceStage = Path.Combine(sourceParent, $".moving-{Path.GetFileName(recheck.FolderPath)}-{operationId}");
+        var targetParent = Path.GetDirectoryName(targetDir)!;
+        var targetStage = Path.Combine(targetParent, $".incoming-{destinationKey}-{operationId}");
+        var sourceStaged = false;
+        var targetPromoted = false;
+        var referenceUpdates = BuildReferenceUpdates(recheck.Key, destinationKey, recheck.FolderPath, targetDir);
+        var appliedReferenceUpdates = new List<TaskReferenceUpdate>();
 
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
-            CopyDirectory(recheck.FolderPath, targetDir);
-            Directory.Delete(recheck.FolderPath, true);
-            _scanner.InvalidateCache();
-            return true;
+            Directory.CreateDirectory(targetParent);
+            // Rename first on the source volume. If any later step fails the
+            // original folder can be restored atomically, so no task can land
+            // as an archived orphan or disappear between copy and delete.
+            Directory.Move(recheck.FolderPath, sourceStage);
+            sourceStaged = true;
+            CopyDirectory(sourceStage, targetStage);
+            TaskJsonFile.UpdateFieldOrThrow(targetStage, "key", destinationKey);
+            TaskJsonFile.UpdateFieldOrThrow(targetStage, "previousKey", recheck.Key ?? "");
+            Directory.Move(targetStage, targetDir);
+            targetPromoted = true;
+
+            // References are part of the migration transaction. Apply every
+            // rewrite before retiring the source so a failed write can restore
+            // the old references, remove the destination, and rename the
+            // staged source back into place.
+            foreach (var update in referenceUpdates)
+            {
+                TaskJsonFile.UpdateFieldOrThrow(update.FolderPath, "references", update.Rewritten);
+                appliedReferenceUpdates.Add(update);
+            }
+
+            // This is the commit point. Nothing after the source deletion may
+            // roll the operation back because the original tree no longer
+            // exists.
+            Directory.Delete(sourceStage, true);
+            sourceStaged = false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to change project for job {JobId} to {Path}", jobId, targetWatchPath);
+            _logger.LogError(ex,
+                "change-project-rollback job={JobId} oldKey={OldKey} attemptedKey={NewKey} target={Target}",
+                jobId, recheck.Key, destinationKey, canonicalTarget);
+            try
+            {
+                foreach (var update in appliedReferenceUpdates.AsEnumerable().Reverse())
+                    TaskJsonFile.UpdateFieldOrThrow(update.FolderPath, "references", update.Original);
+                if (targetPromoted && Directory.Exists(targetDir)) Directory.Delete(targetDir, true);
+                if (Directory.Exists(targetStage)) Directory.Delete(targetStage, true);
+                if (sourceStaged && Directory.Exists(sourceStage) && !Directory.Exists(recheck.FolderPath))
+                    Directory.Move(sourceStage, recheck.FolderPath);
+                TaskLayoutIndex.Rebuild(recheck.WatchPath, _logger);
+                TaskLayoutIndex.Rebuild(canonicalTarget, _logger);
+                _scanner.InvalidateCache();
+            }
+            catch (Exception rollbackEx)
+            {
+                _logger.LogCritical(rollbackEx,
+                    "change-project-rollback-failed job={JobId} sourceStage={SourceStage} target={Target}",
+                    jobId, sourceStage, targetDir);
+            }
             return false;
         }
+
+        try
+        {
+            TaskLayoutIndex.Rebuild(recheck.WatchPath, _logger);
+            TaskLayoutIndex.Rebuild(canonicalTarget, _logger);
+            _scanner.InvalidateCache();
+            _notifier?.PublishMoved(destinationProject.DisplayName, jobId, canonicalTarget, recheck.State, recheck.State);
+        }
+        catch (Exception ex)
+        {
+            // The move and its reference rewrites are already committed. A
+            // cache, index, or notification failure must not delete the only
+            // durable task copy.
+            _logger.LogError(ex,
+                "change-project-post-commit-refresh-failed job={JobId} newKey={NewKey} destinationProject={DestinationProject}",
+                jobId, destinationKey, destinationProject.Id);
+            _scanner.InvalidateCache();
+        }
+
+        _logger.LogInformation(
+            "change-project-complete job={JobId} oldKey={OldKey} newKey={NewKey} source={Source} destinationProject={DestinationProject}",
+            jobId, recheck.Key, destinationKey, recheck.WatchPath, destinationProject.Id);
+        return true;
     }
 
     private static void CopyDirectory(string sourceDir, string targetDir)
@@ -690,6 +782,42 @@ public class TaskStateMachine
         foreach (var dir in Directory.GetDirectories(sourceDir))
             CopyDirectory(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
     }
+
+    private List<TaskReferenceUpdate> BuildReferenceUpdates(
+        string? oldKey,
+        string newKey,
+        string movedSourceFolder,
+        string movedDestinationFolder)
+    {
+        var updates = new List<TaskReferenceUpdate>();
+        if (string.IsNullOrWhiteSpace(oldKey)) return updates;
+        foreach (var task in _scanner.ScanAllJobsWithArchive())
+        {
+            var refs = task.References;
+            if (refs == null || !refs.Enumerate().Any(edge =>
+                    string.Equals(edge.Target, oldKey, StringComparison.OrdinalIgnoreCase))) continue;
+            var rewritten = new TaskReferences
+            {
+                DependsOn = Replace(refs.DependsOn, oldKey, newKey),
+                RelatedTo = Replace(refs.RelatedTo, oldKey, newKey),
+                BlockedBy = Replace(refs.BlockedBy, oldKey, newKey),
+                Supersedes = Replace(refs.Supersedes, oldKey, newKey),
+            };
+            var folder = string.Equals(task.FolderPath, movedSourceFolder, StringComparison.OrdinalIgnoreCase)
+                ? movedDestinationFolder
+                : task.FolderPath;
+            updates.Add(new TaskReferenceUpdate(folder, refs, rewritten));
+        }
+        return updates;
+    }
+
+    private static List<string> Replace(IEnumerable<string> values, string oldKey, string newKey)
+        => values.Select(value => string.Equals(value, oldKey, StringComparison.OrdinalIgnoreCase) ? newKey : value).ToList();
+
+    private sealed record TaskReferenceUpdate(
+        string FolderPath,
+        TaskReferences Original,
+        TaskReferences Rewritten);
 
     public void EnsureStateFoldersAndMigrate()
     {

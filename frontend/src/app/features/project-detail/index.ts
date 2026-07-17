@@ -25,6 +25,7 @@ export { WorkbenchViewerComponent } from './components/workbench-viewer/workbenc
 export { ProjectGitPanelComponent } from './components/project-git-panel/project-git-panel.component';
 export { ProjectProposalsPanelComponent } from './components/project-proposals-panel/project-proposals-panel.component';
 export { ProjectGraphComponent } from './components/project-graph/project-graph.component';
+export { OwnershipMappingPanelComponent } from './components/ownership-mapping-panel/ownership-mapping-panel.component';
 
 // section components used cross-feature
 export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section/project-steering-docs-section';

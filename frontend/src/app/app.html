@@ -496,9 +496,9 @@
       }
       @if (showCreate()) {
         <app-create-job-dialog
-          [watchPaths]="watchPaths()"
-          [availableModels]="availableModels()"
+          [watchPaths]="watchPaths()" [availableModels]="availableModels()"
           [cliTypeDraft]="createJobForm.newCliType"
+          [routing]="createJobForm.routing()" [routingPending]="createJobForm.routingPending()"
           [(newTitle)]="createJobForm.newTitle"
           [(newWatchPath)]="createJobForm.newWatchPath"
           [(newModel)]="createJobForm.newModel"
@@ -830,9 +830,9 @@
 
       @if (showCreate()) {
         <app-create-job-dialog
-          [watchPaths]="watchPaths()"
-          [availableModels]="availableModels()"
+          [watchPaths]="watchPaths()" [availableModels]="availableModels()"
           [cliTypeDraft]="createJobForm.newCliType"
+          [routing]="createJobForm.routing()" [routingPending]="createJobForm.routingPending()"
           [(newTitle)]="createJobForm.newTitle"
           [(newWatchPath)]="createJobForm.newWatchPath"
           [(newModel)]="createJobForm.newModel"

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AgentStudio.Orchestrator;
+using AgentStudio.Registry;
 
 namespace AgentStudio.Runner;
 
@@ -383,7 +384,9 @@ public sealed record ChatNavigationContext(
     string? CurrentTaskTitle = null,
     string? CurrentTaskState = null,
     string? CurrentLaneFilter = null,
-    string? ViewportTimestamp = null);
+    string? ViewportTimestamp = null,
+    string? ObservedSurface = null,
+    string? AffectedComponent = null);
 
 /// <summary>
 /// Service that turns a user message into an orchestrator reply by resuming
@@ -414,6 +417,7 @@ public class OrchestratorChatService
     private readonly ILogger<OrchestratorChatService> _logger;
     private readonly ClientIdentityStore? _identityStore;
     private readonly OrchestratorContextDigestService? _contextDigests;
+    private readonly ComponentRoutingService? _componentRouting;
 
     /// <summary>
     /// Serializes concurrent <see cref="SendAsync"/> calls because the
@@ -444,7 +448,8 @@ public class OrchestratorChatService
         IConfiguration config,
         ILogger<OrchestratorChatService> logger,
         ClientIdentityStore? identityStore = null,
-        OrchestratorContextDigestService? contextDigests = null)
+        OrchestratorContextDigestService? contextDigests = null,
+        ComponentRoutingService? componentRouting = null)
     {
         _chat = chat;
         _runner = runner;
@@ -455,6 +460,7 @@ public class OrchestratorChatService
         _logger = logger;
         _identityStore = identityStore;
         _contextDigests = contextDigests;
+        _componentRouting = componentRouting;
     }
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
@@ -758,6 +764,25 @@ public class OrchestratorChatService
 
         AppendNavigationContext(sb, req.NavigationContext);
 
+        if (_componentRouting != null)
+        {
+            var affectedComponent = req.NavigationContext?.AffectedComponent;
+            // The host cannot know the affected implementation before the
+            // operator describes the problem. Use an explicit component hint
+            // when one exists, otherwise resolve from the current message so
+            // the routing block is useful on the first proposal turn instead
+            // of always reporting an artificial "unresolved" component.
+            var routingComponent = string.IsNullOrWhiteSpace(affectedComponent)
+                ? req.Text
+                : affectedComponent;
+            var route = _componentRouting.Resolve(new ComponentRoutingRequest(
+                req.NavigationContext?.ObservedSurface ?? req.NavigationContext?.CurrentPage,
+                routingComponent,
+                projectName));
+            sb.AppendLine(ComponentRoutingService.RenderCompact(route));
+            sb.AppendLine();
+        }
+
         sb.AppendLine("=== USER MESSAGE ===");
         sb.AppendLine(req.Text);
         sb.AppendLine();
@@ -883,7 +908,9 @@ public class OrchestratorChatService
                 && string.IsNullOrWhiteSpace(nav.CurrentTaskTitle)
                 && string.IsNullOrWhiteSpace(nav.CurrentTaskState)
                 && string.IsNullOrWhiteSpace(nav.CurrentLaneFilter)
-                && string.IsNullOrWhiteSpace(nav.ViewportTimestamp)))
+                && string.IsNullOrWhiteSpace(nav.ViewportTimestamp)
+                && string.IsNullOrWhiteSpace(nav.ObservedSurface)
+                && string.IsNullOrWhiteSpace(nav.AffectedComponent)))
         {
             sb.AppendLine("No navigation context was sent with this message.");
             sb.AppendLine("If the user asks a context-dependent question (\"what is the current task?\", \"explain this\"), say no specific task is in scope and ask which task they mean. Do NOT invent a task or hallucinate a context.");
@@ -898,6 +925,8 @@ public class OrchestratorChatService
         if (!string.IsNullOrWhiteSpace(nav.CurrentTaskState)) sb.AppendLine($"  currentTaskState: {nav.CurrentTaskState}");
         if (!string.IsNullOrWhiteSpace(nav.CurrentLaneFilter)) sb.AppendLine($"  currentLaneFilter: {nav.CurrentLaneFilter}");
         if (!string.IsNullOrWhiteSpace(nav.ViewportTimestamp)) sb.AppendLine($"  viewportTimestamp: {nav.ViewportTimestamp}");
+        if (!string.IsNullOrWhiteSpace(nav.ObservedSurface)) sb.AppendLine($"  observedSurface: {nav.ObservedSurface}");
+        if (!string.IsNullOrWhiteSpace(nav.AffectedComponent)) sb.AppendLine($"  affectedComponent: {nav.AffectedComponent}");
         sb.AppendLine();
         sb.AppendLine("Use this when interpreting context-dependent questions. When currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by id. When currentTaskId is null, do NOT invent one; say no task is in scope and ask which task they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
         sb.AppendLine();
