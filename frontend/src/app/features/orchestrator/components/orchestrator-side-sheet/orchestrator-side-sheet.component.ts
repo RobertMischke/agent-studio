@@ -19,14 +19,23 @@ import type { OrchestratorChatTurn, OrchestratorContextSession } from '../../../
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
 import { ChatComponent } from 'coding-agent-chat/composer';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
-import { ChatEvent, ChatSubmitEvent, ChatToolbarItem } from 'coding-agent-chat/core';
-import { TooltipDirective } from 'coding-agent-chat/shared';
+import {
+  ChatEvent,
+  ChatModelSelection,
+  ChatSubmitEvent,
+  ChatToolbarItem,
+} from 'coding-agent-chat/core';
+import {
+  composerLocationLabel,
+  type ComposerLocationContext,
+} from '../../composer-location-context';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
 import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
+import { OrchestratorComposerModelService } from '../../state/orchestrator-composer-model.service';
 import {
   parseBugHashtags,
   resolveAttachmentUrl,
@@ -37,7 +46,7 @@ import {
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
  * The reusable composer owns chat interaction; this host owns app context,
- * transcript endpoints, task-draft handoff, and the ORCH-1 read digest.
+ * transcript endpoints, and the ORCH-1 read digest.
  */
 @Component({
   selector: 'app-orchestrator-side-sheet',
@@ -45,7 +54,6 @@ import {
   imports: [
     ChatComponent,
     ConversationViewComponent,
-    TooltipDirective,
     SidesheetComponent,
     OrchestratorContextHeaderComponent,
     ChatSwitcherRailComponent,
@@ -66,9 +74,15 @@ import {
 })
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly jobService = inject(TaskService);
+  readonly composerModel = inject(OrchestratorComposerModelService);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
   readonly watchPaths = input<WatchPathEntry[]>([]);
+  /** Canonical active-tab context, derived by Studio; rendered via CAC's `contextLabel`. */
+  readonly composerContext = input<ComposerLocationContext | null>(null);
+  /** CAC has no structured context input yet, so the host formats the label. */
+  readonly composerContextLabel = computed<string | null>(() =>
+    composerLocationLabel(this.composerContext()));
 
   /**
    * Phase 6 inputs: when a task detail is open, the host passes the
@@ -93,14 +107,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly activeJobKey = input<string | null>(null);
   readonly activeJobState = input<string | null>(null);
   readonly activeRun = input<{ model: string | null; startedAt: string | null } | null>(null);
-
-  /**
-   * Phase 5: when the user clicks "Make a task from this reply", the
-   * host opens the create-task dialog pre-filled with the orchestrator's
-   * latest reply text. The host wires the dialog; this component just
-   * names what to seed it with.
-   */
-  readonly createTaskFromDraft = output<{ projectName: string; promptText: string }>();
 
   /**
    * Phase: Verbose Debug. Emitted when the user clicks the bug icon in the
@@ -271,9 +277,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   /**
    * Composer toolbar items. The chat component is intentionally generic
    * (a reusable agent-interaction surface) — hosts plug surface-specific
-   * affordances in. The orchestrator side sheet wants the four standard
-   * navigation actions on the left and a `/task` quick action on the
-   * right; clicks land in {@link onChatToolbarAction}.
+   * affordances in. The orchestrator side sheet retains the standard
+   * reference, mention, fork, and search actions.
    */
   readonly composerToolbarStart: readonly ChatToolbarItem[] = [
     { id: 'reference', glyph: '#', label: 'Reference a task' },
@@ -281,26 +286,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     { id: 'fork',      glyph: '⑂', label: 'Fork into a new thread' },
     { id: 'search',    glyph: '🔍', label: 'Search chat history' },
   ];
-  readonly composerToolbarEnd: readonly ChatToolbarItem[] = [
-    { id: 'task', glyph: '/task', label: 'Open Add Task pre-filled with the draft', variant: 'pill' },
-  ];
+  /** Effective GPT-only route and explicit-vs-inherited provenance. */
+  readonly composerRoutingLabel = computed<string>(() =>
+    `GPT-only · ${this.composerModel.sourceLabel()}`);
 
-  /**
-   * Routing chip shown right-aligned in the composer toolbar — at-a-
-   * glance "which model picks this up". Reads the local default-CLI
-   * pref (set from the status bar) so it stays in sync with the rest
-   * of the workspace. No-op when nothing is set.
-   */
-  readonly composerRoutingLabel = computed<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const defaultCli = window.localStorage?.getItem('defaultCliType');
-      if (!defaultCli) return null;
-      return `routing: ${defaultCli}`;
-    } catch {
-      return null;
-    }
-  });
+  onModelCommit(selection: ChatModelSelection): void {
+    this.composerModel.commit(selection);
+  }
 
   private pollTimer: VisibleIntervalHandle | null = null;
 
@@ -320,35 +312,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       ? `Task '${this.effectiveJobTitle()}'`
       : 'Board';
     return `Context: ${proj} · ${tail}`;
-  });
-
-  readonly canCreateTaskFromReply = computed(() => {
-    const last = [...this.turns()].reverse().find(
-      (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
-    );
-    return !!last;
-  });
-
-  /**
-   * "Make a task from your message" gate. Independent of the orchestrator
-   * reply so the user can convert their own typed intent into a task even
-   * when the orchestrator round-trip is slow, errors, or gets dropped on
-   * the floor by a backend hiccup. Looks at the merged turn list (server +
-   * locally-buffered pending user turn) so the button is reachable the
-   * instant the message is submitted.
-   *
-   * Why this exists: before this affordance, the only path from chat to
-   * task was "Make a task from this reply", which is gated on a non-empty
-   * non-error orchestrator turn. A failed or pending reply silently
-   * stranded the user's intent - the typed message was visible but
-   * un-actionable. This button gives the user a deterministic exit.
-   */
-  readonly canCreateTaskFromUserMessage = computed(() => {
-    const merged = [...this.turns(), ...this.localTurns()];
-    const last = [...merged].reverse().find(
-      (t) => t.role === 'user' && !!t.text && t.text.trim().length > 0
-    );
-    return !!last;
   });
 
   constructor() {
@@ -734,7 +697,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const sendBody = {
       text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined,
-      navigationContext: contextPayload
+      navigationContext: contextPayload,
+      model: this.composerModel.effectiveSelection().model || null,
+      thinkingLevel: this.composerModel.effectiveSelection().thinkingLevel,
+      selectionSource: this.composerModel.selectionSource(),
     };
     const send$ = contextKey
       ? this.jobService.sendOrchestratorChatByContext(contextKey, sendBody)
@@ -913,24 +879,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     return this.bugEventTargets.has(eventId);
   }
 
-  /**
-   * Composer-toolbar click handler. The chat component is generic and
-   * just rebroadcasts the toolbar item id; this is where the
-   * orchestrator-specific intent lives.
-   *
-   * - `task`     → reuse the "make task from your message" flow so the
-   *                Add-Task dialog opens pre-filled with the draft.
-   * - `reference`, `mention`, `fork`, `search` → reserved; future slices
-   *                wire these to the relevant pickers / panels. For now
-   *                clicking them is a no-op so the affordance is visible
-   *                without dangling promises.
-   */
-  onChatToolbarAction(action: { id: string }): void {
-    if (action.id === 'task') {
-      this.onCreateTaskFromYourMessage();
-    }
-  }
-
   private uploadOne(projectName: string, file: File): Promise<{ relativePath: string; url: string }> {
     return new Promise((resolve, reject) => {
       this.jobService.uploadOrchestratorChatAttachment(projectName, file).subscribe({
@@ -938,38 +886,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         error: (err) => reject(new Error(err?.error?.error || err?.message || 'Upload failed'))
       });
     });
-  }
-
-  /**
-   * Phase 5: hand the latest orchestrator reply back to the host so it
-   * can open the create-task dialog pre-filled with that text.
-   */
-  onCreateTaskFromLastReply(): void {
-    const proj = this.effectiveProject();
-    if (!proj) return;
-    const last = [...this.turns()].reverse().find(
-      (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
-    );
-    if (!last) return;
-    this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
-  }
-
-  /**
-   * Open the create-task dialog seeded with the user's most-recent typed
-   * message - the deterministic escape hatch for "I described a task in
-   * the chat and the orchestrator never replied / errored". Looks at
-   * server turns first, then the locally-buffered pending turn, so the
-   * affordance works the moment a message is submitted.
-   */
-  onCreateTaskFromYourMessage(): void {
-    const proj = this.effectiveProject();
-    if (!proj) return;
-    const merged = [...this.turns(), ...this.localTurns()];
-    const last = [...merged].reverse().find(
-      (t) => t.role === 'user' && !!t.text && t.text.trim().length > 0
-    );
-    if (!last) return;
-    this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
   }
 
 }

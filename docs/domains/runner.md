@@ -47,6 +47,10 @@ state.
   mapping.
 - `backend/Services/Runner/OrchestratorChatLog.cs`: typed orchestrator messages
   written into `logs/cli-output.log`.
+- `backend/Features/Runner/OrchestratorChat.cs` and `OrchestratorRunner.cs`:
+  side-sheet chat dispatch. This operating mode accepts the effective model and
+  reasoning choice from the live Codex catalogue, executes through the Codex
+  one-shot registry, and rejects non-GPT models without a Claude fallback.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -175,6 +179,10 @@ state.
   Digest sections are capped and omit raw quota samples and full decision
   prompts/responses. Normal turns use cached quota; only the explicit refresh
   endpoint starts quota probes.
+- Side-sheet Orchestrator chat is GPT-only. Its selected model and reasoning
+  level travel on every Board or Task context request. The backend may resolve
+  an omitted model to the detected Codex default, but it must never route this
+  mode to Claude.
 - Every coding run is worktree-isolated - single-slot resume/reissue included,
   not just parallel slots. The shared main checkout is read-only reference + the
   integration target; on a failed worktree prepare the run is deferred, never

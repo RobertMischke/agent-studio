@@ -330,6 +330,12 @@ export function isProjectRailKey(value: string | null | undefined): value is Pro
 
 export const DEFAULT_PROJECT_RAIL_KEY: ProjectRailKey = 'overview';
 
+/** Canonical user-facing label for a Project Hub rail section. */
+export function projectRailLabel(section: string | null | undefined): string {
+  const key = isProjectRailKey(section) ? section : DEFAULT_PROJECT_RAIL_KEY;
+  return PROJECT_RAIL_ITEMS.find(item => item.key === key)?.label ?? 'Overview';
+}
+
 /**
  * Slug used in the project-shell URL hash. Stable mapping from a watch-path
  * project name (e.g. "Agent Software Studio") to a kebab-case identifier

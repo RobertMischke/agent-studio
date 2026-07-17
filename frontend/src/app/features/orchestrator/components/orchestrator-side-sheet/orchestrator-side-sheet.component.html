@@ -148,29 +148,13 @@
               [disabled]="sending()"
               [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
               [toolbarStart]="composerToolbarStart"
-              [toolbarEnd]="composerToolbarEnd"
               [routingLabel]="composerRoutingLabel()"
+              [contextLabel]="composerContextLabel()"
+              [modelControl]="composerModel.control()"
               (submitMessage)="onSubmit($event)"
-              (toolbarAction)="onChatToolbarAction($event)" />
-
-            <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
-              <button class="sheet__draft-btn sheet__draft-btn--primary"
-                      type="button"
-                      (click)="onCreateTaskFromYourMessage()"
-                      [disabled]="!canCreateTaskFromUserMessage()"
-                      [cacTooltip]="'Open Add Task pre-filled with the text you typed'"
-                      data-testid="orch-side-sheet-make-task-from-yours">
-                Make a task from your message
-              </button>
-              <button class="sheet__draft-btn"
-                      type="button"
-                      (click)="onCreateTaskFromLastReply()"
-                      [disabled]="!canCreateTaskFromReply()"
-                      [cacTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
-                      data-testid="orch-side-sheet-make-task">
-                Make a task from this reply
-              </button>
-            </div>
+              (modelCommit)="onModelCommit($event)"
+              (modelCatalogRequested)="composerModel.requestCatalog()"
+              (modelRefreshRequested)="composerModel.requestCatalog(true)" />
           </section>
         } @else {
           <div class="sheet__no-project">No watched projects yet.</div>

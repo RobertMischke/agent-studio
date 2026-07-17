@@ -144,6 +144,10 @@ groups, and a failed domain reports an error without hiding successful domains.
   lane moves, reorder, and rollback.
 - `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model
   catalog cache.
+- `frontend/src/app/features/orchestrator/state/orchestrator-composer-model.service.ts`:
+  workspace-persistent GPT model and reasoning selection for the canonical
+  coding-agent-chat footer. It projects the complete live Codex catalogue and
+  distinguishes an explicit operator choice from an inherited default.
 - `frontend/src/app/components/menu/`: text-only menu component.
 - `frontend/src/app/components/cli-model-selector/`: shared CLI/model picker.
 - `frontend/src/app/components/task-reference-microcard/`: compact, accessible
@@ -228,6 +232,11 @@ unseen again, and renders missing reviewed artifacts as no longer actionable.
 - Workspace-level CLI administration is not a separate sheet. Model and
   environment management, completion contracts, sessions, usage caps, and
   token spend belong to Workspace Settings under CLI Management.
+- The Orchestrator uses the standard `<cac-chat>` footer model control. In
+  GPT-only mode it renders every available model and reasoning level from the
+  live Codex catalogue, preserves the full selection across navigation context
+  changes, and sends the effective selection with every message. Do not replace
+  it with a routing-only badge, reduced host list, or Orchestrator-only picker.
 - Project Overview remains operator-first. Do not add watch paths, repository
   paths, working directories, CLI health, clean-context controls, or session
   administration back to the Overview; those facts belong to Project Settings.

@@ -48,6 +48,7 @@ import {
   type TriageButton,
 } from './features/task-detail';
 import {
+  buildComposerLocationContext,
   OrchestratorSideSheetComponent,
 } from './features/orchestrator';
 import {
@@ -214,6 +215,10 @@ export class App implements OnInit, OnDestroy {
   readonly updateClient = inject(UpdateClientService);
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
+  readonly orchestratorComposerContext = computed(() => buildComposerLocationContext(
+    this.studioTabState.activeTab(),
+    this.jobService.jobs(),
+  ));
   private readonly studioPanelState = inject(StudioPanelStateService);
   private readonly nowTick = inject(NowTickService).now;
 
@@ -2023,10 +2028,6 @@ export class App implements OnInit, OnDestroy {
   onUxuiActionQueued(event: { projectName: string; action: string; jobId: string }): void {
     void event;
     this.refresh();
-  }
-
-  onCreateTaskFromOrchestratorDraft(event: { projectName: string; promptText: string }): void {
-    this.createJobForm.openOrchestratorDraftFollowUp(event, this.watchPaths());
   }
 
   private pickOrchFeedProject(): string | null {

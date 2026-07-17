@@ -81,7 +81,6 @@
 
 .sheet__context-badge:focus-visible,
 .sheet__context-actions button:focus-visible,
-.sheet__draft-btn:focus-visible,
 .sheet__event-action:focus-visible {
   outline: 2px solid var(--studio-accent);
   outline-offset: 2px;
@@ -276,40 +275,6 @@
 
 .sheet__event-action {
   align-self: flex-start;
-}
-
-.sheet__draft-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--studio-spacing-1);
-}
-
-.sheet__draft-btn {
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border: 1px solid var(--studio-border);
-  border-radius: 6px;
-  background: var(--studio-bg-hover);
-  color: var(--studio-fg);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.sheet__draft-btn:hover:not(:disabled) {
-  background: var(--studio-bg-elevated);
-  color: var(--studio-fg-strong);
-}
-
-.sheet__draft-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.sheet__draft-btn--primary {
-  border-color: var(--studio-accent);
-  background: var(--studio-accent);
-  color: var(--studio-on-accent);
 }
 
 @media (max-width: 720px) {

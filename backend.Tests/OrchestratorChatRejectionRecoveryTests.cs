@@ -64,7 +64,7 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
     }
 
     [Fact]
-    public async Task SendAsync_OnRejectedSession_FallsBackAndPersistsFreshSessionId()
+    public async Task SendAsync_GptSelection_IgnoresLegacyClaudeSession()
     {
         // Arrange: a stored global session whose id will be "rejected" by
         // the runner. Configuration points TaskRepository + WatchPath at
@@ -114,7 +114,8 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
             chat, runner, sessionStore, bootstrap, scanner, config,
             NullLogger<OrchestratorChatService>.Instance);
 
-        var req = new SendOrchestratorChatRequest("Hi", Attachments: null);
+        var req = new SendOrchestratorChatRequest(
+            "Hi", Attachments: null, Model: "gpt-5.4-mini", ThinkingLevel: "low");
 
         // Act
         var reply = await service.SendAsync("project-a", _watchPath, req, CancellationToken.None);
@@ -124,17 +125,17 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
         Assert.Equal("Hi back!", reply.Text);
         Assert.Null(reply.ErrorMessage);
 
-        // Both runner methods were exercised in the expected order.
-        Assert.Equal(1, runner.ResumeCalls);
+        // The GPT-only path never resumes or silently falls back to Claude.
+        Assert.Equal(0, runner.ResumeCalls);
         Assert.Equal(1, runner.DecideCalls);
-        Assert.Equal("stale-session-aaaa", runner.LastResumeSessionId);
+        Assert.Null(runner.LastResumeSessionId);
+        Assert.Equal("gpt-5.4-mini", runner.LastModel);
+        Assert.Equal("low", runner.LastThinkingLevel);
 
-        // The session file was rewritten with the freshly captured id, so
-        // the next chat turn will resume against the new session instead
-        // of looping on the rejected one.
+        // The unrelated legacy session is untouched.
         var afterRecovery = sessionStore.Read();
         Assert.NotNull(afterRecovery);
-        Assert.Equal("fresh-session-bbbb", afterRecovery!.SessionId);
+        Assert.Equal("stale-session-aaaa", afterRecovery!.SessionId);
         Assert.Equal(1, afterRecovery.Calls);
     }
 
@@ -154,6 +155,8 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
         public int ResumeCalls { get; private set; }
         public int DecideCalls { get; private set; }
         public string? LastResumeSessionId { get; private set; }
+        public string? LastModel { get; private set; }
+        public string? LastThinkingLevel { get; private set; }
 
         public RejectThenSucceedRunner(string rejectionError, string freshSessionId, string replyText)
             : base(
@@ -207,6 +210,22 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
                     CacheCreationTokens = 0
                 },
                 CapturedSessionId: _freshSessionId,
+                ErrorMessage: null));
+        }
+
+        public override Task<OrchestratorDecisionResult> DecideCodexAsync(
+            string prompt, string model, string? thinkingLevel, string workingDirectory,
+            CancellationToken ct = default)
+        {
+            DecideCalls++;
+            LastModel = model;
+            LastThinkingLevel = thinkingLevel;
+            return Task.FromResult(new OrchestratorDecisionResult(
+                Success: true,
+                ReplyText: _replyText,
+                Model: model,
+                TokenUsage: null,
+                CapturedSessionId: null,
                 ErrorMessage: null));
         }
     }

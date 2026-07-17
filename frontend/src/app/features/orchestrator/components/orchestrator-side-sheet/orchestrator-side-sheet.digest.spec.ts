@@ -43,6 +43,8 @@ describe('OrchestratorSideSheetComponent · ORCH-1 context digest', () => {
     component.contextDigestState.selectContext('project:Agent Studio');
     component.contextDigestState.digest.set(digest('project:Agent Studio'));
     fixture.detectChanges();
+    (fixture.nativeElement.querySelector('[data-testid="orch-context-badge"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="orch-context-scope"]')?.textContent.trim())
       .toBe('Project context');
     expect(fixture.nativeElement.querySelector('[data-testid="orch-context-freshness"]')?.textContent)

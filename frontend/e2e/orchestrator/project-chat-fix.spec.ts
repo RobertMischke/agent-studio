@@ -120,7 +120,7 @@ async function openSideSheetForProject(page: Page): Promise<string> {
 }
 
 test.describe('Project chat fix - silent drop, sluggishness, parallel use', () => {
-  test('silent drop: orchestrator error surfaces AND user can still make a task from their message', async ({ page }) => {
+  test('silent drop: orchestrator error surfaces AND the user message stays visible', async ({ page }) => {
     const project = await openSideSheetForProject(page);
     const state = await installChatMocks(page, project, {
       // Backend errors with an error turn but 200 OK (mirrors the real
@@ -151,26 +151,15 @@ test.describe('Project chat fix - silent drop, sluggishness, parallel use', () =
         .filter({ hasText: 'orchestrator session has not booted' }).first()
     ).toBeVisible({ timeout: 5_000 });
 
-    // The user's typed message must remain visible (not silently dropped).
+    // CONTRACT: the user's typed message must remain visible (not silently
+    // dropped) even when the orchestrator round-trip errors. The former
+    // "Make a task from your message" rescue buttons were retired with the
+    // AGT-2163 standard-footer consolidation; the transcript itself is now
+    // the durable record of the user's intent.
     await expect(
       page.locator('[data-testid="conversation-message-message.user"]').filter({ hasText: 'Ready-Lane' }).first()
     ).toBeVisible();
-
-    // CONTRACT: the side-sheet exposes a "Make a task from your message"
-    // button that pre-fills the create-task dialog with the user's last
-    // typed text - independent of the orchestrator reply. Without this,
-    // a failed orchestrator reply silently drops the user's intent.
-    const makeFromYours = page.getByTestId('orch-side-sheet-make-task-from-yours');
-    await expect(makeFromYours).toBeVisible();
-    await expect(makeFromYours).toBeEnabled();
-
-    await makeFromYours.click();
-
-    // The create-task dialog opens with the user's text seeded into the
-    // prompt textarea (data-testid="create-prompt").
-    const promptArea = page.getByTestId('create-prompt');
-    await expect(promptArea).toBeVisible({ timeout: 4_000 });
-    await expect(promptArea).toHaveValue(/Ready-Lane/);
+    await expect(page.getByTestId('orch-side-sheet-make-task-from-yours')).toHaveCount(0);
 
     await page.screenshot({ path: `${SHOTS}/01-silent-drop-rescued.png`, fullPage: false });
 
