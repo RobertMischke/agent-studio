@@ -1,39 +1,90 @@
 # Security requirements
 
-These are the load-bearing constraints. If you make a change that touches one, surface it in the PR description.
+These constraints are release gates for their named profile.
 
-> **Scope note (2026-07-13):** R1 describes the current local compatibility
-> profile, not the distributed target. No port may be exposed until the human
-> authentication, Runner service identity, authorization, HTTPS, and audit
-> baseline in
-> [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md#8-security-baseline-for-an-internet-reachable-server)
-> is implemented and this requirements page is replaced with profile-specific
-> controls.
+## Local profile
 
-## R1 - Local compatibility profile is localhost only
+### L1: loopback only
 
-Backend binds `127.0.0.1:5030`. Frontend dev server binds `127.0.0.1:4010`. CORS restricted to those two origins. No `0.0.0.0`, no LAN listeners, no tunneling.
+The backend and development frontend bind only to loopback. Local CORS allows
+the documented development origins. A local instance is not safe to expose by
+port-forwarding, tunneling, or changing the listener to `0.0.0.0`.
 
-## R2 - No secret material in the repo
+### L2: attribution is not authentication
 
-Auth tokens, CLI sessions, quota credentials live in user-scoped paths (Claude `~/.claude`, Copilot, Gemini), never in this tree. `appsettings.Local.json` is gitignored and may contain absolute machine paths, but no secrets.
+`X-Client-Id` may select client defaults and provide audit attribution. It must
+never grant network access or be described as a credential.
 
-## R3 - Watched target writes go through the contract
+## Networked profile
 
-The app never edits a watched project's source code directly. All writes that affect the target repo go through the agent (which the user supervises) or through the app-owned task lifecycle (`docs/contracts/agent-task.md`).
+### N1: HTTPS before exposure
 
-## R4 - Markdown rendering is read-only and inert
+The Task Server is reachable only through a TLS-terminating reverse proxy.
+HTTP redirects to HTTPS. HSTS is present. The application rejects requests
+whose trusted forwarded scheme is not HTTPS. Angular, the API, and hubs share
+one origin.
 
-User-authored markdown (prompts, status files, security/architecture docs) is rendered through `markdown-utils.ts`. The renderer escapes raw HTML; only headings, paragraphs, lists, code, links, images, bold, and italic are emitted. No script execution, no inline event handlers.
+### N2: humans use server sessions
 
-## R5 - Project-level surfaces are explicit read or trigger surfaces
+First-owner bootstrap is one-time. Passwords use modern salted adaptive
+hashing. Login throttling, password change, owner reset, forced change, session
+idle expiry, absolute expiry, logout, secure cookies, and CSRF protection are
+mandatory. Angular stores no password, session token, or bearer credential.
+Logout and an expired-session 401 must stop browser polling and event reconnects
+before returning Studio to the login gate.
 
-Project shell panels may surface Security, Token Usage, Observability, Steering Docs, Analysis Reports, Drift, and future QA/UX views, but each panel must declare whether it is read-only or action-triggering. Read-only panels must not mutate job state, source files, runner mode, or budgets. Action-triggering panels must create a normal queued job, write a structured report through the project evidence contract, or call an existing documented endpoint with visible feedback.
+### N3: authorization stays small
 
-## R6 - Security and analysis actions leave durable evidence
+The only human roles are owner, operator, and viewer. Owner identity operations
+cannot remove the final active owner. Viewer mutations fail. Project membership
+is enforced on project-addressed routes for scoped non-owner accounts. There is
+no tenant boundary, SSO, billing role, or policy language. Workspace-wide task,
+Runner, registry, and search collections must filter out disallowed projects.
 
-Manual security audits, roadmap checks, docs-drift checks, token-spend reviews, and observability analyses must leave durable evidence: Markdown for humans plus structured JSON when the UI aggregates it. A panel button must not silently run an agent and only show an ephemeral toast. The minimum record is action, project, requested scope, timestamp, model or CLI when known, token usage when known, evidence path, result, and follow-up job id if one was created.
+### N4: Runners use revocable services identities
 
-## R7 - Token and quota surfaces never expose credentials
+Open self-registration is disabled. An owner creates a short-lived one-time
+enrollment code. Runner credentials are random, one-time reveal, hash-only at
+rest, independently scoped, expirable, last-use tracked, and revocable.
+Overlapping rotation is supported. Runner ids on lease and completion requests
+must match the authenticated identity.
 
-Token Usage, CLI Usage, quota strips, heatmaps, and status-bar usage pills may display aggregate counts, percentages, reset windows, model names, job ids, and run metadata. They must not render auth tokens, session secret material, raw vendor credential files, or user-scoped credential paths beyond coarse source labels such as "Claude session files" or "Copilot token state". Token totals are observability, not permission or scheduling enforcement.
+### N5: least-privilege Runner scopes
+
+Claim, lease and heartbeat, log upload, event upload, artifact upload, and
+completion are separate scopes. A credential missing the route's scope receives
+403. Runner service credentials cannot sign in to Studio or call human admin
+surfaces.
+
+### N6: reads, writes, and streams fail closed
+
+All API reads and writes require a human session unless the route is an
+explicitly scoped Runner route. SignalR negotiation, connection, subscription,
+and automatic reconnect require a live human session. `/healthz` and the
+minimum pre-auth endpoints are the only anonymous application routes.
+
+### N7: dual-principal run audit
+
+Every remote run records the initiating human or automation principal and the
+authenticated executing Runner principal. Credential ids may be recorded;
+credential plaintext may not.
+
+### N8: production surface reduction
+
+Debug and internal probe endpoints are absent. Exception details are off.
+Health is minimal. Reverse proxy and Kestrel request limits are finite. Proxy
+configuration preserves WebSocket upgrades and only one trusted forwarded
+header hop.
+
+### N9: credential redaction
+
+Passwords, cookies, authorization headers, session tokens, enrollment codes,
+and Runner bearer secrets must not appear in logs, task output, diagnostics, or
+audit. Tests cover the product credential formats and named secret fields.
+
+## Shared data rules
+
+- Secret material never enters the repository.
+- Watched-project writes follow the task lifecycle contract.
+- User-authored Markdown remains inert and sanitized.
+- Security actions leave durable, non-secret audit evidence.

@@ -11,8 +11,9 @@ namespace AgentStudio.Shared;
 ///
 /// Pairs with <c>docs/schemas/client-identity.schema.json</c>.
 ///
-/// This is a registration boundary, not a security model: the door has a
-/// sign, every visitor signs in. Cryptographic signing is a follow-up.
+/// This legacy identity is attribution only. The local profile uses it as a
+/// lightweight registration boundary. The networked profile authenticates
+/// human sessions and Runner service credentials separately.
 /// </summary>
 public record ClientIdentity
 {

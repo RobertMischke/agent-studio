@@ -46,6 +46,8 @@ export class StatusBarComponent implements OnInit {
   readonly orchestratorOpen = input(false);
   readonly feedOpen = input(false);
   readonly settingsOpen = input(false);
+  readonly showSignOut = input(false);
+  readonly signedInLabel = input('');
 
   readonly toggleUsage = output<void>();
   readonly toggleOrchestrator = output<void>();
@@ -54,6 +56,7 @@ export class StatusBarComponent implements OnInit {
   // evidence and CLI management are sections of that home now, so the
   // status bar exposes one button instead of three scattered ones.
   readonly toggleSettings = output<void>();
+  readonly signOut = output<void>();
   // Quota-strip click: open the CLI-Management (usage caps) section
   // directly, where the full usage detail lives. Separate from
   // `toggleSettings`, which lands on the home overview.

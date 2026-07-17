@@ -18,6 +18,7 @@ public static class TaskCrudEndpoints
         // cached, and merge membership is calculated once for the whole requested
         // set, never once per key.
         group.MapPost("/reference-status", (TaskReferenceStatusRequest req,
+            HttpContext context,
             TaskScannerService scanner,
             BoardMergeStatusService mergeStatus,
             AgentStudio.Registry.ProjectRegistry projects,
@@ -31,11 +32,15 @@ public static class TaskCrudEndpoints
                 .Take(200)
                 .ToArray();
 
-            var registry = projects.List();
+            var registry = projects.List()
+                .Where(project => context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human
+                                  || ProjectAccessAuthorization.Allows(human.User, project.Id, projects))
+                .ToList();
             var knownCodes = registry
                 .Where(p => !string.IsNullOrWhiteSpace(p.ShortCode))
                 .ToDictionary(p => p.ShortCode, StringComparer.OrdinalIgnoreCase);
-            var jobs = scanner.ScanAllJobsWithArchive();
+            var jobs = ProjectAccessAuthorization.FilterTasks(
+                context, scanner.ScanAllJobsWithArchive(), projects).ToList();
             var byKey = jobs
                 .Where(j => !string.IsNullOrWhiteSpace(j.Key))
                 .GroupBy(j => j.Key!, StringComparer.OrdinalIgnoreCase)
@@ -66,9 +71,9 @@ public static class TaskCrudEndpoints
             return Results.Ok(new TaskReferenceStatusResponse(items!));
         });
 
-        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
+        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus, AgentStudio.Registry.ProjectRegistry projects) =>
         {
-            var raw = scanner.ScanAllJobs();
+            var raw = ProjectAccessAuthorization.FilterTasks(ctx, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
@@ -89,9 +94,9 @@ public static class TaskCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
+        group.MapGet("/grouped", (bool? includeFixtures, HttpContext context, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus, AgentStudio.Registry.ProjectRegistry projects) =>
         {
-            var raw = scanner.ScanAllJobs();
+            var raw = ProjectAccessAuthorization.FilterTasks(context, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
@@ -179,7 +184,7 @@ public static class TaskCrudEndpoints
         // archived card renders. Query: watchPath (optional project filter),
         // offset/limit (paging), search (case-insensitive title/key/id), and
         // includeFixtures (default false, mirroring the board endpoints).
-        group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures,
+        group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures, HttpContext context,
             TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, ILoggerFactory loggerFactory) =>
         {
             var projectRequested = !string.IsNullOrWhiteSpace(project);
@@ -191,7 +196,7 @@ public static class TaskCrudEndpoints
                 return Results.NotFound(new { error = $"Unknown project '{project}'" });
             var logger = loggerFactory.CreateLogger("TaskArchiveEndpoint");
             var sw = Stopwatch.StartNew();
-            var all = scanner.ScanArchivedJobs();
+            var all = ProjectAccessAuthorization.FilterTasks(context, scanner.ScanArchivedJobs(), projects).ToList();
             IEnumerable<TaskInfo> archived = all;
 
             if (!string.IsNullOrWhiteSpace(watchPath))
@@ -479,15 +484,21 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations) =>
+        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             if (string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest("Title is required");
 
-            // Header X-Client-Id wins when the body does not name an owner.
-            // The middleware has already validated the header against the
-            // ClientIdentityStore, so we trust it here.
-            if (string.IsNullOrWhiteSpace(req.OwnerClientId))
+            // A networked human principal is the initiating identity. The
+            // attribution header must never override the authenticated user.
+            if (ctx.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
+            {
+                var requestedProject = string.IsNullOrWhiteSpace(req.Project) ? req.WatchPath : req.Project;
+                if (!ProjectAccessAuthorization.Allows(human.User, requestedProject, projects))
+                    return Results.Json(new { error = "project-scope-denied", message = "This account is not a member of the requested project." }, statusCode: StatusCodes.Status403Forbidden);
+                req = req with { OwnerClientId = human.User.Id };
+            }
+            else if (string.IsNullOrWhiteSpace(req.OwnerClientId))
             {
                 var headerOwner = ctx.Request.Headers["X-Client-Id"].FirstOrDefault();
                 if (!string.IsNullOrWhiteSpace(headerOwner))

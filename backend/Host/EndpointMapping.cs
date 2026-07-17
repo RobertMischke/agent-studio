@@ -17,6 +17,7 @@ public static class EndpointMapping
 {
     public static void MapAllEndpoints(this WebApplication app)
     {
+        app.MapAccessSecurityEndpoints();
         var tasks = app.MapGroup("/api/tasks")
             .AddEndpointFilter<TaskOperationTimingFilter>();
         tasks.MapTaskCrudEndpoints();
@@ -39,6 +40,7 @@ public static class EndpointMapping
         app.MapLeaseEndpoints();
         app.MapIntegrationLeaseEndpoints();
         app.MapLogIngestionEndpoints();
+        app.MapRunnerEventIngestionEndpoints();
         app.MapArtifactIngestionEndpoints();
         app.MapRegistryEndpoints();
         app.MapWorkspaceEndpoints();
@@ -60,14 +62,14 @@ public static class EndpointMapping
         app.MapProjectOperatorDashboardEndpoints();
         app.MapProjectGraphEndpoints();
         app.MapPublishEndpoints();
-        app.MapFilesystemLayerEndpoints();
+        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
-        app.MapDevToolsEndpoints();
+        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapDevToolsEndpoints();
         app.MapAdminConfigEndpoints();
         app.MapSupervisorEndpoints();
-        app.MapDiagnosticsEndpoints();
-        app.MapInternalProbeEndpoints();
+        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapDiagnosticsEndpoints();
+        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapInternalProbeEndpoints();
         app.MapTitleGenerationEndpoints();
         app.MapPromptEnhancementEndpoints();
         app.MapAdHocUsageEndpoints();

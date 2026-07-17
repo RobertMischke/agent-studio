@@ -17,7 +17,7 @@ import {
  * Task-Server settings page (AGT-1924).
  *
  * The operator's read-context for the durable task server the platform talks
- * to: the connected URL (localhost today, a central URL in Phase 2), the
+ * to: the connected local or networked URL, the
  * workspace store it owns (root, size, task/project/identity counts), the
  * git-backed evidence repository's status, the registered client identities,
  * and the management sweeps (archive / orphan / fixture). See

@@ -3,10 +3,10 @@ using System.Text.Json;
 namespace AgentStudio.Admin;
 
 /// <summary>
-/// Surface for the orchestrator + supervisor flag toggles. Read open
-/// (so the UI can render the panel without an X-Client-Id), write
-/// gated by the registration boundary in
-/// <see cref="AgentStudio.Clients.ClientIdentityMiddleware"/>.
+/// Surface for the orchestrator + supervisor flag toggles. The local profile
+/// uses the attribution registration boundary in
+/// <see cref="AgentStudio.Clients.ClientIdentityMiddleware"/>. The networked
+/// profile requires an authenticated human session and applies role checks.
 /// All flags require a backend restart to take effect; the response
 /// surfaces that explicitly so the frontend can render the
 /// "saved and active" state.

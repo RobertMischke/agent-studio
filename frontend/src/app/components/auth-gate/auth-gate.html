@@ -1,0 +1,28 @@
+<main class="auth-gate" data-testid="auth-gate">
+  <form class="auth-gate__panel" (ngSubmit)="submit()">
+    <div class="auth-gate__brand">Agent Software Studio</div>
+    @if (auth.loading()) {
+      <p class="auth-gate__muted">Connecting securely...</p>
+    } @else if (auth.status()?.user?.mustChangePassword) {
+      <h1>Choose a new password</h1>
+      <p class="auth-gate__muted">Your temporary password must be replaced before Studio opens.</p>
+      <label>Temporary password<input name="currentPassword" type="password" autocomplete="current-password" [(ngModel)]="password" required></label>
+      <label>New password<input name="newPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" [(ngModel)]="newPassword" required></label>
+      <button type="submit" [disabled]="submitting()">Change password</button>
+    } @else if (auth.status()?.bootstrapRequired) {
+      <h1>Create the first owner</h1>
+      <p class="auth-gate__muted">This one-time step closes bootstrap and creates the organization owner.</p>
+      <label>Username<input name="username" autocomplete="username" [(ngModel)]="username" required></label>
+      <label>Display name<input name="displayName" autocomplete="name" [(ngModel)]="displayName"></label>
+      <label>Password<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" [(ngModel)]="password" required></label>
+      <button type="submit" [disabled]="submitting()">Create owner</button>
+    } @else {
+      <h1>Sign in</h1>
+      <p class="auth-gate__muted">Use your organization account. Runner credentials cannot sign in here.</p>
+      <label>Username<input name="username" autocomplete="username" [(ngModel)]="username" required></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" [(ngModel)]="password" required></label>
+      <button type="submit" [disabled]="submitting()">Sign in</button>
+    }
+    @if (error()) { <p class="auth-gate__error" role="alert">{{ error() }}</p> }
+  </form>
+</main>

@@ -22,7 +22,9 @@ export function seedTaskServerStatus(nowMs: number, origin: string): TaskServerS
       health: 'healthy',
       version: '2026.07.0',
       uptimeLabel: '3d 4h',
-      authMode: 'X-Client-Id (registration boundary, not auth yet)',
+      authMode: isLocalUrl(origin)
+        ? 'Local loopback (X-Client-Id is attribution only)'
+        : 'Secure server session',
     },
     store: {
       root: 'C:\\Projects\\agent-taskboard-workspace',

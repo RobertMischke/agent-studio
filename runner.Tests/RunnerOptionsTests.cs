@@ -17,8 +17,9 @@ public class RunnerOptionsTests
     [Fact]
     public void Flags_override_task_and_server()
     {
+        using var token = new TemporaryTokenFile();
         var (options, taskKey, _, _) = RunnerOptions.Parse(
-            ["--task", "AGT-1", "--server", "https://central/", "--runner-name", "agent-runner-01"]);
+            ["--task", "AGT-1", "--server", "https://central/", "--runner-name", "agent-runner-01", "--auth-token-file", token.Path]);
         Assert.Equal("AGT-1", taskKey);
         Assert.Equal("https://central", options.ServerUrl); // trailing slash trimmed
         Assert.Equal("agent-runner-01", options.RunnerName);
@@ -104,6 +105,35 @@ public class RunnerOptionsTests
     {
         var (options, _, _, _) = RunnerOptions.Parse(["AGT-1"]);
         Assert.False(options.HealthCheckOnly);
+    }
+
+    [Fact]
+    public void Non_loopback_server_requires_https_and_service_credential()
+    {
+        Assert.Throws<ArgumentException>(() => RunnerOptions.Parse(["--server", "http://tasks.example.com"]));
+        Assert.Throws<ArgumentException>(() => RunnerOptions.Parse(["--server", "https://tasks.example.com"]));
+        using var token = new TemporaryTokenFile();
+        var (options, _, _, _) = RunnerOptions.Parse([
+            "--server", "https://tasks.example.com", "--auth-token-file", token.Path]);
+        Assert.Equal("https://tasks.example.com", options.ServerUrl);
+    }
+
+    [Fact]
+    public void Command_line_secret_is_rejected_to_keep_it_out_of_process_diagnostics()
+        => Assert.Throws<ArgumentException>(() => RunnerOptions.Parse([
+            "--server", "https://tasks.example.com", "--auth-token", "rnr.test.secret-value-long-enough"]));
+
+    private sealed class TemporaryTokenFile : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "runner-token-" + Guid.NewGuid().ToString("N"));
+
+        public TemporaryTokenFile()
+        {
+            File.WriteAllText(Path, "rnr.test.secret-value-long-enough");
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
+        public void Dispose() => File.Delete(Path);
     }
 }
 

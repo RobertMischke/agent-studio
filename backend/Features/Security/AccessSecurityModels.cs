@@ -1,0 +1,131 @@
+using System.Text.Json.Serialization;
+
+namespace AgentStudio.Security;
+
+public static class SecurityProfiles
+{
+    public const string Local = "local";
+    public const string Networked = "networked";
+
+    public static bool IsNetworked(IConfiguration configuration)
+        => string.Equals(configuration["Security:Profile"], Networked, StringComparison.OrdinalIgnoreCase);
+}
+
+public static class StudioRoles
+{
+    public const string Owner = "owner";
+    public const string Operator = "operator";
+    public const string Viewer = "viewer";
+
+    public static bool IsValid(string? value) => value is Owner or Operator or Viewer;
+}
+
+public static class RunnerScopes
+{
+    public const string Claim = "runner.claim";
+    public const string Lease = "runner.lease";
+    public const string Logs = "runner.logs";
+    public const string Events = "runner.events";
+    public const string Artifacts = "runner.artifacts";
+    public const string Completion = "runner.completion";
+
+    public static readonly string[] Minimum = [Claim, Lease, Logs, Events, Artifacts, Completion];
+    public static readonly HashSet<string> All = new(Minimum, StringComparer.Ordinal);
+}
+
+public sealed record StudioUser
+{
+    public required string Id { get; init; }
+    public required string Username { get; init; }
+    public required string DisplayName { get; init; }
+    public required string Role { get; init; }
+    public required string PasswordHash { get; init; }
+    public List<string> Projects { get; init; } = [];
+    public bool Disabled { get; init; }
+    public bool MustChangePassword { get; init; }
+    public DateTime CreatedAt { get; init; }
+    public DateTime PasswordChangedAt { get; init; }
+}
+
+public sealed record StudioSession
+{
+    public required string Id { get; init; }
+    public required string UserId { get; init; }
+    public required string TokenHash { get; init; }
+    public required string CsrfHash { get; init; }
+    public required DateTime CreatedAt { get; init; }
+    public required DateTime LastSeenAt { get; init; }
+    public required DateTime ExpiresAt { get; init; }
+    public required DateTime AbsoluteExpiresAt { get; init; }
+}
+
+public sealed record RunnerCredential
+{
+    public required string Id { get; init; }
+    public required string SecretHash { get; init; }
+    public required List<string> Scopes { get; init; }
+    public required DateTime CreatedAt { get; init; }
+    public DateTime? ExpiresAt { get; init; }
+    public DateTime? LastUsedAt { get; init; }
+    public DateTime? RevokedAt { get; init; }
+}
+
+public sealed record RunnerServiceIdentity
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required DateTime CreatedAt { get; init; }
+    public DateTime? RevokedAt { get; init; }
+    public List<RunnerCredential> Credentials { get; init; } = [];
+}
+
+public sealed record RunnerEnrollment
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string CodeHash { get; init; }
+    public required List<string> Scopes { get; init; }
+    public required DateTime CreatedAt { get; init; }
+    public required DateTime ExpiresAt { get; init; }
+    public DateTime? CredentialExpiresAt { get; init; }
+    public DateTime? UsedAt { get; init; }
+}
+
+public sealed record SecurityState
+{
+    public List<StudioUser> Users { get; init; } = [];
+    public List<StudioSession> Sessions { get; init; } = [];
+    public List<RunnerServiceIdentity> Runners { get; init; } = [];
+    public List<RunnerEnrollment> Enrollments { get; init; } = [];
+}
+
+public sealed record HumanPrincipal(StudioUser User, StudioSession Session);
+public sealed record RunnerPrincipal(string RunnerId, string RunnerName, string CredentialId, IReadOnlySet<string> Scopes);
+
+public sealed record AuthStatusResponse(string Profile, bool BootstrapRequired, bool Authenticated, AuthUserResponse? User = null, string? CsrfToken = null);
+public sealed record AuthUserResponse(string Id, string Username, string DisplayName, string Role, IReadOnlyList<string> Projects, bool Disabled, bool MustChangePassword);
+public sealed record BootstrapRequest(string Username, string Password, string? DisplayName);
+public sealed record LoginRequest(string Username, string Password);
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+public sealed record CreateUserRequest(string Username, string DisplayName, string Role, IReadOnlyList<string>? Projects, string? TemporaryPassword);
+public sealed record UpdateUserRequest(string? DisplayName, string? Role, IReadOnlyList<string>? Projects, bool? Disabled);
+public sealed record PasswordResetRequest(string? TemporaryPassword);
+public sealed record RunnerEnrollmentRequest(string Name, IReadOnlyList<string>? Scopes, DateTime? ExpiresAt, DateTime? CredentialExpiresAt);
+public sealed record RunnerEnrollRequest(string Code);
+public sealed record RunnerRotateRequest(IReadOnlyList<string>? Scopes, DateTime? ExpiresAt);
+public sealed record OneTimeSecretResponse(string RunnerId, string RunnerName, string CredentialId, string Secret, IReadOnlyList<string> Scopes, DateTime? ExpiresAt);
+public sealed record OneTimeEnrollmentResponse(string EnrollmentCode, string Name, IReadOnlyList<string> Scopes, DateTime ExpiresAt);
+public sealed record PasswordResetResponse(string UserId, string TemporaryPassword, bool MustChangePassword);
+
+internal sealed record LoginAttempt(int Failures, DateTime WindowStartedAt, DateTime? LockedUntil);
+
+public sealed record RunSecurityAuditEvent(
+    DateTime Timestamp,
+    string Action,
+    string TaskKey,
+    string? Project,
+    string InitiatingPrincipal,
+    string ExecutingRunnerPrincipal,
+    string? CredentialId,
+    long? FencingToken = null,
+    string? Outcome = null);

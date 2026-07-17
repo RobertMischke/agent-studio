@@ -2,6 +2,9 @@
 
 namespace AgentStudio.Projects;
 
+using AgentStudio.Registry;
+using AgentStudio.Security;
+
 /// <summary>
 /// Body for <c>PUT /api/projects/{name}/intake</c>. Enables or disables the
 /// orchestrator-intake gate. See <see cref="ProjectSettings.IntakeEnabled"/>.
@@ -47,9 +50,11 @@ public static class ProjectSettingsEndpoints
         // Per-project preferences (auto-commit on/off today). Read-all returns a
         // flat map keyed by project name so the header can render every toggle
         // in one shot without N round-trips.
-        app.MapGet("/api/projects/settings", (ProjectSettingsService settings) =>
+        app.MapGet("/api/projects/settings", (HttpContext context, ProjectSettingsService settings, ProjectRegistry projects) =>
         {
-            var all = settings.GetAll();
+            var all = settings.GetAll().AsEnumerable();
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
+                all = all.Where(kv => ProjectAccessAuthorization.Allows(human.User, kv.Key, projects));
             var projected = all.ToDictionary(
                 kv => kv.Key,
                 kv => new

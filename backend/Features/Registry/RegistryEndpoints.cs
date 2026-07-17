@@ -27,14 +27,18 @@ public static class RegistryEndpoints
     public static List<WorkspaceListItem> BuildWorkspaceListing(
         WorkspaceRegistry workspaces,
         ProjectRegistry projects,
-        bool includeArchived)
+        bool includeArchived,
+        Func<ProjectRecord, bool>? projectAllowed = null)
     {
         var projectsByWs = projects.List()
             .Where(p => includeArchived || !p.Archived)
+            .Where(p => projectAllowed?.Invoke(p) ?? true)
             .GroupBy(p => p.WorkspaceId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
-        return workspaces.List().Select(w => new WorkspaceListItem
+        return workspaces.List()
+            .Where(w => projectAllowed is null || projectsByWs.ContainsKey(w.Id))
+            .Select(w => new WorkspaceListItem
         {
             Id = w.Id,
             DisplayName = w.DisplayName,
@@ -50,15 +54,27 @@ public static class RegistryEndpoints
 
     public static void MapRegistryEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/workspaces", (WorkspaceRegistry workspaces, ProjectRegistry projects, bool? includeArchived) =>
+        app.MapGet("/api/workspaces", (HttpContext context, WorkspaceRegistry workspaces, ProjectRegistry projects, bool? includeArchived) =>
         {
-            return Results.Ok(BuildWorkspaceListing(workspaces, projects, includeArchived == true));
+            var human = context.Items[AccessSecurityMiddleware.HumanPrincipalItem] as HumanPrincipal;
+            Func<ProjectRecord, bool>? projectAllowed = human is null
+                || human.User.Role == StudioRoles.Owner
+                || human.User.Projects.Count == 0
+                    ? null
+                    : project => ProjectAccessAuthorization.Allows(human.User, project.Id, projects);
+            return Results.Ok(BuildWorkspaceListing(
+                workspaces,
+                projects,
+                includeArchived == true,
+                projectAllowed));
         });
 
-        app.MapGet("/api/projects", (ProjectRegistry projects, bool? includeArchived) =>
+        app.MapGet("/api/projects", (HttpContext context, ProjectRegistry projects, bool? includeArchived) =>
         {
             var all = projects.List();
             if (includeArchived != true) all = [.. all.Where(p => !p.Archived)];
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
+                all = [.. all.Where(project => ProjectAccessAuthorization.Allows(human.User, project.Id, projects))];
             return Results.Ok(all.Select(ProjectSummary.From).ToList());
         });
 

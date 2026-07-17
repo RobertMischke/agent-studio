@@ -31,7 +31,7 @@ public sealed class RunnerOptions
     /// <summary>Free-form label describing which backend/topology this runner serves.</summary>
     public required string BackendName { get; init; }
 
-    /// <summary>Optional bearer token sent as Authorization on every request (Phase 2 auth).</summary>
+    /// <summary>Runner service credential sent as Authorization on every networked-profile request.</summary>
     public string? AuthToken { get; init; }
 
     /// <summary>Fallback git remote for one-shot runs and claims from older servers.</summary>
@@ -117,6 +117,14 @@ public sealed class RunnerOptions
         string Val(string cliKey, string envName, string fallback = "")
             => overrides.TryGetValue(cliKey, out var v) && v.Length > 0 ? v : Env(envName, fallback);
 
+        if (overrides.ContainsKey("auth-token"))
+            throw new ArgumentException("Runner credentials are not accepted on the command line. Use RUNNER_AUTH_TOKEN_FILE or RUNNER_AUTH_TOKEN.");
+        var authTokenFile = Val("auth-token-file", "RUNNER_AUTH_TOKEN_FILE").Trim();
+        var directAuthToken = Env("RUNNER_AUTH_TOKEN").Trim();
+        if (authTokenFile.Length > 0 && directAuthToken.Length > 0)
+            throw new ArgumentException("Configure only one of RUNNER_AUTH_TOKEN_FILE or RUNNER_AUTH_TOKEN.");
+        var authToken = authTokenFile.Length > 0 ? ReadAuthTokenFile(authTokenFile) : directAuthToken;
+
         var options = new RunnerOptions
         {
             ServerUrl = Val("server", "RUNNER_SERVER_URL", "http://127.0.0.1:5030").TrimEnd('/'),
@@ -125,7 +133,7 @@ public sealed class RunnerOptions
             ClientId = Val("client-id", "RUNNER_CLIENT_ID").Trim() is { Length: > 0 } clientId ? clientId : null,
             Hostname = Val("hostname", "RUNNER_HOSTNAME", Environment.MachineName),
             BackendName = Val("backend-name", "RUNNER_BACKEND_NAME", "remote-runner"),
-            AuthToken = Val("auth-token", "RUNNER_AUTH_TOKEN") is { Length: > 0 } t ? t : null,
+            AuthToken = authToken.Length > 0 ? authToken : null,
             GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE").Trim() is { Length: > 0 } gitRemote ? gitRemote : null,
             GitPushRemote = Val("git-push-remote", "RUNNER_GIT_PUSH_REMOTE").Trim() is { Length: > 0 } gitPushRemote ? gitPushRemote : null,
             WorkDir = Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")),
@@ -143,7 +151,27 @@ public sealed class RunnerOptions
             HealthCheckOnly = healthCheck,
         };
 
+        var serverUri = new Uri(options.ServerUrl, UriKind.Absolute);
+        if (serverUri.Scheme != Uri.UriSchemeHttps && !serverUri.IsLoopback)
+            throw new ArgumentException("RUNNER_SERVER_URL must use HTTPS unless it is a loopback address.");
+        if (!serverUri.IsLoopback && string.IsNullOrWhiteSpace(options.AuthToken))
+            throw new ArgumentException("RUNNER_AUTH_TOKEN is required for a non-loopback Task Server.");
+
         var taskKey = positional ?? (overrides.TryGetValue("task", out var tk) ? tk : null);
         return (options, string.IsNullOrWhiteSpace(taskKey) ? null : taskKey.Trim(), once, help);
+    }
+
+    private static string ReadAuthTokenFile(string path)
+    {
+        if (!File.Exists(path)) throw new ArgumentException($"RUNNER_AUTH_TOKEN_FILE does not exist: {path}");
+        if (!OperatingSystem.IsWindows())
+        {
+            var mode = File.GetUnixFileMode(path);
+            if ((mode & (UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute)) != 0)
+                throw new ArgumentException("RUNNER_AUTH_TOKEN_FILE must not be accessible to other users.");
+        }
+        var token = File.ReadAllText(path).Trim();
+        if (token.Length == 0) throw new ArgumentException("RUNNER_AUTH_TOKEN_FILE is empty.");
+        return token;
     }
 }

@@ -2,6 +2,7 @@
 
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Serilog;
 using Serilog.Events;
 
@@ -18,6 +19,17 @@ Log.Logger = new LoggerConfiguration()
     .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+});
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = builder.Configuration.GetValue<long>("Security:MaxRequestBodyBytes", 25 * 1024 * 1024);
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(15);
+});
 
 // Default BackgroundServiceExceptionBehavior is StopHost: an unhandled
 // exception escaping any HostedService.ExecuteAsync stops the entire host.
@@ -177,6 +189,7 @@ catch (Exception ex)
 }
 
 builder.Services.AddSingleton<ClientIdentityStore>();
+builder.Services.AddSingleton<AccessSecurityStore>();
 builder.Services.AddSingleton<HostTelemetryStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
@@ -584,17 +597,24 @@ builder.Services.AddSignalR();
 // jobsBulkChanged). Resolved + move-source-attached during startup wiring
 // below so the notifier subscriptions are live before the first mutation.
 builder.Services.AddSingleton<AgentStudio.Host.TaskHubBroadcaster>();
-builder.Services.AddCors(options =>
+if (!SecurityProfiles.IsNetworked(builder.Configuration))
 {
-    options.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:4010", "http://localhost:4200")
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials());
-});
+    builder.Services.AddCors(options =>
+    {
+        options.AddDefaultPolicy(policy =>
+            policy.WithOrigins("http://localhost:4010", "http://localhost:4200")
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials());
+    });
+}
 
 var app = builder.Build();
-var includeExceptionDetails = app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
+var networkedSecurityProfile = SecurityProfiles.IsNetworked(app.Configuration);
+var includeExceptionDetails = !networkedSecurityProfile && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
+
+app.UseForwardedHeaders();
+if (networkedSecurityProfile) app.UseHsts();
 
 app.UseExceptionHandler(exceptionApp =>
 {
@@ -627,12 +647,18 @@ app.UseExceptionHandler(exceptionApp =>
     });
 });
 
-app.UseCors();
+if (!networkedSecurityProfile) app.UseCors();
 
-// X-Client-Id registration boundary: rejects mutations from unregistered
-// identities, stamps lastSeenAt on known ones. Carve-outs for /api/clients/register,
+// In the networked profile this is the authentication and authorization
+// boundary. X-Client-Id remains attribution only and is never consulted as a
+// credential. Local development retains the legacy attribution middleware.
+app.UseAccessSecurity();
+
+// The local profile's X-Client-Id registration boundary rejects mutations from
+// unregistered identities and stamps lastSeenAt on known ones. This is local
+// attribution only, never authentication. Carve-outs for client registration,
 // hubs, and health checks live in the middleware itself.
-app.UseClientIdentity();
+if (!networkedSecurityProfile) app.UseClientIdentity();
 
 // Touch the identity store at boot so the bootstrap "local-default" identity
 // is created before any caller looks at it.
@@ -773,7 +799,16 @@ try
     store.OnAppended = (workspace, msg) =>
     {
         try { cache.OnAppended(workspace, msg); } catch (Exception ex) { SilentCatch.Note(ex, "BusAggregationCache.OnAppended"); }
-        try { _ = pushHub.Clients.All.SendAsync("busMessageAdded", msg); } catch (Exception ex) { SilentCatch.Note(ex, "busMessageAdded SignalR push"); }
+        try
+        {
+            var recipients = !networkedSecurityProfile
+                ? pushHub.Clients.All
+                : !string.IsNullOrWhiteSpace(msg.Project)
+                    ? pushHub.Clients.Group(TaskHub.ProjectGroup(msg.Project, app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>()))
+                    : pushHub.Clients.Group(TaskHub.UnscopedSecurityGroup);
+            _ = recipients.SendAsync("busMessageAdded", msg);
+        }
+        catch (Exception ex) { SilentCatch.Note(ex, "busMessageAdded SignalR push"); }
     };
 }
 catch (Exception ex) { crashRecorder.Record("BusAggregationCache.Wire", ex); }
@@ -808,6 +843,19 @@ _ = Task.Run(() =>
 var watcher = app.Services.GetRequiredService<TaskWatcherService>();
 var hubContext = app.Services.GetRequiredService<IHubContext<TaskHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
+var eventProjects = app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>();
+IClientProxy ProjectEventClients(string projectName)
+    => networkedSecurityProfile
+        ? hubContext.Clients.Group(TaskHub.ProjectGroup(projectName, eventProjects))
+        : hubContext.Clients.All;
+IClientProxy TaskEventClients(string jobId)
+{
+    if (!networkedSecurityProfile) return hubContext.Clients.All;
+    var task = app.Services.GetRequiredService<TaskScannerService>().FindJob(jobId);
+    return task is null
+        ? hubContext.Clients.Group("project:unresolved")
+        : ProjectEventClients(task.ProjectName);
+}
 
 // Fine-grained job-mutation push (jobCreated / jobUpdated / jobMoved /
 // jobDeleted / jobsReordered / jobsBulkChanged). Resolving the singleton
@@ -966,18 +1014,18 @@ watcher.OnJobChanged += path => runnerForTransitions.ReconcileRunnerForPath(path
 // Wire up CLI events → SignalR push (across all CLI backends via the router)
 var cliRouter = app.Services.GetRequiredService<CliRouter>();
 cliRouter.OnOutput += (cliType, jobId, line) =>
-    hubContext.Clients.All.SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
+    TaskEventClients(jobId).SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
 cliRouter.OnStarted += (cliType, jobId, exec) =>
-    hubContext.Clients.All.SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
+    TaskEventClients(jobId).SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
 cliRouter.OnFinished += (cliType, jobId, exec) =>
-    hubContext.Clients.All.SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
+    TaskEventClients(jobId).SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
 // Plan strip live push: when the agent emits a TodoWrite / update_plan frame the
 // runner persists a snapshot; tell the open detail view to re-fetch /plan. Uses
 // the same job identifier as cliOutput so the frontend correlates identically.
 cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 {
     if (evt is CliRunEvent.PlanUpdated)
-        hubContext.Clients.All.SendAsync("planUpdated", jobId, cliType);
+        TaskEventClients(jobId).SendAsync("planUpdated", jobId, cliType);
 };
 
 // Per-CLI startup hook. Claude / Codex / Gemini reap orphans - see
@@ -1005,7 +1053,7 @@ else
 // Wire up Runner status → SignalR push
 var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();
 taskRunner.OnRunnerStatusChanged += (projectName, status) =>
-    hubContext.Clients.All.SendAsync("runnerStatusChanged", projectName, status.Mode, status.ActiveJobId);
+    ProjectEventClients(projectName).SendAsync("runnerStatusChanged", projectName, status.Mode, status.ActiveJobId);
 
 app.MapAllEndpoints();
 app.MapConversationEndpoints();

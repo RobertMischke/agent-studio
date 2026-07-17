@@ -33,16 +33,19 @@ public sealed class TaskHubBroadcaster
 {
     private readonly IHubContext<TaskHub> _hub;
     private readonly TaskScannerService _scanner;
+    private readonly AgentStudio.Registry.ProjectRegistry _projects;
     private readonly ILogger<TaskHubBroadcaster> _logger;
 
     public TaskHubBroadcaster(
         IHubContext<TaskHub> hub,
         TaskScannerService scanner,
+        AgentStudio.Registry.ProjectRegistry projects,
         TaskChangeNotifier notifier,
         ILogger<TaskHubBroadcaster> logger)
     {
         _hub = hub;
         _scanner = scanner;
+        _projects = projects;
         _logger = logger;
 
         notifier.TaskCreated += OnCreated;
@@ -67,13 +70,13 @@ public sealed class TaskHubBroadcaster
     private void OnUpdated(TaskChangeEvent e) => BroadcastInfo("jobUpdated", e);
 
     private void OnDeleted(TaskChangeEvent e) =>
-        Send("jobDeleted", new { id = e.JobId, watchPath = e.WatchPath });
+        SendProject(e.WatchPath, "jobDeleted", new { id = e.JobId, watchPath = e.WatchPath });
 
     private void OnMoved(string projectName, string jobId, string fromState, string toState) =>
-        Send("jobMoved", new { id = jobId, fromState, toState });
+        SendProject(projectName, "jobMoved", new { id = jobId, fromState, toState });
 
     private void OnReordered(JobsReorderedEvent e) =>
-        Send("jobsReordered", new { projectName = e.ProjectName, lane = e.Lane });
+        SendProject(e.ProjectName, "jobsReordered", new { projectName = e.ProjectName, lane = e.Lane });
 
     private void OnBulkChanged() => Send("jobsBulkChanged");
 
@@ -84,8 +87,20 @@ public sealed class TaskHubBroadcaster
         // relocated the folder; in that case FindJob returns null and we
         // fall back to a bulk re-pull rather than dropping the event.
         var info = _scanner.FindJob(e.JobId, e.WatchPath);
-        if (info != null) Send(method, info);
+        if (info != null) SendProject(info.ProjectName, method, info);
         else Send("jobsBulkChanged");
+    }
+
+    private void SendProject(string projectHandle, string method, params object?[] args)
+    {
+        try
+        {
+            _ = _hub.Clients.Group(TaskHub.ProjectGroup(projectHandle, _projects)).SendCoreAsync(method, args);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "JobsHub project broadcast of {Method} failed", method);
+        }
     }
 
     private void Send(string method, params object?[] args)

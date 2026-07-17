@@ -15,9 +15,20 @@ public static class RunnerEndpoints
     {
         var runnerGroup = app.MapGroup("/api/runner");
 
-        runnerGroup.MapGet("/status", (TaskRunnerService runner) =>
+        runnerGroup.MapGet("/status", (HttpContext context, TaskRunnerService runner,
+            AgentStudio.Registry.ProjectRegistry projects) =>
         {
-            return Results.Ok(runner.GetStatus());
+            var status = runner.GetStatus();
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
+            {
+                status = status with
+                {
+                    Projects = status.Projects
+                        .Where(pair => ProjectAccessAuthorization.Allows(human.User, pair.Key, projects))
+                        .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase),
+                };
+            }
+            return Results.Ok(status);
         });
 
         // Global orchestrator session: the singleton that lives above the
@@ -37,9 +48,12 @@ public static class RunnerEndpoints
         // path. The result is capped after the merge: a noisy project cannot
         // force every other project out before timestamps are compared.
         runnerGroup.MapGet("/orchestrator-feed",
-            (TaskScannerService scanner, OrchestratorLog log) =>
+            (HttpContext context, TaskScannerService scanner, OrchestratorLog log,
+                AgentStudio.Registry.ProjectRegistry projects) =>
             {
                 var entries = scanner.GetWatchPaths()
+                    .Where(project => context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human
+                                      || ProjectAccessAuthorization.Allows(human.User, project.Name, projects))
                     .SelectMany(project => log.Read(project.Path).Select(entry => new
                     {
                         project = project.Name,
@@ -191,9 +205,12 @@ public static class RunnerEndpoints
         // the whole workspace" number on hover. Persisted to disk so
         // the modal renders last-known totals immediately on app start.
         runnerGroup.MapGet("/token-summary-aggregate",
-            (TaskScannerService scanner, ITokenAggregator tokens) =>
+            (HttpContext context, TaskScannerService scanner, ITokenAggregator tokens,
+                AgentStudio.Registry.ProjectRegistry registry) =>
             {
                 var projects = scanner.GetWatchPaths()
+                    .Where(project => context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human
+                                      || ProjectAccessAuthorization.Allows(human.User, project.Name, registry))
                     .Select(e => (e.Name, e.Path))
                     .ToList();
                 var agg = tokens.WorkspaceAggregate(projects);
@@ -205,8 +222,12 @@ public static class RunnerEndpoints
         // this on first paint so the cached value appears even before
         // the live aggregator finishes scanning the JSONL files.
         runnerGroup.MapGet("/token-summary-aggregate/cached",
-            (ITokenAggregator tokens) =>
+            (HttpContext context, ITokenAggregator tokens) =>
             {
+                if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human
+                    && human.User.Role != StudioRoles.Owner
+                    && human.User.Projects.Count > 0)
+                    return Results.NoContent();
                 var snap = tokens.CachedWorkspaceAggregate();
                 return snap == null ? Results.NoContent() : Results.Ok(snap);
             });

@@ -10,6 +10,8 @@ host=""
 server_url=""
 topology=""
 client_id=""
+runner_id=""
+auth_token_file="/etc/agent-runner/runner-auth-token"
 runner_name=""
 git_remote=""
 git_push_remote=""
@@ -24,7 +26,8 @@ Usage: remote-runner-onboard.sh \
   --host <ssh-alias-or-user@host> \
   --server <task-server-url-visible-from-host> \
   --topology <central|tunnel|lan> \
-  --client-id <registered-x-client-id> \
+  --client-id <optional-attribution-label> \
+  --runner-id <owner-enrolled-runner-id> \
   --runner-name <runner-name> \
   --git-remote <fetch-origin-url> \
   --git-push-remote <write-origin-url> [options]
@@ -33,6 +36,7 @@ Options:
   --package-id <id>       NuGet DotnetTool package (default: CodingAgentRunner)
   --runner-command <cmd>  Installed tool command (default: agent-runner)
   --minimum-version <v>   Minimum accepted package version (default: 0.5.0)
+  --auth-token-file <p>   Protected Runner credential file already on the host
   --skip-auth             Do not launch login flows; status checks still run
   -h, --help              Show this help
 
@@ -53,6 +57,8 @@ while (($#)); do
     --server) server_url="${2:-}"; shift 2 ;;
     --topology) topology="${2:-}"; shift 2 ;;
     --client-id) client_id="${2:-}"; shift 2 ;;
+    --runner-id) runner_id="${2:-}"; shift 2 ;;
+    --auth-token-file) auth_token_file="${2:-}"; shift 2 ;;
     --runner-name) runner_name="${2:-}"; shift 2 ;;
     --git-remote) git_remote="${2:-}"; shift 2 ;;
     --git-push-remote) git_push_remote="${2:-}"; shift 2 ;;
@@ -68,7 +74,6 @@ done
 [[ -n "$host" ]] || die "--host is required."
 [[ -n "$server_url" ]] || die "--server is required."
 [[ -n "$topology" ]] || die "--topology is required."
-[[ -n "$client_id" ]] || die "--client-id is required."
 [[ -n "$runner_name" ]] || die "--runner-name is required."
 [[ -n "$git_remote" ]] || die "--git-remote is required."
 [[ -n "$git_push_remote" ]] || die "--git-push-remote is required."
@@ -82,7 +87,9 @@ scp_git_pattern='^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9.-]+:[A-Za-z0-9._~/%+@:-]
 [[ "$host" =~ $host_pattern ]] || die "The SSH target contains unsupported characters. Use a configured alias or user@host."
 [[ "$topology" =~ ^(central|tunnel|lan)$ ]] || die "--topology must be central, tunnel, or lan."
 [[ "$server_url" =~ $server_url_pattern ]] || die "--server must be an http(s) URL without embedded credentials, fragments, whitespace, or shell characters."
-[[ "$client_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--client-id contains unsupported characters."
+[[ -z "$client_id" || "$client_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--client-id contains unsupported characters."
+[[ -z "$runner_id" || "$runner_id" =~ ^runner_[A-Za-z0-9_-]+$ ]] || die "--runner-id must be the runner_<id> returned by enrollment."
+[[ "$auth_token_file" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "--auth-token-file must be an absolute path without shell characters."
 [[ "$runner_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--runner-name contains unsupported characters."
 [[ "$package_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--package-id contains unsupported characters."
 [[ "$runner_command" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "--runner-command contains unsupported characters."
@@ -105,16 +112,29 @@ case "$server_url" in
     ;;
 esac
 
+service_auth=0
+if [[ "$topology" != "tunnel" ]]; then
+  [[ "$server_url" == https://* ]] || die "Central and LAN Task Server URLs must use HTTPS."
+  [[ -n "$runner_id" ]] || die "--runner-id is required for a networked Task Server. Enroll the Runner as an owner first."
+  service_auth=1
+else
+  runner_id="${runner_id:-$runner_name}"
+  [[ -n "$client_id" ]] || die "--client-id is required for the local profile reached through a tunnel."
+fi
+
 printf '[onboarding] host=%s runner=%s client=%s topology=%s server=%s\n' \
-  "$host" "$runner_name" "$client_id" "$topology" "$server_url"
+  "$host" "$runner_name" "${client_id:-none}" "$topology" "$server_url"
 
 ssh_base=(ssh -o BatchMode=yes -o ConnectTimeout=10)
 
 printf '[onboarding] phase=preflight Checking SSH, sudo, .NET, and Task Server reachability from the host.\n'
-"${ssh_base[@]}" -T "$host" bash -s -- "$server_url" "$client_id" <<'REMOTE_PREFLIGHT'
+"${ssh_base[@]}" -T "$host" bash -s -- "$server_url" "$client_id" "$runner_id" "$auth_token_file" "$service_auth" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
 server_url="$1"
 client_id="$2"
+runner_id="$3"
+auth_token_file="$4"
+service_auth="$5"
 printf '[remote] connected host=%s user=%s\n' "$(hostname)" "$(id -un)"
 command -v sudo >/dev/null || { echo '[remote] sudo is required.' >&2; exit 20; }
 sudo -n true || { echo '[remote] passwordless sudo is required for unattended systemd installation.' >&2; exit 21; }
@@ -130,17 +150,28 @@ if ! curl --fail --show-error --silent --max-time 10 "$health_url" >/dev/null; t
 fi
 printf '[remote] Task Server reachable: %s; dotnet=%s\n' "$health_url" "$dotnet_version"
 
-identity_url="${server_url%/}/api/clients/${client_id}"
-identity_json="$(curl --fail --show-error --silent --max-time 10 \
-  -H "X-Client-Id: $client_id" "$identity_url")" || {
-  printf '[remote] Registered client identity %s was not found at %s.\n' "$client_id" "$identity_url" >&2
-  exit 26
-}
-if printf '%s' "$identity_json" | grep -Eqi '"kind"[[:space:]]*:[[:space:]]*"retired"'; then
-  printf '[remote] Client identity %s is retired; choose an active host identity.\n' "$client_id" >&2
-  exit 27
+if [[ "$service_auth" == 1 ]]; then
+  sudo test -f "$auth_token_file" || { printf '[remote] Runner credential file is missing: %s\n' "$auth_token_file" >&2; exit 26; }
+  token="$(sudo cat "$auth_token_file")"
+  [[ "$token" == rnr.* ]] || { echo '[remote] Runner credential file does not contain an rnr.* service credential.' >&2; exit 27; }
+  umask 077
+  curl_config="$(mktemp)"
+  trap 'rm -f "$curl_config"' EXIT
+  printf 'header = "Authorization: Bearer %s"\n' "$token" >"$curl_config"
+  identity_url="${server_url%/}/api/auth/runner"
+  identity_json="$(curl --config "$curl_config" --fail --show-error --silent --max-time 10 "$identity_url")" || {
+    echo '[remote] Runner service credential was not accepted.' >&2; exit 28;
+  }
+  printf '%s' "$identity_json" | grep -Fq "\"id\":\"$runner_id\"" || {
+    printf '[remote] Credential identity does not match requested Runner id %s.\n' "$runner_id" >&2; exit 29;
+  }
+  printf '[remote] Runner service identity verified: %s\n' "$runner_id"
+else
+  identity_url="${server_url%/}/api/clients/${client_id}"
+  curl --fail --show-error --silent --max-time 10 -H "X-Client-Id: $client_id" "$identity_url" >/dev/null || {
+    printf '[remote] Local-profile client attribution %s was not found.\n' "$client_id" >&2; exit 26;
+  }
 fi
-printf '[remote] Client identity verified: %s\n' "$client_id"
 REMOTE_PREFLIGHT
 
 printf '[onboarding] phase=install Installing/updating the runner tool and agent CLIs.\n'
@@ -205,14 +236,17 @@ fi
 
 printf '[onboarding] phase=systemd Writing configuration and enabling the OS-owned service.\n'
 "${ssh_base[@]}" -T "$host" bash -s -- \
-  "$server_url" "$client_id" "$runner_name" "$git_remote" "$git_push_remote" "$runner_command" <<'REMOTE_SYSTEMD'
+  "$server_url" "$client_id" "$runner_id" "$runner_name" "$git_remote" "$git_push_remote" "$runner_command" "$auth_token_file" "$service_auth" <<'REMOTE_SYSTEMD'
 set -euo pipefail
 server_url="$1"
 client_id="$2"
-runner_name="$3"
-git_remote="$4"
-git_push_remote="$5"
-runner_command="$6"
+runner_id="$3"
+runner_name="$4"
+git_remote="$5"
+git_push_remote="$6"
+runner_command="$7"
+auth_token_file="$8"
+service_auth="$9"
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
 runner_bin="$(command -v "$runner_command")"
 runner_user="$(id -un)"
@@ -225,9 +259,10 @@ trap 'rm -f "$env_tmp" "$unit_tmp"' EXIT
 chmod 600 "$env_tmp"
 {
   printf 'RUNNER_SERVER_URL=%s\n' "$server_url"
-  printf 'RUNNER_CLIENT_ID=%s\n' "$client_id"
-  printf 'RUNNER_ID=%s\n' "$runner_name"
+  [[ -z "$client_id" ]] || printf 'RUNNER_CLIENT_ID=%s\n' "$client_id"
+  printf 'RUNNER_ID=%s\n' "$runner_id"
   printf 'RUNNER_NAME=%s\n' "$runner_name"
+  [[ "$service_auth" == 1 ]] && printf 'RUNNER_AUTH_TOKEN_FILE=%s\n' "$auth_token_file"
   printf 'RUNNER_GIT_REMOTE=%s\n' "$git_remote"
   printf 'RUNNER_GIT_PUSH_REMOTE=%s\n' "$git_push_remote"
   printf 'RUNNER_WORKDIR=/var/lib/agent-runner/work\n'
@@ -267,6 +302,10 @@ EOF
 
 sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner /var/lib/agent-runner/work
 sudo chown -R "$runner_user:$runner_group" /var/lib/agent-runner
+if [[ "$service_auth" == 1 ]]; then
+  sudo chown root:"$runner_group" "$auth_token_file"
+  sudo chmod 0640 "$auth_token_file"
+fi
 sudo install -m 0640 -o root -g "$runner_group" "$env_tmp" /etc/agent-runner/runner.env
 sudo install -m 0644 "$unit_tmp" /etc/systemd/system/agent-runner.service
 sudo systemctl daemon-reload
@@ -275,22 +314,22 @@ sudo systemctl restart agent-runner
 sleep 2
 sudo systemctl is-enabled agent-runner
 sudo systemctl is-active agent-runner
-"$runner_bin" --health-check --server "$server_url"
+RUNNER_AUTH_TOKEN_FILE="$([[ "$service_auth" == 1 ]] && printf '%s' "$auth_token_file")" \
+  "$runner_bin" --health-check --server "$server_url"
 
-identity_url="${server_url%/}/api/clients/${client_id}"
 git_status=""
 for _ in $(seq 1 30); do
-  identity_json="$(curl --fail --show-error --silent --max-time 10 -H "X-Client-Id: $client_id" "$identity_url")"
-  git_status="$(printf '%s' "$identity_json" | sed -n 's/.*"runnerGitStatus"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
-  [[ "$git_status" == "ready" || "$git_status" == "read-only" ]] && break
+  journal="$(sudo journalctl -u agent-runner -n 80 --no-pager)"
+  printf '%s' "$journal" | grep -Fq 'runner-git-capability status=ready' && { git_status=ready; break; }
+  printf '%s' "$journal" | grep -Fq 'runner-git-capability status=read-only' && { git_status=read-only; break; }
   sleep 2
 done
-[[ "$git_status" == "ready" ]] || {
+[[ "$git_status" == ready ]] || {
   sudo journalctl -u agent-runner -n 40 --no-pager >&2
   printf '[remote] Runner Git push capability is %s; claims remain disabled.\n' "${git_status:-unreported}" >&2
   exit 40
 }
-printf '[remote] service=active health=passed identity=%s gitPushStatus=ready\n' "$client_id"
+printf '[remote] service=active health=passed identity=%s gitPushStatus=ready\n' "$runner_id"
 REMOTE_SYSTEMD
 
 printf '[onboarding] completed host=%s runner=%s client=%s\n' "$host" "$runner_name" "$client_id"

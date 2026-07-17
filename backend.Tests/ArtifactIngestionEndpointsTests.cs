@@ -52,6 +52,24 @@ public sealed class ArtifactIngestionEndpointsTests : IDisposable
     }
 
     [Fact]
+    public void WriteArtifacts_RedactsCredentialsFromTextEvidence()
+    {
+        var job = Path.Combine(_root, "projects", "demo", "tasks", "001", "AGT-2");
+        Directory.CreateDirectory(job);
+        var task = new TaskInfo { Id = "AGT-2", TaskKey = "AGT-2", FolderPath = job };
+        const string secret = "rnr.credential.abcdefghijklmnopqrstuvwxyz012345";
+        var request = new ArtifactIngestRequest(
+            "AGT-2",
+            [new RunnerArtifactUpload("report.md", Convert.ToBase64String(Encoding.UTF8.GetBytes($"token: {secret}")))]);
+
+        ArtifactIngestionEndpoints.WriteArtifacts(task, request);
+
+        var written = File.ReadAllText(Path.Combine(job, "results", "report.md"));
+        Assert.DoesNotContain(secret, written);
+        Assert.Contains("REDACTED_CREDENTIAL", written);
+    }
+
+    [Fact]
     public void ArtifactUploadCommitMessage_ListsUploadedFiles()
     {
         var message = WorkspaceArtifactCommitService.BuildArtifactUploadMessage(

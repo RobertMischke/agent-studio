@@ -1,14 +1,10 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 
 /**
- * Stamps `X-Client-Id` on every outbound API request so the backend's
- * registration boundary accepts the call. The frontend has no per-user
- * identity yet; until a registration UI ships we sign every request as
- * the bootstrap `local-default` identity, which exists on every backend.
- *
- * Once the identity-picker UI lands, swap the static id for the active
- * client signal value. This file is the single chokepoint for that
- * change.
+ * Stamps the local profile's attribution id on outbound API requests. In the
+ * networked profile this header remains attribution only: the secure server
+ * session is the human authentication boundary and Angular stores no reusable
+ * password or bearer secret.
  */
 export const CLIENT_ID = 'local-default';
 

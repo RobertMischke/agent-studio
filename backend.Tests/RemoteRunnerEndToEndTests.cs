@@ -56,6 +56,7 @@ namespace AgentStudio.Tests;
 /// manual mode and never races the runner for the seeded card.
 /// </para>
 /// </summary>
+[Collection(WebApplicationFactorySerialCollection.Name)]
 public sealed class RemoteRunnerEndToEndTests : IDisposable
 {
     private const string ProjectName = "agent-runner-01";

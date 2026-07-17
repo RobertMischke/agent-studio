@@ -92,6 +92,31 @@ public class BackendCrashSurfaceTests
     }
 
     [Fact]
+    public void Sink_redacts_product_sessions_runner_credentials_and_password_fields()
+    {
+        using var temp = new TempDir();
+        using var sink = new BackendFileLogSink(new BackendFileLoggerOptions
+        {
+            LogDirectory = temp.Path,
+            MinimumLevel = LogLevel.Information,
+        });
+        const string runnerSecret = "rnr.credential.abcdefghijklmnopqrstuvwxyz012345";
+        const string sessionSecret = "ssn.session.abcdefghijklmnopqrstuvwxyz012345";
+
+        sink.Write(
+            LogLevel.Information,
+            "Security.Test",
+            $"runner={runnerSecret} session={sessionSecret} password=do-not-log-this",
+            null);
+
+        var persisted = File.ReadAllText(sink.CurrentLogPath);
+        Assert.DoesNotContain(runnerSecret, persisted);
+        Assert.DoesNotContain(sessionSecret, persisted);
+        Assert.DoesNotContain("do-not-log-this", persisted);
+        Assert.Contains("REDACTED", persisted);
+    }
+
+    [Fact]
     public async Task UnobservedTaskException_FromHostedService_SurfacesViaDiagnosticsEndpoint()
     {
         using var temp = new TempDir();

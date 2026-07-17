@@ -61,10 +61,10 @@ Linux host and fills a bounded set of task slots without owning task state:
 ## Test host
 
 `agent-runner` (Hetzner, `88.99.136.78`). SSH key-auth, one sudo-capable user.
-No inbound ports beyond SSH until the central-URL auth work (Phase 2) lands, so
-the runner reaches the Task Server over an `ssh -R`/`-L` tunnel or the operator's
-LAN address during the MVP. For **unattended** operation, keep that tunnel up as
-a supervised, auto-reconnecting service and gate work on its health-check:
+For the local profile, expose no inbound Task Server port and reach it through a
+supervised `ssh -R`/`-L` tunnel. For the networked profile, the runner connects
+outbound to the authenticated HTTPS origin with its enrolled service identity.
+The tunnel procedure and health gate are documented in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
 ## Product onboarding from Remote Hosts
@@ -77,9 +77,11 @@ The local controller then runs
 every provisioning command in that controller is executed through SSH on the
 selected host.
 
-Before the task can start, the dialog requires an SSH target, the registered
-host client id, a credential-free fallback git origin, and one of these Task Server
-topologies:
+Before the task can start, the dialog requires an SSH target, a credential-free
+fallback git origin, and one of these Task Server topologies. The local profile
+also needs a registered attribution id. The networked profile instead needs the
+owner-enrolled `runner_<id>` and a protected `rnr.*` credential file already on
+the host:
 
 | Topology | URL entered in setup | Required proof |
 |---|---|---|
@@ -105,10 +107,10 @@ The controller is intentionally repeatable after a host wipe:
    then `codex login status` and `claude auth status --text` report the active
    account. Credential files are never copied as the normal path.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
-   runner identity, `RUNNER_CLIENT_ID`, and fallback git origin. Install and start the
+   runner identity, optional `RUNNER_CLIENT_ID`, credential-file path, and fallback git origin. Install and start the
    service through systemd. The SSH session never owns the daemon process.
-5. Prove `systemctl is-enabled`, `systemctl is-active`, runner health, and the
-   registered client endpoint before setup completes.
+5. Prove `systemctl is-enabled`, `systemctl is-active`, Runner health, and an
+   authenticated claim or empty-queue response before setup completes.
 
 The NuGet package must be published with package type `DotnetTool` and expose
 the `agent-runner` command. A library-only `CodingAgentRunner` package cannot be
@@ -178,7 +180,7 @@ list.
 | `RUNNER_SERVER_URL` | `--server` | `http://127.0.0.1:5030` | Task Server base URL (or the tunnelled address). |
 | `RUNNER_ID` | `--runner-id` | `agent-runner-<host>` | Stable lease owner identity. Fencing is per task, not per pid. |
 | `RUNNER_NAME` | `--runner-name` | `agent-runner-01` | Board-facing runner/project name. |
-| `RUNNER_CLIENT_ID` | `--client-id` | (self-register) | Existing host identity shown in Remote Hosts. When set, startup verifies this exact X-Client-Id and refuses to create a replacement identity. |
+| `RUNNER_CLIENT_ID` | `--client-id` | (none) | Optional attribution label. It is not authentication and grants no access. |
 | `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Credential-free fetch URL and startup push-probe repository. Required for daemon onboarding; normally use HTTPS. |
 | `RUNNER_GIT_PUSH_REMOTE` | `--git-push-remote` | (fetch URL) | Write URL installed as Git `origin.pushurl`; normally the SSH URL backed by this host/repository deploy key. |
 | `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
@@ -186,7 +188,8 @@ list.
 | `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
 | `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). |
 | `RUNNER_CLI_ARGS` | `--cli-args` | `-p` | Headless CLI args; the prompt is streamed on stdin. |
-| `RUNNER_AUTH_TOKEN` | `--auth-token` | (none) | Bearer token for the central URL (Phase 2 auth). |
+| `RUNNER_AUTH_TOKEN_FILE` | `--auth-token-file` | (none on loopback) | Protected file containing the owner-enrolled Runner service credential. Required for every non-loopback Task Server. |
+| `RUNNER_AUTH_TOKEN` | none | (none) | Compatibility environment input. Prefer the credential file so the secret is absent from process diagnostics. |
 | `RUNNER_TTL_SECONDS` | `--ttl` | `120` | Requested lease TTL; the server clamps it. |
 | `RUNNER_HEARTBEAT_SECONDS` | | `30` | Renew cadence, kept below the TTL. |
 | `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
@@ -329,9 +332,9 @@ sudo journalctl -u agent-runner -f
 ```
 
 At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, `RUNNER_NAME`,
-`RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. Product onboarding also sets
-`RUNNER_CLIENT_ID`, so the configured identity and its `LastSeen` record remain
-stable across reinstalls. The unit restarts after failures, logs to journald,
+`RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. A networked deployment also
+sets `RUNNER_AUTH_TOKEN_FILE`; the credential itself stays in that separate
+protected file. `RUNNER_CLIENT_ID` remains optional attribution. The unit restarts after failures, logs to journald,
 requests graceful SIGINT shutdown, and best-effort starts
 `~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
 clean Mode-A Studio stack.
@@ -387,9 +390,15 @@ path, and intended branch. Do not delete that path manually. Restore origin
 access, push or otherwise secure the branch, and close the gate only after the
 remote ref is verified.
 
-### Client identity registration (required)
+### Local-profile client attribution
 
-The Task Server guards every mutation behind an `X-Client-Id` registration
+This section applies only to the loopback or protected-tunnel `local` profile.
+For an internet-facing `networked` Task Server, open registration is disabled;
+use the owner-authorized enrollment and `RUNNER_AUTH_TOKEN_FILE` flow in
+[networked-task-server.md](./networked-task-server.md). In both profiles,
+`X-Client-Id` is attribution and never authentication.
+
+The local-profile Task Server guards every mutation behind an `X-Client-Id` registration
 boundary (`ClientIdentityMiddleware`): a POST from an id the server has never
 seen is rejected `401 client-unknown`. Reads (prompt fetch) stay open, but the
 lease, log, artifact, and completion writes do not. Product onboarding

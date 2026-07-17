@@ -3,6 +3,8 @@
 namespace AgentStudio.Host;
 
 using System.Reflection;
+using AgentStudio.Registry;
+using AgentStudio.Security;
 
 /// <summary>
 /// Cross-cutting routes that don't fit any of the resource-scoped
@@ -14,9 +16,12 @@ public static class SystemEndpoints
 {
     public static void MapSystemEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/watch-paths", (TaskScannerService scanner) =>
+        app.MapGet("/api/watch-paths", (HttpContext context, TaskScannerService scanner, ProjectRegistry projects) =>
         {
-            var entries = scanner.GetWatchPaths();
+            var entries = scanner.GetWatchPaths().AsEnumerable();
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
+                entries = entries.Where(entry => ProjectAccessAuthorization.Allows(human.User, entry.Name, projects)
+                                                 || ProjectAccessAuthorization.Allows(human.User, entry.Path, projects));
             return Results.Ok(entries);
         });
 
@@ -104,7 +109,13 @@ public static class SystemEndpoints
 
         // Per-project git summary, used by board tile pills. Cached server-side
         // for ~3 s so the board can call freely without forking N git processes.
-        app.MapGet("/api/git/summary", (GitService git) => Results.Ok(git.GetSummaries()));
+        app.MapGet("/api/git/summary", (HttpContext context, GitService git, ProjectRegistry projects) =>
+        {
+            var summaries = git.GetSummaries().AsEnumerable();
+            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
+                summaries = summaries.Where(summary => ProjectAccessAuthorization.Allows(human.User, summary.ProjectName, projects));
+            return Results.Ok(summaries);
+        });
 
         // Repository hygiene snapshot for the project header badge: dirty
         // working tree, ahead-of-upstream, last commit, etc. Cached for ~3 s

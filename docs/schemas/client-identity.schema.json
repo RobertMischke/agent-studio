@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/client-identity.schema.json",
   "title": "ClientIdentity",
-  "description": "Identity record for one client of the Task Access Layer. A client is anything that talks to the API: a human-driven UI session, a CLI agent instance, an external tool, or a backend service. Stored as JSON files under <workspace>/identities/<id>.json. Loaded on Task Access Layer boot. The layer rejects mutations from unregistered identities. This is a registration boundary, not a security model: the door has a sign, every visitor signs in. Cryptographic signing is a follow-up.",
+  "description": "Legacy attribution record for one client of the Task Access Layer. Stored as JSON files under <workspace>/identities/<id>.json and loaded on backend boot. The local profile uses these records as a lightweight registration boundary. They are never authentication. The networked profile authenticates human sessions and Runner service credentials separately.",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "displayName", "kind", "registeredAt"],

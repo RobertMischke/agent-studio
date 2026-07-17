@@ -2,8 +2,8 @@
  * Task-Server management model (AGT-1924).
  *
  * The "Task Server" settings page is the operator's one place to read the
- * durable task server the whole platform talks to: the connected URL (localhost
- * today, a central URL in Phase 2), the workspace store it owns (root, size,
+ * durable task server the whole platform talks to: the connected local or
+ * networked URL, the workspace store it owns (root, size,
  * counts), the git-backed evidence repository's status, the registered client
  * identities, and the management functions (archive sweep, orphan scan, fixture
  * cleanup). See docs/research/remote-ready-kickoff-2026-07.md for the theme.
@@ -42,14 +42,14 @@ export type ManagementActionKind = 'archive-sweep' | 'orphan-scan' | 'fixture-cl
 export interface TaskServerConnection {
   /** The URL the SPA is talking to (live: the serving origin). */
   url: string;
-  /** localhost today, a central URL in Phase 2. Derived from {@link url}. */
+  /** Local loopback or separately hosted networked server. Derived from {@link url}. */
   phase: TaskServerPhase;
   health: TaskServerHealth;
   /** Server build / version string, or null if not reported. */
   version: string | null;
   /** Human uptime label reported by the server (e.g. "2d 9h"). */
   uptimeLabel: string | null;
-  /** Current access boundary, e.g. "X-Client-Id (registration only)". */
+  /** Current profile-specific access boundary. X-Client-Id is attribution only. */
   authMode: string;
 }
 

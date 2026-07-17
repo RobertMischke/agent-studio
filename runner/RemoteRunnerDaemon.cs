@@ -21,12 +21,14 @@ public sealed class RemoteRunnerDaemon
     public async Task RunAsync(CancellationToken shutdown)
     {
         var clientId = await _client.RegisterAsync(_options.RunnerName, "service", shutdown);
-        _log($"registered daemon '{_options.RunnerName}' as client '{clientId}'; slots={_options.HostMaxParallelism}");
+        _log($"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; slots={_options.HostMaxParallelism}");
 
         var gitCapability = await GitPushProbe.RunAsync(_options, _log, shutdown);
         await _client.ReportGitCapabilityAsync(clientId, new RunnerGitCapabilityRequest(
             gitCapability.CanPush ? "ready" : "read-only", gitCapability.Detail, DateTime.UtcNow), shutdown);
         _log($"runner-git-capability status={(gitCapability.CanPush ? "ready" : "read-only")} detail={gitCapability.Detail}");
+        if (!gitCapability.CanPush)
+            throw new InvalidOperationException("Git push capability is read-only; refusing to claim work until the host credential is repaired.");
 
         var active = new List<Task<int>>();
         var telemetry = new HostTelemetrySampler();
