@@ -1,49 +1,34 @@
+@use '../../../../../../styles/mixins' as m;
+
+// One card in the wiki dashboard grid; the parent guards mounting behind a
+// non-empty star list, so an empty panel leaves no grid cell behind.
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
-/* Card look shared with the "Einstiege" block directly below (.whome). */
 .wstar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--studio-spacing-2);
-  /* Margin lives here (not on :host) so an empty block occupies no space. */
-  margin: var(--studio-spacing-4) var(--studio-spacing-4) 0;
-  padding: var(--studio-spacing-3);
-  border-radius: 9px;
-  border: 1px solid color-mix(in srgb, var(--studio-fg) 10%, transparent);
-  background: color-mix(in srgb, var(--studio-fg) 3%, transparent);
+  @include m.knowledge-card;
+
+  flex: 1 1 auto;
 }
 
 .wstar__head {
-  display: flex;
-  align-items: center;
-  gap: var(--studio-spacing-2);
+  @include m.knowledge-card-head;
 }
+
 .wstar__head-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  @include m.knowledge-card-icon;
+
   color: var(--studio-accent-3);
-  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
 }
-.wstar__title {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--studio-fg);
-}
+
 .wstar__count {
   margin-left: auto;
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
 }
 
 .wstar__list {
@@ -54,6 +39,7 @@
   flex-direction: column;
   gap: var(--studio-spacing-1);
 }
+
 .wstar__item {
   display: flex;
   align-items: center;
@@ -72,18 +58,21 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
   font: inherit;
   cursor: pointer;
 }
+
 .wstar__open:hover {
-  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
-  border-color: color-mix(in srgb, var(--studio-fg) 12%, transparent);
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
+  border-color: var(--pwiki-paper-border, var(--studio-border));
 }
+
 .wstar__open:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
   outline-offset: 1px;
 }
+
 .wstar__label {
   font-size: 0.78rem;
   font-weight: 600;
@@ -91,10 +80,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .wstar__path {
   font-size: 0.68rem;
   font-family: var(--font-mono, monospace);
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -114,9 +104,11 @@
   color: var(--studio-accent-3);
   cursor: pointer;
 }
+
 .wstar__remove:hover {
-  background: color-mix(in srgb, var(--studio-fg) 8%, transparent);
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
 }
+
 .wstar__remove:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
   outline-offset: 1px;

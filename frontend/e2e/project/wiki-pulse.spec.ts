@@ -324,7 +324,10 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
     await expect(page.getByTestId('project-wiki-pulse')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('project-wiki-pulse-feed-empty')).toContainText('No recent edits');
-    await expect(page.getByTestId('project-wiki-pulse-inbox-empty')).toContainText('Inbox clear');
+    // A clear inbox contributes no sub-list to the merged Aufmerksamkeit card;
+    // the card itself stays because the fixture's warnings remain active.
+    await expect(page.getByTestId('project-wiki-pulse-attention')).toBeVisible();
+    await expect(page.getByTestId('project-wiki-pulse-inbox')).toHaveCount(0);
     await expect(page.getByTestId('project-wiki-pulse-drift-empty')).toContainText('No knowledge pages filed');
   });
 

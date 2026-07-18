@@ -693,10 +693,13 @@
   background: color-mix(in srgb, var(--studio-bg-hover) 70%, transparent);
 }
 
+// The active tab merges into the paper reading surface below, so its ink must
+// come from the paper tokens: the studio fg is light in the dark theme and
+// would vanish on the always-light paper.
 .pwiki__tab--active {
   background: var(--pwiki-paper-bg);
   border-bottom-color: var(--studio-accent);
-  color: var(--studio-fg-strong);
+  color: var(--pwiki-paper-fg);
 }
 
 .pwiki__tab--active small {
@@ -1366,27 +1369,6 @@
   white-space: pre;
 }
 
-.pwiki__viewer-empty {
-  min-height: 360px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: var(--studio-spacing-2);
-  border: 1px solid var(--pwiki-paper-border);
-  border-radius: 8px;
-  background: var(--pwiki-paper-bg);
-  color: var(--pwiki-paper-muted);
-  box-shadow: 0 14px 34px rgb(15 23 42 / 12%);
-}
-
-.pwiki__viewer-empty p {
-  margin: 0;
-}
-
-.pwiki__viewer-empty-icon {
-  color: var(--color-slate-500);
-}
-
 .pwiki__workspace--landing {
   flex: 1 1 auto;
 }
@@ -1395,139 +1377,6 @@
   min-height: 0;
   overflow-y: auto;
   @include m.thin-scroll;
-}
-
-.pwiki__landing-head {
-  padding: var(--studio-spacing-4);
-  border-bottom: 1px solid var(--pwiki-paper-border);
-  background: var(--pwiki-paper-bg);
-}
-
-.pwiki__landing-head p {
-  max-width: 48rem;
-  margin: var(--studio-spacing-2) 0 0;
-  color: var(--pwiki-paper-muted);
-  font-size: 0.88rem;
-  line-height: 1.55;
-}
-
-.pwiki__landing-head code {
-  color: var(--color-slate-600);
-  background: var(--color-slate-100);
-}
-
-.pwiki__landing-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--studio-spacing-2);
-  padding: var(--studio-spacing-3) var(--studio-spacing-4);
-  border-bottom: 1px solid var(--pwiki-paper-border);
-}
-
-.pwiki__landing-action {
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--studio-spacing-2);
-  padding: 0 var(--studio-spacing-3);
-  border: 1px solid var(--pwiki-paper-border);
-  border-radius: 6px;
-  background: var(--pwiki-paper-bg);
-  color: var(--pwiki-paper-fg);
-  font-size: 0.82rem;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.pwiki__landing-action:hover {
-  border-color: color-mix(in srgb, var(--studio-accent) 38%, var(--pwiki-paper-border));
-  background: var(--pwiki-paper-soft);
-}
-
-.pwiki__landing-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: var(--studio-spacing-2);
-  padding: var(--studio-spacing-4);
-}
-
-.pwiki__doc-card {
-  min-width: 0;
-  display: grid;
-  gap: var(--studio-spacing-2);
-  padding: var(--studio-spacing-2);
-  border: 1px solid var(--pwiki-paper-border);
-  border-radius: 7px;
-  background: var(--pwiki-paper-soft);
-  color: var(--pwiki-paper-fg);
-  text-align: left;
-  font-family: inherit;
-}
-
-.pwiki__doc-card:hover {
-  border-color: color-mix(in srgb, var(--studio-accent) 36%, var(--pwiki-paper-border));
-  background: var(--pwiki-paper-bg);
-}
-
-.pwiki__doc-card-main {
-  min-width: 0;
-  display: grid;
-  gap: var(--studio-spacing-1);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-}
-
-.pwiki__metric-strip--card {
-  min-width: 0;
-}
-
-.pwiki__metric-strip--card .pwiki__metric {
-  min-width: 0;
-}
-
-.pwiki__doc-card-kind {
-  color: var(--pwiki-paper-muted);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-
-.pwiki__doc-card strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--pwiki-paper-fg);
-  font-size: 0.82rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pwiki__doc-card code {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--pwiki-paper-muted);
-  font-size: 0.7rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: transparent;
-}
-
-.pwiki__kind {
-  flex-shrink: 0;
-  min-height: 16px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 var(--studio-spacing-1);
-  border: 1px solid color-mix(in srgb, var(--studio-fg) 18%, transparent);
-  border-radius: 3px;
-  color: var(--studio-fg-muted);
-  font-size: 0.62rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .pwiki__rev-banner {
@@ -1839,10 +1688,6 @@
   .pwiki__tree {
     max-height: 280px;
   }
-
-  .pwiki__landing-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 680px) {
@@ -1879,13 +1724,6 @@
 
   .pwiki__reader-body {
     padding: var(--studio-spacing-3);
-  }
-
-  .pwiki__landing-head,
-  .pwiki__landing-actions,
-  .pwiki__landing-grid {
-    padding-left: var(--studio-spacing-3);
-    padding-right: var(--studio-spacing-3);
   }
 
   .pwiki__source-line {

@@ -1,62 +1,47 @@
-:host {
-  display: block;
-  min-width: 0;
-}
+@use '../../../../../../styles/mixins' as m;
 
-.whome {
-  display: flex;
-  flex-direction: column;
-  gap: var(--studio-spacing-2);
-  /* Margin lives here (not on :host) so an empty block occupies no space. */
-  margin: var(--studio-spacing-4) var(--studio-spacing-4) 0;
-  padding: var(--studio-spacing-3);
-  border-radius: 9px;
-  border: 1px solid color-mix(in srgb, var(--studio-fg) 10%, transparent);
-  background: color-mix(in srgb, var(--studio-fg) 3%, transparent);
+// Every curated section is its own card in the wiki dashboard grid: both the
+// host and the wrapper contribute no box, the section cards are grid items.
+:host { display: contents; }
+
+.whome { display: contents; }
+
+.whome__card {
+  @include m.knowledge-card;
 }
 
 .whome__head {
-  display: flex;
-  align-items: center;
-  gap: var(--studio-spacing-2);
-}
-.whome__head-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  color: var(--studio-accent-3);
-  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
-}
-.whome__title {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--studio-fg);
+  @include m.knowledge-card-head;
+
+  align-items: flex-start;
 }
 
-.whome__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--studio-spacing-3);
+.whome__head-icon {
+  @include m.knowledge-card-icon;
 }
-.whome__section {
+
+.whome__head-copy {
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-1);
+  gap: 0;
   min-width: 0;
 }
-.whome__section-title {
-  margin: 0;
-  font-size: 0.7rem;
+
+.whome__kicker {
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.6rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  color: var(--studio-fg-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
+
+.whome__count {
+  margin-left: auto;
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .whome__list {
   list-style: none;
   margin: 0;
@@ -68,42 +53,48 @@
 
 .whome__link {
   width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
-  text-align: left;
   padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
   font: inherit;
-  min-width: 0;
+  text-align: left;
 }
+
 button.whome__link { cursor: pointer; }
+
 button.whome__link:hover {
-  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
-  border-color: color-mix(in srgb, var(--studio-fg) 12%, transparent);
+  border-color: var(--pwiki-paper-border, var(--studio-border));
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
 }
+
 button.whome__link:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
   outline-offset: 1px;
 }
+
 .whome__link--missing {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
 .whome__label {
+  overflow: hidden;
   font-size: 0.78rem;
   font-weight: 600;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .whome__note {
-  font-size: 0.7rem;
-  color: var(--studio-fg-muted);
   overflow: hidden;
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.7rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

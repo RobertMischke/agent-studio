@@ -38,13 +38,11 @@ import { MenuComponent } from '../../../../components/menu/menu.component';
 import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.types';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
+import { WikiDashboardComponent } from './wiki-dashboard/wiki-dashboard.component';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.component';
-import { WikiHomeLinksComponent } from './wiki-home-links/wiki-home-links.component';
-import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
+import { WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiSearchResultsComponent } from './wiki-search-results/wiki-search-results.component';
-import { WikiGradePanelComponent } from './wiki-grade-panel/wiki-grade-panel.component';
-import { ProjectStyleGuidesPanelComponent } from '../project-style-guides-panel/project-style-guides-panel';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -53,7 +51,6 @@ import {
   nodeId,
 } from './wiki-tree';
 import { WikiStarsService } from './wiki-stars.service';
-import { WikiStarredPanelComponent } from './wiki-starred-panel/wiki-starred-panel.component';
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
@@ -124,14 +121,10 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     OverlayPortalDirective,
     StudioIconComponent,
     TooltipDirective,
+    WikiDashboardComponent,
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
-    WikiHomeLinksComponent,
-    WikiPulseComponent,
     WikiSearchResultsComponent,
-    WikiStarredPanelComponent,
-    WikiGradePanelComponent,
-    ProjectStyleGuidesPanelComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',

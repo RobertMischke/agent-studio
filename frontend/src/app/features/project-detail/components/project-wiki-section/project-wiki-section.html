@@ -616,57 +616,26 @@
                [class.pwiki__workspace--resizing]="resizingPanel() === 'context'"
                [style.--pwiki-context-width]="contextWidthStyle()">
             <article class="pwiki__reader pwiki__landing" data-testid="project-wiki-viewer-empty">
-              <!-- @if-guarded so an empty star list leaves no host element on the landing. -->
-              @if (hasStarred()) {
-                <app-wiki-starred-panel
-                    [projectName]="projectName()"
-                    (openEntry)="openFile($event.relPath, $event.type)" />
-              }
-              <app-wiki-home-links
+              <app-wiki-dashboard
                   [projectName]="projectName()"
-                  (openLink)="openFile($event.relPath, $event.type)" />
-              <header class="pwiki__landing-head">
-                <span class="pwiki__doc-kind">Pulse</span>
-                <h2 class="pwiki__doc-title">What changed, what needs sorting, and how stale the knowledge is.</h2>
-                <p>
-                  A generated entry view over this wiki - the recent-edits feed, the unfiled inbox, and
-                  deterministic drift grading per Workstream area. It is not a wiki page and cannot be edited.
-                </p>
-              </header>
-
-              <div class="pwiki__landing-actions">
-                <button class="pwiki__landing-action" type="button"
-                        data-testid="project-wiki-open-first"
-                        (click)="openFirstDoc()">
-                  <app-studio-icon name="book" [size]="14"></app-studio-icon>
-                  <span>Open first page</span>
-                </button>
-                <button class="pwiki__landing-action" type="button"
-                        data-testid="project-wiki-drift-open-empty"
-                        (click)="openDriftModal()">
-                  <app-studio-icon name="diff" [size]="14"></app-studio-icon>
-                  <span>Start drift analysis</span>
-                </button>
-              </div>
-              <app-project-style-guides-panel [projectName]="projectName()" (openGuide)="openFile($event, 'md')" />
-              <app-wiki-pulse
-                  class="pwiki__pulse"
+                  [docCount]="docCount()"
                   [pulse]="pulse()"
                   [loading]="pulseLoading()"
-                  (openPage)="onPulseOpen($event)" (openWorkbench)="openWorkbench.emit($event)" />
-
-              <app-wiki-grade-panel
-                  class="pwiki__grade"
+                  [hasStarred]="hasStarred()"
                   [gradingStatus]="gradingStatus()"
                   [gradeModel]="gradeModel()"
                   [gradeLevel]="gradeLevel()"
                   [gradeModels]="gradeModelOptions()"
-                  [critical]="pulse()?.critical ?? null"
+                  (openPage)="onPulseOpen($event)"
+                  (openWorkbench)="openWorkbench.emit($event)"
+                  (openFirst)="openFirstDoc()"
+                  (openDrift)="openDriftModal()"
                   (startGrading)="startWikiGrading()"
                   (abortGrading)="abortWikiGrading()"
                   (gradeModelChange)="onGradeModelChange($event)"
                   (gradeLevelChange)="onGradeLevelChange($event)"
-                  (openReport)="openReportPage($event)" />
+                  (openReport)="openReportPage($event)"
+                  (openGuide)="openFile($event, 'md')" />
             </article>
 
             <div class="pwiki__splitter pwiki__splitter--context"

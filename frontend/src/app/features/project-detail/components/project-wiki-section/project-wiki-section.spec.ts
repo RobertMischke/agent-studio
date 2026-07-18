@@ -168,7 +168,7 @@ const HOME: WikiHome = {
   ],
 };
 
-async function setup(tree: WikiTree = TREE) {
+async function setup(tree: WikiTree = TREE, pulse: WikiPulse = PULSE) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
     providers: [
@@ -185,7 +185,7 @@ async function setup(tree: WikiTree = TREE) {
   fixture.detectChanges();
 
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
-  flushWikiPulse(http);
+  flushWikiPulse(http, pulse);
   flushGradingContext(http);
   fixture.detectChanges();
   flushStyleGuidesIfRendered(http);
@@ -535,6 +535,39 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     expect(metaToggle.getAttribute('aria-expanded')).toBe('false');
     expect(root.querySelector('#project-wiki-meta-body')!.hasAttribute('hidden')).toBe(true);
+    http.verify();
+  });
+
+  it('renders the dashboard head stats from the Pulse payload', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    // Page total comes from the tree, drift numbers from pulse.drift.counts.
+    expect(root.querySelector('[data-testid="project-wiki-stat-pages"]')?.textContent).toContain('4');
+    const drift = root.querySelector('[data-testid="project-wiki-stat-drift"]')!;
+    expect(drift.textContent).toContain('Fresh');
+    expect(drift.textContent).toContain('Aging');
+    expect(drift.textContent).toContain('Stale');
+    // Overall verdict reads as a small icon + label, not a coloured number.
+    expect(root.querySelector('[data-testid="project-wiki-pulse-overall"]')?.textContent)
+      .toContain('Drift Aging');
+    http.verify();
+  });
+
+  it('hides the Aufmerksamkeit card when warnings and inbox are clear', async () => {
+    const clearPulse: WikiPulse = {
+      ...PULSE,
+      inbox: { available: true, reason: null, count: 0, items: [] },
+      warnings: { available: true, reason: 'All clear.', count: 0, items: [] },
+    };
+    const { fixture, http } = await setup(TREE, clearPulse);
+    const root = el(fixture);
+
+    expect(root.querySelector('[data-testid="project-wiki-pulse-attention"]')).toBeNull();
+    expect(root.querySelector('[data-testid="project-wiki-pulse-inbox"]')).toBeNull();
+    // The feed and drift cards stay regardless of the attention state.
+    expect(root.querySelector('[data-testid="project-wiki-pulse-feed"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-pulse-drift"]')).toBeTruthy();
     http.verify();
   });
 

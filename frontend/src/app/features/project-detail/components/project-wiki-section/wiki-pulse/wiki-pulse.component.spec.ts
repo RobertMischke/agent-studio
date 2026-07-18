@@ -92,11 +92,40 @@ const html = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
 describe('WikiPulseComponent', () => {
   beforeEach(() => TestBed.resetTestingModule());
 
-  it('groups the change feed by local day (Today / Yesterday)', async () => {
+  it('shows a compact feed (8 rows) and reveals the rest behind "Alle anzeigen"', async () => {
+    const items = Array.from({ length: 11 }, (_, i) => ({
+      relPath: `notes-${i}.md`,
+      title: `Note ${i}`,
+      author: 'Alice',
+      authorDateUtc: isoDaysAgo(0),
+      sha: `s${i}`,
+      shortSha: `s${i}`,
+      subject: 'edit',
+      frameAreaSlug: null,
+      frameAreaTitle: null,
+      taskKey: null,
+    }));
+    const fixture = await mount(makePulse({ feed: { available: true, reason: null, items } }));
+    const root = html(fixture);
+
+    const rows = () => root.querySelectorAll('[data-testid^="project-wiki-pulse-feed-open-"]');
+    expect(rows().length).toBe(8);
+
+    // Pure UI state: expanding shows every row, collapsing trims back to 8.
+    const toggle = () => root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-pulse-feed-toggle"]')!;
+    expect(toggle().textContent).toContain('Alle anzeigen');
+    toggle().click();
+    fixture.detectChanges();
+    expect(rows().length).toBe(11);
+    expect(toggle().textContent).toContain('Weniger anzeigen');
+    toggle().click();
+    fixture.detectChanges();
+    expect(rows().length).toBe(8);
+  });
+
+  it('hides the feed toggle when the feed already fits the compact card', async () => {
     const fixture = await mount(makePulse());
-    const heads = Array.from(html(fixture).querySelectorAll('.wpulse__day-head')).map(e => e.textContent?.trim());
-    expect(heads).toContain('Today');
-    expect(heads).toContain('Yesterday');
+    expect(html(fixture).querySelector('[data-testid="project-wiki-pulse-feed-toggle"]')).toBeNull();
   });
 
   it('renders the frame-area badge and the task key on a feed row', async () => {
@@ -127,9 +156,21 @@ describe('WikiPulseComponent', () => {
     expect(emitted).toEqual({ relPath: 'notes.md', type: 'md' });
   });
 
-  it('shows the healthy empty-inbox state when the inbox is clear', async () => {
+  it('drops the Aufmerksamkeit card entirely when warnings and inbox are clear', async () => {
+    const fixture = await mount(makePulse({
+      inbox: { available: true, reason: null, count: 0, items: [] },
+      warnings: { available: true, reason: 'All clear.', count: 0, items: [] },
+    }));
+    expect(html(fixture).querySelector('[data-testid="project-wiki-pulse-attention"]')).toBeNull();
+  });
+
+  it('keeps the Aufmerksamkeit card when warnings exist even though the inbox is clear', async () => {
     const fixture = await mount(makePulse({ inbox: { available: true, reason: null, count: 0, items: [] } }));
-    expect(html(fixture).querySelector('[data-testid="project-wiki-pulse-inbox-empty"]')).toBeTruthy();
+    const root = html(fixture);
+    expect(root.querySelector('[data-testid="project-wiki-pulse-attention"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-pulse-warnings"]')?.textContent).toContain('Runner crash');
+    // A clear inbox contributes no sub-list to the merged card.
+    expect(root.querySelector('[data-testid="project-wiki-pulse-inbox"]')).toBeNull();
   });
 
   it('degrades each section to a reason when its source is unavailable', async () => {
