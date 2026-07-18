@@ -295,6 +295,21 @@ public static class ProjectDocsEndpoints
                 : Results.BadRequest(new { error = commit.Error });
         });
 
+        // Persist the sibling display order of category folders (consumed by the
+        // wiki tree and the folder overview). Stored beside the other wiki
+        // metadata in docs/.wiki-order.json and committed like every other wiki
+        // mutation; folders missing from the list sort behind alphabetically.
+        app.MapPut("/api/projects/{projectName}/wiki/folder-order", (string projectName, WikiFolderOrderRequest body, ProjectDocsService docs, GitService git) =>
+        {
+            if (body.OrderedNames == null)
+                return Results.BadRequest(new { error = "orderedNames field required" });
+            var parent = Normalize(body.ParentRelPath) ?? string.Empty;
+            var result = docs.SetWikiFolderOrder(projectName, parent, body.OrderedNames);
+            if (!result.Success) return Results.BadRequest(new { error = result.Error });
+            return CommitWikiChange(git, projectName, result.FullPath!,
+                $"wiki: reorder categories under {(parent.Length == 0 ? "root" : parent)}");
+        });
+
         // Delete a wiki node (file or folder) via git rm + commit.
         app.MapDelete("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
         {
@@ -383,4 +398,5 @@ public static class ProjectDocsEndpoints
 public record WikiCreatePageRequest(string RelPath, string? Content);
 public record WikiCreateFolderRequest(string RelPath);
 public record WikiMoveRequest(string FromRelPath, string ToRelPath);
+public record WikiFolderOrderRequest(string? ParentRelPath, List<string>? OrderedNames);
 public record WikiSaveRequest(string? Content);

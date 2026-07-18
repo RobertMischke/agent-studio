@@ -54,6 +54,7 @@ import { WikiStarsService } from './wiki-stars.service';
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
+const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
 const WIKI_STATE_STORAGE_PREFIX = 'atp.projectWiki.v1.';
 const WIKI_NAV_MIN_WIDTH = 216;
 const WIKI_NAV_MAX_WIDTH = 420;
@@ -107,8 +108,12 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
  *
  * Structural edits are real git commits in the project repo: a text-only
  * context menu offers New page / New category / Rename / Delete, and dragging a
- * file onto a folder moves it (git mv). The tree re-reads from disk after every
- * mutation, so what you see is the committed state.
+ * file onto a folder moves it (git mv). Dragging a folder onto a sibling
+ * folder reorders the categories; the order persists server-side
+ * (docs/.wiki-order.json) through the same commit-backed mutation channel. The
+ * tree re-reads from disk after every mutation, so what you see is the
+ * committed state. A pinned "Overview" node above the categories reopens the
+ * dashboard landing (the initial no-selection state).
  */
 @Component({
   selector: 'app-project-wiki-section',
@@ -227,8 +232,9 @@ export class ProjectWikiSectionComponent {
   readonly renamingId = signal<string | null>(null);
   readonly renameValue = signal('');
 
-  // Drag-and-drop (file onto folder).
+  // Drag-and-drop (file onto folder → move; folder onto sibling folder → reorder).
   readonly draggingRel = signal<string | null>(null);
+  readonly draggingFolderRel = signal<string | null>(null);
   readonly dropTargetId = signal<string | null>(null);
 
   readonly driftModalOpen = signal(false);
@@ -462,6 +468,23 @@ export class ProjectWikiSectionComponent {
 
   /** Root breadcrumb of the folder overview: back to the Pulse landing. */
   showWikiLanding(): void {
+    this.selectedFolderRel.set(null);
+  }
+
+  // ---- Overview node (pinned tree entry for the dashboard landing) ----
+
+  /** The pinned "Overview" tree node lights up whenever the landing is on screen. */
+  readonly overviewActive = computed(() =>
+    !this.searchActive() && !this.openedRel() && !this.selectedFolderRel());
+
+  /**
+   * Pinned "Overview" node at the top of the tree: drops every selection
+   * (open page, folder overview, search) so the dashboard landing renders -
+   * the same state as the initial view.
+   */
+  openOverview(): void {
+    this.resetSearchState();
+    if (this.openedRel()) this.closeFile();
     this.selectedFolderRel.set(null);
   }
 
@@ -1279,11 +1302,21 @@ export class ProjectWikiSectionComponent {
     this.runMutation(this.docs.deleteWikiNode(this.projectName(), node.relPath));
   }
 
-  // ---- drag and drop (file onto folder → git mv into the folder) ----
+  // ---- drag and drop ----
+  // Files dragged onto a folder move into it (git mv, the original mechanism);
+  // folders dragged onto a *sibling* folder reorder the category list, which is
+  // persisted through the docs/.wiki-order.json channel.
 
-  onFileDragStart(ev: DragEvent, node: WikiTreeNode): void {
-    if (node.type === 'folder' || !node.relPath || !ev.dataTransfer) return;
-    if (node.immutable) return; // frame shells cannot be moved
+  onNodeDragStart(ev: DragEvent, node: WikiTreeNode): void {
+    if (!node.relPath || !ev.dataTransfer) return;
+    if (node.immutable) return; // frame folders and shells cannot be dragged
+    if (node.type === 'folder') {
+      ev.dataTransfer.setData(FOLDER_DRAG_TYPE, node.relPath);
+      ev.dataTransfer.setData('text/plain', node.relPath);
+      ev.dataTransfer.effectAllowed = 'move';
+      this.draggingFolderRel.set(node.relPath);
+      return;
+    }
     ev.dataTransfer.setData(FILE_DRAG_TYPE, node.relPath);
     ev.dataTransfer.setData('text/plain', node.relPath);
     ev.dataTransfer.effectAllowed = 'move';
@@ -1292,11 +1325,18 @@ export class ProjectWikiSectionComponent {
 
   onDragEnd(): void {
     this.draggingRel.set(null);
+    this.draggingFolderRel.set(null);
     this.dropTargetId.set(null);
   }
 
   onFolderDragOver(ev: DragEvent, folder: WikiTreeNode): void {
-    if (folder.type !== 'folder' || !this.draggingRel()) return;
+    if (folder.type !== 'folder' || !folder.relPath) return;
+    const draggingFolder = this.draggingFolderRel();
+    if (draggingFolder) {
+      if (!this.isReorderTarget(draggingFolder, folder.relPath)) return;
+    } else if (!this.draggingRel()) {
+      return;
+    }
     ev.preventDefault();
     if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
     this.dropTargetId.set(nodeId(folder));
@@ -1310,14 +1350,47 @@ export class ProjectWikiSectionComponent {
   onFolderDrop(ev: DragEvent, folder: WikiTreeNode): void {
     if (folder.type !== 'folder' || !folder.relPath) return;
     ev.preventDefault();
-    const rel = ev.dataTransfer?.getData(FILE_DRAG_TYPE) || this.draggingRel();
+    const folderRel = ev.dataTransfer?.getData(FOLDER_DRAG_TYPE) || this.draggingFolderRel();
+    const fileRel = ev.dataTransfer?.getData(FILE_DRAG_TYPE) || this.draggingRel();
     this.dropTargetId.set(null);
     this.draggingRel.set(null);
-    if (!rel) return;
-    const name = this.basename(rel);
+    this.draggingFolderRel.set(null);
+    if (folderRel) {
+      this.reorderFolder(folderRel, folder.relPath);
+      return;
+    }
+    if (!fileRel) return;
+    const name = this.basename(fileRel);
     const dest = this.joinRel(folder.relPath, name);
-    if (dest === rel) return;
-    this.runMutation(this.docs.moveWikiNode(this.projectName(), rel, dest));
+    if (dest === fileRel) return;
+    this.runMutation(this.docs.moveWikiNode(this.projectName(), fileRel, dest));
+  }
+
+  /** Reorder is within one parent: a folder only drops onto a *sibling* folder. */
+  private isReorderTarget(draggedRel: string, targetRel: string): boolean {
+    return draggedRel !== targetRel
+      && this.parentDir(draggedRel) === this.parentDir(targetRel);
+  }
+
+  /**
+   * Moves the dragged folder to the drop target's slot within their shared
+   * parent (dragging up lands before the target, dragging down after it) and
+   * persists the resulting sibling order through the same channel the tree
+   * reads it back from.
+   */
+  private reorderFolder(draggedRel: string, targetRel: string): void {
+    if (!this.isReorderTarget(draggedRel, targetRel)) return;
+    const parent = this.parentDir(draggedRel);
+    const siblings = parent
+      ? (this.findNode(this.roots(), parent)?.children ?? [])
+      : this.roots();
+    const names = siblings.filter(n => n.type === 'folder').map(n => n.name);
+    const from = names.indexOf(this.basename(draggedRel));
+    const to = names.indexOf(this.basename(targetRel));
+    if (from < 0 || to < 0 || from === to) return;
+    const [dragged] = names.splice(from, 1);
+    names.splice(to, 0, dragged);
+    this.runMutation(this.docs.setWikiFolderOrder(this.projectName(), parent, names));
   }
 
   // ---- mutation plumbing ----

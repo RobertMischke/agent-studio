@@ -218,6 +218,18 @@ export class ProjectDocsService {
     );
   }
 
+  /**
+   * Persist the display order of the category folders under one parent
+   * ("" = docs root). Stored server-side beside the other wiki metadata
+   * (docs/.wiki-order.json) and committed like every other wiki mutation.
+   */
+  setWikiFolderOrder(projectName: string, parentRelPath: string, orderedNames: string[]) {
+    return this.http.put<{ relPath: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/folder-order`,
+      { parentRelPath, orderedNames }
+    );
+  }
+
   /** Delete a wiki node (file or folder) via git rm + commit. */
   deleteWikiNode(projectName: string, relPath: string) {
     return this.http.delete<{ relPath: string; sha: string }>(

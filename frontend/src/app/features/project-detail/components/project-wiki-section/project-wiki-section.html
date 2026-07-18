@@ -113,6 +113,17 @@
           </label>
         }
 
+        <button class="pwiki__overview-node"
+                type="button"
+                data-testid="project-wiki-overview-node"
+                [class.pwiki__overview-node--active]="overviewActive()"
+                [attr.aria-pressed]="overviewActive()"
+                cacTooltip="Open the knowledge dashboard"
+                (click)="openOverview()">
+          <span class="pwiki__chevron-spacer"></span>
+          <app-studio-icon name="layout" [size]="13"></app-studio-icon>
+          <span class="pwiki__overview-label">Overview</span>
+        </button>
         <div class="pwiki__rows"
              role="tree"
              aria-label="Knowledge document tree">
@@ -130,11 +141,11 @@
                  [attr.aria-selected]="openedRel() === row.node.relPath ? 'true' : null"
                  [attr.data-testid]="'project-wiki-node-' + nodeId(row.node)"
                  [attr.data-wiki-row-id]="nodeId(row.node)"
-                 [draggable]="row.node.type !== 'folder'"
+                 [draggable]="!row.node.immutable"
                  (focusin)="focusTreeRow(row.node)"
                  (click)="focusTreeRowElement($event, row.node)"
                  (keydown)="onTreeKeydown($event)"
-                 (dragstart)="onFileDragStart($event, row.node)"
+                 (dragstart)="onNodeDragStart($event, row.node)"
                  (dragend)="onDragEnd()"
                  (dragover)="onFolderDragOver($event, row.node)"
                  (dragleave)="onFolderDragLeave(row.node)"
@@ -693,7 +704,7 @@
                     </div>
                     <div>
                       <dt>Navigation</dt>
-                      <dd>Categories, search, drag move, context actions</dd>
+                      <dd>Categories, search, drag move &amp; reorder, context actions</dd>
                     </div>
                   </dl>
                 </section>

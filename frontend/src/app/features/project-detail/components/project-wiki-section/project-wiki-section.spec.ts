@@ -54,6 +54,35 @@ const TREE: WikiTree = {
   ],
 };
 
+/** Three top-level categories (beta with a nested folder) for reorder tests. */
+const REORDER_TREE: WikiTree = {
+  projectName: 'Demo',
+  baseDir: '/repo/docs',
+  exists: true,
+  root: [
+    {
+      name: 'alpha', title: 'alpha', relPath: 'alpha', type: 'folder', children: [
+        { name: 'a.md', title: 'Alpha page', relPath: 'alpha/a.md', type: 'md', children: [] },
+      ],
+    },
+    {
+      name: 'beta', title: 'beta', relPath: 'beta', type: 'folder', children: [
+        {
+          name: 'inner', title: 'inner', relPath: 'beta/inner', type: 'folder', children: [
+            { name: 'i.md', title: 'Inner page', relPath: 'beta/inner/i.md', type: 'md', children: [] },
+          ],
+        },
+        { name: 'b.md', title: 'Beta page', relPath: 'beta/b.md', type: 'md', children: [] },
+      ],
+    },
+    {
+      name: 'gamma', title: 'gamma', relPath: 'gamma', type: 'folder', children: [
+        { name: 'g.md', title: 'Gamma page', relPath: 'gamma/g.md', type: 'md', children: [] },
+      ],
+    },
+  ],
+};
+
 const PULSE: WikiPulse = {
   projectName: 'Demo',
   baseDir: '/repo/docs',
@@ -938,6 +967,114 @@ describe('ProjectWikiSectionComponent', () => {
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
     flushWikiPulse(http);
     fixture.detectChanges();
+    http.verify();
+  });
+
+  it('drag-drops a folder onto a sibling folder and persists the category order', async () => {
+    const { fixture, http } = await setup(REORDER_TREE);
+    const root = el(fixture);
+
+    const alpha = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-alpha"]')!;
+    const gamma = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-gamma"]')!;
+    expect(alpha).toBeTruthy();
+    expect(gamma).toBeTruthy();
+    // Folder rows are draggable (only frame nodes are not).
+    expect(alpha.getAttribute('draggable')).toBe('true');
+
+    // A folder never drops onto a folder with a different parent: no request.
+    fixture.componentInstance.toggleExpand('beta');
+    fixture.detectChanges();
+    const inner = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-beta/inner"]')!;
+    expect(inner).toBeTruthy();
+    const crossDt = makeDataTransfer();
+    fireDrag(alpha, 'dragstart', crossDt);
+    fireDrag(inner, 'dragover', crossDt);
+    fireDrag(inner, 'drop', crossDt);
+    fixture.detectChanges();
+
+    // Dragging alpha down onto sibling gamma: alpha takes the slot after gamma.
+    const dt = makeDataTransfer();
+    fireDrag(alpha, 'dragstart', dt);
+    fireDrag(gamma, 'dragover', dt);
+    fireDrag(gamma, 'drop', dt);
+    fixture.detectChanges();
+
+    const put = http.expectOne(req =>
+      req.method === 'PUT' && req.url === '/api/projects/Demo/wiki/folder-order');
+    expect(put.request.body).toEqual({ parentRelPath: '', orderedNames: ['beta', 'gamma', 'alpha'] });
+    put.flush({ relPath: '.wiki-order.json', sha: 'abc1234' });
+
+    // The mutation triggers a refresh; the tree comes back in the saved order.
+    http.expectOne('/api/projects/Demo/wiki/tree').flush({
+      ...REORDER_TREE,
+      root: [REORDER_TREE.root[1], REORDER_TREE.root[2], REORDER_TREE.root[0]],
+    });
+    flushWikiPulse(http);
+    fixture.detectChanges();
+
+    const labels = [...root.querySelectorAll('[data-testid^="project-wiki-folder-label-"]')]
+      .map(n => (n.getAttribute('data-testid') ?? '').replace('project-wiki-folder-label-', ''))
+      .filter(id => !id.includes('/'));
+    expect(labels).toEqual(['beta', 'gamma', 'alpha']);
+    http.verify();
+  });
+
+  it('pins an Overview node above the categories that reopens the dashboard landing', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    const node = root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-overview-node"]')!;
+    expect(node).toBeTruthy();
+    // It sits directly above the sortable category rows and is not draggable.
+    expect(node.nextElementSibling?.classList.contains('pwiki__rows')).toBe(true);
+    expect(node.getAttribute('draggable')).toBeNull();
+    // The landing is the initial view, so the pinned node starts active.
+    expect(node.classList.contains('pwiki__overview-node--active')).toBe(true);
+    expect(root.querySelector('[data-testid="project-wiki-viewer-empty"]')).toBeTruthy();
+
+    // Opening a document deactivates it.
+    expandConcepts(fixture);
+    root.querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="project-wiki-overview-node"]')!
+      .classList.contains('pwiki__overview-node--active')).toBe(false);
+    expect(root.querySelector('[data-testid="project-wiki-viewer-empty"]')).toBeFalsy();
+
+    // Clicking Overview closes the page: the same state as the initial landing.
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-overview-node"]')!.click();
+    fixture.detectChanges();
+    http.match('/api/projects/Demo/style-guides').forEach(r => r.flush(STYLE_GUIDES));
+    http.match('/api/projects/Demo/wiki/home').forEach(r => r.flush(HOME));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedRel()).toBeNull();
+    expect(fixture.componentInstance.selectedFolderRel()).toBeNull();
+    expect(root.querySelector('[data-testid="project-wiki-viewer-empty"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-overview-node"]')!
+      .classList.contains('pwiki__overview-node--active')).toBe(true);
+
+    // From a folder overview the node also routes back to the landing.
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-folder-label-concepts"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts')
+      .flush({ path: 'concepts', name: 'concepts', children: [] });
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="project-wiki-overview-node"]')!
+      .classList.contains('pwiki__overview-node--active')).toBe(false);
+
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-overview-node"]')!.click();
+    fixture.detectChanges();
+    http.match('/api/projects/Demo/style-guides').forEach(r => r.flush(STYLE_GUIDES));
+    http.match('/api/projects/Demo/wiki/home').forEach(r => r.flush(HOME));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedFolderRel()).toBeNull();
+    expect(root.querySelector('[data-testid="project-wiki-viewer-empty"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-overview-node"]')!
+      .classList.contains('pwiki__overview-node--active')).toBe(true);
     http.verify();
   });
 

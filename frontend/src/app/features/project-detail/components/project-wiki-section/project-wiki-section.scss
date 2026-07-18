@@ -355,6 +355,52 @@
   color: var(--studio-fg-muted);
 }
 
+// Pinned "Overview" node above the category rows: reopens the dashboard
+// landing. Mirrors the row/label look but stays outside the sortable tree.
+.pwiki__overview-node {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  width: 100%;
+  min-height: 30px;
+  margin-bottom: 2px;
+  padding: 3px var(--studio-spacing-2) 3px 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--studio-fg);
+  font-family: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pwiki__overview-node:hover {
+  background: var(--studio-bg-hover);
+}
+
+.pwiki__overview-node app-studio-icon {
+  flex: 0 0 auto;
+  color: var(--studio-fg-muted);
+}
+
+.pwiki__overview-node--active {
+  background: var(--studio-nav-active-bg);
+  border-color: color-mix(in srgb, var(--studio-accent) 45%, transparent);
+  color: var(--studio-fg-strong);
+}
+
+.pwiki__overview-node--active .pwiki__overview-label {
+  font-weight: 600;
+}
+
+.pwiki__overview-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pwiki__rows {
   display: flex;
   flex-direction: column;
