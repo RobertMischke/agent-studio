@@ -11,19 +11,28 @@
         }
       </p>
     </div>
-    <button class="wsearch__semantic" type="button"
-            data-testid="wiki-search-semantic"
-            [disabled]="semanticLoading() || loading()"
-            cacTooltip="Suche mit semantisch verwandten Begriffen erweitern"
-            (click)="expandSemantic.emit()">
-      @if (semanticLoading()) {
-        <span class="wsearch__spinner" data-testid="wiki-search-semantic-spinner" aria-hidden="true"></span>
-        <span>Erweitere…</span>
-      } @else {
-        <app-studio-icon name="sliders" [size]="12"></app-studio-icon>
-        <span>Semantisch erweitern</span>
+    <div class="wsearch__actions">
+      @if (results().length > 0) {
+        <app-segmented-control
+            ariaLabel="Darstellung der Suchtreffer"
+            [options]="viewOptions"
+            [value]="viewMode()"
+            (valueChange)="setViewMode($event)" />
       }
-    </button>
+      <button class="wsearch__semantic" type="button"
+              data-testid="wiki-search-semantic"
+              [disabled]="semanticLoading() || loading()"
+              cacTooltip="Suche mit semantisch verwandten Begriffen erweitern"
+              (click)="expandSemantic.emit()">
+        @if (semanticLoading()) {
+          <span class="wsearch__spinner" data-testid="wiki-search-semantic-spinner" aria-hidden="true"></span>
+          <span>Erweitere…</span>
+        } @else {
+          <app-studio-icon name="sliders" [size]="12"></app-studio-icon>
+          <span>Semantisch erweitern</span>
+        }
+      </button>
+    </div>
   </header>
 
   @if (semanticUnavailable()) {
@@ -44,29 +53,59 @@
     <p class="wsearch__state wsearch__state--error" data-testid="wiki-search-error">{{ message }}</p>
   } @else if (results().length === 0 && response()) {
     <p class="wsearch__state" data-testid="wiki-search-empty">Keine Treffer für „{{ query() }}“.</p>
+  } @else if (viewMode() === 'tree') {
+    <ul class="wsearch__list" data-testid="wiki-search-tree">
+      @for (row of treeRows(); track rowId(row)) {
+        <li [style.padding-left.px]="row.depth * 14">
+          @if (row.kind === 'group') {
+            <button class="wsearch__group" type="button"
+                    [attr.data-testid]="'wiki-search-group-' + row.path"
+                    [attr.aria-expanded]="row.expanded"
+                    [cacTooltip]="row.path"
+                    (click)="toggleGroup(row.path)">
+              <span class="wsearch__group-chevron" aria-hidden="true">
+                <app-studio-icon [name]="row.expanded ? 'chevronDown' : 'chevronRight'" [size]="12"></app-studio-icon>
+              </span>
+              <span class="wsearch__group-folder" aria-hidden="true">
+                <app-studio-icon name="folder" [size]="12"></app-studio-icon>
+              </span>
+              <span class="wsearch__group-label">{{ row.label }}</span>
+              <span class="wsearch__group-count"
+                    [attr.data-testid]="'wiki-search-count-' + row.path">{{ row.count }}</span>
+            </button>
+          } @else {
+            <ng-container *ngTemplateOutlet="hitRow; context: { $implicit: row.result }" />
+          }
+        </li>
+      }
+    </ul>
   } @else {
-    <ul class="wsearch__list">
+    <ul class="wsearch__list" data-testid="wiki-search-list">
       @for (result of results(); track result.relPath) {
         <li>
-          <button class="wsearch__row" type="button"
-                  [attr.data-testid]="'wiki-search-open-' + result.relPath"
-                  (click)="openResult.emit(result)">
-            <span class="wsearch__row-top">
-              <strong class="wsearch__row-title">{{ result.title }}</strong>
-              @if (result.updatedAt) {
-                <time [attr.datetime]="result.updatedAt"
-                      [cacTooltip]="absoluteTime(result.updatedAt)">{{ relativeTime(result.updatedAt) }}</time>
-              }
-            </span>
-            <code class="wsearch__path">{{ result.relPath }}</code>
-            @if (result.snippet) {
-              <span class="wsearch__snippet"
-                    [attr.data-testid]="'wiki-search-snippet-' + result.relPath"
-                    [innerHTML]="result.snippet"></span>
-            }
-          </button>
+          <ng-container *ngTemplateOutlet="hitRow; context: { $implicit: result }" />
         </li>
       }
     </ul>
   }
+
+  <ng-template #hitRow let-result>
+    <button class="wsearch__row" type="button"
+            [attr.data-testid]="'wiki-search-open-' + result.relPath"
+            (click)="openResult.emit(result)">
+      <span class="wsearch__row-top">
+        <strong class="wsearch__row-title">{{ result.title }}</strong>
+        @if (result.updatedAt) {
+          <time [attr.datetime]="result.updatedAt"
+                [cacTooltip]="absoluteTime(result.updatedAt)">{{ relativeTime(result.updatedAt) }}</time>
+        }
+      </span>
+      <code class="wsearch__path">{{ result.relPath }}</code>
+      @if (result.snippet) {
+        <span class="wsearch__snippet"
+              [attr.data-testid]="'wiki-search-snippet-' + result.relPath"
+              [innerHTML]="result.snippet"></span>
+      }
+    </button>
+  </ng-template>
 </section>

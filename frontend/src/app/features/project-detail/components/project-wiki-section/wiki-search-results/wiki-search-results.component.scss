@@ -48,8 +48,16 @@
 }
 .wsearch__stats { font-variant-numeric: tabular-nums; }
 
-.wsearch__semantic {
+/* Right-aligned header controls: view toggle (tree|list) + semantic button. */
+.wsearch__actions {
   margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+
+.wsearch__semantic {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -120,6 +128,57 @@
   flex-direction: column;
   gap: var(--studio-spacing-1);
 }
+/* ---- tree view (default): folder groups with indented hit leaves ---- */
+/* Depth indentation arrives as inline padding on the <li> (depth * 14px). */
+.wsearch__group {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wsearch__group:hover {
+  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
+}
+.wsearch__group:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+.wsearch__group-chevron,
+.wsearch__group-folder {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--studio-fg-muted);
+}
+.wsearch__group-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wsearch__group-count {
+  flex-shrink: 0;
+  padding: 0 var(--studio-spacing-1);
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
+  color: var(--studio-fg);
+}
+
 .wsearch__row {
   width: 100%;
   display: flex;
