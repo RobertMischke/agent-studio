@@ -22,7 +22,7 @@ public enum WikiMaintenanceVerdict
 /// Deterministic project-wiki maintenance for the optional
 /// <c>post-wiki-maintenance</c> pipeline step. It uses the task's typed outcome
 /// issue and stable log needles as cheap signals, then updates the watched
-/// project's own <c>docs/wiki/common-problems</c> library without an LLM call.
+/// project's own <c>docs/common-problems</c> library without an LLM call.
 /// </summary>
 public sealed partial class WikiMaintenancePostStepRunner
 {
@@ -59,7 +59,7 @@ public sealed partial class WikiMaintenancePostStepRunner
         if (signal == null)
             return new WikiMaintenanceResult(WikiMaintenanceVerdict.Skipped, "no recurring-problem signal found");
 
-        var wikiRoot = Path.Combine(docsRoot, "wiki", "common-problems");
+        var wikiRoot = Path.Combine(docsRoot, "common-problems");
         try
         {
             var problemDir = Path.Combine(wikiRoot, signal.Slug);

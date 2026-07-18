@@ -1,7 +1,7 @@
 # Token Aggregation — Audit and Consolidation Plan
 
 > **Concept + living knowledge page:**
-> [`docs/wiki/concepts/token-aggregation.md`](../wiki/concepts/token-aggregation.md)
+> [`docs/concepts/token-aggregation.md`](../concepts/token-aggregation.md)
 > explains the aggregator -> bus-shim concept for operators and LLM instances and
 > is the knowledge-collection point for this area. This document is the
 > system-of-record plan and migration record.

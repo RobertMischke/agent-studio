@@ -2,7 +2,7 @@
 # Scaffold a new common-problems entry from template.
 # Usage: scripts/wiki/new-problem.sh <kebab-case-slug>
 #
-# Creates docs/wiki/common-problems/<slug>/ with the canonical 6 files.
+# Creates docs/common-problems/<slug>/ with the canonical 6 files.
 # Fills frontmatter with sensible defaults; you edit the rest.
 set -euo pipefail
 
@@ -18,7 +18,7 @@ if ! printf '%s' "$slug" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$'; then
 fi
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-target="$repo_root/docs/wiki/common-problems/$slug"
+target="$repo_root/docs/common-problems/$slug"
 
 if [ -e "$target" ]; then
   echo "error: $target already exists" >&2

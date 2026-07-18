@@ -17,10 +17,10 @@ apply only under `frontend/`.
   do not already know the right document.
 - Operator setup and troubleshooting: [docs/operations/setup/](./docs/operations/setup/README.md).
 - Familiar runtime, CLI, permission, filesystem, runner, or state-machine
-  failure: search [docs/wiki/common-problems/](docs/wiki/common-problems/)
+  failure: search [docs/common-problems/](docs/common-problems/)
   before debugging from scratch.
 - Current state of a designated topic (so we do not re-discover the same ground):
-  [docs/wiki/concepts/designated-topics/](docs/wiki/concepts/designated-topics/README.md).
+  [docs/concepts/designated-topics/](docs/concepts/designated-topics/README.md).
   The opt-in `post-agents-wiki-sync` step keeps these pointers consistent and the
   per-topic Current State pages fresh.
 
@@ -53,7 +53,7 @@ apply only under `frontend/`.
   [docs/README.md](docs/README.md) in the same change.
 - CLI crashes, run-outcome classification, retries, or orchestrator
   drive-to-conclusion: read
-  [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](docs/wiki/concepts/orchestrator-drive-to-conclusion.html)
+  [docs/concepts/orchestrator-drive-to-conclusion.html](docs/concepts/orchestrator-drive-to-conclusion.html)
   before changing that logic, and maintain it after. Append each incident to
   its case log (date, slug, what crashed, which terminal it reached).
 - A repeatedly busy orphan worktree is a bounded drive-to-conclusion failure:

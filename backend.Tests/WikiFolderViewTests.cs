@@ -149,6 +149,7 @@ public class WikiFolderViewTests : IDisposable
         WritePage("real.md.meta.json", "{}");
         WritePage("real.md.report.html", "<html></html>");
         WritePage("data.json", "{ \"title\": \"Data\" }");
+        WritePage("home.json", "{ \"sections\": [] }"); // wiki home config, never a page
         WritePage(".hidden/secret.md", "# Secret\n");
         Directory.CreateDirectory(Path.Combine(_docsDir, "empty"));
 

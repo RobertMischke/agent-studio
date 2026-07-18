@@ -108,5 +108,5 @@ Backlog task slug:
 ## Related
 
 - [../../domains/tasks.md](../../domains/tasks.md) - system-of-record task map.
-- [../../../.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md) - how to call the task API today.
+- [../../.agents/skills/task-api/SKILL.md](../../.agents/skills/task-api/SKILL.md) - how to call the task API today.
 - [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../common-problems/project-name-divergence-watchpath-vs-registry/README.md) - the watchPath-versus-registry trap.

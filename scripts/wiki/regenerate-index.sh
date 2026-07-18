@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Rebuild docs/wiki/common-problems/README.md from each entry's frontmatter.
+# Rebuild docs/common-problems/README.md from each entry's frontmatter.
 # Always overwrites; the README is treated as a derived artifact.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-root="$repo_root/docs/wiki/common-problems"
+root="$repo_root/docs/common-problems"
 index="$root/README.md"
 
 fm_scalar() {

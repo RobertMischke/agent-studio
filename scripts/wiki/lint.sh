@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate every docs/wiki/common-problems/<slug>/ entry.
+# Validate every docs/common-problems/<slug>/ entry.
 # Exits non-zero with a per-file reason on failure. Silent on success except for a final OK line.
 set -euo pipefail
 
@@ -66,7 +66,7 @@ for (const dirent of fs.readdirSync(root, { withFileTypes: true })) {
   const slug = dirent.name;
   const dir = path.join(root, slug);
   const readme = path.join(dir, 'README.md');
-  const rel = `docs/wiki/common-problems/${slug}/README.md`;
+  const rel = `docs/common-problems/${slug}/README.md`;
   checked += 1;
 
   const readmeText = readIfExists(readme);

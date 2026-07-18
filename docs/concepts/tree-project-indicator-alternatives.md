@@ -8,7 +8,7 @@ Board child row can keep lane badges or lane dots because that level explains
 the work distribution. The project row is one level higher and should use its
 limited trailing space for a compact situation summary, not a total job count.
 
-The accompanying [interactive exploration](../../design/tree-indicator-exploration-2026-07.html)
+The accompanying [interactive exploration](../design/tree-indicator-exploration-2026-07.html)
 recreates the Explorer hierarchy with realistic calm, active, escalated, and
 full-shelf projects. It can switch all project rows between the eight options,
 toggle light and dark themes, collapse project children, and pause motion.
@@ -140,8 +140,8 @@ Record one of these statements in the implementation follow-up:
 - `Approved: A - Micro dashboard dots`
 - `Approved: E - Pulse plus micro dashboard; project-row liveness is mandatory`
 
-The [interactive mockup, opened on A](../../design/tree-indicator-exploration-2026-07.html?option=dots)
-and [the same mockup opened on E](../../design/tree-indicator-exploration-2026-07.html?option=pulse)
+The [interactive mockup, opened on A](../design/tree-indicator-exploration-2026-07.html?option=dots)
+and [the same mockup opened on E](../design/tree-indicator-exploration-2026-07.html?option=pulse)
 provide a like-for-like review in both themes. The decision panel inside the
 mockup records a local A/E review selection without sending or changing product
 data.

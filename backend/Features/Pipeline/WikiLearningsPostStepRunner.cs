@@ -40,7 +40,7 @@ public enum WikiLearningsVerdict
 /// <c>post-wiki-learnings</c> pipeline step. After a task's review settles it
 /// folds the derived verdict, the per-aspect orchestrator-review findings, the
 /// agent's own close-out notes, and any typed outcome stumbling block into a
-/// per-task page under <c>docs/wiki/learnings/&lt;task&gt;.md</c> and regenerates
+/// per-task page under <c>docs/learnings/&lt;task&gt;.md</c> and regenerates
 /// the learnings index - no LLM call. It is idempotent: each distilled run carries
 /// a stable signature so a re-invocation on the same run state refreshes the page
 /// timestamp instead of duplicating, while a genuine reissue (new signature)
@@ -74,7 +74,7 @@ public sealed class WikiLearningsPostStepRunner
 
         // Self-provisioning (AGT-2024): ensure the Workstream frame exists before
         // this step writes. Activating the step for a project is what creates the
-        // structure - the old "skip when docs/wiki is missing" gate is gone, since
+        // structure - the old "skip when the wiki folder is missing" gate is gone, since
         // an enabled step now bootstraps its own home under docs/. Idempotent and
         // never overwriting.
         var docsRoot = Path.Combine(entry.RootPath, "docs");
@@ -87,7 +87,7 @@ public sealed class WikiLearningsPostStepRunner
 
         try
         {
-            var learningsRoot = Path.Combine(docsRoot, "wiki", "learnings");
+            var learningsRoot = Path.Combine(docsRoot, "learnings");
             Directory.CreateDirectory(learningsRoot);
 
             var pagePath = Path.Combine(learningsRoot, slug + ".md");

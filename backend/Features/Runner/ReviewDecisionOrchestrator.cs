@@ -1688,7 +1688,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Wiki learnings post-step: opt-in project-scoped knowledge distillation.
         // It folds the derived verdict, the per-aspect review findings, the
         // agent's close-out notes, and the typed outcome stumbling block into a
-        // per-task page under docs/wiki/learnings and regenerates that index. It
+        // per-task page under docs/learnings and regenerates that index. It
         // is reporting-only and never changes the task lane decision.
         RunWikiLearningsPostStep(entry, current, report, statusSummary, diffSummary);
 
@@ -3721,7 +3721,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     /// <summary>
     /// Opt-in wiki-learnings post-step (<c>post-wiki-learnings</c>). Distills the
-    /// settled review into a per-task page under <c>docs/wiki/learnings</c> via
+    /// settled review into a per-task page under <c>docs/learnings</c> via
     /// the injected <see cref="WikiLearningsPostStepRunner"/>. Disabled by default
     /// and gated by per-project config (same switch the wiki-maintenance step
     /// uses). Reporting-only and fully non-gating: any failure records a

@@ -46,7 +46,7 @@ public sealed record AgentsWikiSyncResult(
 /// </para>
 ///
 /// <para>
-/// It writes only under <c>docs/wiki/concepts/designated-topics/</c> plus, when
+/// It writes only under <c>docs/concepts/designated-topics/</c> plus, when
 /// self-healing a missing pointer, a single managed block at the end of the
 /// project's <c>AGENTS.md</c>. It never edits a hand-maintained concept page in
 /// place (those pages are HTML/Markdown owned by humans); the machine-maintained
@@ -57,10 +57,10 @@ public sealed record AgentsWikiSyncResult(
 public sealed class AgentsWikiSyncPostStepRunner
 {
     /// <summary>Wiki-root-relative folder that holds the registry + generated pages.</summary>
-    public const string TopicsFolderRel = "wiki/concepts/designated-topics";
+    public const string TopicsFolderRel = "concepts/designated-topics";
 
     /// <summary>Repo-relative index the AGENTS.md pointer targets.</summary>
-    public const string IndexRepoRel = "docs/wiki/concepts/designated-topics/README.md";
+    public const string IndexRepoRel = "docs/concepts/designated-topics/README.md";
 
     private const string AgentsBeginMarker = "<!-- designated-topics:begin (managed by post-agents-wiki-sync) -->";
     private const string AgentsEndMarker = "<!-- designated-topics:end -->";
@@ -257,7 +257,7 @@ public sealed class AgentsWikiSyncPostStepRunner
         var dto = new RegistryDto
         {
             Note = "Designated topics for the post-agents-wiki-sync pipeline step. Each entry pins an "
-                 + "AGENTS-surface pointer to a docs/wiki/concepts page and a machine-maintained "
+                 + "AGENTS-surface pointer to a docs/concepts page and a machine-maintained "
                  + "'Current State / Progress' page in this folder, so agents read the current state of a "
                  + "topic instead of re-discovering it. A task is matched to a topic by shared tags or by a "
                  + "changed-file path prefix. Add entries to enable the sync.",
@@ -266,7 +266,7 @@ public sealed class AgentsWikiSyncPostStepRunner
             {
                 Slug = "drive-to-conclusion",
                 Title = "Orchestrator drive-to-conclusion",
-                Page = "docs/wiki/concepts/orchestrator-drive-to-conclusion.html",
+                Page = "docs/concepts/orchestrator-drive-to-conclusion.html",
                 Tags = ["drive-to-conclusion", "orchestrator"],
                 PathPrefixes = ["backend/Features/Runner/"],
             },

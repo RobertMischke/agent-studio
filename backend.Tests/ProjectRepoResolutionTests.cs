@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// The docs/wiki root is &lt;repo&gt;/docs by convention — never a setting of
+/// The wiki root is &lt;repo&gt;/docs by convention — never a setting of
 /// its own. These tests pin the repository resolution order behind that
 /// convention: registry record → legacy WatchPaths config → derivation from
 /// the in-repo storage layout (&lt;repo&gt;/.orchestrator/jobs).

@@ -13,7 +13,7 @@ pipeline view.
   is the concept ADR for CI/CD-style task pipelines.
 - [docs/concepts/task-execution-and-log-architecture.md](../concepts/task-execution-and-log-architecture.md)
   covers the Server/Runner split, stream logs, leases, and shared state.
-- [Runner provenance, host handoff, and continuation](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance)
+- [Runner provenance, host handoff, and continuation](../concepts/completion-review-and-remote-runner-stability.html#provenance)
   defines how a pipeline cycle, agent run, execution attempt, and step execution
   retain ordered runner/host placement across planned review handoffs and
   recovery. A single task- or pipeline-level runner field is not sufficient.
@@ -23,7 +23,7 @@ pipeline view.
   per-step telemetry rows.
 - [docs/domains/token-pricing.md](./token-pricing.md) is the single source for pipeline
   cost derivation.
-- [Workflow arguments become unbounded fan-out](../wiki/common-problems/workflow-args-json-string-fanout/)
+- [Workflow arguments become unbounded fan-out](../common-problems/workflow-args-json-string-fanout/)
   records the serialized-argument failure mode and the validation and resource
   caps required before parallel work starts.
 
@@ -72,7 +72,7 @@ pipeline view.
   `post-agents-wiki-sync` step (AGT-1782). Deterministic (no LLM): it keeps the
   AGENTS.md -> wiki pointers for a set of designated topics consistent (no dead /
   missing link) and maintains a machine-owned "Current State / Progress" page per
-  designated topic under `docs/wiki/concepts/designated-topics/`, so agents read
+  designated topic under `docs/concepts/designated-topics/`, so agents read
   the current state of a topic instead of re-discovering it ("gegen im Kreis
   drehen"). The operator-owned topic list is `designated-topics/registry.json`
   (self-provisioned as an empty template on first run); a task is matched to a
@@ -298,7 +298,7 @@ operator changes cause the step to fail before its writer runs.
   `task/*`/`refs/backups/*` refs right after a successful merge step - is
   intentionally **not** wired into the pipeline; merged-ref removal is an
   operator-triggered action only (Project Hub Git-Management). See
-  `docs/wiki/concepts/task-integration-and-merge-workflow.md` §"Branch cleanup"
+  `docs/concepts/task-integration-and-merge-workflow.md` §"Branch cleanup"
   for the dry-run/execute contract and the AGT-1945 guard it would reuse.
 - `post-task-spawner` (AGT-2028) is an opt-in `StepKind.Orchestrator` post-step,
   `DefaultEnabled = false` and additionally gated on a `ProjectSettings.TaskSpawner`
@@ -322,7 +322,7 @@ operator changes cause the step to fail before its writer runs.
   `DefaultEnabled = false`, deterministic (no model), and reporting-only: it NEVER
   changes the task lane decision. It depends on the core run (not the aspect
   verdicts) and sits with the sibling wiki producers, before the final decision. It
-  writes only under `docs/wiki/concepts/designated-topics/` plus, when self-healing
+  writes only under `docs/concepts/designated-topics/` plus, when self-healing
   a missing pointer, a single managed block appended to the project's `AGENTS.md`;
   it never edits a hand-maintained concept page in place (those HTML/Markdown pages
   are human-owned), so the machine-maintained current-state block lives in the

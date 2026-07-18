@@ -105,12 +105,12 @@ describe('ProjectSteeringDocsSectionComponent (smoke)', () => {
         kind: 'gatewayTooHeavy',
         message: 'AGENTS.md carries too much local guidance.',
         sourceId: 'agents-md',
-        evidenceRefs: ['AGENTS.md', 'docs/wiki/'],
+        evidenceRefs: ['AGENTS.md', 'docs/'],
       }],
     });
     http.expectOne('/api/projects/Demo/steering/files/AGENTS.md').flush({
       relPath: 'AGENTS.md',
-      content: '# Root agent rules\n\nSee docs/wiki/common-problems/example.',
+      content: '# Root agent rules\n\nSee docs/common-problems/example.',
     });
     http.expectOne('/api/projects/Demo/steering/read-analytics').flush({
       projectName: 'Demo',

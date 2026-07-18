@@ -94,7 +94,7 @@ project**" become a real product feature instead of a deployment choice.
   continuation, and review use several runners, including A → B → A returns.
   Assignment changes, historical attribution, and controlled host switching are
   defined in the Wiki's
-  [runner provenance and host handoff contract](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance).
+  [runner provenance and host handoff contract](completion-review-and-remote-runner-stability.html#provenance).
 - **Failure surface:** a runner that misses heartbeats shows as offline; its
   projects fall back to `blocked: runner offline` instead of silently
   queueing (explicit beats implicit).

@@ -30,7 +30,7 @@ The platform owns the commit boundary (agents leave git to the application; see 
 - Committed work that is not yet merged into the integration branch keeps the worktree. Terminal teardown only proceeds when `task/<id>` is a strict ancestor of develop, so an unmerged attempt is preserved for a reissue or human review.
 - A genuine failure to land agent edits onto the task branch at integration is surfaced as a High `integration-error`, never silently swallowed on the happy path.
 
-This is why an agent may safely end a run with work left uncommitted: durably preserving it is the platform's responsibility, not the agent's. The runner-side mechanics live in `docs/domains/runner.md` and the incident log in `docs/wiki/concepts/orchestrator-drive-to-conclusion.html`.
+This is why an agent may safely end a run with work left uncommitted: durably preserving it is the platform's responsibility, not the agent's. The runner-side mechanics live in `docs/domains/runner.md` and the incident log in `docs/concepts/orchestrator-drive-to-conclusion.html`.
 
 ## Agent Rules
 

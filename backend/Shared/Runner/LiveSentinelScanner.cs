@@ -14,7 +14,7 @@ namespace AgentStudio.Shared;
 /// <c>[[TASK_DONE]]</c> literals, so any run that merely READ such a file (the
 /// file content rides the <c>user</c> / tool-result stream) tripped the scanner
 /// and was killed mid-work as a false "completion". See
-/// <c>docs/wiki/concepts/runner-stability-incidents.html</c>.
+/// <c>docs/concepts/runner-stability-incidents.html</c>.
 /// </para>
 ///
 /// <para>

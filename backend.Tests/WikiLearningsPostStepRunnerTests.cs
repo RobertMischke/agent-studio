@@ -102,8 +102,8 @@ public sealed class WikiLearningsPostStepRunnerTests : IDisposable
     public void Run_WhenDocsEmpty_SelfProvisionsFrameThenWritesLearnings()
     {
         // Self-provisioning (AGT-2024): an enabled step no longer skips because
-        // docs/wiki is missing. It seeds the Workstream frame and then writes
-        // normally, bootstrapping its own docs/wiki/learnings home.
+        // the wiki folder is missing. It seeds the Workstream frame and then writes
+        // normally, bootstrapping its own docs/learnings home.
         var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "empty-docs")).FullName;
         var runner = NewRunner();
 
@@ -147,12 +147,12 @@ public sealed class WikiLearningsPostStepRunnerTests : IDisposable
     private string PrepareProjectWiki()
     {
         var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "project", Guid.NewGuid().ToString("N"))).FullName;
-        Directory.CreateDirectory(Path.Combine(projectRoot, "docs", "wiki"));
+        Directory.CreateDirectory(Path.Combine(projectRoot, "docs"));
         return projectRoot;
     }
 
     private static string LearningsRoot(string projectRoot)
-        => Path.Combine(projectRoot, "docs", "wiki", "learnings");
+        => Path.Combine(projectRoot, "docs", "learnings");
 
     private static WatchPathEntry Entry(string projectRoot) => new()
     {

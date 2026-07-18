@@ -137,7 +137,7 @@ public sealed class OnDemandPostStepService
                         var result = _maintenance.Run(task, entry, started);
                         var status = result.Verdict == WikiMaintenanceVerdict.Error ? "Failed"
                             : result.Verdict == WikiMaintenanceVerdict.Skipped ? "Skipped" : "Ok";
-                        var artifact = result.Slug is null ? null : $"docs/wiki/common-problems/{result.Slug}/README.md";
+                        var artifact = result.Slug is null ? null : $"docs/common-problems/{result.Slug}/README.md";
                         return new ManagedProjectArtifactOutput(status, result.Reason, artifact);
                     }
                     case PipelineCatalogue.WikiLearningsStepId:
@@ -152,7 +152,7 @@ public sealed class OnDemandPostStepService
                         var result = _learnings.Run(task, entry, evidence, started);
                         var status = result.Verdict == WikiLearningsVerdict.Error ? "Failed"
                             : result.Verdict == WikiLearningsVerdict.Skipped ? "Skipped" : "Ok";
-                        var artifact = result.Slug is null ? null : $"docs/wiki/learnings/{result.Slug}.md";
+                        var artifact = result.Slug is null ? null : $"docs/learnings/{result.Slug}.md";
                         return new ManagedProjectArtifactOutput(status, result.Reason, artifact);
                     }
                     default:

@@ -24,7 +24,7 @@ public class ProjectDocsService
     private const string SecurityStateFile = "state.json";
     private const string AdrRel = "docs/architecture/decisions/adr-archive.md";
     internal const string WikiRel = "docs";
-    private const string WikiHomeRel = "wiki/home.json";
+    private const string WikiHomeRel = "home.json";
 
     // The wiki tree is the physical docs/ hierarchy itself - folders are nodes,
     // files are pages - so there is no virtual organisation layer to maintain.
@@ -465,7 +465,7 @@ public class ProjectDocsService
             var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
             var ext = Path.GetExtension(full);
             if (!WikiDocExtensions.Contains(ext)) continue;
-            if (IsWikiCompanionFile(docsRel)) continue;
+            if (IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
             if (!File.Exists(full)) continue; // a deletion in the log
 
             var title = ExtractDocTitle(full, ext)
@@ -590,7 +590,7 @@ public class ProjectDocsService
             var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
             var ext = Path.GetExtension(full);
             if (!WikiDocExtensions.Contains(ext)) continue;
-            if (IsWikiCompanionFile(docsRel)) continue;
+            if (IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
             if (!File.Exists(full)) continue; // a deletion in the log
 
             lastUpdateByRel[docsRel] = e.AuthorDateUtc;
@@ -1169,7 +1169,7 @@ public class ProjectDocsService
             if (file.Name.StartsWith('.')) continue;
             var ext = file.Extension;
             var rel = Path.GetRelativePath(docsRoot, file.FullName).Replace('\\', '/');
-            if (!WikiDocExtensions.Contains(ext) || IsWikiCompanionFile(rel)) continue;
+            if (!WikiDocExtensions.Contains(ext) || IsWikiCompanionFile(rel) || IsWikiConfigFile(rel)) continue;
             var type = ext.Equals(".md", StringComparison.OrdinalIgnoreCase)
                 ? "md"
                 : ext.Equals(".json", StringComparison.OrdinalIgnoreCase)
@@ -1279,6 +1279,14 @@ public class ProjectDocsService
         relPath.EndsWith(".meta.json", StringComparison.OrdinalIgnoreCase)
         || relPath.EndsWith(".report.html", StringComparison.OrdinalIgnoreCase)
         || relPath.EndsWith(".report.htm", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <c>docs/home.json</c> is wiki configuration (the curated home sections),
+    /// not a page: hide it from every reading surface the same way companion
+    /// sidecars are hidden. Only the root-level file is reserved.
+    /// </summary>
+    private static bool IsWikiConfigFile(string relPath) =>
+        relPath.Equals(WikiHomeRel, StringComparison.OrdinalIgnoreCase);
 
     private static string? NormalizeMetadataSourcePath(string? sourcePath)
     {
@@ -1565,7 +1573,7 @@ public class ProjectDocsService
             if (!WikiDocExtensions.Contains(ext)) continue;
             var fi = new FileInfo(f);
             var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
-            if (IsWikiCompanionFile(rel)) continue;
+            if (IsWikiCompanionFile(rel) || IsWikiConfigFile(rel)) continue;
             results.Add(new WikiFileEntry(
                 Name: Path.GetFileName(f),
                 RelPath: rel,
@@ -1932,10 +1940,10 @@ public class ProjectDocsService
         return collapsed.Length <= 240 ? collapsed : collapsed[..240].TrimEnd();
     }
 
-    // -------- Wiki home (curated landing sections from docs/wiki/home.json) --------
+    // -------- Wiki home (curated landing sections from docs/home.json) --------
 
     /// <summary>
-    /// The curated wiki home sections read from <c>docs/wiki/home.json</c>.
+    /// The curated wiki home sections read from <c>docs/home.json</c>.
     /// Every configured link is kept and annotated with an <c>exists</c> flag
     /// (checked against the docs tree with the standard traversal guard) so the
     /// UI can render a dead link visibly instead of silently dropping it. A
@@ -2355,7 +2363,7 @@ public record WikiFolderChild(
 
 // ---- Wiki home (curated landing sections) ----
 
-/// <summary>Curated wiki home payload backed by <c>docs/wiki/home.json</c>.</summary>
+/// <summary>Curated wiki home payload backed by <c>docs/home.json</c>.</summary>
 public record WikiHomeView(List<WikiHomeSection> Sections);
 public record WikiHomeSection(string Title, List<WikiHomeLink> Links);
 

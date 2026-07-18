@@ -3,7 +3,7 @@
   "schemaVersion": "wiki-document-companion/v1",
   "title": "Common problems wiki metadata",
   "source": {
-    "path": "docs/wiki/common-problems/README.md",
+    "path": "docs/common-problems/README.md",
     "type": "markdown",
     "fingerprint": {
       "algorithm": "sha256",
@@ -14,7 +14,7 @@
     }
   },
   "report": {
-    "path": "docs/wiki/common-problems/README.md.report.html",
+    "path": "docs/common-problems/README.md.report.html",
     "generatedAt": "2026-06-12T08:30:00Z",
     "generator": "scripts/wiki/generate-companion-metadata.mjs",
     "template": "wiki-document-companion-report/v1"

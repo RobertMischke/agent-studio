@@ -63,22 +63,22 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 - The route is `/api/tasks` (the former `/api/jobs` alias was removed, ADR-0058).
   How the API identifies a project (raw `watchPath` today, `shortCode`/`projectId`
   target) is documented in
-  [../wiki/concepts/api-project-identity-and-watchpath.md](../wiki/concepts/api-project-identity-and-watchpath.md).
+  [../concepts/api-project-identity-and-watchpath.md](../concepts/api-project-identity-and-watchpath.md).
 - If an operation is missing from the API, create a follow-up task instead of
   reaching around the API.
 
 ## Related Concepts
 
-- [../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance):
+- [../concepts/completion-review-and-remote-runner-stability.html#provenance](../concepts/completion-review-and-remote-runner-stability.html#provenance):
   why runner assignment is scheduling policy rather than historical fact, how a
   Task retains an ordered multi-runner route, and when a host change continues,
   blocks, or starts a new attempt.
-- [../wiki/concepts/task-integration-and-merge-workflow.md](../wiki/concepts/task-integration-and-merge-workflow.md):
+- [../concepts/task-integration-and-merge-workflow.md](../concepts/task-integration-and-merge-workflow.md):
   how a finished task's branch reaches `develop` (worktree, deferred merge, the
   `5-human-review -> 6-completed` accept trigger).
-- [../wiki/concepts/task-integration-merge-config-analysis.html](../wiki/concepts/task-integration-merge-config-analysis.html):
+- [../concepts/task-integration-merge-config-analysis.html](../concepts/task-integration-merge-config-analysis.html):
   why integration semantics should not depend on `maxParallelism`.
-- [../wiki/concepts/auto-review-evidence-gate-analysis.html](../wiki/concepts/auto-review-evidence-gate-analysis.html):
+- [../concepts/auto-review-evidence-gate-analysis.html](../concepts/auto-review-evidence-gate-analysis.html):
   why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
 
 ## Files-tab document projection

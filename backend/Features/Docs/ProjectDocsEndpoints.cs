@@ -163,7 +163,7 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(res);
         });
 
-        // Curated wiki home sections from docs/wiki/home.json. Missing or
+        // Curated wiki home sections from docs/home.json. Missing or
         // malformed file degrades to empty sections; configured links are kept
         // and annotated with an exists flag instead of being dropped. Sits
         // before the /files catch-all for path precedence.

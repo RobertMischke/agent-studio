@@ -86,6 +86,8 @@ public class ProjectWikiEnhancementsTests : IDisposable
         var docsDir = Path.Combine(projectRoot, "docs");
         Directory.CreateDirectory(Path.Combine(docsDir, "01-concepts"));
         File.WriteAllText(Path.Combine(docsDir, "README.md"), "# Index\n");
+        // Wiki home configuration, not a page: must never surface as a tree node.
+        File.WriteAllText(Path.Combine(docsDir, "home.json"), "{ \"sections\": [] }");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md"), "# Overview\n");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.html"), "<h1>HTML page</h1>");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.metadata.json"),
@@ -154,12 +156,13 @@ public class ProjectWikiEnhancementsTests : IDisposable
 
         Assert.NotNull(tree);
         Assert.True(tree!.Exists);
-        // Folders sort before the loose README file.
+        // Folders sort before the loose README file; home.json (config) is hidden.
         Assert.Equal(2, tree.Root.Count);
         Assert.Equal("folder", tree.Root[0].Type);
         Assert.Equal("concepts", tree.Root[0].Title); // NN- prefix stripped
         Assert.Equal("01-concepts", tree.Root[0].Name);
         Assert.Equal("README.md", tree.Root[1].Name);
+        Assert.DoesNotContain(tree.Root, n => n.Name == "home.json");
 
         var folder = tree.Root[0];
         Assert.Equal(3, folder.Children.Count);
@@ -362,7 +365,7 @@ public class ProjectWikiEnhancementsTests : IDisposable
     public void GetFileHistory_ReturnsCommitsNewestFirst_AndModelFromTrailer()
     {
         var repoRoot = Path.Combine(_tempDir, "repo");
-        var docPath = Path.Combine(repoRoot, "docs", "wiki", "note.md");
+        var docPath = Path.Combine(repoRoot, "docs", "note.md");
         Directory.CreateDirectory(Path.GetDirectoryName(docPath)!);
 
         RunGit(repoRoot, "init -q -b main");
@@ -380,12 +383,12 @@ public class ProjectWikiEnhancementsTests : IDisposable
 
         var git = BuildGitService(("Repo", repoRoot));
 
-        var history = git.GetFileHistory(repoRoot, "docs/wiki/note.md");
+        var history = git.GetFileHistory(repoRoot, "docs/note.md");
         Assert.Equal(2, history.Count);
         Assert.Equal("update note", history[0].Subject); // newest first
         Assert.Equal("create note", history[1].Subject);
 
-        var model = git.GetLatestModelForPath(repoRoot, "docs/wiki/note.md");
+        var model = git.GetLatestModelForPath(repoRoot, "docs/note.md");
         Assert.Equal("Claude Opus 4.8", model);
     }
 

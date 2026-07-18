@@ -1,5 +1,11 @@
 # Konsolidierungsanalyse Agent-Studio-Wiki — 2026-07-18
 
+> Hinweis 18.07.: Der `docs/wiki/`-Unterordner wurde noch am selben Tag aufgelöst
+> (Inhalt eine Ebene hochgehoben: `concepts/`, `common-problems/`, `learnings/`,
+> `home.json` liegen jetzt direkt unter `docs/`). Seitenbezogene Pfade in dieser
+> Analyse sind auf die neuen Orte aktualisiert; Struktur-Inventarzeilen und
+> Baumskizzen beschreiben den Stand vor der Auflösung.
+
 Analyse-Snapshot über den kompletten `docs/`-Baum (Worktree `wiki-main`, Branch `main`)
 plus das Wissen außerhalb des Wikis (`artifacts/improvement-plans/`).
 Zweck: Grundlage für Roberts Aufräum- und Kurationspass. Diese Seite verändert nichts —
@@ -15,7 +21,7 @@ Methodik: Jede der 474 Seiten wurde mindestens mit Titel + erster Sektion erfass
 
 - **474 Seiten** (412 md, 62 html) in 21 Top-Ordnern; dazu 49 `.meta.json`-Sidecars, 17 generierte `.report.html`-Companions, 12 JSON-Schemas, Bild-Assets. Zeitspanne der letzten Änderungen: **2026-05-03 bis 2026-07-18**.
 - Davon **generiert/uniform**: 110 common-problems-Dateien (18 Probleme × 6), 66 Survey-Proposals (paarweise Duplikate!), 13 Lane-Guides, 11 Visual-Feature-Seiten, 6 Workstream-Landing-Pages. Die eigentliche "Kurationsmasse" sind **~180 Hand-Seiten**.
-- **Größtes Problem 1 — Generationen-Stapel Remote/Runner/Completion:** mindestens 4 Generationen von Stabilitäts-/Completion-Analysen liegen nebeneinander (Mai-Postmortems → Juni-Incident-Seiten → Juli-Umbrella `completion-review-…` → **Härtungs-Workbench 18.07. = neuer kanonischer Ort**). Die Juni-HTMLs in `docs/wiki/concepts/` tragen keine "überholt durch"-Banner.
+- **Größtes Problem 1 — Generationen-Stapel Remote/Runner/Completion:** mindestens 4 Generationen von Stabilitäts-/Completion-Analysen liegen nebeneinander (Mai-Postmortems → Juni-Incident-Seiten → Juli-Umbrella `completion-review-…` → **Härtungs-Workbench 18.07. = neuer kanonischer Ort**). Die Juni-HTMLs in `docs/concepts/` tragen keine "überholt durch"-Banner.
 - **Größtes Problem 2 — Selbstreferenz-Wildwuchs "Wiki über das Wiki":** 10+ Seiten (wiki-tree, Pulse, Grading, Classification, Editing-Flow, docs-structure-migration, meta/*, usage) ohne eine klare Einstiegsseite; `docs/meta/documents/` + `docs/meta/reports/documents/` sind laut eigenem Drift-Audit **Alt-Evidenz vor der Sidecar-Migration**.
 - **Größtes Problem 3 — Sprachmix gegen die eigene Policy:** AGENTS.md verlangt Englisch, aber der neue kanonische Härtungs-Ort, 2 Konzepte und 2 Mockups sind Deutsch; der Drift-Report zu `remote-hosts-ux.html` moniert genau das (D5).
 - **Größtes Problem 4 — Wissen außerhalb des Wikis:** Phantom-Welle-/Salvage-Vollzugsprotokoll (17.07.), Org-Migration agent-orc und Pipeline-UI-Handoffs liegen nur im Devspace und sind aus dem Wiki nicht erreichbar.
@@ -53,7 +59,7 @@ Legende Typ: K=Konzept, ADR, C=Contract, D=Domain-Map, A=Analyse/Research, R=Run
 
 Sidecar-/Companion-Infrastruktur (nicht kuratieren, aber wissen): `*.meta.json` (49) und
 `*.report.html` (17, alle Stand 2026-06-12) liegen neben ihren Quelldokumenten;
-`docs/wiki/.drift/` enthält nur 2 Producer-Notizen (Bus-Contract, Remote-Hosts-Mockup) —
+`docs/.drift/` enthält nur 2 Producer-Notizen (Bus-Contract, Remote-Hosts-Mockup) —
 inkonsistent dünn, aber harmlos.
 
 ### Detail: die entscheidungsrelevanten Einzelseiten
@@ -62,22 +68,22 @@ Nur Seiten, deren Zustand nicht "aktuell" oder trivial ist (vollständige unifor
 
 | Pfad | Titel/Kurzinhalt | Typ | Stand | Zustand |
 |---|---|---|---|---|
-| `wiki/concepts/completion-review-and-remote-runner-stability.html` | Umbrella: semantische Completion, Exact-Revision-Review, Runner-Provenienz, Remote-Stabilität | K/A | 07-13 | aktuell — kanonisches EN-Konzept der Kette; sollte auf Härtungs-Workbench verweisen |
-| `wiki/concepts/runner-stability-incidents.html` | Incident-Log + Invarianten (seeded 06-23) | A | 07-13 | **überholt durch** `workbenches/haertung-verteilte-ausfuehrung/historie.html` (deren Pflege-Regel: "der eine Ort für Vorfälle") |
-| `wiki/concepts/overnight-2026-06-23-summary.html` | Overnight-Session-Zwischenstand 06-23 | A | 06-23 | historischer Sessionbericht; überholt durch historie.html |
-| `wiki/concepts/claude-termination-investigation.html` | claude.exe-Kill-Forensik, RESOLVED 06-23 (Sentinel-Scanner-Bug) | A | 06-23 | abgeschlossen; als Forensik-Archiv behalten, Banner setzen |
-| `wiki/concepts/process-termination-scenarios.html` | Termination-/Abort-Szenario-Testsuite-Spec | C/A | 06-23 | inhaltlich noch nützlich (Szenario-Matrix), aber Pflege eingeschlafen; mit Gate-/Testsuite-Realität abgleichen |
-| `wiki/concepts/orchestrator-drive-to-conclusion.html` | Drive-to-Conclusion, Slice 1 live 06-22 | K | 07-13 | aktuell (designated topic), Implementierungsstand prüfen |
-| `wiki/concepts/orchestrator-supervision-loop.html` | Watch-Loop-Konzept (proposed) | K | 06-22 | aktuell als Konzept (designated topic) |
-| `wiki/concepts/auto-review-evidence-gate-analysis.html` | 9-Task-Audit "Needs rework", Evidence-Gate | A | 07-13 | aktuell (designated topic); Überschneidung mit completion-review-Umbrella §6 |
-| `wiki/concepts/task-integration-merge-config-analysis.html` | MaxParallelism wählt still 2 Git-Pipelines; Integration-Policy-Vorschlag | A | 06-22 | aktuell als Analyse; Ist-Zustand kanonisch in `task-integration-and-merge-workflow.md` |
-| `wiki/concepts/docs-structure-migration.md` | Migrationsrekord der 06-11-Umstrukturierung | A | 06-11 | historisch (korrekt so deklariert) |
+| `concepts/completion-review-and-remote-runner-stability.html` | Umbrella: semantische Completion, Exact-Revision-Review, Runner-Provenienz, Remote-Stabilität | K/A | 07-13 | aktuell — kanonisches EN-Konzept der Kette; sollte auf Härtungs-Workbench verweisen |
+| `concepts/runner-stability-incidents.html` | Incident-Log + Invarianten (seeded 06-23) | A | 07-13 | **überholt durch** `workbenches/haertung-verteilte-ausfuehrung/historie.html` (deren Pflege-Regel: "der eine Ort für Vorfälle") |
+| `concepts/overnight-2026-06-23-summary.html` | Overnight-Session-Zwischenstand 06-23 | A | 06-23 | historischer Sessionbericht; überholt durch historie.html |
+| `concepts/claude-termination-investigation.html` | claude.exe-Kill-Forensik, RESOLVED 06-23 (Sentinel-Scanner-Bug) | A | 06-23 | abgeschlossen; als Forensik-Archiv behalten, Banner setzen |
+| `concepts/process-termination-scenarios.html` | Termination-/Abort-Szenario-Testsuite-Spec | C/A | 06-23 | inhaltlich noch nützlich (Szenario-Matrix), aber Pflege eingeschlafen; mit Gate-/Testsuite-Realität abgleichen |
+| `concepts/orchestrator-drive-to-conclusion.html` | Drive-to-Conclusion, Slice 1 live 06-22 | K | 07-13 | aktuell (designated topic), Implementierungsstand prüfen |
+| `concepts/orchestrator-supervision-loop.html` | Watch-Loop-Konzept (proposed) | K | 06-22 | aktuell als Konzept (designated topic) |
+| `concepts/auto-review-evidence-gate-analysis.html` | 9-Task-Audit "Needs rework", Evidence-Gate | A | 07-13 | aktuell (designated topic); Überschneidung mit completion-review-Umbrella §6 |
+| `concepts/task-integration-merge-config-analysis.html` | MaxParallelism wählt still 2 Git-Pipelines; Integration-Policy-Vorschlag | A | 06-22 | aktuell als Analyse; Ist-Zustand kanonisch in `task-integration-and-merge-workflow.md` |
+| `concepts/docs-structure-migration.md` | Migrationsrekord der 06-11-Umstrukturierung | A | 06-11 | historisch (korrekt so deklariert) |
 | `concepts/git-branching-integration-zielbild.md` | Git-Zielbild-Entwurf | K | 07-13 | **HISTORICAL DRAFT** (eigenes Banner) → `release-semantics.md` |
 | `concepts/project-chartroom-concept.md` | Chartroom | K | 07-08 | **SUPERSEDED** (eigenes Banner) → `engineering-workstream.md` |
 | `concepts/remote-execution-product-integration.md` | Remote im Produkt (Slices) | K | 07-13 | tw. historisch (eigenes Banner) → `distributed-agent-studio-target-architecture.md`; Host-Onboarding/UI-Slices weiter nützlich |
 | `concepts/project-relationship-model.md` | Branch-aware Wiki, Projekt/Repo-Kardinalität | K | 07-13 | historisch (eigenes Banner) → distributed-…; Branch-Provenienz-Teil weiter nützlich |
 | `concepts/task-execution-and-log-architecture.md` | Log-/Exec-Architektur | K | 07-13 | historisches Fundament (eigenes Banner) → distributed-… |
-| `concepts/mockups/remote-hosts-ux.html` | 4 Remote-Hosts-Screens (deutsch) | M | 07-07 | **Drift-Warn 56/100** (`wiki/.drift/…`): 4-Schritte-Wizard statt 5 (Push-Key fehlt), kein Status-Banner, Sprache DE |
+| `concepts/mockups/remote-hosts-ux.html` | 4 Remote-Hosts-Screens (deutsch) | M | 07-07 | **Drift-Warn 56/100** (`.drift/…`): 4-Schritte-Wizard statt 5 (Push-Key fehlt), kein Status-Banner, Sprache DE |
 | `concepts/cli-completion-and-test-quality-gate.md` | Completion-Erkennung + Test-Gate (deutsch, ENTWURF 06-09) | K | 06-09 | vermutlich veraltet: Kernfragen inzwischen in Run-Outcome-Contract, completion-review-Umbrella und Gates-Realität beantwortet |
 | `research/remote-ready-kickoff-2026-07.md` | Remote-Kickoff, Phasenplan | A | 07-13 | historischer Phasenplan (eigenes Banner) → distributed-… + linux-runner-host |
 | `research/wsl2-vs-windows-decision-2026-05.md` | WSL2 vs Windows | A | 05-03 | überholt durch ADR-0059/Linux-Runner-Realität; Design-Geschichte |
@@ -93,8 +99,8 @@ Nur Seiten, deren Zustand nicht "aktuell" oder trivial ist (vollständige unifor
 | `frontend/audits/*` (5) | SCSS/Architektur/Tooltip/Selector-Audits | A | 06-11 | datierte Audits; `scss-quality.md` bleibt Playbook, `scss-quality-eval-2026-05-17.md` ist dessen Verlaufs-Snapshot |
 | `mockups/chat-window-next-gen/` (14) | Chat-v7-Mockup-Familie (Mai) | M | 05-05…06-22 | Design-Geschichte der heutigen Chat-Richtung |
 | `mockups/kanban-board-design/`, `vscode-layout/`, `orchestrator-meta-cycle/`, `orchestrator-prep-and-autonomy/`, `task-progress-tracking/`, `quality-system/` | Mai-Mockup-Familien | M | 05-05…06-22 | gelockte Specs bzw. Design-Geschichte; quality-system lebt weiter über `concepts/architecture-quality-layer.md` |
-| `wiki/README.md` | Wiki-Einstieg + common-problems-Konventionen | I | 06-23 | aktuell, aber Intro-Absatz 3× fast wortgleich wiederholt — zusammenziehen |
-| `wiki/learnings/README.md` | "No learnings distilled yet" | G | 06-09 | verwaist-leer (Step opt-in, nie gelaufen) |
+| `README-aus-wiki.md` | Wiki-Einstieg + common-problems-Konventionen | I | 06-23 | aktuell, aber Intro-Absatz 3× fast wortgleich wiederholt — zusammenziehen |
+| `learnings/README.md` | "No learnings distilled yet" | G | 06-09 | verwaist-leer (Step opt-in, nie gelaufen) |
 
 ---
 
@@ -107,8 +113,8 @@ Das mit Abstand größte Konsolidierungsfeld.
 | Generation | Seiten | Empfehlung |
 |---|---|---|
 | Gen 1 (Mai-Postmortems) | `research/arhciv-loop-postmortem-2026-05.md`, `auto-pickup-cascade-analysis-2026-05.md`, `anthropic-5xx-frequency-2026-05-07.md`, `runner-outcome-visibility-2026-05-11.md`, `cli-orchestration-survey-2026-05.md`, `path-forward-plan-2026-05.md`, `wsl2-vs-windows-decision-2026-05.md` | behalten als Research-Archiv (datiert, korrekt einsortiert); wsl2 als "überholt durch ADR-0059" bannern |
-| Gen 2 (Juni-Incident-Seiten) | `wiki/concepts/runner-stability-incidents.html`, `process-termination-scenarios.html`, `claude-termination-investigation.html`, `overnight-2026-06-23-summary.html`, `orchestrator-drive-to-conclusion.html` | **runner-stability-incidents, overnight, claude-termination: "überholt durch historie.html" bannern** (Chronik-Monopol liegt jetzt dort); process-termination-scenarios als Testsuite-Spec prüfen/behalten; drive-to-conclusion bleibt (designated topic) |
-| Gen 3 (Juli-Umbrella) | `wiki/concepts/completion-review-and-remote-runner-stability.html` (112 KB, 07-13) | **kanonisch für Completion-/Review-/Provenienz-Semantik (EN)**; Querverweis auf Workbench ergänzen |
+| Gen 2 (Juni-Incident-Seiten) | `concepts/runner-stability-incidents.html`, `process-termination-scenarios.html`, `claude-termination-investigation.html`, `overnight-2026-06-23-summary.html`, `orchestrator-drive-to-conclusion.html` | **runner-stability-incidents, overnight, claude-termination: "überholt durch historie.html" bannern** (Chronik-Monopol liegt jetzt dort); process-termination-scenarios als Testsuite-Spec prüfen/behalten; drive-to-conclusion bleibt (designated topic) |
+| Gen 3 (Juli-Umbrella) | `concepts/completion-review-and-remote-runner-stability.html` (112 KB, 07-13) | **kanonisch für Completion-/Review-/Provenienz-Semantik (EN)**; Querverweis auf Workbench ergänzen |
 | Gen 4 (kanonischer Härtungs-Ort) | `workbenches/haertung-verteilte-ausfuehrung/index.html` + `historie.html` (18.07.) | **kanonisch für Vorfalls-Chronik + Härtungsprogramm**; einzige Pflegestelle für neue Vorfälle |
 
 Dazu die Remote-**Zielbild**-Achse (kein Duplikat, aber ein Verweisnetz, das stimmen muss):
@@ -122,9 +128,9 @@ ADR-0060 (`architecture/decisions/proposed/`) ist der produktive Lease-Slice die
 
 | Seite | Rolle | Empfehlung |
 |---|---|---|
-| `wiki/concepts/task-integration-and-merge-workflow.md` | Ist-Zustand (code-verifiziert) | **kanonisch (Ist)** |
+| `concepts/task-integration-and-merge-workflow.md` | Ist-Zustand (code-verifiziert) | **kanonisch (Ist)** |
 | `concepts/release-semantics.md` | entschiedenes Modell 07-13 | **kanonisch (Entscheidung)** |
-| `wiki/concepts/task-integration-merge-config-analysis.html` | Analyse + Integration-Policy-Vorschlag | behalten als Analyse, aus den beiden kanonischen verlinken |
+| `concepts/task-integration-merge-config-analysis.html` | Analyse + Integration-Policy-Vorschlag | behalten als Analyse, aus den beiden kanonischen verlinken |
 | `concepts/parallel-task-execution.md` | Design-Home zu ADR-0052 | behalten (Design-Home) |
 | `concepts/git-branching-integration-zielbild.md` | HISTORICAL DRAFT | Banner ok — kein Handlungsbedarf, ggf. nach `research/` verschieben |
 | `operations/git/commit-push-doctrine.md` + `commit-attribution-discovery.md` | Doktrin + Audit | behalten, kanonisch für Commit-Grenze |
@@ -146,10 +152,10 @@ ADR-0060 (`architecture/decisions/proposed/`) ist der produktive Lease-Slice die
 | `concepts/wiki-pulse-dashboard.md` (+ Mockup) | Pulse (PULSE-1/2 implementiert) | kanonisch für den Einstiegs-View |
 | `concepts/wiki-grading-run.md` | Grading (GRADE-1 implementiert) | kanonisch fürs Grading |
 | `product/wiki-document-classification.md`, `product/wiki-editing-and-branch-flow.md` | Klassifikation, Editing | behalten |
-| `wiki/concepts/docs-structure-migration.md` | Migrationsrekord 06-11 | historisch, ok |
+| `concepts/docs-structure-migration.md` | Migrationsrekord 06-11 | historisch, ok |
 | `meta/README.md` + `meta/reports/*` + `meta/usage/*` | Metadaten/Reports/Telemetry-Konzept | `meta/documents/` + `meta/reports/documents/` = Alt-Evidenz → archivieren/löschen; usage-Konzept behalten |
 | `concepts/project-relationship-model.md` (+ Mockup) | branch-aware Wiki (historisch) | Banner ok |
-| `wiki/README.md` | Einstieg + Problemkonventionen | Intro deduplizieren |
+| `README-aus-wiki.md` | Einstieg + Problemkonventionen | Intro deduplizieren |
 
 Empfehlung: eine einzige "Wiki-System"-Übersichtszeile in `docs/README.md` bzw. der neuen
 kuratierten Startseite, die diese 10 Seiten in kanonisch/lebend/historisch ordnet.
@@ -166,7 +172,7 @@ kuratierten Startseite, die diese 10 Seiten in kanonisch/lebend/historisch ordne
 
 ### Cluster F — Orchestrator-Supervision / Meta-Loop / Lanes
 
-- Kanonisch: `wiki/concepts/orchestrator-supervision-loop.html` (Konzept), `in-app-help/lane-guides/` (Ist-Verhalten, App-served), `domains/tasks.md`/`domains/runner.md` (System of record).
+- Kanonisch: `concepts/orchestrator-supervision-loop.html` (Konzept), `in-app-help/lane-guides/` (Ist-Verhalten, App-served), `domains/tasks.md`/`domains/runner.md` (System of record).
 - Design-Geschichte: `research/orchestrator-meta-loop-analysis-2026-05-04.md`, `mockups/orchestrator-meta-cycle/`, `mockups/orchestrator-prep-and-autonomy/`, `research/expanded-lifecycle-lanes-plan-2026-05.md`, `research/escalated-lane-and-decision-surface-2026-06.md`, `research/orchestrator-prep-as-active-pipeline-step-2026-06.md`, `research/auto-review-postprocessing-consolidation-2026-06.md`, `research/orchestrator-decision-protocol-2026-05.md`.
 - Konsistenz-Check nötig: `orchestrator-prep-as-active-pipeline-step` will die `1a`-Lane abschaffen — `lane-guides/lane-1a-orchestrator-prep.md` beschreibt sie als lebendig. Eine Seite von beiden braucht eine Statuszeile.
 
@@ -189,9 +195,9 @@ Seiten, deren Inhalt von neueren Seiten oder vom Code überholt ist. "Banner feh
 
 | Seite | Überholt durch | Banner? |
 |---|---|---|
-| `wiki/concepts/runner-stability-incidents.html` | `workbenches/haertung-verteilte-ausfuehrung/historie.html` (Chronik-Monopol) | **fehlt** |
-| `wiki/concepts/overnight-2026-06-23-summary.html` | historie.html (Vorfälle dort aufgearbeitet) | **fehlt** |
-| `wiki/concepts/claude-termination-investigation.html` | in sich RESOLVED; Chronik → historie.html | **fehlt** (nur "RESOLVED" im Text) |
+| `concepts/runner-stability-incidents.html` | `workbenches/haertung-verteilte-ausfuehrung/historie.html` (Chronik-Monopol) | **fehlt** |
+| `concepts/overnight-2026-06-23-summary.html` | historie.html (Vorfälle dort aufgearbeitet) | **fehlt** |
+| `concepts/claude-termination-investigation.html` | in sich RESOLVED; Chronik → historie.html | **fehlt** (nur "RESOLVED" im Text) |
 | `concepts/cli-completion-and-test-quality-gate.md` (de, ENTWURF 06-09) | `contracts/run-outcome.md`, completion-review-Umbrella, Gates-Realität (Testsuite-Gates seit 07) | **fehlt** |
 | `research/wsl2-vs-windows-decision-2026-05.md` | ADR-0059 + `operations/setup/linux-runner-host.md` | **fehlt** |
 | `research/project-chat-progress-indicator-2026-05-08.md` | `…-2026-06-08.md` | indirekt (Nachfolger sagt es) |
@@ -204,8 +210,8 @@ Seiten, deren Inhalt von neueren Seiten oder vom Code überholt ist. "Banner feh
 | Bereits korrekt gebannert (kein Handlungsbedarf): `concepts/git-branching-integration-zielbild.md`, `concepts/project-chartroom-concept.md`, `concepts/remote-execution-product-integration.md`, `concepts/project-relationship-model.md`, `concepts/task-execution-and-log-architecture.md`, `research/remote-ready-kickoff-2026-07.md`, `meta/reports/wiki-drift-audit-2026-06-11.html`, `in-app-help/lane-guides/lane-3a-failed-pickup.md` | — | ok |
 
 Verwaist (weder aktuell noch als historisch deklariert):
-`wiki/learnings/README.md` (leer, Step nie gelaufen — Step aktivieren oder Ordner-Erklärung ergänzen);
-`wiki/.drift/` (2 Einträge ohne Index); fehlende Seite `cli/skills/cli-copilot.md`
+`learnings/README.md` (leer, Step nie gelaufen — Step aktivieren oder Ordner-Erklärung ergänzen);
+`.drift/` (2 Einträge ohne Index); fehlende Seite `cli/skills/cli-copilot.md`
 (gelöscht, aber Copilot bleibt supported — wiederherstellen oder Referenzen bereinigen).
 
 ---
@@ -233,9 +239,9 @@ Umbenennungs-/Verschiebeplan (klein, 1 Ebene):
 
 | Alt | Neu | Grund |
 |---|---|---|
-| `wiki/concepts/overnight-2026-06-23-summary.html` | `wiki/concepts/archive/…` | abgeschlossener Sessionbericht |
-| `wiki/concepts/claude-termination-investigation.html` | `wiki/concepts/archive/…` | RESOLVED-Forensik |
-| `wiki/concepts/runner-stability-incidents.html` | `wiki/concepts/archive/…` (nach Merge offener Invarianten in historie.html) | Chronik-Monopol liegt in der Workbench |
+| `concepts/overnight-2026-06-23-summary.html` | `concepts/archive/…` | abgeschlossener Sessionbericht |
+| `concepts/claude-termination-investigation.html` | `concepts/archive/…` | RESOLVED-Forensik |
+| `concepts/runner-stability-incidents.html` | `concepts/archive/…` (nach Merge offener Invarianten in historie.html) | Chronik-Monopol liegt in der Workbench |
 | `meta/documents/`, `meta/reports/documents/` | löschen oder `meta/archive/` | Vor-Sidecar-Alt-Evidenz |
 | `concepts/git-branching-integration-zielbild.md` | `research/git-branching-integration-zielbild-2026-06.md` (optional) | Entwurfsgeschichte gehört zu research |
 | `concepts/cli-completion-and-test-quality-gate.md` | `research/cli-completion-gate-entwurf-2026-06.md` (optional) + Banner | dito |
@@ -285,7 +291,7 @@ relPath relativ zu `docs/`.
 | Zielbild | `concepts/distributed-agent-studio-target-architecture.md` | Verteiltes Zielbild (Studio/Server/Runner) | Kanonische Koordinationsquelle aller Remote-/Lifecycle-Entscheidungen |
 | Härtung | `workbenches/haertung-verteilte-ausfuehrung/index.html` | Härtung der verteilten Ausführung | Aktuellstes Konzept: Result-SHA, Fencing, hermetische Verifikation |
 | Härtung | `workbenches/haertung-verteilte-ausfuehrung/historie.html` | Vorfalls-Chronik | Der eine Pflegeort für Vorfälle + Präventionsstand |
-| Completion/Review | `wiki/concepts/completion-review-and-remote-runner-stability.html` | Completion, Review & Remote-Stabilität | EN-Umbrella für Completion-Semantik, Provenienz, Gates |
+| Completion/Review | `concepts/completion-review-and-remote-runner-stability.html` | Completion, Review & Remote-Stabilität | EN-Umbrella für Completion-Semantik, Provenienz, Gates |
 | Betrieb | `operations/setup/getting-started.md` | Getting started | Verifizierter Null-auf-Betrieb-Pfad |
 | Betrieb | `operations/remote-hosts.md` | Remote-Hosts-Runbook | Operator-Lifecycle für Runner-Hosts (mit linux-runner-host als Tiefe) |
 | System | `domains/runner.md` | Runner-Domain-Map | System of record für Pickup/Run/Outcome/Recovery |
@@ -293,8 +299,8 @@ relPath relativ zu `docs/`.
 | System | `domains/tasks.md` | Tasks-Domain-Map | System of record für Lanes, Job-Ordner, API-Mutationen |
 | System | `contracts/filesystem.md` | Filesystem-Contract | Kanonisches On-Disk-Layout, von jedem Agenten gebraucht |
 | Entscheidungen | `architecture/decisions/adr-archive.md` | ADR-Archiv | Alle tragenden Entscheidungen an einem Ort |
-| Integration | `wiki/concepts/task-integration-and-merge-workflow.md` | Task-Integration & Merge | Code-verifizierter Ist-Zustand des Merge-Wegs |
-| Probleme | `wiki/common-problems/README.md` | Common Problems | Erste Anlaufstelle bei bekannten Symptomen (18 Muster) |
+| Integration | `concepts/task-integration-and-merge-workflow.md` | Task-Integration & Merge | Code-verifizierter Ist-Zustand des Merge-Wegs |
+| Probleme | `common-problems/README.md` | Common Problems | Erste Anlaufstelle bei bekannten Symptomen (18 Muster) |
 | UI/Design | `design/style-guide-hard-rules.md` | Design Hard Rules | Prompt-known Regelwerk für jede UI-Karte |
 | Wiki-System | `concepts/wiki-pulse-dashboard.md` | Wiki Pulse | Erklärt den generierten Einstiegs-View + Grading-Anbindung |
 
@@ -303,5 +309,5 @@ relPath relativ zu `docs/`.
 ## NICHT getan (bewusst)
 
 Nichts gelöscht, nichts verschoben, keine Banner gesetzt, keine anderen Dateien geändert,
-kein Commit. Diese Datei (`docs/wiki/konsolidierung-analyse-2026-07-18.md`) ist die einzige
+kein Commit. Diese Datei (`docs/konsolidierung-analyse-2026-07-18.md`) ist die einzige
 Neuanlage. Alle Empfehlungen oben sind Vorschläge für Roberts Entscheidungspass.

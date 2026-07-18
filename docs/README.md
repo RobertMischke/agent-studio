@@ -21,9 +21,10 @@ Use this page as the first stop when you need the right document quickly.
 | [operations/](operations/README.md) | Setup, onboarding, security docs, runtime observability, git doctrine, and test workspaces. |
 | [reports/](reports/README.md) | Report contracts, HTML visual reports, and screenshot-backed visual documentation. |
 | [meta/](meta/README.md) | Document metadata, drift grading samples, direction, and HTML metadata reports. |
-| [concepts/](concepts/) | Future/current architecture concepts that have not become a domain or ADR yet. |
+| [concepts/](concepts/README.md) | Architecture concepts that have not become a domain or ADR yet, plus hand-maintained living concept/knowledge pages with running knowledge logs. |
 | [in-app-help/](in-app-help/README.md) | Short Markdown help pages served by the app next to non-obvious UI surfaces. |
-| [wiki/](wiki/README.md) | Living knowledge: common problems, explanatory concept pages, learnings, and migration notes. |
+| [common-problems/](common-problems/README.md) | Known recurring problems with root-cause analysis, occurrence logs, and workarounds. Search here first on a familiar symptom. |
+| [learnings/](learnings/README.md) | Per-task run learnings auto-distilled by the opt-in `post-wiki-learnings` pipeline step. Do not edit by hand. |
 | [research/](research/) | Dated deep dives and decision grounding material. |
 | [schemas/](schemas/README.md) | JSON schemas for wire and disk shapes. |
 | [mockups/](mockups/) | Locked design references and click-dummies. |
@@ -51,7 +52,7 @@ Use this page as the first stop when you need the right document quickly.
 | Engineering style guides (technology-aware and prompt-injected) | [quality/README.md](quality/README.md) |
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](design/app-survey-2026-07-11.html) |
 | Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](design/angular-performance-report-2026-07.html) |
-| Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](wiki/concepts/tree-project-indicator-alternatives.md) |
+| Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](concepts/tree-project-indicator-alternatives.md) |
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](concepts/orchestrator-in-app.md) |
@@ -81,28 +82,29 @@ Use this page as the first stop when you need the right document quickly.
 | Standalone remote runner (Linux host) | [operations/setup/linux-runner-host.md](operations/setup/linux-runner-host.md) |
 | Remote hosts operator lifecycle | [operations/remote-hosts.md](operations/remote-hosts.md) |
 | Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](operations/setup/remote-runner-persistent-connection.md) |
-| Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
-| Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [wiki/concepts/designated-topics/README.md](wiki/concepts/designated-topics/README.md) |
-| API project identity / watchPath | [wiki/concepts/api-project-identity-and-watchpath.md](wiki/concepts/api-project-identity-and-watchpath.md) |
-| Workflow arguments become unbounded fan-out | [wiki/common-problems/workflow-args-json-string-fanout/](wiki/common-problems/workflow-args-json-string-fanout/) |
-| Services killed by a harness sweep | [wiki/common-problems/services-killed-by-harness-sweep/](wiki/common-problems/services-killed-by-harness-sweep/) |
-| Orchestrator drive-to-conclusion & CLI-crash resilience | [wiki/concepts/orchestrator-drive-to-conclusion.html](wiki/concepts/orchestrator-drive-to-conclusion.html) |
-| Task integration & worktree/merge workflow | [wiki/concepts/task-integration-and-merge-workflow.md](wiki/concepts/task-integration-and-merge-workflow.md) |
-| Merge config analysis (parallelism coupling) | [wiki/concepts/task-integration-merge-config-analysis.html](wiki/concepts/task-integration-merge-config-analysis.html) |
-| Auto-review reissue / evidence-gate analysis | [wiki/concepts/auto-review-evidence-gate-analysis.html](wiki/concepts/auto-review-evidence-gate-analysis.html) |
-| Completion, review, runner provenance, host handoff, and Remote Runner stability | [wiki/concepts/completion-review-and-remote-runner-stability.html](wiki/concepts/completion-review-and-remote-runner-stability.html) |
-| Planning & Research task type | [wiki/concepts/planning-research-task-type.html](wiki/concepts/planning-research-task-type.html) |
+| Common problems | [common-problems/README.md](common-problems/README.md) |
+| Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [concepts/designated-topics/README.md](concepts/designated-topics/README.md) |
+| API project identity / watchPath | [concepts/api-project-identity-and-watchpath.md](concepts/api-project-identity-and-watchpath.md) |
+| Workflow arguments become unbounded fan-out | [common-problems/workflow-args-json-string-fanout/](common-problems/workflow-args-json-string-fanout/) |
+| Services killed by a harness sweep | [common-problems/services-killed-by-harness-sweep/](common-problems/services-killed-by-harness-sweep/) |
+| Orchestrator drive-to-conclusion & CLI-crash resilience | [concepts/orchestrator-drive-to-conclusion.html](concepts/orchestrator-drive-to-conclusion.html) |
+| Task integration & worktree/merge workflow | [concepts/task-integration-and-merge-workflow.md](concepts/task-integration-and-merge-workflow.md) |
+| Merge config analysis (parallelism coupling) | [concepts/task-integration-merge-config-analysis.html](concepts/task-integration-merge-config-analysis.html) |
+| Auto-review reissue / evidence-gate analysis | [concepts/auto-review-evidence-gate-analysis.html](concepts/auto-review-evidence-gate-analysis.html) |
+| Completion, review, runner provenance, host handoff, and Remote Runner stability | [concepts/completion-review-and-remote-runner-stability.html](concepts/completion-review-and-remote-runner-stability.html) |
+| Planning & Research task type | [concepts/planning-research-task-type.html](concepts/planning-research-task-type.html) |
 | MVP presentation screen-tooling evaluation and recommendation | [research/screen-tooling-mvp-presentation-2026-07.md](research/screen-tooling-mvp-presentation-2026-07.md) |
 | MVP presentation capture runbook | [operations/setup/presentation-capture.md](operations/setup/presentation-capture.md) |
 | MVP presentation storyboard and shot list | [product/mvp-presentation-storyboard.md](product/mvp-presentation-storyboard.md) |
-| Quota snapshot events at run start/end (cap-forecast data collection) | [wiki/concepts/quota-snapshot-run-events.md](wiki/concepts/quota-snapshot-run-events.md) |
-| Runtime prompt usage audit | [wiki/concepts/runtime-prompt-usage-audit.html](wiki/concepts/runtime-prompt-usage-audit.html) |
-| Admin CLI onboarding | [wiki/concepts/admin-cli-onboarding.html](wiki/concepts/admin-cli-onboarding.html) |
-| Orchestrator supervision loop | [wiki/concepts/orchestrator-supervision-loop.html](wiki/concepts/orchestrator-supervision-loop.html) |
-| Runner stability: incidents, invariants & goal | [wiki/concepts/runner-stability-incidents.html](wiki/concepts/runner-stability-incidents.html) |
-| Process termination & abort scenarios (test suite) | [wiki/concepts/process-termination-scenarios.html](wiki/concepts/process-termination-scenarios.html) |
-| Overnight session summary 2026-06-23 (Zwischenstand) | [wiki/concepts/overnight-2026-06-23-summary.html](wiki/concepts/overnight-2026-06-23-summary.html) |
-| claude.exe mid-run termination — live investigation | [wiki/concepts/claude-termination-investigation.html](wiki/concepts/claude-termination-investigation.html) |
+| Quota snapshot events at run start/end (cap-forecast data collection) | [concepts/quota-snapshot-run-events.md](concepts/quota-snapshot-run-events.md) |
+| Runtime prompt usage audit | [concepts/runtime-prompt-usage-audit.html](concepts/runtime-prompt-usage-audit.html) |
+| Admin CLI onboarding | [concepts/admin-cli-onboarding.html](concepts/admin-cli-onboarding.html) |
+| Orchestrator supervision loop | [concepts/orchestrator-supervision-loop.html](concepts/orchestrator-supervision-loop.html) |
+| Runner stability: incidents, invariants & goal | [concepts/runner-stability-incidents.html](concepts/runner-stability-incidents.html) |
+| Process termination & abort scenarios (test suite) | [concepts/process-termination-scenarios.html](concepts/process-termination-scenarios.html) |
+| Overnight session summary 2026-06-23 (Zwischenstand) | [concepts/overnight-2026-06-23-summary.html](concepts/overnight-2026-06-23-summary.html) |
+| claude.exe mid-run termination — live investigation | [concepts/claude-termination-investigation.html](concepts/claude-termination-investigation.html) |
+| Wiki consolidation analysis 2026-07-18 (inventory, redundancy clusters, cleanup plan) | [konsolidierung-analyse-2026-07-18.md](konsolidierung-analyse-2026-07-18.md) |
 
 ## Organization Rules
 
@@ -110,7 +112,9 @@ Use this page as the first stop when you need the right document quickly.
   `architecture/`.
 - Keep dated evidence in `reports/`, `research/`, `frontend/audits/`, or
   `cli/audits/`.
-- Keep explanatory and evolving notes in `wiki/`.
+- Keep explanatory and evolving notes in `concepts/`, recurring incident
+  patterns in `common-problems/`, and auto-distilled run learnings in
+  `learnings/` (wiki conventions: [README-aus-wiki.md](README-aus-wiki.md)).
 - Use Markdown by default.
 - Use HTML only for visual or spatial pages that need layout, such as maps or
   reports. HTML pages must be self-contained and readable in the Wiki iframe.

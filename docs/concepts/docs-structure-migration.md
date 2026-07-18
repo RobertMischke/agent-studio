@@ -3,6 +3,10 @@
 Status: implemented on 2026-06-11. This page records the reasoning and move
 map for the physical `docs/` tree migration.
 
+> Follow-up 2026-07-18: the `docs/wiki/` subfolder was dissolved; its content
+> now lives directly under `docs/` (`concepts/`, `common-problems/`,
+> `learnings/`, `home.json`). Path references below reflect the 2026-06 state.
+
 ## Goal
 
 The Wiki should make the repository documentation feel like a maintained
@@ -55,7 +59,7 @@ HTML wiki pages must be self-contained and safe in the Wiki iframe:
 - accessible headings and section labels,
 - linked from `docs/README.md` like Markdown pages.
 
-Current example: [`docs/architecture/maps/knowledge-map.html`](../../architecture/maps/knowledge-map.html).
+Current example: [`docs/architecture/maps/knowledge-map.html`](../architecture/maps/knowledge-map.html).
 It demonstrates a sandboxed HTML page next to Markdown architecture docs.
 
 ## Implemented top-level taxonomy

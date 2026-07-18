@@ -5569,7 +5569,7 @@ public class ProjectRunner
                 // that the typed routes above never claimed). A deliberate stop
                 // (status=stopped) and a manual-mode NeedsInput legitimately stay
                 // in progress and are excluded by the guard. See
-                // docs/wiki/concepts/runner-stability-incidents.html.
+                // docs/concepts/runner-stability-incidents.html.
                 var backstopIssueKind = action?.IssueKind is RunIssueKind k and not RunIssueKind.None
                     ? k
                     : RunIssueKind.OrchestratorInconclusive;

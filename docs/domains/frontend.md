@@ -124,7 +124,7 @@ groups, and a failed domain reports an error without hiding successful domains.
   Board cards deliberately show the actual live runner from the fenced run
   lease, not merely this configured target, so assignment and attribution
   cannot be confused. The historical target is the ordered, immutable route
-  defined by [Runner provenance and host handoff](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance):
+  defined by [Runner provenance and host handoff](../concepts/completion-review-and-remote-runner-stability.html#provenance):
   task Overview and run/pipeline detail show actual placement per agent run and
   executed step, preserve A → B → A returns, and label missing legacy data as
   unknown rather than inferring local execution.

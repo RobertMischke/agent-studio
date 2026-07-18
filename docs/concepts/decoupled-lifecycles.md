@@ -61,7 +61,7 @@ This builds on, rather than replaces, the current architecture:
   connection, and detached lifecycles cannot ship until restart continuity is
   closed as specified below.
 - The Wiki's
-  [runner provenance and host handoff contract](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance)
+  [runner provenance and host handoff contract](completion-review-and-remote-runner-stability.html#provenance)
   owns the user-visible ordered runner route, the deferred assignment-switch
   default, the positive no-overlap requirement, and the rule that a cross-host
   continuation creates a new process and attempt identity.

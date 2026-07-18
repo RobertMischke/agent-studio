@@ -14,7 +14,7 @@
           "note": "Kanonische Koordinationsquelle aller Remote- und Lifecycle-Entscheidungen."
         },
         {
-          "relPath": "wiki/common-problems/README.md",
+          "relPath": "common-problems/README.md",
           "label": "Common Problems",
           "note": "Erste Anlaufstelle bei bekannten Symptomen (18 Muster)."
         }
@@ -34,7 +34,7 @@
           "note": "Der eine Pflegeort für Vorfälle, Ursachen und Präventionsstand."
         },
         {
-          "relPath": "wiki/concepts/completion-review-and-remote-runner-stability.html",
+          "relPath": "concepts/completion-review-and-remote-runner-stability.html",
           "label": "Completion, Review & Remote-Stabilität",
           "note": "Umbrella für Completion-Semantik, Provenienz und Gates."
         },
@@ -54,7 +54,7 @@
       "title": "Architektur & Verträge",
       "links": [
         {
-          "relPath": "wiki/concepts/api-project-identity-and-watchpath.md",
+          "relPath": "concepts/api-project-identity-and-watchpath.md",
           "label": "API-Projektidentität & WatchPath",
           "note": "Vertrag: wie Projektname, Registry und WatchPath zusammenhängen."
         },
@@ -79,7 +79,7 @@
           "note": "Kanonisches On-Disk-Layout — von jedem Agenten gebraucht."
         },
         {
-          "relPath": "wiki/concepts/task-integration-and-merge-workflow.md",
+          "relPath": "concepts/task-integration-and-merge-workflow.md",
           "label": "Task-Integration & Merge",
           "note": "Code-verifizierter Ist-Zustand des Merge-Wegs bis develop."
         }
@@ -124,7 +124,7 @@
           "note": "Erklärt den generierten Einstiegs-View und die Grading-Anbindung."
         },
         {
-          "relPath": "wiki/konsolidierung-analyse-2026-07-18.md",
+          "relPath": "konsolidierung-analyse-2026-07-18.md",
           "label": "Wiki-Konsolidierungsanalyse",
           "note": "Bestandsaufnahme, Redundanz-Cluster und Aufräumplan (18.07.2026)."
         }

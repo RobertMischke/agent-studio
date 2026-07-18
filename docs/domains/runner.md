@@ -9,20 +9,20 @@ state.
 
 ## Entry Points
 
-- Start with [docs/wiki/common-problems/](../wiki/common-problems) for recurring
+- Start with [docs/common-problems/](../common-problems) for recurring
   runner, CLI, permission, filesystem, and state-machine failures.
-- Use [Services killed by a harness sweep](../wiki/common-problems/services-killed-by-harness-sweep/)
+- Use [Services killed by a harness sweep](../common-problems/services-killed-by-harness-sweep/)
   when choosing whether a command is session-owned, OS-owned, or a child
   process that must remain owned by one coding run.
 - Use [docs/contracts/run-outcome.md](../contracts/run-outcome.md) for the shared
   classification that drives lane routing, `status.md`, and frontend failure
   surfacing.
-- Use [Runner provenance, host handoff, and continuation](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance)
+- Use [Runner provenance, host handoff, and continuation](../concepts/completion-review-and-remote-runner-stability.html#provenance)
   when a change touches historical runner attribution, runner assignment during
   active work, cross-host continuation, attempt identity, or per-step placement.
   It defines the deferred-switch default, the no-hot-migration boundary, and the
   ordered runner route shown in Overview and task detail.
-- Read [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](../wiki/concepts/orchestrator-drive-to-conclusion.html)
+- Read [docs/concepts/orchestrator-drive-to-conclusion.html](../concepts/orchestrator-drive-to-conclusion.html)
   before touching reissue, retry, CLI-crash, or classifier logic: it holds the
   target model (retry-with-cooldown, no classifier-unknown, honest human-review
   terminal) and a running case log. Append new crash incidents there.

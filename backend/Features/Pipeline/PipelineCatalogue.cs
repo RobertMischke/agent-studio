@@ -210,7 +210,7 @@ public static class PipelineCatalogue
 
     /// <summary>
     /// Opt-in deterministic post-step that keeps a watched project's local
-    /// <c>docs/wiki/common-problems</c> library current from task outcome
+    /// <c>docs/common-problems</c> library current from task outcome
     /// signals. It dedupes by slug, increments occurrence evidence, updates
     /// <c>last-seen</c>, and regenerates the common-problems index without an
     /// LLM call. Implemented by <c>WikiMaintenancePostStepRunner</c>.
@@ -222,7 +222,7 @@ public static class PipelineCatalogue
     /// derived review verdict, the per-aspect orchestrator-review findings, the
     /// agent's own close-out notes, and any typed outcome stumbling block - into
     /// a per-task page under the watched project's
-    /// <c>docs/wiki/learnings/&lt;task&gt;.md</c> tree, then regenerates the
+    /// <c>docs/learnings/&lt;task&gt;.md</c> tree, then regenerates the
     /// learnings index. It is CLI-agnostic (no model call - it reads structured
     /// run evidence the orchestrator already has) and idempotent: a re-run dedupes
     /// by run signature so it merges/augments the page rather than overwriting it,
@@ -239,7 +239,7 @@ public static class PipelineCatalogue
     /// Opt-in deterministic post-step that keeps the AGENTS.md -&gt; wiki pointers
     /// for a set of designated topics consistent (no dead / missing link) and
     /// maintains a machine-owned "Current State / Progress" page per designated
-    /// topic under <c>docs/wiki/concepts/designated-topics/</c>, so agents read the
+    /// topic under <c>docs/concepts/designated-topics/</c>, so agents read the
     /// current state of a topic instead of re-discovering it every run ("gegen im
     /// Kreis drehen"). It is CLI-agnostic (no model call - it derives the per-topic
     /// current-state line from the task's own title / newest commit / typed outcome,
