@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Härtung — Historie: Probleme &amp; Maßnahmen</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --develop: #2a78d6; --ok: #008300; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --develop: #3987e5; --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1);
+         font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 24px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 66ch; margin: 0; }
+  h2 { font-size: 21px; margin: 44px 0 10px; }
+  p { max-width: 78ch; }
+  code { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 8px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; white-space: nowrap; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .entry { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+           padding: 20px 24px; margin: 18px 0; }
+  .entry header { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; flex-wrap: wrap;
+                  border: 0; padding: 0; margin: 0 0 8px; }
+  .entry h3 { margin: 0; font-size: 17px; }
+  .entry .date { font-size: 13px; color: var(--ink-3); font-weight: 600; white-space: nowrap; }
+  .entry dl { display: grid; grid-template-columns: 130px 1fr; gap: 4px 16px; margin: 10px 0 0; font-size: 14.5px; }
+  .entry dt { color: var(--ink-3); font-size: 12.5px; letter-spacing: .05em; text-transform: uppercase; padding-top: 2px; }
+  .entry dd { margin: 0; max-width: 80ch; }
+  .entry dd ul { margin: 0; padding-left: 18px; }
+  .entry dd li { margin: 3px 0; }
+  .rule { border: 1px solid var(--line); border-radius: 10px; background: var(--accent-soft); padding: 16px 22px; margin: 20px 0; }
+  .rule h4 { margin: 0 0 6px; font-size: 15px; }
+  .rule p { margin: 0; }
+  @media (max-width: 640px) { .entry dl { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Härtung der verteilten Ausführung · Unterseite</p>
+  <h1>Historie: Probleme &amp; Maßnahmen</h1>
+  <p class="lede">Die kanonische Chronik aller Vorfälle, ihrer Wurzeln und der Gegenmaßnahmen —
+  von AGT-1917 bis heute. Hauptseite: <code>index.html</code>.</p>
+</header>
+
+<div class="rule">
+  <h4>Pflege-Regel</h4>
+  <p>Diese Seite ist der <b>eine Ort</b>, an dem Vorfälle der Ausführungs-/Review-/Gate-Kette
+  dokumentiert werden. Jeder neue Vorfall bekommt einen Eintrag im Format unten (Problem → Root Cause
+  → Maßnahme → Status → Referenzen) <b>bevor</b> die Karte dazu geschlossen wird. Ein Vorfall ohne
+  Eintrag hier gilt als nicht aufgearbeitet.</p>
+</div>
+
+<h2>Präventionsstand nach Problemklasse</h2>
+<table>
+  <thead><tr><th>Problemklasse</th><th>Beispiele</th><th>Prävention heute</th></tr></thead>
+  <tbody>
+    <tr><td><b>Arbeitsverlust</b></td><td>Phantom-Welle, Teardown-Vernichtung</td>
+        <td><span class="pill done">geschlossen</span> verified-push-before-completion, Worktree bleibt bei Fehler</td></tr>
+    <tr><td><b>Falscher Review-Scope</b></td><td>Grade D auf leeren Diffs</td>
+        <td><span class="pill part">teilweise</span> Reconciliation erledigt; strukturell erst mit Result-SHA-Vertrag (Phase 1)</td></tr>
+    <tr><td><b>Lost-Update / Races</b></td><td>DeleteJob vs. Move; Salvage-Kontamination</td>
+        <td><span class="pill part">teilweise</span> DeleteJob-Fix gemergt; Attempt-Fencing (AGT-2182) ausstehend</td></tr>
+    <tr><td><b>Unhermetische Gates</b></td><td>Watcher-/Timing-Flakes, Logger-Freeze</td>
+        <td><span class="pill part">teilweise</span> 7 Blocker gefixt; Hermetik-Umbau (Phase 2) ausstehend</td></tr>
+    <tr><td><b>Unbewachte Baseline</b></td><td>7 rote Tests unbemerkt, Konfliktmarker committet</td>
+        <td><span class="pill open">offen</span> Nightly + Guards (Phase 3/4) noch nicht eingerichtet</td></tr>
+    <tr><td><b>Stumme Staus</b></td><td>Eskalations-Berg, Steer 4 Tage, Phase-Wedge</td>
+        <td><span class="pill open">offen</span> Board-Watchdog + Steer-Timeout noch nicht eingerichtet</td></tr>
+    <tr><td><b>Unvalidierte Registry-Writes</b></td><td>PROJ-017-Korruption</td>
+        <td><span class="pill open">offen</span> Validierung + Bereinigung ausstehend</td></tr>
+  </tbody>
+</table>
+
+<h2>Chronik</h2>
+
+<div class="entry">
+  <header><h3>AGT-1917: Die Out-of-band-„Leiche“</h3><span class="date">07.–08.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Arbeit wurde außerhalb des Runners erledigt und committet, aber die Karte blieb
+      im Zustand „escalated / no summary“, <code>lifecycle.json</code> hing in
+      <code>post-processing-running</code> — eine reviewt aussehende Lane mit verwaist aussehender Karte.</dd>
+    <dt>Root Cause</dt><dd>Das Produkt kannte nur Runner-Läufe als Evidenzquelle; für extern entstandene
+      Ergebnisse gab es keinen Ingest-Pfad.</dd>
+    <dt>Maßnahme</dt><dd><code>POST /api/tasks/{id}/external-completion</code> (atomare Reconciliation:
+      deliverables.md, status.md, Lifecycle-Terminalisierung, Timeline-Aktor <code>external</code>,
+      „extern erledigt“-Badge); Eskalationstext nennt vorhandene Partial-Results.</dd>
+    <dt>Status</dt><dd><span class="pill done">shipped</span></dd>
+    <dt>Referenzen</dt><dd><code>docs/concepts/out-of-band-task-completion.md</code>, <code>ExternalCompletionService</code></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Pflicht-Identität für API-Mutationen</h3><span class="date">10.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Board-Mutationen ohne Absender-Identität — nicht zuordenbar, nicht verweigerbar.</dd>
+    <dt>Maßnahme</dt><dd><code>X-Client-Id</code> als Pflicht-Header auf allen PUT/POST
+      (<code>ClientIdentityMiddleware</code>, 401 ohne Header). Vorstufe des Attempt-Fencings.</dd>
+    <dt>Status</dt><dd><span class="pill done">shipped</span></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Die Phantom-Welle</h3><span class="date">11.07.2026, abends</span></header>
+  <dl>
+    <dt>Problem</dt><dd>~29 Karten der Abendwelle als „done“ gemeldet, aber auf origin kam kein einziger
+      Commit an. xhigh-Compute-Arbeit unwiederbringlich zerstört (kein dangling commit auffindbar).</dd>
+    <dt>Root Cause</dt><dd>Drei gleichzeitige Defekte („die drei Löcher“):
+      <ul>
+        <li><b>AGT-2149:</b> Host ohne Git-Push-Credentials (Deploy-Keys per Org-Policy deaktiviert) — jeder Push scheiterte.</li>
+        <li><b>AGT-2148:</b> Daemon-Prompt ohne Completion-Protocol → nie ein Terminal-Sentinel → <code>outcome Unknown</code> → serverseitig als „Completed out-of-band“ verbucht (Erfolgs-Default für ein unbekanntes Ergebnis).</li>
+        <li><b>AGT-2147:</b> Teardown machte <code>worktree remove --force</code> ohne Commit/Push — und lief <i>nach</i> der bereits gemeldeten Completion, Fehler verschluckt.</li>
+      </ul>
+      Tiefenstruktur: Completion war zeitlich vor und logisch unabhängig von jedem Push.</dd>
+    <dt>Maßnahme</dt><dd>Reihenfolge invertiert und gegated: Teardown committet, pusht, <b>verifiziert</b>
+      (<code>ls-remote</code>-Gegenprobe) — erst dann Complete mit SHA. Push-Fehler ⇒
+      <code>WorktreeSalvageException</code>, Worktree bleibt, Karte eskaliert statt „done“.
+      Startup-Push-Probe; schreibunfähige Runner melden sich read-only, Claims werden verweigert.
+      Deploy-Key-Policy geflippt, Key am Repo.</dd>
+    <dt>Status</dt><dd><span class="pill done">deployed 12.07.</span> — Heilungsbeweis: AGT-2123 lief
+      danach komplett durch (outcome Done, salvage-push secured=True).</dd>
+    <dt>Referenzen</dt><dd>AGT-2147/2148/2149 · <code>runner/GitWorkspace.cs</code>,
+      <code>runner/RemoteTaskRunner.cs</code>, <code>runner/GitPushProbe.cs</code>, <code>runner/SentinelScanner.cs</code> ·
+      Handoff <code>lage-kontext-handoff-2026-07-12.md</code></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Gate-Test-Stufe wird Falsch-Eskalations-Fabrik</h3><span class="date">12.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Mit dem Nacht-Deploy bekamen Karten-Gates eine Test-Stufe — und vier latente
+      Rot-Quellen (Namespace-Guard, monatslatente Fixture, Label-Drift, Live-Checkout-/Perf-Polizei)
+      ließen gesunde Karten reihenweise durchfallen. Zusätzlich: Gate-Timeout 300 s bei ~8 min Suite
+      („exit n/a“ = Timeout, kein roter Test), BuildProfile-Validierung läuft im leeren Worktree-Kontext
+      (MSB1009) und blockiert Auto-Pickup.</dd>
+    <dt>Root Cause</dt><dd>Maschinen-/lastabhängige Tests in parallelen Karten-Gates; Timeout-Default
+      nicht an Suite-Dauer angepasst; Validierung gegen falschen Kontext.</dd>
+    <dt>Maßnahme</dt><dd>MachineBound-Konvention (<code>[Trait("Category","MachineBound")]</code>) +
+      Gate-Filter <code>Category!=MachineBound</code>; Timeout auf 900 s; Workaround: Status direkt in
+      <code>project-settings.json</code> auf <code>pipeline-ready</code>.</dd>
+    <dt>Status</dt><dd><span class="pill done">Workarounds aktiv</span>
+      <span class="pill open">Validierungsbug offen</span> — strukturelle Antwort ist die Hermetik (Hauptseite §5).</dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Rescue der Phantom-Charge · QS-15-Wedge · Steer ohne Timeout</h3><span class="date">13.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Die 13.07.-Charge musste manuell gerettet werden; QS-15 blieb mit
+      <code>missing-terminal-sentinel</code> vier Tage in <code>post-processing-running</code> hängen;
+      CAC-10s Steer-Frage („which port?“) wartete ab hier unbeantwortet — <code>timeoutSeconds: 0</code>.</dd>
+    <dt>Root Cause</dt><dd>Salvage→task-Integration manuell; Phase-Zustände ohne Selbstheilung;
+      Warte-auf-Mensch ohne Timeout und ohne Alarm.</dd>
+    <dt>Maßnahme</dt><dd>Rescue-Branches (<code>rescue/integrate-phantom-salvage-20260713</code>,
+      <code>rescue/phantom-shared-develop-20260713</code>) vollständig in develop integriert; QS-15 am
+      17.07. per Lane-Move entstuckt (Move bereinigt inkompatible Phase).</dd>
+    <dt>Status</dt><dd><span class="pill done">Rescue erledigt</span>
+      <span class="pill open">Steer-Timeout &amp; Phase-Watchdog offen</span> (Phase 3;
+      Branch <code>run-liveness-b-steer-timeout-mit-fallback</code> existiert).</dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Harness-Sweeps töten Dienst-Prozesse</h3><span class="date">~12.07.2026 (Konvention)</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Als Session-Tasks gestartete Dienste (Server, Tunnel) wurden von
+      Harness-Sweeps samt Prozessbaum beendet.</dd>
+    <dt>Maßnahme</dt><dd>Konvention: Dienste nie als Session-Tasks — Windows <code>Start-Process</code>
+      (detached), Linux <code>setsid</code>/systemd.</dd>
+    <dt>Status</dt><dd><span class="pill done">Konvention etabliert</span></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Die Grade-D-Welle: Salvage nie integriert</h3><span class="date">17.07.2026, 20:03–21:52</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Auto-Review eskalierte 17 Karten mit Grade D — „the claimed implementation
+      exists only on an external salvage branch“. Die Reviews waren korrekt: die Arbeit lag auf
+      <code>runner/agent-runner-01/*</code>, die reviewten <code>task/*</code>-Branches waren leer oder themenfremd.</dd>
+    <dt>Root Cause</dt><dd>Design-Lücke, nicht Bug: der Remote-Runner pusht ausschließlich auf
+      <code>runner/&lt;id&gt;/&lt;key&gt;</code>; kein automatischer Schritt integriert nach
+      <code>task/&lt;slug&gt;</code>. Der Review-Diff-Scope (Run-SHAs → Branch-Fallback) rät und trifft
+      im Phantom-Fall das falsche Universum. Detailanalyse: Hauptseite §2.</dd>
+    <dt>Maßnahme</dt><dd>Reconciliation aller 19 betroffenen Karten: frischer <code>task/&lt;slug&gt;</code>
+      von aktuellem develop, <code>merge --squash</code> des Salvage, Konflikte develop-erhaltend gelöst,
+      Push, Requeue. Strukturelle Antwort: Result-SHA-Vertrag (Phase 1).</dd>
+    <dt>Status</dt><dd><span class="pill done">Reconciliation erledigt</span>
+      <span class="pill queued">Struktur: Phase 1 gequeued</span></dd>
+    <dt>Referenzen</dt><dd>Vollzugsprotokoll <code>salvage-reconciliation-2026-07-17.md</code> (devspace/artifacts) ·
+      AGT-2108/2133/2152/2156/2159/2160/2162/2163/2167/2177/2178/2180/2181/2188/2190/2191/2192/2193/2195</dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Sieben Gate-Blocker auf develop</h3><span class="date">17.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Die Testsuite auf develop war siebenfach rot bzw. flaky — jede Karte fiel
+      unabhängig von ihrer Qualität durchs Build-Test-Gate.</dd>
+    <dt>Root Cause</dt><dd>Gemischt: ein echter Produkt-Race (<code>DeleteJob</code> jagte gemovte
+      Karten in die neue Lane — Lost Update), ein Serilog-Freeze-Race paralleler Test-Hosts,
+      zu knappe Watcher-Zeitbudgets, ein von der Produktentwicklung überholter Test-Seed, zwei
+      Guard-Verstöße (Inline-Prompts, Legacy-Namespace), committete Konfliktmarker in einer Doku.
+      Alle vorbestehend — unbemerkt, weil niemand develop selbst testet.</dd>
+    <dt>Maßnahme</dt><dd>Zwei Fix-Commits (<code>13581a70</code>, <code>e9520c2b</code>), Volltest
+      (4230 Tests) verifiziert; betroffene Karten requeued (Worktree-Basis-Regel).</dd>
+    <dt>Status</dt><dd><span class="pill done">gemergt</span> — <span class="pill open">4 Rest-Flakes
+      dokumentiert</span>: <code>AdHocUsageBusParityTests.LegacyAndBusReaders…</code> (2× im Vollauf —
+      Analyse vor Ausschluss!), <code>BuildTestGateRunnerBehaviorTests.CancellationDuringHostLoadWait…</code>,
+      <code>MergeEndpointsIntegrationTests.CompletedLaneAuditRoutes…</code>,
+      <code>TaskWatcherServiceTests.RelevantBurst…</code></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Korrupte Registry-Registrierung PROJ-017</h3><span class="date">entdeckt 17.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Doppelte „Quality Studio“-Registrierung PROJ-017 (QS2) mit Pfad
+      <code>C:Projectsquality-studio.orchestratorjobs</code> — alle Backslashes verloren. Folge u. a.:
+      Task-Moves via <code>?watchPath=</code> liefern für QS/CAC 404.</dd>
+    <dt>Root Cause</dt><dd>Registry-Write ohne Pfad-Validierung (vermutlich Escaping-Fehler beim Schreiben).</dd>
+    <dt>Maßnahme</dt><dd>Workaround: Mutationen über den path-freien Handle <code>?project=PROJ-NNN</code>.
+      Ausstehend: Validierung an jeder Registry-Schreibstelle (absolut + existent) und Löschung der
+      Leiche (Operator-Entscheid).</dd>
+    <dt>Status</dt><dd><span class="pill open">offen</span></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Kreuzkontaminierte Salvage-Branches</h3><span class="date">entdeckt 17.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd><code>runner/…/AGT-2191</code> enthielt nahezu das komplette Werk von AGT-2108 —
+      Salvage-Stände bauten aufeinander auf; Branch-Inhalte sind keine sauberen Per-Task-Diffs.
+      Merge-Folgen: der zweite überlappende Branch wird No-Op oder Konflikt.</dd>
+    <dt>Root Cause</dt><dd>Pickup startete zeitweise vom Umgebungszustand (Resume-von-Salvage) statt von
+      einer autoritativen Basis.</dd>
+    <dt>Maßnahme</dt><dd>AGT-2177: Pickup materialisiert eine explizit gefetchte Basis-SHA
+      (<code>worktree add … &lt;sha&gt;</code>); Divergenz → deterministische Collision-Refs, nie Force-Push.</dd>
+    <dt>Status</dt><dd><span class="pill queued">AGT-2177 reconciled + requeued</span></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Verlorene Library-Companion-Änderung (Chat)</h3><span class="date">11.07., entdeckt 17.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Der Studio-Salvage von AGT-2162 band <code>[composerContext]</code> an
+      <code>&lt;cac-chat&gt;</code> — diese API existiert in keiner Version und auf keinem Branch des
+      Library-Repos: die Companion-Änderung ging im 11.07.-Ausfall vollständig verloren
+      (Verlust <i>über Repo-Grenzen hinweg</i> — die Phantom-Klasse trifft auch Nachbar-Repos).</dd>
+    <dt>Maßnahme</dt><dd>App-lokale Brücke über den <code>[chat-foot-start]</code>-Projektionsslot;
+      Follow-up-Ticket <code>cac-chat-composer-context-first-class-input</code> im CAC-Backlog.</dd>
+    <dt>Status</dt><dd><span class="pill queued">Backlog-Ticket angelegt</span></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>CAC-7: legitime Eskalation am npm-Publish</h3><span class="date">17.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Nach Reconciliation und Re-Run (173/173 Tests, Release 0.2.1 gebaut) eskalierte
+      CAC-7 erneut — diesmal zu Recht: <code>npm publish</code> scheitert an fehlender Auth (E401,
+      ausstehender Erstpublish von <code>@coding-agent/chat</code>). Nebenbefund: die Completion-Gate
+      urteilte zwischenzeitlich über eine <i>stale</i> Prosa-Checkliste — Argument für
+      <code>completion-gate-use-structured-evidence</code>.</dd>
+    <dt>Status</dt><dd><span class="pill open">Operator-Entscheid: main pushen + npm-Publish freigeben</span></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Härtungskonzept beschlossen</h3><span class="date">18.07.2026</span></header>
+  <dl>
+    <dt>Inhalt</dt><dd>Dieses Konzept: Result-SHA-Vertrag, gefencte Schreiber (inkl. Agenten-Quarantäne),
+      hermetische Gates, bewachte Baseline, Gesundheits-SLOs. Programm und Phasen: Hauptseite §7.
+      Harte Bedingung: Remote-Reaktivierung erst nach Phase 1.</dd>
+    <dt>Status</dt><dd><span class="pill done">dokumentiert</span> — Umsetzung läuft über die P0-Karten.</dd>
+  </dl>
+</div>
+
+</main>
+</body>
+</html>

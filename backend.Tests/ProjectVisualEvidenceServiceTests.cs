@@ -87,6 +87,30 @@ public sealed class ProjectVisualEvidenceServiceTests : IDisposable
         Assert.Equal(2, Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo", refresh: true)).Items.Count);
     }
 
+    [Fact]
+    public void Build_ReturnsOnlyTheFourNewestOverviewItems()
+    {
+        var (service, jobFolder, originalScreenshot) = BuildStack();
+        var results = Path.Combine(jobFolder, "results");
+        var baseline = new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(originalScreenshot, baseline);
+
+        for (var index = 1; index <= 5; index++)
+        {
+            var path = Path.Combine(results, $"evidence-{index}--real.png");
+            File.WriteAllBytes(path, [(byte)index]);
+            File.SetLastWriteTimeUtc(path, baseline.AddMinutes(index));
+        }
+
+        var queue = Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo", refresh: true));
+
+        Assert.Equal(ProjectVisualEvidenceService.OverviewItemLimit, queue.Items.Count);
+        Assert.Equal(4, queue.UnseenCount);
+        Assert.Equal(
+            ["evidence-5--real.png", "evidence-4--real.png", "evidence-3--real.png", "evidence-2--real.png"],
+            queue.Items.Select(item => item.FileName));
+    }
+
     private (ProjectVisualEvidenceService Service, string JobFolder, string Screenshot) BuildStack()
     {
         var demo = Path.Combine(_root, "demo");

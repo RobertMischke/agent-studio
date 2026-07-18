@@ -35,15 +35,6 @@ const project = {
 };
 const workspaces = [{ id: 'ws-product', displayName: 'Product Engineering', color: '#6c8cff', projects: [project] }];
 
-const throughput = {
-  project: PROJECT_NAME, capturedAt: '2026-07-11T12:00:00Z',
-  completedLast24h: 8, completedLast7d: 29,
-  recentCompletions: Array.from({ length: 29 }, (_, i) => ({
-    taskId: `done-${i + 1}`, taskKey: `OPD-${100 + i}`, title: `Delivered change ${i + 1}`,
-    completedAt: `2026-07-${String(11 - Math.floor(i / 5)).padStart(2, '0')}T10:00:00Z`,
-  })),
-};
-
 const tokenSummary = {
   project: PROJECT_NAME, hasData: true,
   lifetimeTotalTokens: 12_409_120, lifetimeJobTokens: 9_200_000,
@@ -204,7 +195,6 @@ async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; t
     // without compiling an unrelated editor surface.
   });
   await page.route('**/api/crash-recovery/pending', route => fulfillJson(route, { pending: [] }));
-  await page.route('**/api/projects/*/throughput', route => fulfillJson(route, throughput));
   await page.route('**/api/projects/*/token-usage/summary', route => fulfillJson(route, tokenSummary));
   await page.route('**/api/projects/*/deployment/summary', route => fulfillJson(route, deployment));
   await page.route('**/api/projects/*/wiki/pulse**', route => fulfillJson(route, wikiPulse));
@@ -234,7 +224,12 @@ async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; t
       watchPath: '/mock/tasks/operator-demo', fileName: 'removed--mocked.png',
       relativePath: 'results/removed--mocked.png', url: null, caption: 'Prior settings sweep',
       testStatus: null, source: 'unavailable', capturedAt: '2026-07-10T09:00:00Z', reviewStatus: 'unavailable',
-    }],
+    }, ...Array.from({ length: 3 }, (_, index) => ({
+      id: `visual-screenshot-history-${index + 3}`, jobId: `OPD-${203 - index}`, jobTitle: 'Earlier visual delivery',
+      watchPath: '/mock/tasks/operator-demo', fileName: `history-${index + 3}--real.png`,
+      relativePath: `results/history-${index + 3}--real.png`, url: '/evidence-shot.svg', caption: `Earlier evidence ${index + 3}`,
+      testStatus: 'passed', source: 'real', capturedAt: `2026-07-0${9 - index}T09:00:00Z`, reviewStatus: 'reviewed',
+    }))],
   }));
   await page.route('**/api/projects/*/visual-evidence/*/acknowledge', route => {
     evidenceReviewed = true;
@@ -287,14 +282,35 @@ async function openDashboard(page: Page, projectName = PROJECT_NAME, freshDocume
 test.describe('Project Overview · operator dashboard', () => {
   test.beforeAll(() => fs.mkdirSync(RESULTS_DIR, { recursive: true }));
 
+  test('keeps the usage card intact and visual evidence bounded in both themes', async ({ page, devBackend }, testInfo) => {
+    await proxyBackend(page, devBackend.baseUrl);
+    await mockDashboard(page);
+    await openDashboard(page);
+
+    await expect(page.getByTestId('project-overview-throughput')).toHaveCount(0);
+    await expect(page.getByTestId('project-overview-dashboard')).not.toContainText('Delivered tasks');
+    await expect(page.getByTestId('project-overview-tokens-24h')).toHaveText('1.2M');
+    await expect(page.getByTestId('project-overview-tokens-7d')).toHaveText('8.3M');
+    await expect(page.getByTestId('project-overview-evidence').locator('li')).toHaveCount(4);
+    await expect(page.getByTestId('project-overview-evidence-visual-screenshot-history-5')).toHaveCount(0);
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: testInfo.outputPath(`project-overview-compact--${theme}.png`),
+        fullPage: true,
+      });
+    }
+  });
+
   test('shows exact operator signals, both themes, and reuses URL start-in-place', async ({ page, devBackend }) => {
     test.setTimeout(120_000);
     await proxyBackend(page, devBackend.baseUrl);
     const mocked = await mockDashboard(page);
     await openDashboard(page);
 
-    await expect(page.getByTestId('project-overview-throughput-24h')).toHaveText('8');
-    await expect(page.getByTestId('project-overview-throughput-7d')).toHaveText('29');
+    await expect(page.getByTestId('project-overview-throughput')).toHaveCount(0);
+    await expect(page.getByTestId('project-overview-dashboard')).not.toContainText('Delivered tasks');
     await expect(page.getByTestId('project-overview-tokens-24h')).toHaveText('1.2M');
     await expect(page.getByTestId('project-overview-tokens-7d')).toHaveText('8.3M');
     await expect(page.getByTestId('project-overview-deployment')).toContainText('5 changes ready to deploy');
@@ -313,7 +329,7 @@ test.describe('Project Overview · operator dashboard', () => {
     const legacyCopy = ['Watch path', 'Working directory', 'Repository', 'Clean context', 'Project sessions'];
     for (const copy of legacyCopy) await expect(page.getByTestId('project-overview-dashboard')).not.toContainText(copy);
 
-    const numericVariant = await page.getByTestId('project-overview-throughput-24h')
+    const numericVariant = await page.getByTestId('project-overview-tokens-24h')
       .evaluate(element => getComputedStyle(element).fontVariantNumeric);
     expect(numericVariant).toContain('tabular-nums');
     const overflow = await page.getByTestId('project-overview-dashboard')

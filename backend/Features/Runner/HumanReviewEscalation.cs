@@ -61,6 +61,13 @@ public static class HumanReviewEscalationCategories
     /// AGT-1945/1929/1930).</summary>
     public const string CliLaunchFailed = "cli-launch-failed";
 
+    /// <summary>The agent CLI could not launch because its OAuth session expired
+    /// and the token refresh failed. Non-retryable and shared across every
+    /// parallel run, so the orchestrator STOPS immediately (breaker) and escalates
+    /// with a re-auth instruction instead of burning further launches - the
+    /// AGT-2066 token-roulette signature (17 cards drained on 2026-07-10).</summary>
+    public const string AuthRefreshFailed = "auth-refresh-failed";
+
     /// <summary>The run could not be mapped to a terminal verdict, but it left
     /// files in <c>results/</c>. Routed to human review WITH a "there is partial
     /// work to inspect" hint rather than a bare inconclusive park, so a reviewer

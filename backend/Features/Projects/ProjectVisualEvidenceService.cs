@@ -31,6 +31,8 @@ public sealed record ProjectVisualEvidenceQueue(
 public sealed class ProjectVisualEvidenceService
 {
     internal const string ReceiptPrefix = "visual-screenshot-";
+    internal const int OverviewItemLimit = 4;
+    private const int CandidateTaskLimit = OverviewItemLimit * 2;
     private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(10);
     private readonly TaskScannerService _scanner;
     private readonly ScreenshotIndexService _screenshots;
@@ -73,9 +75,16 @@ public sealed class ProjectVisualEvidenceService
         if (watch is null) return null;
 
         var items = new List<ProjectVisualEvidenceItem>();
-        foreach (var task in _scanner.ScanAllJobsWithArchive()
-                     .Where(task => WatchPathComparison.PathsEqual(task.WatchPath, watch.Path))
-                     .Where(task => task.State is TaskStates.Completed or TaskStates.Archive))
+        // Screenshot discovery recursively walks each task's results tree. The
+        // Overview is a recent-evidence glance, so keep that work bounded to a
+        // small set of the latest delivered tasks instead of walking the full
+        // completed/archive history on every refresh.
+        var candidates = _scanner.ScanAllJobsWithArchive()
+            .Where(task => WatchPathComparison.PathsEqual(task.WatchPath, watch.Path))
+            .Where(task => task.State is TaskStates.Completed or TaskStates.Archive)
+            .OrderByDescending(task => task.LastActivity)
+            .Take(CandidateTaskLimit);
+        foreach (var task in candidates)
         {
             try
             {
@@ -90,8 +99,8 @@ public sealed class ProjectVisualEvidenceService
         }
 
         var ordered = items
-            .OrderBy(item => item.ReviewStatus == "unseen" ? 0 : item.ReviewStatus == "reviewed" ? 1 : 2)
-            .ThenByDescending(item => item.CapturedAt)
+            .OrderByDescending(item => item.CapturedAt)
+            .Take(OverviewItemLimit)
             .ToList();
         return new ProjectVisualEvidenceQueue(
             projectName,

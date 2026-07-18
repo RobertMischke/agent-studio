@@ -79,6 +79,7 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     [InlineData(OrchestratorMessageKind.InfraCrash, "High", "infra-crash")]
     [InlineData(OrchestratorMessageKind.OrchestratorInconclusive, "Warn", "orchestrator-inconclusive")]
     [InlineData(OrchestratorMessageKind.CliLaunchFailed, "Warn", "cli-launch-failed")]
+    [InlineData(OrchestratorMessageKind.AuthRefreshFailed, "High", "auth-refresh-failed")]
     [InlineData(OrchestratorMessageKind.GiveUp, "High", "giveup")]
     [InlineData(OrchestratorMessageKind.IntegrationConflict, "High", "integration-conflict")]
     [InlineData(OrchestratorMessageKind.IntegrationError, "High", "integration-error")]

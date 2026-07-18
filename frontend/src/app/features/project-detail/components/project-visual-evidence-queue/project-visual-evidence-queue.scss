@@ -14,7 +14,7 @@ li[data-status='unavailable'] { background: color-mix(in srgb, var(--studio-fg-m
 .evidence-queue__copy { display: grid; min-width: 0; gap: var(--studio-spacing-1); }
 .evidence-queue__copy strong, .evidence-queue__copy span, .evidence-queue__copy code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .evidence-queue__copy strong { color: var(--studio-fg-strong); font-size: .78rem; }
-.evidence-queue__copy span, .evidence-queue__copy code, .evidence-queue__state, .evidence-queue__more { color: var(--studio-fg-muted); font-size: .68rem; }
+.evidence-queue__copy span, .evidence-queue__copy code, .evidence-queue__state { color: var(--studio-fg-muted); font-size: .68rem; }
 .evidence-queue__actions { display: flex; align-items: center; gap: var(--studio-spacing-2); }
 .evidence-queue button { padding: var(--studio-spacing-1) var(--studio-spacing-2); border: 1px solid var(--studio-border-strong); border-radius: 6px; background: transparent; color: var(--studio-fg); cursor: pointer; font: inherit; font-size: .68rem; }
 .evidence-queue button:hover { background: var(--studio-bg-hover); }
@@ -23,6 +23,5 @@ li[data-status='unavailable'] { background: color-mix(in srgb, var(--studio-fg-m
 .evidence-queue .evidence-queue__ack { background: var(--studio-accent); color: var(--studio-accent-contrast, white); }
 .evidence-queue__state { margin: var(--studio-spacing-3) 0 0; padding: var(--studio-spacing-3); border-radius: 7px; background: var(--studio-bg-surface); }
 .evidence-queue__state--error { display: flex; align-items: center; justify-content: space-between; gap: var(--studio-spacing-2); color: var(--studio-error); }
-.evidence-queue__more { margin: var(--studio-spacing-2) 0 0; }
 @media (max-width: 48rem) { li { grid-template-columns: 4rem minmax(0, 1fr); } .evidence-queue__preview, .evidence-queue__missing { width: 4rem; } .evidence-queue__actions { grid-column: 1 / -1; justify-content: flex-end; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; } }

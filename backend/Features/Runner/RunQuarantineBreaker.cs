@@ -56,6 +56,11 @@ public static class RunQuarantineBreaker
         // per-task no-progress quarantine streak (AGT-1944).
         RunIssueKind.EnvironmentalTransient => false,
         RunIssueKind.CliLaunchFailed    => false,
+        // A failed OAuth-session refresh is an infra credential fault shared
+        // across every run, not this task's work: re-running the same task
+        // content cannot revive a dead token, so it must not accrue toward the
+        // per-task no-progress quarantine streak (AGT-2066).
+        RunIssueKind.AuthRefreshFailed  => false,
         RunIssueKind.SilentCompletion   => false,
         RunIssueKind.Quarantined        => false,
         RunIssueKind.AgentGitViolation  => false,

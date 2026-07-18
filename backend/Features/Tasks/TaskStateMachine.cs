@@ -486,6 +486,13 @@ public class TaskStateMachine
             using var _ = _laneMutex.Acquire(info.WatchPath);
             var recheck = _scanner.FindJob(jobId, watchPath);
             if (recheck == null) return false;
+            // F21: a peer lane-writer may have moved the job while we waited
+            // on the mutex. Deleting it at its NEW location would let both
+            // writers report success (lost update: the mover believes the
+            // card now lives in the target lane). The delete targeted the
+            // folder resolved before the wait — if the job no longer lives
+            // there, fail cleanly and let the caller re-issue.
+            if (!WatchPathComparison.PathsEqual(recheck.FolderPath, info.FolderPath)) return false;
 
             try
             {

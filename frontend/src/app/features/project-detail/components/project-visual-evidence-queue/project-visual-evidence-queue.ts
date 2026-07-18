@@ -11,6 +11,7 @@ import { TaskService } from '../../../../services/task.service';
   styleUrl: './project-visual-evidence-queue.scss',
 })
 export class ProjectVisualEvidenceQueueComponent {
+  private static readonly overviewItemLimit = 4;
   readonly projectName = input.required<string>();
   readonly refreshGeneration = input(0);
   readonly openTask = output<{ jobId: string; watchPath: string }>();
@@ -40,8 +41,13 @@ export class ProjectVisualEvidenceQueueComponent {
     ).subscribe({
       next: queue => {
         if (generation !== this.loadGeneration || project !== this.projectName()) return;
+        const items = queue.items.slice(0, ProjectVisualEvidenceQueueComponent.overviewItemLimit);
         this.queueProject = project;
-        this.queue.set(queue);
+        this.queue.set({
+          ...queue,
+          items,
+          unseenCount: items.filter(item => item.reviewStatus === 'unseen').length,
+        });
         this.loading.set(false);
       },
       error: () => {

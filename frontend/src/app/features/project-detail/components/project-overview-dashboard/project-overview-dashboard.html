@@ -19,7 +19,7 @@
     <section class="operator-dashboard__metrics" aria-labelledby="project-overview-metrics-title">
       <header class="operator-dashboard__section-head">
         <div>
-          <p class="operator-dashboard__eyebrow">Throughput &amp; spend</p>
+          <p class="operator-dashboard__eyebrow">Usage</p>
           <h2 id="project-overview-metrics-title">Key numbers</h2>
         </div>
         <button type="button"
@@ -28,20 +28,8 @@
       </header>
 
       <div class="operator-dashboard__metric-lines">
-        <article class="operator-dashboard__metric-line" data-testid="project-overview-throughput">
-          <span class="operator-dashboard__metric-icon"><app-studio-icon name="check" [size]="16" /></span>
-          <div class="operator-dashboard__metric-copy">
-            <strong>Delivered tasks</strong>
-            <span>Completed, including archive</span>
-          </div>
-          <dl>
-            <div><dt>24 h</dt><dd data-testid="project-overview-throughput-24h">{{ throughput()?.completedLast24h ?? 'Not available' }}</dd></div>
-            <div><dt>7 d</dt><dd data-testid="project-overview-throughput-7d">{{ throughput()?.completedLast7d ?? 'Not available' }}</dd></div>
-          </dl>
-        </article>
-
         <article class="operator-dashboard__metric-line" data-testid="project-overview-tokens">
-          <span class="operator-dashboard__metric-icon operator-dashboard__metric-icon--tokens"><app-studio-icon name="cli" [size]="16" /></span>
+          <span class="operator-dashboard__metric-icon"><app-studio-icon name="cli" [size]="16" /></span>
           <div class="operator-dashboard__metric-copy">
             <strong>Token usage</strong>
             <span>Task, supporting, and orchestrator calls</span>
