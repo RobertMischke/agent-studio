@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Git-Integration: Zielbild, Verhalten & offene Fragen",
+  "source": {
+    "path": "docs/concepts/git-branching-integration-zielbild.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "13c2b2c8d45c7eac731d3b416ecb77352263010c9e8609a17f28bd3eaf0f2eb2",
+      "sizeBytes": 11555,
+      "lineCount": 197,
+      "capturedAt": "2026-07-18T18:45:50.429Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "concepts/release-semantics.md",
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

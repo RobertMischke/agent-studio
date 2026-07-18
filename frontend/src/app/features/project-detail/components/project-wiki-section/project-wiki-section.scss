@@ -607,6 +607,54 @@
   color: color-mix(in srgb, var(--studio-fg) 88%, var(--studio-fg-muted));
 }
 
+// Curated classification (consolidation analysis): a muted status chip
+// (veraltet / überholt) plus a 2-3-letter type code, right-aligned on the doc
+// row. Deliberately quiet so a narrow tree stays readable; the analysis date
+// and the successor page live in the tooltips.
+.pwiki__label--doc .pwiki__class-strip {
+  flex: 0 0 auto;
+}
+
+.pwiki__class-strip {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1, 4px);
+  overflow: hidden;
+}
+
+.pwiki__class-chip {
+  min-width: 0;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--studio-border) 65%, transparent);
+  border-radius: 4px;
+  font-size: 0.58rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--studio-fg-muted);
+}
+
+.pwiki__class-chip[data-kind='type'] {
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--studio-fg-muted) 82%, transparent);
+}
+
+.pwiki__class-chip[data-tone='stale'] {
+  color: color-mix(in srgb, var(--studio-error) 55%, var(--studio-fg-muted));
+  border-color: color-mix(in srgb, var(--studio-error) 30%, var(--studio-border));
+  background: color-mix(in srgb, var(--studio-error) 7%, transparent);
+}
+
+.pwiki__class-chip[data-tone='superseded'] {
+  color: color-mix(in srgb, var(--studio-warn, var(--studio-fg)) 45%, var(--studio-fg-muted));
+  border-color: color-mix(in srgb, var(--studio-warn, var(--studio-border)) 25%, var(--studio-border));
+  background: color-mix(in srgb, var(--studio-warn, transparent) 6%, transparent);
+}
+
 .pwiki__file-type {
   width: 20px;
   height: 20px;

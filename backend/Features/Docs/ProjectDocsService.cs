@@ -1188,7 +1188,13 @@ public class ProjectDocsService
             metadataByRelPath.TryGetValue(rel, out var metadata);
             nodes.Add(new WikiTreeNode(
                 file.Name, title, rel, type, [], metadata,
-                EngineeringWorkstreamFrame.IsStructural(rel)));
+                EngineeringWorkstreamFrame.IsStructural(rel),
+                BuildClassification(
+                    rel,
+                    metadata?.ClassificationStatus,
+                    metadata?.ClassificationSupersededBy,
+                    metadata?.ClassificationType,
+                    metadata?.ClassificationAnalyzedAt)));
         }
 
         var dirRel = Path.GetRelativePath(docsRoot, dir.FullName).Replace('\\', '/');
@@ -1274,7 +1280,11 @@ public class ProjectDocsService
                     GradingGrade: JsonString(grading, "grade"),
                     GradingAssessment: JsonString(grading, "assessment"),
                     GradedAt: JsonString(grading, "gradedAt"),
-                    GradingModel: JsonString(grading, "model"));
+                    GradingModel: JsonString(grading, "model"),
+                    ClassificationStatus: JsonString(classification, "status"),
+                    ClassificationSupersededBy: JsonString(classification, "supersededBy"),
+                    ClassificationType: JsonString(classification, "type"),
+                    ClassificationAnalyzedAt: JsonString(classification, "analyzedAt"));
                 index[sourceRel] = metadata;
             }
             catch (Exception __ex)
@@ -1300,6 +1310,83 @@ public class ProjectDocsService
     private static bool IsWikiConfigFile(string relPath) =>
         relPath.Equals(WikiHomeRel, StringComparison.OrdinalIgnoreCase)
         || relPath.Equals(WikiFolderOrderRel, StringComparison.OrdinalIgnoreCase);
+
+    // ---- Wiki page classification (consolidation-analysis metadata) ----
+
+    /// <summary>
+    /// Projects the sidecar classification fields onto a page node, falling back
+    /// to the per-folder default type when the sidecar carries no classification.
+    /// A page with neither sidecar fields nor a folder default has no
+    /// classification (null), so the UI renders nothing rather than noise.
+    /// </summary>
+    internal static WikiClassification? BuildClassification(
+        string relPath, string? status, string? supersededBy, string? type, string? analyzedAt)
+    {
+        status = NormalizeClassificationValue(status);
+        supersededBy = NormalizeClassificationValue(supersededBy);
+        type = NormalizeClassificationValue(type) ?? DefaultClassificationType(relPath);
+        analyzedAt = NormalizeClassificationValue(analyzedAt);
+        if (status == null && supersededBy == null && type == null && analyzedAt == null) return null;
+        return new WikiClassification(status, supersededBy, type, analyzedAt);
+    }
+
+    /// <summary>
+    /// Default document type for pages without a sidecar classification, derived
+    /// from the docs folder they live in. Covers the uniform generated families
+    /// (common-problems, proposals, ...) so they never need per-page sidecars;
+    /// folders without an agreed default return null.
+    /// </summary>
+    internal static string? DefaultClassificationType(string relPath)
+    {
+        var rel = relPath.Replace('\\', '/').TrimStart('/');
+        if (rel.StartsWith("architecture/decisions/", StringComparison.OrdinalIgnoreCase)) return "adr";
+        var top = rel.Split('/')[0].ToLowerInvariant();
+        return top switch
+        {
+            "common-problems" => "generiert",
+            "proposals" => "proposal",
+            "workbenches" => "workbench",
+            "domains" => "domain-map",
+            "contracts" => "contract",
+            "mockups" => "mockup",
+            "research" => "analyse",
+            _ => null,
+        };
+    }
+
+    private static string? NormalizeClassificationValue(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Classification for one folder-overview page row: read from the page's own
+    /// adjacent companion (a single file probe, no recursive sidecar scan), with
+    /// the same folder-default fallback as the tree.
+    /// </summary>
+    private static WikiClassification? ReadPageClassification(string pageFullPath, string relPath)
+    {
+        string? status = null, supersededBy = null, type = null, analyzedAt = null;
+        var companion = pageFullPath + ".meta.json";
+        if (File.Exists(companion))
+        {
+            try
+            {
+                GitProcessTelemetry.RecordFileRead();
+                using var doc = JsonDocument.Parse(File.ReadAllText(companion));
+                if (TryJsonObject(doc.RootElement, "classification", out var classification))
+                {
+                    status = JsonString(classification, "status");
+                    supersededBy = JsonString(classification, "supersededBy");
+                    type = JsonString(classification, "type");
+                    analyzedAt = JsonString(classification, "analyzedAt");
+                }
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "ProjectDocsService: unreadable companion during folder classification read.");
+            }
+        }
+        return BuildClassification(relPath, status, supersededBy, type, analyzedAt);
+    }
 
     private static string? NormalizeMetadataSourcePath(string? sourcePath)
     {
@@ -1909,7 +1996,8 @@ public class ProjectDocsService
                 Summary: ExtractWikiPageSummary(file.FullName, file.Extension),
                 UpdatedAt: file.LastWriteTimeUtc,
                 Size: file.Length,
-                ChildCount: null));
+                ChildCount: null,
+                Classification: ReadPageClassification(file.FullName, fileRel)));
         }
 
         // Same saved category drag-order as the tree; unlisted folders keep the
@@ -2304,7 +2392,31 @@ public record WikiTreeMetadata(
     string? GradingGrade = null,
     string? GradingAssessment = null,
     string? GradedAt = null,
-    string? GradingModel = null);
+    string? GradingModel = null,
+    // Curated consolidation classification (konsolidierung-analyse 2026-07-18):
+    // the status / successor / doc-type fields of the companion's
+    // `classification` block. All optional - older sidecars carry none.
+    string? ClassificationStatus = null,
+    string? ClassificationSupersededBy = null,
+    string? ClassificationType = null,
+    string? ClassificationAnalyzedAt = null);
+
+/// <summary>
+/// Curation classification of one wiki page, projected onto tree and folder
+/// rows. <see cref="Status"/> is <c>aktuell</c> / <c>veraltet</c> /
+/// <c>ueberholt</c> (null = unclassified); <see cref="SupersededBy"/> is the
+/// docs-relative path of the successor page for <c>ueberholt</c> pages;
+/// <see cref="Type"/> is the document kind (<c>konzept</c> / <c>adr</c> /
+/// <c>contract</c> / <c>domain-map</c> / <c>analyse</c> / <c>runbook</c> /
+/// <c>workbench</c> / <c>mockup</c> / <c>proposal</c> / <c>generiert</c> /
+/// <c>index</c>), either from the sidecar or from the per-folder default;
+/// <see cref="AnalyzedAt"/> is the consolidation-analysis date (ISO date).
+/// </summary>
+public record WikiClassification(
+    string? Status,
+    string? SupersededBy,
+    string? Type,
+    string? AnalyzedAt);
 
 public record WikiTreeNode(
     string Name,
@@ -2313,7 +2425,10 @@ public record WikiTreeNode(
     string Type,
     List<WikiTreeNode> Children,
     WikiTreeMetadata? Metadata,
-    bool Immutable = false);
+    bool Immutable = false,
+    // Page nodes only: the curated classification (sidecar first, folder-default
+    // type as fallback); null for folders and unclassified pages.
+    WikiClassification? Classification = null);
 
 /// <summary>The physical docs/ folder tree exposed to the wiki UI.</summary>
 public record WikiTree(string ProjectName, string BaseDir, bool Exists, List<WikiTreeNode> Root);
@@ -2523,7 +2638,10 @@ public record WikiFolderChild(
     string? Summary,
     DateTime UpdatedAt,
     long? Size,
-    int? ChildCount);
+    int? ChildCount,
+    // Page rows only: the curated classification (sidecar first, folder-default
+    // type as fallback); null for folders and unclassified pages.
+    WikiClassification? Classification = null);
 
 // ---- Wiki home (curated landing sections) ----
 

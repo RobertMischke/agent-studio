@@ -95,6 +95,25 @@ export interface RelatedTaskReference {
 /** Kind of a wiki tree node: a folder, or a document by source type. */
 export type WikiNodeType = 'folder' | 'md' | 'html' | 'json';
 
+/** Curated consolidation status of a wiki page. */
+export type WikiClassificationStatus = 'aktuell' | 'veraltet' | 'ueberholt';
+
+/**
+ * Curation classification of one wiki page (mirrors backend
+ * `WikiClassification`): read from the companion sidecar's `classification`
+ * block, with the backend filling the `type` from a per-folder default when a
+ * page has no sidecar. Absent/null on folders and unclassified pages.
+ */
+export interface WikiClassification {
+  status: WikiClassificationStatus | string | null;
+  /** Docs-relative path of the successor page when status is `ueberholt`. */
+  supersededBy: string | null;
+  /** konzept | adr | contract | domain-map | analyse | runbook | workbench | mockup | proposal | generiert | index */
+  type: string | null;
+  /** ISO date of the consolidation analysis. */
+  analyzedAt: string | null;
+}
+
 /** Compact per-document metadata shown in the tree (mirrors backend WikiTreeMetadata). */
 export interface WikiTreeMetadata {
   documentMode: string | null;
@@ -128,6 +147,8 @@ export interface WikiTreeNode {
   type: WikiNodeType;
   children: WikiTreeNode[];
   metadata?: WikiTreeMetadata | null;
+  /** Curated classification (pages only; null for folders and unclassified pages). */
+  classification?: WikiClassification | null;
   /**
    * True for a fixed Engineering Workstream frame node (a frame folder or a
    * landing shell). The tree marks such nodes with a lock affordance and the
@@ -376,6 +397,8 @@ export interface WikiFolderChild {
   updatedAt: string | null;
   size: number | null;
   childCount: number | null;
+  /** Curated classification (pages only; null for folders and unclassified pages). */
+  classification?: WikiClassification | null;
 }
 
 /** Overview of one wiki folder: its path, display name, and direct children. */

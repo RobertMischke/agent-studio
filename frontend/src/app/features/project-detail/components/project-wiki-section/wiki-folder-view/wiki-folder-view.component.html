@@ -44,6 +44,7 @@
           <th scope="col">Titel</th>
           <th scope="col">Datei</th>
           <th scope="col">Typ</th>
+          <th scope="col">Status</th>
           <th scope="col">Geändert</th>
           <th scope="col">Größe</th>
         </tr>
@@ -76,6 +77,21 @@
             </td>
             <td class="wfolder__cell-file"><code>{{ child.name }}</code></td>
             <td class="wfolder__cell-type" [attr.data-testid]="'wiki-folder-type-' + child.relPath">{{ typeLabel(child) }}</td>
+            <td class="wfolder__cell-class" [attr.data-testid]="'wiki-folder-class-' + child.relPath">
+              @if (classBadges(child); as badges) {
+                @if (badges.length) {
+                  @for (badge of badges; track badge.key) {
+                    <span class="wfolder__class-chip"
+                          [attr.data-kind]="badge.key"
+                          [attr.data-tone]="badge.tone"
+                          [attr.data-testid]="'wiki-folder-class-' + child.relPath + '-' + badge.key"
+                          [cacTooltip]="badge.tooltip">{{ badge.label }}</span>
+                  }
+                } @else {
+                  <span aria-hidden="true">–</span>
+                }
+              }
+            </td>
             <td class="wfolder__cell-when">
               @if (child.updatedAt) {
                 <time [attr.datetime]="child.updatedAt"

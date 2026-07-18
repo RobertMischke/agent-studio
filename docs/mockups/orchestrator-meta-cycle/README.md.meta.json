@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Orchestrator Meta-Cycle - Mockup",
+  "source": {
+    "path": "docs/mockups/orchestrator-meta-cycle/README.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "6c332c422dced25abec21db002ca933f32a2d0c738c850f2d0fbfc8addc580f2",
+      "sizeBytes": 7699,
+      "lineCount": 92,
+      "capturedAt": "2026-07-18T18:45:50.497Z"
+    }
+  },
+  "classification": {
+    "owner": "mockups",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "mockup",
+    "analyzedAt": "2026-07-18"
+  }
+}

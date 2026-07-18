@@ -18,5 +18,29 @@
       "linkedAt": "2026-07-11T00:28:28.6565887Z",
       "source": "auto"
     }
-  ]
+  ],
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Orchestrator Drive-to-Conclusion &amp; CLI-Crash Resilience",
+  "source": {
+    "path": "docs/concepts/orchestrator-drive-to-conclusion.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "59bcfb99fb142dfed3c27e3ddcc26dbb766f19cdcd29c997bee97f6fd6839998",
+      "sizeBytes": 61150,
+      "lineCount": 931,
+      "capturedAt": "2026-07-18T18:45:50.411Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
 }

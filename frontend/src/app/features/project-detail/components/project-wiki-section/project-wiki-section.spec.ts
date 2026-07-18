@@ -45,6 +45,12 @@ const TREE: WikiTree = {
             sourceChangedSinceReview: false,
             findingsCount: 2,
           },
+          classification: {
+            status: 'ueberholt',
+            supersededBy: 'concepts/new-overview.md',
+            type: 'konzept',
+            analyzedAt: '2026-07-18',
+          },
         },
         { name: 'page.html', title: 'HTML page', relPath: 'concepts/page.html', type: 'html', children: [] },
         { name: 'page.metadata.json', title: 'Page metadata', relPath: 'concepts/page.metadata.json', type: 'json', children: [] },
@@ -368,6 +374,27 @@ describe('ProjectWikiSectionComponent', () => {
     ).toBe('Metadata unscored');
     expect(el(fixture).querySelector('[data-file-type="html"]')).toBeTruthy();
     expect(el(fixture).querySelector('[data-file-type="json"]')).toBeTruthy();
+    http.verify();
+  });
+
+  it('renders classification chips on page rows: status + compact type code, nothing when unclassified', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+
+    const strip = el(fixture).querySelector('[data-testid="project-wiki-class-concepts/overview.md"]');
+    expect(strip, 'classification strip').toBeTruthy();
+    const status = strip!.querySelector('[data-testid="project-wiki-class-concepts/overview.md-status"]');
+    expect(status?.textContent?.trim()).toBe('überholt');
+    expect(status?.getAttribute('data-tone')).toBe('superseded');
+    const type = strip!.querySelector('[data-testid="project-wiki-class-concepts/overview.md-type"]');
+    expect(type?.textContent?.trim()).toBe('KON');
+    expect(type?.getAttribute('data-tone')).toBe('muted');
+
+    // The analysis date lives in the tooltips, not as visible column text.
+    expect(strip!.textContent).not.toContain('2026');
+
+    // Unclassified page: no classification strip at all.
+    expect(el(fixture).querySelector('[data-testid="project-wiki-class-concepts/page.html"]')).toBeNull();
     http.verify();
   });
 
@@ -1186,9 +1213,9 @@ describe('ProjectWikiSectionComponent', () => {
 
     const view = root.querySelector('[data-testid="wiki-folder-view"]')!;
     expect(view, 'folder overview').toBeTruthy();
-    // Column headers: Titel | Datei | Typ | Geändert | Größe.
+    // Column headers: Titel | Datei | Typ | Status | Geändert | Größe.
     const headers = [...view.querySelectorAll('th')].map(th => th.textContent?.trim());
-    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Geändert', 'Größe']);
+    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Status', 'Geändert', 'Größe']);
     // Folders first, then pages in payload order.
     const rowIds = [...view.querySelectorAll('[data-testid^="wiki-folder-row-"]')]
       .map(row => row.getAttribute('data-testid'));

@@ -223,6 +223,18 @@
                         </button>
                       }
                     </span>
+                    @if (classificationBadges(row.node.classification).length) {
+                      <span class="pwiki__class-strip"
+                            [attr.data-testid]="'project-wiki-class-' + row.node.relPath">
+                        @for (badge of classificationBadges(row.node.classification); track badge.key) {
+                          <span class="pwiki__class-chip"
+                                [attr.data-kind]="badge.key"
+                                [attr.data-tone]="badge.tone"
+                                [attr.data-testid]="'project-wiki-class-' + row.node.relPath + '-' + badge.key"
+                                [cacTooltip]="badge.tooltip">{{ badge.label }}</span>
+                        }
+                      </span>
+                    }
                   </span>
                 </div>
               }

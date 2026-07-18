@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Task Execution & Log Architecture (concept)",
+  "source": {
+    "path": "docs/concepts/task-execution-and-log-architecture.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "b7243580c5531a110bf2c36fd782ad11d7f6058a7c609a6b7c89fbd5093469cd",
+      "sizeBytes": 5907,
+      "lineCount": 108,
+      "capturedAt": "2026-07-18T18:45:50.440Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "concepts/distributed-agent-studio-target-architecture.md",
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

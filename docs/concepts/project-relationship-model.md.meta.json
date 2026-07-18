@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Project Relationship Model And Branch-Aware Wiki",
+  "source": {
+    "path": "docs/concepts/project-relationship-model.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "5b4bd8f1f399e42fa58cf205407314ff1957bd41bc508b0f80c95f30ce06e83b",
+      "sizeBytes": 18415,
+      "lineCount": 363,
+      "capturedAt": "2026-07-18T18:45:50.438Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "concepts/distributed-agent-studio-target-architecture.md",
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

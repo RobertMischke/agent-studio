@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Remote-ready execution — kickoff (2026-07)",
+  "source": {
+    "path": "docs/research/remote-ready-kickoff-2026-07.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "746ee865aba9efbb659c62e83f2896d67e8975829f8be89644cab737aa309ad9",
+      "sizeBytes": 21289,
+      "lineCount": 360,
+      "capturedAt": "2026-07-18T18:45:50.447Z"
+    }
+  },
+  "classification": {
+    "owner": "research",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "concepts/distributed-agent-studio-target-architecture.md",
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

@@ -23,7 +23,11 @@
     "owner": "architecture",
     "documentMode": "documentation",
     "temporalState": "mixed",
-    "implementationState": "partially implemented"
+    "implementationState": "partially implemented",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
   },
   "review": {
     "date": "2026-06-11",

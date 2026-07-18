@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Codex runner: `[[TASK_NOOP]]` on every fresh job (2026-05-12)",
+  "source": {
+    "path": "docs/cli/investigations/codex-runner-investigation.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "1b658adeade6c6b8796b74b05e6ae58af41f65425e71575f2b088c4a52b2b58f",
+      "sizeBytes": 6184,
+      "lineCount": 127,
+      "capturedAt": "2026-07-18T18:45:50.463Z"
+    }
+  },
+  "classification": {
+    "owner": "cli",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

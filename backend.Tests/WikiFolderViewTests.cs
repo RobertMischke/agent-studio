@@ -158,6 +158,49 @@ public class WikiFolderViewTests : IDisposable
         Assert.Equal(new[] { "real.md" }, view!.Children.Select(c => c.Name).ToArray());
     }
 
+    // ---- Classification column (sidecar first, folder-default type fallback) ----
+
+    [Fact]
+    public void GetWikiFolder_PagesCarryClassification_FromSidecarOrFolderDefault()
+    {
+        WritePage("concepts/old.md", "# Old\n");
+        WritePage("concepts/old.md.meta.json",
+            """
+            {
+              "source": { "path": "docs/concepts/old.md" },
+              "classification": {
+                "status": "ueberholt",
+                "supersededBy": "concepts/new.md",
+                "type": "konzept",
+                "analyzedAt": "2026-07-18"
+              }
+            }
+            """);
+        WritePage("proposals/finding.md", "# Finding\n");
+        WritePage("plain/note.md", "# Note\n");
+
+        var docs = BuildDocsService();
+
+        var old = docs.GetWikiFolder(ProjectName, "concepts")!.Children.Single(c => c.Name == "old.md");
+        Assert.NotNull(old.Classification);
+        Assert.Equal("ueberholt", old.Classification!.Status);
+        Assert.Equal("concepts/new.md", old.Classification.SupersededBy);
+        Assert.Equal("konzept", old.Classification.Type);
+        Assert.Equal("2026-07-18", old.Classification.AnalyzedAt);
+
+        var finding = docs.GetWikiFolder(ProjectName, "proposals")!.Children.Single(c => c.Name == "finding.md");
+        Assert.NotNull(finding.Classification);
+        Assert.Equal("proposal", finding.Classification!.Type);
+        Assert.Null(finding.Classification.Status);
+
+        var note = docs.GetWikiFolder(ProjectName, "plain")!.Children.Single(c => c.Name == "note.md");
+        Assert.Null(note.Classification);
+
+        // Folder rows never carry a classification.
+        var root = docs.GetWikiFolder(ProjectName, "")!;
+        Assert.All(root.Children.Where(c => c.Kind == "folder"), c => Assert.Null(c.Classification));
+    }
+
     // ---- Guards ----
 
     [Fact]

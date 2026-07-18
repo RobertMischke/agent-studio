@@ -6,5 +6,29 @@
       "linkedAt": "2026-07-11T00:28:28.6565887Z",
       "source": "auto"
     }
-  ]
+  ],
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Auto-Review Reissue and the Evidence Gate",
+  "source": {
+    "path": "docs/concepts/auto-review-evidence-gate-analysis.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "98009ee2bf54cbc9e3c62d9c43b3265c5735eeac63a45ce1fb0dfa392ebd604f",
+      "sizeBytes": 11075,
+      "lineCount": 117,
+      "capturedAt": "2026-07-18T18:45:50.419Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
 }

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Project chat: progress indicator and responsiveness — research",
+  "source": {
+    "path": "docs/research/project-chat-progress-indicator-2026-05-08.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "415a5126797c309a7a58f3520949be50ca91772380524343ccbe5ca7d8ef7ce9",
+      "sizeBytes": 28426,
+      "lineCount": 394,
+      "capturedAt": "2026-07-18T18:45:50.453Z"
+    }
+  },
+  "classification": {
+    "owner": "research",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "research/project-chat-progress-indicator-2026-06-08.md",
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

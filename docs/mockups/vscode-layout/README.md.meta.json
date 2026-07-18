@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "VS Code-style Layout: maximise content area, collapsible meta panels, tabs",
+  "source": {
+    "path": "docs/mockups/vscode-layout/README.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "f4091fff5c7270dc5ff4d786db33ec9f193f91b2c7fd0faad23e671069920cb2",
+      "sizeBytes": 8077,
+      "lineCount": 107,
+      "capturedAt": "2026-07-18T18:45:50.494Z"
+    }
+  },
+  "classification": {
+    "owner": "mockups",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "mockup",
+    "analyzedAt": "2026-07-18"
+  }
+}

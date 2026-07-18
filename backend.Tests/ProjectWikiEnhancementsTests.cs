@@ -207,6 +207,107 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Null(docs.GetWikiTree("Nope"));
     }
 
+    // ---- Classification (sidecar `classification` block + folder defaults) ----
+
+    [Fact]
+    public void GetWikiTree_ClassificationComesFromSidecar_WithFolderDefaultTypeFallback()
+    {
+        var projectRoot = Path.Combine(_tempDir, "class-proj");
+        var docsDir = Path.Combine(projectRoot, "docs");
+        Directory.CreateDirectory(Path.Combine(docsDir, "concepts"));
+        Directory.CreateDirectory(Path.Combine(docsDir, "research"));
+        File.WriteAllText(Path.Combine(docsDir, "concepts", "old.md"), "# Old concept\n");
+        File.WriteAllText(Path.Combine(docsDir, "concepts", "old.md.meta.json"),
+            """
+            {
+              "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+              "schemaVersion": "wiki-document-companion/v1",
+              "source": { "path": "docs/concepts/old.md" },
+              "classification": {
+                "owner": "concepts",
+                "status": "ueberholt",
+                "supersededBy": "concepts/new.md",
+                "type": "konzept",
+                "analyzedAt": "2026-07-18"
+              }
+            }
+            """);
+        // Sidecar without a `type`: the folder default (research -> analyse) fills it.
+        File.WriteAllText(Path.Combine(docsDir, "research", "aging.md"), "# Aging analysis\n");
+        File.WriteAllText(Path.Combine(docsDir, "research", "aging.md.meta.json"),
+            """
+            {
+              "source": { "path": "docs/research/aging.md" },
+              "classification": { "status": "veraltet", "analyzedAt": "2026-07-18" }
+            }
+            """);
+
+        var tree = BuildDocsService(("Class", projectRoot)).GetWikiTree("Class");
+
+        var concept = tree!.Root.Single(n => n.Name == "concepts").Children.Single(n => n.Name == "old.md");
+        Assert.NotNull(concept.Classification);
+        Assert.Equal("ueberholt", concept.Classification!.Status);
+        Assert.Equal("concepts/new.md", concept.Classification.SupersededBy);
+        Assert.Equal("konzept", concept.Classification.Type);
+        Assert.Equal("2026-07-18", concept.Classification.AnalyzedAt);
+
+        var aging = tree.Root.Single(n => n.Name == "research").Children.Single(n => n.Name == "aging.md");
+        Assert.NotNull(aging.Classification);
+        Assert.Equal("veraltet", aging.Classification!.Status);
+        Assert.Null(aging.Classification.SupersededBy);
+        Assert.Equal("analyse", aging.Classification.Type);
+    }
+
+    [Fact]
+    public void GetWikiTree_ClassificationFolderDefaults_ApplyWithoutSidecar()
+    {
+        var projectRoot = Path.Combine(_tempDir, "class-default-proj");
+        var docsDir = Path.Combine(projectRoot, "docs");
+        Directory.CreateDirectory(Path.Combine(docsDir, "proposals", "2026-07-11"));
+        Directory.CreateDirectory(Path.Combine(docsDir, "architecture", "decisions", "proposed"));
+        Directory.CreateDirectory(Path.Combine(docsDir, "operations"));
+        File.WriteAllText(Path.Combine(docsDir, "proposals", "2026-07-11", "finding.md"), "# Finding\n");
+        File.WriteAllText(
+            Path.Combine(docsDir, "architecture", "decisions", "proposed", "adr-0099-example.md"), "# ADR\n");
+        File.WriteAllText(Path.Combine(docsDir, "operations", "runbook.md"), "# Runbook\n");
+
+        var tree = BuildDocsService(("ClassDefault", projectRoot)).GetWikiTree("ClassDefault");
+
+        var proposal = tree!.Root.Single(n => n.Name == "proposals")
+            .Children.Single(n => n.Name == "2026-07-11").Children.Single(n => n.Name == "finding.md");
+        Assert.NotNull(proposal.Classification);
+        Assert.Equal("proposal", proposal.Classification!.Type);
+        Assert.Null(proposal.Classification.Status);
+
+        var adr = tree.Root.Single(n => n.Name == "architecture")
+            .Children.Single(n => n.Name == "decisions")
+            .Children.Single(n => n.Name == "proposed")
+            .Children.Single(n => n.Name == "adr-0099-example.md");
+        Assert.Equal("adr", adr.Classification!.Type);
+
+        // No sidecar + no folder default -> no classification at all.
+        var runbook = tree.Root.Single(n => n.Name == "operations").Children.Single(n => n.Name == "runbook.md");
+        Assert.Null(runbook.Classification);
+        // Folder nodes never carry a classification.
+        Assert.Null(tree.Root.Single(n => n.Name == "proposals").Classification);
+    }
+
+    [Theory]
+    [InlineData("common-problems/x/main.md", "generiert")]
+    [InlineData("proposals/2026-07-11/a.md", "proposal")]
+    [InlineData("workbenches/haertung/index.html", "workbench")]
+    [InlineData("domains/tasks.md", "domain-map")]
+    [InlineData("contracts/filesystem.md", "contract")]
+    [InlineData("architecture/decisions/adr-archive.md", "adr")]
+    [InlineData("mockups/project-urls/README.md", "mockup")]
+    [InlineData("research/some-analysis.md", "analyse")]
+    [InlineData("architecture/model.md", null)]
+    [InlineData("concepts/idea.md", null)]
+    public void DefaultClassificationType_MapsAgreedFolders(string relPath, string? expected)
+    {
+        Assert.Equal(expected, ProjectDocsService.DefaultClassificationType(relPath));
+    }
+
     // ---- CreateWikiPage / CreateWikiFolder + commit ----
 
     [Fact]

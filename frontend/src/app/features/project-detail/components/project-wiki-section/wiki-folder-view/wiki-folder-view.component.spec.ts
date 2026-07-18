@@ -15,6 +15,9 @@ const OVERVIEW: WikiFolderOverview = {
     {
       name: 'detail.md', relPath: 'concepts/deep/detail.md', kind: 'page', fileType: 'md',
       title: 'Detail', summary: 'Zweite Zeile.', updatedAt: '2026-07-10T08:00:00Z', size: 2048, childCount: null,
+      classification: {
+        status: 'ueberholt', supersededBy: 'concepts/new.md', type: 'konzept', analyzedAt: '2026-07-18',
+      },
     },
     {
       name: 'viz.html', relPath: 'concepts/deep/viz.html', kind: 'page', fileType: 'html',
@@ -72,7 +75,7 @@ describe('WikiFolderViewComponent', () => {
     const root = el(fixture);
 
     const headers = [...root.querySelectorAll('th')].map(th => th.textContent?.trim());
-    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Geändert', 'Größe']);
+    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Status', 'Geändert', 'Größe']);
 
     const rowIds = [...root.querySelectorAll('[data-testid^="wiki-folder-row-"]')]
       .map(row => row.getAttribute('data-testid'));
@@ -95,6 +98,28 @@ describe('WikiFolderViewComponent', () => {
     expect(root.querySelector('[data-testid="wiki-folder-summary-concepts/deep/detail.md"]')!.textContent)
       .toContain('Zweite Zeile.');
     expect(root.querySelector('[data-testid="wiki-folder-row-concepts/deep/detail.md"] time')).toBeTruthy();
+    http.verify();
+  });
+
+  it('renders the Status column with classification chips, dimmed dash otherwise', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    // detail.md: superseded status chip + type code, tooltip carries successor + date.
+    const statusChip = root.querySelector(
+      '[data-testid="wiki-folder-class-concepts/deep/detail.md-status"]')!;
+    expect(statusChip.textContent?.trim()).toBe('überholt');
+    expect(statusChip.getAttribute('data-tone')).toBe('superseded');
+    const typeChip = root.querySelector(
+      '[data-testid="wiki-folder-class-concepts/deep/detail.md-type"]')!;
+    expect(typeChip.textContent?.trim()).toBe('KON');
+    expect(typeChip.getAttribute('data-tone')).toBe('muted');
+
+    // viz.html has no classification; folders never have one -> dash placeholder.
+    expect(root.querySelector('[data-testid="wiki-folder-class-concepts/deep/viz.html"]')!
+      .textContent).toContain('–');
+    expect(root.querySelector('[data-testid="wiki-folder-class-concepts/deep/sub"]')!
+      .textContent).toContain('–');
     http.verify();
   });
 
