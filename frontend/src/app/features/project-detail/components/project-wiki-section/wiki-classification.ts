@@ -53,6 +53,65 @@ export function classificationTypeAbbreviation(type: string): string {
   return TYPE_ABBREVIATIONS[clean] ?? clean.slice(0, 3).toUpperCase();
 }
 
+/** Full human label for a curated type (`domain-map` -> `Domain-Map`); raw fallback. */
+export function classificationTypeLabel(type: string): string {
+  const clean = type.trim();
+  return TYPE_LABELS[clean.toLowerCase()] ?? clean;
+}
+
+/** Status chip of the meta-panel classification block. */
+export interface WikiClassMetaStatus {
+  label: string;
+  tone: WikiClassBadgeTone;
+  /** Docs-relative successor page when the status is `ueberholt`. */
+  supersededBy: string | null;
+}
+
+/** View model of the meta-panel "Klassifikation" block. */
+export interface WikiClassMeta {
+  status: WikiClassMetaStatus | null;
+  /** Spelled-out type label (not the compact tree code). */
+  typeLabel: string | null;
+  /** Analysis date pre-formatted as dd.mm.yyyy. */
+  analyzedAt: string | null;
+}
+
+/**
+ * Meta-rail view of a page's classification: unlike the compact tree badges,
+ * the block spells the type out, shows the analysis date as visible text, and
+ * carries the successor path so the template can render it as a navigable
+ * link. `aktuell` (and any unknown status) renders as a quiet muted chip here
+ * - the tree hides it, but the meta panel is exactly the place to state it.
+ * Null when the page carries no classification data at all (block hidden).
+ */
+export function classificationMeta(
+  classification: WikiClassification | null | undefined,
+): WikiClassMeta | null {
+  if (!classification) return null;
+
+  const rawStatus = classification.status?.trim();
+  let status: WikiClassMetaStatus | null = null;
+  if (rawStatus?.toLowerCase() === 'veraltet') {
+    status = { label: 'veraltet', tone: 'stale', supersededBy: null };
+  } else if (rawStatus?.toLowerCase() === 'ueberholt') {
+    status = {
+      label: 'überholt',
+      tone: 'superseded',
+      supersededBy: classification.supersededBy?.trim() || null,
+    };
+  } else if (rawStatus) {
+    status = { label: rawStatus, tone: 'muted', supersededBy: null };
+  }
+
+  const type = classification.type?.trim();
+  const typeLabel = type ? classificationTypeLabel(type) : null;
+  const analyzedAtRaw = classification.analyzedAt?.trim();
+  const analyzedAt = analyzedAtRaw ? formatAnalyzedDate(analyzedAtRaw) : null;
+
+  if (!status && !typeLabel && !analyzedAt) return null;
+  return { status, typeLabel, analyzedAt };
+}
+
 function analyzedSuffix(classification: WikiClassification): string {
   const at = classification.analyzedAt?.trim();
   return at ? ` · Analyse ${formatAnalyzedDate(at)}` : '';

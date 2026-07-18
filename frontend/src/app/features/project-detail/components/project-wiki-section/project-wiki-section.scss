@@ -655,6 +655,34 @@
   background: color-mix(in srgb, var(--studio-warn, transparent) 6%, transparent);
 }
 
+// Meta-rail "Klassifikation" block: the status chip reuses the tree optics
+// (.pwiki__class-chip tones); the successor of a superseded page renders as a
+// plain navigable link underneath so long docs-relative paths can wrap.
+.pwiki__class-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--studio-spacing-1);
+}
+
+.pwiki__class-successor {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--studio-accent-strong);
+  font-family: inherit;
+  font-size: 0.76rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.pwiki__class-successor:hover,
+.pwiki__class-successor:focus-visible {
+  text-decoration: underline;
+}
+
 .pwiki__file-type {
   width: 20px;
   height: 20px;

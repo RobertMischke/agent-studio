@@ -534,6 +534,45 @@
                 </div>
               </section>
 
+              @if (openedClassification(); as cls) {
+                <section class="pwiki__panel" data-testid="project-wiki-classification-panel">
+                  <div class="pwiki__panel-head">
+                    <span>Klassifikation</span>
+                  </div>
+                  <dl class="pwiki__info-list">
+                    @if (cls.status; as status) {
+                      <div data-testid="project-wiki-classification-status">
+                        <dt>Status</dt>
+                        <dd class="pwiki__class-status">
+                          <span class="pwiki__class-chip"
+                                [attr.data-tone]="status.tone"
+                                data-testid="project-wiki-classification-status-chip">{{ status.label }}</span>
+                          @if (status.supersededBy; as successor) {
+                            <button class="pwiki__class-successor"
+                                    type="button"
+                                    data-testid="project-wiki-classification-superseded-link"
+                                    [cacTooltip]="'Nachfolger-Seite öffnen: ' + successor"
+                                    (click)="openSupersededBy(successor)">{{ successor }}</button>
+                          }
+                        </dd>
+                      </div>
+                    }
+                    @if (cls.typeLabel; as typeLabel) {
+                      <div data-testid="project-wiki-classification-type">
+                        <dt>Typ</dt>
+                        <dd>{{ typeLabel }}</dd>
+                      </div>
+                    }
+                    @if (cls.analyzedAt; as analyzedAt) {
+                      <div data-testid="project-wiki-classification-analyzed">
+                        <dt>Analyse</dt>
+                        <dd>{{ analyzedAt }}</dd>
+                      </div>
+                    }
+                  </dl>
+                </section>
+              }
+
               <section class="pwiki__panel pwiki__panel--history" data-testid="project-wiki-history-panel">
                 <div class="pwiki__panel-head">
                   <span>History</span>
