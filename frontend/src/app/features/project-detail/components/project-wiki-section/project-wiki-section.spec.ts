@@ -4,8 +4,17 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { vi } from 'vitest';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
-import type { ProjectStyleGuideCatalogue, WikiFileHistory, WikiPulse, WikiTree } from '../../../../models/project-docs.model';
+import type {
+  ProjectStyleGuideCatalogue,
+  WikiFileHistory,
+  WikiFolderOverview,
+  WikiHome,
+  WikiPulse,
+  WikiSearchResponse,
+  WikiTree,
+} from '../../../../models/project-docs.model';
 
 const TREE: WikiTree = {
   projectName: 'Demo',
@@ -142,6 +151,23 @@ const STYLE_GUIDES: ProjectStyleGuideCatalogue = {
   refreshAfterUtc: '2026-07-14T08:05:00Z',
 };
 
+const HOME: WikiHome = {
+  sections: [
+    {
+      title: 'Start',
+      links: [
+        { relPath: 'concepts/overview.md', label: 'Konzept-Überblick', note: 'Der Einstieg', exists: true },
+        { relPath: 'workbench/overview.html', label: 'Workbench', note: null, exists: true },
+        { relPath: 'missing/gone.md', label: 'Verschollen', note: 'alte Seite', exists: false },
+      ],
+    },
+    {
+      title: 'Betrieb',
+      links: [{ relPath: 'ops/runbook.md', label: 'Runbook', note: null, exists: true }],
+    },
+  ],
+};
+
 async function setup(tree: WikiTree = TREE) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
@@ -163,6 +189,7 @@ async function setup(tree: WikiTree = TREE) {
   flushGradingContext(http);
   fixture.detectChanges();
   flushStyleGuidesIfRendered(http);
+  flushWikiHomeIfRendered(http);
   fixture.detectChanges();
   return { fixture, http };
 }
@@ -192,6 +219,17 @@ function flushStyleGuidesIfRendered(http: HttpTestingController): void {
   const requests = http.match('/api/projects/Demo/style-guides');
   expect(requests.length).toBeLessThanOrEqual(1);
   requests[0]?.flush(STYLE_GUIDES);
+}
+
+/**
+ * The curated "Einstiege" block self-fetches /wiki/home whenever the landing
+ * view mounts; like the style-guide panel it is absent when persisted state
+ * opens a document directly, so the request is flushed only when present.
+ */
+function flushWikiHomeIfRendered(http: HttpTestingController, home: WikiHome = HOME): void {
+  const requests = http.match('/api/projects/Demo/wiki/home');
+  expect(requests.length).toBeLessThanOrEqual(1);
+  requests[0]?.flush(home);
 }
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
@@ -903,6 +941,10 @@ describe('ProjectWikiSectionComponent', () => {
     const folder = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-concepts"]')!;
     folder.querySelector<HTMLButtonElement>('.pwiki__label')!.click();
     fixture.detectChanges();
+    // Clicking the folder *name* now also selects the folder (overview page).
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts')
+      .flush({ path: 'concepts', name: 'concepts', children: [] });
+    fixture.detectChanges();
     await Promise.resolve();
 
     expect(document.activeElement?.getAttribute('data-testid')).toBe('project-wiki-node-concepts');
@@ -930,6 +972,354 @@ describe('ProjectWikiSectionComponent', () => {
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
     fixture.detectChanges();
 
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('concepts/overview.md');
+    http.verify();
+  });
+
+  // ---- folder overview page (content pane) ----
+
+  const FOLDER_CONCEPTS: WikiFolderOverview = {
+    path: 'concepts',
+    name: 'Concepts',
+    children: [
+      // Pages deliberately listed before the folder: the view sorts folders first.
+      {
+        name: 'overview.md', relPath: 'concepts/overview.md', kind: 'page', fileType: 'md',
+        title: 'Concept overview', summary: 'Der rote Faden.',
+        updatedAt: '2026-07-10T08:00:00Z', size: 2048, childCount: null,
+      },
+      {
+        name: 'page.html', relPath: 'concepts/page.html', kind: 'page', fileType: 'html',
+        title: 'HTML page', summary: null,
+        updatedAt: '2026-07-01T08:00:00Z', size: 500, childCount: null,
+      },
+      {
+        name: 'deep', relPath: 'concepts/deep', kind: 'folder', fileType: null,
+        title: 'Deep dive', summary: 'Unterordner mit Details.',
+        updatedAt: '2026-07-11T08:00:00Z', size: null, childCount: 3,
+      },
+    ],
+  };
+
+  it('shows a folder overview when the folder name is clicked and routes row clicks', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    // Clicking the folder NAME selects it (the chevron would only expand).
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-folder-label-concepts"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts').flush(FOLDER_CONCEPTS);
+    fixture.detectChanges();
+
+    const view = root.querySelector('[data-testid="wiki-folder-view"]')!;
+    expect(view, 'folder overview').toBeTruthy();
+    // Column headers: Titel | Datei | Typ | Geändert | Größe.
+    const headers = [...view.querySelectorAll('th')].map(th => th.textContent?.trim());
+    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Geändert', 'Größe']);
+    // Folders first, then pages in payload order.
+    const rowIds = [...view.querySelectorAll('[data-testid^="wiki-folder-row-"]')]
+      .map(row => row.getAttribute('data-testid'));
+    expect(rowIds).toEqual([
+      'wiki-folder-row-concepts/deep',
+      'wiki-folder-row-concepts/overview.md',
+      'wiki-folder-row-concepts/page.html',
+    ]);
+    // Type / size formatting incl. child count for folders, summary second line.
+    expect(view.querySelector('[data-testid="wiki-folder-type-concepts/deep"]')!.textContent).toContain('Ordner');
+    expect(view.querySelector('[data-testid="wiki-folder-size-concepts/deep"]')!.textContent).toContain('3 Einträge');
+    expect(view.querySelector('[data-testid="wiki-folder-type-concepts/page.html"]')!.textContent).toContain('html');
+    expect(view.querySelector('[data-testid="wiki-folder-size-concepts/overview.md"]')!.textContent).toContain('2.0 KB');
+    expect(view.querySelector('[data-testid="wiki-folder-size-concepts/page.html"]')!.textContent).toContain('500 B');
+    expect(view.querySelector('[data-testid="wiki-folder-summary-concepts/overview.md"]')!.textContent)
+      .toContain('Der rote Faden.');
+
+    // Folder row click drills into the subfolder overview.
+    root.querySelector<HTMLElement>('[data-testid="wiki-folder-row-concepts/deep"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts/deep').flush({
+      path: 'concepts/deep',
+      name: 'Deep dive',
+      children: [{
+        name: 'detail.md', relPath: 'concepts/deep/detail.md', kind: 'page', fileType: 'md',
+        title: 'Detail', summary: null, updatedAt: null, size: 10, childCount: null,
+      }],
+    });
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[data-testid="wiki-folder-title"]')!.textContent).toContain('Deep dive');
+    // The breadcrumb carries the clickable parent segment.
+    expect(el(fixture).querySelector('[data-testid="wiki-folder-crumb-concepts"]')).toBeTruthy();
+
+    // Page row click opens the page in the reader.
+    el(fixture).querySelector<HTMLElement>('[data-testid="wiki-folder-row-concepts/deep/detail.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/deep/detail.md')
+      .flush({ relPath: 'concepts/deep/detail.md', content: '# Detail\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/deep/detail.md').flush({
+      relPath: 'concepts/deep/detail.md', model: null,
+      metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
+      commits: [],
+    });
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('concepts/deep/detail.md');
+    http.verify();
+  });
+
+  it('shows loading and error states for the folder overview', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-folder-label-concepts"]')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="wiki-folder-loading"]')).toBeTruthy();
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts')
+      .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="wiki-folder-error"]')).toBeTruthy();
+    http.verify();
+  });
+
+  // ---- wiki search ----
+
+  const searchRequest = (http: HttpTestingController, q: string, semantic = false) =>
+    http.expectOne(r => r.url === '/api/projects/Demo/wiki/search'
+      && r.params.get('q') === q
+      && (semantic ? r.params.get('semantic') === 'true' : !r.params.has('semantic')));
+
+  const searchResponse = (overrides: Partial<WikiSearchResponse> = {}): WikiSearchResponse => ({
+    query: 'guide',
+    semanticUsed: false,
+    expandedTerms: [],
+    durationMs: 12,
+    results: [{
+      relPath: 'concepts/overview.md',
+      title: 'Concept overview',
+      kind: 'md',
+      snippet: 'Der <em>Guide</em> für alles',
+      score: 0.9,
+      updatedAt: '2026-07-10T08:00:00Z',
+    }],
+    ...overrides,
+  });
+
+  it('debounces the search (300ms, min 2 chars) and renders em-snippets safely', async () => {
+    const { fixture, http } = await setup();
+    const cmp = fixture.componentInstance;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      // A single character never searches.
+      cmp.onSearchQueryChange('g');
+      vi.advanceTimersByTime(400);
+      http.expectNone(r => r.url === '/api/projects/Demo/wiki/search');
+
+      // Retyping inside the window resets the debounce.
+      cmp.onSearchQueryChange('gu');
+      vi.advanceTimersByTime(200);
+      cmp.onSearchQueryChange('guide');
+      vi.advanceTimersByTime(299);
+      http.expectNone(r => r.url === '/api/projects/Demo/wiki/search');
+      vi.advanceTimersByTime(1);
+
+      // The snippet keeps only <em>; injected markup arrives escaped as text.
+      searchRequest(http, 'guide').flush(searchResponse({
+        results: [{
+          relPath: 'concepts/overview.md',
+          title: 'Concept overview',
+          kind: 'md',
+          snippet: 'Der <em>Guide</em> mit <img src=x onerror=alert(1)> und <em onclick=alert(1)>Trick</em>',
+          score: 0.9,
+          updatedAt: '2026-07-10T08:00:00Z',
+        }],
+      }));
+      fixture.detectChanges();
+
+      const snippet = el(fixture)
+        .querySelector('[data-testid="wiki-search-snippet-concepts/overview.md"]')!;
+      expect(snippet, 'snippet').toBeTruthy();
+      expect(snippet.querySelectorAll('em')).toHaveLength(1);
+      expect(snippet.querySelector('em')!.textContent).toBe('Guide');
+      expect(snippet.querySelector('img')).toBeNull();
+      expect(snippet.textContent).toContain('<img src=x onerror=alert(1)>');
+      expect(snippet.textContent).toContain('<em onclick=alert(1)>Trick');
+      // Result meta: dimmed relPath + relative time render alongside the title.
+      const row = el(fixture).querySelector('[data-testid="wiki-search-open-concepts/overview.md"]')!;
+      expect(row.textContent).toContain('Concept overview');
+      expect(row.querySelector('code')!.textContent).toContain('concepts/overview.md');
+      expect(row.querySelector('time')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+    http.verify();
+  });
+
+  it('opens the top search hit on Enter', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const input = root.querySelector<HTMLInputElement>('[data-testid="project-wiki-search"]')!;
+      input.value = 'guide';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+      searchRequest(http, 'guide').flush(searchResponse());
+      fixture.detectChanges();
+
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      fixture.detectChanges();
+      http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+        .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n' });
+      http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+      fixture.detectChanges();
+
+      expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+        .toContain('concepts/overview.md');
+      // Opening a hit leaves the search: the box is cleared again.
+      expect(fixture.componentInstance.searchQuery()).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+    http.verify();
+  });
+
+  it('Escape cancels a pending search and restores the previous view', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+    expandConcepts(fixture);
+    root.querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const input = root.querySelector<HTMLInputElement>('[data-testid="project-wiki-search"]')!;
+      input.value = 'over';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+      // Search view replaces the reader while the query is active...
+      expect(root.querySelector('[data-testid="wiki-search-results"]')).toBeTruthy();
+      expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')).toBeNull();
+
+      // ...Escape before the debounce fires: no request, previous view returns.
+      vi.advanceTimersByTime(100);
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      fixture.detectChanges();
+      vi.advanceTimersByTime(400);
+      http.expectNone(r => r.url === '/api/projects/Demo/wiki/search');
+      expect(root.querySelector('[data-testid="wiki-search-results"]')).toBeNull();
+      expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+        .toContain('concepts/overview.md');
+    } finally {
+      vi.useRealTimers();
+    }
+    http.verify();
+  });
+
+  it('expands the search semantically and shows the expanded terms as chips', async () => {
+    const { fixture, http } = await setup();
+    const cmp = fixture.componentInstance;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      cmp.onSearchQueryChange('deploy');
+      vi.advanceTimersByTime(300);
+      searchRequest(http, 'deploy').flush(searchResponse({ query: 'deploy' }));
+      fixture.detectChanges();
+      // The lexical response never shows the unavailable hint.
+      expect(el(fixture).querySelector('[data-testid="wiki-search-semantic-unavailable"]')).toBeNull();
+
+      el(fixture).querySelector<HTMLButtonElement>('[data-testid="wiki-search-semantic"]')!.click();
+      fixture.detectChanges();
+      // Spinner while the semantic call runs; the current results stay visible.
+      expect(el(fixture).querySelector('[data-testid="wiki-search-semantic-spinner"]')).toBeTruthy();
+      expect(el(fixture).querySelector('[data-testid="wiki-search-open-concepts/overview.md"]')).toBeTruthy();
+
+      searchRequest(http, 'deploy', true).flush(searchResponse({
+        query: 'deploy',
+        semanticUsed: true,
+        expandedTerms: ['rollout', 'release'],
+        results: [
+          ...searchResponse().results,
+          {
+            relPath: 'ops/rollout.md', title: 'Rollout', kind: 'md',
+            snippet: '<em>Rollout</em> Schritte', score: 0.7, updatedAt: null,
+          },
+        ],
+      }));
+      fixture.detectChanges();
+
+      const terms = el(fixture).querySelector('[data-testid="wiki-search-expanded-terms"]')!;
+      expect(terms, 'expanded terms').toBeTruthy();
+      expect(terms.textContent).toContain('rollout');
+      expect(terms.textContent).toContain('release');
+      expect(el(fixture).querySelector('[data-testid="wiki-search-open-ops/rollout.md"]')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+    http.verify();
+  });
+
+  it('hints when semantic expansion is unavailable (semanticUsed=false)', async () => {
+    const { fixture, http } = await setup();
+    const cmp = fixture.componentInstance;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      cmp.onSearchQueryChange('deploy');
+      vi.advanceTimersByTime(300);
+      searchRequest(http, 'deploy').flush(searchResponse({ query: 'deploy' }));
+      fixture.detectChanges();
+
+      el(fixture).querySelector<HTMLButtonElement>('[data-testid="wiki-search-semantic"]')!.click();
+      fixture.detectChanges();
+      searchRequest(http, 'deploy', true).flush(searchResponse({ query: 'deploy', semanticUsed: false }));
+      fixture.detectChanges();
+
+      expect(el(fixture).querySelector('[data-testid="wiki-search-semantic-unavailable"]')!.textContent)
+        .toContain('Semantische Erweiterung nicht verfügbar');
+    } finally {
+      vi.useRealTimers();
+    }
+    http.verify();
+  });
+
+  // ---- curated landing links ("Einstiege") ----
+
+  it('renders the Einstiege block on top of the landing and routes its links', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    const landing = root.querySelector('[data-testid="project-wiki-viewer-empty"]')!;
+    const home = landing.querySelector('[data-testid="wiki-home-links"]')!;
+    expect(home, 'Einstiege block').toBeTruthy();
+    // The block sits at the very top of the landing article, above the Pulse head.
+    expect(landing.firstElementChild!.contains(home)).toBe(true);
+    expect(home.textContent).toContain('Einstiege');
+    expect(home.textContent).toContain('Start');
+    expect(home.textContent).toContain('Betrieb');
+    // Note renders as a dimmed second line.
+    expect(home.textContent).toContain('Der Einstieg');
+    // Pulse feed, drift, and inbox remain below.
+    expect(root.querySelector('[data-testid="project-wiki-pulse-feed"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-pulse-drift"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-pulse-inbox"]')).toBeTruthy();
+
+    // A dangling link is dimmed and never navigates.
+    const missing = home.querySelector<HTMLElement>('[data-testid="wiki-home-link-missing/gone.md"]')!;
+    expect(missing.classList.contains('whome__link--missing')).toBe(true);
+    missing.click();
+    fixture.detectChanges();
+    http.expectNone(r => r.url.includes('/wiki/files/'));
+
+    // An existing link opens the page via the normal reader flow.
+    home.querySelector<HTMLButtonElement>('[data-testid="wiki-home-link-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
       .toContain('concepts/overview.md');
     http.verify();

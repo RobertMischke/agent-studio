@@ -1,0 +1,134 @@
+{
+  "sections": [
+    {
+      "title": "Start & Zielbild",
+      "links": [
+        {
+          "relPath": "README.md",
+          "label": "Dokumentations-Index",
+          "note": "Vollständiger, gepflegter Einstieg mit allen tragenden Entry-Points."
+        },
+        {
+          "relPath": "concepts/distributed-agent-studio-target-architecture.md",
+          "label": "Verteiltes Zielbild (Studio/Server/Runner)",
+          "note": "Kanonische Koordinationsquelle aller Remote- und Lifecycle-Entscheidungen."
+        },
+        {
+          "relPath": "wiki/common-problems/README.md",
+          "label": "Common Problems",
+          "note": "Erste Anlaufstelle bei bekannten Symptomen (18 Muster)."
+        }
+      ]
+    },
+    {
+      "title": "Härtung & Betrieb",
+      "links": [
+        {
+          "relPath": "workbenches/haertung-verteilte-ausfuehrung/index.html",
+          "label": "Härtung der verteilten Ausführung",
+          "note": "Aktuellstes Konzept: Result-SHA-Vertrag, Fencing, hermetische Verifikation."
+        },
+        {
+          "relPath": "workbenches/haertung-verteilte-ausfuehrung/historie.html",
+          "label": "Vorfalls-Chronik",
+          "note": "Der eine Pflegeort für Vorfälle, Ursachen und Präventionsstand."
+        },
+        {
+          "relPath": "wiki/concepts/completion-review-and-remote-runner-stability.html",
+          "label": "Completion, Review & Remote-Stabilität",
+          "note": "Umbrella für Completion-Semantik, Provenienz und Gates."
+        },
+        {
+          "relPath": "operations/setup/getting-started.md",
+          "label": "Getting started",
+          "note": "Verifizierter Null-auf-Betrieb-Pfad."
+        },
+        {
+          "relPath": "operations/remote-hosts.md",
+          "label": "Remote-Hosts-Runbook",
+          "note": "Operator-Lifecycle für Runner-Hosts."
+        }
+      ]
+    },
+    {
+      "title": "Architektur & Verträge",
+      "links": [
+        {
+          "relPath": "wiki/concepts/api-project-identity-and-watchpath.md",
+          "label": "API-Projektidentität & WatchPath",
+          "note": "Vertrag: wie Projektname, Registry und WatchPath zusammenhängen."
+        },
+        {
+          "relPath": "architecture/project-map.md",
+          "label": "Projektkarte",
+          "note": "Überblickskarte über die Systemteile und ihre Beziehungen."
+        },
+        {
+          "relPath": "architecture/decisions/adr-archive.md",
+          "label": "ADR-Archiv",
+          "note": "Alle tragenden Architekturentscheidungen an einem Ort."
+        },
+        {
+          "relPath": "architecture/model.md",
+          "label": "Architekturmodell",
+          "note": "Das zentrale Modell der Backend-/Runner-Architektur."
+        },
+        {
+          "relPath": "contracts/filesystem.md",
+          "label": "Filesystem-Contract",
+          "note": "Kanonisches On-Disk-Layout — von jedem Agenten gebraucht."
+        },
+        {
+          "relPath": "wiki/concepts/task-integration-and-merge-workflow.md",
+          "label": "Task-Integration & Merge",
+          "note": "Code-verifizierter Ist-Zustand des Merge-Wegs bis develop."
+        }
+      ]
+    },
+    {
+      "title": "Domänen",
+      "links": [
+        {
+          "relPath": "domains/tasks.md",
+          "label": "Tasks-Domain-Map",
+          "note": "System of record für Lanes, Job-Ordner und API-Mutationen."
+        },
+        {
+          "relPath": "domains/runner.md",
+          "label": "Runner-Domain-Map",
+          "note": "System of record für Pickup, Run, Outcome und Recovery."
+        },
+        {
+          "relPath": "domains/pipeline.md",
+          "label": "Pipeline-Domain-Map",
+          "note": "System of record für Pre-/Core-/Post-Steps und Kosten."
+        },
+        {
+          "relPath": "domains/frontend.md",
+          "label": "Frontend-Domain-Map",
+          "note": "Board, Task-Detail und Wiki-Oberfläche."
+        }
+      ]
+    },
+    {
+      "title": "UI & Wiki-System",
+      "links": [
+        {
+          "relPath": "design/style-guide-hard-rules.md",
+          "label": "Design Hard Rules",
+          "note": "Prompt-verankertes Regelwerk für jede UI-Karte."
+        },
+        {
+          "relPath": "concepts/wiki-pulse-dashboard.md",
+          "label": "Wiki Pulse",
+          "note": "Erklärt den generierten Einstiegs-View und die Grading-Anbindung."
+        },
+        {
+          "relPath": "wiki/konsolidierung-analyse-2026-07-18.md",
+          "label": "Wiki-Konsolidierungsanalyse",
+          "note": "Bestandsaufnahme, Redundanz-Cluster und Aufräumplan (18.07.2026)."
+        }
+      ]
+    }
+  ]
+}

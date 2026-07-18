@@ -1,0 +1,165 @@
+/* Rendered as a direct pane of the flex-column .pwiki__viewer: fill + scroll. */
+:host {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.wfolder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-4);
+  min-width: 0;
+}
+
+/* ---- breadcrumb ---- */
+.wfolder__crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-1);
+  font-size: 0.74rem;
+  color: var(--studio-fg-muted);
+}
+.wfolder__crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--studio-fg-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+button.wfolder__crumb:hover { color: var(--studio-fg); text-decoration: underline; }
+button.wfolder__crumb:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+.wfolder__crumb--current {
+  color: var(--studio-fg);
+  font-weight: 600;
+  cursor: default;
+}
+.wfolder__crumb-sep { opacity: 0.55; }
+
+/* ---- header ---- */
+.wfolder__head {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+.wfolder__head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: var(--studio-accent-3);
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+}
+.wfolder__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--studio-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wfolder__count {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--studio-fg-muted);
+}
+
+/* ---- states ---- */
+.wfolder__state {
+  margin: 0;
+  padding: var(--studio-spacing-3) 0;
+  font-size: 0.78rem;
+  color: var(--studio-fg-muted);
+}
+.wfolder__state--error { color: var(--studio-error); }
+
+/* ---- table ---- */
+.wfolder__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  color: var(--studio-fg);
+}
+.wfolder__table th {
+  text-align: left;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--studio-fg-muted);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--studio-fg) 14%, transparent);
+  white-space: nowrap;
+}
+.wfolder__table td {
+  padding: var(--studio-spacing-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--studio-fg) 7%, transparent);
+  vertical-align: top;
+}
+.wfolder__row { cursor: pointer; }
+.wfolder__row:hover td { background: color-mix(in srgb, var(--studio-fg) 5%, transparent); }
+.wfolder__row--folder .wfolder__title-text { font-weight: 600; }
+
+.wfolder__cell-title { min-width: 0; }
+.wfolder__title-line {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+  color: var(--studio-fg);
+}
+.wfolder__title-line app-studio-icon { color: var(--studio-fg-muted); }
+.wfolder__title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wfolder__summary {
+  display: block;
+  margin-top: var(--studio-spacing-1);
+  font-size: 0.72rem;
+  color: var(--studio-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 48ch;
+}
+.wfolder__cell-file code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  color: var(--studio-fg-muted);
+  word-break: break-all;
+}
+.wfolder__cell-type {
+  white-space: nowrap;
+  color: var(--studio-fg-muted);
+}
+.wfolder__cell-when {
+  white-space: nowrap;
+  color: var(--studio-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.wfolder__cell-size {
+  white-space: nowrap;
+  text-align: right;
+  color: var(--studio-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.wfolder__table th:last-child { text-align: right; }

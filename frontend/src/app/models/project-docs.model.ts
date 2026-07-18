@@ -356,6 +356,77 @@ export interface WikiPulse {
   workbenches?: WorkbenchCatalogue | null;
 }
 
+// ---- Wiki folder overview / search / curated home (agreed backend contracts) ----
+
+/** Kind of a folder-overview child: a subfolder or a document page. */
+export type WikiFolderChildKind = 'folder' | 'page';
+
+/**
+ * One row of a folder overview (mirrors the agreed
+ * `GET /api/projects/{p}/wiki/folder/{relPath}` contract). Folders carry
+ * `childCount` (and a null `fileType`); pages carry `fileType` + `size`.
+ */
+export interface WikiFolderChild {
+  name: string;
+  relPath: string;
+  kind: WikiFolderChildKind;
+  fileType: 'md' | 'html' | null;
+  title: string;
+  summary: string | null;
+  updatedAt: string | null;
+  size: number | null;
+  childCount: number | null;
+}
+
+/** Overview of one wiki folder: its path, display name, and direct children. */
+export interface WikiFolderOverview {
+  path: string;
+  name: string;
+  children: WikiFolderChild[];
+}
+
+/**
+ * One search hit. `snippet` may carry `<em>` highlight markup only; everything
+ * else arrives escaped and is additionally sanitised client-side before render
+ * (see `sanitizeWikiSearchSnippet`).
+ */
+export interface WikiSearchResult {
+  relPath: string;
+  title: string;
+  kind: string;
+  snippet: string;
+  score: number;
+  updatedAt: string | null;
+}
+
+/** Response of `GET /api/projects/{p}/wiki/search?q=&semantic=&limit=`. */
+export interface WikiSearchResponse {
+  query: string;
+  semanticUsed: boolean;
+  expandedTerms: string[];
+  durationMs: number;
+  results: WikiSearchResult[];
+}
+
+/** One curated entry link; `exists=false` marks a dangling curated target. */
+export interface WikiHomeLink {
+  relPath: string;
+  label: string;
+  note: string | null;
+  exists: boolean;
+}
+
+/** One curated section ("Einstiege") of the wiki home surface. */
+export interface WikiHomeSection {
+  title: string;
+  links: WikiHomeLink[];
+}
+
+/** Response of `GET /api/projects/{p}/wiki/home` (curated landing links). */
+export interface WikiHome {
+  sections: WikiHomeSection[];
+}
+
 // ---- Wiki grading maintenance run (AGT-2051) ----
 
 /** Lifecycle of a grading run (mirrors backend WikiGradingRunState, camelCased). */

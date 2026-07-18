@@ -1,0 +1,139 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { WikiFolderOpenRequest, WikiFolderViewComponent } from './wiki-folder-view.component';
+import type { WikiFolderOverview } from '../../../../../models/project-docs.model';
+
+const OVERVIEW: WikiFolderOverview = {
+  path: 'concepts/deep',
+  name: 'Deep dive',
+  children: [
+    // Pages deliberately listed before the folder: the view sorts folders first.
+    {
+      name: 'detail.md', relPath: 'concepts/deep/detail.md', kind: 'page', fileType: 'md',
+      title: 'Detail', summary: 'Zweite Zeile.', updatedAt: '2026-07-10T08:00:00Z', size: 2048, childCount: null,
+    },
+    {
+      name: 'viz.html', relPath: 'concepts/deep/viz.html', kind: 'page', fileType: 'html',
+      title: 'Visualisierung', summary: null, updatedAt: null, size: 500, childCount: null,
+    },
+    {
+      name: 'sub', relPath: 'concepts/deep/sub', kind: 'folder', fileType: null,
+      title: 'Unterbereich', summary: null, updatedAt: '2026-07-11T08:00:00Z', size: null, childCount: 1,
+    },
+  ],
+};
+
+async function setup(overview: WikiFolderOverview | 'error' = OVERVIEW) {
+  await TestBed.configureTestingModule({
+    imports: [WikiFolderViewComponent],
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+    ],
+  }).compileComponents();
+
+  const fixture = TestBed.createComponent(WikiFolderViewComponent);
+  const http = TestBed.inject(HttpTestingController);
+  fixture.componentRef.setInput('projectName', 'Demo');
+  fixture.componentRef.setInput('relPath', 'concepts/deep');
+  fixture.detectChanges();
+
+  const request = http.expectOne('/api/projects/Demo/wiki/folder/concepts/deep');
+  if (overview === 'error') {
+    request.flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
+  } else {
+    request.flush(overview);
+  }
+  fixture.detectChanges();
+  return { fixture, http };
+}
+
+const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
+
+describe('WikiFolderViewComponent', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('renders the children as a table (Titel/Datei/Typ/Geändert/Größe), folders first', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    const headers = [...root.querySelectorAll('th')].map(th => th.textContent?.trim());
+    expect(headers).toEqual(['Titel', 'Datei', 'Typ', 'Geändert', 'Größe']);
+
+    const rowIds = [...root.querySelectorAll('[data-testid^="wiki-folder-row-"]')]
+      .map(row => row.getAttribute('data-testid'));
+    expect(rowIds).toEqual([
+      'wiki-folder-row-concepts/deep/sub',
+      'wiki-folder-row-concepts/deep/detail.md',
+      'wiki-folder-row-concepts/deep/viz.html',
+    ]);
+
+    // Typ column: Ordner / md / html; Größe: child count vs. human-readable bytes.
+    expect(root.querySelector('[data-testid="wiki-folder-type-concepts/deep/sub"]')!.textContent).toContain('Ordner');
+    expect(root.querySelector('[data-testid="wiki-folder-type-concepts/deep/detail.md"]')!.textContent).toContain('md');
+    expect(root.querySelector('[data-testid="wiki-folder-type-concepts/deep/viz.html"]')!.textContent).toContain('html');
+    expect(root.querySelector('[data-testid="wiki-folder-size-concepts/deep/sub"]')!.textContent).toContain('1 Eintrag');
+    expect(root.querySelector('[data-testid="wiki-folder-size-concepts/deep/detail.md"]')!.textContent).toContain('2.0 KB');
+    expect(root.querySelector('[data-testid="wiki-folder-size-concepts/deep/viz.html"]')!.textContent).toContain('500 B');
+
+    // Summary renders as the dimmed second line under the title; relative time has
+    // the absolute timestamp as its tooltip source attribute value.
+    expect(root.querySelector('[data-testid="wiki-folder-summary-concepts/deep/detail.md"]')!.textContent)
+      .toContain('Zweite Zeile.');
+    expect(root.querySelector('[data-testid="wiki-folder-row-concepts/deep/detail.md"] time')).toBeTruthy();
+    http.verify();
+  });
+
+  it('emits folder drill-down, page open, and breadcrumb navigation', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+    const cmp = fixture.componentInstance;
+
+    const folders: string[] = [];
+    const pages: WikiFolderOpenRequest[] = [];
+    let rootRequested = 0;
+    cmp.openFolder.subscribe(rel => folders.push(rel));
+    cmp.openPage.subscribe(request => pages.push(request));
+    cmp.openRoot.subscribe(() => rootRequested++);
+
+    root.querySelector<HTMLElement>('[data-testid="wiki-folder-row-concepts/deep/sub"]')!.click();
+    expect(folders).toEqual(['concepts/deep/sub']);
+
+    root.querySelector<HTMLElement>('[data-testid="wiki-folder-row-concepts/deep/detail.md"]')!.click();
+    root.querySelector<HTMLElement>('[data-testid="wiki-folder-row-concepts/deep/viz.html"]')!.click();
+    expect(pages).toEqual([
+      { relPath: 'concepts/deep/detail.md', type: 'md' },
+      { relPath: 'concepts/deep/viz.html', type: 'html' },
+    ]);
+
+    // Breadcrumb: parent segment is clickable, the current one is not a button.
+    root.querySelector<HTMLButtonElement>('button[data-testid="wiki-folder-crumb-concepts"]')!.click();
+    expect(folders).toEqual(['concepts/deep/sub', 'concepts']);
+    expect(root.querySelector('button[data-testid="wiki-folder-crumb-concepts/deep"]')).toBeNull();
+    expect(root.querySelector('[data-testid="wiki-folder-crumb-concepts/deep"]')!.getAttribute('aria-current'))
+      .toBe('page');
+
+    root.querySelector<HTMLButtonElement>('[data-testid="wiki-folder-crumb-root"]')!.click();
+    expect(rootRequested).toBe(1);
+    http.verify();
+  });
+
+  it('shows the error state when the folder cannot be loaded and reloads on input change', async () => {
+    const { fixture, http } = await setup('error');
+    expect(el(fixture).querySelector('[data-testid="wiki-folder-error"]')).toBeTruthy();
+
+    // Changing the folder input refetches.
+    fixture.componentRef.setInput('relPath', 'concepts');
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts')
+      .flush({ path: 'concepts', name: 'Concepts', children: [] });
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[data-testid="wiki-folder-error"]')).toBeNull();
+    expect(el(fixture).querySelector('[data-testid="wiki-folder-empty"]')).toBeTruthy();
+    http.verify();
+  });
+});

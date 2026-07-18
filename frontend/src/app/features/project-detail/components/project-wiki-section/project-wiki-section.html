@@ -73,6 +73,17 @@
          [style.--pwiki-nav-width]="navWidthStyle()">
       @if (!navCollapsed()) {
       <nav class="pwiki__tree" id="project-wiki-tree" data-testid="project-wiki-tree" aria-label="Knowledge categories">
+        <label class="pwiki__filter-wrap">
+          <app-studio-icon name="search" [size]="13"></app-studio-icon>
+          <input class="pwiki__filter"
+                 type="search"
+                 [ngModel]="searchQuery()"
+                 (ngModelChange)="onSearchQueryChange($event)"
+                 (keydown.enter)="openTopSearchResult()"
+                 (keydown.escape)="clearSearch()"
+                 placeholder="Wiki durchsuchen…"
+                 data-testid="project-wiki-search">
+        </label>
         <div class="pwiki__tree-top">
           <span>Categories</span>
           <span>{{ docCount() }}</span>
@@ -111,7 +122,7 @@
                  [attr.tabindex]="rowTabIndex(row, index)"
                  [class.pwiki__row--group]="row.node.type === 'folder'"
                  [class.pwiki__row--doc]="row.node.type !== 'folder'"
-                 [class.pwiki__row--active]="openedRel() === row.node.relPath"
+                 [class.pwiki__row--active]="openedRel() === row.node.relPath || selectedFolderRel() === row.node.relPath"
                  [class.pwiki__row--drop]="dropTargetId() === nodeId(row.node)"
                  [style.padding-left.px]="rowPad(row.depth)"
                  [attr.aria-level]="row.depth + 1"
@@ -154,7 +165,8 @@
               } @else if (row.node.type === 'folder') {
                 <button class="pwiki__label pwiki__label--group" type="button"
                         tabindex="-1"
-                        (click)="toggleExpand(nodeId(row.node))">
+                        [attr.data-testid]="'project-wiki-folder-label-' + nodeId(row.node)"
+                        (click)="selectFolder(row.node)">
                   <app-studio-icon name="folder" [size]="13"></app-studio-icon>
                   <span class="pwiki__label-copy">
                     <span class="pwiki__label-text">{{ row.node.title }}</span>
@@ -241,7 +253,17 @@
       }
 
       <div class="pwiki__viewer">
-        @if (openedRel(); as rel) {
+        @if (searchActive()) {
+          <app-wiki-search-results
+              [query]="searchQuery()"
+              [response]="searchResponse()"
+              [loading]="searchLoading()"
+              [semanticLoading]="semanticLoading()"
+              [semanticRequested]="semanticRequested()"
+              [error]="searchError()"
+              (openResult)="openSearchResult($event)"
+              (expandSemantic)="expandSearchSemantically()" />
+        } @else if (openedRel(); as rel) {
           <header class="pwiki__viewer-head">
             <div class="pwiki__tabs" role="tablist" aria-label="Page view modes">
               <button class="pwiki__tab" type="button"
@@ -560,6 +582,13 @@
               </div>
             </aside>
           </div>
+        } @else if (selectedFolderRel(); as folderRel) {
+          <app-wiki-folder-view
+              [projectName]="projectName()"
+              [relPath]="folderRel"
+              (openFolder)="openFolderOverview($event)"
+              (openPage)="openFile($event.relPath, $event.type)"
+              (openRoot)="showWikiLanding()" />
         } @else {
           <header class="pwiki__viewer-head" data-testid="project-wiki-tabs-empty">
             <div class="pwiki__tabs" role="tablist" aria-label="Root page modes">
@@ -578,6 +607,9 @@
                [class.pwiki__workspace--resizing]="resizingPanel() === 'context'"
                [style.--pwiki-context-width]="contextWidthStyle()">
             <article class="pwiki__reader pwiki__landing" data-testid="project-wiki-viewer-empty">
+              <app-wiki-home-links
+                  [projectName]="projectName()"
+                  (openLink)="openFile($event.relPath, $event.type)" />
               <header class="pwiki__landing-head">
                 <span class="pwiki__doc-kind">Pulse</span>
                 <h2 class="pwiki__doc-title">What changed, what needs sorting, and how stale the knowledge is.</h2>

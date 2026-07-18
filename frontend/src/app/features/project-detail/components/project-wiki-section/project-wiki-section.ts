@@ -26,8 +26,9 @@ import {
   WikiGradingRunStatus,
   WikiNodeType,
   WikiPulse,
+  WikiSearchResponse,
+  WikiSearchResult,
   WikiTree,
-  WikiTreeMetadata,
   WikiTreeNode,
   WorkbenchListItem,
 } from '../../../../models/project-docs.model';
@@ -35,10 +36,13 @@ import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MenuComponent } from '../../../../components/menu/menu.component';
 import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.types';
-import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
+import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.component';
+import { WikiHomeLinksComponent } from './wiki-home-links/wiki-home-links.component';
 import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
+import { WikiSearchResultsComponent } from './wiki-search-results/wiki-search-results.component';
 import { WikiGradePanelComponent } from './wiki-grade-panel/wiki-grade-panel.component';
 import { ProjectStyleGuidesPanelComponent } from '../project-style-guides-panel/project-style-guides-panel';
 import {
@@ -48,6 +52,7 @@ import {
   flattenWikiTree,
   nodeId,
 } from './wiki-tree';
+import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const WIKI_STATE_STORAGE_PREFIX = 'atp.projectWiki.v1.';
@@ -90,17 +95,8 @@ interface WikiDocLink {
   kind: 'doc' | 'anchor' | 'external';
 }
 
-type WikiMetricTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
-
-interface WikiMetricChip {
-  key: string;
-  icon: StudioIconName;
-  display: string;
-  label: string;
-  tone: WikiMetricTone;
-  tooltip: string;
-  reportAnchor: string | null;
-}
+const WIKI_SEARCH_DEBOUNCE_MS = 300;
+const WIKI_SEARCH_MIN_LENGTH = 2;
 
 /**
  * Project-level knowledge view backed by the physical docs/ folder hierarchy:
@@ -127,7 +123,10 @@ interface WikiMetricChip {
     StudioIconComponent,
     TooltipDirective,
     WikiDocHistoryComponent,
+    WikiFolderViewComponent,
+    WikiHomeLinksComponent,
     WikiPulseComponent,
+    WikiSearchResultsComponent,
     WikiGradePanelComponent,
     ProjectStyleGuidesPanelComponent,
   ],
@@ -201,6 +200,24 @@ export class ProjectWikiSectionComponent {
   readonly history = signal<WikiFileHistory | null>(null);
   readonly loadingHistory = signal(false);
 
+  // Folder overview: selecting a folder *name* in the tree shows its overview
+  // page in the content pane (an open page always wins over the selection).
+  readonly selectedFolderRel = signal<string | null>(null);
+
+  // Wiki search (lexical, debounced; optional semantic expansion on demand).
+  readonly searchQuery = signal('');
+  readonly searchResponse = signal<WikiSearchResponse | null>(null);
+  readonly searchLoading = signal(false);
+  readonly searchError = signal<string | null>(null);
+  readonly semanticLoading = signal(false);
+  readonly semanticRequested = signal(false);
+  /** The content pane switches to the result list from 2 characters on. */
+  readonly searchActive = computed(() =>
+    this.searchQuery().trim().length >= WIKI_SEARCH_MIN_LENGTH);
+  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Monotonic guard so a stale (slower) response never overwrites a newer one. */
+  private searchSeq = 0;
+
   // Old-revision preview: when a sha is set, the doc pane shows that revision's
   // content instead of the working-tree content, with a "back to current" banner.
   readonly revisionSha = signal<string | null>(null);
@@ -237,6 +254,7 @@ export class ProjectWikiSectionComponent {
   private resizeState: WikiResizeState | null = null;
 
   protected readonly nodeId = nodeId;
+  protected readonly documentMetricChips = documentMetricChips;
 
   constructor() {
     effect(() => {
@@ -390,7 +408,7 @@ export class ProjectWikiSectionComponent {
   readonly metaGradeBadge = computed<{ display: string; label: string; tone: WikiMetricTone } | null>(() => {
     const meta = this.openedNode()?.metadata;
     if (!meta) return null;
-    const chip = this.driftChip(meta);
+    const chip = driftChip(meta);
     return { display: chip.display, label: chip.label, tone: chip.tone };
   });
 
@@ -398,6 +416,116 @@ export class ProjectWikiSectionComponent {
 
   onPulseOpen(req: WikiPulseOpenRequest): void {
     this.openFile(req.relPath, req.type);
+  }
+
+  // ---- folder overview (content-pane folder page) ----
+
+  /** Tree folder *name* click: select the folder and show its overview page. */
+  selectFolder(node: WikiTreeNode): void {
+    if (node.type !== 'folder' || !node.relPath) return;
+    this.openFolderOverview(node.relPath);
+  }
+
+  /**
+   * Shows a folder's overview page in the content pane (also used to drill
+   * into subfolders from the overview table and breadcrumb). The folder is
+   * expanded in the tree so the selection stays visible.
+   */
+  openFolderOverview(relPath: string): void {
+    this.resetSearchState();
+    if (this.openedRel()) this.closeFile();
+    if (!relPath) {
+      this.selectedFolderRel.set(null);
+      return;
+    }
+    this.expandAncestors(relPath);
+    this.expand(relPath);
+    this.focusedRowId.set(relPath);
+    this.selectedFolderRel.set(relPath);
+  }
+
+  /** Root breadcrumb of the folder overview: back to the Pulse landing. */
+  showWikiLanding(): void {
+    this.selectedFolderRel.set(null);
+  }
+
+  // ---- wiki search (debounced lexical, semantic expansion on demand) ----
+
+  onSearchQueryChange(value: string): void {
+    this.searchQuery.set(value);
+    if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
+    this.searchDebounceTimer = null;
+    this.searchSeq++; // invalidate any in-flight response for the old query
+    this.semanticRequested.set(false);
+    this.searchError.set(null);
+    const query = value.trim();
+    if (query.length < WIKI_SEARCH_MIN_LENGTH) {
+      this.searchResponse.set(null);
+      this.searchLoading.set(false);
+      this.semanticLoading.set(false);
+      return;
+    }
+    this.searchLoading.set(true);
+    this.searchDebounceTimer = setTimeout(() => {
+      this.searchDebounceTimer = null;
+      this.runWikiSearch(query, false);
+    }, WIKI_SEARCH_DEBOUNCE_MS);
+  }
+
+  /** "Semantisch erweitern": re-run the current query with semantic=true. */
+  expandSearchSemantically(): void {
+    const query = this.searchQuery().trim();
+    if (query.length < WIKI_SEARCH_MIN_LENGTH || this.semanticLoading()) return;
+    this.semanticRequested.set(true);
+    this.runWikiSearch(query, true);
+  }
+
+  /** Enter in the search box: open the top hit. */
+  openTopSearchResult(): void {
+    const top = this.searchResponse()?.results?.[0];
+    if (top && this.searchActive()) this.openSearchResult(top);
+  }
+
+  openSearchResult(result: WikiSearchResult): void {
+    this.openFile(result.relPath, this.wikiTypeForRel(result.relPath));
+  }
+
+  /** Esc / clearing the box: drop the search, the previous view reappears. */
+  clearSearch(): void {
+    this.resetSearchState();
+  }
+
+  private resetSearchState(): void {
+    if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
+    this.searchDebounceTimer = null;
+    this.searchSeq++;
+    this.searchQuery.set('');
+    this.searchResponse.set(null);
+    this.searchLoading.set(false);
+    this.searchError.set(null);
+    this.semanticLoading.set(false);
+    this.semanticRequested.set(false);
+  }
+
+  private runWikiSearch(query: string, semantic: boolean): void {
+    const seq = ++this.searchSeq;
+    if (semantic) this.semanticLoading.set(true);
+    else this.searchLoading.set(true);
+    this.searchError.set(null);
+    this.docs.searchWiki(this.projectName(), query, { semantic }).subscribe({
+      next: response => {
+        if (seq !== this.searchSeq) return;
+        this.searchResponse.set(response);
+        this.searchLoading.set(false);
+        this.semanticLoading.set(false);
+      },
+      error: () => {
+        if (seq !== this.searchSeq) return;
+        this.searchLoading.set(false);
+        this.semanticLoading.set(false);
+        this.searchError.set('Suche fehlgeschlagen.');
+      },
+    });
   }
 
   /** Open a critical page (from the grade panel) straight to its report tab. */
@@ -561,6 +689,8 @@ export class ProjectWikiSectionComponent {
   // ---- viewer ----
 
   openFile(rel: string, type: WikiNodeType = 'md', tab: WikiViewerTab = 'doc', reportAnchor: string | null = null): void {
+    this.resetSearchState();
+    this.selectedFolderRel.set(null);
     this.expandAncestors(rel);
     this.focusedRowId.set(rel);
     this.openedRel.set(rel);
@@ -1529,155 +1659,6 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
     if (!rel) return 'root folder';
     const parent = this.parentDir(rel);
     return parent || 'root folder';
-  }
-
-  documentMetricChips(node: WikiTreeNode): WikiMetricChip[] {
-    const meta = node.metadata ?? null;
-    if (!meta) {
-      return [
-        {
-          key: 'unscored',
-          icon: 'file',
-          display: 'None',
-          label: 'Metadata unscored',
-          tone: 'muted',
-          tooltip: 'No adjacent companion metadata file describes this document yet.',
-          reportAnchor: null,
-        },
-      ];
-    }
-
-    const chips = [
-      this.driftChip(meta),
-      this.directionChip(meta.temporalState),
-    ].filter((chip): chip is WikiMetricChip => chip !== null);
-    return chips;
-  }
-
-  private driftChip(meta: WikiTreeMetadata): WikiMetricChip {
-    const cleanGrade = this.cleanGrade(meta.driftGrade);
-    const summary = this.companionTooltipSummary(meta);
-    if (meta.hasDrift === false) {
-      return {
-        key: 'drift',
-        icon: 'check',
-        display: cleanGrade ?? 'A',
-        label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift stable',
-        tone: 'good',
-        tooltip: this.joinTooltip('No drift is currently suspected.', summary),
-        reportAnchor: 'why-drift',
-      };
-    }
-    if (meta.hasDrift === true) {
-      return {
-        key: 'drift',
-        icon: 'diff',
-        display: cleanGrade ?? '?',
-        label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown grade',
-        tone: cleanGrade === 'D' ? 'bad' : 'warn',
-        tooltip: this.joinTooltip('Drift is suspected for this document.', summary),
-        reportAnchor: 'why-drift',
-      };
-    }
-    return {
-      key: 'drift',
-      icon: 'diff',
-      display: cleanGrade ?? '?',
-      label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown',
-      tone: 'muted',
-      tooltip: this.joinTooltip('Drift state is not classified yet.', summary),
-      reportAnchor: 'why-drift',
-    };
-  }
-
-  private directionChip(state: string | null): WikiMetricChip {
-    const normalized = this.normalizeMetric(state);
-    switch (normalized) {
-      case 'present':
-      case 'current':
-      case 'now':
-        return {
-          key: 'direction',
-          icon: 'activity',
-          display: 'Now',
-          label: 'Direction Current',
-          tone: 'muted',
-          tooltip: 'Direction: describes current behavior.',
-          reportAnchor: 'temporal-reasoning',
-        };
-      case 'future':
-      case 'planned':
-      case 'vision':
-        return {
-          key: 'direction',
-          icon: 'branch',
-          display: 'Fut',
-          label: 'Direction Future',
-          tone: 'muted',
-          tooltip: 'Direction: describes planned or future behavior.',
-          reportAnchor: 'temporal-reasoning',
-        };
-      case 'past':
-      case 'historic':
-      case 'obsolete':
-        return {
-          key: 'direction',
-          icon: 'archive',
-          display: 'Past',
-          label: 'Direction Past',
-          tone: 'muted',
-          tooltip: 'Direction: describes past or obsolete behavior.',
-          reportAnchor: 'temporal-reasoning',
-        };
-      case 'mixed':
-      case 'transition':
-        return {
-          key: 'direction',
-          icon: 'diff',
-          display: 'Mix',
-          label: 'Direction Mixed',
-          tone: 'muted',
-          tooltip: 'Direction: mixes current and planned behavior.',
-          reportAnchor: 'temporal-reasoning',
-        };
-      default:
-        return {
-          key: 'direction',
-          icon: 'activity',
-          display: '?',
-          label: 'Direction unknown',
-          tone: 'muted',
-          tooltip: 'Direction has not been classified yet.',
-          reportAnchor: 'temporal-reasoning',
-        };
-    }
-  }
-
-  private cleanGrade(grade: string | null): string | null {
-    const clean = grade?.trim().toUpperCase();
-    return clean && /^[A-D]$/.test(clean) ? clean : null;
-  }
-
-  private normalizeMetric(value: string | null): string {
-    return value?.trim().toLowerCase() ?? '';
-  }
-
-  private joinTooltip(primary: string, summary: string | null): string {
-    const clean = summary?.trim();
-    return clean ? `${primary} ${clean}` : primary;
-  }
-
-  private companionTooltipSummary(meta: WikiTreeMetadata): string | null {
-    const parts: string[] = [];
-    if (meta.sourceChangedSinceReview === true) {
-      parts.push('Source changed since the companion review.');
-    }
-    if (meta.summary?.trim()) parts.push(meta.summary.trim());
-    if (meta.findingsCount && meta.findingsCount > 0) {
-      parts.push(`${meta.findingsCount} finding${meta.findingsCount === 1 ? '' : 's'} in the companion report.`);
-    }
-    if (meta.companionPath?.trim()) parts.push(`Companion: ${meta.companionPath.trim()}.`);
-    return parts.length ? parts.join(' ') : null;
   }
 
   fileTypeLabel(node: WikiTreeNode): string {

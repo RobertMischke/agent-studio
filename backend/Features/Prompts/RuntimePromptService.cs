@@ -23,6 +23,7 @@ public sealed partial class RuntimePromptService
     public const string ModeFramingWeb = "mode-framing-web.md";
     public const string ProposalFeedbackRefine = "proposal-feedback-refine.md";
     public const string ProposalDraftGenerate = "proposal-draft-generate.md";
+    public const string WikiSearchExpand = "wiki-search-expand.md";
 
     private static readonly IReadOnlyDictionary<string, string?> NoValues =
         new Dictionary<string, string?>();

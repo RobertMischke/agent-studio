@@ -528,6 +528,9 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // hours the way 2062/2067/2068 did on 2026-07-10.
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+// Lexical wiki search (BM25 in-memory index, lazily rebuilt on a docs
+// fingerprint change) with the fail-open semantic query-expansion layer.
+builder.Services.AddSingleton<WikiSearchService>();
 builder.Services.AddSingleton<ProjectStyleGuideService>();
 builder.Services.AddSingleton<WorkbenchCatalogueService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();

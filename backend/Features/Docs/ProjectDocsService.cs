@@ -23,7 +23,8 @@ public class ProjectDocsService
     private const string SecurityRel = "docs/operations/security";
     private const string SecurityStateFile = "state.json";
     private const string AdrRel = "docs/architecture/decisions/adr-archive.md";
-    private const string WikiRel = "docs";
+    internal const string WikiRel = "docs";
+    private const string WikiHomeRel = "wiki/home.json";
 
     // The wiki tree is the physical docs/ hierarchy itself - folders are nodes,
     // files are pages - so there is no virtual organisation layer to maintain.
@@ -1664,6 +1665,331 @@ public class ProjectDocsService
     private static string StripHtml(string text) =>
         Regex.Replace(text, "<.*?>", "", RegexOptions.Singleline).Trim();
 
+    // -------- Wiki folder view (one directory level for the folder overview) --------
+
+    // Page extensions the folder overview lists: markdown plus HTML concept
+    // pages. JSON metadata pages are deliberately omitted here - the folder
+    // card surface is a reading surface and its DTO contract only knows
+    // fileType "md" | "html" (null for folders).
+    private static readonly HashSet<string> WikiFolderPageExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".md", ".html", ".htm" };
+
+    /// <summary>
+    /// One directory level of the wiki for the folder-overview surface: the
+    /// folder's own identity plus every direct child, folders first then pages,
+    /// each alphabetical. Pages carry a sniffed title (first H1 / frontmatter
+    /// title for markdown, <c>&lt;title&gt;</c> for HTML, file name fallback)
+    /// and a plain-text summary (first text paragraph, markup stripped, max 240
+    /// chars); folders carry a non-recursive child count instead. An empty
+    /// <paramref name="relPath"/> lists the wiki root. Returns null when the
+    /// project is unknown, the path is unsafe (same traversal guard as the
+    /// file endpoints), or the folder does not exist.
+    /// </summary>
+    public WikiFolderView? GetWikiFolder(string projectName, string? relPath)
+    {
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return null;
+
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/folder", _logger);
+
+        var root = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var rel = (relPath ?? string.Empty).Replace('\\', '/').Trim().Trim('/');
+
+        string full;
+        if (rel.Length == 0)
+        {
+            full = root;
+        }
+        else
+        {
+            if (rel.Contains("..", StringComparison.Ordinal)) return null;
+            if (Path.IsPathRooted(rel)) return null;
+            full = Path.GetFullPath(Path.Combine(root, rel));
+            // Append a separator to the root so "docs-other/" can't satisfy the prefix.
+            var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+            if (!full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase)) return null;
+        }
+        if (!Directory.Exists(full)) return null;
+
+        var dir = new DirectoryInfo(full);
+        var children = new List<WikiFolderChild>();
+
+        foreach (var sub in dir.GetDirectories())
+        {
+            if (sub.Name.StartsWith('.')) continue;
+            if (!HasWikiPageDescendant(sub)) continue; // prune empty folders, like the tree
+            var subRel = Path.GetRelativePath(root, sub.FullName).Replace('\\', '/');
+            children.Add(new WikiFolderChild(
+                Name: sub.Name,
+                RelPath: subRel,
+                Kind: "folder",
+                FileType: null,
+                Title: EngineeringWorkstreamFrame.DisplayTitle(subRel) ?? StripOrderPrefix(sub.Name),
+                Summary: null,
+                UpdatedAt: sub.LastWriteTimeUtc,
+                Size: null,
+                ChildCount: CountDirectFolderChildren(sub)));
+        }
+
+        foreach (var file in dir.GetFiles())
+        {
+            if (!IsWikiFolderPage(file)) continue;
+            var fileRel = Path.GetRelativePath(root, file.FullName).Replace('\\', '/');
+            children.Add(new WikiFolderChild(
+                Name: file.Name,
+                RelPath: fileRel,
+                Kind: "page",
+                FileType: file.Extension.Equals(".md", StringComparison.OrdinalIgnoreCase) ? "md" : "html",
+                Title: ExtractWikiPageTitle(file.FullName, file.Extension)
+                    ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name)),
+                Summary: ExtractWikiPageSummary(file.FullName, file.Extension),
+                UpdatedAt: file.LastWriteTimeUtc,
+                Size: file.Length,
+                ChildCount: null));
+        }
+
+        children.Sort((a, b) =>
+        {
+            var aFolder = a.Kind == "folder";
+            var bFolder = b.Kind == "folder";
+            if (aFolder != bFolder) return aFolder ? -1 : 1;
+            return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        });
+
+        return new WikiFolderView(rel, dir.Name, children);
+    }
+
+    private static bool IsWikiFolderPage(FileInfo file) =>
+        !file.Name.StartsWith('.')
+        && WikiFolderPageExtensions.Contains(file.Extension)
+        && !IsWikiCompanionFile(file.Name);
+
+    /// <summary>Any page anywhere below this folder? Used to prune folders with no navigable content.</summary>
+    private static bool HasWikiPageDescendant(DirectoryInfo dir)
+    {
+        try
+        {
+            return dir.EnumerateFiles("*", SearchOption.AllDirectories).Any(IsWikiFolderPage);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable folder while probing for wiki pages; treating as empty.");
+            return false;
+        }
+    }
+
+    /// <summary>Direct pages + direct non-empty subfolders. Deliberately not recursive.</summary>
+    private static int CountDirectFolderChildren(DirectoryInfo dir)
+    {
+        var count = dir.GetFiles().Count(IsWikiFolderPage);
+        count += dir.GetDirectories().Count(d => !d.Name.StartsWith('.') && HasWikiPageDescendant(d));
+        return count;
+    }
+
+    /// <summary>
+    /// Display title for a wiki page in the folder overview. Markdown: first
+    /// <c># </c> heading outside the frontmatter, else the frontmatter
+    /// <c>title:</c>. HTML: the <c>&lt;title&gt;</c> tag, else the first
+    /// <c>&lt;h1&gt;</c>. Null (caller falls back to the file name) when the
+    /// file is unreadable or carries neither.
+    /// </summary>
+    internal static string? ExtractWikiPageTitle(string path, string extension)
+    {
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            var text = File.ReadAllText(path);
+            if (extension.Equals(".md", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var line in StripWikiFrontmatter(text).Split('\n'))
+                {
+                    var trimmed = line.TrimStart();
+                    if (trimmed.StartsWith("# ", StringComparison.Ordinal))
+                        return trimmed[2..].Trim();
+                }
+                return FrontmatterScalar(text, "title");
+            }
+
+            var title = Regex.Match(text, @"<title[^>]*>(?<title>.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (title.Success)
+            {
+                var t = System.Net.WebUtility.HtmlDecode(StripHtml(title.Groups["title"].Value));
+                if (!string.IsNullOrWhiteSpace(t)) return t;
+            }
+            var h1 = Regex.Match(text, @"<h1[^>]*>(?<title>.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (h1.Success)
+            {
+                var t = System.Net.WebUtility.HtmlDecode(StripHtml(h1.Groups["title"].Value));
+                if (!string.IsNullOrWhiteSpace(t)) return t;
+            }
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable page title: fall back to the file name in the caller.");
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// First text paragraph of a wiki page as a plain-text summary: markdown
+    /// syntax / HTML tags stripped, whitespace collapsed, hard-capped at 240
+    /// characters. Null when the page has no prose (or is unreadable).
+    /// </summary>
+    private static string? ExtractWikiPageSummary(string path, string extension)
+    {
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            var text = File.ReadAllText(path);
+            var summary = extension.Equals(".md", StringComparison.OrdinalIgnoreCase)
+                ? FirstMarkdownParagraph(text)
+                : FirstHtmlParagraph(text);
+            return TruncateSummary(summary);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable page summary; omitting it.");
+            return null;
+        }
+    }
+
+    /// <summary>Body of a markdown doc without its leading YAML frontmatter block.</summary>
+    internal static string StripWikiFrontmatter(string text)
+    {
+        var m = WikiFrontmatterRegex.Match(text);
+        return m.Success ? text[(m.Index + m.Length)..] : text;
+    }
+
+    /// <summary>
+    /// First contiguous run of prose lines in a markdown body - headings, code
+    /// fences, tables, and HTML comments are skipped; inline markdown (links,
+    /// images, emphasis, inline code) is stripped down to its text.
+    /// </summary>
+    private static string? FirstMarkdownParagraph(string text)
+    {
+        var lines = StripWikiFrontmatter(text).Split('\n');
+        var paragraph = new List<string>();
+        var inFence = false;
+        foreach (var raw in lines)
+        {
+            var line = raw.TrimEnd('\r');
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal))
+            {
+                inFence = !inFence;
+                continue;
+            }
+            if (inFence) continue;
+            var isProse = trimmed.Length > 0
+                && !trimmed.StartsWith('#')
+                && !trimmed.StartsWith('|')
+                && !trimmed.StartsWith("<!--", StringComparison.Ordinal)
+                && !trimmed.StartsWith("![", StringComparison.Ordinal)
+                && !trimmed.StartsWith("---", StringComparison.Ordinal);
+            if (isProse)
+            {
+                paragraph.Add(trimmed.TrimStart('>', ' ').TrimStart('-', '*', ' '));
+            }
+            else if (paragraph.Count > 0)
+            {
+                break; // paragraph ended
+            }
+        }
+        if (paragraph.Count == 0) return null;
+
+        var joined = string.Join(" ", paragraph);
+        joined = Regex.Replace(joined, @"!\[[^\]]*\]\([^)]*\)", "");        // images
+        joined = Regex.Replace(joined, @"\[([^\]]*)\]\([^)]*\)", "$1");      // links -> text
+        joined = Regex.Replace(joined, @"`([^`]*)`", "$1");                  // inline code
+        joined = Regex.Replace(joined, @"(\*\*|__|\*|~~)", "");              // emphasis markers
+        joined = StripHtml(joined);                                          // inline HTML
+        return joined;
+    }
+
+    /// <summary>First <c>&lt;p&gt;</c> with text, else the tag-stripped body text.</summary>
+    private static string? FirstHtmlParagraph(string text)
+    {
+        var cleaned = Regex.Replace(text, @"<script[^>]*>.*?</script>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        cleaned = Regex.Replace(cleaned, @"<style[^>]*>.*?</style>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        cleaned = Regex.Replace(cleaned, @"<head[^>]*>.*?</head>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        foreach (Match p in Regex.Matches(cleaned, @"<p[^>]*>(?<body>.*?)</p>", RegexOptions.IgnoreCase | RegexOptions.Singleline))
+        {
+            var candidate = System.Net.WebUtility.HtmlDecode(StripHtml(p.Groups["body"].Value));
+            if (!string.IsNullOrWhiteSpace(candidate)) return candidate;
+        }
+
+        var fallback = System.Net.WebUtility.HtmlDecode(StripHtml(cleaned));
+        return string.IsNullOrWhiteSpace(fallback) ? null : fallback;
+    }
+
+    /// <summary>Collapses whitespace and hard-caps the summary at 240 characters.</summary>
+    private static string? TruncateSummary(string? summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary)) return null;
+        var collapsed = Regex.Replace(summary, @"\s+", " ").Trim();
+        if (collapsed.Length == 0) return null;
+        return collapsed.Length <= 240 ? collapsed : collapsed[..240].TrimEnd();
+    }
+
+    // -------- Wiki home (curated landing sections from docs/wiki/home.json) --------
+
+    /// <summary>
+    /// The curated wiki home sections read from <c>docs/wiki/home.json</c>.
+    /// Every configured link is kept and annotated with an <c>exists</c> flag
+    /// (checked against the docs tree with the standard traversal guard) so the
+    /// UI can render a dead link visibly instead of silently dropping it. A
+    /// missing or malformed <c>home.json</c> degrades to empty sections, never
+    /// an error; null only when the project itself is unknown.
+    /// </summary>
+    public WikiHomeView? GetWikiHome(string projectName)
+    {
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return null;
+
+        var homePath = Path.Combine(baseDir, WikiRel, WikiHomeRel.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(homePath)) return new WikiHomeView([]);
+
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            using var doc = JsonDocument.Parse(File.ReadAllText(homePath));
+            var sections = new List<WikiHomeSection>();
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("sections", out var rawSections)
+                && rawSections.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var rawSection in rawSections.EnumerateArray())
+                {
+                    if (rawSection.ValueKind != JsonValueKind.Object) continue;
+                    var links = new List<WikiHomeLink>();
+                    if (rawSection.TryGetProperty("links", out var rawLinks) && rawLinks.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var rawLink in rawLinks.EnumerateArray())
+                        {
+                            if (rawLink.ValueKind != JsonValueKind.Object) continue;
+                            var rel = JsonString(rawLink, "relPath")?.Replace('\\', '/').Trim().TrimStart('/');
+                            if (string.IsNullOrWhiteSpace(rel)) continue;
+                            var target = ResolveWikiPath(projectName, rel, requireDoc: false);
+                            links.Add(new WikiHomeLink(
+                                RelPath: rel,
+                                Label: JsonString(rawLink, "label") ?? rel,
+                                Note: JsonString(rawLink, "note"),
+                                Exists: target != null && File.Exists(target)));
+                        }
+                    }
+                    sections.Add(new WikiHomeSection(JsonString(rawSection, "title") ?? "", links));
+                }
+            }
+            return new WikiHomeView(sections);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: malformed wiki home.json; serving empty sections.");
+            return new WikiHomeView([]);
+        }
+    }
+
     // -------- Architecture decisions --------
 
     public ArchitectureOverview? GetArchitectureOverview(string projectName)
@@ -1999,6 +2325,43 @@ public record WikiPulseDriftArea(
 
 /// <summary>Roll-up of how many graded pages fall in each drift band.</summary>
 public record WikiPulseDriftCounts(int Fresh, int Aging, int Stale, int Graded);
+
+// ---- Wiki folder view (one directory level) ----
+
+/// <summary>
+/// One wiki directory level for the folder-overview surface. <see cref="Path"/>
+/// is the docs-root-relative folder path (empty string for the wiki root);
+/// children are sorted folders first, then pages, each alphabetical.
+/// </summary>
+public record WikiFolderView(string Path, string Name, List<WikiFolderChild> Children);
+
+/// <summary>
+/// One direct child of a wiki folder. <c>Kind</c> is <c>folder</c> or
+/// <c>page</c>; <c>FileType</c> is <c>md</c> / <c>html</c> for pages and null
+/// for folders. <c>Summary</c> (pages only) is the first text paragraph,
+/// markup-stripped, max 240 chars. <c>ChildCount</c> (folders only) counts
+/// direct pages + direct non-empty subfolders, not recursive.
+/// </summary>
+public record WikiFolderChild(
+    string Name,
+    string RelPath,
+    string Kind,
+    string? FileType,
+    string Title,
+    string? Summary,
+    DateTime UpdatedAt,
+    long? Size,
+    int? ChildCount);
+
+// ---- Wiki home (curated landing sections) ----
+
+/// <summary>Curated wiki home payload backed by <c>docs/wiki/home.json</c>.</summary>
+public record WikiHomeView(List<WikiHomeSection> Sections);
+public record WikiHomeSection(string Title, List<WikiHomeLink> Links);
+
+/// <summary>One curated link. <see cref="Exists"/> flags whether the target
+/// page is actually on disk so the UI can render dead links visibly.</summary>
+public record WikiHomeLink(string RelPath, string Label, string? Note, bool Exists);
 
 public record SecurityMeta(string? LastReviewDate, string? Rating, string? Summary);
 public record SecurityFileEntry(string Name, string RelPath, DateTime UpdatedAt, long Size);

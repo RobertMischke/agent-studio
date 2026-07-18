@@ -1,0 +1,185 @@
+/* Rendered as a direct pane of the flex-column .pwiki__viewer: fill + scroll. */
+:host {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.wsearch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-4);
+  min-width: 0;
+}
+
+/* ---- header ---- */
+.wsearch__head {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+.wsearch__head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: var(--studio-accent-3);
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+}
+.wsearch__head-copy { min-width: 0; }
+.wsearch__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--studio-fg);
+}
+.wsearch__query {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--studio-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wsearch__stats { font-variant-numeric: tabular-nums; }
+
+.wsearch__semantic {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 16%, transparent);
+  background: color-mix(in srgb, var(--studio-fg) 4%, transparent);
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wsearch__semantic:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--studio-fg) 8%, transparent);
+}
+.wsearch__semantic:disabled { opacity: 0.6; cursor: default; }
+.wsearch__semantic:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+.wsearch__spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--studio-fg) 25%, transparent);
+  border-top-color: var(--studio-accent-3);
+  animation: wsearch-spin 0.8s linear infinite;
+}
+@keyframes wsearch-spin { to { transform: rotate(360deg); } }
+
+/* ---- semantic hint + term chips ---- */
+.wsearch__notice {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--studio-fg-muted);
+}
+.wsearch__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-1);
+}
+.wsearch__term {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+  color: var(--studio-fg);
+}
+
+/* ---- states ---- */
+.wsearch__state {
+  margin: 0;
+  padding: var(--studio-spacing-3) 0;
+  font-size: 0.78rem;
+  color: var(--studio-fg-muted);
+}
+.wsearch__state--error { color: var(--studio-error); }
+
+/* ---- result list ---- */
+.wsearch__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+.wsearch__row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  text-align: left;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--studio-fg);
+  cursor: pointer;
+  font: inherit;
+  min-width: 0;
+}
+.wsearch__row:hover {
+  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
+  border-color: color-mix(in srgb, var(--studio-fg) 12%, transparent);
+}
+.wsearch__row:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+.wsearch__row-top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+}
+.wsearch__row-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wsearch__row-top time {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--studio-fg-muted);
+}
+.wsearch__path {
+  font-size: 0.68rem;
+  font-family: var(--font-mono, monospace);
+  color: var(--studio-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wsearch__snippet {
+  font-size: 0.74rem;
+  color: var(--studio-fg-muted);
+  overflow-wrap: anywhere;
+}
+/* The <em> arrives via [innerHTML], so it carries no Angular scoping attribute. */
+.wsearch__snippet ::ng-deep em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--studio-fg);
+  background: color-mix(in srgb, var(--studio-accent-3) 18%, transparent);
+  border-radius: 3px;
+}

@@ -136,6 +136,45 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(pulse with { Workbenches = workbenches.List(projectName) });
         });
 
+        // One directory level of the wiki for the folder-overview surface:
+        // direct children (folders first, then pages, each alphabetical) with
+        // sniffed titles, plain-text summaries, and folder child counts. An
+        // empty relPath lists the wiki root. Sits before the /files catch-all
+        // for path precedence, like its sibling routes.
+        app.MapGet("/api/projects/{projectName}/wiki/folder/{**relPath}", (string projectName, string? relPath, ProjectDocsService docs) =>
+        {
+            var folder = docs.GetWikiFolder(projectName, relPath);
+            return folder == null
+                ? Results.NotFound(new { error = "Folder not found or path rejected" })
+                : Results.Ok(folder);
+        });
+
+        // Lexical wiki search (BM25 over title/headings/body) with an optional
+        // fail-open semantic query-expansion layer (semantic=true). The limit
+        // is clamped server-side; a blank query is a 400, an unknown project a
+        // 404. Sits before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/search", async (string projectName, string? q, bool? semantic, int? limit, WikiSearchService search, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return Results.BadRequest(new { error = "q is required" });
+            var res = await search.SearchAsync(projectName, q.Trim(), semantic == true, Math.Clamp(limit ?? 20, 1, 50), ct);
+            return res == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(res);
+        });
+
+        // Curated wiki home sections from docs/wiki/home.json. Missing or
+        // malformed file degrades to empty sections; configured links are kept
+        // and annotated with an exists flag instead of being dropped. Sits
+        // before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/home", (string projectName, ProjectDocsService docs) =>
+        {
+            var home = docs.GetWikiHome(projectName);
+            return home == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(home);
+        });
+
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
         {
             var file = docs.ReadWikiFile(projectName, relPath);

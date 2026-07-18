@@ -1,0 +1,72 @@
+<section class="wsearch" data-testid="wiki-search-results">
+  <header class="wsearch__head">
+    <span class="wsearch__head-icon" aria-hidden="true">
+      <app-studio-icon name="search" [size]="15"></app-studio-icon>
+    </span>
+    <div class="wsearch__head-copy">
+      <h2 class="wsearch__title">Suche</h2>
+      <p class="wsearch__query">„{{ query() }}“
+        @if (response(); as r) {
+          <span class="wsearch__stats" data-testid="wiki-search-stats">· {{ r.results.length }} Treffer · {{ r.durationMs }} ms</span>
+        }
+      </p>
+    </div>
+    <button class="wsearch__semantic" type="button"
+            data-testid="wiki-search-semantic"
+            [disabled]="semanticLoading() || loading()"
+            cacTooltip="Suche mit semantisch verwandten Begriffen erweitern"
+            (click)="expandSemantic.emit()">
+      @if (semanticLoading()) {
+        <span class="wsearch__spinner" data-testid="wiki-search-semantic-spinner" aria-hidden="true"></span>
+        <span>Erweitere…</span>
+      } @else {
+        <app-studio-icon name="sliders" [size]="12"></app-studio-icon>
+        <span>Semantisch erweitern</span>
+      }
+    </button>
+  </header>
+
+  @if (semanticUnavailable()) {
+    <p class="wsearch__notice" data-testid="wiki-search-semantic-unavailable">Semantische Erweiterung nicht verfügbar</p>
+  }
+
+  @if (expandedTerms().length > 0) {
+    <div class="wsearch__terms" data-testid="wiki-search-expanded-terms" aria-label="Erweiterte Suchbegriffe">
+      @for (term of expandedTerms(); track term) {
+        <span class="wsearch__term">{{ term }}</span>
+      }
+    </div>
+  }
+
+  @if (loading()) {
+    <p class="wsearch__state" data-testid="wiki-search-loading">Suche läuft…</p>
+  } @else if (error(); as message) {
+    <p class="wsearch__state wsearch__state--error" data-testid="wiki-search-error">{{ message }}</p>
+  } @else if (results().length === 0 && response()) {
+    <p class="wsearch__state" data-testid="wiki-search-empty">Keine Treffer für „{{ query() }}“.</p>
+  } @else {
+    <ul class="wsearch__list">
+      @for (result of results(); track result.relPath) {
+        <li>
+          <button class="wsearch__row" type="button"
+                  [attr.data-testid]="'wiki-search-open-' + result.relPath"
+                  (click)="openResult.emit(result)">
+            <span class="wsearch__row-top">
+              <strong class="wsearch__row-title">{{ result.title }}</strong>
+              @if (result.updatedAt) {
+                <time [attr.datetime]="result.updatedAt"
+                      [cacTooltip]="absoluteTime(result.updatedAt)">{{ relativeTime(result.updatedAt) }}</time>
+              }
+            </span>
+            <code class="wsearch__path">{{ result.relPath }}</code>
+            @if (result.snippet) {
+              <span class="wsearch__snippet"
+                    [attr.data-testid]="'wiki-search-snippet-' + result.relPath"
+                    [innerHTML]="result.snippet"></span>
+            }
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</section>
