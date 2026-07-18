@@ -15,6 +15,7 @@
       @if (results().length > 0) {
         <app-segmented-control
             ariaLabel="Darstellung der Suchtreffer"
+            appearance="subtle"
             [options]="viewOptions"
             [value]="viewMode()"
             (valueChange)="setViewMode($event)" />
@@ -54,14 +55,17 @@
   } @else if (results().length === 0 && response()) {
     <p class="wsearch__state" data-testid="wiki-search-empty">Keine Treffer für „{{ query() }}“.</p>
   } @else if (viewMode() === 'tree') {
-    <ul class="wsearch__list" data-testid="wiki-search-tree">
+    <ul class="wsearch__list wsearch__list--tree" data-testid="wiki-search-tree">
       @for (row of treeRows(); track rowId(row)) {
-        <li [style.padding-left.px]="row.depth * 14">
+        <!-- Children indent via margin (not padding) so the border-left guide
+             sits at the parent's level and marks the subtree as belonging. -->
+        <li [class.wsearch__branch]="row.depth > 0"
+            [style.margin-left.px]="row.depth * 14">
           @if (row.kind === 'group') {
             <button class="wsearch__group" type="button"
                     [attr.data-testid]="'wiki-search-group-' + row.path"
                     [attr.aria-expanded]="row.expanded"
-                    [cacTooltip]="row.path"
+                    [cacTooltip]="groupTooltip(row.path)"
                     (click)="toggleGroup(row.path)">
               <span class="wsearch__group-chevron" aria-hidden="true">
                 <app-studio-icon [name]="row.expanded ? 'chevronDown' : 'chevronRight'" [size]="12"></app-studio-icon>

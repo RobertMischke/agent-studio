@@ -28,6 +28,17 @@ export type WikiSearchViewMode = 'tree' | 'list';
  */
 const VIEW_MODE_STORAGE_KEY = 'atp.projectWikiSearchView.v1';
 
+/**
+ * Synthetic group path for root-level hits (relPath without a folder). Only
+ * materialises when at least one real folder group exists — root hits then
+ * gather under a "(Wurzel)" group instead of floating beside the folders.
+ * With exclusively root-level hits the tree stays flat (no pseudo group).
+ */
+export const WIKI_SEARCH_ROOT_GROUP_PATH = '(root)';
+
+/** Display label of the synthetic root group. */
+export const WIKI_SEARCH_ROOT_GROUP_LABEL = '(Wurzel)';
+
 /** Folder node of the tree view; `label` may compress a single-child chain. */
 export interface WikiSearchTreeGroup {
   kind: 'group';
@@ -102,8 +113,8 @@ export class WikiSearchResultsComponent {
   readonly expandedTerms = computed(() => this.response()?.expandedTerms ?? []);
 
   readonly viewOptions: readonly SegmentedOption<WikiSearchViewMode>[] = [
-    { value: 'tree', label: 'Baum', testid: 'wiki-search-view-tree' },
-    { value: 'list', label: 'Liste', testid: 'wiki-search-view-list' },
+    { value: 'tree', label: 'Baum', icon: 'folder', testid: 'wiki-search-view-tree' },
+    { value: 'list', label: 'Liste', icon: 'list', testid: 'wiki-search-view-list' },
   ];
 
   readonly viewMode = signal<WikiSearchViewMode>(readStoredViewMode());
@@ -144,6 +155,11 @@ export class WikiSearchResultsComponent {
 
   rowId(row: WikiSearchRow): string {
     return row.kind === 'group' ? `group:${row.path}` : `hit:${row.result.relPath}`;
+  }
+
+  /** Path tooltip of a group; the synthetic root group shows the wiki root. */
+  groupTooltip(path: string): string {
+    return path === WIKI_SEARCH_ROOT_GROUP_PATH ? 'docs/' : path;
   }
 
   /** Star state of a hit (reactive: the template read tracks the store signal). */
@@ -204,6 +220,12 @@ interface DraftFolder {
  * node ("wiki/concepts"). Every level is sorted by the best (lowest) result
  * index it contains, so group order follows the best score of their content
  * and hits inside a group keep their original score order.
+ *
+ * Root-level hits (relPath without a folder): as soon as at least one folder
+ * group exists they gather under a synthetic "(Wurzel)" group — otherwise they
+ * would float beside the folders and the tree would read like the flat list.
+ * With only root-level hits the tree stays flat (a lone pseudo group would be
+ * noise, not structure).
  */
 export function buildWikiSearchTree(results: readonly WikiSearchResult[]): WikiSearchTreeNode[] {
   const root: DraftFolder = { name: '', path: '', folders: new Map(), hits: [] };
@@ -225,7 +247,23 @@ export function buildWikiSearchTree(results: readonly WikiSearchResult[]): WikiS
     }
     node.hits.push({ kind: 'hit', result, index });
   });
-  return finishChildren(root);
+  return groupRootHits(finishChildren(root));
+}
+
+/** Wraps top-level hits into the "(Wurzel)" group when folder groups exist. */
+function groupRootHits(nodes: WikiSearchTreeNode[]): WikiSearchTreeNode[] {
+  const rootHits = nodes.filter(n => n.kind === 'hit');
+  if (rootHits.length === 0 || rootHits.length === nodes.length) return nodes;
+  const rootGroup: WikiSearchTreeGroup = {
+    kind: 'group',
+    label: WIKI_SEARCH_ROOT_GROUP_LABEL,
+    path: WIKI_SEARCH_ROOT_GROUP_PATH,
+    count: rootHits.length,
+    bestIndex: rootHits.reduce((best, h) => Math.min(best, orderIndex(h)), Number.MAX_SAFE_INTEGER),
+    children: rootHits,
+  };
+  return [...nodes.filter(n => n.kind === 'group'), rootGroup]
+    .sort((a, b) => orderIndex(a) - orderIndex(b));
 }
 
 function finishChildren(folder: DraftFolder): WikiSearchTreeNode[] {

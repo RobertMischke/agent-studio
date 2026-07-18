@@ -129,7 +129,24 @@
   gap: var(--studio-spacing-1);
 }
 /* ---- tree view (default): folder groups with indented hit leaves ---- */
-/* Depth indentation arrives as inline padding on the <li> (depth * 14px). */
+/* Depth indentation arrives as inline margin on the <li> (depth * 14px);
+ * margin — not padding — so the child's border-left guide sits at the
+ * parent's indent level and visually ties the subtree to its group. */
+.wsearch__list--tree {
+  gap: 0;
+}
+/* Breathing room before each new top-level node; zero inside a subtree so
+ * the guide line runs continuously along a group's children. */
+.wsearch__list--tree > li:not(.wsearch__branch) {
+  margin-top: var(--studio-spacing-1);
+}
+.wsearch__list--tree > li:first-child {
+  margin-top: 0;
+}
+.wsearch__branch {
+  border-left: 1px solid var(--studio-border);
+  padding-left: var(--studio-spacing-1);
+}
 .wsearch__group {
   width: 100%;
   display: flex;
@@ -139,14 +156,14 @@
   padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border: 0;
   border-radius: 6px;
-  background: transparent;
+  background: color-mix(in srgb, var(--studio-fg) 4%, transparent);
   color: var(--studio-fg);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 .wsearch__group:hover {
-  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
+  background: color-mix(in srgb, var(--studio-fg) 8%, transparent);
 }
 .wsearch__group:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
@@ -167,16 +184,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Quiet neutral count badge — the folder label carries the emphasis. */
 .wsearch__group-count {
   flex-shrink: 0;
   padding: 0 var(--studio-spacing-1);
   border-radius: 999px;
   font-size: 0.66rem;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.6;
-  background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
-  color: var(--studio-fg);
+  background: color-mix(in srgb, var(--studio-fg) 8%, transparent);
+  color: var(--studio-fg-muted);
 }
 
 /* Hit row + star toggle side by side (shared by tree leaves and flat list). */

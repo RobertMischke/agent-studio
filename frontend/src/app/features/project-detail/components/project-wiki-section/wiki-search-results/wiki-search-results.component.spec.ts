@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { WikiSearchResultsComponent } from './wiki-search-results.component';
+import {
+  WIKI_SEARCH_ROOT_GROUP_PATH,
+  WikiSearchResultsComponent,
+} from './wiki-search-results.component';
 import { WikiStarsService } from '../wiki-stars.service';
 import type { WikiSearchResponse, WikiSearchResult } from '../../../../../models/project-docs.model';
 
@@ -89,7 +92,8 @@ describe('WikiSearchResultsComponent', () => {
       .toBe('1');
     expect(root.querySelector('[data-testid="wiki-search-count-ops"]')!.textContent!.trim()).toBe('1');
 
-    // Groups follow the best score of their content; the root-level hit stays a plain leaf.
+    // Groups follow the best score of their content; the root-level hit
+    // gathers under the synthetic "(Wurzel)" group because folder groups exist.
     const order = [...tree.querySelectorAll('[data-testid^="wiki-search-group-"], [data-testid^="wiki-search-open-"]')]
       .map(node => node.getAttribute('data-testid'));
     expect(order).toEqual([
@@ -99,14 +103,49 @@ describe('WikiSearchResultsComponent', () => {
       'wiki-search-open-wiki/concepts/deep/details.md',
       'wiki-search-group-ops',
       'wiki-search-open-ops/runbook.md',
+      `wiki-search-group-${WIKI_SEARCH_ROOT_GROUP_PATH}`,
       'wiki-search-open-README.md',
     ]);
+    const rootGroup = root.querySelector(`[data-testid="wiki-search-group-${WIKI_SEARCH_ROOT_GROUP_PATH}"]`)!;
+    expect(rootGroup.textContent).toContain('(Wurzel)');
+    expect(root.querySelector(`[data-testid="wiki-search-count-${WIKI_SEARCH_ROOT_GROUP_PATH}"]`)!.textContent!.trim())
+      .toBe('1');
+    // The synthetic group tooltips as the wiki root, not as a real folder path.
+    expect(fixture.componentInstance.groupTooltip(WIKI_SEARCH_ROOT_GROUP_PATH)).toBe('docs/');
+    expect(fixture.componentInstance.groupTooltip('ops')).toBe('ops');
 
     // Leaves keep the untouched hit rendering (title, dimmed relPath, time).
     const leaf = root.querySelector('[data-testid="wiki-search-open-wiki/concepts/overview.md"]')!;
     expect(leaf.textContent).toContain('Overview');
     expect(leaf.querySelector('code')!.textContent).toContain('wiki/concepts/overview.md');
     expect(leaf.querySelector('time')).toBeTruthy();
+  });
+
+  it('keeps the tree flat when only root-level hits exist (no pseudo group)', async () => {
+    const { fixture } = await setup(response([hit('README.md', 0.9), hit('CHANGELOG.md', 0.8)]));
+    const root = el(fixture);
+
+    expect(root.querySelector('[data-testid="wiki-search-tree"]')).toBeTruthy();
+    expect(root.querySelector(`[data-testid="wiki-search-group-${WIKI_SEARCH_ROOT_GROUP_PATH}"]`)).toBeNull();
+    expect(root.querySelectorAll('[data-testid^="wiki-search-group-"]')).toHaveLength(0);
+    const flat = [...root.querySelectorAll('[data-testid^="wiki-search-open-"]')]
+      .map(node => node.getAttribute('data-testid'));
+    expect(flat).toEqual(['wiki-search-open-README.md', 'wiki-search-open-CHANGELOG.md']);
+  });
+
+  it('collapses the synthetic root group like any folder group', async () => {
+    const { fixture } = await setup();
+    const root = el(fixture);
+
+    const group = root.querySelector<HTMLButtonElement>(
+      `[data-testid="wiki-search-group-${WIKI_SEARCH_ROOT_GROUP_PATH}"]`)!;
+    expect(group.getAttribute('aria-expanded')).toBe('true');
+    group.click();
+    fixture.detectChanges();
+    expect(group.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('[data-testid="wiki-search-open-README.md"]')).toBeNull();
+    // Folder subtrees keep rendering.
+    expect(root.querySelector('[data-testid="wiki-search-open-ops/runbook.md"]')).toBeTruthy();
   });
 
   it('collapses and re-expands a group on click; a new response starts fully expanded', async () => {
@@ -144,6 +183,8 @@ describe('WikiSearchResultsComponent', () => {
 
     expect(root.querySelector('[data-testid="wiki-search-view-tree"]')!.getAttribute('aria-pressed'))
       .toBe('true');
+    // The toolbar uses the quiet segmented variant, not the accent one.
+    expect(root.querySelector('.segmented')!.classList.contains('segmented--subtle')).toBe(true);
 
     root.querySelector<HTMLButtonElement>('[data-testid="wiki-search-view-list"]')!.click();
     fixture.detectChanges();
