@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Companion App Design (V1)",
+  "source": {
+    "path": "docs/product/companion-app-design.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "55ea9861b339b749255940bd40293dd4664a192b5dc870e98fbb4d8ab755cd82",
+      "sizeBytes": 8792,
+      "lineCount": 156,
+      "capturedAt": "2026-07-18T18:45:50.475Z"
+    }
+  },
+  "classification": {
+    "owner": "product",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

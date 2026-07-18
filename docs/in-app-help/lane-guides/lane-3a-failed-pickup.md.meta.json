@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Failed Pickup (retired)",
+  "source": {
+    "path": "docs/in-app-help/lane-guides/lane-3a-failed-pickup.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "f36981c4823bd7944d43fbc6533e90544c2da7f21365b80ae09d5e7cc614750c",
+      "sizeBytes": 1288,
+      "lineCount": 16,
+      "capturedAt": "2026-07-18T18:45:50.515Z"
+    }
+  },
+  "classification": {
+    "owner": "in-app-help",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "runbook",
+    "analyzedAt": "2026-07-18"
+  }
+}

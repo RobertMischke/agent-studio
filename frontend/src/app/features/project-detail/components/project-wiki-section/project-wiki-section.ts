@@ -52,6 +52,7 @@ import {
 } from './wiki-tree';
 import { WikiStarsService } from './wiki-stars.service';
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
+import { classificationBadges } from './wiki-classification';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
@@ -258,6 +259,7 @@ export class ProjectWikiSectionComponent {
 
   protected readonly nodeId = nodeId;
   protected readonly documentMetricChips = documentMetricChips;
+  protected readonly classificationBadges = classificationBadges;
 
   constructor() {
     effect(() => {

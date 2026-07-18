@@ -180,6 +180,37 @@ button.wfolder__crumb:focus-visible {
   white-space: nowrap;
   color: var(--studio-fg-muted);
 }
+/* Status/Typ column: curated classification chips (consolidation analysis).
+   Muted by design - most pages show only the type code or nothing at all. */
+.wfolder__cell-class {
+  white-space: nowrap;
+  color: var(--studio-fg-muted);
+}
+.wfolder__class-chip {
+  display: inline-block;
+  padding: 0 var(--studio-spacing-1);
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 14%, transparent);
+  border-radius: 4px;
+  font-size: 0.62rem;
+  line-height: 1.6;
+  color: var(--studio-fg-muted);
+}
+.wfolder__class-chip + .wfolder__class-chip { margin-left: var(--studio-spacing-1); }
+.wfolder__class-chip[data-kind='type'] {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--studio-fg-muted) 82%, transparent);
+}
+.wfolder__class-chip[data-tone='stale'] {
+  color: color-mix(in srgb, var(--studio-error) 55%, var(--studio-fg-muted));
+  border-color: color-mix(in srgb, var(--studio-error) 30%, var(--studio-fg-muted));
+  background: color-mix(in srgb, var(--studio-error) 7%, transparent);
+}
+.wfolder__class-chip[data-tone='superseded'] {
+  color: color-mix(in srgb, var(--studio-warn, var(--studio-fg)) 45%, var(--studio-fg-muted));
+  border-color: color-mix(in srgb, var(--studio-warn, var(--studio-fg-muted)) 25%, var(--studio-fg-muted));
+  background: color-mix(in srgb, var(--studio-warn, transparent) 6%, transparent);
+}
 .wfolder__cell-when {
   white-space: nowrap;
   color: var(--studio-fg-muted);

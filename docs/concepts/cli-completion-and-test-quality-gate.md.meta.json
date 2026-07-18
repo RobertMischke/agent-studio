@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Konzept: Zuverlässige CLI-Completion-Erkennung + Test-Quality-Gate",
+  "source": {
+    "path": "docs/concepts/cli-completion-and-test-quality-gate.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "a1d3f398654118755d7dbcd9cb53f6a85399c38b9f23bbd019a6ba516f9980d6",
+      "sizeBytes": 5030,
+      "lineCount": 46,
+      "capturedAt": "2026-07-18T18:45:50.446Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "contracts/run-outcome.md",
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

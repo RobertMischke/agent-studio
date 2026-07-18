@@ -4,6 +4,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { WikiFolderChild, WikiFolderOverview, WikiNodeType } from '../../../../../models/project-docs.model';
 import { ProjectDocsService } from '../../../../../services/project-docs.service';
 import { WikiStarsService } from '../wiki-stars.service';
+import { WikiClassBadge, classificationBadges } from '../wiki-classification';
 
 /** What the parent needs to open a page from a folder-overview row. */
 export interface WikiFolderOpenRequest {
@@ -121,6 +122,11 @@ export class WikiFolderViewComponent {
   typeLabel(child: WikiFolderChild): string {
     if (child.kind === 'folder') return 'Ordner';
     return child.fileType ?? 'md';
+  }
+
+  /** Status/Typ cell: curated classification badges (pages only, often empty). */
+  classBadges(child: WikiFolderChild): WikiClassBadge[] {
+    return classificationBadges(child.classification);
   }
 
   /** Groesse cell: entry count for folders, human-readable bytes for pages. */

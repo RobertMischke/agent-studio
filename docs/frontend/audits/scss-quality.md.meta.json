@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Frontend SCSS quality — guidelines, audit, refactor plan",
+  "source": {
+    "path": "docs/frontend/audits/scss-quality.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "c2708d734c490e1c86eba1c6e4f2d6dbea0eed4c4fa8e44cac354fdb054344c6",
+      "sizeBytes": 30708,
+      "lineCount": 388,
+      "capturedAt": "2026-07-18T18:45:50.486Z"
+    }
+  },
+  "classification": {
+    "owner": "frontend",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "runbook",
+    "analyzedAt": "2026-07-18"
+  }
+}

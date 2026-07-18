@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "claude.exe mid-run termination — live investigation log",
+  "source": {
+    "path": "docs/concepts/claude-termination-investigation.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "145c0a3593daee18751712a4d7a6cc3bc2146de82b1f535f81ff30245f0a36f8",
+      "sizeBytes": 12795,
+      "lineCount": 90,
+      "capturedAt": "2026-07-18T18:47:24.360Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "workbenches/haertung-verteilte-ausfuehrung/historie.html",
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

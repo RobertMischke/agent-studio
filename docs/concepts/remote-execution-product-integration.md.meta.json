@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Remote execution in the product — user-facing integration concept",
+  "source": {
+    "path": "docs/concepts/remote-execution-product-integration.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "08674c8aa1e7d85167a3526f88b752d33387fede6852159eec565c1a2c313ba1",
+      "sizeBytes": 15061,
+      "lineCount": 274,
+      "capturedAt": "2026-07-18T18:45:50.435Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "concepts/distributed-agent-studio-target-architecture.md",
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

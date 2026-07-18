@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Overnight Runner-Stability Session — 2026-06-23 (Zwischenstand)",
+  "source": {
+    "path": "docs/concepts/overnight-2026-06-23-summary.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "eff1ca22eb08fbdcc042ce5186f053c12f6effe905db1c8e5b2f9c0f66c5afca",
+      "sizeBytes": 7123,
+      "lineCount": 72,
+      "capturedAt": "2026-07-18T18:47:24.358Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "workbenches/haertung-verteilte-ausfuehrung/historie.html",
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

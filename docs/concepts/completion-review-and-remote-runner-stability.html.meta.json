@@ -96,5 +96,29 @@
       "linkedAt": "2026-07-13T19:53:10Z",
       "source": "manual"
     }
-  ]
+  ],
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Completion, Review, and Remote Runner Stability",
+  "source": {
+    "path": "docs/concepts/completion-review-and-remote-runner-stability.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "91dabbb2a5ddb2817e8a01534a42a2113b358a2b65d0ed9c4bedaec2e96c8823",
+      "sizeBytes": 112322,
+      "lineCount": 1525,
+      "capturedAt": "2026-07-18T18:45:50.382Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
 }

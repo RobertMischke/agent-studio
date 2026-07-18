@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Kanban board design specification",
+  "source": {
+    "path": "docs/mockups/kanban-board-design/README.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "3571dc254a9efd7c605e09db807c025a45f7fd951b59a90d4256421a6335fa72",
+      "sizeBytes": 8936,
+      "lineCount": 134,
+      "capturedAt": "2026-07-18T18:45:50.493Z"
+    }
+  },
+  "classification": {
+    "owner": "mockups",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "mockup",
+    "analyzedAt": "2026-07-18"
+  }
+}

@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
   "title": "Wiki Document Companion",
-  "description": "Adjacent sidecar metadata for one Wiki document. The file lives next to the source document as <source-file>.meta.json and drives the document row metadata plus the generated companion HTML report.",
+  "description": "Adjacent sidecar metadata for one Wiki document. The file lives next to the source document as <source-file>.meta.json and drives the document row metadata plus the generated companion HTML report. Several producers write into the same sidecar (companion generator, grading run, task cross-referencing, consolidation classification), so only the identity fields are required; every block is merged, never overwritten.",
   "type": "object",
-  "required": ["$schema", "schemaVersion", "title", "source", "report", "classification", "review", "drift", "findings"],
+  "required": ["$schema", "schemaVersion", "source"],
   "additionalProperties": false,
   "properties": {
     "$schema": {
@@ -73,6 +73,25 @@
         "implementationState": {
           "type": "string",
           "description": "Implemented, partial, planned, aspirational, or unknown implementation state."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["aktuell", "veraltet", "ueberholt"],
+          "description": "Curated consolidation status (konsolidierung-analyse): aktuell = current, veraltet = dated with no direct successor, ueberholt = superseded by a newer page."
+        },
+        "supersededBy": {
+          "type": ["string", "null"],
+          "description": "Docs-relative path of the successor page when status is 'ueberholt' (e.g. 'workbenches/haertung-verteilte-ausfuehrung/historie.html'); null otherwise."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["konzept", "adr", "contract", "domain-map", "analyse", "runbook", "workbench", "mockup", "proposal", "generiert", "index"],
+          "description": "Curated document kind shown as a compact code in the Wiki tree. Pages without a sidecar fall back to a per-folder default in the backend."
+        },
+        "analyzedAt": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of the consolidation analysis that produced the curated classification fields."
         }
       }
     },
@@ -168,7 +187,22 @@
         }
       }
     },
-    "nextAction": { "type": "string" }
+    "nextAction": { "type": "string" },
+    "relatedTasks": {
+      "type": "array",
+      "description": "Task cross-references written by the wiki task cross-referencing service. Historically some sidecars carry only this block.",
+      "items": {
+        "type": "object",
+        "required": ["key", "title", "linkedAt", "source"],
+        "additionalProperties": true,
+        "properties": {
+          "key": { "type": "string" },
+          "title": { "type": "string" },
+          "linkedAt": { "type": "string", "format": "date-time" },
+          "source": { "type": "string", "enum": ["auto", "manual"] }
+        }
+      }
+    }
   },
   "$defs": {
     "fingerprint": {

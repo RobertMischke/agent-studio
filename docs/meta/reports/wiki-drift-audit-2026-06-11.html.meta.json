@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Wiki Drift Audit - 2026-06-11",
+  "source": {
+    "path": "docs/meta/reports/wiki-drift-audit-2026-06-11.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "a502f42538d234174cde9097738188884262221fcc251a0e6cc135844c278126",
+      "sizeBytes": 186678,
+      "lineCount": 514,
+      "capturedAt": "2026-07-18T18:45:50.473Z"
+    }
+  },
+  "classification": {
+    "owner": "meta",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

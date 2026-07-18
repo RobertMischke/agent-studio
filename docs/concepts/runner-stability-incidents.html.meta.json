@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Runner Stability — Incident Log, Invariants &amp; Goal",
+  "source": {
+    "path": "docs/concepts/runner-stability-incidents.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "6bc8701e67883b4ac976e6387b9892359e2e18550fc5b2e02b6f3496310eb336",
+      "sizeBytes": 14745,
+      "lineCount": 139,
+      "capturedAt": "2026-07-18T18:47:24.354Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "ueberholt",
+    "supersededBy": "workbenches/haertung-verteilte-ausfuehrung/historie.html",
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}
