@@ -2,9 +2,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { WikiSearchResultsComponent } from './wiki-search-results.component';
+import { WikiStarsService } from '../wiki-stars.service';
 import type { WikiSearchResponse, WikiSearchResult } from '../../../../../models/project-docs.model';
 
 const VIEW_KEY = 'atp.projectWikiSearchView.v1';
+
+function clearStarStorage(): void {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('atp.projectWikiStars.v1.')) localStorage.removeItem(key);
+  }
+}
 
 const hit = (relPath: string, score: number, overrides: Partial<WikiSearchResult> = {}): WikiSearchResult => ({
   relPath,
@@ -43,6 +50,7 @@ async function setup(resp: WikiSearchResponse = response(RESULTS)) {
   }).compileComponents();
 
   const fixture = TestBed.createComponent(WikiSearchResultsComponent);
+  fixture.componentRef.setInput('projectName', 'Demo');
   fixture.componentRef.setInput('query', resp.query);
   fixture.componentRef.setInput('response', resp);
   fixture.detectChanges();
@@ -55,8 +63,12 @@ describe('WikiSearchResultsComponent', () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
     localStorage.removeItem(VIEW_KEY);
+    clearStarStorage();
   });
-  afterEach(() => localStorage.removeItem(VIEW_KEY));
+  afterEach(() => {
+    localStorage.removeItem(VIEW_KEY);
+    clearStarStorage();
+  });
 
   it('defaults to the tree view: folder groups with counts, compressed chains, best-score order', async () => {
     const { fixture } = await setup();
@@ -166,5 +178,35 @@ describe('WikiSearchResultsComponent', () => {
     el(fixture).querySelector<HTMLButtonElement>('[data-testid="wiki-search-open-ops/runbook.md"]')!.click();
     expect(opened).toHaveLength(1);
     expect(opened[0].relPath).toBe('ops/runbook.md');
+  });
+
+  it('toggles the star on a hit leaf without emitting openResult', async () => {
+    const { fixture } = await setup();
+    const root = el(fixture);
+    const opened: WikiSearchResult[] = [];
+    fixture.componentInstance.openResult.subscribe(result => opened.push(result));
+
+    const star = () =>
+      root.querySelector<HTMLButtonElement>('[data-testid="wiki-search-star-ops/runbook.md"]')!;
+    expect(star(), 'star toggle on the hit leaf').toBeTruthy();
+    expect(star().getAttribute('aria-pressed')).toBe('false');
+
+    star().click();
+    fixture.detectChanges();
+    // The star click never counts as opening the result...
+    expect(opened).toEqual([]);
+    // ...but persists the star (label = hit title) and renders the active state.
+    expect(star().getAttribute('aria-pressed')).toBe('true');
+    const stars = TestBed.inject(WikiStarsService);
+    expect(stars.entries('Demo')[0]).toMatchObject({ relPath: 'ops/runbook.md', label: 'runbook.md' });
+
+    // The same shared row template carries the star in the flat list view too.
+    root.querySelector<HTMLButtonElement>('[data-testid="wiki-search-view-list"]')!.click();
+    fixture.detectChanges();
+    expect(star().getAttribute('aria-pressed')).toBe('true');
+    star().click();
+    fixture.detectChanges();
+    expect(stars.entries('Demo')).toEqual([]);
+    expect(opened).toEqual([]);
   });
 });

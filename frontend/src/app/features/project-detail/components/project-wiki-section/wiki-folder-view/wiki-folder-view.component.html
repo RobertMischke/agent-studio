@@ -59,6 +59,16 @@
               <span class="wfolder__title-line">
                 <app-studio-icon [name]="child.kind === 'folder' ? 'folder' : (child.fileType === 'html' ? 'code' : 'file')" [size]="13"></app-studio-icon>
                 <span class="wfolder__title-text">{{ child.title || child.name }}</span>
+                @if (child.kind !== 'folder') {
+                  <button class="wfolder__star" type="button"
+                          [class.wfolder__star--active]="isStarred(child)"
+                          [attr.aria-pressed]="isStarred(child)"
+                          [attr.data-testid]="'wiki-folder-star-' + child.relPath"
+                          [cacTooltip]="isStarred(child) ? 'Stern entfernen' : 'Starren'"
+                          (click)="toggleStar($event, child)">
+                    <app-studio-icon [name]="isStarred(child) ? 'starFilled' : 'star'" [size]="13"></app-studio-icon>
+                  </button>
+                }
               </span>
               @if (child.summary; as summary) {
                 <span class="wfolder__summary" [attr.data-testid]="'wiki-folder-summary-' + child.relPath">{{ summary }}</span>

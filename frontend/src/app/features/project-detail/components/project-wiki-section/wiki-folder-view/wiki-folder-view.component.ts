@@ -3,6 +3,7 @@ import { StudioIconComponent } from '../../../../../components/studio-icon/studi
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { WikiFolderChild, WikiFolderOverview, WikiNodeType } from '../../../../../models/project-docs.model';
 import { ProjectDocsService } from '../../../../../services/project-docs.service';
+import { WikiStarsService } from '../wiki-stars.service';
 
 /** What the parent needs to open a page from a folder-overview row. */
 export interface WikiFolderOpenRequest {
@@ -50,6 +51,7 @@ export class WikiFolderViewComponent {
   readonly error = signal<string | null>(null);
 
   private readonly docs = inject(ProjectDocsService);
+  private readonly stars = inject(WikiStarsService);
 
   constructor() {
     effect(onCleanup => {
@@ -103,6 +105,17 @@ export class WikiFolderViewComponent {
       return;
     }
     this.openPage.emit({ relPath: child.relPath, type: child.fileType === 'html' ? 'html' : 'md' });
+  }
+
+  /** Star state of a page row (reactive: the template read tracks the store signal). */
+  isStarred(child: WikiFolderChild): boolean {
+    return child.kind !== 'folder' && this.stars.isStarred(this.projectName(), child.relPath);
+  }
+
+  /** Star toggle on a page row; stops propagation so the row click never opens the page. */
+  toggleStar(event: Event, child: WikiFolderChild): void {
+    event.stopPropagation();
+    this.stars.toggle(this.projectName(), child.relPath, child.title || child.name);
   }
 
   typeLabel(child: WikiFolderChild): string {

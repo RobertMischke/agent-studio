@@ -131,6 +131,35 @@ button.wfolder__crumb:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Star toggle on page rows: quiet until hover, always visible once starred. */
+.wfolder__star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+.wfolder__row:hover .wfolder__star,
+.wfolder__star:focus-visible,
+.wfolder__star--active { opacity: 1; }
+.wfolder__star:hover {
+  background: color-mix(in srgb, var(--studio-fg) 8%, transparent);
+  color: var(--studio-fg);
+}
+.wfolder__star--active { color: var(--studio-accent-3); }
+.wfolder__star:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
 .wfolder__summary {
   display: block;
   margin-top: var(--studio-spacing-1);

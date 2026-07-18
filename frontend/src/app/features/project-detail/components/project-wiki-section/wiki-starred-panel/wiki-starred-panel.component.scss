@@ -1,0 +1,123 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+/* Card look shared with the "Einstiege" block directly below (.whome). */
+.wstar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+  /* Margin lives here (not on :host) so an empty block occupies no space. */
+  margin: var(--studio-spacing-4) var(--studio-spacing-4) 0;
+  padding: var(--studio-spacing-3);
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 10%, transparent);
+  background: color-mix(in srgb, var(--studio-fg) 3%, transparent);
+}
+
+.wstar__head {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+.wstar__head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--studio-accent-3);
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+}
+.wstar__title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg);
+}
+.wstar__count {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--studio-fg-muted);
+}
+
+.wstar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+.wstar__item {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+}
+
+.wstar__open {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  text-align: left;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.wstar__open:hover {
+  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
+  border-color: color-mix(in srgb, var(--studio-fg) 12%, transparent);
+}
+.wstar__open:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+.wstar__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wstar__path {
+  font-size: 0.68rem;
+  font-family: var(--font-mono, monospace);
+  color: var(--studio-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wstar__remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-accent-3);
+  cursor: pointer;
+}
+.wstar__remove:hover {
+  background: color-mix(in srgb, var(--studio-fg) 8%, transparent);
+}
+.wstar__remove:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}

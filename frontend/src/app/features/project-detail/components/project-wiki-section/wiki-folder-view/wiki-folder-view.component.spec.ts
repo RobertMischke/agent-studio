@@ -4,6 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { WikiFolderOpenRequest, WikiFolderViewComponent } from './wiki-folder-view.component';
+import { WikiStarsService } from '../wiki-stars.service';
 import type { WikiFolderOverview } from '../../../../../models/project-docs.model';
 
 const OVERVIEW: WikiFolderOverview = {
@@ -54,8 +55,17 @@ async function setup(overview: WikiFolderOverview | 'error' = OVERVIEW) {
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
 
+function clearStarStorage(): void {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('atp.projectWikiStars.v1.')) localStorage.removeItem(key);
+  }
+}
+
 describe('WikiFolderViewComponent', () => {
-  beforeEach(() => TestBed.resetTestingModule());
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    clearStarStorage();
+  });
 
   it('renders the children as a table (Titel/Datei/Typ/Geändert/Größe), folders first', async () => {
     const { fixture, http } = await setup();
@@ -119,6 +129,38 @@ describe('WikiFolderViewComponent', () => {
 
     root.querySelector<HTMLButtonElement>('[data-testid="wiki-folder-crumb-root"]')!.click();
     expect(rootRequested).toBe(1);
+    http.verify();
+  });
+
+  it('toggles the star on a page row without opening the page', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+    const cmp = fixture.componentInstance;
+    const pages: WikiFolderOpenRequest[] = [];
+    cmp.openPage.subscribe(request => pages.push(request));
+
+    // Folders carry no star toggle - only documents are starrable.
+    expect(root.querySelector('[data-testid="wiki-folder-star-concepts/deep/sub"]')).toBeNull();
+
+    const star = () =>
+      root.querySelector<HTMLButtonElement>('[data-testid="wiki-folder-star-concepts/deep/detail.md"]')!;
+    expect(star(), 'star toggle on the page row').toBeTruthy();
+    expect(star().getAttribute('aria-pressed')).toBe('false');
+
+    // Starring persists via the service and re-renders the toggle as active...
+    star().click();
+    fixture.detectChanges();
+    expect(star().getAttribute('aria-pressed')).toBe('true');
+    const stars = TestBed.inject(WikiStarsService);
+    expect(stars.isStarred('Demo', 'concepts/deep/detail.md')).toBe(true);
+    expect(stars.entries('Demo')[0].label).toBe('Detail');
+    // ...and never bubbles into the row click that would open the page.
+    expect(pages).toEqual([]);
+
+    star().click();
+    fixture.detectChanges();
+    expect(star().getAttribute('aria-pressed')).toBe('false');
+    expect(stars.entries('Demo')).toEqual([]);
     http.verify();
   });
 

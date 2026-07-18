@@ -255,6 +255,7 @@
       <div class="pwiki__viewer">
         @if (searchActive()) {
           <app-wiki-search-results
+              [projectName]="projectName()"
               [query]="searchQuery()"
               [response]="searchResponse()"
               [loading]="searchLoading()"
@@ -302,6 +303,14 @@
                     data-testid="project-wiki-edit">
               <app-studio-icon name="code" [size]="12"></app-studio-icon>
               <span>Edit</span>
+            </button>
+            <button class="pwiki__star-toggle" type="button"
+                    data-testid="project-wiki-star-toggle"
+                    [class.pwiki__star-toggle--active]="openedStarred()"
+                    [attr.aria-pressed]="openedStarred()"
+                    [cacTooltip]="openedStarred() ? 'Stern entfernen' : 'Starren'"
+                    (click)="toggleOpenedStar($event)">
+              <app-studio-icon [name]="openedStarred() ? 'starFilled' : 'star'" [size]="13"></app-studio-icon>
             </button>
             <button class="pwiki__viewer-close" type="button" (click)="closeFile()"
                     data-testid="project-wiki-close">
@@ -607,6 +616,12 @@
                [class.pwiki__workspace--resizing]="resizingPanel() === 'context'"
                [style.--pwiki-context-width]="contextWidthStyle()">
             <article class="pwiki__reader pwiki__landing" data-testid="project-wiki-viewer-empty">
+              <!-- @if-guarded so an empty star list leaves no host element on the landing. -->
+              @if (hasStarred()) {
+                <app-wiki-starred-panel
+                    [projectName]="projectName()"
+                    (openEntry)="openFile($event.relPath, $event.type)" />
+              }
               <app-wiki-home-links
                   [projectName]="projectName()"
                   (openLink)="openFile($event.relPath, $event.type)" />

@@ -245,7 +245,9 @@ function wikiStorageKey(projectName = 'Demo'): string {
 
 function clearWikiStorage(): void {
   for (const key of Object.keys(localStorage)) {
-    if (key.startsWith('atp.projectWiki.v1.')) localStorage.removeItem(key);
+    if (key.startsWith('atp.projectWiki.v1.') || key.startsWith('atp.projectWikiStars.v1.')) {
+      localStorage.removeItem(key);
+    }
   }
 }
 
@@ -1322,6 +1324,70 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
       .toContain('concepts/overview.md');
+    http.verify();
+  });
+
+  // ---- starred documents ("Gestarrt") ----
+
+  it('stars the open page from the viewer head and lists it on the landing until unstarred', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    // Landing without stars: no Gestarrt section at all.
+    expect(root.querySelector('[data-testid="project-wiki-starred"]')).toBeNull();
+
+    // Open a page; the viewer-head toggle starts unstarred.
+    expandConcepts(fixture);
+    root.querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    const toggle = () => root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-star-toggle"]')!;
+    expect(toggle(), 'viewer-head star toggle').toBeTruthy();
+    expect(toggle().getAttribute('aria-pressed')).toBe('false');
+    toggle().click();
+    fixture.detectChanges();
+    expect(toggle().getAttribute('aria-pressed')).toBe('true');
+
+    // Back on the landing: the Gestarrt block sits above the Einstiege block and
+    // shows label + dimmed relPath.
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-close"]')!.click();
+    fixture.detectChanges();
+    flushStyleGuidesIfRendered(http);
+    flushWikiHomeIfRendered(http);
+    fixture.detectChanges();
+    const landing = root.querySelector('[data-testid="project-wiki-viewer-empty"]')!;
+    const starred = landing.querySelector('[data-testid="project-wiki-starred"]')!;
+    expect(starred, 'Gestarrt block').toBeTruthy();
+    expect(landing.firstElementChild!.contains(starred)).toBe(true);
+    expect(starred.textContent).toContain('Gestarrt');
+    expect(starred.textContent).toContain('Concept overview');
+    expect(starred.querySelector('code')!.textContent).toContain('concepts/overview.md');
+
+    // Clicking the entry re-opens the page through the normal reader flow.
+    starred.querySelector<HTMLButtonElement>('[data-testid="project-wiki-starred-open-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('concepts/overview.md');
+    expect(toggle().getAttribute('aria-pressed')).toBe('true');
+
+    // Unstar directly at the landing entry: the whole section disappears.
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-close"]')!.click();
+    fixture.detectChanges();
+    flushStyleGuidesIfRendered(http);
+    flushWikiHomeIfRendered(http);
+    fixture.detectChanges();
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-starred-remove-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="project-wiki-starred"]')).toBeNull();
+    expect(localStorage.getItem('atp.projectWikiStars.v1.Demo')).toBeNull();
     http.verify();
   });
 

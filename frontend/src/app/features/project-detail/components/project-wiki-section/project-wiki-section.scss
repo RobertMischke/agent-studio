@@ -1907,3 +1907,30 @@
     flex-wrap: wrap;
   }
 }
+
+/* ---- stars: viewer-head toggle (landing block lives in wiki-starred-panel) ---- */
+
+/* Sits between Edit and Close in the viewer head; same recipe as the actions. */
+.pwiki__star-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 var(--studio-spacing-2);
+  border: 0;
+  border-left: 1px solid var(--studio-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pwiki__star-toggle:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+}
+
+.pwiki__star-toggle--active {
+  color: var(--studio-accent-3);
+}

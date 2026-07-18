@@ -52,6 +52,8 @@ import {
   flattenWikiTree,
   nodeId,
 } from './wiki-tree';
+import { WikiStarsService } from './wiki-stars.service';
+import { WikiStarredPanelComponent } from './wiki-starred-panel/wiki-starred-panel.component';
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
@@ -127,6 +129,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     WikiHomeLinksComponent,
     WikiPulseComponent,
     WikiSearchResultsComponent,
+    WikiStarredPanelComponent,
     WikiGradePanelComponent,
     ProjectStyleGuidesPanelComponent,
   ],
@@ -139,6 +142,7 @@ export class ProjectWikiSectionComponent {
   readonly openWorkbench = output<WorkbenchListItem>();
 
   private readonly docs = inject(ProjectDocsService);
+  private readonly stars = inject(WikiStarsService);
   private readonly drift = inject(DriftService);
   private readonly tasks = inject(TaskService);
   private readonly catalog = inject(CliCatalogStore);
@@ -413,6 +417,25 @@ export class ProjectWikiSectionComponent {
   });
 
   readonly firstDoc = computed(() => this.findFirstDoc(this.roots()));
+
+  // ---- stars (favourite documents) ----
+
+  /** Mount guard for the landing "Gestarrt" panel (it renders itself from the store). */
+  readonly hasStarred = computed(() => this.stars.entries(this.projectName()).length > 0);
+
+  /** Star state of the open page (drives the viewer-head toggle). */
+  readonly openedStarred = computed(() => {
+    const rel = this.openedRel();
+    return !!rel && this.stars.isStarred(this.projectName(), rel);
+  });
+
+  /** Viewer-head star toggle; the label is the title at the starring moment. */
+  toggleOpenedStar(event: Event): void {
+    event.stopPropagation();
+    const rel = this.openedRel();
+    if (!rel) return;
+    this.stars.toggle(this.projectName(), rel, this.openedTitle());
+  }
 
   onPulseOpen(req: WikiPulseOpenRequest): void {
     this.openFile(req.relPath, req.type);
@@ -1556,7 +1579,7 @@ ${linked || '- No explicit Markdown or HTML links detected in the selected page.
 3. List evidence refs using repository-relative paths.
 4. Identify whether the page needs edits, a follow-up task, or no action.
 5. Create or update a conceptual page-metadata note for this page. Suggested sidecar path:
-   \`docs/wiki/.drift/${this.toSlug(rel)}.md\`
+   \`docs/.drift/${this.toSlug(rel)}.md\`
 6. If the result should become a project drift report, post the structured response back through:
    \`POST /api/drift/{project}/actions/software-architecture-drift\`
 

@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   linkedSignal,
   output,
@@ -15,6 +16,7 @@ import {
 import { StudioIconComponent } from '../../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { WikiSearchResponse, WikiSearchResult } from '../../../../../models/project-docs.model';
+import { WikiStarsService } from '../wiki-stars.service';
 
 /** How the hit list renders: grouped by folder hierarchy (default) or flat. */
 export type WikiSearchViewMode = 'tree' | 'list';
@@ -80,6 +82,8 @@ export type WikiSearchRow =
   styleUrl: './wiki-search-results.component.scss',
 })
 export class WikiSearchResultsComponent {
+  /** Project scope for the per-hit star toggle (empty in pure previews). */
+  readonly projectName = input('');
   readonly query = input.required<string>();
   readonly response = input<WikiSearchResponse | null>(null);
   readonly loading = input(false);
@@ -91,6 +95,8 @@ export class WikiSearchResultsComponent {
 
   readonly openResult = output<WikiSearchResult>();
   readonly expandSemantic = output<void>();
+
+  private readonly stars = inject(WikiStarsService);
 
   readonly results = computed(() => this.response()?.results ?? []);
   readonly expandedTerms = computed(() => this.response()?.expandedTerms ?? []);
@@ -138,6 +144,17 @@ export class WikiSearchResultsComponent {
 
   rowId(row: WikiSearchRow): string {
     return row.kind === 'group' ? `group:${row.path}` : `hit:${row.result.relPath}`;
+  }
+
+  /** Star state of a hit (reactive: the template read tracks the store signal). */
+  isStarred(result: WikiSearchResult): boolean {
+    return this.stars.isStarred(this.projectName(), result.relPath);
+  }
+
+  /** Star toggle on a hit; stops propagation so it never counts as openResult. */
+  toggleStar(event: Event, result: WikiSearchResult): void {
+    event.stopPropagation();
+    this.stars.toggle(this.projectName(), result.relPath, result.title);
   }
 
   /** Compact relative time ("3h ago"), falling back to a locale date. */
