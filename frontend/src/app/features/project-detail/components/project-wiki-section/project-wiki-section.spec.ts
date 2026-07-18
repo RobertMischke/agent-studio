@@ -398,6 +398,69 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
+  it('shows the classification block in the meta panel and opens the successor via the supersededBy link', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!
+      .click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    const panel = el(fixture).querySelector('[data-testid="project-wiki-classification-panel"]');
+    expect(panel, 'classification block').toBeTruthy();
+    expect(panel!.textContent).toContain('Klassifikation');
+
+    // Status chip in tree optics; the successor renders as a navigable link.
+    const chip = panel!.querySelector('[data-testid="project-wiki-classification-status-chip"]');
+    expect(chip?.textContent?.trim()).toBe('überholt');
+    expect(chip?.getAttribute('data-tone')).toBe('superseded');
+
+    // Type is spelled out, not the compact tree code; analysis date is visible.
+    const type = panel!.querySelector('[data-testid="project-wiki-classification-type"]');
+    expect(type?.textContent).toContain('Konzept');
+    expect(type?.textContent).not.toContain('KON');
+    const analyzed = panel!.querySelector('[data-testid="project-wiki-classification-analyzed"]');
+    expect(analyzed?.textContent).toContain('Analyse');
+    expect(analyzed?.textContent).toContain('18.07.2026');
+
+    // Clicking the supersededBy link opens the successor page via openFile.
+    const link = panel!.querySelector<HTMLButtonElement>('[data-testid="project-wiki-classification-superseded-link"]');
+    expect(link?.textContent?.trim()).toBe('concepts/new-overview.md');
+    link!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/new-overview.md')
+      .flush({ relPath: 'concepts/new-overview.md', content: '# New overview' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/new-overview.md')
+      .flush({ ...HISTORY, relPath: 'concepts/new-overview.md' });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedRel()).toBe('concepts/new-overview.md');
+    // The successor is not in the tree / unclassified, so the block hides again.
+    expect(el(fixture).querySelector('[data-testid="project-wiki-classification-panel"]')).toBeNull();
+    http.verify();
+  });
+
+  it('hides the classification block for a page without classification', async () => {
+    const { fixture, http } = await setup();
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-README.md"]')!
+      .click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/README.md')
+      .flush({ relPath: 'README.md', content: '# Index' });
+    http.expectOne('/api/projects/Demo/wiki/history/README.md')
+      .flush({ ...HISTORY, relPath: 'README.md' });
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('[data-testid="project-wiki-meta-panel"]'), 'meta panel').toBeTruthy();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-classification-panel"]')).toBeNull();
+    http.verify();
+  });
+
   it('shows applicable repository style guides and opens one in the Wiki reader', async () => {
     const { fixture, http } = await setup();
 

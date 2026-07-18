@@ -1,6 +1,8 @@
 import {
   classificationBadges,
+  classificationMeta,
   classificationTypeAbbreviation,
+  classificationTypeLabel,
   formatAnalyzedDate,
 } from './wiki-classification';
 import { WikiClassification } from '../../../../models/project-docs.model';
@@ -90,6 +92,64 @@ describe('classificationTypeAbbreviation', () => {
 
   it('shortens unknown types to three uppercase letters', () => {
     expect(classificationTypeAbbreviation('whitepaper')).toBe('WHI');
+  });
+});
+
+describe('classificationTypeLabel', () => {
+  it('spells curated types out in full', () => {
+    expect(classificationTypeLabel('konzept')).toBe('Konzept');
+    expect(classificationTypeLabel('domain-map')).toBe('Domain-Map');
+    expect(classificationTypeLabel(' ADR ')).toBe('ADR');
+  });
+
+  it('falls back to the raw value for unknown types', () => {
+    expect(classificationTypeLabel('whitepaper')).toBe('whitepaper');
+  });
+});
+
+describe('classificationMeta (meta-rail block view model)', () => {
+  it('returns null for a missing or empty classification (block hidden)', () => {
+    expect(classificationMeta(null)).toBeNull();
+    expect(classificationMeta(undefined)).toBeNull();
+    expect(classificationMeta(classification({}))).toBeNull();
+    expect(classificationMeta(classification({ status: '  ', type: ' ', analyzedAt: '' }))).toBeNull();
+  });
+
+  it('maps veraltet to a stale chip without a successor', () => {
+    const meta = classificationMeta(classification({ status: 'veraltet' }))!;
+    expect(meta.status).toEqual({ label: 'veraltet', tone: 'stale', supersededBy: null });
+  });
+
+  it('maps ueberholt to a superseded chip carrying the successor path', () => {
+    const meta = classificationMeta(classification({
+      status: 'ueberholt',
+      supersededBy: 'concepts/new-overview.md',
+    }))!;
+    expect(meta.status).toEqual({
+      label: 'überholt',
+      tone: 'superseded',
+      supersededBy: 'concepts/new-overview.md',
+    });
+  });
+
+  it('shows aktuell as a muted chip (unlike the tree, which hides it)', () => {
+    const meta = classificationMeta(classification({ status: 'aktuell' }))!;
+    expect(meta.status).toEqual({ label: 'aktuell', tone: 'muted', supersededBy: null });
+  });
+
+  it('spells the type out and formats the analysis date', () => {
+    const meta = classificationMeta(classification({
+      type: 'domain-map',
+      analyzedAt: '2026-07-18',
+    }))!;
+    expect(meta.status).toBeNull();
+    expect(meta.typeLabel).toBe('Domain-Map');
+    expect(meta.analyzedAt).toBe('18.07.2026');
+  });
+
+  it('ignores a blank successor on ueberholt', () => {
+    const meta = classificationMeta(classification({ status: 'ueberholt', supersededBy: '  ' }))!;
+    expect(meta.status!.supersededBy).toBeNull();
   });
 });
 

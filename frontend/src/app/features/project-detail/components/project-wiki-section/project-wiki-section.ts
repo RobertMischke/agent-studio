@@ -52,7 +52,7 @@ import {
 } from './wiki-tree';
 import { WikiStarsService } from './wiki-stars.service';
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
-import { classificationBadges } from './wiki-classification';
+import { WikiClassMeta, classificationBadges, classificationMeta } from './wiki-classification';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
@@ -416,6 +416,20 @@ export class ProjectWikiSectionComponent {
     const chip = driftChip(meta);
     return { display: chip.display, label: chip.label, tone: chip.tone };
   });
+
+  /**
+   * "Klassifikation" block for the open page's meta rail, resolved from the
+   * already-loaded tree node (relPath lookup, no extra HTTP): the status chip
+   * in tree optics, the spelled-out type, the analysis date, and the successor
+   * link when the page is superseded. Null hides the block entirely.
+   */
+  readonly openedClassification = computed<WikiClassMeta | null>(() =>
+    classificationMeta(this.openedNode()?.classification));
+
+  /** Successor link in the classification block: opens the superseding page. */
+  openSupersededBy(rel: string): void {
+    this.openFile(rel, this.wikiTypeForRel(rel));
+  }
 
   readonly firstDoc = computed(() => this.findFirstDoc(this.roots()));
 
