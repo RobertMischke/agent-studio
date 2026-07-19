@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'fs';
  * (`runActivity.failed-backoff`, ASS-1751) must read DISTINCTLY from a normal
  * "running" progress card so a cooling task is not mistaken for a fresh stall or
  * a live run. The card renders a warn-toned full-width banner
- * (`infra-crashed · retrying k/3 · in Ns`) sourced only from the already-overlaid
+ * (`infra-crashed, retrying k/3 in Ns`) sourced only from the already-overlaid
  * `runActivity` (kind + attempt + backoffUntil) — no new side-channel.
  *
  * This spec drops two cards into 3-progress — a normal running card and a
@@ -113,7 +113,7 @@ async function installRoutes(page: Page): Promise<void> {
     backlog: [], preparation: [], orchestratorPrep: [], ready: [],
     progress: [runningCard(), cooldownCard(backoffUntil)],
     failedPickup: [], codeNotComplete: [], review: [], autoReview: [],
-    humanReview: [], completed: [], archive: [],
+    humanReview: [], escalated: [], completed: [], archive: [],
   };
 
   // Catch-all first (lowest priority); specific routes registered later win.

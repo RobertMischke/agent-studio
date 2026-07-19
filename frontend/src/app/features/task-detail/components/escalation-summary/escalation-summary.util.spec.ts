@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TaskInfo, ReviewEvidenceEntry } from '../../../../models/task.model';
+import type { CliOutputLine, TaskInfo, ReviewEvidenceEntry } from '../../../../models/task.model';
 import type { CodeReviewListEntry } from '../../../../services/task.service';
 import type { SteeringInfo } from '../../../../components/steering-detail';
 import {
@@ -12,6 +12,7 @@ import {
   gateItemsFromFindings,
   gradeTone,
   parseFollowUpGateItems,
+  parseOrchestratorGiveUp,
   parseStatusStubEscalation,
   pickReviewHead,
   resolveGateItems,
@@ -357,6 +358,34 @@ describe('parseStatusStubEscalation', () => {
 
 describe('deriveEscalationClass', () => {
   const noSteer = { steering: null };
+
+  it('reads the give-up category and honest reason from the existing orchestrator chat log', () => {
+    const cliOutput: CliOutputLine[] = [
+      {
+        timestamp: '2026-07-11T00:34:00Z',
+        stream: 'orchestrator',
+        text: '[giveup] Retry budget exhausted after the CLI died before a terminal verdict. (category: infra-crash; run summary: exit -1)',
+      },
+    ];
+
+    expect(parseOrchestratorGiveUp(cliOutput)).toEqual({
+      category: 'infra-crash',
+      reason: 'Retry budget exhausted after the CLI died before a terminal verdict. Run summary: exit -1',
+    });
+
+    const cls = deriveEscalationClass({
+      info: info({ state: '5-human-review', orchestratorVerdict: 'escalate' }),
+      statusMarkdown: '# Status\n- Result: NeedsReview',
+      cliOutput,
+      ...noSteer,
+    });
+    expect(cls).toEqual({
+      kind: 'gave-up',
+      category: 'infra-crash',
+      categoryLabel: 'Infra crash',
+      reason: 'Retry budget exhausted after the CLI died before a terminal verdict. Run summary: exit -1',
+    });
+  });
 
   it('classifies an infra-crash status stub as a GaveUpToHuman terminal', () => {
     const cls = deriveEscalationClass({

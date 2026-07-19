@@ -25,7 +25,7 @@
  * isolation from the Angular host, mirroring `pipeline-groups.util` /
  * `steering-detail.model`.
  */
-import type { TaskInfo } from '../../../../models/task.model';
+import type { CliOutputLine, TaskInfo } from '../../../../models/task.model';
 import type { ReviewEvidenceEntry, ReviewEvidenceSeverity } from '../../../../models/task.model';
 import type { CodeReviewListEntry } from '../../../../services/task.service';
 import {
@@ -109,35 +109,51 @@ export interface EscalationDelivery {
  */
 const GAVE_UP_CATEGORIES = new Set<string>([
   'infra-crash',
+  'infra-crash-retries-exhausted',
   'orchestrator-inconclusive',
   'inconclusive-with-results',
   'quota-exhausted',
   'environmental',
+  'environment-blocker',
+  'permission-blocked',
   'cli-launch-failed',
+  'auth-refresh-failed',
   'watchdog-kill',
   'pickup-zombie',
+  'worktree-blocked',
   'empty-fast-exit',
   'context-overflow',
   'model-invalid',
   'quarantined',
   'auto-failure-park',
+  'agent-git-violation',
+  'human-decision-needed',
+  'steer-unanswered',
 ]);
 
 /** Presentable labels for the escalation categories the give-up banner shows. */
 const CATEGORY_LABELS: Record<string, string> = {
   'infra-crash': 'Infra crash',
+  'infra-crash-retries-exhausted': 'Infra crash retries exhausted',
   'orchestrator-inconclusive': 'Orchestrator inconclusive',
   'inconclusive-with-results': 'Inconclusive (partial results)',
   'quota-exhausted': 'Quota exhausted',
   environmental: 'Environmental fault',
+  'environment-blocker': 'Environment blocker',
+  'permission-blocked': 'Permission blocked',
   'cli-launch-failed': 'CLI launch failed',
+  'auth-refresh-failed': 'Authentication refresh failed',
   'watchdog-kill': 'Watchdog kill',
   'pickup-zombie': 'Pickup zombie',
+  'worktree-blocked': 'Worktree blocked',
   'empty-fast-exit': 'Empty fast exit',
   'context-overflow': 'Context overflow',
   'model-invalid': 'Model invalid',
   quarantined: 'Quarantined',
   'auto-failure-park': 'Auto-failure park',
+  'agent-git-violation': 'Agent git violation',
+  'human-decision-needed': 'Human decision needed',
+  'steer-unanswered': 'Steer unanswered',
 };
 
 /** Turn a raw category slug into a human label (title-cases unknown slugs). */
@@ -176,6 +192,49 @@ export function parseStatusStubEscalation(
 }
 
 /**
+ * Recover the latest system give-up from the existing orchestrator participant
+ * in `logs/cli-output.log` (the same chat transcript the detail view already
+ * polls). The runtime writes either the category as the leading typed tag or as
+ * `(category: <slug>; run summary: ...)` on a `[giveup]` line. This parser only
+ * accepts known system-escalation categories, so a logical completion-gate
+ * decision cannot accidentally acquire the louder GaveUpToHuman treatment.
+ *
+ * This is a read-only projection over an existing source. It introduces no
+ * persisted field and no endpoint beside the chat/output path already mounted
+ * by the task detail.
+ */
+export function parseOrchestratorGiveUp(
+  lines: readonly CliOutputLine[] | null | undefined,
+): { category: string; reason: string | null } | null {
+  if (!lines?.length) return null;
+
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const line = lines[index];
+    if (line.stream?.trim().toLowerCase() !== 'orchestrator') continue;
+
+    const text = line.text?.trim();
+    if (!text) continue;
+
+    const categoryMatch = /\bcategory:\s*([a-z0-9][a-z0-9_-]*)/i.exec(text);
+    const leadingTag = /^\s*\[([a-z0-9][a-z0-9_-]*)\]/i.exec(text);
+    const category = (categoryMatch?.[1] ?? leadingTag?.[1] ?? '').toLowerCase();
+    if (!GAVE_UP_CATEGORIES.has(category)) continue;
+
+    const taggedBody = text.replace(/^\s*\[(?:giveup|[a-z0-9][a-z0-9_-]*)\]\s*/i, '').trim();
+    const suffix = /\s*\(\s*category:\s*[a-z0-9][a-z0-9_-]*\s*(?:;\s*run summary:\s*([^)]*?))?\s*\)\s*\.?\s*$/i.exec(taggedBody);
+    const body = (suffix ? taggedBody.slice(0, suffix.index) : taggedBody).trim().replace(/[.;:,]+$/, '');
+    const runSummary = suffix?.[1]?.trim().replace(/[.;:,]+$/, '') || '';
+    const reason = [body, runSummary ? `Run summary: ${runSummary}` : '']
+      .filter(Boolean)
+      .join('. ');
+
+    return { category, reason: reason || null };
+  }
+
+  return null;
+}
+
+/**
  * Classification of an escalated card into the DtC terminal it reached:
  * `gave-up` (the orchestrator/infra could not conclude — GaveUpToHuman) vs
  * `needs-review` (a logical / quality escalation a human judges on its merits).
@@ -194,24 +253,25 @@ export interface EscalationClassView {
 
 /**
  * Derive the escalation class from the escalation category the runtime already
- * recorded. Priority: the `status.md` stub category (reliable for the primary
- * system-escalation path, including infra-crash), then the steering event's
- * `cause` / reason text (the aspect-verdict infra path writes
+ * recorded. Priority: the existing orchestrator chat/log line, then the legacy
+ * `status.md` stub, then the steering event's `cause` / reason text (the
+ * aspect-verdict infra path writes
  * `aspect-verdict-infra-crash`). A card with an escalate verdict but no
  * recognisable give-up category is a logical NeedsReview. Returns null when the
  * card is not an escalation at all.
  */
 export function deriveEscalationClass(
-  inputs: Pick<EscalationSummaryInputs, 'info' | 'statusMarkdown' | 'steering'>,
+  inputs: Pick<EscalationSummaryInputs, 'info' | 'statusMarkdown' | 'steering' | 'cliOutput'>,
 ): EscalationClassView | null {
   const isEscalation = inputs.info.orchestratorVerdict === 'escalate';
+  const chatGiveUp = parseOrchestratorGiveUp(inputs.cliOutput);
   const stub = parseStatusStubEscalation(inputs.statusMarkdown);
   const cause = causeOf(inputs.steering);
   const steeringReason = inputs.steering?.reason?.trim() || null;
 
-  // Category, best available: the stub slug wins; else sniff the steering cause
-  // (e.g. `aspect-verdict-infra-crash`) for a known give-up token.
-  let category = stub?.category ?? null;
+  // Category, best available: chat wins, then the legacy stub; otherwise sniff
+  // the steering cause (e.g. `aspect-verdict-infra-crash`).
+  let category = chatGiveUp?.category ?? stub?.category ?? null;
   if (!category && cause) {
     const hit = [...GAVE_UP_CATEGORIES].find((c) => cause.toLowerCase().includes(c));
     if (hit) category = hit;
@@ -224,7 +284,7 @@ export function deriveEscalationClass(
     kind: isGiveUp ? 'gave-up' : 'needs-review',
     category,
     categoryLabel: category ? escalationCategoryLabel(category) : null,
-    reason: stub?.reason ?? steeringReason,
+    reason: chatGiveUp?.reason ?? stub?.reason ?? steeringReason,
   };
 }
 
@@ -283,6 +343,8 @@ export interface EscalationSummaryInputs {
    * `BuildStatusStub` `- Category:` / `- Reason:` lines); null when absent.
    */
   statusMarkdown: string | null;
+  /** Existing task chat / orchestrator-log projection from `GET .../output`. */
+  cliOutput?: readonly CliOutputLine[];
   /** Full chronological task ledger used for reissue provenance and budget. */
   timeline: readonly TaskTimelineEvent[];
 }

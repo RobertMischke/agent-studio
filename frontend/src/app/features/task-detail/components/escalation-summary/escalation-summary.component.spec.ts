@@ -40,6 +40,7 @@ function mount(opts: {
   reviews?: unknown[];
   events?: TaskTimelineEvent[];
   detail?: TaskDetail;
+  cliOutput?: { timestamp: string; stream: string; text: string }[];
 }) {
   const taskStub = {
     listCodeReviews: () => of({ entries: opts.reviews ?? [] }),
@@ -58,6 +59,7 @@ function mount(opts: {
   });
   const fixture = TestBed.createComponent(EscalationSummaryComponent);
   fixture.componentRef.setInput('detail', opts.detail ?? detail());
+  fixture.componentRef.setInput('cliOutput', opts.cliOutput ?? []);
   fixture.detectChanges();
   return fixture;
 }
@@ -156,15 +158,20 @@ describe('EscalationSummaryComponent — collapse (AGT-2060)', () => {
     expect(el.querySelector('[data-testid="escalation-toggle"]')?.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('defaults closed on any other lane (escalate verdict parked in 5-human-review)', () => {
+  it('opens a GaveUpToHuman reason prominently in 5-human-review', () => {
     const el: HTMLElement = mount({
       reviews: [],
       detail: detail({ id: 'AGT-XREV', state: '5-human-review' }),
+      cliOutput: [{
+        timestamp: '2026-07-11T00:34:00Z',
+        stream: 'orchestrator',
+        text: '[giveup] Retry budget exhausted after the CLI died before a terminal verdict. (category: infra-crash; run summary: exit -1)',
+      }],
     }).nativeElement;
-    // Body hidden by default (historical context), but the header essence stays.
-    expect(el.querySelector('[data-testid="escalation-body"]')).toBeNull();
-    expect(el.querySelector('[data-testid="escalation-toggle"]')?.getAttribute('aria-expanded')).toBe('false');
-    expect(el.querySelector('[data-testid="escalation-essence"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="escalation-body"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="escalation-toggle"]')?.getAttribute('aria-expanded')).toBe('true');
+    expect(el.querySelector('[data-testid="escalation-gave-up-category"]')?.textContent).toContain('Infra crash');
+    expect(el.querySelector('[data-testid="escalation-gave-up-reason"]')?.textContent).toContain('Retry budget exhausted');
   });
 
   it('toggles on header click and persists the choice for the task', () => {

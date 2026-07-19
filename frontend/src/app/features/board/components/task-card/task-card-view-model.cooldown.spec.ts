@@ -7,7 +7,7 @@ import type { TaskInfo, TaskRunActivity } from '../../../../models/task.model';
  * DtC step 6 — the CooldownRetry banner marks a 3-progress card that infra-crashed
  * and is holding out its scheduled re-pickup backoff (the `runActivity.failed-backoff`
  * state). It must read distinctly from a live "Running live" run, so the builder
- * only fires for the failed-backoff kind and reports `retrying k/3 · in Ns`.
+ * only fires for the failed-backoff kind and reports `retrying k/3 in Ns`.
  */
 function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
@@ -43,7 +43,7 @@ function activity(overrides: Partial<TaskRunActivity> = {}): TaskRunActivity {
 const NOW = Date.parse('2026-07-11T12:00:00Z');
 
 describe('buildCooldownRetryBanner (DtC step 6)', () => {
-  it('renders "infra-crashed · retrying k/3" with a live seconds countdown', () => {
+  it('renders "infra-crashed, retrying k/3" with a live seconds countdown', () => {
     const backoffUntil = new Date(NOW + 210_000).toISOString();
     const banner = buildCooldownRetryBanner(
       makeJob({ runActivity: activity({ attempt: 2, backoffUntil, lastError: 'exit -1' }) }),
@@ -52,7 +52,7 @@ describe('buildCooldownRetryBanner (DtC step 6)', () => {
     expect(banner).not.toBeNull();
     expect(banner!.attempt).toBe(2);
     expect(banner!.budget).toBe(INFRA_RETRY_BUDGET);
-    expect(banner!.label).toBe('infra-crashed · retrying 2/3');
+    expect(banner!.label).toBe('infra-crashed, retrying 2/3');
     expect(banner!.secondsLeft).toBe(210);
     expect(banner!.countdown).toBe('in 210s');
     expect(banner!.tooltip).toContain('exit -1');
@@ -69,7 +69,7 @@ describe('buildCooldownRetryBanner (DtC step 6)', () => {
   it('clamps the attempt into [1, budget] so the k/3 never overflows', () => {
     const hi = buildCooldownRetryBanner(makeJob({ runActivity: activity({ attempt: 9 }) }), NOW);
     expect(hi!.attempt).toBe(INFRA_RETRY_BUDGET);
-    expect(hi!.label).toBe('infra-crashed · retrying 3/3');
+    expect(hi!.label).toBe('infra-crashed, retrying 3/3');
     const lo = buildCooldownRetryBanner(makeJob({ runActivity: activity({ attempt: 0 }) }), NOW);
     expect(lo!.attempt).toBe(1);
   });

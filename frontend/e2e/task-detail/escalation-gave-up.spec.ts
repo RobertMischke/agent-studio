@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync } from 'fs';
  * DtC step 6 — GaveUpToHuman escalation reason, prominent + visually distinct
  * (task `dtc-t6-ui---cooldownretry-banner--gaveuptohuman-grund-sichtbar`).
  *
- * A `5e-escalated` card the orchestrator/infra could NOT conclude (infra crash,
+ * A `5-human-review` card the orchestrator/infra could NOT conclude (infra crash,
  * quarantine, cli-launch-failed, quota, …) used to render exactly like a logical
  * NeedsReview escalation a human judges on its merits — hiding WHY the human is
  * here. This surface makes the give-up terminal read apart at a glance:
@@ -14,8 +14,8 @@ import { mkdirSync, writeFileSync } from 'fs';
  *   - the panel wears a distinct amber "system fault" wash (⚙, not the red ⚠), and
  *   - a prominent give-up banner names the escalation category + the honest reason.
  *
- * Source is the escalation category + reason the runtime already writes into the
- * card's `status.md` stub (`- Category:` / `- Reason:`) — no new side-channel.
+ * Source is the escalation category + reason already present in the task's
+ * orchestrator chat log. No new side-channel is introduced.
  *
  * Fully mocked via route interception, so it runs against any served frontend
  * without a live backend. The give-up fixture mirrors a real quarantine stub.
@@ -53,21 +53,16 @@ const TITLE: Record<Kind, string> = {
 };
 
 /**
- * The give-up card carries the runtime's `BuildStatusStub` output: a `- Category:`
- * / `- Reason:` pair (here a real quarantine stub). The needs-review card carries
- * a normal agent-written status with NO `Category:` line — which is itself the
- * signal that it is a logical escalation, not a system give-up.
+ * Both cards carry ordinary result text. The distinction comes from the existing
+ * orchestrator chat line below, not from status.md.
  */
 const STATUS_MD: Record<Kind, string> = {
   'gave-up': [
     '# Status',
     '',
-    '- Result: Escalated to human decision (quarantined)',
+    '- Result: NeedsReview',
     '',
-    'This card was routed to 5e-escalated by the orchestrator runtime without an automated quality review, so there is no agent-written summary.',
-    '',
-    '- Category: quarantined',
-    '- Reason: quarantined after 3 consecutive failed runs without progress (last issue: cli-launch-failed). Re-issuing would loop; the task is parked for human review.',
+    'The run ended without a clean terminal verdict. See the orchestrator conversation for the hand-off reason.',
   ].join('\n'),
   'needs-review': [
     '# Status',
@@ -76,6 +71,23 @@ const STATUS_MD: Record<Kind, string> = {
     '',
     'The agent finished the slice but flagged an open design question for a human to decide before it can be accepted.',
   ].join('\n'),
+};
+
+const CLI_OUTPUT: Record<Kind, unknown[]> = {
+  'gave-up': [
+    {
+      timestamp: '2026-07-11T00:34:00Z',
+      stream: 'orchestrator',
+      text: '[giveup] Retry budget exhausted after 3 consecutive failed runs without progress. (category: quarantined; run summary: last issue was cli-launch-failed)',
+    },
+  ],
+  'needs-review': [
+    {
+      timestamp: '2026-07-09T19:45:00Z',
+      stream: 'orchestrator',
+      text: '[decision] Completion gate found an unresolved design question in the previous run.',
+    },
+  ],
 };
 
 const TIMELINE: Record<Kind, unknown[]> = {
@@ -115,14 +127,14 @@ function buildInfo(kind: Kind) {
     taskKey: `${WATCH_PATH}::${JOB_ID[kind]}`,
     key: JOB_ID[kind],
     title: TITLE[kind],
-    state: '5e-escalated',
+    state: '5-human-review',
     orchestratorVerdict: 'escalate',
     agent: 'claude',
     cliType: 'claude',
     model: 'claude-opus-4-8',
     watchPath: WATCH_PATH,
     projectName: PROJECT,
-    folderPath: `${WATCH_PATH}/.orchestrator/jobs/5e-escalated/${JOB_ID[kind]}`,
+    folderPath: `${WATCH_PATH}/.orchestrator/jobs/5-human-review/${JOB_ID[kind]}`,
     execution: null,
     kind: 'task',
     epicId: null,
@@ -194,7 +206,7 @@ async function installRoutes(page: Page): Promise<void> {
   const grouped = {
     backlog: [], preparation: [], orchestratorPrep: [], ready: [], progress: [],
     failedPickup: [], codeNotComplete: [], review: [], autoReview: [],
-    humanReview: [], escalated: [buildInfo('gave-up'), buildInfo('needs-review')],
+    humanReview: [buildInfo('gave-up'), buildInfo('needs-review')], escalated: [],
     completed: [], archive: [],
   };
 
@@ -223,6 +235,8 @@ async function installRoutes(page: Page): Promise<void> {
   // sub-routes below in priority (registered later wins in Playwright).
   await page.route(/\/api\/tasks\/(GAVEUP|NEEDSREVIEW)-fixture(\?|$)/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(buildDetail(kindFromUrl(route.request().url()))) }));
+  await page.route(/\/api\/tasks\/(GAVEUP|NEEDSREVIEW)-fixture\/output(\?|$)/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(CLI_OUTPUT[kindFromUrl(route.request().url())]) }));
   await page.route(/\/api\/tasks\/[^/]+\/pipeline(\?|$)/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
 
@@ -253,13 +267,6 @@ async function openDetail(page: Page, kind: Kind): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`/?job=${encodeURIComponent(JOB_ID[kind])}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
   await expect(page.getByTestId('escalation-summary')).toBeVisible({ timeout: 20_000 });
-  // The acute 5e-escalated lane opens by default; ensure the body is expanded so
-  // the give-up banner (body-only) is captured even if a stored state collapsed it.
-  const toggle = page.getByTestId('escalation-toggle');
-  if ((await toggle.getAttribute('aria-expanded')) === 'false') {
-    await toggle.click();
-  }
-  await expect(page.getByTestId('escalation-body')).toBeVisible();
 }
 
 async function shootPanel(page: Page, testInfo: TestInfo, name: string): Promise<Buffer> {
@@ -278,6 +285,7 @@ async function captureComposite(
   theme: 'dark' | 'light',
   before: Buffer,
   after: Buffer,
+  labels: { fileName: string; before: string; after: string },
 ): Promise<void> {
   const backdrop = { dark: '#1e1e2e', light: '#eff1f5' } as const;
   const caption = { dark: '#a6adc8', light: '#5c5f77' } as const;
@@ -287,16 +295,16 @@ async function captureComposite(
     + `<div id="cmp" style="background:${backdrop[theme]};padding:24px;`
     + `display:inline-flex;gap:24px;align-items:flex-start;font-family:system-ui,sans-serif">`
     + `<figure style="margin:0;display:flex;flex-direction:column;gap:8px">`
-    + `<figcaption style="font:600 12px/1.4 system-ui;letter-spacing:.04em;text-transform:uppercase;color:${caption[theme]}">Before · logical NeedsReview escalation</figcaption>`
+    + `<figcaption style="font:600 12px/1.4 system-ui;letter-spacing:.04em;text-transform:uppercase;color:${caption[theme]}">${labels.before}</figcaption>`
     + `<img alt="before" style="display:block;box-shadow:0 0 0 1px rgba(128,128,128,.25)" src="data:image/png;base64,${b64(before)}"></figure>`
     + `<figure style="margin:0;display:flex;flex-direction:column;gap:8px">`
-    + `<figcaption style="font:600 12px/1.4 system-ui;letter-spacing:.04em;text-transform:uppercase;color:${caption[theme]}">After · GaveUpToHuman (DtC step 6)</figcaption>`
+    + `<figcaption style="font:600 12px/1.4 system-ui;letter-spacing:.04em;text-transform:uppercase;color:${caption[theme]}">${labels.after}</figcaption>`
     + `<img alt="after" style="display:block;box-shadow:0 0 0 1px rgba(128,128,128,.25)" src="data:image/png;base64,${b64(after)}"></figure>`
     + `</div></body></html>`,
   );
   await page.waitForTimeout(100);
   const shot = await page.locator('#cmp').screenshot();
-  await saveShot(testInfo, `escalation-gave-up-vs-needs-review-${theme}--composite-mocked.png`, shot);
+  await saveShot(testInfo, labels.fileName, shot);
 }
 
 test.describe('DtC step 6 — GaveUpToHuman escalation reason', () => {
@@ -308,6 +316,7 @@ test.describe('DtC step 6 — GaveUpToHuman escalation reason', () => {
     // 1. GaveUpToHuman card: distinct title, category chip, honest reason.
     await openDetail(page, 'gave-up');
     await expect(page.getByTestId('escalation-title')).toHaveText('Orchestrator gave up');
+    await expect(page.getByTestId('escalation-body')).toBeVisible();
     await expect(page.getByTestId('escalation-gave-up')).toBeVisible();
     await expect(page.getByTestId('escalation-gave-up-category')).toHaveText('Quarantined');
     await expect(page.getByTestId('escalation-gave-up-reason')).toContainText('3 consecutive failed runs');
@@ -315,10 +324,33 @@ test.describe('DtC step 6 — GaveUpToHuman escalation reason', () => {
     await expect(page.getByTestId('escalation-summary')).toHaveAttribute('data-escalation-kind', 'gave-up');
 
     const after: Record<'dark' | 'light', Buffer> = {} as never;
+    const beforeCollapsed: Record<'dark' | 'light', Buffer> = {} as never;
     for (const theme of ['dark', 'light'] as const) {
       await setTheme(page, theme);
       await page.waitForTimeout(200);
       after[theme] = await shootPanel(page, testInfo, `escalation-gave-up-${theme}--mocked.png`);
+
+      // Reproduce the pre-change 5-human-review default for durable before/after
+      // evidence: the same give-up panel collapsed, then expanded prominently.
+      await page.getByTestId('escalation-toggle').click();
+      await expect(page.getByTestId('escalation-body')).toHaveCount(0);
+      beforeCollapsed[theme] = await shootPanel(
+        page,
+        testInfo,
+        `escalation-gave-up-5-human-review-before-${theme}--mocked.png`,
+      );
+      await page.getByTestId('escalation-toggle').click();
+      await expect(page.getByTestId('escalation-body')).toBeVisible();
+    }
+
+    // Composite rendering replaces the page body, so do it only after both
+    // app-backed theme screenshots have been collected.
+    for (const theme of ['dark', 'light'] as const) {
+      await captureComposite(page, testInfo, theme, beforeCollapsed[theme], after[theme], {
+        fileName: `escalation-gave-up-5-human-review-before-after-${theme}--composite-mocked.png`,
+        before: 'Before · 5-human-review reason collapsed',
+        after: 'After · Give-up reason prominent',
+      });
     }
 
     // 2. Contrast: a logical NeedsReview escalation keeps the neutral presentation.
@@ -336,7 +368,11 @@ test.describe('DtC step 6 — GaveUpToHuman escalation reason', () => {
 
     // 3. Before/after composite: neutral NeedsReview beside the distinct give-up.
     for (const theme of ['dark', 'light'] as const) {
-      await captureComposite(page, testInfo, theme, before[theme], after[theme]);
+      await captureComposite(page, testInfo, theme, before[theme], after[theme], {
+        fileName: `escalation-gave-up-vs-needs-review-${theme}--composite-mocked.png`,
+        before: 'Logical NeedsReview escalation',
+        after: 'GaveUpToHuman (DtC step 6)',
+      });
     }
   });
 });

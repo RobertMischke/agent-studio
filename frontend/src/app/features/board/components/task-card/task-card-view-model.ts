@@ -1143,7 +1143,7 @@ export interface CooldownRetryBanner {
   budget: number;
   /** Whole seconds until the scheduled re-pickup, or null when already due. */
   secondsLeft: number | null;
-  /** Primary line, e.g. `infra-crashed · retrying 2/3`. */
+  /** Primary line, e.g. `infra-crashed, retrying 2/3`. */
   label: string;
   /** Countdown fragment, e.g. `in 210s` (or `now` when the timer elapsed). */
   countdown: string;
@@ -1156,7 +1156,7 @@ export interface CooldownRetryBanner {
  * state, ASS-1751). This is the ONLY non-live state allowed in 3-progress, and it
  * must read distinctly from the normal "Running live" chip so a cooling task does
  * not look like a fresh stall: the card renders it as a warn-toned banner
- * (`infra-crashed · retrying k/3 · in Ns`), not the running tint.
+ * (`infra-crashed, retrying k/3 in Ns`), not the running tint.
  *
  * Source is the already-overlaid `runActivity` (kind + backoffUntil + attempt) —
  * no new side-channel. `nowMs` is injected so the countdown ticks from the card's
@@ -1187,7 +1187,7 @@ export function buildCooldownRetryBanner(job: TaskInfo, nowMs: number): Cooldown
     attempt,
     budget: INFRA_RETRY_BUDGET,
     secondsLeft,
-    label: `infra-crashed · retrying ${attempt}/${INFRA_RETRY_BUDGET}`,
+    label: `infra-crashed, retrying ${attempt}/${INFRA_RETRY_BUDGET}`,
     countdown,
     tooltip: tooltipLines.join('\n'),
   };

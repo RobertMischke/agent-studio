@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 
 import { TaskState } from '../../../../models/task.model';
-import type { TaskDetail, TaskInfo } from '../../../../models/task.model';
+import type { CliOutputLine, TaskDetail, TaskInfo } from '../../../../models/task.model';
 import { CodeReviewListEntry, TaskService } from '../../../../services/task.service';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import {
@@ -26,17 +26,9 @@ import {
 } from './escalation-summary.util';
 
 /**
- * Escalation summary panel (AGT-2019). Renders — prominently, above the panes —
- * for a `5e-escalated` card the four things an operator needs to make the call
- * that the thin last-run status protocol never showed: the open gate points,
- * the code-review verdict, the delivery context (already in develop?), and the
- * gate's recommendation. Pure display aggregation of existing artifacts; see
- * {@link buildEscalationSummaryView} for the source-priority rules.
- *
- * The panel owns two cheap fetches (the code-review grade list and the reissue
- * follow-up file) and reads the already-polled task timeline for the steering
- * event; everything else comes off `detail()`. It is otherwise presentational —
- * no mutations, no outputs.
+ * Decision-ready escalation summary (AGT-2019): open gates, review verdict,
+ * delivery context, recommendation and the system give-up reason. It aggregates
+ * existing detail, chat, timeline and review artifacts without mutating them.
  */
 @Component({
   selector: 'app-escalation-summary',
@@ -48,6 +40,8 @@ import {
 })
 export class EscalationSummaryComponent {
   readonly detail = input.required<TaskDetail>();
+  /** Existing task conversation/output signal owned by the detail host. */
+  readonly cliOutput = input<readonly CliOutputLine[]>([]);
 
   private readonly jobs = inject(TaskService);
   private readonly timelinePoll = inject(TaskTimelinePollService);
@@ -59,16 +53,7 @@ export class EscalationSummaryComponent {
   /** Which job the current fetch results belong to, to drop stale responses. */
   private fetchedJobId: string | null = null;
 
-  /**
-   * Collapse state of the whole panel, remembered per task (AGT-2060). The
-   * header is the click target; collapsing hides the reason line, gate
-   * checklist and detail grid so the panel stops crowding out the rest of the
-   * task-detail view. Default follows the acute-vs-history rule (AGT-2049): an
-   * acute `5e-escalated` card opens (the operator is here to act on it), every
-   * other lane where an escalation lingers (a card parked in `5-human-review`
-   * with an escalate verdict) starts closed (historical context). An explicit
-   * per-task toggle, once made, always wins over the lane default.
-   */
+  /** Per-task collapse state; explicit operator choice wins over defaults. */
   readonly collapsed = signal<boolean>(false);
   /** Job the current collapse state was seeded for, to re-seed on task change. */
   private collapseJobId: string | null = null;
@@ -116,6 +101,16 @@ export class EscalationSummaryComponent {
         },
       });
     });
+
+    // A system/infra give-up in 5-human-review is an acute hand-off, not quiet
+    // history: open its reason as soon as the existing orchestrator chat line is
+    // available. An operator's explicit per-task collapse preference still wins.
+    effect(() => {
+      const info = this.detail().info;
+      if (this.view().escalation?.kind !== 'gave-up') return;
+      if (readCollapsePref(info.id) !== null) return;
+      this.collapsed.set(false);
+    });
   }
 
   /**
@@ -140,6 +135,7 @@ export class EscalationSummaryComponent {
       followUpMarkdown: this.followUpMarkdown(),
       steering: this.steering(),
       statusMarkdown: this.detail().statusMarkdown,
+      cliOutput: this.cliOutput(),
       timeline: this.timelinePoll.events(),
     }),
   );
@@ -189,9 +185,8 @@ const COLLAPSE_KEY = 'taskboard.escalation.collapsed';
 
 /**
  * Initial collapse for a freshly-opened task: an explicit stored preference
- * wins; otherwise the lane decides. Only the acute `5e-escalated` lane opens by
- * default — everywhere else an escalation is historical context and starts
- * closed.
+ * wins; otherwise the lane decides. The give-up effect above additionally opens
+ * a system/infra hand-off once its orchestrator category is available.
  */
 function initialCollapsed(info: TaskInfo): boolean {
   const stored = readCollapsePref(info.id);

@@ -46,7 +46,7 @@
   }
 
   @if (isEscalated()) {
-    <app-escalation-summary [detail]="detail()" />
+    <app-escalation-summary [detail]="detail()" [cliOutput]="cliOutput()" />
   }
 
   <app-command-deck
