@@ -17,12 +17,12 @@ instead of by historical accident.
 The current tree already has strong islands:
 
 - `docs/operations/setup/` for onboarding and troubleshooting.
-- `docs/schemas/` for wire and disk contracts.
+- `docs/system/schemas/` for wire and disk contracts.
 - `docs/mockups/` for locked UI references.
 - `docs/research/` for dated deep dives.
 - `docs/wiki/common-problems/` for recurring runtime and workflow failures.
-- `docs/frontend/style-guide/` for UI vocabulary.
-- `docs/reports/visual/` for screenshot-backed feature documentation.
+- `docs/quality/frontend/style-guide/` for UI vocabulary.
+- `docs/quality/visual-features/` for screenshot-backed feature documentation.
 
 The weak spots are mostly at the root. Many documents are useful, but their
 placement mixes domains, reports, architecture decisions, frontend audits, CLI
@@ -57,9 +57,9 @@ HTML wiki pages must be self-contained and safe in the Wiki iframe:
 - no external assets unless deliberately linked,
 - readable on a white background,
 - accessible headings and section labels,
-- linked from `docs/README.md` like Markdown pages.
+- linked from `docs/start/README.md` like Markdown pages.
 
-Current example: [`docs/architecture/maps/knowledge-map.html`](../architecture/maps/knowledge-map.html).
+Current example: [`docs/system/architecture/maps/knowledge-map.html`](../system/architecture/maps/knowledge-map.html).
 It demonstrates a sandboxed HTML page next to Markdown architecture docs.
 
 ## Implemented top-level taxonomy
@@ -153,21 +153,21 @@ tree; old root-level document files were not kept as compatibility shims.
 
 | Former area | New home | Notes |
 |---|---|---|
-| `runner-domain.md`, `pipeline-domain.md`, `tasks-domain.md`, `frontend-domain.md`, `cli-domain.md` | `docs/domains/` | Root files were moved, and AGENTS/tests now point to the new paths. |
-| `architecture-model.md` | `docs/architecture/model.md` | This is a core architecture input for drift analysis. It deserves the architecture folder. |
-| `architecture-decisions.md` and `docs/architecture/decisions/proposed/*` | `docs/architecture/decisions/` | Long term: split accepted ADRs into one folder. Short term: keep the archive stable. |
-| `architecture/STYLEGUIDE.md`, `architecture/structure-target.md` | `docs/architecture/backend-structure/` | These are backend structure docs, not general architecture docs. |
-| `architecture-3-progress-lane-writers.md` | `docs/architecture/runner-lanes/` | It is an architecture constraint for runner/lane writers. |
-| `agent-message-bus.md`, `bus-implementation-state.md` | `docs/architecture/bus/` | They describe the event spine and implementation status. |
+| `runner-domain.md`, `pipeline-domain.md`, `tasks-domain.md`, `frontend-domain.md`, `cli-domain.md` | `docs/system/domains/` | Root files were moved, and AGENTS/tests now point to the new paths. |
+| `architecture-model.md` | `docs/system/architecture/model.md` | This is a core architecture input for drift analysis. It deserves the architecture folder. |
+| `architecture-decisions.md` and `docs/system/architecture/decisions/proposed/*` | `docs/system/architecture/decisions/` | Long term: split accepted ADRs into one folder. Short term: keep the archive stable. |
+| `architecture/STYLEGUIDE.md`, `architecture/structure-target.md` | `docs/system/architecture/backend-structure/` | These are backend structure docs, not general architecture docs. |
+| `architecture-3-progress-lane-writers.md` | `docs/system/architecture/runner-lanes/` | It is an architecture constraint for runner/lane writers. |
+| `agent-message-bus.md`, `bus-implementation-state.md` | `docs/system/architecture/bus/` | They describe the event spine and implementation status. |
 | `bus-architecture-report.html`, `orchestrator-system-visual-report.html` | `docs/reports/html/` | HTML reports should not sit at the root. |
-| `cli-skills/`, `supported-clis.md`, `cli-domain.md` | `docs/cli/` | Keep per-CLI pages under `skills/`; audits and investigations should be separate. |
-| `cli-startup-cost-analysis-*`, `cli-model-selector-audit.md`, `codex-runner-investigation.md` | `docs/cli/audits/`, `docs/frontend/audits/`, and `docs/cli/investigations/` | These are evidence documents, not everyday entry points. |
-| `frontend-scss-quality*`, `frontend-architecture-review-*`, `perf-frontend.md`, `frontend-testids.md` | `docs/frontend/` | Split between `audits/`, `performance.md`, and `testing.md`. |
-| `design-system.md`, `design-principles.md`, `style-guide/` | `docs/frontend/` and `docs/product/` | The visual system is frontend-owned; design principles are product-facing. |
+| `cli-skills/`, `supported-clis.md`, `cli-domain.md` | `docs/system/cli/` | Keep per-CLI pages under `skills/`; audits and investigations should be separate. |
+| `cli-startup-cost-analysis-*`, `cli-model-selector-audit.md`, `codex-runner-investigation.md` | `docs/system/cli/audits/`, `docs/quality/frontend/audits/`, and `docs/system/cli/investigations/` | These are evidence documents, not everyday entry points. |
+| `frontend-scss-quality*`, `frontend-architecture-review-*`, `perf-frontend.md`, `frontend-testids.md` | `docs/quality/frontend/` | Split between `audits/`, `performance.md`, and `testing.md`. |
+| `design-system.md`, `design-principles.md`, `style-guide/` | `docs/quality/frontend/` and `docs/product/` | The visual system is frontend-owned; design principles are product-facing. |
 | `concepts/` | `docs/concepts/` | Keep as future/current architecture concepts. Add subfolders by area. |
 | `concept-docs/` | `docs/in-app-help/lane-guides/` | Backend route resolution was updated with the move. |
 | `wiki/concepts/` | `docs/wiki/concepts/` | Keep. These are living explanatory pages with logs, not source-of-truth contracts. |
-| `token-aggregation.md` and `wiki/concepts/token-aggregation.md` | `docs/domains/tokens.md` plus `docs/wiki/concepts/token-aggregation.md` | This pair is intentional: contract vs living explanation. Make that pairing explicit in indexes. |
+| `token-aggregation.md` and `wiki/concepts/token-aggregation.md` | `docs/system/domains/tokens.md` plus `docs/wiki/concepts/token-aggregation.md` | This pair is intentional: contract vs living explanation. Make that pairing explicit in indexes. |
 | `analysis-reports.md`, `drift-reports.md` | `docs/reports/` | They define report contracts and UI behavior. |
 | `product-runtime-*` | `docs/operations/runtime/` | Keep runtime observability together instead of split at root. |
 
@@ -188,7 +188,7 @@ Every pair should cross-link at the top.
 
 ### ADR archive vs proposed ADRs
 
-`architecture-decisions.md` is the accepted historical archive. `docs/architecture/decisions/proposed/` has
+`architecture-decisions.md` is the accepted historical archive. `docs/system/architecture/decisions/proposed/` has
 newer proposed or sliced ADRs.
 
 Recommended rule:
@@ -222,7 +222,7 @@ Recommended rule:
 ## Migration result
 
 - Root-level document files now live in physical categories.
-- `docs/README.md` is a category index, not a long mixed flat table.
+- `docs/start/README.md` is a category index, not a long mixed flat table.
 - Category READMEs were added for `architecture`, `domains`, `contracts`,
   `product`, `frontend`, `cli`, `operations`, `reports`, `in-app-help`, and
   `assets`.
@@ -230,7 +230,7 @@ Recommended rule:
   location, and backend concept-doc lookup now targets the new path.
 - `docs/operations/security/` replaced the old `docs/security/` location, and
   the Security docs service now targets the new path.
-- `docs/architecture/decisions/adr-archive.md` replaced the old root ADR
+- `docs/system/architecture/decisions/adr-archive.md` replaced the old root ADR
   archive path.
 
 ## Living knowledge log

@@ -12,7 +12,7 @@ namespace AgentStudio.State;
 /// <c>AutoInterventionHostedService</c> used to do inline.
 /// </summary>
 /// <remarks>
-/// Schema: <c>docs/schemas/supervisor-advisory.schema.json</c>. The store is
+/// Schema: <c>docs/system/schemas/supervisor-advisory.schema.json</c>. The store is
 /// append-only; the supervisor is the only legitimate writer. Pure file
 /// access for the corresponding writers in
 /// <c>HardHealthCheckHostedService.AppendObservationRecord</c> remains so the

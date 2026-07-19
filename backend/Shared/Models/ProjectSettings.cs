@@ -84,7 +84,7 @@ public record ProjectSettings
     /// <c>disabled</c>, <c>fewHours</c>, <c>daily</c>, <c>manualOnly</c>.
     /// Default null = "disabled" for every topic; reports never auto-run
     /// without an explicit opt-in. The contract for execution is documented
-    /// in <c>docs/reports/analysis-reports.md</c>; this struct stores the user's
+    /// in <c>docs/system/reports/analysis-reports.md</c>; this struct stores the user's
     /// cadence choice only.
     /// </summary>
     public Dictionary<string, string>? AnalysisSchedules { get; init; }

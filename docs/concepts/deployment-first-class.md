@@ -229,7 +229,7 @@ governed, visible work.
 
 A project's deploy configuration is repository content, consistent with how
 [workbenches](experimentier-workbench.md) and the
-[wiki tree](../contracts/wiki-tree.md) store their objects as physical folders
+[wiki tree](../system/contracts/wiki-tree.md) store their objects as physical folders
 rather than a virtual registry:
 
 ```text
@@ -320,7 +320,7 @@ persist a second last-deploy truth, or gain a separate run action.
 
 - **Targets** lists derived + templated + prompt targets, each with a quiet
   status (dot or tint, never a colored left bar -
-  [style-guide R1](../design/style-guide-hard-rules.md)).
+  [style-guide R1](../quality/design/style-guide-hard-rules.md)).
 - **History** shows recent runs for the selected target. For `deploy-stable`
   this is read straight from `stable-restarts.jsonl` and the git range; no run
   action is required.

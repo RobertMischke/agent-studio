@@ -47,8 +47,8 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
     public void SelectScope_PicksUpAdrArchiveAndArchitectureNotesWhenPresentAndSkipsMissingFiles()
     {
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        WriteRepoFile("docs/architecture/decisions/adr-archive.md", "# ADRs\n");
-        WriteRepoFile("docs/product/design-principles.md", "# DP\n");
+        WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADRs\n");
+        WriteRepoFile("docs/quality/design-principles.md", "# DP\n");
         File.WriteAllText(Path.Combine(_repoRoot, "ROADMAP.md"), "# ROADMAP\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
         // README intentionally absent so we prove missing files are skipped.
@@ -57,13 +57,13 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
 
         var paths = scope.Docs.Select(d => d.Path.Replace('\\', '/')).ToArray();
-        Assert.Contains("docs/architecture/decisions/adr-archive.md", paths);
-        Assert.Contains("docs/product/design-principles.md", paths);
+        Assert.Contains("docs/system/architecture/decisions/adr-archive.md", paths);
+        Assert.Contains("docs/quality/design-principles.md", paths);
         Assert.Contains("ROADMAP.md", paths);
         Assert.Contains("AGENTS.md", paths);
         Assert.DoesNotContain(paths, p => p.EndsWith("README.md", StringComparison.Ordinal));
         // ADR file leads the doc list so the agent reads decisions first.
-        Assert.Equal("docs/architecture/decisions/adr-archive.md", scope.Docs[0].Path.Replace('\\', '/'));
+        Assert.Equal("docs/system/architecture/decisions/adr-archive.md", scope.Docs[0].Path.Replace('\\', '/'));
     }
 
     [Fact]
@@ -111,9 +111,9 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
 
         var paths = scope.Schemas.Select(s => s.Path.Replace('\\', '/')).ToArray();
-        Assert.Contains("docs/schemas/drift-report.schema.json", paths);
-        Assert.Contains("docs/schemas/analysis-report.schema.json", paths);
-        Assert.Contains("docs/schemas/agent-message.schema.json", paths);
+        Assert.Contains("docs/system/schemas/drift-report.schema.json", paths);
+        Assert.Contains("docs/system/schemas/analysis-report.schema.json", paths);
+        Assert.Contains("docs/system/schemas/agent-message.schema.json", paths);
         Assert.DoesNotContain(paths, p => p.EndsWith("README.md", StringComparison.Ordinal));
         // Sorted ordinally so prompts diff cleanly across runs.
         Assert.Equal(paths.OrderBy(p => p, StringComparer.Ordinal).ToArray(), paths);
@@ -148,7 +148,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
     public void BuildPrompt_RendersAllLoadBearingPlaceholdersWithoutLeavingUnrenderedBraces()
     {
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        WriteRepoFile("docs/architecture/decisions/adr-archive.md", "# ADR\n");
+        WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend", "Services", "Drift"));
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "schemas"));
         File.WriteAllText(
@@ -193,9 +193,9 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
 
         Assert.Contains("agent-taskboard", rendered);
         Assert.Contains("2026-05-05T12:00:00Z", rendered);
-        Assert.Contains("docs/architecture/decisions/adr-archive.md", rendered);
+        Assert.Contains("docs/system/architecture/decisions/adr-archive.md", rendered);
         Assert.Contains("backend/Services/Drift/", rendered);
-        Assert.Contains("docs/schemas/drift-report.schema.json", rendered);
+        Assert.Contains("docs/system/schemas/drift-report.schema.json", rendered);
         Assert.Contains("6-completed/shipped-task", rendered);
         // Hard-constraint wording from the template is preserved verbatim.
         Assert.Contains("do not modify any source file", rendered);
@@ -229,7 +229,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
                   "sourceCoverage": 0.6,
                   "status": "New",
                   "summary": "Drift module landed without ADR.",
-                  "evidenceRefs": ["backend/Services/Drift/", "docs/architecture/decisions/adr-archive.md"],
+                  "evidenceRefs": ["backend/Services/Drift/", "docs/system/architecture/decisions/adr-archive.md"],
                   "recommendedActions": ["Add an ADR entry covering the Drift module"]
                 },
                 {
@@ -240,7 +240,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
                   "sourceCoverage": 0.9,
                   "status": "New",
                   "summary": "Schema additions match producer code.",
-                  "evidenceRefs": ["docs/schemas/drift-report.schema.json"],
+                  "evidenceRefs": ["docs/system/schemas/drift-report.schema.json"],
                   "recommendedActions": []
                 }
               ],
@@ -273,7 +273,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
         Assert.Equal(0.8, arch.Confidence);
         Assert.Equal(0.6, arch.SourceCoverage);
         Assert.Contains("backend/Services/Drift/", arch.EvidenceRefs);
-        Assert.Contains("docs/architecture/decisions/adr-archive.md", arch.EvidenceRefs);
+        Assert.Contains("docs/system/architecture/decisions/adr-archive.md", arch.EvidenceRefs);
         Assert.Single(arch.RecommendedActions);
 
         var schema = parse.Dimensions!.Single(d => d.Type == DriftDimensionType.Schema);
@@ -385,7 +385,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
     public void BuildReport_StructuredHealthyVerdictWithoutFindings_StillProducesSchemaValidReportWithSyntheticDimension()
     {
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        WriteRepoFile("docs/architecture/decisions/adr-archive.md", "# ADR\n");
+        WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend", "Services", "Drift"));
 
         var svc = new AdrCodeDriftAnalysisService();
@@ -427,7 +427,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
     public void BuildReport_StructuredVerdictWithFindings_PassesValidationAndCarriesEvidenceRefsOnEachDimension()
     {
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        WriteRepoFile("docs/architecture/decisions/adr-archive.md", "# ADR\n");
+        WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend", "Services", "Drift"));
 
         var svc = new AdrCodeDriftAnalysisService();
@@ -447,7 +447,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
                   "sourceCoverage": 0.6,
                   "status": "New",
                   "summary": "Drift module landed without ADR.",
-                  "evidenceRefs": ["backend/Services/Drift/", "docs/architecture/decisions/adr-archive.md"],
+                  "evidenceRefs": ["backend/Services/Drift/", "docs/system/architecture/decisions/adr-archive.md"],
                   "recommendedActions": ["Add an ADR entry covering the Drift module"]
                 }
               ]
@@ -472,21 +472,21 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
         Assert.NotNull(report.Scope.SourceRefs);
         Assert.Contains(
             report.Scope.SourceRefs!,
-            r => r.Replace('\\', '/') == "docs/architecture/decisions/adr-archive.md");
+            r => r.Replace('\\', '/') == "docs/system/architecture/decisions/adr-archive.md");
         Assert.Contains(
             report.Scope.SourceRefs!,
             r => r.Replace('\\', '/') == "backend/Services/Drift/");
         // Per-dimension evidence refs survive the round-trip.
         Assert.Single(report.Dimensions);
         Assert.Contains("backend/Services/Drift/", report.Dimensions[0].EvidenceRefs);
-        Assert.Contains("docs/architecture/decisions/adr-archive.md", report.Dimensions[0].EvidenceRefs);
+        Assert.Contains("docs/system/architecture/decisions/adr-archive.md", report.Dimensions[0].EvidenceRefs);
     }
 
     [Fact]
     public void BuildReport_UnstructuredParse_EmitsEvidenceOnlyDimensionWithUnknownBandAndStillValidates()
     {
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        WriteRepoFile("docs/architecture/decisions/adr-archive.md", "# ADR\n");
+        WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend", "Services", "Drift"));
 
         var svc = new AdrCodeDriftAnalysisService();
@@ -514,7 +514,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
     public void BuildReport_MalformedJsonParse_EmitsUnknownBandAndCarriesParseErrorInDimensionSummary()
     {
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        WriteRepoFile("docs/architecture/decisions/adr-archive.md", "# ADR\n");
+        WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
 
         var svc = new AdrCodeDriftAnalysisService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);

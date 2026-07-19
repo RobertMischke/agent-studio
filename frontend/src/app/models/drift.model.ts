@@ -1,6 +1,6 @@
 /**
  * Frontend projection of the drift-report contract. Mirrors
- * `docs/schemas/drift-report.schema.json` and the backend records in
+ * `docs/system/schemas/drift-report.schema.json` and the backend records in
  * `backend/Services/Drift/DriftReportContract.cs`. Only the slices the
  * project Drift surface consumes today are typed - the rest is intentionally
  * loose so a server-side enum extension does not break the UI.

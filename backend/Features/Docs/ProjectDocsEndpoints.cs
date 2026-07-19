@@ -77,9 +77,11 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(catalogue);
         });
 
-        // Repository-owned experiment Workbenches. The list is bounded by the
-        // physical docs/workbenches folders plus a named legacy migration pilot;
-        // HTML is returned as data and is never executed by the backend origin.
+        // Repository-owned experiment Workbenches. The catalogue is discovered by
+        // scanning docs/ recursively for workbench.json descriptors (post-2026-07
+        // migration the workbench folders are theme-distributed, e.g. under
+        // operations/ and quality/); HTML is returned as data and is never
+        // executed by the backend origin.
         app.MapGet("/api/projects/{projectName}/workbenches", (string projectName, bool? history, WorkbenchCatalogueService workbenches) =>
         {
             var catalogue = workbenches.List(projectName, history == true);

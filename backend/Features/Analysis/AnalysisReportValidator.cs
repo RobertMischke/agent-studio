@@ -2,7 +2,7 @@ namespace AgentStudio.Analysis;
 
 /// <summary>
 /// In-code validator that mirrors the value sets and required-field rules in
-/// <c>docs/schemas/analysis-report.schema.json</c>. Validation lives here,
+/// <c>docs/system/schemas/analysis-report.schema.json</c>. Validation lives here,
 /// alongside the in-memory store, so every consumer that goes through the
 /// store gets the same rejection set.
 /// </summary>

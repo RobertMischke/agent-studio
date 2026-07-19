@@ -1,7 +1,7 @@
 # Layer 3 system-review fixtures
 
 JSONL fixtures shaped like Agent Message Bus day-files. Each line is one
-`AgentMessage` (see [`docs/schemas/agent-message.schema.json`](../../../docs/schemas/agent-message.schema.json)).
+`AgentMessage` (see [`docs/system/schemas/agent-message.schema.json`](../../../docs/system/schemas/agent-message.schema.json)).
 
 ## `sample-bus.jsonl`
 

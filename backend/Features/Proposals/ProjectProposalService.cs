@@ -25,12 +25,12 @@ public sealed record ProjectProposal(
 public sealed record ProposalDecisionResult(ProjectProposal Proposal, string? SpawnedTask);
 
 /// <summary>
-/// Durable proposal catalogue backed by structured markdown in docs/proposals.
+/// Durable proposal catalogue backed by structured markdown in docs/concepts/proposals.
 /// Generations are append-only; decisions update only status and spawnedTask.
 /// </summary>
 public sealed class ProjectProposalService
 {
-    private const string ProposalsRel = "docs/proposals";
+    private const string ProposalsRel = "docs/concepts/proposals";
     private static readonly string[] AllowedStatuses = ["proposed", "approved", "rejected", "spawned"];
     private readonly TaskScannerService _scanner;
     private readonly ProjectRegistry _registry;
@@ -196,7 +196,7 @@ public sealed class ProjectProposalService
     private static string BuildImplementationPrompt(ProjectProposal p) => $"""
         # Implement approved project proposal {p.Id}
 
-        Source document: `docs/proposals/{p.RelPath}`
+        Source document: `docs/concepts/proposals/{p.RelPath}`
 
         ## Finding
 
@@ -227,7 +227,7 @@ public sealed class ProjectProposalService
         var full = Path.GetFullPath(Path.Combine(root, ProposalsRel, p.RelPath));
         var dir = Path.GetFullPath(Path.Combine(root, ProposalsRel));
         if (!full.StartsWith(dir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Proposal path escaped docs/proposals.");
+            throw new InvalidOperationException("Proposal path escaped docs/concepts/proposals.");
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         File.WriteAllText(full, Render(p));
     }
@@ -277,7 +277,7 @@ public sealed class ProjectProposalService
         var proposalsRoot = Path.GetFullPath(Path.Combine(root, ProposalsRel));
         var document = Path.GetFullPath(Path.Combine(proposalsRoot, proposal.RelPath));
         if (!document.StartsWith(proposalsRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Proposal path escaped docs/proposals.");
+            throw new InvalidOperationException("Proposal path escaped docs/concepts/proposals.");
         if (File.Exists(document)) File.Delete(document);
         if (!string.IsNullOrWhiteSpace(proposal.EvidenceScreenshot))
         {
@@ -302,7 +302,7 @@ public sealed class ProjectProposalService
         var proposalsRoot = Path.GetFullPath(Path.Combine(root, ProposalsRel));
         var full = Path.GetFullPath(Path.Combine(proposalsRoot, relPath));
         if (!full.StartsWith(proposalsRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Proposal evidence path escaped docs/proposals.");
+            throw new InvalidOperationException("Proposal evidence path escaped docs/concepts/proposals.");
         return full;
     }
 

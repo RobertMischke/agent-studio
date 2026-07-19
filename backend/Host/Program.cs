@@ -205,7 +205,7 @@ builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
 // before TaskStateMachine / TaskMutationService / TaskAccessService so
 // every lane-mutating service can take it as a dependency. See
-// docs/architecture/runner-lanes/progress-lane-writers.md.
+// docs/system/architecture/runner-lanes/progress-lane-writers.md.
 builder.Services.AddSingleton<LaneMutexRegistry>();
 // SignalR fanout for fine-grained job mutation events (jobCreated /
 // jobUpdated / jobMoved / jobDeleted / jobsReordered). Registered before
@@ -755,7 +755,7 @@ catch (Exception ex)
 }
 
 // Seed the Agent Message Bus participant registry. Workspace-scoped, idempotent
-// across boots; safe to fire-and-forget. See docs/architecture/bus/agent-message-bus.md section 2.
+// across boots; safe to fire-and-forget. See docs/system/architecture/bus/agent-message-bus.md section 2.
 try
 {
     var bus = app.Services.GetRequiredService<AgentMessageBusBridge>();

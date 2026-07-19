@@ -4,7 +4,7 @@
       "title": "Start & Zielbild",
       "links": [
         {
-          "relPath": "README.md",
+          "relPath": "start/README.md",
           "label": "Dokumentations-Index",
           "note": "Vollständiger, gepflegter Einstieg mit allen tragenden Entry-Points."
         },
@@ -14,9 +14,9 @@
           "note": "Kanonische Koordinationsquelle aller Remote- und Lifecycle-Entscheidungen."
         },
         {
-          "relPath": "common-problems/README.md",
+          "relPath": "operations/common-problems/README.md",
           "label": "Common Problems",
-          "note": "Erste Anlaufstelle bei bekannten Symptomen (18 Muster)."
+          "note": "Erste Anlaufstelle bei bekannten Symptomen (thematisch: operations & system)."
         }
       ]
     },
@@ -24,12 +24,12 @@
       "title": "Härtung & Betrieb",
       "links": [
         {
-          "relPath": "workbenches/haertung-verteilte-ausfuehrung/index.html",
+          "relPath": "operations/haertung-verteilte-ausfuehrung/index.html",
           "label": "Härtung der verteilten Ausführung",
           "note": "Aktuellstes Konzept: Result-SHA-Vertrag, Fencing, hermetische Verifikation."
         },
         {
-          "relPath": "workbenches/haertung-verteilte-ausfuehrung/historie.html",
+          "relPath": "operations/haertung-verteilte-ausfuehrung/historie.html",
           "label": "Vorfalls-Chronik",
           "note": "Der eine Pflegeort für Vorfälle, Ursachen und Präventionsstand."
         },
@@ -59,22 +59,22 @@
           "note": "Vertrag: wie Projektname, Registry und WatchPath zusammenhängen."
         },
         {
-          "relPath": "architecture/project-map.md",
+          "relPath": "system/architecture/project-map.md",
           "label": "Projektkarte",
           "note": "Überblickskarte über die Systemteile und ihre Beziehungen."
         },
         {
-          "relPath": "architecture/decisions/adr-archive.md",
+          "relPath": "system/architecture/decisions/adr-archive.md",
           "label": "ADR-Archiv",
           "note": "Alle tragenden Architekturentscheidungen an einem Ort."
         },
         {
-          "relPath": "architecture/model.md",
+          "relPath": "system/architecture/model.md",
           "label": "Architekturmodell",
           "note": "Das zentrale Modell der Backend-/Runner-Architektur."
         },
         {
-          "relPath": "contracts/filesystem.md",
+          "relPath": "system/contracts/filesystem.md",
           "label": "Filesystem-Contract",
           "note": "Kanonisches On-Disk-Layout — von jedem Agenten gebraucht."
         },
@@ -89,22 +89,22 @@
       "title": "Domänen",
       "links": [
         {
-          "relPath": "domains/tasks.md",
+          "relPath": "system/domains/tasks.md",
           "label": "Tasks-Domain-Map",
           "note": "System of record für Lanes, Job-Ordner und API-Mutationen."
         },
         {
-          "relPath": "domains/runner.md",
+          "relPath": "system/domains/runner.md",
           "label": "Runner-Domain-Map",
           "note": "System of record für Pickup, Run, Outcome und Recovery."
         },
         {
-          "relPath": "domains/pipeline.md",
+          "relPath": "system/domains/pipeline.md",
           "label": "Pipeline-Domain-Map",
           "note": "System of record für Pre-/Core-/Post-Steps und Kosten."
         },
         {
-          "relPath": "domains/frontend.md",
+          "relPath": "system/domains/frontend.md",
           "label": "Frontend-Domain-Map",
           "note": "Board, Task-Detail und Wiki-Oberfläche."
         }
@@ -114,7 +114,7 @@
       "title": "UI & Wiki-System",
       "links": [
         {
-          "relPath": "design/style-guide-hard-rules.md",
+          "relPath": "quality/design/style-guide-hard-rules.md",
           "label": "Design Hard Rules",
           "note": "Prompt-verankertes Regelwerk für jede UI-Karte."
         },
@@ -124,7 +124,7 @@
           "note": "Erklärt den generierten Einstiegs-View und die Grading-Anbindung."
         },
         {
-          "relPath": "konsolidierung-analyse-2026-07-18.md",
+          "relPath": "start/konsolidierung-analyse-2026-07-18.md",
           "label": "Wiki-Konsolidierungsanalyse",
           "note": "Bestandsaufnahme, Redundanz-Cluster und Aufräumplan (18.07.2026)."
         }

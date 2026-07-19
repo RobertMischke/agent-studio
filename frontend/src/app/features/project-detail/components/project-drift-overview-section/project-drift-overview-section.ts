@@ -372,7 +372,7 @@ Spawned from the project Drift overview surface.
 ${action.description}
 
 Produce a Markdown report plus an inline JSON block conforming to
-\`docs/schemas/drift-report.schema.json\`. POST the reply back through the
+\`docs/system/schemas/drift-report.schema.json\`. POST the reply back through the
 appropriate \`/api/drift/{project}/actions/...\` endpoint when one exists,
 or attach the report to this task's \`status.md\` for review.
 

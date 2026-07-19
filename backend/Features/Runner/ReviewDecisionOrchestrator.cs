@@ -5240,7 +5240,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private static string LoadAdrTitles(string rootPath)
     {
         if (string.IsNullOrWhiteSpace(rootPath)) return string.Empty;
-        var path = Path.Combine(rootPath, "docs", "architecture", "decisions", "adr-archive.md");
+        var path = Path.Combine(rootPath, "docs", "system", "architecture", "decisions", "adr-archive.md");
         if (!File.Exists(path)) return string.Empty;
         try
         {

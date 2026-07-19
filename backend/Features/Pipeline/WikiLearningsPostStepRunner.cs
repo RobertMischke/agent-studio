@@ -25,7 +25,8 @@ public sealed record WikiLearningsRun(
 public sealed record WikiLearningsResult(
     WikiLearningsVerdict Verdict,
     string Reason,
-    string? Slug = null);
+    string? Slug = null,
+    string? RelPath = null);
 
 public enum WikiLearningsVerdict
 {
@@ -40,8 +41,8 @@ public enum WikiLearningsVerdict
 /// <c>post-wiki-learnings</c> pipeline step. After a task's review settles it
 /// folds the derived verdict, the per-aspect orchestrator-review findings, the
 /// agent's own close-out notes, and any typed outcome stumbling block into a
-/// per-task page under <c>docs/learnings/&lt;task&gt;.md</c> and regenerates
-/// the learnings index - no LLM call. It is idempotent: each distilled run carries
+/// per-task page under <c>docs/operations/learnings/&lt;task&gt;.md</c> and
+/// regenerates the learnings index - no LLM call. It is idempotent: each distilled run carries
 /// a stable signature so a re-invocation on the same run state refreshes the page
 /// timestamp instead of duplicating, while a genuine reissue (new signature)
 /// prepends a fresh dated run block so nothing is lost and git keeps the history.
@@ -80,9 +81,10 @@ public sealed class WikiLearningsPostStepRunner
         if (string.IsNullOrWhiteSpace(slug))
             return new WikiLearningsResult(WikiLearningsVerdict.Skipped, "task has no usable id for a page slug");
 
+        var relPath = $"operations/learnings/{slug}.md";
         try
         {
-            var learningsRoot = Path.Combine(docsRoot, "learnings");
+            var learningsRoot = Path.Combine(docsRoot, "operations", "learnings");
             Directory.CreateDirectory(learningsRoot);
 
             var pagePath = Path.Combine(learningsRoot, slug + ".md");
@@ -97,14 +99,15 @@ public sealed class WikiLearningsPostStepRunner
             return new WikiLearningsResult(
                 verdict,
                 verdict == WikiLearningsVerdict.Created ? "created learnings page" : "updated learnings page",
-                slug);
+                slug,
+                relPath);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "Wiki learnings failed for {Project}/{JobId} slug={Slug}",
                 entry.Name, task.Id, slug);
-            return new WikiLearningsResult(WikiLearningsVerdict.Error, ex.Message, slug);
+            return new WikiLearningsResult(WikiLearningsVerdict.Error, ex.Message, slug, relPath);
         }
     }
 

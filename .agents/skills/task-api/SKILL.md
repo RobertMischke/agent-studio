@@ -43,7 +43,7 @@ requests do not need the header but it is harmless to include.
 
 **Use `/api/tasks`.** The route is canonical; the former `/api/jobs`
 compatibility alias has been removed (see
-[ADR-0057](../../../docs/architecture/decisions/adr-archive.md#adr-0057---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)).
+[ADR-0057](../../../docs/system/architecture/decisions/adr-archive.md#adr-0057---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)).
 The raw `watchPath` key and the path-versus-shortCode direction are explained in
 [../../../docs/concepts/api-project-identity-and-watchpath.md](../../../docs/concepts/api-project-identity-and-watchpath.md).
 

@@ -4,7 +4,7 @@ Single source of truth for the contract that lets the software the agents are bu
 
 > **Language:** English. See [AGENTS.md](../../../AGENTS.md#documentation-language).
 >
-> **Schema home:** the field-level rules live in [`docs/schemas/product-runtime-event.schema.json`](../../schemas/product-runtime-event.schema.json). This file is the prose contract; the schema is the validator.
+> **Schema home:** the field-level rules live in [`docs/system/schemas/product-runtime-event.schema.json`](../../system/schemas/product-runtime-event.schema.json). This file is the prose contract; the schema is the validator.
 
 ## 1. Purpose and non-goals
 
@@ -52,7 +52,7 @@ The two streams are deliberately separate.
 | Producer | Orchestrator, supervisor, supporting agents, system review, runtime, user. | The built software itself: backend services, frontends, CLIs, jobs, scripts. |
 | Question answered | Who decided, observed, advised, intervened, asked, answered. | What did the running app do, when, how fast, with which outcome. |
 | Lifecycle authority | Routine outcomes flow through `RunOutcomePolicy`; supervisor uses runner primitives. | None. The stream is pure output. |
-| Schema | [`agent-message.schema.json`](../../schemas/agent-message.schema.json) | [`product-runtime-event.schema.json`](../../schemas/product-runtime-event.schema.json) |
+| Schema | [`agent-message.schema.json`](../../system/schemas/agent-message.schema.json) | [`product-runtime-event.schema.json`](../../system/schemas/product-runtime-event.schema.json) |
 | Storage | `logs/bus/<project>/<yyyy-mm-dd>.jsonl` | `<job>/logs/runtime/<yyyy-mm-dd>.jsonl` for job-scoped runs, `<project>/logs/runtime/<yyyy-mm-dd>.jsonl` for project-scoped runs. |
 
 The bus and the runtime stream are joined by reference, not by mixing.
@@ -65,7 +65,7 @@ If you find yourself wanting to copy fields from one schema into the other, that
 
 ## 4. The structured event envelope
 
-Every runtime event is a small JSON document validated by [`product-runtime-event.schema.json`](../../schemas/product-runtime-event.schema.json). The required fields are deliberately minimal so producers can adopt the shape without ceremony:
+Every runtime event is a small JSON document validated by [`product-runtime-event.schema.json`](../../system/schemas/product-runtime-event.schema.json). The required fields are deliberately minimal so producers can adopt the shape without ceremony:
 
 - `schemaVersion` (currently `1`).
 - `timestamp` (UTC, ISO 8601, ends in `Z`).
@@ -142,9 +142,9 @@ If a reviewer cannot answer "what did the app do during this run?" from the evid
 
 Before you touch any of the moving parts:
 
-1. If you change the **schema** in `docs/schemas/product-runtime-event.schema.json`, mirror the change in §4 of this file in the same PR.
+1. If you change the **schema** in `docs/system/schemas/product-runtime-event.schema.json`, mirror the change in §4 of this file in the same PR.
 2. If you add a new **sink** convention, add a row to §5 and explain why an existing sink is insufficient.
-3. If you add a new **task evidence integration**, update §6 and reconcile with [`docs/contracts/protocol-style.md`](../../contracts/protocol-style.md) so the protocol pane and the screenshot strip stay consistent.
+3. If you add a new **task evidence integration**, update §6 and reconcile with [`docs/system/contracts/protocol-style.md`](../../system/contracts/protocol-style.md) so the protocol pane and the screenshot strip stay consistent.
 4. If you propose a **production-deployment hook**, do not change this file in the same PR. Land the workbench capture first, then write a separate addendum that references the production producer.
 
 The single-source-of-truth rule from [AGENTS.md](../../../AGENTS.md): if the doc and the code disagree, the doc is wrong. Fix it.

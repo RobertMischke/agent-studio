@@ -4,7 +4,7 @@ Status: Concept (living). Slices PULSE-1 and PULSE-2 implemented (2026-07-11).
 Updated 2026-07-19: the Workstream frame was retired ("nicht bewährt, umbauen");
 drift groups and area badges are now the **real top-level docs folders**, and
 the `human-action` warning became a folder-independent frontmatter convention
-(see [../contracts/wiki-tree.md](../contracts/wiki-tree.md)). Frame wording
+(see [../contracts/wiki-tree.md](../system/contracts/wiki-tree.md)). Frame wording
 below is updated where behavior changed.
 
 > Operator intent (2026-07-09): "When you open the wiki, you should see a history

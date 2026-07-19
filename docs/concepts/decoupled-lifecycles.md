@@ -55,7 +55,7 @@ This builds on, rather than replaces, the current architecture:
   mechanism to extend, not a second scheduler.
 - The standalone [Linux runner](../operations/setup/linux-runner-host.md)
   productively uses the fenced `/api/runner/lease` path. The proposed
-  [ADR-0060](../architecture/decisions/proposed/adr-0060-fenced-run-lease-and-runner-identity.md)
+  [ADR-0060](../system/architecture/decisions/proposed/adr-0060-fenced-run-lease-and-runner-identity.md)
   records its contract and history, including the important current gap that
   lease rows are in memory. The lease is execution authority, not a viewer
   connection, and detached lifecycles cannot ship until restart continuity is
@@ -76,7 +76,7 @@ This builds on, rather than replaces, the current architecture:
   remains attribution only, exactly as documented in the remote-ready kickoff.
   It is not authentication.
 - [Orchestrator in-app](orchestrator-in-app.md) and the context-keyed
-  [orchestrator session registry](../product/orchestrator-chat.md) provide the
+  [orchestrator session registry](./orchestrator-chat.md) provide the
   precedent for stable logical session identities and resumable transcripts.
 - [Experiment Workbenches](experimentier-workbench.md), created by AGT-2084,
   provide the repository-owned, self-contained review pattern followed by this

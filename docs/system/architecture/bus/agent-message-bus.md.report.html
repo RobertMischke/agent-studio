@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent message bus metadata - Companion Report</title>
+  <style>
+    :root { color-scheme: light; --ink: #172033; --muted: #64748b; --line: #dbe4ef; --soft: #f7fafc; --panel: #fff; --good: #15803d; --info: #2563eb; --warn: #b45309; --bad: #b42318; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: var(--ink); font: 14px/1.55 Inter, "Segoe UI", Arial, sans-serif; }
+    main { max-width: 1120px; margin: 0 auto; padding: 28px; display: grid; gap: 18px; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 1.5rem; line-height: 1.2; }
+    h2 { font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; color: #475569; }
+    code { color: #334155; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    header { display: grid; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: end; }
+    .path { color: var(--muted); }
+    .scoreboard { display: grid; grid-template-columns: repeat(4, minmax(94px, 1fr)); gap: 8px; min-width: 430px; }
+    .score { border: 1px solid var(--line); border-radius: 9px; background: var(--soft); padding: 10px 12px; }
+    .score strong { display: block; font-size: 1.05rem; }
+    .score span { color: var(--muted); font-size: .76rem; }
+    .score--good strong { color: var(--good); }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(280px, .88fr); gap: 16px; }
+    section { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+    section > h2 { padding: 12px 14px; border-bottom: 1px solid var(--line); background: #f8fafc; }
+    .body { padding: 14px; display: grid; gap: 12px; }
+    .callout { border-left: 3px solid var(--good); background: var(--soft); border-radius: 8px; padding: 12px; }
+    .muted { color: var(--muted); }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid var(--line); padding: 7px 0; text-align: left; vertical-align: top; }
+    th { width: 42%; color: #475569; font-weight: 650; }
+    .finding { border: 1px solid var(--line); border-radius: 9px; padding: 10px; display: grid; gap: 8px; }
+    .finding__head { display: flex; justify-content: space-between; gap: 10px; font-size: .78rem; color: var(--muted); }
+    .finding--warn { border-color: #f2c27b; }
+    .finding--error { border-color: #f0a5a5; }
+    ul { margin: 0; padding-left: 18px; }
+    footer { color: var(--muted); font-size: .78rem; }
+    @media (max-width: 880px) { main { padding: 18px; } .hero, .grid { grid-template-columns: 1fr; } .scoreboard { min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="hero">
+      <div>
+        <h1>Agent message bus metadata</h1>
+        <p class="path"><code>docs/system/architecture/bus/agent-message-bus.md</code></p>
+      </div>
+      <div class="scoreboard" aria-label="Companion score summary">
+        <div class="score score--good"><strong>A</strong><span>drift grade</span></div>
+        <div class="score"><strong>Current</strong><span>direction</span></div>
+        <div class="score"><strong>Done</strong><span>implementation</span></div>
+        <div class="score"><strong>Current</strong><span>source fingerprint</span></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section>
+      <h2 id="why-drift">Why drift?</h2>
+      <div class="body">
+        <div class="callout">
+          <p>The bus concept remains aligned with the current runtime and is a strong architecture reference.</p>
+        </div>
+        <ul><li>The document describes an implemented cross-cutting architecture piece.</li><li>Recent Wiki and navigation work did not change bus semantics.</li><li>Only routine re-checks are needed.</li></ul>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="temporal-reasoning">Temporal reasoning</h2>
+      <div class="body">
+        <p>This document is classified as <strong>Current</strong> and <strong>Done</strong>.</p>
+        <p class="muted">The companion JSON stores the source fingerprint used for this review. If the source hash changes, the next generator run can mark this report stale.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="findings">Findings</h2>
+      <div class="body">
+        
+        <article class="finding finding--info">
+          <div class="finding__head">
+            <span>Drift</span>
+            <strong>INFO</strong>
+          </div>
+          <p>The bus concept remains aligned with the current runtime and is a strong architecture reference.</p>
+          <ul><li>The document describes an implemented cross-cutting architecture piece.</li><li>Recent Wiki and navigation work did not change bus semantics.</li><li>Only routine re-checks are needed.</li></ul>
+        </article>
+        <article class="finding finding--info">
+          <div class="finding__head">
+            <span>Drift</span>
+            <strong>INFO</strong>
+          </div>
+          <p>The document describes an implemented cross-cutting architecture piece.</p>
+          
+        </article>
+        <article class="finding finding--info">
+          <div class="finding__head">
+            <span>Drift</span>
+            <strong>INFO</strong>
+          </div>
+          <p>Recent Wiki and navigation work did not change bus semantics.</p>
+          
+        </article>
+        <article class="finding finding--info">
+          <div class="finding__head">
+            <span>Drift</span>
+            <strong>INFO</strong>
+          </div>
+          <p>Only routine re-checks are needed.</p>
+          
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="axis-evidence">Axis evidence</h2>
+      <div class="body">
+        <table>
+          <tbody>
+        <tr><th>Architecture Alignment</th><td>high</td></tr>
+        <tr><th>Implementation Alignment</th><td>high</td></tr>
+        <tr><th>Freshness</th><td>high</td></tr>
+        <tr><th>Operator Usefulness</th><td>high</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="duplicate-reasoning">Duplicate reasoning</h2>
+      <div class="body">
+        <p>No duplicate ownership is currently suspected.</p>
+        <p class="muted">Group size: 1</p>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="source-fingerprint">Source fingerprint</h2>
+      <div class="body">
+        <table>
+          <tbody>
+            <tr><th>Algorithm</th><td>sha256</td></tr>
+            <tr><th>Hash</th><td><code>6db7e5d70d443792209bdfd5888dd2ad38275cc598a3e249cc75bca35c71c59d</code></td></tr>
+            <tr><th>Size</th><td>35329 bytes</td></tr>
+            <tr><th>Lines</th><td>287</td></tr>
+            <tr><th>Captured</th><td>2026-06-12T08:30:00Z</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <footer>Generated from <code>docs/system/architecture/bus/agent-message-bus.md.meta.json</code> by <code>scripts/wiki/generate-companion-metadata.mjs</code>.</footer>
+</main>
+</body>
+</html>

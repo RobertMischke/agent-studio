@@ -6,7 +6,7 @@ namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the round-trip between the JSON schemas under
-/// <c>docs/schemas/</c> and the C# records that flow through
+/// <c>docs/system/schemas/</c> and the C# records that flow through
 /// <c>AgentStudio.State</c>: every required field listed in the
 /// schema appears as a serialised property on a fresh canonical example, and
 /// every documented enum value parses back into its C# enum without loss.
@@ -328,11 +328,11 @@ public class SchemaRoundTripTests
                     SourceCoverage: 0.7,
                     Status: DriftFindingStatus.New,
                     Summary: "Two ADR assumptions are not reflected in the source layout.",
-                    EvidenceRefs: new[] { "docs/architecture/decisions/adr-archive.md", "backend/Services/Runner/" },
+                    EvidenceRefs: new[] { "docs/system/architecture/decisions/adr-archive.md", "backend/Services/Runner/" },
                     RecommendedActions: new[] { "Create architecture follow-up task" },
                     ScoreInputs: new DriftScoreInputs(
                         FindingsBySeverity: new DriftFindingSeverityCounts(Warn: 2),
-                        AffectedSurfaces: new[] { "docs/architecture/decisions/adr-archive.md", "backend/Services/Runner/" },
+                        AffectedSurfaces: new[] { "docs/system/architecture/decisions/adr-archive.md", "backend/Services/Runner/" },
                         RecurrenceCount: 1,
                         OldestFindingAgeDays: 14,
                         TrackedFindings: 0,
@@ -346,7 +346,7 @@ public class SchemaRoundTripTests
                             Status: DriftFindingStatus.New,
                             FirstSeenAt: new DateTime(2026, 4, 21, 0, 0, 0, DateTimeKind.Utc),
                             LastSeenAt: new DateTime(2026, 5, 5, 0, 0, 0, DateTimeKind.Utc),
-                            EvidenceRefs: new[] { "docs/architecture/decisions/adr-archive.md#adr-0017" }),
+                            EvidenceRefs: new[] { "docs/system/architecture/decisions/adr-archive.md#adr-0017" }),
                     }),
             },
             Summary: "Two ADR assumptions drifted; queue an architecture follow-up.",
@@ -499,16 +499,16 @@ public class SchemaRoundTripTests
     private static string ResolveSchemaPath(string fileName)
     {
         // Walk up from the test binary location to the repo root, then into
-        // docs/schemas/. The test runner's working directory is the test
+        // docs/system/schemas/. The test runner's working directory is the test
         // project's bin/Debug/net10.0/.
         var current = AppContext.BaseDirectory;
         for (var i = 0; i < 8 && current is not null; i++)
         {
-            var candidate = Path.Combine(current, "docs", "schemas", fileName);
+            var candidate = Path.Combine(current, "docs", "system", "schemas", fileName);
             if (File.Exists(candidate)) return candidate;
             current = Directory.GetParent(current)?.FullName;
         }
-        return Path.Combine(AppContext.BaseDirectory, "docs", "schemas", fileName);
+        return Path.Combine(AppContext.BaseDirectory, "docs", "system", "schemas", fileName);
     }
 
     private static string[] ReadStringArray(JsonElement element, string property)

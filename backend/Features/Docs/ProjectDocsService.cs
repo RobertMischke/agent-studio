@@ -22,7 +22,7 @@ public class ProjectDocsService
 
     private const string SecurityRel = "docs/operations/security";
     private const string SecurityStateFile = "state.json";
-    private const string AdrRel = "docs/architecture/decisions/adr-archive.md";
+    private const string AdrRel = "docs/system/architecture/decisions/adr-archive.md";
     internal const string WikiRel = "docs";
     private const string WikiHomeRel = "home.json";
 
@@ -636,7 +636,7 @@ public class ProjectDocsService
     /// <summary>
     /// PULSE-2 warnings from deterministic docs integrity checks. The
     /// <c>human-action</c> signal is a folder-independent frontmatter convention
-    /// (see <c>docs/contracts/wiki-tree.md</c>): any page carrying a
+    /// (see <c>docs/system/contracts/wiki-tree.md</c>): any page carrying a
     /// <c>human-action</c> value whose <c>status</c> is <c>observed</c> or
     /// <c>active</c> raises a Pulse warning, wherever it lives.
     /// </summary>
@@ -1273,19 +1273,24 @@ public class ProjectDocsService
     internal static string? DefaultClassificationType(string relPath)
     {
         var rel = relPath.Replace('\\', '/').TrimStart('/');
-        if (rel.StartsWith("architecture/decisions/", StringComparison.OrdinalIgnoreCase)) return "adr";
-        var top = rel.Split('/')[0].ToLowerInvariant();
-        return top switch
-        {
-            "common-problems" => "generiert",
-            "proposals" => "proposal",
-            "workbenches" => "workbench",
-            "domains" => "domain-map",
-            "contracts" => "contract",
-            "mockups" => "mockup",
-            "research" => "analyse",
-            _ => null,
-        };
+        // The docs tree is organised by theme (start/system/concepts/operations/
+        // quality), so the uniform generated families are matched by the folder
+        // segment they carry anywhere in the path, not by the top-level folder.
+        if (rel.Contains("architecture/decisions/", StringComparison.OrdinalIgnoreCase)) return "adr";
+        if (rel.Contains("common-problems/", StringComparison.OrdinalIgnoreCase)) return "generiert";
+        if (rel.Contains("proposals/", StringComparison.OrdinalIgnoreCase)) return "proposal";
+        if (rel.Contains("system/domains/", StringComparison.OrdinalIgnoreCase)) return "domain-map";
+        if (rel.Contains("system/contracts/", StringComparison.OrdinalIgnoreCase)) return "contract";
+        // Standalone mockups live under docs/concepts/mockups/; the active
+        // families were promoted to top-level docs/concepts/<family>/ folders in
+        // the 2026-07 migration and no longer carry a "/mockups/" path segment.
+        if (rel.Contains("/mockups/", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains("concepts/project-urls/", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains("concepts/project-overview-dashboard/", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains("concepts/task-processing-pipeline/", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains("concepts/task-detail-header-state-actions/", StringComparison.OrdinalIgnoreCase))
+            return "mockup";
+        return null;
     }
 
     private static string? NormalizeClassificationValue(string? value) =>

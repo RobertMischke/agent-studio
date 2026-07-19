@@ -63,7 +63,7 @@ export interface SupervisorRecentEvents {
 }
 
 // Meta-cycle types. Mirrors backend/Services/Supervisor/MetaCycleContract.cs
-// and docs/schemas/meta-cycle-report.schema.json. Only the slice the panel
+// and docs/system/schemas/meta-cycle-report.schema.json. Only the slice the panel
 // renders is duplicated here.
 
 export type MetaCycleVerdict = 'healthy' | 'fixTriggering' | 'escalationOnly' | 'aborted';

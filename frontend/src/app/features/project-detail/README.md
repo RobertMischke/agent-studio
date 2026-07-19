@@ -86,7 +86,7 @@ DEP-2 targets, launches runnable templates through the shared visible CLI-task
 substrate, and compiles only bounded repository-script prompts with typed slots.
 The existing publishing panel keeps ownership of package release actions.
 
-The Project Proposals rail is a management surface over `docs/proposals`: it
+The Project Proposals rail is a management surface over `docs/concepts/proposals`: it
 shows topic, categories, source, generations, and prior decisions; creates a
 repository-grounded draft from an operator topic via the proposal-management
 CLI; records both refined and raw rejection feedback; and exposes explicit

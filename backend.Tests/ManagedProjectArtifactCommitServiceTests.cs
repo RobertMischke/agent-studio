@@ -35,7 +35,7 @@ public sealed class ManagedProjectArtifactCommitServiceTests : IDisposable
     {
         var (service, scanner, queue) = Build();
         var task = WriteTask(scanner, "AGT-501");
-        var artifact = Path.Combine(_repository, "docs", "learnings", "agt-501.md");
+        var artifact = Path.Combine(_repository, "docs", "operations", "learnings", "agt-501.md");
 
         var result = await service.ExecuteAsync(
             task,
@@ -45,7 +45,7 @@ public sealed class ManagedProjectArtifactCommitServiceTests : IDisposable
                 Directory.CreateDirectory(Path.GetDirectoryName(artifact)!);
                 File.WriteAllText(artifact, "# Durable learning\n");
                 return new ManagedProjectArtifactOutput(
-                    "Ok", "Wrote one learning.", "docs/learnings/agt-501.md");
+                    "Ok", "Wrote one learning.", "docs/operations/learnings/agt-501.md");
             },
             default);
 
@@ -55,7 +55,7 @@ public sealed class ManagedProjectArtifactCommitServiceTests : IDisposable
         Assert.Matches("^[a-f0-9]{40,64}$", result.CommitSha!);
         Assert.Equal(string.Empty, RunGitCapture(_repository, "status", "--porcelain=v1"));
         Assert.Equal(
-            "docs/learnings/agt-501.md",
+            "docs/operations/learnings/agt-501.md",
             RunGitCapture(_repository, "show", "--name-only", "--pretty=format:", "HEAD"));
         Assert.Contains(
             $"docs(pipeline): run {PipelineCatalogue.WikiLearningsStepId} for AGT-501",

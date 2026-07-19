@@ -124,7 +124,7 @@ Hard rules:
 
 First implementation order:
 
-1. Define `docs/test-run-service-contract.md` and `docs/schemas/test-run.schema.json` (request + run-record + quality-metrics shape).
+1. Define `docs/test-run-service-contract.md` and `docs/system/schemas/test-run.schema.json` (request + run-record + quality-metrics shape).
 2. In-process executor that wraps the existing local Playwright suite, so the app can talk to its own contract end-to-end before any remote integration lands.
 3. Run-history surface on the project page: list of runs per commit, status chips, drill-down to evidence.
 4. Webhook + GET-run-by-id callback API so a remote executor can push status updates.
@@ -162,7 +162,7 @@ Hard rules:
 
 First implementation order:
 
-1. Define `docs/reports/visual-regression-evidence.md` and `docs/schemas/visual-evidence-run.schema.json` for state profiles, screenshot records, diff records, and baseline verdicts.
+1. Define `docs/reports/visual-regression-evidence.md` and `docs/system/schemas/visual-evidence-run.schema.json` for state profiles, screenshot records, diff records, and baseline verdicts.
 2. Extend the Playwright reporter so selected specs can publish visual evidence into a task or Test Run Service record.
 3. Add a small baseline store under project evidence, keyed by profile, viewport, theme, and feature flags.
 4. Add a task-detail Visual Evidence panel that shows run status, screenshot thumbnails, diff thumbnails, trace links, and baseline status.
@@ -252,7 +252,7 @@ The Drift report JSON should support both dimension-level scores and architectur
 First implementation order:
 
 1. Extend `drift-report.schema.json` with an optional architecture model: max ten elements, per-element expected role, source refs, score, severity, source coverage, evidence refs, and follow-up suggestions.
-2. Define a Markdown architecture-model authoring contract so projects can write the high-level system map without a drawing tool. Contract lives in [`docs/architecture/model.md`](./docs/architecture/model.md), validated by [`docs/schemas/architecture-model.schema.json`](docs/schemas/architecture-model.schema.json).
+2. Define a Markdown architecture-model authoring contract so projects can write the high-level system map without a drawing tool. Contract lives in [`docs/system/architecture/model.md`](./docs/system/architecture/model.md), validated by [`docs/system/schemas/architecture-model.schema.json`](docs/system/schemas/architecture-model.schema.json).
 3. Add the Drift surface marble view with per-element scores and drill-down.
 4. Implement **Software / Architecture Drift** analysis: compare architecture model and ADRs against source tree, schemas, runtime events, tests, and recent job evidence.
 5. Let each architecture element create normal follow-up tasks for code cleanup, ADR updates, missing tests, missing runtime signals, or documentation sync.
@@ -356,7 +356,7 @@ The board should make these phases visible:
 
 Column labels on the board are the shorter forms `Human Ready`, `Intake`, `Execution`, `Post Processing`, and `Human Review`; the longer phrasing above appears in the in-product help and in the concept doc.
 
-V1 implements this as virtual lanes derived from a hybrid model: the six existing folder states stay the durable skeleton, a new optional `phase` field on `JobInfo` (backed by a sidecar `lifecycle.json` in the job folder when richer data is needed) carries the orchestrator-driven substate, and the kanban projection computes the visible lane from `(state, phase, execution.status, summaryState)`. No new filesystem states. Existing jobs with no `phase` render in the default lane of their state. The Agent Message Bus, once it lands, can subsume the sidecar by emitting `lifecycle` kind messages. The full plan lives in [docs/research/expanded-lifecycle-lanes-plan-2026-05.md](docs/research/expanded-lifecycle-lanes-plan-2026-05.md).
+V1 implements this as virtual lanes derived from a hybrid model: the six existing folder states stay the durable skeleton, a new optional `phase` field on `JobInfo` (backed by a sidecar `lifecycle.json` in the job folder when richer data is needed) carries the orchestrator-driven substate, and the kanban projection computes the visible lane from `(state, phase, execution.status, summaryState)`. No new filesystem states. Existing jobs with no `phase` render in the default lane of their state. The Agent Message Bus, once it lands, can subsume the sidecar by emitting `lifecycle` kind messages. The full plan lives in [docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md](docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md).
 
 The UI should support lane grouping and collapse. Users should be able to collapse orchestration-only lanes into a slim left-side rail or compact group, while keeping the main human decision lanes visible. The board should preserve scanability when there are many lanes: group headers, counters, active-run badges, CLI badges, post-processing indicators, and a quick way to expand only the lanes that currently need attention.
 
@@ -364,7 +364,7 @@ Hard boundary: expanded lanes do not bypass ADR-0052. Intake and post-processing
 
 First implementation order:
 
-1. Write the lifecycle-lane concept and state model, including virtual lane vs filesystem state tradeoffs. Done; see [docs/research/expanded-lifecycle-lanes-plan-2026-05.md](docs/research/expanded-lifecycle-lanes-plan-2026-05.md).
+1. Write the lifecycle-lane concept and state model, including virtual lane vs filesystem state tradeoffs. Done; see [docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md](docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md).
 2. Land the wire-level `phase` field plus sidecar `lifecycle.json` and a backend test that confirms an existing job renders in the right default lane (no UI lanes yet). This is the migration-and-compatibility step; do it before any UI lane changes so step 3 has data to render.
 3. Add grouped and collapsible Kanban lanes with active counters and compact left-rail collapsed state, driven off the `phase` field landed in step 2.
 4. Add Orchestrator Intake after Human Ready, with duplicate, clarity, missing-context, and executable-shape checks. Default off per project; pass-through when no checks are configured.
@@ -382,7 +382,7 @@ Make large boards easier to understand:
   git primitives through `GET /api/search?q=...&domains=tasks,commits,files`.
   Exact task-key matches rank first and domain failures preserve partial
   results. The current contract is documented in
-  [docs/domains/frontend.md#global-search](docs/domains/frontend.md#global-search).
+  [docs/system/domains/frontend.md#global-search](docs/system/domains/frontend.md#global-search).
 - Project-level tags with defaults such as Backend, Frontend, UI Improvement, and Bugfix.
 - Better ordering interactions with stronger drag feedback and less visible internal bookkeeping.
 - Cleaner archive browsing for completed and historical work.
@@ -426,7 +426,7 @@ their owning `WorkspaceRecord`, which in turn win over platform constants. Only
 controls evaluated inside a project or workspace context belong in that chain;
 process-wide hosted-service lifecycle gates remain global. The shipped foundation,
 persistence boundary, resolver, and retired-modal routing are recorded in
-[ADR-0061](docs/architecture/decisions/adr-archive.md#adr-0061---orchestrator-settings-are-a-two-tier-config-project-override-wins-over-workspace-default-wins-over-platform-constant-2026-07-11).
+[ADR-0061](docs/system/architecture/decisions/adr-archive.md#adr-0061---orchestrator-settings-are-a-two-tier-config-project-override-wins-over-workspace-default-wins-over-platform-constant-2026-07-11).
 
 - Hard agent signals (`[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, `[[TASK_NOOP]]`) parsed from CLI output. Authoritative when present.
 - A post-run policy that re-issues a follow-up the agent did not honor, instead of accepting the inconsistency. Bounded retry budget; meta message into the chat on every action.
@@ -604,11 +604,11 @@ The Project Screen should make the bus visible:
 
 Storage stays deliberately simple: many small documents on disk as source of truth, backed by a strongly typed in-memory projection for query, aggregation, and UI speed. No SQL, SQLite, LiteDB, or EF until the file-backed model is proven insufficient. If the bus grows into tens of thousands of documents, the next optimization is indexing and snapshotting inside the in-memory layer, not a premature database migration.
 
-The contract lives in [`docs/architecture/bus/agent-message-bus.md`](./docs/architecture/bus/agent-message-bus.md) with schemas under [`docs/schemas/`](docs/schemas/README.md) (`agent-message`, `agent-participant`, `agent-artifact-ref`). Subsequent slices implement the projection, bridge writers, UI panel, supporting-agent emitters, and system-health reader on top of that contract.
+The contract lives in [`docs/system/architecture/bus/agent-message-bus.md`](./docs/system/architecture/bus/agent-message-bus.md) with schemas under [`docs/system/schemas/`](docs/system/schemas/README.md) (`agent-message`, `agent-participant`, `agent-artifact-ref`). Subsequent slices implement the projection, bridge writers, UI panel, supporting-agent emitters, and system-health reader on top of that contract.
 
 First implementation order:
 
-1. Document the contract in `docs/architecture/bus/agent-message-bus.md` and add JSON schemas under `docs/schemas/`.
+1. Document the contract in `docs/system/architecture/bus/agent-message-bus.md` and add JSON schemas under `docs/system/schemas/`.
 2. Extend the planned in-memory layer with an Agent Message Bus projection over JSONL on disk.
 3. Bridge existing streams into the bus: `cli-output.log`, orchestrator chat messages, supervisor advisories and interventions, lifecycle moves, and token usage summaries.
 4. Add the Project Screen Observability surface with timeline, participant graph, filters, and raw JSON drill-down.
@@ -643,7 +643,7 @@ This should stay proportional. A tiny script does not need a telemetry platform.
 
 First implementation order:
 
-1. Define `docs/operations/runtime/observability.md` and `docs/schemas/product-runtime-event.schema.json`.
+1. Define `docs/operations/runtime/observability.md` and `docs/system/schemas/product-runtime-event.schema.json`.
 2. Update base prompts and task contracts so agents consider build-time observability when adding meaningful software behaviour.
 3. Add capture paths for local runs, Playwright runs, backend logs, and browser console events into task evidence or project observability folders.
 4. Add a Runtime Observability project surface that reads structured product events and summarizes errors, latency, counters, and domain timelines.
@@ -663,13 +663,13 @@ Make the running task board reachable from a phone without exposing the local pr
 - The companion shipped on Fly.io. Railway is a documented fallback. The PWA is a separate Angular build, deployed as static assets.
 - Default-off in the local processor. Enabling it is a `Companion:Enabled=true` flip in `appsettings.Local.json`, so a fresh checkout never tries to phone home.
 
-The full V1 contract (endpoints, snapshot shape, command shape, sync cadence, file map) lives in [docs/product/companion-app-design.md](./docs/product/companion-app-design.md). [ADR-0018](./docs/architecture/decisions/adr-archive.md) captures the architectural decision.
+The full V1 contract (endpoints, snapshot shape, command shape, sync cadence, file map) lives in [docs/concepts/companion-app-design.md](./docs/concepts/companion-app-design.md). [ADR-0018](./docs/system/architecture/decisions/adr-archive.md) captures the architectural decision.
 
 ### Schema-First Communication and In-Memory Data Layer
 
 The product is accumulating cross-cutting structured data: agent messages, participant records, product runtime events, token aggregates per project, supervisor advisories and interventions, audit findings, architecture-quality scores, componentisation metrics. None of this should sit in a database. It should be many small JSON-schema-validated documents on disk, plus a strongly-typed in-memory layer that loads them at boot, supports query and aggregation, and writes back changes the same way the job system already does.
 
-- One schema per concept, named `<concept>.schema.json`, under `docs/schemas/`. Draft 2020-12. English. No em dashes.
+- One schema per concept, named `<concept>.schema.json`, under `docs/system/schemas/`. Draft 2020-12. English. No em dashes.
 - An in-memory store is a typed view over disk; the file is always the source of truth.
 - No SQL. No SQLite, no LiteDB, no EF. The repo deliberately avoids a database engine.
 - First slice: schemas for supervisor advisory, supervisor intervention, token aggregate, agent message records, and product runtime events, plus an `InMemoryStore` consumed by `AutoInterventionHostedService`, the Agent Message Bus projection, and runtime observability projections to replace direct file reads.
@@ -723,9 +723,9 @@ Planned capabilities:
 - Typed app actions from chat, starting with safe actions such as create task draft, open job detail, refresh memory, and summarize recent results.
 - Explicit fork semantics for research or speculative planning. The canonical project orchestrator remains the default chat partner.
 
-The redesign handoff is [docs/product/orchestrator-chat-redesign-handoff.md](./docs/product/orchestrator-chat-redesign-handoff.md). The load-bearing UI boundary is archived in [ADR-0036](./docs/architecture/decisions/adr-archive.md#adr-0036---session-mechanics-render-as-timeline-events-not-primary-chat-objects-2026-05-17): session mechanics are audit events, not the primary chat object.
+The redesign handoff is [docs/concepts/orchestrator-chat-redesign-handoff.md](./docs/concepts/orchestrator-chat-redesign-handoff.md). The load-bearing UI boundary is archived in [ADR-0036](./docs/system/architecture/decisions/adr-archive.md#adr-0036---session-mechanics-render-as-timeline-events-not-primary-chat-objects-2026-05-17): session mechanics are audit events, not the primary chat object.
 
-Delivered (Multichat, Concept §4): the side sheet follows the operator's navigation and can pin a context (MC-2), per-context transcript history is served by `GET/POST /api/runner/{contextKey}/orchestrator-chat` — a `task:<PROJ>/<KEY>` context keeps its own thread while `project:<PROJ>` resolves to the canonical board thread — and the side sheet reads and sends through the context-keyed route, so a pinned task now shows its own transcript in the app while the board is byte-for-byte unchanged. See [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md#per-context-chat-transcript).
+Delivered (Multichat, Concept §4): the side sheet follows the operator's navigation and can pin a context (MC-2), per-context transcript history is served by `GET/POST /api/runner/{contextKey}/orchestrator-chat` — a `task:<PROJ>/<KEY>` context keeps its own thread while `project:<PROJ>` resolves to the canonical board thread — and the side sheet reads and sends through the context-keyed route, so a pinned task now shows its own transcript in the app while the board is byte-for-byte unchanged. See [docs/concepts/orchestrator-chat.md](./docs/concepts/orchestrator-chat.md#per-context-chat-transcript).
 
 ### In-App Orchestrator (Sight, Hands, Anchor)
 
@@ -737,7 +737,7 @@ Move the operator inside the application. The concept ([docs/concepts/orchestrat
 
 Hard boundary: sight grants no mutation authority. ORCH-1 only reads; intervention arrives with ORCH-2 and must be journaled and admitted through the existing slot and worktree-isolation model ([ADR-0052](docs/concepts/parallel-task-execution.md)), never as a hidden parallel actor editing a project outside admission.
 
-Delivered (Sight, ORCH-1): one backend `OrchestratorContextDigestService` builds the bounded digest and is shared by both the visible side-sheet chat turn and the canonical session-turn API, so the two entry points cannot drift into different views of application state. `GET /api/orchestrator/context/{key}` inspects the digest cheaply from cached quota; `POST .../refresh` is the only path that re-probes quota. The read-only, single-builder, fail-closed-scope boundary is archived in [ADR-0062](docs/architecture/decisions/adr-archive.md#adr-0062---the-in-app-orchestrator-read-context-orch-1-is-one-shared-scoped-read-only-digest-builder-2026-07-11). See [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md#application-read-context-orch-1).
+Delivered (Sight, ORCH-1): one backend `OrchestratorContextDigestService` builds the bounded digest and is shared by both the visible side-sheet chat turn and the canonical session-turn API, so the two entry points cannot drift into different views of application state. `GET /api/orchestrator/context/{key}` inspects the digest cheaply from cached quota; `POST .../refresh` is the only path that re-probes quota. The read-only, single-builder, fail-closed-scope boundary is archived in [ADR-0062](docs/system/architecture/decisions/adr-archive.md#adr-0062---the-in-app-orchestrator-read-context-orch-1-is-one-shared-scoped-read-only-digest-builder-2026-07-11). See [docs/concepts/orchestrator-chat.md](./docs/concepts/orchestrator-chat.md#application-read-context-orch-1).
 
 ### Focused UX
 
@@ -784,4 +784,4 @@ Be cautious with work that:
 
 ## Documentation Drift
 
-After any CLI-executed task finishes, check whether the README, this roadmap, AGENTS.md, [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md), or other docs need to be updated. Update them in the same task when the change affects product direction, public behavior, architecture, CLI contracts, filesystem contracts, agent workflow, or established a non-goal worth archiving. The ADR file is the chronological log of decisions; README / ROADMAP / AGENTS are the narrative surfaces that describe the current shape. The two must stay in sync. If no documentation update is needed, say so briefly in the task report.
+After any CLI-executed task finishes, check whether the README, this roadmap, AGENTS.md, [docs/system/architecture/decisions/adr-archive.md](./docs/system/architecture/decisions/adr-archive.md), or other docs need to be updated. Update them in the same task when the change affects product direction, public behavior, architecture, CLI contracts, filesystem contracts, agent workflow, or established a non-goal worth archiving. The ADR file is the chronological log of decisions; README / ROADMAP / AGENTS are the narrative surfaces that describe the current shape. The two must stay in sync. If no documentation update is needed, say so briefly in the task report.

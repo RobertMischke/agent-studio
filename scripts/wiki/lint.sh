@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate every docs/common-problems/<slug>/ entry.
+# Validate every docs/<theme>/common-problems/<slug>/ entry across all themes.
 # Exits non-zero with a per-file reason on failure. Silent on success except for a final OK line.
 set -euo pipefail
 
@@ -10,7 +10,14 @@ const fs = require('fs');
 const path = require('path');
 
 const repoRoot = process.argv[2];
-const root = path.join(repoRoot, 'docs', 'wiki', 'common-problems');
+const docsRoot = path.join(repoRoot, 'docs');
+// The common-problems library is thematic: docs/<theme>/common-problems/.
+const roots = fs.existsSync(docsRoot)
+  ? fs.readdirSync(docsRoot, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+      .map((d) => path.join(docsRoot, d.name, 'common-problems'))
+      .filter((p) => fs.existsSync(p))
+  : [];
 
 const requiredKeys = ['id', 'title', 'status', 'first-seen', 'last-seen', 'severity', 'category', 'tags', 'affects', 'related-tasks', 'related-adrs'];
 const listKeys = new Set(['tags', 'affects', 'related-tasks', 'related-adrs']);
@@ -58,7 +65,9 @@ function readIfExists(file) {
   return fs.readFileSync(file, 'utf8');
 }
 
-for (const dirent of fs.readdirSync(root, { withFileTypes: true })) {
+for (const root of roots) {
+  const theme = path.basename(path.dirname(root));
+  for (const dirent of fs.readdirSync(root, { withFileTypes: true })) {
   if (!dirent.isDirectory() || dirent.name === 'archive') {
     continue;
   }
@@ -66,7 +75,7 @@ for (const dirent of fs.readdirSync(root, { withFileTypes: true })) {
   const slug = dirent.name;
   const dir = path.join(root, slug);
   const readme = path.join(dir, 'README.md');
-  const rel = `docs/common-problems/${slug}/README.md`;
+  const rel = `docs/${theme}/common-problems/${slug}/README.md`;
   checked += 1;
 
   const readmeText = readIfExists(readme);
@@ -135,6 +144,7 @@ for (const dirent of fs.readdirSync(root, { withFileTypes: true })) {
     if (todoTableCellPattern.test(measures)) {
       fail(rel, 'measures.md still contains scaffold TODO row');
     }
+  }
   }
 }
 

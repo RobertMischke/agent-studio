@@ -3,7 +3,7 @@
 Status: analysis recorded 2026-06-21. Documents how the HTTP API currently
 identifies a project, why the raw `watchPath` should be encapsulated, and the
 canonical-versus-legacy route split. Companion to the system-of-record map in
-[../../domains/tasks.md](../../domains/tasks.md). Cleanup is tracked as a backlog
+[../../domains/tasks.md](../system/domains/tasks.md). Cleanup is tracked as a backlog
 task (see "Cleanup task" below).
 
 ## The three project identifiers
@@ -27,7 +27,7 @@ API uses yet.
 
 `/api/tasks` is the only public route. The former `/api/jobs` compatibility
 alias was removed in
-[ADR-0058](../../architecture/decisions/adr-archive.md#adr-0058---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)
+[ADR-0058](../system/architecture/decisions/adr-archive.md#adr-0058---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)
 (Phase 1 of this cleanup) and the create DTO was renamed `CreateJobRequest` ->
 `CreateTaskRequest`, so the domain reads "Task" end to end. There is no `/api/jobs`
 route or `CreateJobRequest` type anymore.
@@ -51,7 +51,7 @@ disk layout to every client:
   storage location via the registry (see Phase 2a below). A raw absolute path
   still passes through for legacy callers, and an empty handle still falls back
   to the first registered project. That last fallback is the trap captured in
-  [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../common-problems/project-name-divergence-watchpath-vs-registry/README.md);
+  [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../system/common-problems/project-name-divergence-watchpath-vs-registry/README.md);
   addressing by `shortCode`/`projectId` avoids it.
 - The `/api/jobs` alias and its ~180 consumers have been migrated to `/api/tasks`
   (Phase 1, done). Remaining `/api/jobs` mentions live only in immutable history:
@@ -107,6 +107,6 @@ Backlog task slug:
 
 ## Related
 
-- [../../domains/tasks.md](../../domains/tasks.md) - system-of-record task map.
+- [../../domains/tasks.md](../system/domains/tasks.md) - system-of-record task map.
 - [../../.agents/skills/task-api/SKILL.md](../../.agents/skills/task-api/SKILL.md) - how to call the task API today.
-- [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../common-problems/project-name-divergence-watchpath-vs-registry/README.md) - the watchPath-versus-registry trap.
+- [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../system/common-problems/project-name-divergence-watchpath-vs-registry/README.md) - the watchPath-versus-registry trap.
