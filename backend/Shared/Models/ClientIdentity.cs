@@ -9,7 +9,7 @@ namespace AgentStudio.Shared;
 /// Loaded on backend boot. Mutations through <c>/api/clients/*</c> are the
 /// single writer; no other service writes identity files directly.
 ///
-/// Pairs with <c>docs/schemas/client-identity.schema.json</c>.
+/// Pairs with <c>docs/app/schemas/client-identity.schema.json</c>.
 ///
 /// This is a registration boundary, not a security model: the door has a
 /// sign, every visitor signs in. Cryptographic signing is a follow-up.

@@ -16,7 +16,7 @@ namespace AgentStudio.Companion;
 /// Default-off (<see cref="CompanionSyncOptions.Enabled"/> = false in
 /// <c>appsettings.json</c>); a fresh checkout never tries to phone home.
 /// Architectural rationale lives in
-/// <c>docs/product/companion-app-design.md</c> and ADR-0018.
+/// <c>docs/concepts/companion-app-design.md</c> and ADR-0018.
 /// </summary>
 public sealed class CompanionSyncService : BackgroundService
 {

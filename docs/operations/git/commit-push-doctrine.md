@@ -65,7 +65,7 @@ These prohibitions are enforced by runtime prompt scope, a worker-only git comma
 
 ## What the orchestrator does
 
-The orchestrator (the per-project supervisory Claude session that wraps a project's pipeline; see [ADR-0017](../../architecture/decisions/adr-archive.md#adr-0017---supervisor-as-advisory-layer-above-the-deterministic-orchestrator-2026-05-04)) is a **supervisor over the runner, not a second author of git history**. Its role with respect to commits and pushes:
+The orchestrator (the per-project supervisory Claude session that wraps a project's pipeline; see [ADR-0017](../../system/architecture/decisions/adr-archive.md#adr-0017---supervisor-as-advisory-layer-above-the-deterministic-orchestrator-2026-05-04)) is a **supervisor over the runner, not a second author of git history**. Its role with respect to commits and pushes:
 
 - **Supervise**, do not commit. The orchestrator may *check* whether the runner committed, whether the working tree was clean, whether the SHA stamped on the job exists - and it may emit a `STEER` follow-up that asks the runner to retry or asks the worker CLI to re-run if the commit step skipped due to a fixable cause. It must not run `git commit` itself.
 - **Supervise**, do not push. The orchestrator may verify that the local SHA reached the remote and surface a typed advisory if it did not. The push call itself is the runner's.

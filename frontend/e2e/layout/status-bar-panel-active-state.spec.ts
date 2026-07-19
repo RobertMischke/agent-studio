@@ -186,7 +186,7 @@ test.describe('Status bar panel buttons - active/toggle state', () => {
     // one Workspace-settings home, while "Settings" opens that same home on
     // its overview. Because both pills carry the single `--studio-accent`
     // active fill, opening either must light EXACTLY one — never both (see
-    // docs/frontend/design-system.md, "one accent per rail").
+    // docs/quality/frontend/design-system.md, "one accent per rail").
     await installBootMocks(page);
     await gotoBoard(page);
     await setTheme(page, 'dark');

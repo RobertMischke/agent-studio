@@ -80,6 +80,16 @@ describe('ProjectOverlaysService · orch-feed deep-link anchor', () => {
     expect(svc.orchFeedProject()).toBe('Runbook');
   });
 
+  it('resolves the wiki rail even when a deep-link query rides on the hash', () => {
+    // The Wiki carries its open page as `#/projects/<slug>/wiki?page=<relPath>`
+    // (wiki-deep-link.ts). The `?…` suffix must not corrupt the rail parse.
+    history.replaceState(null, '', '/#/projects/runbook/wiki?page=concepts%2Foverview.md');
+    const svc = new ProjectOverlaysService();
+    svc.syncShellFromHash(watchPaths);
+    expect(svc.projectShellName()).toBe('Runbook');
+    expect(svc.projectShellRail()).toBe('wiki');
+  });
+
   it('keeps the open settings shell and hash aligned after a project rename', () => {
     const svc = new ProjectOverlaysService();
     svc.projectShellName.set('Old Name');
@@ -90,5 +100,19 @@ describe('ProjectOverlaysService · orch-feed deep-link anchor', () => {
 
     expect(svc.projectShellName()).toBe('New Name');
     expect(window.location.hash).toBe('#/projects/new-name/settings');
+  });
+
+  it('preserves an open wiki deep-link query across a project rename', () => {
+    // A rename swaps only the slug; the Wiki's `?page=` deep-link belongs to the
+    // (unchanged) rail and must survive so the address bar stays shareable.
+    const svc = new ProjectOverlaysService();
+    svc.projectShellName.set('Old Name');
+    svc.projectShellRail.set('wiki');
+    history.replaceState(null, '', '/#/projects/old-name/wiki?page=concepts%2Foverview.md');
+
+    svc.renameOpenProjectShell('New Name');
+
+    expect(svc.projectShellName()).toBe('New Name');
+    expect(window.location.hash).toBe('#/projects/new-name/wiki?page=concepts%2Foverview.md');
   });
 });

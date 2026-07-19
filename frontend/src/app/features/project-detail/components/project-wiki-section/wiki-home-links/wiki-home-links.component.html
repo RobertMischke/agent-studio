@@ -1,0 +1,43 @@
+@if (sections().length > 0) {
+  <section class="whome" data-testid="wiki-home-links" aria-label="Kuratierte Einstiege">
+    @for (section of sections(); track section.title) {
+      <article class="whome__card" [attr.data-testid]="'wiki-home-section-' + section.title">
+        <header class="whome__head">
+          <span class="whome__head-icon" aria-hidden="true">
+            <app-studio-icon name="book" [size]="13"></app-studio-icon>
+          </span>
+          <div class="whome__head-copy">
+            <span class="whome__kicker">Einstiege</span>
+            <h4 class="whome__title">{{ section.title }}</h4>
+          </div>
+          <span class="whome__count">{{ section.links.length }}</span>
+        </header>
+        <ul class="whome__list">
+          @for (link of section.links; track link.relPath + link.label) {
+            <li>
+              @if (link.exists) {
+                <button class="whome__link" type="button"
+                        [attr.data-testid]="'wiki-home-link-' + link.relPath"
+                        (click)="onLinkClick(link)">
+                  <span class="whome__label">{{ link.label }}</span>
+                  @if (link.note) {
+                    <span class="whome__note">{{ link.note }}</span>
+                  }
+                </button>
+              } @else {
+                <span class="whome__link whome__link--missing"
+                      [attr.data-testid]="'wiki-home-link-' + link.relPath"
+                      cacTooltip="Seite nicht gefunden">
+                  <span class="whome__label">{{ link.label }}</span>
+                  @if (link.note) {
+                    <span class="whome__note">{{ link.note }}</span>
+                  }
+                </span>
+              }
+            </li>
+          }
+        </ul>
+      </article>
+    }
+  </section>
+}

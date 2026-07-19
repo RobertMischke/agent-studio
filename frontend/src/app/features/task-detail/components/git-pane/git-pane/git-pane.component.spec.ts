@@ -513,7 +513,7 @@ describe('GitPaneComponent', () => {
 
   it('offers a Preview toggle only for md/html files and renders the markdown preview (AGT-2008)', async () => {
     const git = makeGitPaneMock({
-      selectedDiffPath: 'docs/README.md',
+      selectedDiffPath: 'docs/start/README.md',
       previewOnLoad: { content: '# Hello preview' },
     });
     await mountGit(git);

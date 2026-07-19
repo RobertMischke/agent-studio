@@ -10,7 +10,7 @@ namespace AgentStudio.State;
 /// per (workspace, project) pair. The pattern matches the Agent Message Bus
 /// store (see <c>AgentStudio.Bus.AgentMessageBusStore</c>) and is
 /// the shared implementation for everything that lands a typed schema in
-/// <c>docs/schemas/</c>.
+/// <c>docs/app/schemas/</c>.
 /// </summary>
 /// <remarks>
 /// <para>

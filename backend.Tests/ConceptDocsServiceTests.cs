@@ -13,7 +13,7 @@ namespace AgentStudio.Tests;
 ///
 /// The two committed seed topics (<c>lane-4-auto-review</c> and
 /// <c>lane-3-progress</c>) are loaded from the real
-/// <c>docs/in-app-help/lane-guides/</c> folder so the test also doubles as a
+/// <c>docs/app/help/lane-guides/</c> folder so the test also doubles as a
 /// guard against accidentally deleting or renaming them.
 /// </summary>
 public class ConceptDocsServiceTests

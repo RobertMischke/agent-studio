@@ -1,5 +1,19 @@
 # Engineering style guides
 
+## Zweck & Abgrenzung
+
+Qualitäts- und Designwissen: technologie-bewusste Style-Guides, verbindliche
+Design-Hartregeln und der Regel-Autoren-Workflow, die in Prompts und Reviews
+einfließen.
+
+**Gehört hierher:** Angular-/.NET-Style-Guides, `design/`-Hartregeln,
+Frontend-Designsystem und Audits, Architektur-/Qualitäts-Layer, Prinzipien.
+
+**Gehört nicht hierher:** verbindliche Systemverträge und Domänenkarten (→
+`system/`), erklärende Konzepte (→ `concepts/`), Betriebswissen (→
+`operations/`). Code-Verträge (Schemas, Config, In-App-Hilfe) liegen unter
+`app/`.
+
 This folder is the single navigation entry for repository coding guidance that
 depends on a project's technology stack. The Project Hub reads the frontmatter
 from this family, shows only applicable guides in Wiki Pulse, and the existing
@@ -14,10 +28,10 @@ entry surface.
 
 | Guide | Applies when | Canonical sources it incorporates |
 |---|---|---|
-| [Angular components](angular-components.md) | Angular is detected | [UI hard rules](../design/style-guide-hard-rules.md), [component vocabulary](../frontend/style-guide/README.md), [performance playbook](../frontend/performance.md) |
-| [.NET backend](dotnet-backend.md) | .NET or C# is detected | [backend structure style guide](../architecture/backend-structure/styleguide.md), [domain maps](../domains/README.md) |
+| [Angular components](angular-components.md) | Angular is detected | [UI hard rules](./design/style-guide-hard-rules.md), [component vocabulary](./frontend/style-guide/README.md), [performance playbook](./frontend/performance.md) |
+| [.NET backend](dotnet-backend.md) | .NET or C# is detected | [backend structure style guide](../system/architecture/backend-structure/styleguide.md), [domain maps](../system/domains/README.md) |
 
-The [UI hard rules](../design/style-guide-hard-rules.md) remain the
+The [UI hard rules](./design/style-guide-hard-rules.md) remain the
 non-negotiable visual baseline. This index is the one place from which a human,
 Project Hub, and prompt enrichment discover that baseline together with the
 technology-specific guidance around it.

@@ -5,7 +5,7 @@ namespace AgentStudio.Shared;
 
 /// <summary>
 /// One structured runtime event emitted by the software the agents are
-/// building, mirroring <c>docs/schemas/product-runtime-event.schema.json</c>.
+/// building, mirroring <c>docs/app/schemas/product-runtime-event.schema.json</c>.
 /// Append-only on disk, written one JSON document per JSONL line under
 /// <c>&lt;job&gt;/logs/runtime/&lt;yyyy-mm-dd&gt;.jsonl</c> (job-scoped) or
 /// <c>&lt;workspace&gt;/logs/runtime/&lt;project&gt;/&lt;yyyy-mm-dd&gt;.jsonl</c>
