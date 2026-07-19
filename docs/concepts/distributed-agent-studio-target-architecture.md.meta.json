@@ -5,6 +5,12 @@
       "title": "Workspace model: component projects, aggregate boards, and cross-project initiatives",
       "linkedAt": "2026-07-19T18:33:54.4903118Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2192",
+      "title": "Task Server: extract an independently deployable control-plane service",
+      "linkedAt": "2026-07-19T18:46:20.8621274Z",
+      "source": "auto"
     }
   ]
 }
