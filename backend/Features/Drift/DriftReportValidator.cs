@@ -3,7 +3,7 @@ namespace AgentStudio.Drift;
 
 /// <summary>
 /// In-code validator that mirrors the value sets and required-field rules in
-/// <c>docs/schemas/drift-report.schema.json</c>. Validation lives next to the
+/// <c>docs/app/schemas/drift-report.schema.json</c>. Validation lives next to the
 /// in-memory store so every consumer that goes through the store gets the
 /// same rejection set. Strict at append time so new garbage cannot enter the
 /// projection; lenient on read so one bad legacy line never breaks the

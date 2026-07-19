@@ -16,7 +16,7 @@ namespace AgentStudio.Tests;
 /// shape these methods emit. Without per-frame regression tests, an
 /// "innocent" tweak to <c>FormatToolUse</c> or the rate-limit kv tail
 /// can silently break the live header pill or the Continue button. The
-/// matching skill at <c>docs/cli/skills/cli-claude.md</c> documents the
+/// matching skill at <c>docs/system/cli/skills/cli-claude.md</c> documents the
 /// frame catalogue these tests lock.
 /// </summary>
 public class ClaudeCliServiceTests

@@ -8,7 +8,7 @@ input.
 ## `aggregate-runtime-events.mjs`
 
 Reads one or more `ProductRuntimeEvent` JSONL files
-([schema](../../../../docs/schemas/product-runtime-event.schema.json)) and
+([schema](../../../../docs/system/schemas/product-runtime-event.schema.json)) and
 prints a JSON aggregate covering the six finding categories the skill
 turns into a report.
 

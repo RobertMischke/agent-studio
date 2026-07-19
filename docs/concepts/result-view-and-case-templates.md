@@ -99,7 +99,7 @@ signal but never the *only* one.
 one-shot Haiku call rendered from
 [`prompts/runtime/summary-protocol.md`](../../prompts/runtime/summary-protocol.md).
 The contract for the file's shape lives in
-[contracts/protocol-style.md §3](../contracts/protocol-style.md).
+[contracts/protocol-style.md §3](../system/contracts/protocol-style.md).
 
 The prompt strategy has three parts:
 
@@ -195,7 +195,7 @@ frontend, so the metric head reuses the review grade (A-D from the
 | Tab label (Protocol to Result) | `.../protocol-pane/protocol-pane/protocol-pane-view-model.ts` |
 | Summarizer prompt | `prompts/runtime/summary-protocol.md` |
 | Summary service + slot wiring | `backend/Features/Review/SummaryGenerationService.cs` |
-| status.md contract | `docs/contracts/protocol-style.md` §3 |
+| status.md contract | `docs/system/contracts/protocol-style.md` §3 |
 | Aspect writer (markdown twin + JSON source of truth) | `backend/Features/Runner/AspectRunnerService.cs`, `AspectVerdict.cs` (`RenderJson`) |
 | Aspect JSON list preference (prefers `.json`, suppresses `.md` twin) | `backend/Features/Tasks/TaskScannerService.cs` (`ListArtifacts`) |
 | Files tab (JSON card + markdown fallback) | `frontend/src/app/features/task-detail/components/prompt-pane/files-pane/` (`aspect-json-card.component.ts`, `aspect-document.model.ts`) |

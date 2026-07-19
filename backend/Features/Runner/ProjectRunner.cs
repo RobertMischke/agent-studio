@@ -2448,7 +2448,7 @@ public class ProjectRunner
             // endpoint uses ("commits made during this run" = git rev-list
             // HeadShaBefore..HeadShaAfter). Best-effort: a missing repo or
             // a git failure leaves the SHAs null and we fall back to the
-            // wall-clock window. See docs/product/design-principles.md for why we
+            // wall-clock window. See docs/quality/design-principles.md for why we
             // treat the software-side change set as a first-class signal.
             var headShaBefore = SafeGetHeadSha(jobId);
 
@@ -3005,7 +3005,7 @@ public class ProjectRunner
         // ROOT CAUSE FIX (2026-06-23): the live-stream sentinel scanner used to
         // match SentinelRegex on EVERY raw output line, so a run that merely READ
         // a file containing a [[TASK_DONE]] literal (the backend's own runner
-        // code, AGENTS.md, and docs/contracts/agent-task.md are full of them - the
+        // code, AGENTS.md, and docs/system/contracts/agent-task.md are full of them - the
         // file content rides the "user"/tool-result stream) was killed mid-work as
         // a false "completion". The decision now lives in the tested pure helper
         // LiveSentinelScanner: agent-stream only + standalone sentinel line.
@@ -3646,7 +3646,7 @@ public class ProjectRunner
                 var resumePrompt = BuildOrchestratorResumePrompt(_prompts, info, lastAgentText, attachmentsList);
                 // Rejection-recovery lives on the runner (ResumeWithFallbackAsync)
                 // so the per-job and global-chat orchestrator paths cannot drift
-                // apart again - see docs/contracts/code-patterns.md "orchestrator-resume-with-fallback".
+                // apart again - see docs/system/contracts/code-patterns.md "orchestrator-resume-with-fallback".
                 var resumeRejected = false;
                 result = await _orchestratorRunner.ResumeWithFallbackAsync(
                     session.SessionId,
@@ -4113,27 +4113,6 @@ public class ProjectRunner
                     settings),
                 ProjectName,
                 info.Id);
-            var onboardingStep = AgentStudio.Pipeline.PipelineCatalogue.Standard.Pre.First(s =>
-                s.Id == AgentStudio.Pipeline.PipelineCatalogue.PreWorkstreamOnboardingStepId);
-            if (AgentStudio.Pipeline.PipelineStepConfigResolver.IsEnabled(settings, onboardingStep)
-                && !string.IsNullOrWhiteSpace(Entry.RootPath))
-            {
-                var started = DateTime.UtcNow;
-                var language = AgentStudio.Docs.WorkstreamFrameLanguageResolver.Resolve(
-                    ProjectName, settings.WorkstreamFramePublic);
-                var result = AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner.RecordOnboarding(
-                    Entry.RootPath, info, language, started);
-                _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
-                {
-                    StepId = AgentStudio.Pipeline.PipelineCatalogue.PreWorkstreamOnboardingStepId,
-                    Kind = StepKind.Module,
-                    Status = result.Writes > 0 ? PipelineStepStatus.Passed : PipelineStepStatus.Skipped,
-                    StartedAt = started,
-                    CompletedAt = DateTime.UtcNow,
-                    Verdict = result.Writes > 0 ? "updated" : "skipped",
-                    Reason = $"current development state writes={result.Writes} rejected={result.Rejected}",
-                });
-            }
             // Carry the CORE step's accumulated duration forward. A re-run of
             // the same task reuses one in-flight record, so without preserving
             // this the run-start write would zero the total and the prior
@@ -5569,7 +5548,7 @@ public class ProjectRunner
                 // that the typed routes above never claimed). A deliberate stop
                 // (status=stopped) and a manual-mode NeedsInput legitimately stay
                 // in progress and are excluded by the guard. See
-                // docs/wiki/concepts/runner-stability-incidents.html.
+                // docs/concepts/runner-stability-incidents.html.
                 var backstopIssueKind = action?.IssueKind is RunIssueKind k and not RunIssueKind.None
                     ? k
                     : RunIssueKind.OrchestratorInconclusive;

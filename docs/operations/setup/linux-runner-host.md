@@ -8,8 +8,8 @@ remote-host onboarding). AGT-2094 uses this runbook as its operational
 reference; the UI does not maintain a second copy of these commands.
 
 This is the operator-facing companion to the plan in
-[../../research/remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
-(Phase 1 + Phase 3) and the binding lease contract in
+[../../concepts/distributed-agent-studio-target-architecture.md](../../concepts/distributed-agent-studio-target-architecture.md)
+and the binding lease contract in
 [../../concepts/parallel-task-execution.md](../../concepts/parallel-task-execution.md)
 §8.2C. The runner code lives under [`runner/`](../../../runner) and consumes only
 the Runner API surface added by RM-3 (fenced lease) and RM-4 (log + artifact
@@ -156,7 +156,7 @@ can read and write in place, so Claude's own token refresh persists for the next
 launch. (The studio's clean-context mechanism keeps the same in-place invariant
 for parallel runs by sharing the one credential file *by link* rather than
 copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
-[`docs/cli/supported-clis.md`](../../cli/supported-clis.md).)
+[`docs/system/cli/supported-clis.md`](../../system/cli/supported-clis.md).)
 
 ## 2. Build the runner
 

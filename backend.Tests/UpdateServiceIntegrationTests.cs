@@ -45,6 +45,8 @@ namespace AgentStudio.Tests;
 /// every case is skipped rather than exercised. Also skipped when bash or git
 /// aren't reachable on PATH; the fake stable checkout needs both.
 /// </summary>
+// MachineBound 19.07.: gesamte Suite treibt echte Prozesse/Healthz-Polling, flakt unter Parallellast im Karten-Gate.
+[Trait("Category", "MachineBound")]
 public class UpdateServiceIntegrationTests
 {
     private const int TriggerTimeoutMs = 90_000;
@@ -154,7 +156,7 @@ public class UpdateServiceIntegrationTests
         Assert.All(rows, r => Assert.True(r.RootElement.GetProperty("ok").GetBoolean()));
 
         // Pre/post snapshots round-trip into the wire shape declared by
-        // docs/schemas/update-run-snapshot.schema.json.
+        // docs/app/schemas/update-run-snapshot.schema.json.
         var pre = JsonSerializer.Deserialize<UpdateRunSnapshot>(File.ReadAllText(Path.Combine(runFolder, "pre-snapshot.json")),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
         Assert.Equal("pre", pre.Kind);

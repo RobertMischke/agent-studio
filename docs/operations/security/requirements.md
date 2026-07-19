@@ -20,7 +20,7 @@ Auth tokens, CLI sessions, quota credentials live in user-scoped paths (Claude `
 
 ## R3 - Watched target writes go through the contract
 
-The app never edits a watched project's source code directly. All writes that affect the target repo go through the agent (which the user supervises) or through the app-owned task lifecycle (`docs/contracts/agent-task.md`).
+The app never edits a watched project's source code directly. All writes that affect the target repo go through the agent (which the user supervises) or through the app-owned task lifecycle (`docs/system/contracts/agent-task.md`).
 
 ## R4 - Markdown rendering is read-only and inert
 

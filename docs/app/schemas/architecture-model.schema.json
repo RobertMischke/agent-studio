@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/architecture-model.schema.json",
+  "title": "ArchitectureModel",
+  "description": "Authoring contract for a project's compact high-level architecture map. Validates the YAML frontmatter of an architecture-model Markdown file. The map is intended to drive software-to-architecture drift analysis and the marble-style Drift surface; it is deliberately small and human-writable. Hard limit of ten elements per map. Storage lives with project evidence (watched project repository or workspace), never in the agent-taskboard source repo. See docs/system/architecture/model.md for the prose contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "modelId",
+    "title",
+    "project",
+    "updatedAt",
+    "elements",
+    "schemaVersion"
+  ],
+  "properties": {
+    "modelId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "description": "Stable kebab-case id for this architecture model. Drift reports reference it via architectureModel.modelId."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable model title. Shown above the marble diagram."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as shown in the project organization layer. Matches DriftReport.project."
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which this revision of the model was authored."
+    },
+    "owner": {
+      "type": ["string", "null"],
+      "description": "Optional human owner of this model (name, handle, or role)."
+    },
+    "summary": {
+      "type": ["string", "null"],
+      "description": "One- or two-sentence description of what the model covers. Renders as the diagram's subtitle."
+    },
+    "diagramHint": {
+      "type": ["string", "null"],
+      "description": "Optional layout hint for the marble surface. Free-form text the renderer may ignore (for example: 'two rows', 'group runtime elements right'). The marble layout is owned by the UI; this is a hint, not a coordinate."
+    },
+    "elements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "description": "High-level architecture elements. Hard limit of ten keeps the map reviewable and forces the author to pick.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "elementId",
+          "label",
+          "expectedRole",
+          "ownershipBoundary"
+        ],
+        "properties": {
+          "elementId": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "Stable kebab-case id, unique within this model. Drift reports key per-element scores by this id."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short display label for the marble. One line."
+          },
+          "expectedRole": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What this element is supposed to own or do, in one or two sentences. The drift analyzer compares this against current code responsibility."
+          },
+          "ownershipBoundary": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Glob patterns or path prefixes that define which files belong to this element. Used by the analyzer to attribute source changes to one element. Example: 'backend/Services/Runner/**', 'frontend/src/app/protocol/**'.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "guidelines": {
+            "type": "array",
+            "description": "Important rules this element should follow. Free-form bullet phrases, not links. Example: 'No SQL'; 'One writer pattern'; 'Validates every append'.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "allowedDependencies": {
+            "type": "array",
+            "description": "Element ids (within this model) or external system names this element may depend on. The analyzer flags dependencies outside this set as drift.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "sourceRefs": {
+            "type": "array",
+            "description": "Docs, ADRs, folders, or other authoritative source references for this element's expected role. Repository-relative paths or fragment links (for example 'docs/system/architecture/decisions/adr-archive.md#adr-0024').",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "relevantTests": {
+            "type": "array",
+            "description": "Tests or test directories whose green-state is evidence the element still works as intended. Example: 'backend.Tests/InMemoryStoreTests.cs', 'frontend/e2e/kanban-seven-lanes.spec.ts'.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "relevantSchemas": {
+            "type": "array",
+            "description": "JSON Schemas that define the data contracts owned or consumed by this element. Repository-relative paths such as 'docs/app/schemas/agent-message.schema.json'.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "runtimeSignals": {
+            "type": "array",
+            "description": "Stable runtime event names, log streams, metric names, or REST endpoints the analyzer can use to confirm the element's runtime behavior. Example: 'event:cycle-resume-failed', 'log:logs/meta/<project>/observations.jsonl', 'endpoint:/api/tasks/grouped'.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "description": "Optional short authoring note. The Markdown body below the frontmatter is the preferred place for prose; this field is for one-line caveats that should travel with the structured record."
+          }
+        }
+      }
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version for this record."
+    }
+  }
+}

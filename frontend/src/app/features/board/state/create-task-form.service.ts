@@ -161,7 +161,7 @@ export class CreateTaskFormService {
    * title, prompt body, same project, mode=coding — and surface the images as
    * already-attached chips. On Save the existing attachment-upload pipeline
    * copies them byte-for-byte into the new task. See
-   * docs/research/planning-research-task-kinds-2026-05.md.
+   * docs/concepts/planning-research-task-kinds-2026-05.md.
    */
   openPromotePlanning(payload: PromoteToCodingResponse, attachments: PendingAttachment[]): void {
     this.newTitle = payload.title;

@@ -896,7 +896,7 @@ public sealed class StaleProgressArchiver
 
 /// <summary>One row in <c>&lt;workspace&gt;/logs/orphan-recoveries.jsonl</c>.</summary>
 /// <remarks>
-/// Schema: <c>docs/schemas/orphan-recovery.schema.json</c>.
+/// Schema: <c>docs/app/schemas/orphan-recovery.schema.json</c>.
 /// </remarks>
 public sealed record StaleProgressDecision
 {
