@@ -101,6 +101,12 @@
       "title": "Task chat: remove mode and configuration chrome and keep only transcript, input, and send",
       "linkedAt": "2026-07-19T20:47:14.3516359Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2178",
+      "title": "Remote runner must support Epic planning and decomposition",
+      "linkedAt": "2026-07-19T21:58:36.9822235Z",
+      "source": "auto"
     }
   ],
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
