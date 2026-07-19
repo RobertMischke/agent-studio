@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace AgentStudio.Drift;
 
 /// <summary>
-/// In-code projection of <c>docs/system/schemas/drift-report.schema.json</c> and the
+/// In-code projection of <c>docs/app/schemas/drift-report.schema.json</c> and the
 /// prose contract in <c>docs/system/reports/drift-reports.md</c>. Drift reports are a
 /// separate evidence pile from
 /// <see cref="AgentStudio.Analysis.AnalysisReport"/>: drift is a
@@ -250,7 +250,7 @@ public sealed record DriftArchitectureElement(
 /// Optional high-level architecture model carried by a drift report. When
 /// present, the Drift project surface renders it as a marble map: up to ten
 /// scan-friendly cards, each linking back to evidence. Mirrors the
-/// <c>architectureModel</c> branch in <c>docs/system/schemas/drift-report.schema.json</c>.
+/// <c>architectureModel</c> branch in <c>docs/app/schemas/drift-report.schema.json</c>.
 /// </summary>
 public sealed record DriftArchitectureModel(
     string ModelId,

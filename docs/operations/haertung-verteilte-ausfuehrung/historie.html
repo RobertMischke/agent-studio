@@ -376,6 +376,38 @@
   </dl>
 </div>
 
+<div class="entry">
+  <header><h3>docs/app/ — der eine Code-Vertrags-Bereich (Welle 2)</h3><span class="date">19.07.2026</span></header>
+  <dl>
+    <dt>Inhalt</dt><dd>Maschinen-Verträge in Datei-Form zogen unter einen einzigen Ordner <code>docs/app/</code>:
+      <code>system/schemas/</code> → <code>app/schemas/</code>, <code>in-app-help/</code> → <code>app/help/</code>,
+      <code>home.json</code> → <code>app/config/home.json</code>, die Ordner-Order-Konstante →
+      <code>app/config/wiki-order.json</code>. <code>docs/app/</code> ist <b>kein Wissens-Content</b>: der ganze
+      Teilbaum ist aus Tree/Folder/Suche/Pulse/Grading ausgeblendet (wie Config, via <code>IsWikiConfigFile</code>/
+      <code>IsWikiAppPath</code>), während Schema-Loader, Help-Resolver und Home-Config ihn weiter per Direktpfad lesen.</dd>
+    <dt>Guard</dt><dd>Neue zentrale Klasse <code>WikiProducerTargets</code> registriert die Producer-Schreibziele
+      (<code>common-problems</code>, <code>operations/learnings</code>, <code>concepts/designated-topics</code>,
+      <code>concepts/proposals</code>) und die bewussten Referenz-Wurzeln. Der Architektur-Guard
+      <code>WikiPathCentralizationGuardTests</code> bricht den Build, sobald ein hartkodierter <code>docs/</code>-Pfad
+      weder unter <code>docs/app/</code> zeigt noch registriert ist.</dd>
+    <dt>Metadaten ab Erstellung</dt><dd>Der Page-Create-Flow und die drei Producer stempeln beim Anlegen einen
+      minimalen Klassifikations-Sidecar (<code>type</code> = Ordner-Default, <code>status=aktuell</code>,
+      <code>analyzedAt</code> = Erstelldatum, schema-konform gemergt). Neu: dezente Pulse-Warnung
+      „unklassifizierte Seite“ für Hand-Seiten ohne Klassifikation (app/ und Generiertes mit Ordner-Default
+      ausgenommen).</dd>
+    <dt>READMEs & Einschmelzen</dt><dd>Jeder der fünf Themen-Ordner bekam ein deutsches Zweck-/Abgrenzungs-README;
+      <code>README-aus-wiki.md</code> wurde als <code>start/wiki-conventions.md</code> eingeschmolzen und die Datei
+      entfernt; der Start-Index führt jetzt einen eigenen <code>app/</code>-Abschnitt samt Regel
+      („app/ = Code-Vertrag: Pfad + Format nur mit Code ändern“).</dd>
+    <dt>Status</dt><dd><span class="pill done">done</span> — Backend baut (Release-Output), Filter-Suite
+      Wiki/ProjectDocs/Pulse/Grading/Schema/Guard/Drift/Producer grün (neuer Guard inklusive); Restpfad-Suche
+      auf <code>in-app-help</code>/<code>system/schemas</code>/<code>docs/home.json</code> leer.</dd>
+    <dt>Referenzen</dt><dd><code>backend/Features/Docs/WikiProducerTargets.cs</code>,
+      <code>backend.Tests/Architecture/WikiPathCentralizationGuardTests.cs</code>,
+      <code>docs/start/wiki-conventions.md</code></dd>
+  </dl>
+</div>
+
 </main>
 </body>
 </html>

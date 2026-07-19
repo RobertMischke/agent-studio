@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/agent-taskboard/agent-taskboard/docs/system/schemas/update-run-snapshot.schema.json",
+  "$id": "https://github.com/agent-taskboard/agent-taskboard/docs/app/schemas/update-run-snapshot.schema.json",
   "title": "Update run pre/post snapshot",
   "description": "Captured by UpdateService at the start (kind=pre) and end (kind=post) of every run; written to <RunsDirectory>/<runId>/{pre,post}-snapshot.json. ADR-0031.",
   "type": "object",

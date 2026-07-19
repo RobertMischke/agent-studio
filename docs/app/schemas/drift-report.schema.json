@@ -315,7 +315,7 @@
     },
     "architectureModel": {
       "type": ["object", "null"],
-      "description": "Optional high-level architecture model used for software-to-architecture drift. Intended for a marble-style project view. Hard limit of ten elements keeps the map reviewable. The authoring contract for the source model (Markdown + frontmatter) lives in docs/system/architecture/model.md and is validated by docs/system/schemas/architecture-model.schema.json. The block here is the per-report projection: it carries scoring fields keyed by the source model's elementId.",
+      "description": "Optional high-level architecture model used for software-to-architecture drift. Intended for a marble-style project view. Hard limit of ten elements keeps the map reviewable. The authoring contract for the source model (Markdown + frontmatter) lives in docs/system/architecture/model.md and is validated by docs/app/schemas/architecture-model.schema.json. The block here is the per-report projection: it carries scoring fields keyed by the source model's elementId.",
       "additionalProperties": false,
       "required": ["modelId", "title", "elements"],
       "properties": {

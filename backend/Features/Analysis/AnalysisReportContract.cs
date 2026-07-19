@@ -204,7 +204,7 @@ public sealed record AnalysisReportFollowUpTaskSuggestion(
 /// human artifact; this JSON record is the additive app contract.
 /// </summary>
 /// <remarks>
-/// Schema: <c>docs/system/schemas/analysis-report.schema.json</c>. Storage rules,
+/// Schema: <c>docs/app/schemas/analysis-report.schema.json</c>. Storage rules,
 /// producer model, and parse-failure semantics are documented in
 /// <c>docs/system/reports/analysis-reports.md</c>.
 /// </remarks>

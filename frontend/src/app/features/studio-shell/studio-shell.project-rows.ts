@@ -13,7 +13,7 @@ export interface ExplorerLaneCounts {
  * orange In Progress / green Human Review). Each entry feeds the canonical
  * `[cacTooltip]` directive as a {@link StructuredTooltip} so the number says
  * which lane it counts and what that lane means. Prose mirrors the lane
- * concept docs (`docs/in-app-help/lane-guides/lane-{2-ready,3-progress,5-human-review}.md`).
+ * concept docs (`docs/app/help/lane-guides/lane-{2-ready,3-progress,5-human-review}.md`).
  */
 export const BOARD_LANE_COUNT_TOOLTIPS: Record<keyof ExplorerLaneCounts, StructuredTooltip> = {
   ready: {

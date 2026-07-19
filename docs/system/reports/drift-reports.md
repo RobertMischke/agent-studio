@@ -4,9 +4,9 @@ Single source of truth for the contract that turns project-level drift inspectio
 
 > **Language:** English. See [AGENTS.md](../../../AGENTS.md#documentation-language).
 >
-> **Schema home:** field-level rules live in [`docs/system/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json). The contract here is the prose; the schema is the validator.
+> **Schema home:** field-level rules live in [`docs/app/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json). The contract here is the prose; the schema is the validator.
 >
-> **Related:** the design rationale lives in [ROADMAP.md](../../../ROADMAP.md#drift-control), [docs/quality/design-principles.md](../../quality/design-principles.md#drift-is-a-scored-project-dimension), [docs/concepts/architecture-quality-layer.md](../../concepts/architecture-quality-layer.md), [docs/system/architecture/model.md](../architecture/model.md), and [docs/system/reports/analysis-reports.md](./analysis-reports.md). The neighbouring `AnalysisReport` shape (`docs/system/schemas/analysis-report.schema.json`) shares the producer model, the Markdown-plus-JSON convention, and the parse-failure semantics.
+> **Related:** the design rationale lives in [ROADMAP.md](../../../ROADMAP.md#drift-control), [docs/quality/design-principles.md](../../quality/design-principles.md#drift-is-a-scored-project-dimension), [docs/concepts/architecture-quality-layer.md](../../concepts/architecture-quality-layer.md), [docs/system/architecture/model.md](../architecture/model.md), and [docs/system/reports/analysis-reports.md](./analysis-reports.md). The neighbouring `AnalysisReport` shape (`docs/app/schemas/analysis-report.schema.json`) shares the producer model, the Markdown-plus-JSON convention, and the parse-failure semantics.
 
 ## 1. Purpose and non-goals
 
@@ -45,7 +45,7 @@ Twelve dimensions are defined. Each dimension answers one question and points at
 | `Test` | Do tests cover the areas the docs call risky? | `backend.Tests/`, `frontend/e2e/`, coverage reports, source-code maps, ADR risk callouts. |
 | `Runtime` | Does runtime behavior match the expected domain behavior and performance signals? | Structured runtime events (when product-runtime-observability lands), backend logs, supervisor advisories, performance probes. |
 | `Process` | Does how work actually flows match the documented process? | `docs/system/contracts/agent-task.md`, `docs/concepts/skills-architecture.md`, `docs/operations/git/commit-push-doctrine.md`, `AGENTS.md` workflow sections, recurring blocked reasons. |
-| `Schema` | Do published JSON schemas match the C# / TypeScript shapes that flow through the layers? | `docs/system/schemas/`, backend records, frontend models, `SchemaRoundTripTests.cs`. |
+| `Schema` | Do published JSON schemas match the C# / TypeScript shapes that flow through the layers? | `docs/app/schemas/`, backend records, frontend models, `SchemaRoundTripTests.cs`. |
 | `Token` | Does declared token budget match observed spend? | `token-aggregate.schema.json` records, project token summaries, expensive-job lists. |
 
 The vocabulary is shared with the architecture-model file's element-level fields; the relationship is many-to-many. One drift report can carry both a `dimensions[]` array (per-dimension scores) and an `architectureModel.elements[]` array (per-element scores under the Architecture dimension lens).
@@ -168,10 +168,10 @@ One report = one Markdown file + one optional JSON sidecar with the same stem.
 
 ### 6.2 JSON is the app contract
 
-- The schema is [`docs/system/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json).
+- The schema is [`docs/app/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json).
 - Required fields lock the surface the UI, the bus, and the system-review monitor read against: `schemaVersion`, `reportId`, `project`, `createdAt`, `producer`, `trigger`, `scope`, `overallScore`, `scoreBand`, `summary`, `parseStatus`, `dimensions`, `followUpTaskSuggestions`.
 - Field names are camelCase to match `JsonSerializerDefaults.Web` and the existing schema policy.
-- Enums spell PascalCase to match the C# records (consistent with [`docs/system/schemas/README.md`](../schemas/README.md)).
+- Enums spell PascalCase to match the C# records (consistent with [`docs/app/schemas/README.md`](../schemas/README.md)).
 
 ### 6.3 Parse-failure behavior
 
@@ -232,8 +232,8 @@ The Task Access Layer (ADR-0024) is in phase 1 (contract only) at the time of wr
 
 ## 9. Implementation pointers
 
-- Schema: [`docs/system/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json).
-- Schema index: [`docs/system/schemas/README.md`](../schemas/README.md).
+- Schema: [`docs/app/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json).
+- Schema index: [`docs/app/schemas/README.md`](../schemas/README.md).
 - Backend records: `AgentStudio.Drift.DriftReport`, `DriftDimension`, `DriftFinding`, `DriftScoreInputs`, `DriftArchitectureModel`, `DriftArchitectureElement`, `DriftFollowUpTaskSuggestion`.
 - Backend validator: `AgentStudio.Drift.DriftReportValidator`.
 - Disk paths: `AgentStudio.Drift.DriftReportPaths`.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/agent-taskboard/agent-taskboard/docs/system/schemas/update-run-verification.schema.json",
+  "$id": "https://github.com/agent-taskboard/agent-taskboard/docs/app/schemas/update-run-verification.schema.json",
   "title": "Update-run verification check row",
   "description": "One row per check appended to <RunsDirectory>/<runId>/verification.jsonl by the phase-6 verifier. ADR-0031.",
   "type": "object",

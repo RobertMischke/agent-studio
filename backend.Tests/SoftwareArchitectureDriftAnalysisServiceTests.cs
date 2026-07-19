@@ -390,9 +390,9 @@ public class SoftwareArchitectureDriftAnalysisServiceTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
         WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend", "Services", "Drift"));
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "schemas"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "app", "schemas"));
         File.WriteAllText(
-            Path.Combine(_repoRoot, "docs", "schemas", "drift-report.schema.json"), "{}", Encoding.UTF8);
+            Path.Combine(_repoRoot, "docs", "app", "schemas", "drift-report.schema.json"), "{}", Encoding.UTF8);
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend.Tests"));
         Directory.CreateDirectory(Path.Combine(_repoRoot, "frontend", "e2e"));
         WriteJob("6-completed", "shipped-task", "Shipped");
@@ -447,7 +447,7 @@ public class SoftwareArchitectureDriftAnalysisServiceTests : IDisposable
         Assert.Contains("backend-api", rendered);
         Assert.Contains("docs/system/architecture/decisions/adr-archive.md", rendered);
         Assert.Contains("backend/Services/Drift/", rendered);
-        Assert.Contains("docs/system/schemas/drift-report.schema.json", rendered);
+        Assert.Contains("docs/app/schemas/drift-report.schema.json", rendered);
         Assert.Contains("backend.Tests/", rendered);
         Assert.Contains("6-completed/shipped-task", rendered);
         Assert.Contains("do not modify any source file", rendered);

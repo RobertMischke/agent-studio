@@ -14,7 +14,7 @@ namespace AgentStudio.Runner;
 /// <c>{workspace}/logs/decisions/{project}.jsonl</c>; consumed by the
 /// Layer 3 review and the planned executive-summary surface.
 ///
-/// Schema lives at <c>docs/system/schemas/orchestrator-decision.schema.json</c>;
+/// Schema lives at <c>docs/app/schemas/orchestrator-decision.schema.json</c>;
 /// keep the two in sync.
 /// </summary>
 public sealed record ReviewDecisionRecord(

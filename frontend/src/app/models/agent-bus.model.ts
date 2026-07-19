@@ -1,6 +1,6 @@
 /**
  * Frontend mirror of the Agent Message Bus contract
- * (`docs/system/schemas/agent-message.schema.json`, `backend/Models/AgentBus.cs`).
+ * (`docs/app/schemas/agent-message.schema.json`, `backend/Models/AgentBus.cs`).
  * The bus is observability-only: it does not move state, never blocks the
  * runner, and is safe to read from the project Observability panel without
  * any side effects.

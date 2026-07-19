@@ -86,8 +86,10 @@ public class ProjectWikiEnhancementsTests : IDisposable
         var docsDir = Path.Combine(projectRoot, "docs");
         Directory.CreateDirectory(Path.Combine(docsDir, "01-concepts"));
         File.WriteAllText(Path.Combine(docsDir, "README.md"), "# Index\n");
-        // Wiki home configuration, not a page: must never surface as a tree node.
-        File.WriteAllText(Path.Combine(docsDir, "home.json"), "{ \"sections\": [] }");
+        // Wiki home configuration lives in the docs/app/ code-contract area, not a
+        // page: the whole app/ subtree must never surface as a tree node.
+        Directory.CreateDirectory(Path.Combine(docsDir, "app", "config"));
+        File.WriteAllText(Path.Combine(docsDir, "app", "config", "home.json"), "{ \"sections\": [] }");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md"), "# Overview\n");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.html"), "<h1>HTML page</h1>");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.metadata.json"),
@@ -163,6 +165,7 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Equal("01-concepts", tree.Root[0].Name);
         Assert.Equal("README.md", tree.Root[1].Name);
         Assert.DoesNotContain(tree.Root, n => n.Name == "home.json");
+        Assert.DoesNotContain(tree.Root, n => n.Name == "app"); // docs/app/ subtree stays hidden
 
         var folder = tree.Root[0];
         Assert.Equal(3, folder.Children.Count);

@@ -3,7 +3,7 @@ namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Validates <see cref="ProductRuntimeEvent"/> instances against the value
-/// sets in <c>docs/system/schemas/product-runtime-event.schema.json</c>. The on-disk
+/// sets in <c>docs/app/schemas/product-runtime-event.schema.json</c>. The on-disk
 /// shape is JSON; we keep enum-like fields as strings so unfamiliar levels do
 /// not crash the reader, and we check the constrained values here.
 /// </summary>

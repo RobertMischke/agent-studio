@@ -24,13 +24,22 @@ public class ProjectDocsService
     private const string SecurityStateFile = "state.json";
     private const string AdrRel = "docs/system/architecture/decisions/adr-archive.md";
     internal const string WikiRel = "docs";
-    private const string WikiHomeRel = "home.json";
+
+    // The code-contract area under docs/. Everything below docs/app/ is a
+    // machine contract (JSON schemas, in-app help bodies, wiki config) whose
+    // path and format only change alongside code - it is NOT knowledge content,
+    // so it is hidden from every reading surface (tree, folder, search, pulse,
+    // grading) exactly like a config file. Direct-path serving (schema loader,
+    // help resolver, home config) still reaches into it by explicit path.
+    internal const string WikiAppRel = "app";
+
+    private const string WikiHomeRel = "app/config/home.json";
 
     // Stored display order of sibling category folders, keyed by parent folder
-    // rel path ("" = docs root). Lives beside the other wiki metadata
-    // (home.json, companion sidecars); dot-prefixed so the tree walkers skip it,
-    // and additionally reserved via IsWikiConfigFile like home.json.
-    internal const string WikiFolderOrderRel = ".wiki-order.json";
+    // rel path ("" = docs root). Lives in the code-contract area under docs/app/
+    // (moved out of the dot-prefixed root file in the 2026-07 app/ migration);
+    // reserved via IsWikiConfigFile and hidden with the rest of docs/app/.
+    internal const string WikiFolderOrderRel = "app/config/wiki-order.json";
 
     // The wiki tree is the physical docs/ hierarchy itself - folders are nodes,
     // files are pages - so there is no virtual organisation layer to maintain.
@@ -661,6 +670,18 @@ public class ProjectDocsService
                     $"Development signal is {status.ToLowerInvariant()}.", action, doc.RelPath, status.ToLowerInvariant()));
             }
 
+            // NOTE (Welle 2 review): an "unclassified page" nudge was emitted here
+            // for every knowledge page whose sidecar carries no classification and
+            // whose folder has no default type. The born-classified stamp
+            // (WriteCreationClassification) only covers pages created *after* the
+            // 2026-07 convention, so the pre-existing corpus (161 of 375 pages in
+            // stable) is not backfilled and the panel shipped flooded with ~160
+            // low-signal nudges that buried the actionable dead-link / human-action
+            // warnings. The nudge was removed until a real backfill classifies the
+            // existing corpus; re-introducing it requires that backfill first (a
+            // blind stamp of status=aktuell/analyzedAt=today would fabricate an
+            // "analyzed" signal the grading/drift surfaces trust).
+
             foreach (Match match in (Path.GetExtension(full).Equals(".md", StringComparison.OrdinalIgnoreCase)
                          ? MarkdownLinkRegex.Matches(text)
                          : HtmlLinkRegex.Matches(text)))
@@ -844,7 +865,7 @@ public class ProjectDocsService
     /// roots landed after each page's last update, band each page Fresh / Aging /
     /// Stale, and grade the folder by its worst page. Folders without pages do
     /// not appear; ordering follows the saved wiki folder order
-    /// (<c>docs/.wiki-order.json</c>), unlisted folders behind in the tree's
+    /// (<c>docs/app/config/wiki-order.json</c>), unlisted folders behind in the tree's
     /// default order (numeric <c>NN-</c> prefix, then name). A
     /// page whose last-update timestamp is unknown (outside the git scan window)
     /// is left Unknown and excluded from the counts.
@@ -1084,6 +1105,8 @@ public class ProjectDocsService
         foreach (var sub in dir.GetDirectories())
         {
             if (sub.Name.StartsWith('.')) continue;
+            var subRel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
+            if (IsWikiAppPath(subRel)) continue; // docs/app/ is code contract, not a wiki page
             var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath, titleCache, folderOrderByParent);
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
@@ -1236,13 +1259,28 @@ public class ProjectDocsService
         || relPath.EndsWith(".report.htm", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// <c>docs/home.json</c> (curated home sections) and
-    /// <c>docs/.wiki-order.json</c> (saved category order) are wiki
-    /// configuration, not pages: hide them from every reading surface the same
-    /// way companion sidecars are hidden. Only the root-level files are reserved.
+    /// The docs/app/ code-contract subtree - JSON schemas, in-app help bodies,
+    /// and wiki config (<c>app/config/home.json</c>, <c>app/config/wiki-order.json</c>)
+    /// - is machine contract, not knowledge content. Every reading surface (tree,
+    /// folder, search, pulse, grading) skips it the same way it skips dot-prefixed
+    /// and companion files; direct-path serving still reaches it by explicit path.
+    /// </summary>
+    internal static bool IsWikiAppPath(string relPath)
+    {
+        var rel = relPath.Replace('\\', '/');
+        return rel.Equals(WikiAppRel, StringComparison.OrdinalIgnoreCase)
+            || rel.StartsWith(WikiAppRel + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Wiki configuration and code-contract paths, not pages: everything under
+    /// <c>docs/app/</c> (which includes the curated home config and the saved
+    /// category order). Hidden from every reading surface the same way companion
+    /// sidecars are hidden.
     /// </summary>
     private static bool IsWikiConfigFile(string relPath) =>
-        relPath.Equals(WikiHomeRel, StringComparison.OrdinalIgnoreCase)
+        IsWikiAppPath(relPath)
+        || relPath.Equals(WikiHomeRel, StringComparison.OrdinalIgnoreCase)
         || relPath.Equals(WikiFolderOrderRel, StringComparison.OrdinalIgnoreCase);
 
     // ---- Wiki page classification (consolidation-analysis metadata) ----
@@ -1495,7 +1533,7 @@ public class ProjectDocsService
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Reads <c>docs/.wiki-order.json</c>: the persisted display order of sibling
+    /// Reads <c>docs/app/config/wiki-order.json</c>: the persisted display order of sibling
     /// category folders, keyed by parent folder rel path ("" = docs root).
     /// Missing or malformed files degrade to an empty map (= the default
     /// prefix/name ordering), mirroring how <c>home.json</c> fails open.
@@ -1503,7 +1541,7 @@ public class ProjectDocsService
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> LoadWikiFolderOrder(string wikiDir)
     {
         var empty = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
-        var path = Path.Combine(wikiDir, WikiFolderOrderRel);
+        var path = Path.Combine(wikiDir, WikiFolderOrderRel.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(path)) return empty;
         try
         {
@@ -1550,7 +1588,7 @@ public class ProjectDocsService
     /// <summary>
     /// Persists the display order of the category folders directly under
     /// <paramref name="parentRelPath"/> ("" = the docs root) into
-    /// <c>docs/.wiki-order.json</c>, beside the other wiki metadata. Orders for
+    /// <c>docs/app/config/wiki-order.json</c>, beside the other wiki metadata. Orders for
     /// other parents are preserved. The endpoint commits the file like every
     /// other wiki mutation; folders missing from the stored list keep sorting
     /// behind the listed ones in the default prefix/name order. Returns the
@@ -1601,7 +1639,10 @@ public class ProjectDocsService
                 .ToDictionary(kv => kv.Key, kv => kv.Value),
         };
 
-        var path = Path.Combine(wikiDir, WikiFolderOrderRel);
+        var path = Path.Combine(wikiDir, WikiFolderOrderRel.Replace('/', Path.DirectorySeparatorChar));
+        // The order file now lives under docs/app/config/; ensure that
+        // code-contract folder exists before the first write in a fresh repo.
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
         // The docs signature covers the order file, but timestamp resolution can
         // hide a same-tick rewrite - drop the memo so the next tree read rebuilds.
@@ -1650,7 +1691,18 @@ public class ProjectDocsService
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var seed = content ?? DefaultPageSeed(relPath, ext);
         File.WriteAllText(full, seed);
-        return WikiMutationResult.Ok(full);
+
+        // Metadata convention (2026-07): stamp a minimal classification sidecar at
+        // creation so a hand-authored page is born classified (type = folder
+        // default, status = aktuell, analyzedAt = today) rather than surfacing as
+        // an "unclassified page" warning on the pulse dashboard.
+        var wikiDir = Path.GetFullPath(Path.Combine(ResolveBaseDir(projectName)!, WikiRel));
+        var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
+        var title = StripOrderPrefix(Path.GetFileNameWithoutExtension(relPath));
+        var companion = new WikiCompanionStore().WriteCreationClassification(
+            wikiDir, docsRel, title, seed, DefaultClassificationType(docsRel), DateTime.UtcNow);
+
+        return WikiMutationResult.Ok(full, new[] { companion.CompanionAbsPath });
     }
 
     private static string DefaultPageSeed(string relPath, string ext)
@@ -1884,6 +1936,7 @@ public class ProjectDocsService
             if (!full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase)) return null;
         }
         if (!Directory.Exists(full)) return null;
+        if (IsWikiAppPath(rel)) return null; // docs/app/ is code contract, never a wiki folder
 
         var dir = new DirectoryInfo(full);
         var children = new List<WikiFolderChild>();
@@ -1891,8 +1944,9 @@ public class ProjectDocsService
         foreach (var sub in dir.GetDirectories())
         {
             if (sub.Name.StartsWith('.')) continue;
-            if (!HasWikiPageDescendant(sub)) continue; // prune empty folders, like the tree
             var subRel = Path.GetRelativePath(root, sub.FullName).Replace('\\', '/');
+            if (IsWikiAppPath(subRel)) continue; // hide docs/app/ from the folder overview
+            if (!HasWikiPageDescendant(sub)) continue; // prune empty folders, like the tree
             children.Add(new WikiFolderChild(
                 Name: sub.Name,
                 RelPath: subRel,
@@ -2115,10 +2169,10 @@ public class ProjectDocsService
         return collapsed.Length <= 240 ? collapsed : collapsed[..240].TrimEnd();
     }
 
-    // -------- Wiki home (curated landing sections from docs/home.json) --------
+    // -------- Wiki home (curated landing sections from docs/app/config/home.json) --------
 
     /// <summary>
-    /// The curated wiki home sections read from <c>docs/home.json</c>.
+    /// The curated wiki home sections read from <c>docs/app/config/home.json</c>.
     /// Every configured link is kept and annotated with an <c>exists</c> flag
     /// (checked against the docs tree with the standard traversal guard) so the
     /// UI can render a dead link visibly instead of silently dropping it. A
@@ -2370,9 +2424,10 @@ public record WikiRevisionResult(WikiRevisionContent Revision, string ETag);
 public record WikiRevisionContent(string RelPath, string Sha, string Content);
 
 /// <summary>Outcome of a wiki filesystem mutation (create/move/delete).</summary>
-public record WikiMutationResult(bool Success, string? FullPath, string? Error)
+public record WikiMutationResult(bool Success, string? FullPath, string? Error, IReadOnlyList<string>? ExtraPaths = null)
 {
     public static WikiMutationResult Ok(string fullPath) => new(true, fullPath, null);
+    public static WikiMutationResult Ok(string fullPath, IReadOnlyList<string> extraPaths) => new(true, fullPath, null, extraPaths);
     public static WikiMutationResult Fail(string error) => new(false, null, error);
 }
 
@@ -2566,7 +2621,7 @@ public record WikiFolderChild(
 
 // ---- Wiki home (curated landing sections) ----
 
-/// <summary>Curated wiki home payload backed by <c>docs/home.json</c>.</summary>
+/// <summary>Curated wiki home payload backed by <c>docs/app/config/home.json</c>.</summary>
 public record WikiHomeView(List<WikiHomeSection> Sections);
 public record WikiHomeSection(string Title, List<WikiHomeLink> Links);
 

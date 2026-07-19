@@ -435,7 +435,7 @@ public sealed class AdrCodeDriftAnalysisService
 
     private static IReadOnlyList<DriftRef> BuildSchemaList(string repoRoot)
     {
-        var schemaDir = Path.Combine(repoRoot, "docs", "schemas");
+        var schemaDir = Path.Combine(repoRoot, "docs", "app", "schemas");
         if (!Directory.Exists(schemaDir)) return Array.Empty<DriftRef>();
 
         var entries = new List<DriftRef>();
@@ -443,7 +443,7 @@ public sealed class AdrCodeDriftAnalysisService
         {
             var name = Path.GetFileName(file);
             entries.Add(new DriftRef(
-                Path: $"docs/system/schemas/{name}",
+                Path: $"docs/app/schemas/{name}",
                 Label: name));
         }
         return entries;

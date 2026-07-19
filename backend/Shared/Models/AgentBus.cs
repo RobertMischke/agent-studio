@@ -4,7 +4,7 @@ namespace AgentStudio.Shared;
 
 /// <summary>
 /// One record on the Agent Message Bus. Mirrors
-/// <c>docs/system/schemas/agent-message.schema.json</c>. Append-only on disk, immutable
+/// <c>docs/app/schemas/agent-message.schema.json</c>. Append-only on disk, immutable
 /// once written. The bus is observability and reference; it does not move jobs.
 /// </summary>
 /// <remarks>

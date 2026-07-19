@@ -4,9 +4,9 @@ Single source of truth for the **authoring** contract of a project's compact hig
 
 > **Language:** English. See [AGENTS.md](../../../AGENTS.md#documentation-language).
 >
-> **Schema home:** field-level rules live in [`docs/system/schemas/architecture-model.schema.json`](../schemas/architecture-model.schema.json). The contract here is the prose; the schema is the validator.
+> **Schema home:** field-level rules live in [`docs/app/schemas/architecture-model.schema.json`](../schemas/architecture-model.schema.json). The contract here is the prose; the schema is the validator.
 >
-> **Related:** [ROADMAP.md](../../../ROADMAP.md#drift-control), [docs/quality/design-principles.md](../../quality/design-principles.md#drift-is-a-scored-project-dimension), and the embedded `architectureModel` block in [`docs/system/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json).
+> **Related:** [ROADMAP.md](../../../ROADMAP.md#drift-control), [docs/quality/design-principles.md](../../quality/design-principles.md#drift-is-a-scored-project-dimension), and the embedded `architectureModel` block in [`docs/app/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json).
 
 ## 1. Purpose and non-goals
 
@@ -32,7 +32,7 @@ Non-goals (do not add, even if asked offhandedly):
 
 One model = one Markdown file with YAML frontmatter plus a free-form body.
 
-- The **frontmatter** is the structured authoring block. It validates against [`docs/system/schemas/architecture-model.schema.json`](../schemas/architecture-model.schema.json). Drift analyzers read this block.
+- The **frontmatter** is the structured authoring block. It validates against [`docs/app/schemas/architecture-model.schema.json`](../schemas/architecture-model.schema.json). Drift analyzers read this block.
 - The **body** below the frontmatter is human prose. ASCII diagrams, narrative per element, and rationale go here. Analyzers may surface the body verbatim in the marble drill-down, but they do not parse it.
 
 The schema is the validator. The prose below explains the *why* of each field; field-level rules (types, enums, lengths, patterns) are in the schema.
@@ -158,8 +158,8 @@ elements:
     sourceRefs:
       - backend/AGENTS.md
     relevantSchemas:
-      - docs/system/schemas/task-find-result.schema.json
-      - docs/system/schemas/task-mutation-request.schema.json
+      - docs/app/schemas/task-find-result.schema.json
+      - docs/app/schemas/task-mutation-request.schema.json
   - elementId: task-access
     label: Task Access Layer
     expectedRole: Single owner of on-disk job state. Find / list / mutate / transition / subscribe.
@@ -176,7 +176,7 @@ elements:
     relevantTests:
       - backend.Tests/InMemoryStoreTests.cs
     relevantSchemas:
-      - docs/system/schemas/task-find-result.schema.json
+      - docs/app/schemas/task-find-result.schema.json
   # ... up to ten elements
 schemaVersion: 1
 ---
@@ -229,7 +229,7 @@ Warnings are reported as drift findings on the next analyzer run; they do not bl
 
 ## 8. Implementation status and parser ownership
 
-This document and [`docs/system/schemas/architecture-model.schema.json`](../schemas/architecture-model.schema.json) are the contract slice. They are intentionally shipped without a backend parser, validator, or in-code projection. Architecture models describe the *watched project's* software and live with project evidence (section 3); the agent-taskboard backend never reads them at runtime today. The matching record type and round-trip test pattern used for other schemas (see [`docs/system/schemas/README.md`](../schemas/README.md), "Validation") do not apply here because there is no in-process consumer yet.
+This document and [`docs/app/schemas/architecture-model.schema.json`](../schemas/architecture-model.schema.json) are the contract slice. They are intentionally shipped without a backend parser, validator, or in-code projection. Architecture models describe the *watched project's* software and live with project evidence (section 3); the agent-taskboard backend never reads them at runtime today. The matching record type and round-trip test pattern used for other schemas (see [`docs/app/schemas/README.md`](../schemas/README.md), "Validation") do not apply here because there is no in-process consumer yet.
 
 Parser, validator, and per-element scoring code are owned by the first consumer: the **Software / Architecture Drift** action (queued at `agent-taskboard/2-ready/software-architecture-drift-analysis-action/`). That task's "Read: architecture model document" deliverable covers:
 

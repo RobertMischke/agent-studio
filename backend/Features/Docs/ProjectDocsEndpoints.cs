@@ -165,7 +165,7 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(res);
         });
 
-        // Curated wiki home sections from docs/home.json. Missing or
+        // Curated wiki home sections from docs/app/config/home.json. Missing or
         // malformed file degrades to empty sections; configured links are kept
         // and annotated with an exists flag instead of being dropped. Sits
         // before the /files catch-all for path precedence.
@@ -257,7 +257,7 @@ public static class ProjectDocsEndpoints
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
             var result = docs.CreateWikiPage(projectName, rel, body.Content);
             if (!result.Success) return Results.BadRequest(new { error = result.Error });
-            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create {rel}");
+            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create {rel}", result.ExtraPaths);
         });
 
         app.MapPost("/api/projects/{projectName}/wiki/folders", (string projectName, WikiCreateFolderRequest body, ProjectDocsService docs, GitService git) =>
@@ -292,7 +292,7 @@ public static class ProjectDocsEndpoints
 
         // Persist the sibling display order of category folders (consumed by the
         // wiki tree and the folder overview). Stored beside the other wiki
-        // metadata in docs/.wiki-order.json and committed like every other wiki
+        // metadata in docs/app/config/wiki-order.json and committed like every other wiki
         // mutation; folders missing from the list sort behind alphabetically.
         app.MapPut("/api/projects/{projectName}/wiki/folder-order", (string projectName, WikiFolderOrderRequest body, ProjectDocsService docs, GitService git) =>
         {
@@ -373,14 +373,19 @@ public static class ProjectDocsEndpoints
     /// the git outcome to an HTTP result. Resolving the repo root or a failed
     /// commit both surface as a 400 so the UI can show the reason.
     /// </summary>
-    private static IResult CommitWikiChange(GitService git, string projectName, string fullPath, string message)
+    private static IResult CommitWikiChange(
+        GitService git, string projectName, string fullPath, string message, IReadOnlyList<string>? extraPaths = null)
     {
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
             return Results.BadRequest(new { error = "Repository not found" });
 
         var repoRel = Path.GetRelativePath(repoRoot, fullPath).Replace('\\', '/');
-        var commit = git.CommitPaths(repoRoot, message, new[] { repoRel });
+        var paths = new List<string> { repoRel };
+        if (extraPaths != null)
+            foreach (var extra in extraPaths)
+                paths.Add(Path.GetRelativePath(repoRoot, extra).Replace('\\', '/'));
+        var commit = git.CommitPaths(repoRoot, message, paths);
         return commit.Success
             ? Results.Ok(new { relPath = repoRel, sha = commit.Sha })
             : Results.BadRequest(new { error = commit.Error });

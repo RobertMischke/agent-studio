@@ -77,7 +77,7 @@ public sealed record RollbackResponse(string RunId, string Phase, string Message
 
 /// <summary>
 /// Snapshot of state captured before phase 2 (pre) and again at phase 8
-/// (post). Schema: docs/system/schemas/update-run-snapshot.schema.json.
+/// (post). Schema: docs/app/schemas/update-run-snapshot.schema.json.
 /// </summary>
 public sealed record UpdateRunSnapshot(
     string Kind,                       // "pre" | "post"

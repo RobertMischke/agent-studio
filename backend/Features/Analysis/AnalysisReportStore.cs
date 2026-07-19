@@ -13,7 +13,7 @@ namespace AgentStudio.Analysis;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Schema: <c>docs/system/schemas/analysis-report.schema.json</c>. The contract,
+/// Schema: <c>docs/app/schemas/analysis-report.schema.json</c>. The contract,
 /// producer model, and parse-failure semantics are documented in
 /// <c>docs/system/reports/analysis-reports.md</c>.
 /// </para>

@@ -59,7 +59,7 @@
     "suspected": true,
     "groupSize": 2,
     "similarTo": [
-      "docs/system/schemas/drift-report.schema.json"
+      "docs/app/schemas/drift-report.schema.json"
     ]
   },
   "findings": [
@@ -105,7 +105,7 @@
       "axis": "duplicate",
       "summary": "This document has possible duplicate ownership candidates.",
       "rationale": [
-        "docs/system/schemas/drift-report.schema.json"
+        "docs/app/schemas/drift-report.schema.json"
       ],
       "evidence": []
     }

@@ -3,7 +3,7 @@ namespace AgentStudio.Bus;
 
 /// <summary>
 /// Validates <see cref="AgentMessage"/> instances against the value sets in
-/// <c>docs/system/schemas/agent-message.schema.json</c>. The on-disk shape is JSON; we
+/// <c>docs/app/schemas/agent-message.schema.json</c>. The on-disk shape is JSON; we
 /// keep enum-like fields as strings so the schema's mixed casing survives a
 /// round-trip, and check the values here in one place.
 /// </summary>

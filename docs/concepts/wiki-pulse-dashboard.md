@@ -61,7 +61,7 @@ since each knowledge page was last refreshed. For every page under a folder:
 
 The **folder grade is its worst page** and the bar reports the worst page's
 commit count. Folders without pages do not appear. Group order follows the saved
-`docs/.wiki-order.json` root order, unlisted folders behind in the tree's
+`docs/app/config/wiki-order.json` root order, unlisted folders behind in the tree's
 default order (numeric `NN-` prefix, then name). The
 overall grade is the worst folder. The grade bar sits at the top of Pulse.
 

@@ -4,7 +4,7 @@ Single source of truth for the contract that lets every agent, supervisor, orche
 
 > **Language:** English. See [AGENTS.md](../../../../AGENTS.md#documentation-language).
 >
-> **Schema home:** all field-level rules live next to this doc under [`docs/system/schemas/`](../../schemas/README.md). The contract here is the prose; the schemas are the validator.
+> **Schema home:** all field-level rules live next to this doc under [`docs/app/schemas/`](../../schemas/README.md). The contract here is the prose; the schemas are the validator.
 
 ## 1. Purpose and non-goals
 

@@ -34,7 +34,7 @@ folders are pruned from the navigation tree.
 Siblings are sorted folders first, then files. An optional leading numeric
 prefix such as `01-`, `01_`, or `01.` controls sort order and is hidden from the
 display title. Without a prefix, items sort by display title. A saved category
-drag-order (`docs/.wiki-order.json`) overrides the folder order per sibling
+drag-order (`docs/app/config/wiki-order.json`) overrides the folder order per sibling
 group; unlisted folders sort behind in the default order.
 
 There is no pinned node and no immutable node: every folder and page follows
@@ -53,7 +53,7 @@ The wiki Pulse drift bar grades the **real top-level `docs/` folders**: every
 top-level folder that holds at least one page is a drift group (first path
 segment = group; the group title is the folder name without its order prefix).
 Folders without pages do not appear; group order follows the saved
-`docs/.wiki-order.json` root order, unlisted folders behind in the tree's
+`docs/app/config/wiki-order.json` root order, unlisted folders behind in the tree's
 default order (numeric `NN-` prefix, then name). Pages
 directly at the docs root belong to no group. The Pulse change-feed area badge
 uses the same top-folder mapping.

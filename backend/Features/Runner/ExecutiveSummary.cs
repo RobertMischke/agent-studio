@@ -5,7 +5,7 @@ namespace AgentStudio.Runner;
 /// <summary>
 /// Workspace-level executive summary returned by
 /// <c>GET /api/workspace/summary</c>. Mirrors
-/// <c>docs/system/schemas/executive-summary.schema.json</c>.
+/// <c>docs/app/schemas/executive-summary.schema.json</c>.
 /// </summary>
 public sealed record ExecutiveSummary(
     [property: JsonPropertyName("windowStart")] DateTime WindowStart,

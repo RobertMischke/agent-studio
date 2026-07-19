@@ -202,7 +202,7 @@ advisory radar that catches patterns the narrow injection regex would miss.
   the aggregator delegates to `TokenPricing` only for the `Dollars` field.
 - **Bus:** [`docs/system/architecture/bus/agent-message-bus.md`](../system/architecture/bus/agent-message-bus.md) describes the
   channel that is now the single source of truth.
-- **Schemas:** `docs/system/schemas/token-aggregate.schema.json`,
+- **Schemas:** `docs/app/schemas/token-aggregate.schema.json`,
   `token-aggregate-by-client.schema.json`, `token-timeline-bucket.schema.json`
   pin the wire shapes.
 - **Frontend surfaces that consume the endpoints:**
