@@ -23,7 +23,7 @@
 <body>
 <div class="wrap">
   <h1>Process Termination &amp; Abort Scenarios — Test Suite</h1>
-  <p class="sub">Status: maintained living page (seeded 2026-06-23 overnight). The single re-findable specification of <strong>what must happen when a coding run is killed, crashes, or aborts</strong> — for both the <strong>Claude Code</strong> and <strong>Codex</strong> CLIs — and whether the user can <strong>see</strong> what happened. Each scenario is a repeatable test case. This is the companion spec to <a href="runner-stability-incidents.html">Runner Stability — Incidents, Invariants &amp; Goal</a>.</p>
+  <p class="sub">Status: maintained living page (seeded 2026-06-23 overnight). The single re-findable specification of <strong>what must happen when a coding run is killed, crashes, or aborts</strong> — for both the <strong>Claude Code</strong> and <strong>Codex</strong> CLIs — and whether the user can <strong>see</strong> what happened. Each scenario is a repeatable test case. This is the companion spec to the <a href="../workbenches/haertung-verteilte-ausfuehrung/historie.html">hardening chronicle (incidents, invariants &amp; sessions)</a>.</p>
 
   <div class="box">
     <strong>Prime directive.</strong> No matter how a run ends, the task must reach a <em>terminal lane</em> with an <em>honest, visible</em> reason. Nothing silently strands in <code>3-progress</code>; nothing silently pauses. "Visible" means the feed/orchestrator-log carries the reason and the card lands in a lane a human can act on. The orchestrator's job is to <em>keep the pipeline moving</em> — recover automatically where it can, escalate honestly where it cannot.
@@ -171,7 +171,7 @@
     <li><strong>Integration kill-test harness.</strong> A deterministic ProjectRunner test that drives a fake CLI to fire <code>OnFinished</code> with each abort shape (exit&lt;0, exit=1 no-output, exit=1 with-output) and asserts the resulting lane — end-to-end, not just the pure classifier.</li>
     <li><strong>CLI-unavailable loud surface.</strong> A missing CLI must HALT loudly (modal + escalation), never pause silently (AGT-1775).</li>
   </ul>
-  <p class="small">Related: <a href="runner-stability-incidents.html">runner-stability-incidents.html</a> (the incident log + invariants), <a href="orchestrator-drive-to-conclusion.html">orchestrator-drive-to-conclusion.html</a> (the routing model), <a href="orchestrator-supervision-loop.html">orchestrator-supervision-loop.html</a> (the active loop that should detect &amp; recover these).</p>
+  <p class="small">Related: <a href="../workbenches/haertung-verteilte-ausfuehrung/historie.html">hardening chronicle</a> (the incident log + invariants), <a href="orchestrator-drive-to-conclusion.html">orchestrator-drive-to-conclusion.html</a> (the routing model), <a href="orchestrator-supervision-loop.html">orchestrator-supervision-loop.html</a> (the active loop that should detect &amp; recover these).</p>
 </div>
 </body>
 </html>

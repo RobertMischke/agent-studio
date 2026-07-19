@@ -358,7 +358,7 @@ access, reduced motion (R5). The page never centers itself in a narrow column
 | Object | Primary question | Owns | Relationship to deployment |
 |---|---|---|---|
 | Publishing workflows | Is something publishable, and ship it? | Package + workflow-published site target derivation + guarded release actions (PUB-1/2). | The release template is a launcher over it; host/SSH sites are deployment's, workflow/Pages sites stay publishing's. |
-| [Project URLs / iframe](project-relationship-model.md) | Where does the running result live? | Configured per-project URLs and previews (AGT-2095). | A deploy target may point at a Project URL to preview the deployed result. |
+| [Project URLs / iframe](distributed-agent-studio-target-architecture.md) | Where does the running result live? | Configured per-project URLs and previews (AGT-2095). | A deploy target may point at a Project URL to preview the deployed result. |
 | Workbenches | What should we see and decide? | Repository HTML experiments + decision-to-task (AGT-2084). | A deploy prompt is a decision that spawns a run, not an experiment. |
 | Remote Hosts onboarding | Provision a runner host. | Visible-CLI-task provisioning over SSH (AGT-2094). | Same CLI-task substrate and same remote-command pattern as a Caddy deploy. |
 | CLI-task substrate | Run and see one command. | Lightweight visible CLI tasks (AGT-2093). | The execution layer for every deploy run. |

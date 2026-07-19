@@ -7,8 +7,8 @@
 > product-thesis framing is superseded, and this document must be rewritten
 > with a real threat model (auth on the central URL, SSH-provisioned runner
 > hosts, per-runner identities) **before** any port is exposed beyond SSH.
-> Plan of record: [remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
-> (phase 2 gates on it, see D4).
+> Plan of record: [concepts/distributed-agent-studio-target-architecture.md](../../concepts/distributed-agent-studio-target-architecture.md)
+> (the central-URL auth boundary and runner split gate the remote phases).
 >
 > **Target clarification (2026-07-13).** The required human login, Runner
 > service identity, HTTPS boundary, audit, and management model is now defined

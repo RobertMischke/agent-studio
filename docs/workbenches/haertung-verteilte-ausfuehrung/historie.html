@@ -324,9 +324,28 @@
       Überholt-Banner + Sidecar <code>status=ueberholt</code>; Einstiegs-Kuration übernimmt die
       kuratierte Startseite (<code>home.json</code>-Seeds der Konsolidierungsanalyse).</dd>
     <dt>Status</dt><dd><span class="pill done">done</span> — Backend-/Frontend-Umbau umgesetzt, Suiten grün.</dd>
-    <dt>Referenzen</dt><dd><code>docs/concepts/engineering-workstream.md</code> (Historie),
-      <code>docs/contracts/wiki-tree.md</code> (Ordner-Drift + human-action-Konvention),
+    <dt>Referenzen</dt><dd><code>docs/contracts/wiki-tree.md</code> (Ordner-Drift + human-action-Konvention),
       <code>docs/konsolidierung-analyse-2026-07-18.md</code> (Kurations-Seeds)</dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Überholt-klassifizierte Wiki-Seiten gelöscht</h3><span class="date">19.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>16 Seiten trugen das Sidecar <code>status=ueberholt</code> (18.07. gestempelt, plus
+      <code>concepts/engineering-workstream.md</code> vom 19.07.). Als gebannerte Altlasten verwässerten sie
+      Suche und Einstieg, obwohl ihr Inhalt längst in Nachfolgeseiten aufgegangen war.</dd>
+    <dt>Maßnahme</dt><dd>Alle 16 Seiten samt Companions (<code>.meta.json</code>) und dem pfadgebundenen
+      Drift-Sidecar (<code>.drift/concepts-mockups-remote-hosts-ux-html.md</code> + Meta) via
+      <code>git rm</code> entfernt (34 Dateien). Aktive Referenzen auf die jeweiligen <code>supersededBy</code>-Nachfolger
+      umgebogen, rein historische Erwähnungen zu Plain-Text de-linkt; <code>home.json</code>,
+      <code>docs/README.md</code> und die HTML-Report-Einstiegstabelle bereinigt. Sammelort der drei
+      Runner-Vorfallsseiten (<code>runner-stability-incidents</code>, <code>overnight-2026-06-23</code>,
+      <code>claude-termination-investigation</code>) ist diese Chronik.</dd>
+    <dt>Status</dt><dd><span class="pill done">done</span> — WikiHome-/FolderView-/Search-/Pulse-Suiten grün,
+      keine aktiven Links mehr auf gelöschte Pfade.</dd>
+    <dt>Referenzen</dt><dd><code>docs/konsolidierung-analyse-2026-07-18.md</code> (Klassifikation &amp; Nachfolger),
+      <code>docs/contracts/wiki-tree.md</code> (Lösch-Regel: jede Seite ist löschbar)</dd>
   </dl>
 </div>
 

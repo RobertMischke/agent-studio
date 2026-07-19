@@ -323,9 +323,9 @@ binding. Multi-repository tasks require an explicit run-plan contract and are
 not inferred from workspace membership.
 
 This supersedes the strict `Project 1 -> 1 Git repository` assumption in the
-current discovery version of
-[Project Relationship Model And Branch-Aware Wiki](project-relationship-model.md).
-The branch and provenance rules remain valuable; only repository cardinality
+earlier Project Relationship Model / Branch-Aware Wiki concept (since retired;
+this page absorbed it). The branch and provenance rules remain valuable; only
+repository cardinality
 and project identity need revision.
 
 ## 10. Code and release organization

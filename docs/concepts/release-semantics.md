@@ -1,8 +1,7 @@
 # Release semantics: integration, acceptance, release, and stable freeze
 
 Status: decided model, 2026-07-13. This page supersedes the release assumptions
-in the older draft
-[`git-branching-integration-zielbild.md`](git-branching-integration-zielbild.md).
+in the older `git-branching-integration-zielbild.md` draft (since retired).
 
 ## Decision
 

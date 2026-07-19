@@ -6,7 +6,7 @@ Single source of truth for the contract that turns project-level drift inspectio
 >
 > **Schema home:** field-level rules live in [`docs/schemas/drift-report.schema.json`](../schemas/drift-report.schema.json). The contract here is the prose; the schema is the validator.
 >
-> **Related:** the design rationale lives in [ROADMAP.md](../../ROADMAP.md#drift-control), [docs/product/design-principles.md](../product/design-principles.md#drift-is-a-scored-project-dimension), [docs/mockups/quality-system/](../mockups/quality-system/README.md), [docs/architecture/model.md](../architecture/model.md), and [docs/reports/analysis-reports.md](./analysis-reports.md). The neighbouring `AnalysisReport` shape (`docs/schemas/analysis-report.schema.json`) shares the producer model, the Markdown-plus-JSON convention, and the parse-failure semantics.
+> **Related:** the design rationale lives in [ROADMAP.md](../../ROADMAP.md#drift-control), [docs/product/design-principles.md](../product/design-principles.md#drift-is-a-scored-project-dimension), [docs/concepts/architecture-quality-layer.md](../concepts/architecture-quality-layer.md), [docs/architecture/model.md](../architecture/model.md), and [docs/reports/analysis-reports.md](./analysis-reports.md). The neighbouring `AnalysisReport` shape (`docs/schemas/analysis-report.schema.json`) shares the producer model, the Markdown-plus-JSON convention, and the parse-failure semantics.
 
 ## 1. Purpose and non-goals
 

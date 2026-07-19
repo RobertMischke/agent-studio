@@ -4,7 +4,7 @@ Date: 2026-06-08
 Job: ASS-880  
 Phase: 1 only, research and recommendation. No production UI code changed.
 
-This document refreshes the earlier research in [project-chat-progress-indicator-2026-05-08.md](project-chat-progress-indicator-2026-05-08.md) against the current code and adds local UI measurements from stable. The two Human Review open items are handled explicitly:
+This document refreshes the earlier `project-chat-progress-indicator-2026-05-08.md` research (since retired) against the current code and adds local UI measurements from stable. The two Human Review open items are handled explicitly:
 
 - Competitor screenshots and T0/T1/T2/T3 captures remain out of scope for this automated run because Copilot Chat, Claude Code VS Code, Cursor, Codex IDE surfaces, and ChatGPT Web are interactive, account-bound GUI sessions. A human-execute follow-up is recommended below instead of pretending public docs are empirical observation.
 - Streaming backend work is still a separate follow-up. The current backend path is a blocking POST and cannot produce a true first-token or tool-use event without a transport/runtime change.

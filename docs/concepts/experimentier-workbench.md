@@ -174,7 +174,7 @@ one Workbench request for every registered project.
 
 Selecting an item opens a Workbench tab and preserves project, path, viewed
 branch, and revision in the header. This uses the shared Branch Context Control
-from the [project relationship model](project-relationship-model.md). The list
+from the [Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md). The list
 and viewer must never imply that content from one branch represents another.
 When the descriptor or entrypoint has uncommitted working-tree changes, the
 viewer says so explicitly and withholds the HEAD revision instead of attaching

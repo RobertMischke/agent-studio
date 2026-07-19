@@ -56,7 +56,6 @@ Use this page as the first stop when you need the right document quickly.
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](concepts/orchestrator-in-app.md) |
-| Project relationship model and branch-aware Wiki checkout | [concepts/project-relationship-model.md](concepts/project-relationship-model.md) |
 | Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](concepts/wiki-pulse-dashboard.md) |
 | Wiki grading run (global LLM grade per page; trigger + critical pages; GRADE-1) | [concepts/wiki-grading-run.md](concepts/wiki-grading-run.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](concepts/run-liveness-and-slot-semantics.md) |
@@ -99,10 +98,8 @@ Use this page as the first stop when you need the right document quickly.
 | Runtime prompt usage audit | [concepts/runtime-prompt-usage-audit.html](concepts/runtime-prompt-usage-audit.html) |
 | Admin CLI onboarding | [concepts/admin-cli-onboarding.html](concepts/admin-cli-onboarding.html) |
 | Orchestrator supervision loop | [concepts/orchestrator-supervision-loop.html](concepts/orchestrator-supervision-loop.html) |
-| Runner stability: incidents, invariants & goal | [concepts/runner-stability-incidents.html](concepts/runner-stability-incidents.html) |
+| Runner stability & incident chronicle (incidents, invariants, sessions; supersedes the retired runner-stability / overnight / claude-termination pages) | [workbenches/haertung-verteilte-ausfuehrung/historie.html](workbenches/haertung-verteilte-ausfuehrung/historie.html) |
 | Process termination & abort scenarios (test suite) | [concepts/process-termination-scenarios.html](concepts/process-termination-scenarios.html) |
-| Overnight session summary 2026-06-23 (Zwischenstand) | [concepts/overnight-2026-06-23-summary.html](concepts/overnight-2026-06-23-summary.html) |
-| claude.exe mid-run termination — live investigation | [concepts/claude-termination-investigation.html](concepts/claude-termination-investigation.html) |
 | Wiki consolidation analysis 2026-07-18 (inventory, redundancy clusters, cleanup plan) | [konsolidierung-analyse-2026-07-18.md](konsolidierung-analyse-2026-07-18.md) |
 
 ## Organization Rules

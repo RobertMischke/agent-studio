@@ -11,7 +11,7 @@ pipeline view.
 
 - [docs/architecture/decisions/proposed/adr-0051-task-processing-pipeline.md](../architecture/decisions/proposed/adr-0051-task-processing-pipeline.md)
   is the concept ADR for CI/CD-style task pipelines.
-- [docs/concepts/task-execution-and-log-architecture.md](../concepts/task-execution-and-log-architecture.md)
+- [docs/concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md)
   covers the Server/Runner split, stream logs, leases, and shared state.
 - [Runner provenance, host handoff, and continuation](../concepts/completion-review-and-remote-runner-stability.html#provenance)
   defines how a pipeline cycle, agent run, execution attempt, and step execution

@@ -40,9 +40,9 @@ group; unlisted folders sort behind in the default order.
 There is no pinned node and no immutable node: every folder and page follows
 the same sort, rename, move, and delete rules. (The former Engineering
 Workstream frame — a pinned `docs/engineering-workstream/` root with locked
-folders and shells — was retired 2026-07-19; see
-[concepts/engineering-workstream.md](../concepts/engineering-workstream.md) for
-the historical record.)
+folders and shells — was retired 2026-07-19; see the hardening chronicle
+[workbenches/haertung-verteilte-ausfuehrung/historie.html](../workbenches/haertung-verteilte-ausfuehrung/historie.html)
+for the historical record.)
 
 The display title for a document is its first H1 when present; otherwise it is
 the file name without extension and without the optional order prefix.
