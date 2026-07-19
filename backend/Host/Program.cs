@@ -473,6 +473,21 @@ builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>();
 builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactCommitService>();
+// Transition-Committer (WorkspaceEvidence): every successful lane transition
+// enqueues an evidence-commit wish (TaskStateMachine.EnqueueEvidence); the
+// worker debounces and commits the touched projects/<name> data paths per
+// workspace repo off the request path, plus a one-shot boot catch-up. Reuses
+// WorkspaceArtifactCommitService's git plumbing and (when Push=true) the
+// existing WorkspaceArtifactPushQueue.
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceEvidenceQueue>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceEvidenceBatcher>(sp =>
+    new AgentStudio.Pipeline.WorkspaceEvidenceBatcher(
+        sp.GetRequiredService<AgentStudio.Pipeline.WorkspaceArtifactCommitService>(),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Pipeline.WorkspaceEvidence"),
+        sp.GetService<TimeProvider>(),
+        sp.GetService<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>()));
+builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();
