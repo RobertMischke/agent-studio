@@ -3,7 +3,7 @@
 Status: operator-vision concept, 2026-07-13. This document is the umbrella
 contract for the read-only Project Graph slice (AGT-2127) and the mapped
 Style-Guide slice (AGT-2128). The accompanying
-[interactive Workbench](../workbenches/architecture-quality-layer/index.html)
+[interactive Workbench](../quality/architecture-quality-layer/index.html)
 shows the four Project Hub views with illustrative contract data.
 
 The Workbench is the umbrella vision, not a claim that all four views land in
@@ -40,9 +40,9 @@ owners. Combining the UI must not collapse those owners into one mutable model.
 | Question | Durable truth | Projection in Project Hub |
 |---|---|---|
 | What exists now? | Repository manifests, solution/project files, workflow files, and source paths at a Git revision. | Generated Project Map snapshot and Markdown map. |
-| What should the high-level architecture be? | The authored, at-most-ten-element [Architecture Model](../architecture/model.md), ADRs, and domain documents. | Intent links and future drift comparison beside discovered components. |
+| What should the high-level architecture be? | The authored, at-most-ten-element [Architecture Model](../system/architecture/model.md), ADRs, and domain documents. | Intent links and future drift comparison beside discovered components. |
 | Which practices apply? | Versioned guide pages with structured applicability metadata. | Applicable guide list and bounded prompt manifest. |
-| Which inspections ran? | Existing [Analysis Reports](../reports/analysis-reports.md), QA/performance artifacts, and registered run descriptors. | Dated run inventory with status, revision, producer, and artifact links. |
+| Which inspections ran? | Existing [Analysis Reports](../system/reports/analysis-reports.md), QA/performance artifacts, and registered run descriptors. | Dated run inventory with status, revision, producer, and artifact links. |
 | How healthy is a component? | A dated grading report with rubric version and evidence references. | Current grade, confidence/coverage, dimension detail, and trend. |
 
 The Project Map describes **observed structure**. The Architecture Model
@@ -111,7 +111,7 @@ per project. A focus-project SHA must never be displayed as if it covered every
 node in the graph.
 
 The current human/agent projection is
-`docs/architecture/project-map.md`. The generator owns a clearly delimited
+`docs/system/architecture/project-map.md`. The generator owns a clearly delimited
 generated body and documents its regeneration command. Dated snapshots are
 append-only evidence; the current page links to the snapshot and source
 revision it represents. Opening Project Hub never triggers discovery.
@@ -142,7 +142,7 @@ map or model.
 
 Guides are Markdown pages in one navigable `docs/quality/` family. Design hard
 rules remain authoritative at
-[`docs/design/style-guide-hard-rules.md`](../design/style-guide-hard-rules.md)
+[`docs/quality/design/style-guide-hard-rules.md`](../quality/design/style-guide-hard-rules.md)
 and are included from the family index instead of copied. A guide has
 structured frontmatter equivalent to:
 
@@ -239,16 +239,15 @@ An overall grade cannot be rendered when required dimensions lack evidence.
 Grades expire or become **stale** when the component revision moves beyond the
 graded source revision; they do not pretend to be live health.
 
-The model follows the evidence-first stance in the
-[quality-system taxonomy](../mockups/quality-system/taxonomy.md): a grade guides
-attention. It does not automatically block integration or move a task. A hard
+The model follows the evidence-first stance of the former quality-system
+taxonomy (now consolidated into this page): a grade guides attention. It does not automatically block integration or move a task. A hard
 rule can still fail an existing lint/review gate, but the UI must distinguish
 that gate result from a component grade.
 
 ### 4.5 Gate and evidence taxonomy
 
 Project Hub preserves the causal vocabulary already exposed by the
-[`Run -> Gate -> Review aspects -> Lane decision` verdict chain](../contracts/run-outcome.md):
+[`Run -> Gate -> Review aspects -> Lane decision` verdict chain](../system/contracts/run-outcome.md):
 
 | Signal | Scope | Can block or move work? | Role in this layer |
 |---|---|---|---|

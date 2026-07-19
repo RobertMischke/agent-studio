@@ -9,7 +9,7 @@ namespace AgentStudio.Tests;
 /// left in 3-progress (where pickup never revisits it -> a permanent zombie).
 /// Regression guard for the recurring "in-progress lane kaputt" incident
 /// (rapid stale-session resume crash, exit=1, 0 output -> NoAgentOutput ->
-/// Accept -> stranded). See docs/wiki/concepts/runner-stability-incidents.html.
+/// Accept -> stranded). See docs/concepts/runner-stability-incidents.html.
 /// </summary>
 public class StrandedRunBackstopTests
 {

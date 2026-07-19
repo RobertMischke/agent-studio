@@ -51,7 +51,7 @@ public class OrchestratorChatLog
             // Bridge to the Agent Message Bus. Best-effort; the chat log is the
             // canonical record (the activity-log parser reads it). The bus
             // mirrors typed entries so future tooling can query without
-            // reparsing prose. See docs/architecture/bus/agent-message-bus.md section 9.
+            // reparsing prose. See docs/system/architecture/bus/agent-message-bus.md section 9.
             try { _ = _bus?.EmitOrchestratorChatAsync(info, kind, text); }
             catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator chat failed for {JobId}", info?.Id); }
         }

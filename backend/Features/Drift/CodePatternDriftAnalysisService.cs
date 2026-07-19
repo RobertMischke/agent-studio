@@ -62,13 +62,13 @@ public sealed class CodePatternDriftAnalysisService
 
     /// <summary>
     /// Build the effective rule set: the hardcoded <see cref="DefaultRules"/>
-    /// plus any extra rules parsed from <c>docs/contracts/code-patterns.md</c> under
+    /// plus any extra rules parsed from <c>docs/system/contracts/code-patterns.md</c> under
     /// <paramref name="repoRoot"/>. Hardcoded rules win on id collisions so
     /// a docs-only override cannot relax a load-bearing rule by accident.
     /// </summary>
     public static IReadOnlyList<CodePatternRule> LoadEffectiveRules(string repoRoot, ILogger? logger = null)
     {
-        var path = Path.Combine(repoRoot, "docs", "contracts", "code-patterns.md");
+        var path = Path.Combine(repoRoot, "docs", "system", "contracts", "code-patterns.md");
         var fromDocs = CodePatternRuleLoader.LoadFromFile(path, logger);
         if (fromDocs.Count == 0) return DefaultRules;
         var ids = new HashSet<string>(DefaultRules.Select(r => r.Id), StringComparer.OrdinalIgnoreCase);
@@ -184,7 +184,7 @@ public sealed class CodePatternDriftAnalysisService
 
         // Merge: ctor-injected rules (used by tests) take priority; for the
         // production path the ctor passes DefaultRules and we layer the
-        // docs/contracts/code-patterns.md additions on top.
+        // docs/system/contracts/code-patterns.md additions on top.
         IReadOnlyList<CodePatternRule> activeRules = _rules;
         if (ReferenceEquals(_rules, DefaultRules))
         {
