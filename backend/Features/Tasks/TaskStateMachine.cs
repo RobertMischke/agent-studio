@@ -123,6 +123,16 @@ public class TaskStateMachine
                 if (!byKey.ContainsKey(key))
                     TaskLayoutIndex.Rebuild(recheck.WatchPath, _logger);
 
+                // Diagnostic (19.07., temporary): an unidentified caller keeps
+                // re-escalating 5-human-review cards with actor "system" and no
+                // matching log line or decision record. Capture the full stack
+                // for every system-side move INTO 5e so the next flip names its
+                // caller. Remove once the source is found.
+                if (string.Equals(targetState, TaskStates.Escalated, StringComparison.Ordinal))
+                    _logger.LogWarning(
+                        "escalation-diagnostic key={Key} from={From} to={To} stack={Stack}",
+                        key, recheck.State, targetState, Environment.StackTrace);
+
                 var result = TaskLayoutTransition.ChangeState(recheck.WatchPath, key, targetState, _logger);
                 if (result.Location == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
                 if (result.Changed)
