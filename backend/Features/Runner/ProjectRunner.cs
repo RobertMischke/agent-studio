@@ -2448,7 +2448,7 @@ public class ProjectRunner
             // endpoint uses ("commits made during this run" = git rev-list
             // HeadShaBefore..HeadShaAfter). Best-effort: a missing repo or
             // a git failure leaves the SHAs null and we fall back to the
-            // wall-clock window. See docs/product/design-principles.md for why we
+            // wall-clock window. See docs/quality/design-principles.md for why we
             // treat the software-side change set as a first-class signal.
             var headShaBefore = SafeGetHeadSha(jobId);
 
@@ -3005,7 +3005,7 @@ public class ProjectRunner
         // ROOT CAUSE FIX (2026-06-23): the live-stream sentinel scanner used to
         // match SentinelRegex on EVERY raw output line, so a run that merely READ
         // a file containing a [[TASK_DONE]] literal (the backend's own runner
-        // code, AGENTS.md, and docs/contracts/agent-task.md are full of them - the
+        // code, AGENTS.md, and docs/system/contracts/agent-task.md are full of them - the
         // file content rides the "user"/tool-result stream) was killed mid-work as
         // a false "completion". The decision now lives in the tested pure helper
         // LiveSentinelScanner: agent-stream only + standalone sentinel line.
@@ -3646,7 +3646,7 @@ public class ProjectRunner
                 var resumePrompt = BuildOrchestratorResumePrompt(_prompts, info, lastAgentText, attachmentsList);
                 // Rejection-recovery lives on the runner (ResumeWithFallbackAsync)
                 // so the per-job and global-chat orchestrator paths cannot drift
-                // apart again - see docs/contracts/code-patterns.md "orchestrator-resume-with-fallback".
+                // apart again - see docs/system/contracts/code-patterns.md "orchestrator-resume-with-fallback".
                 var resumeRejected = false;
                 result = await _orchestratorRunner.ResumeWithFallbackAsync(
                     session.SessionId,

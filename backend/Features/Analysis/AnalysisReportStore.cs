@@ -13,9 +13,9 @@ namespace AgentStudio.Analysis;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Schema: <c>docs/schemas/analysis-report.schema.json</c>. The contract,
+/// Schema: <c>docs/system/schemas/analysis-report.schema.json</c>. The contract,
 /// producer model, and parse-failure semantics are documented in
-/// <c>docs/reports/analysis-reports.md</c>.
+/// <c>docs/system/reports/analysis-reports.md</c>.
 /// </para>
 /// <para>
 /// Storage shape: one JSON record per report on the index for fast load and

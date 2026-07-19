@@ -160,7 +160,7 @@ public static class WorkspaceEndpoints
         // requested window. windowHours defaults to 24 and accepts
         // {1, 6, 24, 168}; out-of-range values snap to the default
         // so the page always renders. Schema:
-        // docs/schemas/executive-summary.schema.json.
+        // docs/system/schemas/executive-summary.schema.json.
         group.MapGet("/summary",
             (int? windowHours, WorkspaceSummaryService summary) =>
             {

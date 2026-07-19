@@ -156,7 +156,7 @@ can read and write in place, so Claude's own token refresh persists for the next
 launch. (The studio's clean-context mechanism keeps the same in-place invariant
 for parallel runs by sharing the one credential file *by link* rather than
 copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
-[`docs/cli/supported-clis.md`](../../cli/supported-clis.md).)
+[`docs/system/cli/supported-clis.md`](../../system/cli/supported-clis.md).)
 
 ## 2. Build the runner
 

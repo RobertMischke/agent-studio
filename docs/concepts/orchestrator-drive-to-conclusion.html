@@ -459,7 +459,7 @@
             toward the quarantine streak; an inconclusive run that left files in <code>results/</code> escalates as
             <code>inconclusive-with-results</code> (a "work to inspect" hint) rather than the bare park; and the reissue budget is
             counted per attempt chain (reset on Escalate / AcceptAsDone), so a reopened card gets a fresh budget. See
-            <code>docs/contracts/run-outcome.md</code> &sect; "Post-processing outcome taxonomy".
+            <code>docs/system/contracts/run-outcome.md</code> &sect; "Post-processing outcome taxonomy".
           </td>
         </tr>
         <tr>
@@ -869,7 +869,7 @@
       <li><strong>Collapse the ClassifierUnknown branch</strong> in <code>RunOutcomePolicy.cs</code> (341-374): route InfraCrash and
           OrchestratorInconclusive to <code>NotifyUserAndStop</code>; delete both meta strings, the chat tag, and the topic string.</li>
       <li><strong>Widen the retry engine + add the cooldown.</strong> Widen <code>IsTransientAbort</code> to accept InfraCrash,
-          bump <code>DefaultBudget</code> 2&rarr;3, update <code>docs/contracts/loop-inventory.md</code> in the same commit, and
+          bump <code>DefaultBudget</code> 2&rarr;3, update <code>docs/system/contracts/loop-inventory.md</code> in the same commit, and
           await <code>RapidCrashBreaker.Backoff(attemptNo)</code> before the re-spawn.</li>
       <li><strong>Make lane-advance total</strong> by adding both kinds to <code>ShouldRouteIssueToHumanReview</code> and
           <code>ToEscalationCategory</code>, plus the two <code>HumanReviewEscalation</code> constants; verify the
@@ -878,7 +878,7 @@
       <li><strong>Maintain this wiki page.</strong> Replace
           <code>docs/common-problems/classifier-unknown-on-cli-resume-failure</code> with
           <code>docs/common-problems/drive-to-conclusion-infra-crash-retry/README.md</code>, seed the case log with ASS-1757,
-          link it from <code>docs/domains/runner.md</code> and <code>AGENTS.md</code>, and add the AGENTS rule.</li>
+          link it from <code>docs/system/domains/runner.md</code> and <code>AGENTS.md</code>, and add the AGENTS rule.</li>
       <li><strong>Deploy via <code>deploy-stable.sh</code> only.</strong> Build and run the full backend test suite, deploy through the
           guarded script (pre-build + health + rollback), verify on stable that an injected <code>exitCode=-1</code> crash retries
           with cooldown, resumes its session, and on exhaustion lands in <span class="lane">5-human-review</span> with category

@@ -1,5 +1,5 @@
 // Mirrors backend/Services/Analysis/AnalysisReportContract.cs and
-// docs/schemas/analysis-report.schema.json. Kept narrow: only the slice the
+// docs/system/schemas/analysis-report.schema.json. Kept narrow: only the slice the
 // project-level Analysis Reports surface renders is duplicated here.
 
 export type AnalysisReportScopeKind = 'Workspace' | 'Project' | 'Task' | 'Run' | 'TimeWindow';

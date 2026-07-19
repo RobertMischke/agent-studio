@@ -116,7 +116,7 @@ Only needed if you want the in-app Update Center to work. `./update-service.sh s
 2. Click "+" next to that workspace to open **Onboard Project**. Fill in a display name (a short code is auto-derived and editable), pick a default CLI + model, and - important - set **CLI working directory** (`rootPath`) to the target project's folder on disk. Without it the project has no auto-pickup runner and the mode toggle won't work later.
 3. Submit. This calls `POST /api/projects` and provisions the project's lane folders immediately - **no backend restart needed.**
 
-This is the current, working path (`RegistryEndpoints.cs`, ADR-0042/ADR-0046). Note on scope: the persistent **Orchestrator Chat** side panel (the chat window docked to a project) is great for asking the orchestrator questions about a project once it's onboarded, but it cannot create a project registration for you today - that capability is still on the roadmap (see [orchestrator-chat.md](../../product/orchestrator-chat.md)). Use the dialog above for the actual creation step.
+This is the current, working path (`RegistryEndpoints.cs`, ADR-0042/ADR-0046). Note on scope: the persistent **Orchestrator Chat** side panel (the chat window docked to a project) is great for asking the orchestrator questions about a project once it's onboarded, but it cannot create a project registration for you today - that capability is still on the roadmap (see [orchestrator-chat.md](../../concepts/orchestrator-chat.md)). Use the dialog above for the actual creation step.
 
 Two cases the dialog doesn't cover, still documented in [onboard-a-project.md](./onboard-a-project.md):
 
@@ -196,7 +196,7 @@ Agents and scripts must organize jobs through the application API, not by direct
 
 ### Supported CLIs
 
-Claude Code, Codex, GitHub Copilot, Gemini. The cross-CLI contract (process lifecycle, session model, model selection, quota probing, logging, cancellation) is in [supported-clis.md](../../cli/supported-clis.md).
+Claude Code, Codex, GitHub Copilot, Gemini. The cross-CLI contract (process lifecycle, session model, model selection, quota probing, logging, cancellation) is in [supported-clis.md](../../system/cli/supported-clis.md).
 
 ### Keeping target projects in sync
 

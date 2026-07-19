@@ -6,8 +6,8 @@
 > subfolder was dissolved.
 
 Hand-maintained, living explainer pages for a domain area. Unlike
-[`common-problems/`](../common-problems/) (one incident pattern per folder) and
-[`learnings/`](../learnings/) (auto-distilled per-task pages, do not hand-edit),
+[`common-problems/`](../operations/common-problems/) (one incident pattern per folder) and
+[`learnings/`](../operations/learnings/) (auto-distilled per-task pages, do not hand-edit),
 pages here are durable concept write-ups that accumulate knowledge over time.
 
 Each page explains *why* a design exists, *what* the moving parts are, and *how*
@@ -24,10 +24,10 @@ contract; the concept page owns the explanation and the running knowledge log.
 
 | Page | Area | System-of-record doc |
 |---|---|---|
-| [completion-review-and-remote-runner-stability.html](completion-review-and-remote-runner-stability.html) | Living umbrella analysis for semantic completion, exact-revision Auto Review, runner/host provenance, controlled cross-host continuation, build/test and visual-evidence gates, retry identity, CLI aborts, and parallel Remote Host stability. | [`docs/domains/runner.md`](../domains/runner.md), [`docs/domains/pipeline.md`](../domains/pipeline.md), [`docs/contracts/run-outcome.md`](../contracts/run-outcome.md) |
-| [docs-structure-migration.md](docs-structure-migration.md) | Record of the real `docs/` folder migration into clearer domains, reports, architecture, frontend, CLI, and Wiki areas while keeping Markdown as default and HTML for visual maps. | [`docs/contracts/wiki-tree.md`](../contracts/wiki-tree.md) |
-| [token-aggregation.md](token-aggregation.md) | Token aggregators -> bus-backed shims (ASS-881): one canonical `ITokenAggregator` over the Agent Message Bus, the legacy shims, and the architecture guard test. | [`docs/domains/tokens.md`](../domains/tokens.md) |
-| [tree-project-indicator-alternatives.md](tree-project-indicator-alternatives.md) | Eight alternatives and recommendation for a project-level Explorer state indicator that shows situation instead of a total. | [`docs/design/tree-indicator-exploration-2026-07.html`](../design/tree-indicator-exploration-2026-07.html) |
+| [completion-review-and-remote-runner-stability.html](completion-review-and-remote-runner-stability.html) | Living umbrella analysis for semantic completion, exact-revision Auto Review, runner/host provenance, controlled cross-host continuation, build/test and visual-evidence gates, retry identity, CLI aborts, and parallel Remote Host stability. | [`docs/system/domains/runner.md`](../system/domains/runner.md), [`docs/system/domains/pipeline.md`](../system/domains/pipeline.md), [`docs/system/contracts/run-outcome.md`](../system/contracts/run-outcome.md) |
+| [docs-structure-migration.md](docs-structure-migration.md) | Record of the real `docs/` folder migration into clearer domains, reports, architecture, frontend, CLI, and Wiki areas while keeping Markdown as default and HTML for visual maps. | [`docs/system/contracts/wiki-tree.md`](../system/contracts/wiki-tree.md) |
+| [token-aggregation.md](token-aggregation.md) | Token aggregators -> bus-backed shims (ASS-881): one canonical `ITokenAggregator` over the Agent Message Bus, the legacy shims, and the architecture guard test. | [`docs/system/domains/tokens.md`](../system/domains/tokens.md) |
+| [tree-project-indicator-alternatives.md](tree-project-indicator-alternatives.md) | Eight alternatives and recommendation for a project-level Explorer state indicator that shows situation instead of a total. | [`docs/quality/design/tree-indicator-exploration-2026-07.html`](../quality/design/tree-indicator-exploration-2026-07.html) |
 
 ## Designated topics (AGENTS/wiki-sync)
 

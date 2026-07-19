@@ -5,7 +5,7 @@ namespace AgentStudio.Cli;
 /// <summary>
 /// Self-heal for half-installed npm CLI shims on Windows (the
 /// <c>infra-cli-broken</c> category in
-/// <c>docs/contracts/agent-contract-pattern.md</c>).
+/// <c>docs/system/contracts/agent-contract-pattern.md</c>).
 ///
 /// <para>
 /// Background. npm's atomic-rename pattern (write

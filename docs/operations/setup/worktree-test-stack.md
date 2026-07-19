@@ -4,7 +4,7 @@
 > **dynamic free ports**, run real integration / E2E tests against it, then tear
 > it down. Companion to [concepts/parallel-task-execution.md](../../concepts/parallel-task-execution.md)
 > and the run-outcome / test-quality-gate contract in
-> [contracts/run-outcome.md](../../contracts/run-outcome.md).
+> [contracts/run-outcome.md](../../system/contracts/run-outcome.md).
 
 ## Why
 

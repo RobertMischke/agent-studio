@@ -333,7 +333,7 @@
 
     <div class="callout good">
       <span class="label">Why the deliverable does not break containment</span>
-      <p>The report artifact is written to the job folder's <code>results/</code> directory, which lives outside the app source repository (per <code>docs/contracts/filesystem.md</code>). Writing <code>results/report.html</code> therefore does not create a source-tree diff and does not trip <code>ReadOnlyContainmentPolicy</code>. This is what makes "produces a rich HTML report" compatible with "read-only, zero source mutation."</p>
+      <p>The report artifact is written to the job folder's <code>results/</code> directory, which lives outside the app source repository (per <code>docs/system/contracts/filesystem.md</code>). Writing <code>results/report.html</code> therefore does not create a source-tree diff and does not trip <code>ReadOnlyContainmentPolicy</code>. This is what makes "produces a rich HTML report" compatible with "read-only, zero source mutation."</p>
     </div>
 
     <h3>The gap: review, decide, continue is not closed</h3>
@@ -346,7 +346,7 @@
 
     <div class="callout warn">
       <span class="label">Design groundwork that already exists</span>
-      <p>The taxonomy is reconciled in <code>docs/research/planning-research-task-kinds-2026-05.md</code> (three modes, read-only pipeline, promote flow, five pinned decisions). The decision-action pattern lives in <code>docs/research/escalated-lane-and-decision-surface-2026-06.md</code> (four actions on a card: discard, reissue with steer, manual, accept). The candidate-to-commitment ledger pattern is already proven in the analysis-report follow-up suggestions (<code>frontend/src/app/models/analysis-report.model.ts</code>). This concept synthesizes those fragments into one product feature.</p>
+      <p>The taxonomy is reconciled in <code>docs/concepts/planning-research-task-kinds-2026-05.md</code> (three modes, read-only pipeline, promote flow, five pinned decisions). The decision-action pattern lives in <code>docs/research/escalated-lane-and-decision-surface-2026-06.md</code> (four actions on a card: discard, reissue with steer, manual, accept). The candidate-to-commitment ledger pattern is already proven in the analysis-report follow-up suggestions (<code>frontend/src/app/models/analysis-report.model.ts</code>). This concept synthesizes those fragments into one product feature.</p>
     </div>
   </section>
 

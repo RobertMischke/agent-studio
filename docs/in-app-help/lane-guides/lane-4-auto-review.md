@@ -40,5 +40,5 @@ If a job sits here longer than expected, inspect `lifecycle.json`, `post-process
 
 - ADR-0025 (three-stage review pipeline)
 - ADR-0026 (multi-aspect orchestrator review)
-- `docs/research/expanded-lifecycle-lanes-plan-2026-05.md`
+- `docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md`
 - `docs/research/auto-review-postprocessing-consolidation-2026-06.md`

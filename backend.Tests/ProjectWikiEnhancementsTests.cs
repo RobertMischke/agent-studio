@@ -215,7 +215,7 @@ public class ProjectWikiEnhancementsTests : IDisposable
         var projectRoot = Path.Combine(_tempDir, "class-proj");
         var docsDir = Path.Combine(projectRoot, "docs");
         Directory.CreateDirectory(Path.Combine(docsDir, "concepts"));
-        Directory.CreateDirectory(Path.Combine(docsDir, "research"));
+        Directory.CreateDirectory(Path.Combine(docsDir, "system", "domains"));
         File.WriteAllText(Path.Combine(docsDir, "concepts", "old.md"), "# Old concept\n");
         File.WriteAllText(Path.Combine(docsDir, "concepts", "old.md.meta.json"),
             """
@@ -232,12 +232,12 @@ public class ProjectWikiEnhancementsTests : IDisposable
               }
             }
             """);
-        // Sidecar without a `type`: the folder default (research -> analyse) fills it.
-        File.WriteAllText(Path.Combine(docsDir, "research", "aging.md"), "# Aging analysis\n");
-        File.WriteAllText(Path.Combine(docsDir, "research", "aging.md.meta.json"),
+        // Sidecar without a `type`: the folder default (system/domains -> domain-map) fills it.
+        File.WriteAllText(Path.Combine(docsDir, "system", "domains", "aging.md"), "# Aging analysis\n");
+        File.WriteAllText(Path.Combine(docsDir, "system", "domains", "aging.md.meta.json"),
             """
             {
-              "source": { "path": "docs/research/aging.md" },
+              "source": { "path": "docs/system/domains/aging.md" },
               "classification": { "status": "veraltet", "analyzedAt": "2026-07-18" }
             }
             """);
@@ -251,11 +251,13 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Equal("konzept", concept.Classification.Type);
         Assert.Equal("2026-07-18", concept.Classification.AnalyzedAt);
 
-        var aging = tree.Root.Single(n => n.Name == "research").Children.Single(n => n.Name == "aging.md");
+        var aging = tree.Root.Single(n => n.Name == "system")
+            .Children.Single(n => n.Name == "domains")
+            .Children.Single(n => n.Name == "aging.md");
         Assert.NotNull(aging.Classification);
         Assert.Equal("veraltet", aging.Classification!.Status);
         Assert.Null(aging.Classification.SupersededBy);
-        Assert.Equal("analyse", aging.Classification.Type);
+        Assert.Equal("domain-map", aging.Classification.Type);
     }
 
     [Fact]
@@ -293,16 +295,23 @@ public class ProjectWikiEnhancementsTests : IDisposable
     }
 
     [Theory]
-    [InlineData("common-problems/x/main.md", "generiert")]
-    [InlineData("proposals/2026-07-11/a.md", "proposal")]
-    [InlineData("workbenches/haertung/index.html", "workbench")]
-    [InlineData("domains/tasks.md", "domain-map")]
-    [InlineData("contracts/filesystem.md", "contract")]
-    [InlineData("architecture/decisions/adr-archive.md", "adr")]
-    [InlineData("mockups/project-urls/README.md", "mockup")]
-    [InlineData("research/some-analysis.md", "analyse")]
-    [InlineData("architecture/model.md", null)]
+    [InlineData("operations/common-problems/x/main.md", "generiert")]
+    [InlineData("concepts/proposals/2026-07-11/a.md", "proposal")]
+    [InlineData("system/domains/tasks.md", "domain-map")]
+    [InlineData("system/contracts/filesystem.md", "contract")]
+    [InlineData("system/architecture/decisions/adr-archive.md", "adr")]
+    [InlineData("concepts/mockups/decoupled-lifecycles.html", "mockup")]
+    // Promoted mockup families keep the mockup type despite losing the /mockups/ segment.
+    [InlineData("concepts/project-urls/ui.html", "mockup")]
+    [InlineData("concepts/project-overview-dashboard/README.md", "mockup")]
+    [InlineData("concepts/task-processing-pipeline/task-timeline.md", "mockup")]
+    [InlineData("concepts/task-detail-header-state-actions/README.md", "mockup")]
+    [InlineData("system/architecture/model.md", null)]
     [InlineData("concepts/idea.md", null)]
+    // Workbench pages are no longer folder-typed (discovered via workbench.json,
+    // theme-distributed); research folder is dissolved - both fall through to null.
+    [InlineData("operations/haertung-verteilte-ausfuehrung/index.html", null)]
+    [InlineData("quality/agent-eval-set-split-measurement-2026-06.md", null)]
     public void DefaultClassificationType_MapsAgreedFolders(string relPath, string? expected)
     {
         Assert.Equal(expected, ProjectDocsService.DefaultClassificationType(relPath));

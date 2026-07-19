@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Project Wiki",
+  "source": {
+    "path": "docs/start/README-aus-wiki.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "28cb452f2025fc76b5d8836d45d66ac6f7c6b4a22f9fb4e85af3e0bdb65b5e93",
+      "sizeBytes": 3964,
+      "lineCount": 100,
+      "capturedAt": "2026-07-18T18:45:50.510Z"
+    }
+  },
+  "classification": {
+    "owner": "docs-root",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "index",
+    "analyzedAt": "2026-07-18"
+  }
+}

@@ -3,7 +3,7 @@
 **Status:** research + concept v1, 2026-07-10 evening — operator-directed
 ("umfassende, coole Recherche: konsistentes Layout, visuelles Feedback,
 eine Skill-Welt rund um Visual Proof — werdet kreativ"). Related:
-`docs/design/style-guide-hard-rules.md` (live, prompt-known — AGT-2061),
+`docs/quality/design/style-guide-hard-rules.md` (live, prompt-known — AGT-2061),
 AGT-1918 (screenshot standardization, parked), withdrawn AGT-2059
 (deploy smoke — operator pulled it; its ideas partially return here in a
 different shape), AGT-2049 (acute vs. history), wiki-pulse (grading).

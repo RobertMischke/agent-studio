@@ -221,7 +221,7 @@ public static class PipelineCatalogue
     /// derived review verdict, the per-aspect orchestrator-review findings, the
     /// agent's own close-out notes, and any typed outcome stumbling block - into
     /// a per-task page under the watched project's
-    /// <c>docs/learnings/&lt;task&gt;.md</c> tree, then regenerates the
+    /// <c>docs/operations/learnings/&lt;task&gt;.md</c> tree, then regenerates the
     /// learnings index. It is CLI-agnostic (no model call - it reads structured
     /// run evidence the orchestrator already has) and idempotent: a re-run dedupes
     /// by run signature so it merges/augments the page rather than overwriting it,

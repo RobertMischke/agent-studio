@@ -7,7 +7,7 @@ namespace AgentStudio.Tasks;
 /// <summary>
 /// Reader / appender for <c>results/review-evidence.jsonl</c>: the
 /// task-level review-evidence file documented in
-/// <c>docs/contracts/filesystem.md</c>.
+/// <c>docs/system/contracts/filesystem.md</c>.
 ///
 /// The file is JSON-Lines, append-only, and per-job. Each line is one
 /// <see cref="ReviewEvidenceEntry"/>. The parser is defensively permissive:

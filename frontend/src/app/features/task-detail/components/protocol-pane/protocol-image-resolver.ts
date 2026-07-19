@@ -10,7 +10,7 @@
  * Anything else (`http(s)://…`, `data:`, unsafe traversals) is passed
  * through unchanged.
  *
- * Folder semantics live in docs/contracts/protocol-style.md — keep that in sync if you
+ * Folder semantics live in docs/system/contracts/protocol-style.md — keep that in sync if you
  * add a new prefix here.
  */
 

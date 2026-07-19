@@ -11,10 +11,10 @@ tags: [token-aggregation, bus-backed-shim, drift-rule, observability, cost]
 related-tasks: [ASS-881, ASS-1717]
 related-adrs: []
 related-docs:
-  - "docs/domains/tokens.md"
-  - "docs/domains/token-pricing.md"
-  - "docs/contracts/code-patterns.md"
-  - "docs/architecture/bus/agent-message-bus.md"
+  - "docs/system/domains/tokens.md"
+  - "docs/system/domains/token-pricing.md"
+  - "docs/system/contracts/code-patterns.md"
+  - "docs/system/architecture/bus/agent-message-bus.md"
 ---
 
 # Token aggregators -> bus-backed shims
@@ -26,7 +26,7 @@ related-docs:
 > guard test stops the old pattern from creeping back. New findings about this
 > area belong in the [Living knowledge log](#living-knowledge-log) at the
 > bottom. The engineering plan and phase-by-phase migration record live in the
-> token domain doc: [`docs/domains/tokens.md`](../domains/tokens.md).
+> token domain doc: [`docs/system/domains/tokens.md`](../system/domains/tokens.md).
 
 ## TL;DR
 
@@ -180,7 +180,7 @@ bus-backed methods.*
 
 ### 2. Drift rule (the soft, repo-wide signal)
 
-`token-aggregation-canonical` in [`docs/contracts/code-patterns.md`](../contracts/code-patterns.md)
+`token-aggregation-canonical` in [`docs/system/contracts/code-patterns.md`](../system/contracts/code-patterns.md)
 is a drift-analysis rule. It scans for the telltale markers of a hand-rolled
 roll-up (`entry.TokenUsage` access, `AgentMessageTokens`, a string-keyed token
 total dictionary) outside the `Tokens/` and `Bus/` namespaces, and the "good
@@ -194,15 +194,15 @@ advisory radar that catches patterns the narrow injection regex would miss.
 ## How this connects to the token domain and the UI
 
 - **Token domain doc (system of record):**
-  [`docs/domains/tokens.md`](../domains/tokens.md) holds the full audit,
+  [`docs/system/domains/tokens.md`](../system/domains/tokens.md) holds the full audit,
   the five-aggregator table, and the phase-by-phase migration record. Read it
   when you need the *plan*; read this page when you need the *concept*.
-- **Pricing:** [`docs/domains/token-pricing.md`](../domains/token-pricing.md) owns the
+- **Pricing:** [`docs/system/domains/token-pricing.md`](../system/domains/token-pricing.md) owns the
   per-model price table. Pricing is deliberately *separate* from aggregation;
   the aggregator delegates to `TokenPricing` only for the `Dollars` field.
-- **Bus:** [`docs/architecture/bus/agent-message-bus.md`](../architecture/bus/agent-message-bus.md) describes the
+- **Bus:** [`docs/system/architecture/bus/agent-message-bus.md`](../system/architecture/bus/agent-message-bus.md) describes the
   channel that is now the single source of truth.
-- **Schemas:** `docs/schemas/token-aggregate.schema.json`,
+- **Schemas:** `docs/system/schemas/token-aggregate.schema.json`,
   `token-aggregate-by-client.schema.json`, `token-timeline-bucket.schema.json`
   pin the wire shapes.
 - **Frontend surfaces that consume the endpoints:**

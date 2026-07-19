@@ -779,7 +779,7 @@ public static class DriftReportEndpoints
         sb.Append("- ADR / arch docs found: ").Append(scope.Docs.Count).AppendLine();
         sb.Append("- Top-level source folders: ").Append(scope.SourceTree.Count).AppendLine();
         sb.Append("- Backend module boundaries: ").Append(scope.ModuleBoundaries.Count).AppendLine();
-        sb.Append("- Schemas in `docs/schemas/`: ").Append(scope.Schemas.Count).AppendLine();
+        sb.Append("- Schemas in `docs/system/schemas/`: ").Append(scope.Schemas.Count).AppendLine();
         sb.Append("- Test directories: ").Append(scope.TestDirs.Count).AppendLine();
         sb.Append("- Recent task evidence entries: ").Append(scope.RecentTasks.Count).AppendLine();
         sb.AppendLine();
@@ -811,7 +811,7 @@ public static class DriftReportEndpoints
         sb.Append("- ADR / arch docs found: ").Append(scope.Docs.Count).AppendLine();
         sb.Append("- Top-level source folders: ").Append(scope.SourceTree.Count).AppendLine();
         sb.Append("- Backend module boundaries: ").Append(scope.ModuleBoundaries.Count).AppendLine();
-        sb.Append("- Schemas in `docs/schemas/`: ").Append(scope.Schemas.Count).AppendLine();
+        sb.Append("- Schemas in `docs/system/schemas/`: ").Append(scope.Schemas.Count).AppendLine();
         sb.Append("- Recent task evidence entries: ").Append(scope.RecentTasks.Count).AppendLine();
         sb.AppendLine();
         sb.AppendLine("## Embedded prompt");

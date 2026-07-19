@@ -149,7 +149,7 @@ test('dimension drill-down: panel renders evidence and findings', async ({ page 
     dimensions: [
       dimension('Architecture', 60, 'High', 0.80, 'Tracked',
         'Runner state-machine has drifted from ADR-0024.', {
-          evidence: ['docs/architecture/decisions/adr-archive.md#adr-0024', 'backend/Services/Jobs/JobTransitionService.cs'],
+          evidence: ['docs/system/architecture/decisions/adr-archive.md#adr-0024', 'backend/Services/Jobs/JobTransitionService.cs'],
           recommendedActions: ['Reconcile RunnerEndpoints with JobTransitionService.'],
           findings: [
             finding('finding-001', 'High', 'Two endpoints write job state outside JobTransitionService.', 'New', [
@@ -243,13 +243,13 @@ test('follow-up task creation: clicking a finding follow-up queues a 1-preparati
     dimensions: [
       dimension('Schema', 45, 'High', 0.85, 'New',
         'Three schemas include unused fields not present in the DTOs.', {
-          evidence: ['docs/schemas/agent-message.schema.json'],
+          evidence: ['docs/system/schemas/agent-message.schema.json'],
           recommendedActions: [],
           findings: [
             finding('finding-schema-001', 'High',
               'agent-message.schema.json carries fields removed from AgentMessage.cs',
               'New',
-              ['docs/schemas/agent-message.schema.json', 'backend/Services/Bus/AgentMessage.cs']),
+              ['docs/system/schemas/agent-message.schema.json', 'backend/Services/Bus/AgentMessage.cs']),
           ],
         }),
     ],

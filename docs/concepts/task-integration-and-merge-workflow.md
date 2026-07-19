@@ -93,7 +93,7 @@ Defined in `backend/Shared/Models/ProjectSettings.cs`. Read live on each transit
 
 ## Known sharp edges (under review)
 
-These behaviours are real today and being reviewed. See the configuration analysis: [./merge-config-analysis.html](./merge-config-analysis.html).
+These behaviours are real today and being reviewed. See the configuration analysis: [./task-integration-merge-config-analysis.html](./task-integration-merge-config-analysis.html).
 
 - Parallelism coupling: `MaxParallelism` is perceived as a throughput knob, but flipping it `1 <-> >=2` also silently changes the commit target, merge timing/trigger, merge command and history shape, conflict handling, and what "Accept" means. `IntegrationBranch` and `IntegrationStrategy` are not exposed in the frontend.
 - Auto-commit on transition: in sequential mode the auto-commit lands directly on the shared checkout's current branch with no `task/<id>` branch, so the deferred "Merge into Develop" step often records `NoTaskBranch -> Skipped` even though the work already landed. The completed-push target can also diverge from the merge target. The exact on-transition git state is under review.
@@ -140,4 +140,4 @@ landed.
 
 - `docs/concepts/parallel-task-execution.md` - parallel execution model, integration strategies, merge-queue.
 - `docs/concepts/release-semantics.md` - the decided integration and release model (supersedes the retired `git-branching-integration-zielbild.md` draft). The target three-tier branching model (`task/<id>` -> `develop-local` -> `develop`) described in that draft was not carried forward; the `develop-local` tier remains a target, not yet implemented.
-- ADR-0052 in `docs/architecture/decisions/adr-archive.md` - the parallel-execution decision and the "run agent does no git" contract.
+- ADR-0052 in `docs/system/architecture/decisions/adr-archive.md` - the parallel-execution decision and the "run agent does no git" contract.

@@ -102,7 +102,7 @@ public sealed class WikiLearningsPostStepRunnerTests : IDisposable
     public void Run_WhenDocsEmpty_SelfProvisionsLearningsHome()
     {
         // Self-provisioning (AGT-2024): an enabled step no longer skips because
-        // the wiki folder is missing - it bootstraps its own docs/learnings home.
+        // the wiki folder is missing - it bootstraps its own docs/operations/learnings home.
         var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "empty-docs")).FullName;
         var runner = NewRunner();
 
@@ -133,7 +133,7 @@ public sealed class WikiLearningsPostStepRunnerTests : IDisposable
     }
 
     private static string LearningsRoot(string projectRoot)
-        => Path.Combine(projectRoot, "docs", "learnings");
+        => Path.Combine(projectRoot, "docs", "operations", "learnings");
 
     private static WatchPathEntry Entry(string projectRoot) => new()
     {

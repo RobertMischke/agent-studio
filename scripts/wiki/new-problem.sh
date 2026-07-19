@@ -1,24 +1,34 @@
 #!/usr/bin/env bash
 # Scaffold a new common-problems entry from template.
-# Usage: scripts/wiki/new-problem.sh <kebab-case-slug>
+# Usage: scripts/wiki/new-problem.sh <theme> <kebab-case-slug>
 #
-# Creates docs/common-problems/<slug>/ with the canonical 6 files.
+# <theme> is one of: operations | system | quality (the common-problems library
+# is thematic; operations is the default inbox for runner/pipeline/sweep issues,
+# system for task-server/API/git/identity, quality for frontend/test).
+# Creates docs/<theme>/common-problems/<slug>/ with the canonical 6 files.
 # Fills frontmatter with sensible defaults; you edit the rest.
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-  echo "usage: $0 <kebab-case-slug>" >&2
+if [ "$#" -ne 2 ]; then
+  echo "usage: $0 <theme> <kebab-case-slug>" >&2
+  echo "  theme: operations | system | quality" >&2
   exit 2
 fi
 
-slug="$1"
+theme="$1"
+case "$theme" in
+  operations|system|quality) ;;
+  *) echo "error: theme must be operations, system, or quality (got: $theme)" >&2; exit 2 ;;
+esac
+
+slug="$2"
 if ! printf '%s' "$slug" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$'; then
   echo "error: slug must be lowercase kebab-case (got: $slug)" >&2
   exit 2
 fi
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-target="$repo_root/docs/common-problems/$slug"
+target="$repo_root/docs/$theme/common-problems/$slug"
 
 if [ -e "$target" ]; then
   echo "error: $target already exists" >&2
