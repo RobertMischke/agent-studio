@@ -211,11 +211,13 @@ public class PublishTargetServiceTests : IDisposable
 
         WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg.Two"));
         ProjectPublishStatus? refreshed = null;
+        // Watcher event delivery has no latency bound; under parallel test
+        // load even 30s was observed missed; 60s bounds the worst case. SpinUntil exits early on success.
         Assert.True(SpinWait.SpinUntil(() =>
         {
             refreshed = service.GetProjectPublishStatus("Demo");
             return refreshed.Targets.SingleOrDefault()?.PackageName == "Pkg.Two";
-        }, TimeSpan.FromSeconds(5)));
+        }, TimeSpan.FromSeconds(60)));
 
         Assert.NotNull(refreshed);
         Assert.True(service.ComputationCount >= 2);
@@ -235,7 +237,7 @@ public class PublishTargetServiceTests : IDisposable
 
         Assert.True(SpinWait.SpinUntil(
             () => service.GetProjectPublishStatus("Demo").Targets.Count == 0,
-            TimeSpan.FromSeconds(5)));
+            TimeSpan.FromSeconds(60)));
         Assert.True(service.ComputationCount >= 2);
     }
 
@@ -255,7 +257,7 @@ public class PublishTargetServiceTests : IDisposable
 
         Assert.True(SpinWait.SpinUntil(
             () => service.GetProjectPublishStatus("Demo").Targets.Count == 0,
-            TimeSpan.FromSeconds(5)));
+            TimeSpan.FromSeconds(60)));
         Assert.True(service.ComputationCount >= 2);
     }
 

@@ -170,7 +170,7 @@ describe('GitFileTreeComponent path disambiguation (AGT-2008)', () => {
   // Two README.md in different folders — the reported "which is which" case.
   const COLLIDING: GitFileChange[] = [
     { status: 'M', path: 'README.md', added: 1, removed: 0 },
-    { status: 'M', path: 'docs/README.md', added: 2, removed: 1 },
+    { status: 'M', path: 'docs/start/README.md', added: 2, removed: 1 },
     { status: 'M', path: 'src/app.ts', added: 4, removed: 0 },
   ];
 
@@ -220,8 +220,8 @@ describe('GitFileTreeComponent path disambiguation (AGT-2008)', () => {
       depth: 0,
     });
 
-    expect(cmp.fileTooltip(fileNode('docs/README.md'))).toBe('docs/README.md');
-    expect(cmp.dirHint(fileNode('docs/README.md'))).toBe('docs/');
+    expect(cmp.fileTooltip(fileNode('docs/start/README.md'))).toBe('docs/start/README.md');
+    expect(cmp.dirHint(fileNode('docs/start/README.md'))).toBe('docs/');
     expect(cmp.dirHint(fileNode('README.md'))).toBe('root');
     // Unique basename -> no hint even though the method is called per row.
     expect(cmp.dirHint(fileNode('src/app.ts'))).toBe('');

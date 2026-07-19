@@ -100,10 +100,10 @@ const wikiPulse = {
   feed: { available: true, reason: null, items: [
     { relPath: 'concepts/deployment-first-class.md', title: 'Deployment as a first-class citizen', author: 'Robert',
       authorDateUtc: '2026-07-11T10:30:00Z', sha: 'a', shortSha: 'a', subject: 'AGT-2097 concept',
-      frameAreaSlug: 'concepts', frameAreaTitle: 'Concepts', taskKey: 'AGT-2097' },
+      areaSlug: 'concepts', areaTitle: 'Concepts', taskKey: 'AGT-2097' },
     { relPath: 'concepts/operator-dashboard.md', title: 'Operator dashboard decisions', author: 'Codex',
       authorDateUtc: '2026-07-11T09:00:00Z', sha: 'b', shortSha: 'b', subject: 'AGT-2105 overview',
-      frameAreaSlug: 'current-state', frameAreaTitle: 'Current State', taskKey: 'AGT-2105' },
+      areaSlug: 'current-state', areaTitle: 'Current State', taskKey: 'AGT-2105' },
   ] },
   inbox: { available: true, reason: null, count: 0, items: [] },
   drift: { available: true, reason: null, overallGrade: 'Fresh', areas: [],
@@ -315,6 +315,8 @@ test.describe('Project Overview · operator dashboard', () => {
     await expect(page.getByTestId('project-overview-tokens-7d')).toHaveText('8.3M');
     await expect(page.getByTestId('project-overview-deployment')).toContainText('5 changes ready to deploy');
     await expect(page.getByTestId('project-overview-wiki')).toContainText('Deployment as a first-class citizen');
+    // Area badge comes from the stubbed areaTitle, not the 'Wiki' fallback.
+    await expect(page.getByTestId('project-overview-wiki')).toContainText('Concepts');
     await expect(page.getByTestId('project-overview-planning-plan-deployment-history')).toBeVisible();
     await expect(page.getByTestId('project-overview-evidence-count')).toHaveText('1 unseen');
     await expect(page.getByTestId('project-overview-remote-truth')).toContainText('4 to push');

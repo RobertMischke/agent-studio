@@ -56,7 +56,7 @@ category.
 
 {{module_boundaries}}
 
-## Schema set (`docs/schemas/`)
+## Schema set (`docs/system/schemas/`)
 
 Each schema is a contract. A drift finding here usually means the code
 emits or consumes shapes the schema does not allow, or an element's

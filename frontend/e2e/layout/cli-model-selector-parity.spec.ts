@@ -4,7 +4,7 @@ import { createJob } from '../helpers/jobs';
 
 /**
  * Cross-surface parity for the unified `<app-cli-model-selector>` chip
- * (see `docs/frontend/audits/cli-model-selector-audit.md`). The same control renders in
+ * (see `docs/quality/frontend/audits/cli-model-selector-audit.md`). The same control renders in
  * the status bar (defaults), the create-task dialog (agent for new task),
  * the job-detail command-deck (agent for this job), the overview Agent row
  * (configure agent), and the code-review panel

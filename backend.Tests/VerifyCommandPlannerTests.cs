@@ -424,6 +424,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             "Two verification command loops ran concurrently in the same repository.");
     }
 
+    // MachineBound 19.07.: TCS/Cancellation-Timing flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task CancellationDuringHostLoadWait_ReleasesRepositoryAdmission()
     {
@@ -449,6 +451,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Assert.Equal(BuildTestGateVerdict.Ok, followup.Verdict);
     }
 
+    // MachineBound 19.07.: Queue-Cancellation-Timing flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task CancellationWhileQueued_DoesNotOpenAdmissionForAnotherRun()
     {

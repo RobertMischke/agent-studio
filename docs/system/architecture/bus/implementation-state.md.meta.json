@@ -1,0 +1,106 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Bus implementation state metadata",
+  "source": {
+    "path": "docs/system/architecture/bus/implementation-state.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "f3bc355f6a2098f0feab4ff5da881e9fa56ffb89d8b2669f20ea525928d7836f",
+      "sizeBytes": 8131,
+      "lineCount": 154,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/system/architecture/bus/implementation-state.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "architecture",
+    "documentMode": "documentation",
+    "temporalState": "mixed",
+    "implementationState": "partially implemented",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "first-ten metadata scoring pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "f3bc355f6a2098f0feab4ff5da881e9fa56ffb89d8b2669f20ea525928d7836f",
+      "sizeBytes": 8131,
+      "lineCount": 154,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "B",
+    "hasDrift": true,
+    "score": 0.29,
+    "summary": "Useful state snapshot, but implementation-state documents age quickly as runtime slices land.",
+    "rationale": [
+      "The document's purpose is a time-sensitive state read.",
+      "Recent shell and metadata work may have changed adjacent integration status.",
+      "It should carry an explicit review date and be refreshed after bus-adjacent changes."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "medium",
+    "freshness": "medium",
+    "operatorUsefulness": "medium"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Useful state snapshot, but implementation-state documents age quickly as runtime slices land.",
+      "rationale": [
+        "The document's purpose is a time-sensitive state read.",
+        "Recent shell and metadata work may have changed adjacent integration status.",
+        "It should carry an explicit review date and be refreshed after bus-adjacent changes."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The document's purpose is a time-sensitive state read.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Recent shell and metadata work may have changed adjacent integration status.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "It should carry an explicit review date and be refreshed after bus-adjacent changes.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Refresh when the next bus-backed UI or projection feature lands."
+}

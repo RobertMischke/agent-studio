@@ -13,7 +13,7 @@ namespace AgentStudio.Shared;
 /// Read-only modes skip the git pre/post pipeline steps (no worktree, no commit,
 /// no merge) and are always parallel-ok. Persisted as the <c>"mode"</c> field in
 /// <c>job.json</c>; keep values stable. See
-/// docs/research/planning-research-task-kinds-2026-05.md.
+/// docs/concepts/planning-research-task-kinds-2026-05.md.
 /// </summary>
 public static class TaskModes
 {

@@ -23,7 +23,7 @@ test.describe('Project detail — Security & Architecture sections', () => {
     const paths = await api<WatchPath[]>('/api/watch-paths');
     expect(paths.length).toBeGreaterThan(0);
     // Prefer the Agent Software Studio project, since this repo has the
-    // canonical docs/operations/security/ and docs/architecture/decisions/adr-archive.md files.
+    // canonical docs/operations/security/ and docs/system/architecture/decisions/adr-archive.md files.
     const preferred = paths.find(p => /agent.?software/i.test(p.name)) ?? paths[0];
     projectName = preferred.name;
   });

@@ -134,6 +134,79 @@ public sealed class WikiCompanionStore
         return new WikiCompanionWriteResult(changed, companionAbs);
     }
 
+    /// <summary>
+    /// Stamps a minimal <c>classification</c> block onto a page's companion at
+    /// creation time (2026-07 metadata convention): <c>status = aktuell</c>,
+    /// <c>analyzedAt = creation date</c>, and <c>type = </c> the folder default
+    /// when the caller supplies one. Merges into an existing companion without
+    /// clobbering any field already set (so a later analysis run wins), or writes
+    /// a schema-valid minimal companion when none exists. Idempotent: returns
+    /// <see cref="WikiCompanionWriteResult.Changed"/> = false on a no-op.
+    /// </summary>
+    public WikiCompanionWriteResult WriteCreationClassification(
+        string wikiDir, string docsRelPath, string title, string content, string? defaultType, DateTime nowUtc)
+    {
+        var companionAbs = CompanionPathFor(wikiDir, docsRelPath);
+        var iso = nowUtc.ToString("o");
+
+        var root = ReadExistingRoot(companionAbs)
+            ?? BuildCreationCompanion(docsRelPath, title, content, iso);
+
+        if (root["classification"] is not JsonObject classification)
+        {
+            classification = new JsonObject
+            {
+                ["owner"] = docsRelPath.Split('/', 2)[0],
+                ["documentMode"] = "documentation",
+                ["temporalState"] = "present",
+                ["implementationState"] = "unknown",
+            };
+            root["classification"] = classification;
+        }
+
+        // Only fill gaps - never overwrite a value a real analysis already wrote.
+        if (classification["status"] is null) classification["status"] = "aktuell";
+        if (classification["analyzedAt"] is null) classification["analyzedAt"] = iso[..10];
+        if (!string.IsNullOrWhiteSpace(defaultType) && classification["type"] is null)
+            classification["type"] = defaultType;
+
+        var serialized = root.ToJsonString(WriteOpts) + "\n";
+        var changed = !File.Exists(companionAbs)
+            || !string.Equals(File.ReadAllText(companionAbs), serialized, StringComparison.Ordinal);
+        if (changed)
+        {
+            var dir = Path.GetDirectoryName(companionAbs);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            File.WriteAllText(companionAbs, serialized);
+        }
+        return new WikiCompanionWriteResult(changed, companionAbs);
+    }
+
+    /// <summary>A schema-valid minimal companion (no report/review/drift blocks yet).</summary>
+    private static JsonObject BuildCreationCompanion(string docsRelPath, string title, string content, string iso)
+    {
+        var (hash, sizeBytes, lineCount) = Fingerprint(content);
+        return new JsonObject
+        {
+            ["$schema"] = SchemaId,
+            ["schemaVersion"] = "wiki-document-companion/v1",
+            ["title"] = string.IsNullOrWhiteSpace(title) ? docsRelPath : title,
+            ["source"] = new JsonObject
+            {
+                ["path"] = "docs/" + docsRelPath,
+                ["type"] = DocumentType(docsRelPath),
+                ["fingerprint"] = new JsonObject
+                {
+                    ["algorithm"] = "sha256",
+                    ["hash"] = hash,
+                    ["sizeBytes"] = sizeBytes,
+                    ["lineCount"] = lineCount,
+                    ["capturedAt"] = iso,
+                },
+            },
+        };
+    }
+
     private static JsonObject? ReadExistingRoot(string companionAbs)
     {
         if (!File.Exists(companionAbs)) return null;
