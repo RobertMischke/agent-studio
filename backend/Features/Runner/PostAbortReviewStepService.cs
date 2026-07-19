@@ -429,7 +429,7 @@ public sealed record PostAbortReviewStepReport(
 /// <summary>
 /// Serialized input contract written to
 /// <c>contracts/post-abort-review-input.json</c> (ADR-0032). Schema lives at
-/// <c>docs/schemas/post-abort-review-input.schema.json</c>.
+/// <c>docs/app/schemas/post-abort-review-input.schema.json</c>.
 /// </summary>
 public sealed record PostAbortReviewInputContract
 {
@@ -452,7 +452,7 @@ public sealed record PostAbortReviewInputContract
 /// <summary>
 /// Serialized output contract written to
 /// <c>contracts/post-abort-review-output.json</c> (ADR-0032). Schema lives at
-/// <c>docs/schemas/post-abort-review-output.schema.json</c>.
+/// <c>docs/app/schemas/post-abort-review-output.schema.json</c>.
 /// </summary>
 public sealed record PostAbortReviewOutputContract
 {

@@ -9,7 +9,7 @@ namespace AgentStudio.Shared;
 /// Loaded on backend boot. Mutations through <c>/api/clients/*</c> are the
 /// single writer; no other service writes identity files directly.
 ///
-/// Pairs with <c>docs/schemas/client-identity.schema.json</c>.
+/// Pairs with <c>docs/app/schemas/client-identity.schema.json</c>.
 ///
 /// This legacy identity is attribution only. The local profile uses it as a
 /// lightweight registration boundary. The networked profile authenticates

@@ -5,9 +5,12 @@ namespace AgentStudio.Docs;
 
 /// <summary>
 /// Read-only repository discovery for experiment Workbenches. Canonical items
-/// live under docs/workbenches/&lt;id&gt;/; the small legacy list is an explicit
-/// migration bridge for named, already-existing artifacts, never a heuristic
-/// scan of arbitrary HTML.
+/// are folders that carry a <c>workbench.json</c> descriptor and live anywhere
+/// under docs/ (each Workbench sits with its own theme, e.g.
+/// docs/operations/&lt;id&gt;/ or docs/quality/&lt;id&gt;/); the recursive scan
+/// skips dot-directories and node_modules-like folders. The small legacy list
+/// is an explicit migration bridge for named, already-existing artifacts, never
+/// a heuristic scan of arbitrary HTML.
 /// </summary>
 public sealed class WorkbenchCatalogueService
 {
@@ -32,13 +35,13 @@ public sealed class WorkbenchCatalogueService
     [
         new("pipeline-workbench", "Pipeline workbench",
             "Inspect the pipeline contract and its current implementation signals.",
-            "docs/domains/pipeline.md.report.html", "testing", ["AGT-2091"]),
+            "docs/system/domains/pipeline.md.report.html", "testing", ["AGT-2091"]),
         new("workbench-mockup-family", "Workbench mockup family",
             "Shape the Workbench host, list, viewer, and later decision surfaces.",
             "docs/concepts/mockups/experimentier-workbench.html", "testing", ["AGT-2122"]),
         new("app-survey", "Application survey",
             "Understand the current product surfaces through the visual survey findings.",
-            "docs/design/app-survey-2026-07-11.html", "decision-ready", []),
+            "docs/quality/design/app-survey-2026-07-11.html", "decision-ready", []),
         new("decoupled-lifecycles", "Decoupled lifecycles",
             "Understand and separate task, run, pipeline, and delivery lifecycles.",
             "docs/concepts/mockups/decoupled-lifecycles.html", "shaping", ["AGT-2091", "AGT-2122"]),
@@ -99,9 +102,9 @@ public sealed class WorkbenchCatalogueService
         if (html == null) return null;
         var status = _git.GetStatusForRepoRoot(root);
         var provenancePaths = new List<string> { item.EntryPath };
-        var canonicalPrefix = $"docs/workbenches/{item.Id}/";
-        if (item.EntryPath.StartsWith(canonicalPrefix, PathComparison))
-            provenancePaths.Add(canonicalPrefix + "workbench.json");
+        var entryDir = Path.GetDirectoryName(item.EntryPath.Replace('\\', '/'))?.Replace('\\', '/');
+        if (!string.IsNullOrEmpty(entryDir))
+            provenancePaths.Add(entryDir + "/workbench.json");
         var workingTreeModified = status.IsRepo && status.Files.Any(change =>
             provenancePaths.Any(path => ChangeTouchesPath(change.Path, path)));
         var revision = status.IsRepo && status.Error == null && !workingTreeModified
@@ -113,15 +116,17 @@ public sealed class WorkbenchCatalogueService
     private List<WorkbenchListItem> DiscoverCanonical(string root)
     {
         var result = new List<WorkbenchListItem>();
-        var workbenches = ContainedPath(root, "docs/workbenches");
-        if (workbenches == null || !Directory.Exists(workbenches)) return result;
-        foreach (var dir in Directory.EnumerateDirectories(workbenches))
+        var docsRoot = ContainedPath(root, "docs");
+        if (docsRoot == null || !Directory.Exists(docsRoot)) return result;
+        foreach (var found in EnumerateWorkbenchDescriptors(docsRoot))
         {
+            var dir = Path.GetDirectoryName(found)!;
             var folder = Path.GetFileName(dir);
+            var descriptorRel = Path.GetRelativePath(root, found).Replace('\\', '/');
             var safeDir = ContainedPath(root, Path.GetRelativePath(root, dir));
             if (safeDir == null)
             {
-                result.Add(Invalid(folder, "Workbench folder is a symbolic link or reparse point."));
+                result.Add(Invalid(folder, "Workbench folder is a symbolic link or reparse point.", descriptorRel));
                 continue;
             }
             var descriptor = ContainedPath(root,
@@ -130,7 +135,7 @@ public sealed class WorkbenchCatalogueService
             {
                 result.Add(Invalid(folder, descriptor == null
                     ? "workbench.json is a symbolic link or reparse point."
-                    : "Missing workbench.json.", descriptor));
+                    : "Missing workbench.json.", descriptorRel));
                 continue;
             }
             try
@@ -164,18 +169,64 @@ public sealed class WorkbenchCatalogueService
             }
             catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException)
             {
-                result.Add(Invalid(folder, ex.Message, descriptor));
+                result.Add(Invalid(folder, ex.Message, descriptorRel, descriptor));
             }
         }
         return result;
     }
 
-    private static WorkbenchListItem Invalid(string folder, string error, string? safePath = null) =>
+    /// <summary>
+    /// Recursively yields every <c>workbench.json</c> descriptor under docs/,
+    /// skipping dot-directories, node_modules-like folders, the shared assets
+    /// tree, and reparse points so a Workbench can live with its own theme.
+    /// </summary>
+    private static IEnumerable<string> EnumerateWorkbenchDescriptors(string docsRoot)
+    {
+        var stack = new Stack<string>();
+        stack.Push(docsRoot);
+        while (stack.Count > 0)
+        {
+            var dir = stack.Pop();
+            string[] files;
+            string[] subdirs;
+            try
+            {
+                if ((new DirectoryInfo(dir).Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                files = Directory.GetFiles(dir, "workbench.json");
+                subdirs = Directory.GetDirectories(dir);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+            foreach (var f in files) yield return f;
+            foreach (var sub in subdirs)
+            {
+                var name = Path.GetFileName(sub);
+                if (name.StartsWith(".", StringComparison.Ordinal)
+                    || name.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("assets", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                bool isReparse;
+                try { isReparse = (new DirectoryInfo(sub).Attributes & FileAttributes.ReparsePoint) != 0; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+                if (isReparse)
+                {
+                    // A symlinked / junctioned Workbench folder must be surfaced
+                    // (and later refused by the ContainedPath guard) rather than
+                    // silently skipped - never recurse through the reparse point.
+                    var linkedDescriptor = Path.Combine(sub, "workbench.json");
+                    if (File.Exists(linkedDescriptor)) yield return linkedDescriptor;
+                    continue;
+                }
+                stack.Push(sub);
+            }
+        }
+    }
+
+    private static WorkbenchListItem Invalid(string folder, string error, string entryPath, string? safePath = null) =>
         new(SafeId(folder) ? folder : "invalid-workbench", folder, "Descriptor needs repair.",
             "invalid", null, safePath != null && File.Exists(safePath)
                 ? File.GetLastWriteTimeUtc(safePath)
                 : DateTime.UtcNow,
-            $"docs/workbenches/{folder}/workbench.json", false, error, []);
+            entryPath, false, error, []);
 
     private string? ResolveRoot(string projectName) =>
         ProjectRepoResolver.ResolveForProject(projectName, _scanner, _registry);

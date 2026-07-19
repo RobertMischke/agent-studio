@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orchestrator Drive-to-Conclusion &amp; CLI-Crash Resilience</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #1f2329;
+    --ink-soft: #4a5159;
+    --line: #e2e6ea;
+    --accent: #2c5f8a;
+    --accent-soft: #eaf2f9;
+    --warn-bg: #fff6e6;
+    --warn-line: #e6c478;
+    --ok-bg: #eaf6ee;
+    --ok-line: #8fc7a3;
+    --bad-bg: #fbecec;
+    --bad-line: #d8a0a0;
+    --code-bg: #eef1f4;
+    --code-ink: #b8341f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+  header.page {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+  header.page h1 {
+    font-size: 26px;
+    line-height: 1.25;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  header.page .sub {
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  header.page .meta {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  header.page .meta span { display: inline-block; margin-right: 18px; }
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 28px;
+  }
+  nav.toc h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    margin: 0 0 8px;
+  }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  nav.toc li { margin: 3px 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px 26px;
+    margin-bottom: 24px;
+  }
+  section > h2 {
+    font-size: 20px;
+    margin: 0 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+  }
+  section h3 {
+    font-size: 15.5px;
+    margin: 22px 0 8px;
+    color: var(--accent);
+  }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    word-break: break-word;
+  }
+  .callout {
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .callout.zielbild { background: var(--accent-soft); border: 1px solid #b9d4e8; }
+  .callout.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .callout.gap { background: var(--bad-bg); border: 1px solid var(--bad-line); }
+  .callout strong { color: var(--ink); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 13.5px;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #f0f3f6;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  tr:nth-child(even) td { background: #fafbfc; }
+  .pill {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .pill.transient { background: var(--warn-bg); border: 1px solid var(--warn-line); color: #7a5b15; }
+  .pill.ok { background: var(--ok-bg); border: 1px solid var(--ok-line); color: #2e6a44; }
+  .pill.review { background: var(--accent-soft); border: 1px solid #b9d4e8; color: #1f4d72; }
+  .pill.human { background: var(--bad-bg); border: 1px solid var(--bad-line); color: #8a3030; }
+  .lane { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; }
+  .filelist code { display: inline-block; margin: 2px 0; }
+  ol.plan > li { margin: 12px 0; }
+  ol.plan > li > strong { color: var(--ink); }
+  .note-append {
+    font-style: italic;
+    color: var(--ink-soft);
+    border-left: 3px solid var(--accent);
+    padding: 6px 12px;
+    margin: 14px 0 0;
+    background: #fbfcfd;
+  }
+  footer.page {
+    margin-top: 28px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .small { font-size: 12.5px; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <h1>Orchestrator Drive-to-Conclusion &amp; CLI-Crash Resilience</h1>
+    <div class="sub">A maintained concept page: how the orchestrator carries every task home, treats infra death as normal, and never strands a task in <span class="lane">3-progress</span>.</div>
+    <div class="meta">
+      <span><strong>Audience:</strong> operator, engineers, future agents</span>
+      <span><strong>Status:</strong> partially implemented (Slice 1 live on stable 2026-06-22)</span>
+      <span><strong>Seed case:</strong> ASS-1757</span>
+    </div>
+  </header>
+
+  <div style="background:#eaf6ee;border:1px solid #8fc7a3;border-radius:8px;padding:14px 18px;margin:0 0 24px;font-size:14px;line-height:1.55;">
+    <strong style="display:block;margin-bottom:6px;">Implementation status (2026-06-22) — keep this current</strong>
+    <div style="margin:6px 0;"><strong>Live on stable</strong> (commits <code>f0892ed6</code> AGT-1770 + <code>d941d6e7</code>):
+      classifier-unknown is removed at the source — a failed/unclassified run is split into
+      <code>InfraCrash</code> (hard CLI death, exit&lt;0) or <code>OrchestratorInconclusive</code> in
+      <code>AgentOutcomeAnalyzer.ResolveIssueKind</code>; <code>RunOutcomePolicy</code> returns
+      <code>NotifyUserAndStop</code> for both (no silent accept); and
+      <code>ProjectRunner.ShouldRouteIssueToHumanReview</code> now routes both to
+      <span class="lane">5-human-review</span> with honest categories
+      (<code>infra-crash</code> / <code>orchestrator-inconclusive</code>).
+      <strong>A failed run never strands in <span class="lane">3-progress</span> anymore.</strong>
+      112 outcome-contract / policy / analyzer tests pass.</div>
+    <div style="margin:6px 0;"><strong>Still open</strong> (epic AGT-1769): retry + cooldown on infra crash with
+      session-resume (AGT-1771); stranded-task self-flag; CooldownRetry banner + gave-up reason in the UI (AGT-1773);
+      the evidence-gate fix so good work is not falsely reissued (AGT-1774).</div>
+  </div>
+
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#zielbild">Zielbild (the target)</a></li>
+      <li><a href="#today">How it works today, and the gap</a></li>
+      <li><a href="#caselog">Case log</a></li>
+      <li><a href="#plan">The plan</a></li>
+      <li><a href="#open">Open questions</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============================ 1. ZIELBILD ============================ -->
+  <section id="zielbild">
+    <h2>1. Zielbild (the target)</h2>
+
+    <div class="callout zielbild">
+      <strong>The orchestrator always drives a task to a real conclusion.</strong> Every run ends in exactly
+      one of four owned terminals, and a task can <em>never</em> sit in <span class="lane">3-progress</span>
+      without either a live process or a scheduled wake.
+    </div>
+
+    <p>The hard requirements that this concept must satisfy:</p>
+    <ol>
+      <li><strong>Drive the task home.</strong> The orchestrator must reliably carry a task to a real conclusion.</li>
+      <li><strong>Infra death is normal.</strong> A CLI crash, <code>exitCode=-1</code>, or a dead host is acceptable and expected.
+          On an infra crash, <strong>retry at least once, up to 3 total attempts</strong>, with a <strong>cooldown step</strong>
+          between attempts. No endless burn-in, no infinite reissue loop.</li>
+      <li><strong>No "classifier-unknown".</strong> The marker gives the operator nothing and is confusing.
+          There must be no <em>classifier-unknown</em> terminal, marker, chip, or chat line anywhere.</li>
+      <li><strong>Honest human-review terminal.</strong> When the orchestrator cannot conclude after N attempts, the task goes to
+          <span class="lane">5-human-review</span> with an explicit, honest reason such as
+          "orchestrator could not conclude after N infra retries; kept the loop, handing to human." That reason <em>is</em> the track.
+          Never leave a task stranded in <span class="lane">3-progress</span>.</li>
+      <li><strong>Failures stay visible.</strong> The operator wants to see that there were problems, but the goal is always:
+          the thing gets finished.</li>
+      <li><strong>Prefer session-resume.</strong> On retry, prefer resuming the same run over a from-scratch rebuild, so good
+          partial work is not thrown away.</li>
+    </ol>
+
+    <h3>The four-terminal model</h3>
+    <p>Every post-run path ends in exactly one of four owned terminals. Two transient states feed them:</p>
+    <table>
+      <thead>
+        <tr><th>State</th><th>Kind</th><th>Destination</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Running</strong></td>
+          <td><span class="pill transient">transient</span></td>
+          <td class="lane">3-progress</td>
+          <td>The CLI is alive.</td>
+        </tr>
+        <tr>
+          <td><strong>CooldownRetry</strong></td>
+          <td><span class="pill transient">transient</span></td>
+          <td class="lane">3-progress</td>
+          <td>An infra crash with retry budget remaining. The task is held with a visible "infra-crashed, retrying k/3 in Ns" banner and a <em>scheduled</em> re-pickup after a backoff delay. It is always time-bounded by a real timer (never the 60-minute boot sweep, never a busy-loop).</td>
+        </tr>
+        <tr>
+          <td><strong>SteerPending</strong></td>
+          <td><span class="pill transient">transient</span></td>
+          <td class="lane">3-progress</td>
+          <td>An auto-mode run asked a steer / NeedsInput question and released its live CLI seat. A durable start time drives the visible "Waiting for answer" timer and a bounded wake: after the configured timeout, the task either receives an unambiguous context-derived answer or reaches a blocked human escalation.</td>
+        </tr>
+        <tr>
+          <td><strong>Succeeded</strong></td>
+          <td><span class="pill ok">terminal</span></td>
+          <td class="lane">4-auto-review</td>
+          <td>Positive terminal sentinel (<code>[[TASK_DONE]]</code> / <code>[[TASK_NOOP]]</code>) or committed-partial work. The existing 3-stage review then owns <span class="lane">4</span> to <span class="lane">5</span>.</td>
+        </tr>
+        <tr>
+          <td><strong>NeedsReview</strong></td>
+          <td><span class="pill human">terminal</span></td>
+          <td class="lane">5-human-review</td>
+          <td>A non-success terminal a human must look at: a <code>[[TASK_BLOCKED]]</code> / <code>[[TASK_NEEDS_INPUT]]</code> sentinel, or a genuine logical failure (failed exit, agent text present, no sentinel, no commits). Carries a concrete reason. Absorbs everything that used to be classifier-unknown-with-text.</td>
+        </tr>
+        <tr>
+          <td><strong>GaveUpToHuman</strong></td>
+          <td><span class="pill human">terminal</span></td>
+          <td class="lane">5-human-review</td>
+          <td>The orchestrator exhausted its infra-retry budget. Honest reason: "orchestrator could not conclude after N infra retries; kept the loop, handing to human." The explicit replacement for silent stranding.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="small"><strong>Invariant:</strong> a run can only leave <em>Running</em> into one of
+      {Succeeded, NeedsReview, GaveUpToHuman, CooldownRetry, SteerPending}. CooldownRetry and SteerPending must each terminate
+      in one of the three terminals or schedule a concrete continuation. No path leaves a task parked in <span class="lane">3-progress</span> without either a live process or a
+      scheduled wake. The 9-day-stranding state is structurally unreachable.</p>
+  </section>
+
+  <!-- ============================ 2. TODAY + GAP ============================ -->
+  <section id="today">
+    <h2>2. How it works today, and the gap</h2>
+
+    <p>A run that ends <code>status=failed</code> with no terminal sentinel and no commits is a structural dead-end today.
+       Three confirmed code facts make it strand:</p>
+
+    <h3>Fact 1: the lane never advances</h3>
+    <p><code>TerminalRunOutcomeClassifier.Classify</code> returns <code>ShouldMoveToReview=false</code> for the
+       failed / no-sentinel / no-commits case. The <code>commitsDuringRun &gt; 0</code> case escapes via
+       <em>CommittedPartial</em>; only the no-commit case strands. Unknown outcomes get
+       <code>ShouldMoveToReview=true</code> <em>only</em> when <code>status=="completed"</code>.</p>
+    <p class="filelist"><code>backend/Shared/Runner/TerminalRunOutcome.cs</code> (lines 48-153; strand at 121-127, partial-escape at 111-119)</p>
+
+    <h3>Fact 2: the marker is born, then re-issued once, then accepted</h3>
+    <p><code>AgentOutcomeAnalyzer.ResolveIssueKind</code> stamps <code>RunIssueKind.ClassifierUnknown</code> on every
+       failed run with agent text (<code>if (failed) return RunIssueKind.ClassifierUnknown;</code>).
+       <code>RunOutcomePolicy.Decide</code> then re-issues exactly once
+       (<code>MaxSoftInterventionAttempts = 1</code>, <code>MaxAutoReissueAttempts = 1</code>) and on exhaustion returns
+       <code>NotifyUserAndAccept</code> with the visible classifier-unknown marker, <em>not</em> <code>NotifyUserAndStop</code>.</p>
+    <p class="filelist">
+      <code>backend/Shared/Runner/AgentOutcomeAnalyzer.cs</code> (line 501; heuristic at 493)<br>
+      <code>backend/Features/Runner/RunOutcomePolicy.cs</code> (lines 57-59, 341-374; meta strings at 356 and 369)<br>
+      <code>backend/Features/Runner/OrchestratorChatLog.cs</code> (line 160, the <code>OrchestratorMessageKind.ClassifierUnknown</code> tag)
+    </p>
+
+    <h3>Fact 3: no escalation path catches it</h3>
+    <p><code>RunIssueKind.ClassifierUnknown</code> is absent from <code>ProjectRunner.ShouldRouteIssueToHumanReview</code>
+       (which lists only PermissionBlocked, WatchdogTimeout, EnvironmentBlocker, EmptyFastExit, ContextOverflow,
+       Quarantined, AgentGitViolation). The <code>NotifyUserAndAccept</code> branch never reaches the
+       <code>EscalateAsync</code> call, which is gated on <code>NotifyUserAndStop</code>. The lane move only happens when
+       <code>movedToReview == true</code>, which is computed from the false <code>ShouldMoveToReview</code> above.</p>
+    <p class="filelist"><code>backend/Features/Runner/ProjectRunner.cs</code> (movedToReview at 4357; escalation gates 4493-4605; lane move 4648-4706; allow-list 4878-4885)</p>
+
+    <div class="callout gap">
+      <strong>The gap:</strong> no lane advance and no escalation. The run is stamped classifier-unknown, re-issued once
+      (a reissue that <em>always rebuilds from scratch</em> and discards in-progress work), and then accepted with a marker
+      that moves nothing. The task stays in <span class="lane">3-progress</span> indefinitely.
+    </div>
+
+    <h3>Why infra death looks like a logical failure</h3>
+    <p>On Windows, <code>Process.Kill</code> hands back <code>exitCode=-1</code> regardless of intent.
+       <code>RunStatusClassifier.Classify</code> deliberately collapses <code>-1</code> and <code>1</code> to
+       <code>"failed"</code> when <code>RunStopReason == None</code> (any non-<code>None</code> reason wins and yields
+       <code>"stopped"</code>). So the system today cannot tell an infra crash from an agent failure. A hard crash mid-productive
+       run leaves a partial output buffer that the heuristic reads as a "substantial reply without a parseable verdict" and the
+       run falls through to classifier-unknown.</p>
+    <p class="filelist">
+      <code>backend/Shared/Runner/RunStatusClassifier.cs</code> (lines 84-98; Windows note at 8-9)<br>
+      <code>backend/Features/Cli/Execution/CliExecutionServiceBase.cs</code> (lines 1063-1071, where exitCode and StopReason are read)
+    </p>
+
+    <h3>Why no background safety net rescues it</h3>
+    <p>The recovery layers exist but none moves a stranded <span class="lane">3-progress</span> task during uptime:</p>
+    <ul>
+      <li><strong>HardHealthChecks.NoProgress</strong> emits a <code>Warn</code> advisory only; it takes no action.
+          <span class="filelist"><code>backend/Features/Supervisor/HardHealthChecks.cs</code>,
+          <code>backend/Features/Supervisor/HardHealthCheckHostedService.cs</code></span></li>
+      <li><strong>AutoInterventionHostedService</strong> is disabled by default, and even when enabled
+          <code>CancelRun</code> only stops the run; it does not move the folder.
+          <span class="filelist"><code>backend/Features/Supervisor/AutoInterventionHostedService.cs</code></span></li>
+      <li><strong>RunQuarantineBreaker</strong> counts soft no-progress failures; <code>exitCode=-1</code> crashes are not in scope.
+          <span class="filelist"><code>backend/Features/Runner/RunQuarantineBreaker.cs</code></span></li>
+      <li><strong>CrossSlugInfraCircuitBreaker</strong> dedupes by slug, so one broken job does not trip it.
+          <span class="filelist"><code>backend/Features/Runner/CrossSlugInfraCircuitBreaker.cs</code></span></li>
+      <li><strong>RapidCrashBreaker</strong> adds exponential backoff (15s / 60s / 240s, cap 900s) but does not move the folder.
+          <span class="filelist"><code>backend/Features/Runner/RapidCrashBreaker.cs</code></span></li>
+      <li><strong>StaleProgressArchiver</strong> would recover the task, but only at boot time and only after the stale window
+          (default 60 minutes), not during uptime.
+          <span class="filelist"><code>backend/Features/Runner/StaleProgressArchiver.cs</code></span></li>
+    </ul>
+
+    <div class="callout warn">
+      Net effect: a hard CLI crash that produced output but no sentinel automatically re-issues (losing context), then accepts
+      a marker that moves nothing, and no live background service rescues it. That is the ASS-1757 strand.
+    </div>
+  </section>
+
+  <!-- ============================ 3. CASE LOG ============================ -->
+  <section id="caselog">
+    <h2>3. Case log</h2>
+    <p>Every CLI crash / dark-flow / drive-to-conclusion incident gets a row here. The first row is the seed case.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:90px;">Date</th>
+          <th style="width:120px;">Task</th>
+          <th>What happened</th>
+          <th>Root cause</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2026-06-19<br><span class="small">(seed)</span></td>
+          <td><code>ASS-1757</code><br><span class="small">feature-kontext-tab-gelesene-wissens-dokumente</span></td>
+          <td>
+            claude CLI exited <code>status=failed, exitCode=-1, duration=292s</code> mid-productive run, right after the agent
+            read code and built a 5-slice plan (TaskCreate #1-5) and announced launching a frontend exploration agent.
+            An earlier intervention had already re-issued once ("re-issuing with sharper framing", category classifier-unknown),
+            which rebuilt context from the job folder and discarded the in-progress work. The supervisor logged
+            "1 warn advisory on no-progress, 0 cycles, 0 jobs reached review" and did nothing.
+          </td>
+          <td>
+            <code>exitCode=-1</code> is a Windows hard process death (an infra crash), but it was classified as
+            classifier-unknown. The exhausted re-issue returned <code>NotifyUserAndAccept</code> (not
+            <code>NotifyUserAndStop</code>), the kind was not in <code>ShouldRouteIssueToHumanReview</code>, and
+            <code>ShouldMoveToReview</code> was false. No lane advance, no escalation.
+          </td>
+          <td>
+            <span class="pill human">stranded</span> in <span class="lane">3-progress</span> for 9 days until manual intervention.
+            <br><span class="small">Under the new model: first crash &rarr; InfraCrash &rarr; CooldownRetry (15s) &rarr;
+            session-RESUME preserving the 5-slice plan; further crashes consume the budget; on exhaustion &rarr;
+            GaveUpToHuman &rarr; <span class="lane">5-human-review</span>, category <code>infra-crash-retries-exhausted</code>.
+            Never stranded.</span>
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-08</td>
+          <td><code>AGT-1945</code><br><span class="small">reissue-verliert-uncommittete-arbeit-worktree-wipe<br>(RM-3 <code>AGT-1937</code>, RM-1 <code>AGT-1935</code>)</span></td>
+          <td>
+            A managed worktree run produced a real deliverable, but the platform auto-commit landed nothing (the branch tip
+            stayed at <code>develop</code>). The reissue / accept verdict then reached terminal teardown, which force-removed the
+            worktree and its <code>task/&lt;id&gt;</code> branch. The next attempt found an empty branch (HEAD == develop), no
+            dangling commits, and the work was irrecoverable.
+          </td>
+          <td>
+            <code>WorktreeTaskLifecycle.TeardownIfIntegrated</code> gated only on <em>committed</em> history
+            (<code>IsAncestor(task/&lt;id&gt;, develop)</code>). A dirty worktree whose branch tip still equals
+            <code>develop</code> reads as "already merged", so <code>git worktree remove --force</code> wiped the uncommitted
+            deliverable. The gate never inspected the working tree.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> teardown now snapshots any uncommitted work onto <code>task/&lt;id&gt;</code> as a
+            platform WIP safety commit <em>before</em> any removal; that commit puts the branch ahead of <code>develop</code>, so
+            the same merged-ancestor gate defers teardown and the work survives for a reissue / human review. A failed snapshot
+            refuses teardown instead of dropping the work, and a genuine auto-commit failure at integration is now a loud High
+            <code>integration-error</code>, never silent.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-09</td>
+          <td><code>AGT-1944</code><br><span class="small">post-processing-outcome-taxonomie-und-environmental-retry</span></td>
+          <td>
+            Three drive-to-conclusion regressions in one night. (1) Transient host file locks (the MSBuild
+            <code>MSB3021/3026/3027</code> copy-lock family) and network blips parked runs to <span class="lane">5e</span> on
+            first detection though re-running after the lock released would have passed. (2) After backend restarts, session
+            resumes failed (<code>claude: "No conversation found"</code>, <code>codex: "no rollout found for thread id"</code>);
+            the <code>cli-launch-failed</code> category promised "rebuilding from disk on the next attempt" but routed straight
+            to 5e instead of making that attempt (belege <code>AGT-1945/1929/1930</code>, one lost cycle per restart). (3) The
+            reissue budget was sticky: <code>CountPriorReissues</code> summed EVERY reissue a job ever accrued, so a card with a
+            spent budget from an earlier, already-resolved chain could never pass a budget-gated check again (beleg
+            <code>AGT-1935</code>).
+          </td>
+          <td>
+            The gate/escalation path keyed off the raw process exit shape, not an outcome bucket:
+            <code>EnvironmentalTransient</code> and <code>CliLaunchFailed</code> had no retry-with-backoff before escalation,
+            environmental cycles counted toward the no-progress quarantine streak, and the shared reissue budget was counted over
+            the job's whole lifetime rather than the current attempt chain.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a five-bucket post-processing outcome taxonomy
+            (<code>PostProcessingOutcomeTaxonomy</code>: success / code-defect / environmental / inconclusive-with-results /
+            inconclusive-empty) now drives routing. Transient environmental faults retry with exponential backoff
+            (30s/120s/300s, budget 2) and <code>cli-launch-failed</code> gets one automatic fresh-start retry before either
+            escalates flagged <code>environmental</code> / <code>cli-launch-failed</code>; environmental cycles no longer accrue
+            toward the quarantine streak; an inconclusive run that left files in <code>results/</code> escalates as
+            <code>inconclusive-with-results</code> (a "work to inspect" hint) rather than the bare park; and the reissue budget is
+            counted per attempt chain (reset on Escalate / AcceptAsDone), so a reopened card gets a fresh budget. See
+            <code>docs/system/contracts/run-outcome.md</code> &sect; "Post-processing outcome taxonomy".
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-10</td>
+          <td><code>AGT-2021</code><br><span class="small">aspect-verdict-ausfall-environmental-retry-statt-gate-item<br>(beleg <code>AGT-1996</code>, baut auf <code>AGT-1944</code>)</span></td>
+          <td>
+            A hard backend cut killed the aspect runner mid-run. The reviewing CLI produced no output, so the aspect verdict came
+            back as the gate item <em>"Aspect runner produced no parseable verdict"</em> - counted as the card's unfinished work and
+            escalated. That is an INFRASTRUCTURE outage, not a work deficit: exactly the fault class the AGT-1944 taxonomy handles for
+            CLI runs but did not yet cover for the ASPECT / post-review steps.
+          </td>
+          <td>
+            The aspect / post-step path had no environmental class of its own: a dead reviewer (CLI threw or returned nothing)
+            collapsed into the same deterministic <code>review:unparseable</code> concern as a genuine format violation, so a killed
+            runner read as the agent's opinion and reached a work-quality terminal.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a missing / unparseable post-step verdict caused by a dead reviewer is now classified
+            environmental. The aspect runner reruns that step exactly once with the AGT-1944 backoff
+            (<code>PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry</code>, budget 1); a second miss flags
+            <code>AspectVerdict.IsInfraFailure</code>, and <code>ReviewDecisionOrchestrator.HandleAspectInfraCrashAsync</code>
+            escalates the card flagged <code>environmental</code> + <code>InfraCrash</code> as a chain-ending <code>Escalate</code>
+            (no reissue-budget burn). A reviewer that DID reply keeps the existing <code>review:unparseable</code> concern; the other
+            post-steps (code-review-grade, wiki) already swallow a crash into a Skipped/Failed row and never gate the lane.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2001</code><br><span class="small">run-liveness B: steer timeout + fallback</span></td>
+          <td>
+            Unattended runs could wait indefinitely after a steer / NeedsInput question. AGT-1936 waited on
+            <em>"provide the task description"</em> with no consumer; later 2062/2067/2068 occupied three slots for about five hours.
+          </td>
+          <td>
+            The intentional steer wait had neither a durable start time nor a bounded wake, so process-liveness recovery correctly
+            left the live-but-waiting run alone and no outcome route ever fired.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> auto-mode steer waits now carry a durable marker and default 120 second timeout.
+            A deterministic branch-state answer resumes the run when available; otherwise the card reaches
+            <span class="lane">5e-escalated</span> with reason <code>steer-unanswered</code>. Both paths emit structured audit and timeline events.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2076</code><br><span class="small">worktree-orphan-resilienz</span></td>
+          <td>
+            Five cards spent a day cycling through worktree preparation while detached <code>ng serve</code> and
+            <code>esbuild</code> helpers held their task worktrees open. About 1,400
+            <code>pick-reverted-no-run</code> events produced 1.7 GB of backend log without a visible terminal.
+          </td>
+          <td>
+            Run teardown killed only the reachable CLI PID tree, detached helpers survived a backend restart, the busy-worktree
+            preparation path had no bounded terminal, and identical revert notices were emitted on every pickup tick.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> Windows runs use a kill-on-close process group plus a boot orphan sweep; a busy
+            worktree retries with exponential cooldown and escalates after five attempts as <code>worktree-blocked</code>, with the
+            busy path in a visible gate item; identical revert logs and chat notices are limited to one per ten minutes with a
+            suppression count. The terminal is <span class="lane">5e-escalated</span>, never an endless ready/progress loop.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+           <td><code>AGT-2077</code><br><span class="small">CPU-Lastwaechter: review OneShots and slot admission under saturation</span></td>
+          <td>
+            Eight parallel worktree installs and Angular builds saturated all 16 cores. Thirty-nine node/esbuild processes
+            left review-decision, post-abort-review, summary-generation, and one main agent call with no CPU time before their
+            60 second deadlines. Empty replies were treated as work-quality failures and ten completed cards reached escalated
+            review within minutes.
+          </td>
+          <td>
+            CLI quota admission knew nothing about local host resources, and the central OneShot path had a fixed timeout with
+            no load-aware queue or retry. Starting more slots amplified the same condition.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> total system CPU is sampled every 15 seconds. One sustained minute above 90
+            percent closes new-slot admission with visible <code>load-throttle</code> events and queues support OneShots until
+             cooling. Calls after saturation get a 3x timeout and one timeout retry; the cause is classified
+             <code>environmental-load</code>, not orchestrator inconclusive. Existing agent runs are not killed.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-08</td>
+          <td><code>AGT-1943</code><br><span class="small">post-build-test-gate worktree isolation<br>(observed on <code>AGT-1937</code>)</span></td>
+          <td>
+            The automatic <code>post-build-test-gate</code> ran <code>dotnet build</code> in the shared dev checkout while a
+            permitted dev backend was running there. The backend held <code>OrchestratorApi.exe</code> open, MSBuild emitted
+            <code>MSB3021</code>/<code>MSB3026</code>/<code>MSB3027</code>, and two red gate attempts falsely escalated a task
+            whose own worktree was green.
+          </td>
+          <td>
+            The review orchestrator always passed the project's configured repository path to the build gate, even when the
+            completed coding run owned a registered <code>task/&lt;id&gt;</code> worktree.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the build gate resolves the live task worktree from its branch and verifies that
+            checkout. Sequential and legacy tasks without a live worktree keep the shared-checkout fallback. A regression test
+            models the shared checkout as <code>MSB3026</code>-locked and proves the green worktree reaches review.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2079</code><br><span class="small">completion gate for documentation and verification-only runs<br>(observed on <code>MKT-1</code>, <code>ASS-1761</code>, <code>AGT-2077</code>)</span></td>
+          <td>
+            Three completed runs with no new commit were reissued or escalated despite <code>[[TASK_DONE]]</code>, a successful run terminal,
+            a successful status, no open items, and concrete delivery evidence in API uploads, <code>results/</code>, or a
+            verification report.
+          </td>
+          <td>
+            <code>CompletionGate.ExtractFindings</code> scanned historical failure vocabulary in the accumulated status and log
+            before it classified the latest run's non-commit evidence. Once the shared reissue budget was spent, the resulting
+            stale finding became the message "unfinished-work evidence after 2 reissues".
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> pure <code>CompletionEvidencePolicy</code> now accepts a clean
+            <code>TASK_DONE</code> close-out with exit 0 or authoritative <code>status=completed</code>, backed by an API delivery, a non-empty <code>results/</code> folder, or
+            documented successful verification. Explicit open items and current, non-reverified build/test failures still use
+            the existing bounded reissue/escalation path. Pure fixtures pin all three night cases.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2099</code><br><span class="small">derived .NET gate cwd<br>(observed on <code>TE-3</code>)</span></td>
+          <td>
+            The derived target-less <code>dotnet build</code> gate failed with <code>MSB1003</code> although the
+            TokenEconomy worktree contained a root <code>.slnx</code> solution.
+          </td>
+          <td>
+            Command discovery depended on the repository root, but execution did not state or test an absolute cwd invariant.
+            A backend process started from another directory could therefore make a target-less command resolve against the
+            wrong directory without enough log context to diagnose it.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the gate canonicalizes the selected checkout root before planning and resolves
+            every command cwd from that absolute root. Each command now records its repository and working directory, and a
+            regression fixture proves a root <code>.slnx</code> with nested-only projects executes at the repository root.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2143</code><br><span class="small">Codex clean-context resume spiral<br>(observed on <code>CAR-5</code>)</span></td>
+          <td>
+            A successful run committed its change, passed 490 tests, and received a code-review grade. The follow-up then ran
+            <code>codex thread/resume</code> inside a newly-created clean-context <code>CODEX_HOME</code>. That home deliberately
+            contained no rollout, so Codex exited in under one second with <code>no rollout found</code>. The empty launch failure
+            replaced the successful run as the aspect basis, produced the false finding "No reviewable code exists", and drove a
+            reissue spiral while session-index-only corpses accumulated.
+          </td>
+          <td>
+            Resume eligibility checked only the stored UUID and worktree cwd, not the rollout in the effective Codex home. The
+            clean-context home is created after prompt planning, so the deterministic mismatch was discovered only by the child
+            process. Session inventory trusted <code>session_index.jsonl</code> without requiring a rollout, and review helpers
+            could select the latest failed run instead of the last completed run.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> Codex resume now proves the rollout exists before prompt rendering. A missing
+            rollout selects the full recovery prompt and logs <code>codex_resume_precondition_fallback</code>, so no doomed resume
+            is launched. CLI sessions without rollouts are hidden immediately and index rows older than five minutes are compacted
+            with <code>codex_session_stillborn_cleanup</code>. Aspect, grade, changed-file, and abort-review evidence select the last
+            completed run; a launch-only failure after a graded success routes to human review with that successful SHA range and
+            cannot reissue. The 2026-07-11 forensic scan found 7 stale shared-home index-only rows and 10 clean Codex homes in the
+            CAR-5 window; the rows are removed by the first post-deploy session inventory refresh.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2147</code><br><span class="small">remote worktree teardown data loss<br>(observed on <code>AGT-2091</code>)</span></td>
+          <td>
+            A remote CLI exited 0 and reported completed work plus passing Playwright tests, but omitted the terminal sentinel.
+            The run was classified as completed out-of-band and teardown force-removed the checkout. No commit, runner branch,
+            or dangling object survived, so roughly one hour of work was irrecoverable.
+          </td>
+          <td>
+            The standalone runner posted external completion before teardown, inspected neither working-tree status nor remote
+            reachability, and force-removed both the linked checkout and its local runner branch. The local runner's snapshot
+            guard did not cover <code>runner/GitWorkspace</code>.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> every remote teardown now commits dirty work, pushes run-produced commits to
+            <code>runner/&lt;runner-id&gt;/&lt;task-key&gt;</code>, verifies the origin ref, and only then removes the checkout.
+            Successful salvage branches are linked in runner-completion deliverables. A failed remote check or push retains the worktree and
+            records a visible <code>worktree-blocked</code> gate item with host and path. The same fail-closed path runs for
+            unknown outcomes, exceptions, cancellation, shutdown, and crash debris.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2148</code><br><span class="small">remote daemon runs omitted terminal sentinels</span></td>
+          <td>
+            Twenty-six remote runs on <code>agent-runner-01</code> exited 0 after substantive final replies but were
+            classified <code>Unknown</code> because no <code>[[TASK_*]]</code> terminal sentinel was present. Equivalent
+            local runs emitted their sentinels normally.
+          </td>
+          <td>
+            <code>RemoteTaskRunner</code> fetched <code>prompt.md</code> and passed it verbatim to stdin. Unlike the local
+            <code>runner-fresh-start</code> render, the standalone one-shot and daemon path never appended the mandatory
+            completion protocol. Output was fully drained, and Codex 0.144 JSONL leaves the sentinel visible to the
+            existing scanner, so neither parser loss nor tail truncation caused the wave.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the shared standalone execution path now appends the four-sentinel contract
+            before every CLI spawn and logs that assembly. Regression fixtures prove the rendered daemon prompt and a
+            Codex JSONL <code>item.completed</code> reply resolve to <code>Done</code> rather than <code>Unknown</code>.
+            A fenced runner-completion endpoint records <code>agent_run_finished</code> and moves successful runs into normal
+            <code>4-auto-review</code> without <code>external_completion</code> provenance.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2148</code><br><span class="small">completion-gate reissue from historical build evidence</span></td>
+          <td>
+            A verification-only follow-up restored successfully and passed its focused tests, but the completion gate reissued it.
+            The successful status explained that an earlier <code>dotnet build --no-restore</code> failure was a false positive,
+            while the log tail also echoed old gate findings from <code>pipeline-execution.json</code>.
+          </td>
+          <td>
+            The evidence scan treated an explicitly disclaimed false-positive phrase and line-numbered durable pipeline-history
+            output as fresh build-failure evidence. A second reissue exposed the remaining cause: recent-log context was truncated
+            from the end, retaining early failure output while dropping the later passing verification, terminal sentinel, and CLI exit.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> recent-log truncation now preserves the terminal end of the run. The completion gate
+            also ignores explicit false-positive or superseded failure diagnoses, negated phrases such as <code>no unfinished evidence</code>,
+            and <code>pipeline-execution.json:&lt;line&gt;</code> artifact echoes. A merely earlier or otherwise unresolved build failure
+            still blocks. The reproduced successful close-out now reaches the normal pass terminal and auto-review.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-12</td>
+          <td><code>AGT-2157</code><br><span class="small">review CLI configuration silently forced Claude</span></td>
+          <td>
+            GPT-only Agent Studio cards ran through Codex on the remote host, but local post-orchestrator outcomes still
+            recorded <code>performerCliType: claude</code> and spawned Claude processes.
+          </td>
+          <td>
+            <code>ReviewDecisionOrchestrator</code> read its configured CLI but <code>RunViaOneShotAsync</code> discarded it
+            and always called <code>CliOneShotRegistry.Get("claude")</code>. Defaults and aspect fallback were Claude-specific too.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> one-shot dispatch now preserves the configured CLI, the bounded review default
+            is Codex with <code>gpt-5.4-mini</code>, and aspect fallback inherits that CLI. AGT-2157 tracks the full Project Hub
+            UI/API surface for pipeline-step and prompt model configuration with Token Economy guidance.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-12</td>
+          <td><code>AGT-2169</code><br><span class="small">progress admission atomicity<br>(observed on <code>AGT-2149</code>)</span></td>
+          <td>
+            AGT-2149 moved from Ready to Progress without a confirmed CLI process. It later showed
+            <code>no-active-run</code> beside a historical execution completed with exit 0, while no live owner or bounded wake
+            could drive the card forward.
+          </td>
+          <td>
+            Explicit spawn-failure branches reverted the lane, but an unexpected exception between the lane move and
+            <code>StartAsync</code> escaped that compensation. The canonical session event and run-start timeline row were also
+            written before process confirmation, and the in-memory claim result was ignored. The disk pickup lock used a read/delete/move sequence
+            that did not serialize two simultaneous backend claims.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> pre-start admission faults now release both ownership layers and return a lane
+            move made by that attempt to <span class="lane">2-ready</span>, where the scheduler provides the bounded wake.
+            Run history and <code>agent_run_started</code> are durable only after the CLI confirms a process. Duplicate in-memory
+            claims fail closed, and the cross-backend pickup record is classified and written under one exclusive file lock.
+            Same-host liveness checks reject a reused PID whose process started after the lock was acquired. Boot liveness
+            recovery continues to route a historical finished run to post-processing and an unfinished zombie back to Ready.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-13</td>
+          <td><code>AGT-2117</code><br><span class="small">quality-grade starvation and stale Pending rows<br>(also observed on <code>AGT-2112</code>, <code>AGT-2114</code>, <code>AGT-2118</code>, and <code>AGT-2108</code>)</span></td>
+          <td>
+            Attempt 8 failed its deterministic build/test gate and ultimately escalated, but Code-review quality grade,
+            the aspect rows, and later pipeline rows remained <code>Pending</code> without a reason. If the grade had been
+            reached, its configured fallback still selected Claude despite the GPT-only operating constraint.
+          </td>
+          <td>
+            The red build-gate and aspect-infrastructure branches returned before the reporting grade. Pipeline completion
+            only stamped <code>CompletedAt</code>; it did not close rows that the terminal branch never dispatched, so the UI
+            represented a finished attempt as work still waiting to start.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the reporting grade now runs before both short-circuits and never gates the lane
+            decision. Completing a pipeline turns known unreached rows into <code>Skipped</code> with the causal terminal reason
+            and interrupted <code>Running</code> rows into <code>Failed</code>; a pure read projection repairs legacy attempts.
+            Model-backed pipeline defaults use Codex, with the detected flagship reserved for quality grading and task spawning.
+            The affected AGT-2117 attempt keeps its recorded <span class="lane">Escalate</span> terminal decision, now with
+            the skipped causes visible even if the card is moved again later.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2134</code><br><span class="small">steer timeout bypass<br>(observed on <code>AGT-2087</code>)</span></td>
+          <td>
+            AGT-2087 remained visibly in "waiting for answer" for 155 minutes although the default steer timeout was
+            120 seconds and the uptime monitor was deployed. No runtime artefacts for the 13:45-16:20 window were present
+            in this checkout, so the code-path audit reconstructed the bypasses and locked them with fixtures.
+          </td>
+          <td>
+            NeedsInput ownership was inferred from the project's mode at completion time and was unnecessarily gated on
+            an optional captured run plan. An auto-picked run could therefore look manual after a mode flip. Separately,
+            the timeout sweep considered only <code>steer-pending.json</code>; a card whose durable phase said
+            <code>steer-pending</code> but whose sidecar write was missing remained visible yet untracked.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> original <code>AutoPickup</code> intent now keeps NeedsInput unattended
+            regardless of a later mode flip and without run-plan metadata. A missing steer marker is reconstructed from
+            the persisted phase timestamp. Timed-out waits therefore reach either <code>auto-answered</code> and
+            <span class="lane">2-ready</span>, or the <code>steer-unanswered</code> blocked terminal in
+            <span class="lane">5e-escalated</span>; they cannot remain in progress indefinitely.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="note-append"><strong>Append future CLI-crash / drive-to-conclusion cases here.</strong> One row per incident:
+       date, task key + slug, what happened, root cause, and which terminal it reached. Keep this log running so the model
+       section stays grounded in real failures.</p>
+  </section>
+
+  <!-- ============================ 4. THE PLAN ============================ -->
+  <section id="plan">
+    <h2>4. The plan</h2>
+
+    <h3>Retry + cooldown policy</h3>
+    <p>Retry applies <em>only</em> to the infra-crash class. Logical conclusions (sentinels, real failures) never retry.</p>
+    <ul>
+      <li><strong>Budget:</strong> up to 3 total attempts per task per run-chain (attempt 1 = original run, +2 infra retries),
+          replacing the implicit <code>MaxAutoReissueAttempts = 1</code>.</li>
+      <li><strong>Engine:</strong> reuse the existing <code>CompletionRetrigger</code> (already a bounded
+          retry-transient-abort-then-escalate engine, already counts budget per job and resets on lane exit, already logs
+          attempt N/N and sessionResumed). Widen <code>IsTransientAbort</code> from watchdog-timeout-only to also accept the
+          infra-crash kind, and bump <code>DefaultBudget</code> from 2 to 3.
+          <span class="filelist"><code>backend/Features/Runner/CompletionRetrigger.cs</code> (lines 54, 61-62);
+          wiring in <code>backend/Features/Runner/ProjectRunner.cs</code> (4524-4567)</span></li>
+      <li><strong>Cooldown:</strong> between retries the task enters CooldownRetry for a backoff delay; reuse
+          <code>RapidCrashBreaker.Backoff</code> (15s / 60s / 240s, cap 900s) awaited inside the existing re-spawn
+          <code>Task.Run</code> before <code>RunCliAsync</code>. No burn-in, no infinite reissue.
+          <span class="filelist"><code>backend/Features/Runner/RapidCrashBreaker.cs</code>;
+          re-spawn at <code>ProjectRunner.cs</code> 4556-4566</span></li>
+      <li><strong>Exhaustion:</strong> when the third attempt still infra-crashes, transition to GaveUpToHuman and escalate to
+          <span class="lane">5-human-review</span>. No fourth attempt.</li>
+    </ul>
+
+    <h3>Session-resume preference</h3>
+    <p>Each retry uses <code>RunIntent.UserContinue</code> + <code>ContinueModes.Continue</code> so it <strong>resumes the live
+       session first</strong> (the <code>RunPlanner</code> resume path) and only falls back to recovery-from-job-folder when the
+       session is genuinely gone. That fallback consumes one attempt; it does not reset the budget. The current defect is the
+       reverse: a reissue always sets <code>MarkSessionChainRecovery</code> on the continue path and rebuilds from scratch,
+       throwing away good partial work. Making resume the default preserves work like ASS-1757's 5-slice plan.</p>
+    <p class="filelist"><code>backend/Features/Runner/RunPlanner.cs</code> (UserContinue routing, lines 85-145)</p>
+
+    <h3>Remove classifier-unknown end-to-end</h3>
+    <p>Delete the concept everywhere so no terminal, marker, chip, or chat line named "unknown" remains:</p>
+    <ul>
+      <li>The <code>RunIssueKind.ClassifierUnknown</code> branch in <code>RunOutcomePolicy.Decide</code> (lines 341-374) and both meta strings (356, 369).</li>
+      <li>The <code>ResolveIssueKind</code> stamp in <code>AgentOutcomeAnalyzer.cs</code> (line 501), replaced by the discriminator below.</li>
+      <li>The <code>OrchestratorMessageKind.ClassifierUnknown</code> chat tag in <code>OrchestratorChatLog.cs</code> (line 160).</li>
+      <li>The <code>"classifier-unknown"</code> topic string in <code>ProjectRunner.ToIssueTopic</code>.</li>
+    </ul>
+
+    <h3>The discriminator (infra crash vs logical conclusion)</h3>
+    <p>Built only from signal already in the code (<code>RunStopReason</code> + <code>exitCode</code> + sentinel + commits):</p>
+    <ul>
+      <li>Positive sentinel present &rarr; <strong>Succeeded</strong> (sentinel always wins).</li>
+      <li><code>[[TASK_BLOCKED]]</code> / <code>[[TASK_NEEDS_INPUT]]</code> &rarr; <strong>NeedsReview</strong>.</li>
+      <li><code>RunStopReason</code> in {UserStop, FollowupPause} &rarr; not terminal (existing pause/continue path, untouched).</li>
+      <li><code>RunStopReason</code> in {Watchdog, Cancelled, QuotaCapExceeded} <em>or</em> (<code>exitCode &lt; 0</code>/non-zero
+          AND no agent terminal text AND no commits) &rarr; <strong>infra crash</strong> &rarr; CooldownRetry if budget remains,
+          else GaveUpToHuman. This is the ASS-1757 path.</li>
+      <li>Failed exit WITH substantial agent text but no positive sentinel and no commits &rarr; <strong>NeedsReview</strong>
+          ("failed without terminal sentinel"). No re-issue, no "unknown".</li>
+      <li>Failed exit WITH commits &rarr; <strong>Succeeded</strong> via CommittedPartial (unchanged).</li>
+    </ul>
+
+    <h3>Honest escalation wiring</h3>
+    <p>Add the two new kinds (<code>InfraCrash</code>, <code>OrchestratorInconclusive</code>) to
+       <code>ShouldRouteIssueToHumanReview</code> and map them in <code>ToEscalationCategory</code>. Add two constants in
+       <code>HumanReviewEscalation.cs</code>: <code>InfraCrashRetriesExhausted = "infra-crash-retries-exhausted"</code> and
+       <code>OrchestratorInconclusive = "orchestrator-inconclusive"</code>. The existing <code>EscalateAsync</code> fall-through
+       fires for both once the budget is exhausted. No failed/unclassified run may ever return <code>NotifyUserAndAccept</code>
+       again; that is the structural invariant that closes the stranding gap.</p>
+    <p class="filelist">
+      <code>backend/Features/Runner/ProjectRunner.cs</code> (ShouldRouteIssueToHumanReview 4878-4885; ToEscalationCategory 4933; fall-through 4570-4604)<br>
+      <code>backend/Features/Runner/HumanReviewEscalation.cs</code> (line 11)
+    </p>
+
+    <h3>Visibility (loud, but non-blocking)</h3>
+    <p>Failures stay loud while the task still finishes:</p>
+    <ul>
+      <li>A CooldownRetry banner on the card ("infra-crashed, retrying k/3 in Ns"), rendered distinctly from the normal
+          in-progress chip so a cooling task does not look like a fresh stall.</li>
+      <li>The GaveUpToHuman / inconclusive escalation reason surfaced prominently in <span class="lane">5-human-review</span>,
+          visually distinct from a logical NeedsReview, driven from the existing escalation category and chat history (no new side channel).</li>
+      <li>Full chat / observation / orchestrator-log history retained. Text-only; no menu icons.</li>
+    </ul>
+
+    <h3>Ordered implementation steps</h3>
+    <ol class="plan">
+      <li><strong>Pin the contract with failing tests first.</strong> Add cases asserting: no failed/unclassified run returns
+          <code>NotifyUserAndAccept</code>; infra crash retries up to 3 with cooldown then escalates with
+          <code>infra-crash-retries-exhausted</code>; a logical failure routes straight to <span class="lane">5-human-review</span>;
+          a resumable session is resumed on retry; the strings "classifier-unknown" and
+          <code>OrchestratorMessageKind.ClassifierUnknown</code> appear nowhere.</li>
+      <li><strong>Split the issue kind at the source</strong> in <code>AgentOutcomeAnalyzer.cs</code> (498-508):
+          InfraCrash vs OrchestratorInconclusive; remove ClassifierUnknown. Keep the &ge;400-char substantial-reply heuristic intact.</li>
+      <li><strong>Collapse the ClassifierUnknown branch</strong> in <code>RunOutcomePolicy.cs</code> (341-374): route InfraCrash and
+          OrchestratorInconclusive to <code>NotifyUserAndStop</code>; delete both meta strings, the chat tag, and the topic string.</li>
+      <li><strong>Widen the retry engine + add the cooldown.</strong> Widen <code>IsTransientAbort</code> to accept InfraCrash,
+          bump <code>DefaultBudget</code> 2&rarr;3, update <code>docs/system/contracts/loop-inventory.md</code> in the same commit, and
+          await <code>RapidCrashBreaker.Backoff(attemptNo)</code> before the re-spawn.</li>
+      <li><strong>Make lane-advance total</strong> by adding both kinds to <code>ShouldRouteIssueToHumanReview</code> and
+          <code>ToEscalationCategory</code>, plus the two <code>HumanReviewEscalation</code> constants; verify the
+          <code>EscalateAsync</code> fall-through fires.</li>
+      <li><strong>Surface CooldownRetry + GaveUpToHuman in the UI</strong> as described above. The UI step is load-bearing, not cosmetic.</li>
+      <li><strong>Maintain this wiki page.</strong> Replace
+          <code>docs/common-problems/classifier-unknown-on-cli-resume-failure</code> with
+          <code>docs/common-problems/drive-to-conclusion-infra-crash-retry/README.md</code>, seed the case log with ASS-1757,
+          link it from <code>docs/system/domains/runner.md</code> and <code>AGENTS.md</code>, and add the AGENTS rule.</li>
+      <li><strong>Deploy via <code>deploy-stable.sh</code> only.</strong> Build and run the full backend test suite, deploy through the
+          guarded script (pre-build + health + rollback), verify on stable that an injected <code>exitCode=-1</code> crash retries
+          with cooldown, resumes its session, and on exhaustion lands in <span class="lane">5-human-review</span> with category
+          <code>infra-crash-retries-exhausted</code>. Confirm no "classifier-unknown" string anywhere. Do not re-arm auto-continuous
+          without explicit operator OK.</li>
+    </ol>
+
+    <div class="callout zielbild">
+      <strong>AGENTS rule (to be added):</strong> Before changing any run-outcome, retry, escalation, classifier, or
+      session-resume logic, read this page (the four-terminal model; no classifier-unknown; infra crash = retry up to 3 with
+      cooldown, session-resume first; never strand in <span class="lane">3-progress</span>). After your change, append the
+      incident to the running case log and keep the model section accurate.
+    </div>
+  </section>
+
+  <!-- ============================ 5. OPEN QUESTIONS ============================ -->
+  <section id="open">
+    <h2>5. Open questions</h2>
+    <ul>
+      <li><strong>Cooldown shape.</strong> Reuse <code>RapidCrashBreaker.Backoff</code> as-is (15s / 60s / 240s) for zero delta,
+          or a gentler infra-specific curve (e.g. 30s / 120s) that is cleaner semantically?</li>
+      <li><strong>QuotaCapExceeded.</strong> Should it count as an infra crash (retry) or escalate immediately? A quota cap will
+          just re-hit on an immediate retry, so it may deserve its own category rather than burning 3 attempts.</li>
+      <li><strong>Inconclusive track.</strong> Does <code>OrchestratorInconclusive</code> deserve its own card track / reason
+          string distinct from a plain logical NeedsReview, or is one honest reason text enough? (Affects the UI step.)</li>
+      <li><strong>Budget across resume-fallback.</strong> Should a retry that had to rebuild-from-job-folder (session genuinely
+          gone) cost the same as a clean resume, or cost extra? Current plan: counts the same.</li>
+      <li><strong>Boot-time sweep.</strong> Retire the <code>StaleProgressArchiver</code> 60-minute sweep, or keep it as a
+          belt-and-braces backstop once CooldownRetry guarantees a scheduled wake? Keeping it is harmless but is a second source of truth.</li>
+      <li><strong>ADR.</strong> Is a full ADR warranted for the four-terminal drive-to-conclusion policy, or does this wiki page
+          plus the run-outcome contract update suffice given ADR-0002 / 0017 / 0025 already exist?</li>
+      <li><strong>StopReason coupling (risk).</strong> The discriminator depends on <code>RunStopReason</code> being stamped at
+          every kill/cancel site. A path that kills a process without setting it and leaves substantial text would misclassify as
+          NeedsReview (benign, human-visible) rather than CooldownRetry. The watchdog, sleep-detector, and cancellation sites must
+          reliably stamp Watchdog / Cancelled.</li>
+    </ul>
+  </section>
+
+  <footer class="page">
+    This page is a living concept doc. It must be maintained: keep the four-terminal model accurate and append every CLI-crash /
+    drive-to-conclusion incident to the case log in Section 3. Code references are grounded in
+    <code>agent-taskboard-dev/backend</code> as of the seed case (2026-06-19); update line numbers if they drift.
+    The current July 2026 umbrella analysis of semantic completion, exact-revision review, and Remote Host stability is
+    <a href="completion-review-and-remote-runner-stability.html">Completion, Review, and Remote Runner Stability</a>.
+  </footer>
+
+</div>
+</body>
+</html>

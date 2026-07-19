@@ -287,7 +287,7 @@ public static class TaskCrudEndpoints
         // mode=coding, state=1-preparation) that the frontend feeds into the
         // existing create-task modal. The modal stays the single source of
         // truth for create UX; this endpoint only reads. See
-        // docs/research/planning-research-task-kinds-2026-05.md.
+        // docs/concepts/planning-research-task-kinds-2026-05.md.
         group.MapGet("/{jobId}/promote-to-coding", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);

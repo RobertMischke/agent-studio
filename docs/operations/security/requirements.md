@@ -17,6 +17,8 @@ never grant network access or be described as a credential.
 
 ## Networked profile
 
+The app never edits a watched project's source code directly. All writes that affect the target repo go through the agent (which the user supervises) or through the app-owned task lifecycle (`docs/system/contracts/agent-task.md`).
+
 ### N1: HTTPS before exposure
 
 The Task Server is reachable only through a TLS-terminating reverse proxy.

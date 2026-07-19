@@ -11,7 +11,7 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
  * Agents / CLI, …) live in the separate `app-section-header`; this
  * component is pane chrome only.
  *
- * See docs/frontend/audits/scss-quality.md "Wave C".
+ * See docs/quality/frontend/audits/scss-quality.md "Wave C".
  */
 @Component({
   selector: 'app-pane-header',

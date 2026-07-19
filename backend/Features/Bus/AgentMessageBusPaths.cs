@@ -2,7 +2,7 @@ namespace AgentStudio.Bus;
 
 /// <summary>
 /// Canonical layout for Agent Message Bus files. See section 4 of
-/// <c>docs/architecture/bus/agent-message-bus.md</c>. The layout root is the watched
+/// <c>docs/system/architecture/bus/agent-message-bus.md</c>. The layout root is the watched
 /// workspace's <c>logs/</c> directory; bus output is workspace evidence and
 /// lives next to other workspace logs, not in the app repository.
 /// </summary>

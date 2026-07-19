@@ -1132,7 +1132,7 @@ export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
  * DtC drive-to-conclusion infra-retry budget: up to 3 total attempts per
  * run-chain (attempt 1 = original run + up to 2 infra retries). Mirrors the
  * backend `CompletionRetrigger` DefaultBudget; see the four-terminal model in
- * `docs/wiki/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
+ * `docs/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
  * CooldownRetry banner counts against this budget.
  */
 export const INFRA_RETRY_BUDGET = 3;

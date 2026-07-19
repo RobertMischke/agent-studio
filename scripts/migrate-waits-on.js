@@ -4,7 +4,7 @@
 // "Waits-on" is the existing F34 `references.dependsOn` relation given scheduler
 // teeth by AGT-2029: a 2-ready card whose dependsOn targets have not reached
 // 6-completed / 7-archive is held back from auto-pickup and shows an amber
-// "waits: KEY" chip on the board (see docs/contracts/filesystem.md and the tasks
+// "waits: KEY" chip on the board (see docs/system/contracts/filesystem.md and the tasks
 // domain map). This script sets those edges through the Task API - never by
 // editing task.json directly (AGENTS.md: API-first).
 //

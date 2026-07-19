@@ -1,5 +1,21 @@
 # Security overview
 
+> **Status note (2026-07-07).** ADR-0059 promotes **remote execution** (Linux
+> runner hosts + a central task-server URL) from explicit non-goal to a major
+> goal. The "local-only" situation below still describes the **current,
+> deployed** state and stays accurate until the remote phases land — but the
+> product-thesis framing is superseded, and this document must be rewritten
+> with a real threat model (auth on the central URL, SSH-provisioned runner
+> hosts, per-runner identities) **before** any port is exposed beyond SSH.
+> Plan of record: [concepts/distributed-agent-studio-target-architecture.md](../../concepts/distributed-agent-studio-target-architecture.md)
+> (the central-URL auth boundary and runner split gate the remote phases).
+>
+> **Target clarification (2026-07-13).** The required human login, Runner
+> service identity, HTTPS boundary, audit, and management model is now defined
+> in [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md#8-security-baseline-for-an-internet-reachable-server).
+> The local-only text below is current-state documentation, not the networked
+> target.
+
 Agent Software Studio has two explicit security profiles. They solve different
 problems and must not be confused. This page is the networked-threat-model
 rewrite required by ADR-0059 before any port is exposed beyond SSH; the target

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Architecture model metadata",
+  "source": {
+    "path": "docs/system/architecture/model.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "15df404237a998c9c95f9057c76b3684c80bd3091a87df0cb584a63e85811bfe",
+      "sizeBytes": 15449,
+      "lineCount": 242,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/system/architecture/model.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "architecture",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "implemented"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "sample metadata pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "15df404237a998c9c95f9057c76b3684c80bd3091a87df0cb584a63e85811bfe",
+      "sizeBytes": 15449,
+      "lineCount": 242,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "B",
+    "hasDrift": true,
+    "score": 0.28,
+    "summary": "Mostly current, but some implementation-status details depend on ongoing Project Hub and Wiki navigation work.",
+    "rationale": [
+      "The architecture model is still the right anchor for drift analysis.",
+      "UI shell behavior changed recently and should be reflected more explicitly.",
+      "No critical contradiction was found in the sampled pass."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "medium",
+    "freshness": "medium",
+    "operatorUsefulness": "high"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Mostly current, but some implementation-status details depend on ongoing Project Hub and Wiki navigation work.",
+      "rationale": [
+        "The architecture model is still the right anchor for drift analysis.",
+        "UI shell behavior changed recently and should be reflected more explicitly.",
+        "No critical contradiction was found in the sampled pass."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The architecture model is still the right anchor for drift analysis.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "UI shell behavior changed recently and should be reflected more explicitly.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "No critical contradiction was found in the sampled pass.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Review after the Wiki and Project Hub navigation slices settle."
+}
