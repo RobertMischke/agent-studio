@@ -1,5 +1,33 @@
 # Workstream
 
+**Status: ÜBERHOLT / RETIRED (operator decision 2026-07-19, "nicht bewährt, umbauen").**
+The fixed five-area Workstream frame was dismantled after an evidence review:
+after 10 days and ~200 tasks the frame held zero operator- or agent-authored
+content, 0 of 575 inspected task logs read a frame page, and the real knowledge
+demand materialised in `learnings/`, `common-problems/`, and the workbenches
+instead. The frame folders, seeder, collector/curator pipeline steps, tree
+pinning, and immutability rules were removed; the Pulse drift bar now grades the
+**real top-level docs folders**, and the `human-action` signal survives as a
+folder-independent frontmatter convention (see
+[../contracts/wiki-tree.md](../contracts/wiki-tree.md)). Entry curation is
+handled by the curated wiki start page (`home.json` seeds, see the
+Konsolidierungsanalyse). Incident context and the removal record:
+[../workbenches/haertung-verteilte-ausfuehrung/historie.html](../workbenches/haertung-verteilte-ausfuehrung/historie.html).
+
+**Cleanup in already-onboarded project wikis:** the six seeded shell pages
+(`docs/engineering-workstream/00-overview.html` plus the five area
+`index.html` landing shells) are no longer excluded anywhere, so wherever they
+still exist they count as ordinary (and permanently stale) pages in Pulse and
+in grading runs. Delete the `docs/engineering-workstream/` folder in each
+project wiki that never accumulated real content there (the immutability lock
+is gone, so the normal wiki delete works); pages with real content should be
+moved out first. This repo's own shells were removed with this change.
+
+The text below is preserved as historical record (only the link to the deleted
+frame source file was unlinked).
+
+---
+
 Status: Concept (living). Slices EW-1 and EW-2 implemented.
 
 > Naming (operator decision 2026-07-09): user-facing, this frame is called
@@ -78,7 +106,8 @@ even when the request comes from an agent, not just the UI. Two tiers:
   because their orientation layout *is* the frame.
 
 The single source of truth is
-[`backend/Features/Docs/EngineeringWorkstreamFrame.cs`](../../backend/Features/Docs/EngineeringWorkstreamFrame.cs).
+`backend/Features/Docs/EngineeringWorkstreamFrame.cs` (file deleted in the
+2026-07-19 retirement; link removed).
 The wiki move, delete, and save endpoints consult it and reject blocked
 mutations (`409 Conflict` for move/delete, a rejected save for content), and the
 wiki tree tags each frame node with an `immutable` flag so the UI shows a lock

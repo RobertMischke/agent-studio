@@ -274,13 +274,6 @@ public static class ProjectDocsEndpoints
             var to = Normalize(body.ToRelPath);
             if (from == null || to == null) return Results.BadRequest(new { error = "fromRelPath and toRelPath are required" });
 
-            // The fixed frame's shape is immutable: its folders and landing shells
-            // cannot be moved/renamed, nor can a move clobber a frame path.
-            if (EngineeringWorkstreamFrame.IsStructural(from))
-                return Results.Conflict(new { error = ProjectDocsService.FrameLockMessage(from, "moved or renamed") });
-            if (EngineeringWorkstreamFrame.IsStructural(to))
-                return Results.Conflict(new { error = ProjectDocsService.FrameLockMessage(to, "used as a move target") });
-
             var fromFull = docs.ResolveWikiNodeFullPath(projectName, from);
             var toFull = docs.ResolveWikiNodeFullPath(projectName, to);
             var repoRoot = git.ResolveRepoRootForProject(projectName);
@@ -315,9 +308,6 @@ public static class ProjectDocsEndpoints
         {
             var rel = Normalize(relPath);
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
-            // Frame folders and landing shells cannot be deleted, even by agents.
-            if (EngineeringWorkstreamFrame.IsStructural(rel))
-                return Results.Conflict(new { error = ProjectDocsService.FrameLockMessage(rel, "deleted") });
             var full = docs.ResolveWikiNodeFullPath(projectName, rel);
             var repoRoot = git.ResolveRepoRootForProject(projectName);
             if (full == null || string.IsNullOrWhiteSpace(repoRoot))

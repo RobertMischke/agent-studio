@@ -298,6 +298,38 @@
   </dl>
 </div>
 
+<div class="entry">
+  <header><h3>Workstream-Frame nicht bewährt — Rückbau</h3><span class="date">19.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Der fixe Engineering-Workstream-Frame (5 unveränderliche Wiki-Areas mit
+      Landing-Shells, Baum-Pinning, Collector-/Curator-Pipeline) hat sich in der Praxis nicht bewährt.
+      Drei Kernbelege der Evidenz-Analyse:
+      <ul>
+        <li><b>0 Inhalt:</b> nach 10 Tagen und ~200 Tasks lag unter dem Frame keinerlei operator- oder
+          agentengeschriebener Inhalt — nur die 6 gesäten Shells.</li>
+        <li><b>0 Leser:</b> 0 von 575 untersuchten Task-Logs lasen jemals eine Frame-Seite.</li>
+        <li><b>Bedarf woanders:</b> der reale Wissensbedarf materialisierte sich in
+          <code>learnings/</code>, <code>common-problems/</code> und den Workbenches — nicht im Frame.</li>
+      </ul>
+      Operator-Entscheid: „nicht bewährt, umbauen".</dd>
+    <dt>Maßnahme</dt><dd>Mittelweg-Schnitt: (1) Pulse-Drift gradet jetzt die <b>realen
+      Top-Level-docs-Ordner</b> mit Seiten (Reihenfolge = gespeicherte wiki-order, sonst alphabetisch);
+      Feed-Area-Badges = Top-Ordner. (2) Das <code>human-action</code>-Signal überlebt als
+      ordnerunabhängige Frontmatter-Konvention (<code>human-action:</code> + <code>status:
+      observed|active</code>), dokumentiert in <code>contracts/wiki-tree.md</code>. (3) Toter Stack
+      entfernt: <code>docs/engineering-workstream/</code>-Shells, Seeder/Frame/Content-Klassen,
+      WorkstreamCurationService, <code>post-workstream-collector</code> + <code>pre-workstream-onboarding</code>
+      aus dem Pipeline-Katalog, Prompt-Template, Frame-Pinning/-Immutabilität in Baum &amp; Endpoints,
+      Frontend-Pin/Lock-UI. Konzeptseite <code>concepts/engineering-workstream.md</code> trägt ein
+      Überholt-Banner + Sidecar <code>status=ueberholt</code>; Einstiegs-Kuration übernimmt die
+      kuratierte Startseite (<code>home.json</code>-Seeds der Konsolidierungsanalyse).</dd>
+    <dt>Status</dt><dd><span class="pill done">done</span> — Backend-/Frontend-Umbau umgesetzt, Suiten grün.</dd>
+    <dt>Referenzen</dt><dd><code>docs/concepts/engineering-workstream.md</code> (Historie),
+      <code>docs/contracts/wiki-tree.md</code> (Ordner-Drift + human-action-Konvention),
+      <code>docs/konsolidierung-analyse-2026-07-18.md</code> (Kurations-Seeds)</dd>
+  </dl>
+</div>
+
 </main>
 </body>
 </html>

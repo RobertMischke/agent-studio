@@ -33,20 +33,44 @@ folders are pruned from the navigation tree.
 
 Siblings are sorted folders first, then files. An optional leading numeric
 prefix such as `01-`, `01_`, or `01.` controls sort order and is hidden from the
-display title. Without a prefix, items sort by display title.
+display title. Without a prefix, items sort by display title. A saved category
+drag-order (`docs/.wiki-order.json`) overrides the folder order per sibling
+group; unlisted folders sort behind in the default order.
 
-One exception overrides the sort above: the **Workstream frame root**
-(`docs/engineering-workstream/`) is pinned as the first top-level tree node,
-ahead of all other `docs/` siblings, regardless of alphabetical order. Only the
-top-level frame root is pinned — nested siblings inside the frame keep the normal
-folders-then-prefix-then-title order. See
-[concepts/engineering-workstream.md §8](../concepts/engineering-workstream.md#8-display-name-and-tree-position).
+There is no pinned node and no immutable node: every folder and page follows
+the same sort, rename, move, and delete rules. (The former Engineering
+Workstream frame — a pinned `docs/engineering-workstream/` root with locked
+folders and shells — was retired 2026-07-19; see
+[concepts/engineering-workstream.md](../concepts/engineering-workstream.md) for
+the historical record.)
 
 The display title for a document is its first H1 when present; otherwise it is
-the file name without extension and without the optional order prefix. The one
-overriding case is the Workstream frame root, whose tree label is remapped to
-`Workstream` while its on-disk folder stays `engineering-workstream` (operator
-decision 2026-07-09).
+the file name without extension and without the optional order prefix.
+
+## Pulse drift groups and the `human-action` convention
+
+The wiki Pulse drift bar grades the **real top-level `docs/` folders**: every
+top-level folder that holds at least one page is a drift group (first path
+segment = group; the group title is the folder name without its order prefix).
+Folders without pages do not appear; group order follows the saved
+`docs/.wiki-order.json` root order, unlisted folders behind in the tree's
+default order (numeric `NN-` prefix, then name). Pages
+directly at the docs root belong to no group. The Pulse change-feed area badge
+uses the same top-folder mapping.
+
+The **`human-action` signal is a folder-independent frontmatter convention**:
+any wiki page (every document type the tree surfaces is scanned; in practice
+the signal lives in Markdown frontmatter), wherever it lives, that carries
+frontmatter with
+
+```yaml
+human-action: <what a human should do>
+status: observed   # or: active
+```
+
+raises a Pulse warning (`kind: human-action`) until its `status` leaves
+`observed`/`active` (e.g. becomes `resolved`). The `human-action` value is the
+action text shown to the operator.
 
 ## API endpoints
 

@@ -92,19 +92,16 @@ public sealed class AgentsWikiSyncPostStepRunner
         TaskInfo task,
         WatchPathEntry entry,
         IReadOnlyList<string>? changedFiles = null,
-        DateTime? nowUtc = null,
-        EngineeringWorkstreamFrameLanguage? frameLanguage = null)
+        DateTime? nowUtc = null)
     {
         var now = nowUtc ?? DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(entry.RootPath))
             return new AgentsWikiSyncResult(AgentsWikiSyncVerdict.Skipped, "project root is not configured");
 
-        // Self-provisioning (AGT-2024): ensure the Workstream frame exists before
-        // this step writes, exactly like the sibling wiki steps. Idempotent and
-        // never overwriting.
+        // Self-provisioning (AGT-2024): the step bootstraps its own home under
+        // docs/, exactly like the sibling wiki steps. Idempotent and never
+        // overwriting.
         var docsRoot = Path.Combine(entry.RootPath, "docs");
-        var language = frameLanguage ?? WorkstreamFrameLanguageResolver.Resolve(entry.Name, isPublicOverride: null);
-        EnsureWorkstreamFrame(docsRoot, language, task, entry);
 
         try
         {
@@ -185,23 +182,6 @@ public sealed class AgentsWikiSyncPostStepRunner
             _logger.LogWarning(ex,
                 "Agents-wiki-sync failed for {Project}/{JobId}", entry.Name, task.Id);
             return new AgentsWikiSyncResult(AgentsWikiSyncVerdict.Error, ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// Runs the shared ensure-frame primitive and logs only when it actually
-    /// materialized (or failed to materialize) frame shells, so a warm project
-    /// stays quiet.
-    /// </summary>
-    private void EnsureWorkstreamFrame(
-        string docsRoot, EngineeringWorkstreamFrameLanguage language, TaskInfo task, WatchPathEntry entry)
-    {
-        var result = EngineeringWorkstreamFrameSeeder.EnsureFrame(docsRoot, language);
-        if (result.CreatedAnything || result.Failed.Count > 0)
-        {
-            _logger.LogInformation(
-                "Workstream frame ensured for {Project}/{JobId} lang={Language} {Summary} created=[{Created}]",
-                entry.Name, task.Id, language, result.Summary, string.Join(", ", result.Created));
         }
     }
 

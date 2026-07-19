@@ -106,8 +106,8 @@ const PULSE: WikiPulse = {
         sha: 'abc1234',
         shortSha: 'abc1234',
         subject: 'AGT-2014 refine overview',
-        frameAreaSlug: null,
-        frameAreaTitle: null,
+        areaSlug: 'concepts',
+        areaTitle: 'concepts',
         taskKey: 'AGT-2014',
       },
     ],
@@ -130,11 +130,8 @@ const PULSE: WikiPulse = {
     reason: null,
     overallGrade: 'Aging',
     areas: [
-      { slug: '10-current-development-state', title: 'Current Development State', grade: 'Aging', pageCount: 1, gradedPageCount: 1, worstCommitCount: 12, freshCount: 0, agingCount: 1, staleCount: 0 },
-      { slug: '20-development-signals', title: 'Development Signals', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
-      { slug: '30-system-knowledge', title: 'System Knowledge', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
-      { slug: '40-decision-log', title: 'Decision Log', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
-      { slug: '50-workstream-log', title: 'Workstream Log', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+      { slug: 'concepts', title: 'concepts', grade: 'Aging', pageCount: 1, gradedPageCount: 1, worstCommitCount: 12, freshCount: 0, agingCount: 1, staleCount: 0 },
+      { slug: 'operations', title: 'operations', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
     ],
     counts: { fresh: 0, aging: 1, stale: 0, graded: 1 },
   },
@@ -697,7 +694,7 @@ describe('ProjectWikiSectionComponent', () => {
     // Change feed row carries its task key + area/drift segment renders.
     expect(root.querySelector('[data-testid="project-wiki-pulse-task-concepts/overview.md"]')?.textContent)
       .toContain('AGT-2014');
-    expect(root.querySelector('[data-testid="project-wiki-pulse-area-10-current-development-state"]')?.textContent)
+    expect(root.querySelector('[data-testid="project-wiki-pulse-area-concepts"]')?.textContent)
       .toContain('Aging');
     // Inbox lists the loose page; overall drift chip shows the worst grade.
     expect(root.querySelector('[data-testid="project-wiki-pulse-inbox-open-stray.md"]')).toBeTruthy();
@@ -1651,81 +1648,61 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
-  // ---- Engineering Workstream frame (immutable) ----
+  // ---- Plain folder tree (no pinned frame, no locked nodes) ----
 
-  const FRAME_TREE: WikiTree = {
+  const FOLDER_TREE: WikiTree = {
     projectName: 'Demo',
     baseDir: '/repo/docs',
     exists: true,
     root: [
       {
-        // Backend relabels the frame root to "Workstream" (folder stays
-        // engineering-workstream) and pins it first - see ProjectDocsService /
-        // EngineeringWorkstreamFrame.DisplayTitle. The tree the component renders
-        // therefore already carries the display title.
-        name: 'engineering-workstream', title: 'Workstream',
-        relPath: 'engineering-workstream', type: 'folder', immutable: true, children: [
+        name: 'architecture', title: 'architecture',
+        relPath: 'architecture', type: 'folder', children: [
           {
-            name: '40-decision-log', title: 'decision-log',
-            relPath: 'engineering-workstream/40-decision-log', type: 'folder', immutable: true, children: [
-              {
-                name: 'index.html', title: 'Decision Log',
-                relPath: 'engineering-workstream/40-decision-log/index.html', type: 'html', immutable: true, children: [],
-              },
-              {
-                name: 'adr-0001.md', title: 'ADR 1',
-                relPath: 'engineering-workstream/40-decision-log/adr-0001.md', type: 'md', immutable: false, children: [],
-              },
-            ],
+            name: 'index.html', title: 'Architecture',
+            relPath: 'architecture/index.html', type: 'html', children: [],
           },
           {
-            name: '00-overview.html', title: 'Workstream',
-            relPath: 'engineering-workstream/00-overview.html', type: 'html', immutable: true, children: [],
+            name: 'adr-0001.md', title: 'ADR 1',
+            relPath: 'architecture/adr-0001.md', type: 'md', children: [],
+          },
+        ],
+      },
+      {
+        name: 'concepts', title: 'concepts',
+        relPath: 'concepts', type: 'folder', children: [
+          {
+            name: 'overview.md', title: 'Concept overview',
+            relPath: 'concepts/overview.md', type: 'md', children: [],
           },
         ],
       },
     ],
   };
 
-  function expandFrame(fixture: { componentInstance: ProjectWikiSectionComponent; detectChanges: () => void }): void {
-    fixture.componentInstance.toggleExpand('engineering-workstream');
-    fixture.componentInstance.toggleExpand('engineering-workstream/40-decision-log');
+  function expandFolders(fixture: { componentInstance: ProjectWikiSectionComponent; detectChanges: () => void }): void {
+    fixture.componentInstance.toggleExpand('architecture');
     fixture.detectChanges();
   }
 
-  it('renders the frame root labelled "Workstream" as the first tree node', async () => {
-    const { fixture, http } = await setup(FRAME_TREE);
+  it('renders top-level folders in tree order without a pinned node or lock affordance', async () => {
+    const { fixture, http } = await setup(FOLDER_TREE);
+    expandFolders(fixture);
     const root = el(fixture);
 
-    // The frame root node carries the relabelled display title...
-    const frameRow = root.querySelector<HTMLElement>(
-      '[data-testid="project-wiki-node-engineering-workstream"]');
-    expect(frameRow, 'frame root row').toBeTruthy();
-    expect(frameRow!.querySelector('.pwiki__label-text')!.textContent!.trim())
-      .toBe('Workstream');
+    // Order is exactly what the backend delivered - no client-side pinning.
+    const rows = Array.from(root.querySelectorAll<HTMLElement>('[data-testid^="project-wiki-node-"]'))
+      .map(r => r.getAttribute('data-testid'));
+    expect(rows[0]).toBe('project-wiki-node-architecture');
 
-    // ...and it is the first top-level row rendered (pinned to the top).
-    const firstRow = root.querySelector<HTMLElement>('[data-testid^="project-wiki-node-"]');
-    expect(firstRow!.getAttribute('data-testid'))
-      .toBe('project-wiki-node-engineering-workstream');
+    // No node renders a lock affordance anymore.
+    expect(root.querySelector('[data-testid^="project-wiki-lock-"]')).toBeNull();
     http.verify();
   });
 
-  it('marks frame folders and shells with a lock affordance, subpages without', async () => {
-    const { fixture, http } = await setup(FRAME_TREE);
-    expandFrame(fixture);
-    const root = el(fixture);
-
-    expect(root.querySelector('[data-testid="project-wiki-lock-engineering-workstream"]'), 'frame root lock').toBeTruthy();
-    expect(root.querySelector('[data-testid="project-wiki-lock-engineering-workstream/40-decision-log"]'), 'area lock').toBeTruthy();
-    expect(root.querySelector('[data-testid="project-wiki-lock-engineering-workstream/40-decision-log/index.html"]'), 'shell lock').toBeTruthy();
-    expect(root.querySelector('[data-testid="project-wiki-lock-engineering-workstream/40-decision-log/adr-0001.md"]'), 'subpage lock absent').toBeNull();
-    http.verify();
-  });
-
-  it('offers subpage creation on a frame area but hides rename/delete; a frame shell is history-only', async () => {
-    const { fixture, http } = await setup(FRAME_TREE);
-    expandFrame(fixture);
+  it('offers the full context menu on every folder and page', async () => {
+    const { fixture, http } = await setup(FOLDER_TREE);
+    expandFolders(fixture);
     const root = el(fixture);
 
     const openCtx = (id: string) => {
@@ -1735,34 +1712,26 @@ describe('ProjectWikiSectionComponent', () => {
       fixture.detectChanges();
     };
 
-    // Frame area folder: subpages allowed, structure locked.
-    openCtx('engineering-workstream/40-decision-log');
+    // Every folder offers creation plus rename/delete.
+    openCtx('architecture');
     expect(document.querySelector('[data-testid="wiki-ctx-item-new-page"]'), 'new page').toBeTruthy();
     expect(document.querySelector('[data-testid="wiki-ctx-item-new-folder"]'), 'new folder').toBeTruthy();
-    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]'), 'no rename').toBeNull();
-    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'no delete').toBeNull();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]'), 'rename').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'delete').toBeTruthy();
 
     fixture.componentInstance.closeMenu();
     fixture.detectChanges();
 
-    // Frame landing shell: read-only, history only.
-    openCtx('engineering-workstream/40-decision-log/index.html');
+    // Every page keeps the full menu - there are no read-only shells.
+    openCtx('architecture/index.html');
     expect(document.querySelector('[data-testid="wiki-ctx-item-history"]'), 'history').toBeTruthy();
-    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]'), 'no rename').toBeNull();
-    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'no delete').toBeNull();
-
-    fixture.componentInstance.closeMenu();
-    fixture.detectChanges();
-
-    // A regular subpage under the area keeps the full menu.
-    openCtx('engineering-workstream/40-decision-log/adr-0001.md');
-    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]'), 'subpage rename').toBeTruthy();
-    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'subpage delete').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]'), 'page rename').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'page delete').toBeTruthy();
     http.verify();
   });
 
-  /** History payload for a frame shell (no git metadata, no commits). */
-  function flushFrameHistory(http: HttpTestingController, rel: string): void {
+  /** History payload for an HTML page (no git metadata, no commits). */
+  function flushHtmlHistory(http: HttpTestingController, rel: string): void {
     http.expectOne(`/api/projects/Demo/wiki/history/${rel}`).flush({
       relPath: rel, model: null,
       metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
@@ -1770,51 +1739,29 @@ describe('ProjectWikiSectionComponent', () => {
     });
   }
 
-  it('navigates between frame landing shells, rendering each in the interactive isolated iframe', async () => {
-    const { fixture, http } = await setup(FRAME_TREE);
-    expandFrame(fixture);
+  it('renders an HTML page in the interactive isolated iframe', async () => {
+    const { fixture, http } = await setup(FOLDER_TREE);
+    expandFolders(fixture);
     const root = el(fixture);
 
-    // Open the frame overview shell.
     root.querySelector<HTMLButtonElement>(
-      '[data-testid="project-wiki-file-engineering-workstream/00-overview.html"]')!.click();
+      '[data-testid="project-wiki-file-architecture/index.html"]')!.click();
     fixture.detectChanges();
-    http.expectOne('/api/projects/Demo/wiki/files/engineering-workstream/00-overview.html')
+    http.expectOne('/api/projects/Demo/wiki/files/architecture/index.html')
       .flush({
-        relPath: 'engineering-workstream/00-overview.html',
-        content: '<!doctype html><html><body><h1>The development story</h1>'
-          + '<section class="ew-grid">Current Development State</section></body></html>',
+        relPath: 'architecture/index.html',
+        content: '<!doctype html><html><body><h1>Architecture</h1></body></html>',
       });
-    flushFrameHistory(http, 'engineering-workstream/00-overview.html');
+    flushHtmlHistory(http, 'architecture/index.html');
     fixture.detectChanges();
 
-    let frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
-    expect(frame, 'overview iframe').toBeTruthy();
+    const frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
+    expect(frame, 'html iframe').toBeTruthy();
     expect(frame!.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame!.getAttribute('sandbox')).not.toContain('allow-same-origin');
-    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('The development story');
+    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('Architecture');
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
-      .toContain('engineering-workstream/00-overview.html');
-
-    // Navigate on to the Decision Log area landing shell — the viewer switches
-    // to the new frame page and re-renders the sandboxed iframe with its content.
-    root.querySelector<HTMLButtonElement>(
-      '[data-testid="project-wiki-file-engineering-workstream/40-decision-log/index.html"]')!.click();
-    fixture.detectChanges();
-    http.expectOne('/api/projects/Demo/wiki/files/engineering-workstream/40-decision-log/index.html')
-      .flush({
-        relPath: 'engineering-workstream/40-decision-log/index.html',
-        content: '<!doctype html><html><body><h1>Decision Log</h1>'
-          + '<div class="ew-rail"><span class="ew-pill ew-pill--here">04</span></div></body></html>',
-      });
-    flushFrameHistory(http, 'engineering-workstream/40-decision-log/index.html');
-    fixture.detectChanges();
-
-    frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
-    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('Decision Log');
-    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('ew-pill--here');
-    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
-      .toContain('engineering-workstream/40-decision-log/index.html');
+      .toContain('architecture/index.html');
     http.verify();
   });
 });

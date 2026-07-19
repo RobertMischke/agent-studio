@@ -80,11 +80,11 @@ public sealed class WikiMaintenancePostStepRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Run_EmptyDocs_SelfProvisionsFrameThenWritesCommonProblem()
+    public void Run_EmptyDocs_SelfProvisionsCommonProblemsHome()
     {
         // Self-provisioning (AGT-2024): with a real signal to write, an empty
-        // docs/ tree no longer skips. The step seeds the Workstream frame and
-        // then bootstraps its own docs/common-problems home and writes.
+        // docs/ tree no longer skips - the step bootstraps its own
+        // docs/common-problems home and writes.
         var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "empty-docs")).FullName;
         var jobFolder = Directory.CreateDirectory(Path.Combine(_root, "job2")).FullName;
         var runner = new WikiMaintenancePostStepRunner(NullLogger<WikiMaintenancePostStepRunner>.Instance);
@@ -102,9 +102,6 @@ public sealed class WikiMaintenancePostStepRunnerTests : IDisposable
         var result = runner.Run(task, Entry(projectRoot), new DateTime(2026, 06, 08, 10, 0, 0, DateTimeKind.Utc));
 
         Assert.Equal(WikiMaintenanceVerdict.Created, result.Verdict);
-        Assert.True(
-            File.Exists(Path.Combine(projectRoot, "docs", "engineering-workstream", "00-overview.html")),
-            "frame overview shell was not seeded");
         Assert.True(
             File.Exists(Path.Combine(projectRoot, "docs", "common-problems", "missing-terminal-sentinel", "README.md")),
             "common-problems entry was not written");

@@ -4113,27 +4113,6 @@ public class ProjectRunner
                     settings),
                 ProjectName,
                 info.Id);
-            var onboardingStep = AgentStudio.Pipeline.PipelineCatalogue.Standard.Pre.First(s =>
-                s.Id == AgentStudio.Pipeline.PipelineCatalogue.PreWorkstreamOnboardingStepId);
-            if (AgentStudio.Pipeline.PipelineStepConfigResolver.IsEnabled(settings, onboardingStep)
-                && !string.IsNullOrWhiteSpace(Entry.RootPath))
-            {
-                var started = DateTime.UtcNow;
-                var language = AgentStudio.Docs.WorkstreamFrameLanguageResolver.Resolve(
-                    ProjectName, settings.WorkstreamFramePublic);
-                var result = AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner.RecordOnboarding(
-                    Entry.RootPath, info, language, started);
-                _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
-                {
-                    StepId = AgentStudio.Pipeline.PipelineCatalogue.PreWorkstreamOnboardingStepId,
-                    Kind = StepKind.Module,
-                    Status = result.Writes > 0 ? PipelineStepStatus.Passed : PipelineStepStatus.Skipped,
-                    StartedAt = started,
-                    CompletedAt = DateTime.UtcNow,
-                    Verdict = result.Writes > 0 ? "updated" : "skipped",
-                    Reason = $"current development state writes={result.Writes} rejected={result.Rejected}",
-                });
-            }
             // Carry the CORE step's accumulated duration forward. A re-run of
             // the same task reuses one in-flight record, so without preserving
             // this the run-start write would zero the total and the prior

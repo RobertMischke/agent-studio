@@ -1,6 +1,11 @@
 # Wiki Pulse dashboard
 
 Status: Concept (living). Slices PULSE-1 and PULSE-2 implemented (2026-07-11).
+Updated 2026-07-19: the Workstream frame was retired ("nicht bewährt, umbauen");
+drift groups and area badges are now the **real top-level docs folders**, and
+the `human-action` warning became a folder-independent frontmatter convention
+(see [../contracts/wiki-tree.md](../contracts/wiki-tree.md)). Frame wording
+below is updated where behavior changed.
 
 > Operator intent (2026-07-09): "When you open the wiki, you should see a history
 > of the last changes: warnings, which things need to be sorted, what is being
@@ -12,8 +17,8 @@ Mockup: [mockups/wiki-pulse-dashboard.html](mockups/wiki-pulse-dashboard.html).
 ## 1. What Pulse is
 
 Pulse is the landing surface the wiki opens on. It is a **generated view**, not a
-stored page: it does not live in the [Workstream frame](engineering-workstream.md),
-it is not part of the docs tree, it cannot be edited, and it is not prompt-known.
+stored page: it is not part of the docs tree, it cannot be edited, and it is not
+prompt-known.
 It is composed on demand from git history and the docs tree and degrades to an
 empty state per section when a source is missing - never an error page.
 
@@ -30,8 +35,8 @@ wiki-performance work.
 The recently-edited wiki pages (git author + timestamp, newest first), grouped by
 day in the UI. Each row is enriched with:
 
-- a **frame-area badge** - which Workstream area the page lives under
-  (`EngineeringWorkstreamFrame.AreaForPath`), or none for a page outside the frame;
+- an **area badge** - the top-level docs folder the page lives under (first path
+  segment, order prefix stripped), or none for a page at the docs root;
 - a **task key** (e.g. `AGT-2014`) parsed from the page's frontmatter `task-key`
   first, then from the commit subject.
 
@@ -39,29 +44,26 @@ Clicking a row opens the page in the reader.
 
 ### 2.2 Inbox (needs sorting)
 
-Loose / unfiled knowledge pages that need a home. Deterministic detection:
-
-- a knowledge doc that sits **directly at the wiki root** and is not a
-  conventional landing file (`README.md`, `index.*`, `home.md`);
-- a knowledge doc dropped **inside the Workstream frame root but under no area**
-  (the frame knows its own structure, so anything filed there but not in one of
-  the five areas is stray).
+Loose / unfiled knowledge pages that need a home. Deterministic detection: a
+knowledge doc that sits **directly at the wiki root** and is not a conventional
+landing file (`README.md`, `index.*`, `home.md`).
 
 An **empty inbox is the healthy state** and is shown as such.
 
 ### 2.3 Drift grading v1 (deterministic, no LLM)
 
-Per Workstream frame area, how much has the code moved since each knowledge page
-was last refreshed. For every page under an area (its immutable landing shell
-excluded):
+Per **top-level docs folder that holds pages**, how much has the code moved
+since each knowledge page was last refreshed. For every page under a folder:
 
 1. take the page's **last update** from git history;
 2. count how many commits under the **code roots** landed after that timestamp;
 3. band the count: **Fresh** (0-9), **Aging** (10-49), **Stale** (50+).
 
-The **area grade is its worst page** and the bar reports the worst page's commit
-count. An area with no filed pages reads **Empty**. The overall grade is the worst
-area. The grade bar sits at the top of Pulse.
+The **folder grade is its worst page** and the bar reports the worst page's
+commit count. Folders without pages do not appear. Group order follows the saved
+`docs/.wiki-order.json` root order, unlisted folders behind in the tree's
+default order (numeric `NN-` prefix, then name). The
+overall grade is the worst folder. The grade bar sits at the top of Pulse.
 
 **Code roots** are every top-level repository directory except the wiki root
 (`docs/`) and build-output / tooling folders (`node_modules`, `dist`, `bin`,
@@ -80,7 +82,7 @@ Every section carries its own `available` + `reason`:
 |---|---|---|---|
 | No `docs/` folder | unavailable (reason) | unavailable (reason) | unavailable (reason) |
 | No git repository | unavailable (reason) | available (filesystem) | unavailable (reason) |
-| No pages under the frame | "no recent edits" if empty | healthy / listed | `Empty` grades + reason |
+| No pages in any top folder | "no recent edits" if empty | healthy / listed | no groups + reason |
 
 The UI renders the reason, never a stack trace or blank screen.
 
@@ -94,17 +96,14 @@ run state.
 
 ### 4.1 PULSE-2 warnings and live work
 
-PULSE-2 adds two generated tiles. Warnings combines active or observed
-Development Signals that carry `human-action` frontmatter with deterministic
-frame violations, dead internal links, and Workstream areas above the 40-page
-budget. In progress lists only live tasks whose task-aware working tree contains
-changes below `docs/`, with task key, lane, runtime, and changed-doc count.
-
-The activity tile also formalizes maintenance outcomes. The latest collector
-result is read from task pipeline history. The curator persists `lastStatus`,
-`lastError`, and its merge and condensation counts in
-`engineering-workstream/.curator/context.json`; Pulse displays the latest result
-and timestamp for both sources. Missing sources remain labelled empty states.
+PULSE-2 adds two generated tiles. Warnings combines pages that carry live
+`human-action` frontmatter (a folder-independent convention:
+`human-action: <text>` plus `status: observed|active`, wherever the page lives)
+with deterministic dead-internal-link detection. In progress lists only live
+tasks whose task-aware working tree contains changes below `docs/`, with task
+key, lane, runtime, and changed-doc count. (The former frame-violation,
+page-budget, and collector/curator maintenance summaries were retired with the
+Workstream frame, 2026-07-19.)
 
 Update (GRADE-1, 2026-07-10, AGT-2051): the Warnings surface arrived as the
 **Critical pages** section plus a **Grade all pages** trigger, driven by an
@@ -115,7 +114,7 @@ bar above stays unchanged; the LLM grade *supplements* it. See
 ## 5. Where it lives
 
 - Backend: `ProjectDocsService.GetWikiPulse` composes the payload;
-  `EngineeringWorkstreamFrame.AreaForPath` maps a page to its area;
+  `ProjectDocsService.TopFolderForPath` maps a page to its top-level folder;
   `GitService.GetCommitAuthorDatesUnderPaths` backs the drift count. Endpoint in
   `ProjectDocsEndpoints` (before the `/wiki/files` catch-all).
 - Frontend: `app-wiki-pulse` (`features/project-detail/.../wiki-pulse/`) renders

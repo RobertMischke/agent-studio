@@ -309,28 +309,6 @@
   font-size: 0.7rem;
 }
 
-.wpulse__run-summaries {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--studio-spacing-2);
-  margin-top: auto;
-}
-
-.wpulse__run-summaries > div {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--studio-spacing-1);
-  padding: var(--studio-spacing-2);
-  border-radius: 6px;
-  background: var(--pwiki-paper-soft);
-  color: var(--pwiki-paper-muted);
-  font-size: 0.68rem;
-}
-
-.wpulse__run-summaries strong { color: var(--pwiki-paper-fg); }
-.wpulse__run-summaries small { flex-basis: 100%; color: var(--pwiki-paper-muted); }
-
 /* ---- tones (drift segments, run status) ---- */
 
 [data-tone='good'] { --wpulse-tone: var(--studio-success); }

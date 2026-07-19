@@ -28,7 +28,7 @@ Use this page as the first stop when you need the right document quickly.
 | [research/](research/) | Dated deep dives and decision grounding material. |
 | [schemas/](schemas/README.md) | JSON schemas for wire and disk shapes. |
 | [mockups/](mockups/) | Locked design references and click-dummies. |
-| [assets/](assets/README.md) | Image assets referenced by documentation pages. |
+| [assets/](assets/) | Image assets referenced by documentation pages. |
 | [proposals/](proposals/README.md) | Dated improvement proposals with durable approval status and implementation-card references. |
 
 ## Load-Bearing Entry Points
@@ -56,7 +56,6 @@ Use this page as the first stop when you need the right document quickly.
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](concepts/orchestrator-in-app.md) |
-| Workstream frame (top wiki element; internal name engineering-workstream) | [concepts/engineering-workstream.md](concepts/engineering-workstream.md) |
 | Project relationship model and branch-aware Wiki checkout | [concepts/project-relationship-model.md](concepts/project-relationship-model.md) |
 | Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](concepts/wiki-pulse-dashboard.md) |
 | Wiki grading run (global LLM grade per page; trigger + critical pages; GRADE-1) | [concepts/wiki-grading-run.md](concepts/wiki-grading-run.md) |

@@ -9,7 +9,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
         Path.GetTempPath(), "agents-wiki-sync-tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Run_NoRegistry_SeedsTemplateAndIndex_AndProvisionsFrame()
+    public void Run_NoRegistry_SeedsTemplateAndIndex()
     {
         var projectRoot = NewProjectRoot();
         var runner = NewRunner();
@@ -22,8 +22,6 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
         var topicsDir = Path.Combine(projectRoot, "docs", "concepts", "designated-topics");
         Assert.True(File.Exists(Path.Combine(topicsDir, "registry.json")), "registry.json was not seeded");
         Assert.True(File.Exists(Path.Combine(topicsDir, "README.md")), "index README was not written");
-        // Self-provisioning: the Workstream frame is seeded like the sibling steps.
-        Assert.True(File.Exists(Path.Combine(projectRoot, "docs", "engineering-workstream", "00-overview.html")));
     }
 
     [Fact]

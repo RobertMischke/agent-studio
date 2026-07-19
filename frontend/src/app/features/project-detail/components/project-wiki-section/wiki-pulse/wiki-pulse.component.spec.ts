@@ -22,15 +22,15 @@ function makePulse(overrides: Partial<WikiPulse> = {}): WikiPulse {
       reason: null,
       items: [
         {
-          relPath: 'engineering-workstream/10-current-development-state/active.md',
+          relPath: 'concepts/active.md',
           title: 'Active stream',
           author: 'Alice',
           authorDateUtc: isoDaysAgo(0),
           sha: 'a1',
           shortSha: 'a1',
           subject: 'AGT-2014 update',
-          frameAreaSlug: '10-current-development-state',
-          frameAreaTitle: 'Current Development State',
+          areaSlug: 'concepts',
+          areaTitle: 'concepts',
           taskKey: 'AGT-2014',
         },
         {
@@ -41,8 +41,8 @@ function makePulse(overrides: Partial<WikiPulse> = {}): WikiPulse {
           sha: 'b1',
           shortSha: 'b1',
           subject: 'jot notes',
-          frameAreaSlug: null,
-          frameAreaTitle: null,
+          areaSlug: null,
+          areaTitle: null,
           taskKey: null,
         },
       ],
@@ -53,8 +53,8 @@ function makePulse(overrides: Partial<WikiPulse> = {}): WikiPulse {
       reason: null,
       overallGrade: 'Stale',
       areas: [
-        { slug: '10-current-development-state', title: 'Current Development State', grade: 'Stale', pageCount: 1, gradedPageCount: 1, worstCommitCount: 60, freshCount: 0, agingCount: 0, staleCount: 1 },
-        { slug: '20-development-signals', title: 'Development Signals', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+        { slug: 'concepts', title: 'concepts', grade: 'Stale', pageCount: 1, gradedPageCount: 1, worstCommitCount: 60, freshCount: 0, agingCount: 0, staleCount: 1 },
+        { slug: 'operations', title: 'operations', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
       ],
       counts: { fresh: 0, aging: 0, stale: 1, graded: 1 },
     },
@@ -69,8 +69,6 @@ function makePulse(overrides: Partial<WikiPulse> = {}): WikiPulse {
       available: true,
       reason: null,
       runs: [{ taskKey: 'AGT-2015', lane: '3-progress', startedAtUtc: isoDaysAgo(0), docsFilesChanged: 2 }],
-      collector: { ranAtUtc: isoDaysAgo(1), status: 'ok', error: null, merges: 0, condensations: 0 },
-      curator: { ranAtUtc: isoDaysAgo(1), status: 'ok', error: null, merges: 2, condensations: 1 },
     },
     ...overrides,
   };
@@ -101,8 +99,8 @@ describe('WikiPulseComponent', () => {
       sha: `s${i}`,
       shortSha: `s${i}`,
       subject: 'edit',
-      frameAreaSlug: null,
-      frameAreaTitle: null,
+      areaSlug: null,
+      areaTitle: null,
       taskKey: null,
     }));
     const fixture = await mount(makePulse({ feed: { available: true, reason: null, items } }));
@@ -128,21 +126,21 @@ describe('WikiPulseComponent', () => {
     expect(html(fixture).querySelector('[data-testid="project-wiki-pulse-feed-toggle"]')).toBeNull();
   });
 
-  it('renders the frame-area badge and the task key on a feed row', async () => {
+  it('renders the top-folder badge and the task key on a feed row', async () => {
     const fixture = await mount(makePulse());
     const root = html(fixture);
-    const badge = root.querySelector('[data-testid="project-wiki-pulse-area-badge-engineering-workstream/10-current-development-state/active.md"]');
-    expect(badge?.textContent).toContain('Current Development State');
-    const task = root.querySelector('[data-testid="project-wiki-pulse-task-engineering-workstream/10-current-development-state/active.md"]');
+    const badge = root.querySelector('[data-testid="project-wiki-pulse-area-badge-concepts/active.md"]');
+    expect(badge?.textContent).toContain('concepts');
+    const task = root.querySelector('[data-testid="project-wiki-pulse-task-concepts/active.md"]');
     expect(task?.textContent).toContain('AGT-2014');
   });
 
   it('maps drift grades to tones on the grade bar', async () => {
     const fixture = await mount(makePulse());
     const root = html(fixture);
-    const stale = root.querySelector('[data-testid="project-wiki-pulse-area-10-current-development-state"]');
+    const stale = root.querySelector('[data-testid="project-wiki-pulse-area-concepts"]');
     expect(stale?.getAttribute('data-tone')).toBe('bad');
-    const empty = root.querySelector('[data-testid="project-wiki-pulse-area-20-development-signals"]');
+    const empty = root.querySelector('[data-testid="project-wiki-pulse-area-operations"]');
     expect(empty?.getAttribute('data-tone')).toBe('muted');
   });
 
@@ -189,24 +187,22 @@ describe('WikiPulseComponent', () => {
     const fixture = await mount(makePulse({
       drift: {
         available: true,
-        reason: 'No knowledge pages filed under the Workstream frame yet.',
+        reason: 'No knowledge pages in any top-level docs folder yet.',
         overallGrade: 'Empty',
         areas: [
-          { slug: '10-current-development-state', title: 'Current Development State', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+          { slug: 'concepts', title: 'concepts', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
         ],
         counts: { fresh: 0, aging: 0, stale: 0, graded: 0 },
       },
     }));
     expect(html(fixture).querySelector('[data-testid="project-wiki-pulse-drift-empty"]')?.textContent)
-      .toContain('No knowledge pages filed');
+      .toContain('No knowledge pages in any top-level docs folder');
   });
 
-  it('renders actionable warnings, docs-touching live runs, and maintenance summaries', async () => {
+  it('renders actionable warnings and docs-touching live runs', async () => {
     const fixture = await mount(makePulse());
     const root = html(fixture);
     expect(root.querySelector('[data-testid="project-wiki-pulse-warnings"]')?.textContent).toContain('Inspect the failed run.');
     expect(root.querySelector('[data-testid="project-wiki-pulse-live-AGT-2015"]')?.textContent).toContain('2 docs files changed');
-    expect(root.querySelector('[data-testid="project-wiki-pulse-collector-run"]')?.textContent).toContain('ok');
-    expect(root.querySelector('[data-testid="project-wiki-pulse-curator-run"]')?.textContent).toContain('2 merges · 1 condensations');
   });
 });

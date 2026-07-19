@@ -241,17 +241,6 @@ public record ProjectSettings
     public bool? EpicSubTasksToReady { get; init; }
 
     /// <summary>
-    /// AGT-2024: language of the self-provisioned Workstream frame shells a
-    /// wiki-writing pipeline step seeds into this project's <c>docs/</c>. True
-    /// (a public / open-source repo) forces English; false opts the project into
-    /// the localized frame. Null uses the heuristic default (English) resolved by
-    /// <see cref="AgentStudio.Docs.WorkstreamFrameLanguageResolver"/>. It only
-    /// affects shells created from now on - existing shells are never rewritten.
-    /// Persisted in <c>project-settings.json</c>.
-    /// </summary>
-    public bool? WorkstreamFramePublic { get; init; }
-
-    /// <summary>
     /// AGT-2028: per-project configuration for the opt-in <c>post-task-spawner</c>
     /// pipeline step. When set (and the step is enabled via
     /// <see cref="PipelineSteps"/>), a completed task whose change set the best
