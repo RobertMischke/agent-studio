@@ -5,5 +5,5 @@ the Wiki iframe.
 
 | File | Purpose |
 |---|---|
-| [bus-architecture-report.html](bus-architecture-report.html) | Visual Agent Message Bus architecture report. |
+| [architecture/bus/agent-message-bus.md](../../architecture/bus/agent-message-bus.md) | Canonical Agent Message Bus architecture (replaces the retired visual bus report). |
 | [orchestrator-system-visual-report.html](orchestrator-system-visual-report.html) | Visual orchestrator system report. |

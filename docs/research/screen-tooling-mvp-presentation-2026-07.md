@@ -39,10 +39,11 @@ be revisited after the first storyboard review without blocking the capture
 kit.
 
 **Context note.** The task points at `docs/concepts/remote-execution-product-integration.md §7`.
-That file does not exist in the tree. The live plan of record for the remote
-theme is [`remote-ready-kickoff-2026-07.md`](./remote-ready-kickoff-2026-07.md);
-its **Phase 4** ("Playwright + previews remote") and **§7 Risks** are the
-closest real anchor and are what this evaluation is written against. The
+That file does not exist in the tree. The plan of record this evaluation was
+written against was `remote-ready-kickoff-2026-07.md` (since retired; succeeded
+by [`distributed-agent-studio-target-architecture.md`](../concepts/distributed-agent-studio-target-architecture.md));
+its **Phase 4** ("Playwright + previews remote") and **§7 Risks** were the
+closest real anchor. The
 ROADMAP's "Visual Regression Evidence" and "Creativity And Design" sections
 ([ROADMAP.md](../../ROADMAP.md)) are the adjacent product direction.
 

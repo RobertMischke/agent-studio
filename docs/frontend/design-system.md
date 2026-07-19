@@ -299,7 +299,7 @@ type / motion rules. New components should be added to this list.
   Design, Visual Evidence, Architecture, Drift, UX/UI, Observability,
   Security, Test Quality, Audits & Checks, Jobs, Token Usage, Product
   Runtime, Activity, Steering Docs, Orchestrator, Settings) per the
-  [quality-system mockup](../mockups/quality-system/README.md).
+  [quality layer architecture](../concepts/architecture-quality-layer.md).
 - **Task detail** — the existing job detail with prompt / protocol /
   evidence panes, projected when the user opens a task tab.
 - **Diff tab** — placeholder for future per-task diff view.

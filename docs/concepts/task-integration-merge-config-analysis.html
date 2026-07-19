@@ -338,7 +338,8 @@
 
     <div class="callout key">
       <span class="label">Documented intent vs. code</span>
-      The Zielbild (<code>docs/concepts/git-branching-integration-zielbild.md</code>) prescribes a three-tier model
+      The Zielbild (the retired <code>git-branching-integration-zielbild.md</code> draft, superseded by
+      <code>docs/concepts/release-semantics.md</code>) prescribed a three-tier model
       (<code>task/&lt;id&gt;</code> &rarr; <code>develop-local</code> &rarr; <code>develop</code>) with named profiles
       (direct / local-then-direct / local-then-mr). The code implements <strong>no</strong> <code>develop-local</code>
       intermediate tier and merges <code>task/&lt;id&gt;</code> straight into <code>develop</code> in both paths.
@@ -693,7 +694,8 @@
     the field defaults in <code>backend/Shared/Models/ProjectSettings.cs</code> (lines 6, 13, 130, 139, 147) and the doc
     comments stating <code>MaxParallelism == 1</code> is kept byte-for-byte identical were verified directly. Relevant
     docs: <code>docs/concepts/parallel-task-execution.md</code>,
-    <code>docs/concepts/git-branching-integration-zielbild.md</code>, and ADR-0052 in
+    <code>docs/concepts/release-semantics.md</code> (which supersedes the retired
+    <code>git-branching-integration-zielbild.md</code> draft), and ADR-0052 in
     <code>docs/architecture/decisions/adr-archive.md</code>.
   </p>
 

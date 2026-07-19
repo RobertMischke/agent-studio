@@ -139,5 +139,5 @@ landed.
 ## See also
 
 - `docs/concepts/parallel-task-execution.md` - parallel execution model, integration strategies, merge-queue.
-- `docs/concepts/git-branching-integration-zielbild.md` - the target three-tier branching model (`task/<id>` -> `develop-local` -> `develop`) and integration profiles. Note: the `develop-local` tier is a target, not yet implemented.
+- `docs/concepts/release-semantics.md` - the decided integration and release model (supersedes the retired `git-branching-integration-zielbild.md` draft). The target three-tier branching model (`task/<id>` -> `develop-local` -> `develop`) described in that draft was not carried forward; the `develop-local` tier remains a target, not yet implemented.
 - ADR-0052 in `docs/architecture/decisions/adr-archive.md` - the parallel-execution decision and the "run agent does no git" contract.

@@ -3,8 +3,8 @@
 > Bring up a task worktree's **own** backend (and optionally frontend) on
 > **dynamic free ports**, run real integration / E2E tests against it, then tear
 > it down. Companion to [concepts/parallel-task-execution.md](../../concepts/parallel-task-execution.md)
-> and the test-quality-gate concept in
-> [concepts/cli-completion-and-test-quality-gate.md](../../concepts/cli-completion-and-test-quality-gate.md).
+> and the run-outcome / test-quality-gate contract in
+> [contracts/run-outcome.md](../../contracts/run-outcome.md).
 
 ## Why
 

@@ -48,7 +48,7 @@ The target separates three different questions:
 
 This builds on, rather than replaces, the current architecture:
 
-- [Remote execution product integration](remote-execution-product-integration.md)
+- [Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md)
   and the standalone [Linux runner](../operations/setup/linux-runner-host.md)
   already separate the execution host from the Task Server and assign a stable
   `executionRunner` per project. This is the executionRunner and remote-lease
