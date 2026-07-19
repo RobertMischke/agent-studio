@@ -30,7 +30,9 @@ if (!cacSpec || cacSpec.startsWith('file:')) {
   fail('Coding Agent Chat must be an immutable registry or tarball release, not file: dist');
 }
 
-const carLocked = nugetLock.dependencies?.net10?.CodingAgentRunner;
+const carLocked = Object.values(nugetLock.dependencies ?? {})
+  .map((framework) => framework?.CodingAgentRunner)
+  .find(Boolean);
 if (!carLocked?.resolved || !carLocked?.contentHash) fail('CodingAgentRunner is missing from backend/packages.lock.json');
 const cacLocked = npmLock.packages?.['node_modules/coding-agent-chat'];
 if (!cacLocked?.version || !cacLocked?.integrity || String(cacLocked.resolved ?? '').startsWith('file:'))

@@ -165,6 +165,54 @@ public sealed class StableReleaseContractTests
         Assert.Contains(result.Errors, e => e.Contains("different release artifacts"));
     }
 
+    [Fact]
+    public void CandidateDependencies_MustMatchExactImmutableLockArtifacts()
+    {
+        var manifest = Manifest("1.3.0", "bbb");
+
+        var errors = StableReleaseContract.ValidateCandidateDependencyLocks(
+            manifest,
+            """{"version":1,"dependencies":{"net10.0":{"CodingAgentRunner":{"resolved":"0.5.0","contentHash":"package"}}}}""",
+            """{"dependencies":{"coding-agent-chat":"0.1.0"}}""",
+            """{"packages":{"node_modules/coding-agent-chat":{"version":"0.1.0","resolved":"https://registry.example/coding-agent-chat-0.1.0.tgz","integrity":"sha512-package"}}}""");
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void CandidateLocalCacDist_IsRefusedEvenWhenManifestClaimsARelease()
+    {
+        var manifest = Manifest("1.3.0", "bbb");
+
+        var errors = StableReleaseContract.ValidateCandidateDependencyLocks(
+            manifest,
+            """{"version":1,"dependencies":{"net10.0":{"CodingAgentRunner":{"resolved":"0.5.0","contentHash":"package"}}}}""",
+            """{"dependencies":{"coding-agent-chat":"file:C:/Projects/coding-agent-chat/dist/coding-agent-chat"}}""",
+            """{"packages":{"node_modules/coding-agent-chat":{"version":"0.1.0","resolved":"file:../../../coding-agent-chat/dist/coding-agent-chat"}}}""");
+
+        Assert.Contains(errors, e => e.Contains("local file: dist artifact"));
+        Assert.Contains(errors, e => e.Contains("not an immutable registry artifact"));
+        Assert.Contains(errors, e => e.Contains("integrity is missing"));
+    }
+
+    [Fact]
+    public void CandidatePackageManifestAndLockMismatch_IsRefused()
+    {
+        var manifest = Manifest("1.3.0", "bbb");
+
+        var errors = StableReleaseContract.ValidateCandidateDependencyLocks(
+            manifest,
+            """{"version":1,"dependencies":{"net10.0":{"CodingAgentRunner":{"resolved":"0.4.0","contentHash":"other"}}}}""",
+            """{"dependencies":{"coding-agent-chat":"0.2.0"}}""",
+            """{"packages":{"node_modules/coding-agent-chat":{"version":"0.2.0","resolved":"https://registry.example/coding-agent-chat-0.2.0.tgz","integrity":"sha512-other"}}}""");
+
+        Assert.Contains(errors, e => e.Contains("CodingAgentRunner version mismatch"));
+        Assert.Contains(errors, e => e.Contains("CodingAgentRunner integrity mismatch"));
+        Assert.Contains(errors, e => e.Contains("Coding Agent Chat package.json version mismatch"));
+        Assert.Contains(errors, e => e.Contains("Coding Agent Chat locked version mismatch"));
+        Assert.Contains(errors, e => e.Contains("Coding Agent Chat integrity mismatch"));
+    }
+
     private static ReleaseManifest Manifest(string version, string commit) => new(
         1, "Agent Studio", $"v{version}", version, commit, false,
         DateTimeOffset.Parse("2026-07-12T10:00:00Z"), "sha256-app",

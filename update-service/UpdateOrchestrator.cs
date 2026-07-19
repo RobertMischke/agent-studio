@@ -208,6 +208,28 @@ public sealed class UpdateOrchestrator
                         $"could not preserve immutable rollback source (rc={bundleRc})", null, folder, preSnapshot);
                     return;
                 }
+
+                var (candidateRc, candidateOutput, candidateErrors) =
+                    await FetchAndValidateCandidateAsync(intendedRelease!, ct);
+                folder.WriteOutput("candidate-artifact-preflight.txt", candidateOutput);
+                if (candidateRc != 0 || candidateErrors.Count > 0)
+                {
+                    var errors = candidateErrors.Count > 0
+                        ? candidateErrors
+                        : new[] { $"candidate immutable tag fetch failed (rc={candidateRc})" };
+                    releaseComparison = release with
+                    {
+                        Allowed = false,
+                        Errors = release.Errors.Concat(errors).ToArray()
+                    };
+                    _store.SetReleaseComparison(releaseComparison);
+                    folder.WriteOutput("release-preflight.json", System.Text.Json.JsonSerializer.Serialize(releaseComparison,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase, WriteIndented = true }));
+                    FinishFailed(runId, startedAt, headBefore, headBefore, trigger,
+                        $"release preflight refused: {string.Join("; ", errors)}", null, folder, preSnapshot,
+                        intendedRelease, release.Running, release.Direction.ToString());
+                    return;
+                }
             }
             var preModes = await _backend.ReadProjectModesAsync(ct) ?? new Dictionary<string, string>();
             var shouldQuiesceRunners = ShouldQuiesceRunners();
@@ -236,13 +258,11 @@ public sealed class UpdateOrchestrator
             SetPhase("pulling", intendedRelease is null
                 ? "git fetch + merge --ff-only"
                 : $"fetching immutable release {intendedRelease.Tag}", runId, startedAt);
-            var installCommand = intendedRelease is null
-                ? "git fetch origin main && git merge --ff-only FETCH_HEAD"
-                : BuildInstallReleaseCommand(intendedRelease);
-            var (pullRc, pullOut) = await RunBashAsync(
-                "-c",
-                installCommand,
-                _options.StableCheckoutDir, ct);
+            var (pullRc, pullOut) = intendedRelease is null
+                ? await RunBashAsync("-c", "git fetch origin main && git merge --ff-only FETCH_HEAD",
+                    _options.StableCheckoutDir, ct)
+                : await RunProcessAsync("git", new[] { "checkout", "--detach", "--force", intendedRelease.Commit },
+                    _options.StableCheckoutDir, ct);
             folder.WriteOutput("pull-output.txt", pullOut);
             if (pullRc != 0)
             {
@@ -723,17 +743,52 @@ public sealed class UpdateOrchestrator
         }
     }
 
-    private static string BuildInstallReleaseCommand(ReleaseManifest release)
+    private async Task<(int Rc, string Output, IReadOnlyList<string> Errors)> FetchAndValidateCandidateAsync(
+        ReleaseManifest release, CancellationToken ct)
     {
         var tagRef = $"refs/tags/{release.Tag}";
         var dereferenced = $"{tagRef}^{{commit}}";
         var refSpec = $"{tagRef}:{tagRef}";
-        return $"git fetch --no-tags origin {ShellQuote(refSpec)} && "
-            + $"test \"$(git rev-parse {ShellQuote(dereferenced)})\" = {ShellQuote(release.Commit)} && "
-            + $"git checkout --detach --force {ShellQuote(release.Commit)}";
-    }
+        var output = new StringBuilder();
+        var fetch = await RunProcessAsync("git", new[] { "fetch", "--no-tags", "origin", refSpec },
+            _options.StableCheckoutDir, ct);
+        output.AppendLine(fetch.Output);
+        if (fetch.Rc != 0) return (fetch.Rc, output.ToString(), Array.Empty<string>());
 
-    private static string ShellQuote(string value) => $"'{value.Replace("'", "'\\''")}'";
+        var resolved = await RunProcessAsync("git", new[] { "rev-parse", dereferenced },
+            _options.StableCheckoutDir, ct);
+        output.AppendLine(resolved.Output);
+        if (resolved.Rc != 0) return (resolved.Rc, output.ToString(), Array.Empty<string>());
+        if (!string.Equals(resolved.Output.Trim(), release.Commit, StringComparison.OrdinalIgnoreCase))
+            return (0, output.ToString(), new[]
+            {
+                $"candidate tag {release.Tag} resolves to {resolved.Output.Trim()}, manifest declares {release.Commit}"
+            });
+
+        var files = new[]
+        {
+            "backend/packages.lock.json",
+            "frontend/package.json",
+            "frontend/package-lock.json"
+        };
+        var contents = new string[files.Length];
+        for (var i = 0; i < files.Length; i++)
+        {
+            var show = await RunProcessAsync("git", new[] { "show", $"{release.Commit}:{files[i]}" },
+                _options.StableCheckoutDir, ct);
+            if (show.Rc != 0)
+            {
+                output.AppendLine(show.Output);
+                return (show.Rc, output.ToString(), new[] { $"candidate {files[i]} could not be read from {release.Tag}" });
+            }
+            contents[i] = show.Output;
+        }
+
+        var errors = StableReleaseContract.ValidateCandidateDependencyLocks(
+            release, contents[0], contents[1], contents[2]);
+        foreach (var error in errors) output.AppendLine(error);
+        return (0, output.ToString(), errors);
+    }
 
     private static ReleaseManifest? ReadReleaseManifest(string path)
     {

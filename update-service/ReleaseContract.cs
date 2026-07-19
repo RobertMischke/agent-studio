@@ -108,6 +108,115 @@ public static class StableReleaseContract
     public static bool IdentityEquals(ReleaseManifest left, ReleaseManifest right) =>
         left == right;
 
+    /// <summary>
+    /// Proves that the dependency identities declared by a candidate manifest
+    /// are the identities pinned by that candidate commit. Callers must supply
+    /// the three files read from <c>manifest.Commit</c>, never from the mutable
+    /// working tree.
+    /// </summary>
+    public static IReadOnlyList<string> ValidateCandidateDependencyLocks(
+        ReleaseManifest manifest,
+        string nugetLockJson,
+        string npmPackageJson,
+        string npmLockJson)
+    {
+        var errors = new List<string>();
+        try
+        {
+            using var nuget = JsonDocument.Parse(nugetLockJson);
+            JsonElement? lockedRunner = null;
+            if (nuget.RootElement.TryGetProperty("dependencies", out var frameworks))
+            {
+                foreach (var framework in frameworks.EnumerateObject())
+                {
+                    if (framework.Value.TryGetProperty("CodingAgentRunner", out var runner))
+                    {
+                        lockedRunner = runner;
+                        break;
+                    }
+                }
+            }
+
+            if (lockedRunner is null)
+            {
+                errors.Add("candidate CodingAgentRunner is missing from backend/packages.lock.json");
+            }
+            else
+            {
+                var runner = lockedRunner.Value;
+                CompareLockedValue(manifest.CodingAgentRunner.Version,
+                    ReadString(runner, "resolved"), "candidate CodingAgentRunner version", errors);
+                var contentHash = ReadString(runner, "contentHash");
+                CompareLockedValue(manifest.CodingAgentRunner.Integrity,
+                    string.IsNullOrWhiteSpace(contentHash) ? null : $"sha512-{contentHash}",
+                    "candidate CodingAgentRunner integrity", errors);
+            }
+        }
+        catch (JsonException ex)
+        {
+            errors.Add($"candidate backend/packages.lock.json is invalid: {ex.Message}");
+        }
+
+        string? packageSpec = null;
+        try
+        {
+            using var package = JsonDocument.Parse(npmPackageJson);
+            if (package.RootElement.TryGetProperty("dependencies", out var dependencies))
+                packageSpec = ReadString(dependencies, "coding-agent-chat");
+            if (string.IsNullOrWhiteSpace(packageSpec))
+                errors.Add("candidate Coding Agent Chat is missing from frontend/package.json");
+            else if (packageSpec.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+                errors.Add("candidate Coding Agent Chat still resolves from a local file: dist artifact");
+            else
+                CompareLockedValue(manifest.CodingAgentChat.Version, packageSpec,
+                    "candidate Coding Agent Chat package.json version", errors);
+        }
+        catch (JsonException ex)
+        {
+            errors.Add($"candidate frontend/package.json is invalid: {ex.Message}");
+        }
+
+        try
+        {
+            using var packageLock = JsonDocument.Parse(npmLockJson);
+            if (!packageLock.RootElement.TryGetProperty("packages", out var packages)
+                || !packages.TryGetProperty("node_modules/coding-agent-chat", out var lockedChat))
+            {
+                errors.Add("candidate Coding Agent Chat is missing from frontend/package-lock.json");
+            }
+            else
+            {
+                var resolved = ReadString(lockedChat, "resolved");
+                if (string.IsNullOrWhiteSpace(resolved)
+                    || resolved.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+                    errors.Add("candidate Coding Agent Chat lock entry is not an immutable registry artifact");
+                CompareLockedValue(manifest.CodingAgentChat.Version,
+                    ReadString(lockedChat, "version"), "candidate Coding Agent Chat locked version", errors);
+                CompareLockedValue(manifest.CodingAgentChat.Integrity,
+                    ReadString(lockedChat, "integrity"), "candidate Coding Agent Chat integrity", errors);
+            }
+        }
+        catch (JsonException ex)
+        {
+            errors.Add($"candidate frontend/package-lock.json is invalid: {ex.Message}");
+        }
+
+        return errors;
+    }
+
+    private static string? ReadString(JsonElement value, string property) =>
+        value.TryGetProperty(property, out var field) && field.ValueKind == JsonValueKind.String
+            ? field.GetString()
+            : null;
+
+    private static void CompareLockedValue(string declared, string? locked, string label, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(locked))
+            errors.Add($"{label} is missing from its lockfile");
+        else if (!string.Equals(declared, locked, StringComparison.Ordinal))
+            errors.Add($"{label} mismatch (manifest={declared}, lock={locked})");
+    }
+
     private static void Validate(ReleaseManifest? manifest, string name, List<string> errors, bool allowLegacy)
     {
         if (manifest is null)

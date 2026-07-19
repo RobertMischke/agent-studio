@@ -52,10 +52,14 @@ are hard failures.
 The outer updater downloads the candidate release asset to the configured
 candidate-manifest cache using create/replace-by-tag semantics. The Update
 Service never manufactures it from a branch checkout. It fetches the manifest's
-exact tag without overwriting an existing tag, verifies the dereferenced tag
-commit, checks out that commit detached, and installs the candidate manifest.
-It does not use branch distance to decide whether a release is available. That
-avoids both moving branch identity and a self-referential manifest commit.
+exact tag without overwriting an existing tag, verifies the dereferenced tag,
+then reads CAR and CAC pins directly from that commit's lockfiles. Manifest
+versions and integrity must match those pins, and CAC must be an exact registry
+artifact rather than `file:.../dist`. Only then may Stable check out the commit
+detached and install the candidate manifest. It does not use branch distance to
+decide whether a release is available. That avoids moving branch identity, a
+stale manifest that merely agrees with itself, and a self-referential manifest
+commit.
 
 Before mutation, copy the installed manifest and create a self-contained Git
 bundle for the installed commit in the run folder. Together they are the exact
