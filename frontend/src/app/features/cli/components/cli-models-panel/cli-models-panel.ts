@@ -14,12 +14,15 @@ interface CliModelGroup {
 }
 
 /**
- * Per-CLI model catalog overview for the Admin/CLI page: each known CLI gets a
- * card listing its discovered models, with the default model and its default
- * thinking level called out. Data is the live `/api/cli/{type}/models` catalog,
- * read through the process-wide {@link CliCatalogStore} so the page reuses the
- * boot-time hydration instead of issuing its own per-CLI requests. The refresh
- * button forces a re-probe of one CLI's catalog (bypasses the store TTL).
+ * Per-CLI model catalog overview for the CLI Management page (rows since
+ * AGT-2101): each known CLI is one compact, stacked row that answers "what's
+ * present" at a glance - the primary model and the fallback-route state - and
+ * expands to reveal the route editor (primary / fallback CLI + model + thinking)
+ * and the full discovered model list. Data is the live `/api/cli/{type}/models`
+ * catalog, read through the process-wide {@link CliCatalogStore} so the page
+ * reuses the boot-time hydration instead of issuing its own per-CLI requests.
+ * The refresh button forces a re-probe of one CLI's catalog (bypasses the store
+ * TTL).
  */
 @Component({
   selector: 'app-cli-models-panel',
@@ -35,6 +38,10 @@ export class CliModelsPanelComponent implements OnInit {
   readonly routes = signal<Record<string, CliModelRouteProfile>>({});
   readonly savingCli = signal<string | null>(null);
   readonly cliTypes = CLI_TYPES;
+
+  /** CLIs whose per-row details (route editor + full model list) are expanded.
+   *  Collapsed rows still answer "what's present" via the summary line. */
+  readonly expanded = signal<Set<string>>(new Set());
 
   /** One group per known CLI. Recomputes when the store's catalog map updates. */
   readonly groups = computed<CliModelGroup[]>(() =>
@@ -61,6 +68,17 @@ export class CliModelsPanelComponent implements OnInit {
     this.catalog.refresh(cliType).subscribe({ error: () => void 0 });
   }
 
+  toggle(cliType: CliType): void {
+    const next = new Set(this.expanded());
+    if (next.has(cliType)) next.delete(cliType);
+    else next.add(cliType);
+    this.expanded.set(next);
+  }
+
+  isExpanded(cliType: CliType): boolean {
+    return this.expanded().has(cliType);
+  }
+
   thinkingSummary(m: CliModelInfo): string {
     return m.thinkingLevels?.length ? m.thinkingLevels.join(' · ') : '';
   }
@@ -69,6 +87,28 @@ export class CliModelsPanelComponent implements OnInit {
     return this.routes()[cliType]?.primaryModel
       ?? this.catalog.modelsFor(cliType).find((m) => m.isDefault)?.id
       ?? '';
+  }
+
+  /** Human label of the resolved primary model, for the collapsed summary. */
+  primaryModelLabel(cliType: CliType): string {
+    const id = this.primaryModel(cliType);
+    if (!id) return 'no catalog';
+    return this.catalog.modelsFor(cliType).find((m) => m.id === id)?.label ?? id;
+  }
+
+  /** One-line fallback-route summary for the collapsed row, e.g.
+   *  "→ Codex · gpt-5" or "no fallback". */
+  fallbackSummary(cliType: CliType): string {
+    const route = this.routes()[cliType];
+    const model = route?.fallbackModel;
+    if (!model) return 'no fallback';
+    const targetCli = (route?.fallbackCliType as CliType | null) ?? cliType;
+    const label = this.catalog.modelsFor(targetCli).find((m) => m.id === model)?.label ?? model;
+    return `→ ${cliTypeLabel(targetCli)} · ${label}`;
+  }
+
+  hasFallback(cliType: CliType): boolean {
+    return !!this.routes()[cliType]?.fallbackModel;
   }
 
   fallbackCli(cliType: CliType): CliType {

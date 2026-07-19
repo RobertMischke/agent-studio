@@ -222,9 +222,8 @@
   color: var(--studio-fg-dim);
   font-size: 12px;
 }
-// The html preview renders in a scripts-disabled sandboxed iframe. A light
-// paper background keeps page markup legible regardless of the app theme,
-// since the embedded document does not inherit the app's tokens.
+// The html preview renders in a script-enabled, opaque-origin sandbox. A light
+// paper background keeps page markup legible regardless of the app theme.
 .git-view__preview-frame {
   display: block;
   width: 100%;

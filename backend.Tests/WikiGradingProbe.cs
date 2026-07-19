@@ -49,11 +49,11 @@ public class WikiGradingProbe : IDisposable
     // categories and lengths.
     private static readonly string[] ProbePages =
     [
-        "README.md",
+        "start/README.md",
         "concepts/wiki-pulse-dashboard.md",
         "concepts/wiki-grading-run.md",
-        "domains/cli.md",
-        "product/wiki-document-classification.md",
+        "system/domains/cli.md",
+        "start/wiki-document-classification.md",
     ];
 
     [Fact]

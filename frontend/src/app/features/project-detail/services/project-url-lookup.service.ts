@@ -7,6 +7,8 @@ import type { RegistryProjectUrl } from '../../../models/task.model';
 export interface ResolvedProjectUrl {
   projectId: string;
   url: RegistryProjectUrl;
+  repositoryPath: string | null;
+  rootPath: string | null;
 }
 
 /**
@@ -34,7 +36,12 @@ export class ProjectUrlLookupService {
           for (const project of ws.projects) {
             if (project.displayName !== projectName) continue;
             const url = (project.urls ?? []).find(u => u.id === urlId);
-            if (url) return { projectId: project.id, url };
+            if (url) return {
+              projectId: project.id,
+              url,
+              repositoryPath: project.repositoryPath,
+              rootPath: project.rootPath,
+            };
           }
         }
         return null;

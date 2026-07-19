@@ -9,7 +9,7 @@ import { TaskState } from '../../../models/task.model';
 import type { PlanningSpawnSummary, TaskInfo, TaskMode } from '../../../models/task.model';
 import type { TaskProvenanceRecord } from '../../../features/git';
 
-function reviewJob(provenance: TaskProvenanceRecord | null = null): TaskInfo {
+function reviewJob(provenance: TaskProvenanceRecord | null = null, overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'task-1',
     taskKey: 'test::task-1',
@@ -29,8 +29,9 @@ function reviewJob(provenance: TaskProvenanceRecord | null = null): TaskInfo {
     useOwnSession: null,
     lastUsage: null,
     execution: null,
-    commit: null,
+    commit: { sha: 'abc1234', shortSha: 'abc1234', message: 'task work', filesChanged: 1, files: ['x.ts'], at: '2026-06-10T10:00:00Z' },
     provenance,
+    ...overrides,
   };
 }
 
@@ -186,6 +187,23 @@ describe('mergeAcceptViewFor — state-dependent Human Review acceptance primary
     expect(view.acceptLabel).toBe('Merge into Develop');
     expect(view.statusLabel).toBeNull();
     expect(view.landedState).toBe('on-branch-only');
+  });
+
+  it('uses Accept when there is no attributed task commit to merge', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance(null), { commit: null, commits: [] }));
+    expect(view.landed).toBe(false);
+    expect(view.acceptLabel).toBe('Accept');
+  });
+
+  it('uses Accept when the merge signal says the task commit is already in develop', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance(null), {
+      mergeSignal: {
+        branch: 'task/ATP-1', inIntegration: true, inRelease: false,
+        integrationBranch: 'develop', releaseBranch: 'main', integrationSha: 'abc1234', releaseSha: null,
+      },
+    }));
+    expect(view.landed).toBe(true);
+    expect(view.acceptLabel).toBe('Accept');
   });
 
   it('treats a recorded merge fact as landed and relabels to "Accept"', () => {

@@ -15,6 +15,7 @@ import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../..
 
 function project(displayName: string, workspaceId: string, storage: string): RegistryProjectSummary {
   return {
+    sourceType: 'local-folder',
     id: `PROJ-${displayName}`,
     displayName,
     shortCode: displayName.slice(0, 3).toUpperCase(),
@@ -24,6 +25,9 @@ function project(displayName: string, workspaceId: string, storage: string): Reg
     modelDefault: null,
     sortOrder: 0,
     storageLocation: storage,
+    repositoryPath: null,
+    rootPath: null,
+    repositoryUrl: null,
     urls: [],
     archived: false,
     createdAt: '2026-01-01T00:00:00Z',

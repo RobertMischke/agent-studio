@@ -20,13 +20,14 @@
  *   src/app/features/cli/components/multi/a.component.ts
  *   src/app/features/cli/components/multi/b.component.ts     (two components in one folder)
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 
 const root = 'src/app';
-const files = execSync(`git ls-files ${root}`, { encoding: 'utf8' })
+const files = execSync(`git ls-files --cached --others --exclude-standard ${root}`, { encoding: 'utf8' })
   .split('\n')
+  .filter(existsSync)
   .filter(f => f.endsWith('.ts') && !f.endsWith('.spec.ts') && !f.endsWith('.d.ts'));
 
 const errors = [];

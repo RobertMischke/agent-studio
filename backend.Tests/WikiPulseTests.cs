@@ -10,8 +10,9 @@ namespace AgentStudio.Tests;
 /// Covers the wiki Pulse landing composition (PULSE-1): the deterministic
 /// task-key + drift-band pure helpers, and the end-to-end
 /// <see cref="ProjectDocsService.GetWikiPulse"/> over a real temp git repo -
-/// change-feed frame-area + task-key enrichment, inbox detection of loose /
-/// unfiled pages, the per-area drift grade bar, and the graceful empty states.
+/// change-feed top-folder + task-key enrichment, inbox detection of loose /
+/// unfiled pages, the per-top-folder drift grade bar, the folder-independent
+/// human-action frontmatter convention, and the graceful empty states.
 /// </summary>
 public class WikiPulseTests : IDisposable
 {
@@ -64,15 +65,15 @@ public class WikiPulseTests : IDisposable
     // ---- GetWikiPulse (real git) ----
 
     [Fact]
-    public void GetWikiPulse_ComposesFeedEnrichmentInboxAndDriftGrades()
+    public void GetWikiPulse_ComposesFeedEnrichmentInboxAndTopFolderDriftGrades()
     {
         var repoRoot = Path.Combine(_tempDir, "pulse-repo");
         var docsDir = Path.Combine(repoRoot, "docs");
-        var frameDir = Path.Combine(docsDir, "engineering-workstream");
-        var area10 = Path.Combine(frameDir, "10-current-development-state");
-        var area20 = Path.Combine(frameDir, "20-development-signals");
-        Directory.CreateDirectory(area10);
-        Directory.CreateDirectory(area20);
+        var conceptsDir = Path.Combine(docsDir, "20-concepts");
+        var opsDir = Path.Combine(docsDir, "operations");
+        Directory.CreateDirectory(conceptsDir);
+        Directory.CreateDirectory(opsDir);
+        Directory.CreateDirectory(Path.Combine(docsDir, "empty-folder")); // no pages -> no drift group
         Directory.CreateDirectory(Path.Combine(repoRoot, "backend"));
         Directory.CreateDirectory(Path.Combine(repoRoot, "frontend"));
 
@@ -80,20 +81,16 @@ public class WikiPulseTests : IDisposable
         RunGit(repoRoot, "config user.email test@example.com");
         RunGit(repoRoot, "config user.name test");
 
-        // --- Seed commit (2026-01-01): docs frame + a loose root page + a frame
-        // stray + two code roots. active-stream.md carries a frontmatter task key.
+        // --- Seed commit (2026-01-01): two real top-level docs folders + a loose
+        // root page + two code roots. active-stream.md carries a frontmatter task key.
         File.WriteAllText(Path.Combine(docsDir, "README.md"), "# Readme\n");
         File.WriteAllText(Path.Combine(docsDir, "loose-note.md"), "# Loose note\n");
-        File.WriteAllText(Path.Combine(frameDir, "00-overview.html"), "<h1>Overview</h1>");
-        File.WriteAllText(Path.Combine(frameDir, "stray.md"), "# Stray fragment\n");
-        File.WriteAllText(Path.Combine(area10, "index.html"), "<h1>Current Development State</h1>");
-        File.WriteAllText(Path.Combine(area10, "active-stream.md"),
+        File.WriteAllText(Path.Combine(conceptsDir, "active-stream.md"),
             "---\ntask-key: AGT-2014\n---\n# Active stream\n");
-        File.WriteAllText(Path.Combine(area20, "index.html"), "<h1>Development Signals</h1>");
         File.WriteAllText(Path.Combine(repoRoot, "backend", "svc.cs"), "// v0\n");
         File.WriteAllText(Path.Combine(repoRoot, "frontend", "app.ts"), "// v0\n");
         RunGit(repoRoot, "add -A");
-        Commit(repoRoot, "2026-01-01T00:00:00", "seed frame and code");
+        Commit(repoRoot, "2026-01-01T00:00:00", "seed docs and code");
 
         // --- 10 code commits after active-stream's last update -> Aging (>=10).
         for (var i = 1; i <= 10; i++)
@@ -103,9 +100,11 @@ public class WikiPulseTests : IDisposable
             Commit(repoRoot, $"2026-02-{i:00}T00:00:00", $"backend change {i}");
         }
 
-        // --- A signals page added AFTER all code churn -> Fresh (0 commits since).
-        // Its task key comes from the commit subject, not frontmatter.
-        File.WriteAllText(Path.Combine(area20, "signal.md"), "# Latency signal\n");
+        // --- An operations page added AFTER all code churn -> Fresh (0 commits
+        // since). Its human-action frontmatter raises the folder-independent
+        // Pulse warning; its task key comes from the commit subject.
+        File.WriteAllText(Path.Combine(opsDir, "signal.md"),
+            "---\nstatus: active\nhuman-action: Investigate the latency regression.\n---\n# Latency signal\n\n[Missing runbook](missing.md)\n");
         RunGit(repoRoot, "add -A");
         Commit(repoRoot, "2026-06-01T00:00:00", "AGT-2020 add latency signal");
 
@@ -117,56 +116,161 @@ public class WikiPulseTests : IDisposable
         Assert.NotNull(pulse);
         Assert.True(pulse!.Exists);
 
-        // ----- Change feed: enriched with frame-area badge + task key -----
+        // ----- Change feed: enriched with the top-folder badge + task key -----
         Assert.True(pulse.Feed.Available);
-        var active = pulse.Feed.Items.Single(i => i.RelPath == "engineering-workstream/10-current-development-state/active-stream.md");
-        Assert.Equal("10-current-development-state", active.FrameAreaSlug);
-        Assert.Equal("Current Development State", active.FrameAreaTitle);
-        Assert.Equal("AGT-2014", active.TaskKey); // from frontmatter
+        var active = pulse.Feed.Items.Single(i => i.RelPath == "20-concepts/active-stream.md");
+        Assert.Equal("20-concepts", active.AreaSlug);
+        Assert.Equal("concepts", active.AreaTitle); // order prefix stripped
+        Assert.Equal("AGT-2014", active.TaskKey);   // from frontmatter
 
-        var signal = pulse.Feed.Items.Single(i => i.RelPath == "engineering-workstream/20-development-signals/signal.md");
-        Assert.Equal("20-development-signals", signal.FrameAreaSlug);
+        var signal = pulse.Feed.Items.Single(i => i.RelPath == "operations/signal.md");
+        Assert.Equal("operations", signal.AreaSlug);
         Assert.Equal("AGT-2020", signal.TaskKey); // from commit subject
 
         // A loose root page carries no area badge.
         var loose = pulse.Feed.Items.Single(i => i.RelPath == "loose-note.md");
-        Assert.Null(loose.FrameAreaSlug);
+        Assert.Null(loose.AreaSlug);
 
-        // ----- Inbox: loose root page + frame stray, README excluded -----
+        // ----- Inbox: only the loose root page, README excluded -----
         Assert.True(pulse.Inbox.Available);
         var inboxPaths = pulse.Inbox.Items.Select(i => i.RelPath).ToHashSet();
         Assert.Contains("loose-note.md", inboxPaths);
-        Assert.Contains("engineering-workstream/stray.md", inboxPaths);
         Assert.DoesNotContain("README.md", inboxPaths);
-        Assert.DoesNotContain("engineering-workstream/10-current-development-state/active-stream.md", inboxPaths);
-        Assert.DoesNotContain("engineering-workstream/00-overview.html", inboxPaths); // frame shell
-        Assert.Equal(2, pulse.Inbox.Count);
+        Assert.DoesNotContain("20-concepts/active-stream.md", inboxPaths);
+        Assert.Equal(1, pulse.Inbox.Count);
 
-        // ----- Drift grade bar: area 10 Aging, area 20 Fresh, rest Empty -----
+        // ----- Drift grade bar: real top folders with pages, alphabetical -----
         Assert.True(pulse.Drift.Available);
-        Assert.Equal(5, pulse.Drift.Areas.Count);
+        Assert.Equal(["20-concepts", "operations"], pulse.Drift.Areas.Select(a => a.Slug).ToArray());
 
-        var d10 = pulse.Drift.Areas.Single(a => a.Slug == "10-current-development-state");
-        Assert.Equal("Aging", d10.Grade);
-        Assert.Equal(1, d10.PageCount);       // active-stream.md; index.html shell excluded
-        Assert.Equal(1, d10.GradedPageCount);
-        Assert.Equal(10, d10.WorstCommitCount);
-        Assert.Equal(1, d10.AgingCount);
+        var concepts = pulse.Drift.Areas.Single(a => a.Slug == "20-concepts");
+        Assert.Equal("concepts", concepts.Title);
+        Assert.Equal("Aging", concepts.Grade);
+        Assert.Equal(1, concepts.PageCount);
+        Assert.Equal(1, concepts.GradedPageCount);
+        Assert.Equal(10, concepts.WorstCommitCount);
+        Assert.Equal(1, concepts.AgingCount);
 
-        var d20 = pulse.Drift.Areas.Single(a => a.Slug == "20-development-signals");
-        Assert.Equal("Fresh", d20.Grade);
-        Assert.Equal(0, d20.WorstCommitCount);
-        Assert.Equal(1, d20.FreshCount);
+        var operations = pulse.Drift.Areas.Single(a => a.Slug == "operations");
+        Assert.Equal("Fresh", operations.Grade);
+        Assert.Equal(0, operations.WorstCommitCount);
+        Assert.Equal(1, operations.FreshCount);
 
-        var d30 = pulse.Drift.Areas.Single(a => a.Slug == "30-system-knowledge");
-        Assert.Equal("Empty", d30.Grade);
-        Assert.Equal(0, d30.PageCount);
+        // A folder without pages never appears as a drift group.
+        Assert.DoesNotContain(pulse.Drift.Areas, a => a.Slug == "empty-folder");
 
-        Assert.Equal("Aging", pulse.Drift.OverallGrade); // worst area
+        Assert.Equal("Aging", pulse.Drift.OverallGrade); // worst folder
         Assert.Equal(1, pulse.Drift.Counts.Fresh);
         Assert.Equal(1, pulse.Drift.Counts.Aging);
         Assert.Equal(0, pulse.Drift.Counts.Stale);
         Assert.Equal(2, pulse.Drift.Counts.Graded);
+
+        // human-action is a frontmatter convention, independent of the folder.
+        Assert.Contains(pulse.Warnings.Items, w => w.Kind == "human-action"
+            && w.Status == "active" && w.HumanAction.Contains("Investigate"));
+        Assert.Contains(pulse.Warnings.Items, w => w.Kind == "dead-link" && w.Detail == "missing.md");
+    }
+
+    [Fact]
+    public void GetWikiPulse_DriftFollowsSavedRootFolderOrder_UnlistedBehind()
+    {
+        var repoRoot = Path.Combine(_tempDir, "pulse-order");
+        var docsDir = Path.Combine(repoRoot, "docs");
+        foreach (var folder in new[] { "alpha", "bravo", "zulu", "10-later", "2-early" })
+        {
+            Directory.CreateDirectory(Path.Combine(docsDir, folder));
+            File.WriteAllText(Path.Combine(docsDir, folder, "page.md"), $"# {folder}\n");
+        }
+        // Saved category drag-order for the docs root: zulu first, then bravo;
+        // the unlisted rest sorts behind in the tree's default order (numeric
+        // NN- prefix, then name), so 2-early precedes 10-later precedes alpha.
+        var orderFile = Path.Combine(docsDir, "app", "config", "wiki-order.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(orderFile)!);
+        File.WriteAllText(orderFile,
+            """{ "schemaVersion": "wiki-folder-order/v1", "folderOrder": { "": ["zulu", "bravo"] } }""");
+        // Hidden entries (dot-prefixed folders/files) are config sidecars the
+        // tree never shows: neither a drift group nor a page count may include
+        // them.
+        Directory.CreateDirectory(Path.Combine(docsDir, ".curator"));
+        File.WriteAllText(Path.Combine(docsDir, ".curator", "context.json"), "{ \"title\": \"curator\" }\n");
+        File.WriteAllText(Path.Combine(docsDir, "zulu", ".retro-pilot.json"), "{ \"title\": \"retro\" }\n");
+        Directory.CreateDirectory(Path.Combine(repoRoot, "backend"));
+        File.WriteAllText(Path.Combine(repoRoot, "backend", "svc.cs"), "// v0\n");
+
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+        RunGit(repoRoot, "add -A");
+        Commit(repoRoot, "2026-01-01T00:00:00", "seed");
+
+        var docs = BuildDocsService(("Order", repoRoot));
+        var git = BuildGitService(("Order", repoRoot));
+
+        var pulse = docs.GetWikiPulse("Order", git);
+
+        Assert.NotNull(pulse);
+        Assert.True(pulse!.Drift.Available);
+        Assert.Equal(
+            ["zulu", "bravo", "2-early", "10-later", "alpha"],
+            pulse.Drift.Areas.Select(a => a.Slug).ToArray());
+        // The hidden sidecars are invisible everywhere: no .curator drift group,
+        // no extra zulu page, no feed row.
+        Assert.Equal(1, pulse.Drift.Areas.Single(a => a.Slug == "zulu").PageCount);
+        Assert.DoesNotContain(pulse.Feed.Items, i => i.RelPath.Contains(".curator") || i.RelPath.Contains(".retro-pilot"));
+    }
+
+    [Fact]
+    public void GetWikiPulse_HumanActionConvention_FiresAnywhere_AndRequiresLiveStatus()
+    {
+        var repoRoot = Path.Combine(_tempDir, "pulse-human-action");
+        var docsDir = Path.Combine(repoRoot, "docs");
+        var deepDir = Path.Combine(docsDir, "operations", "runbooks");
+        Directory.CreateDirectory(deepDir);
+        // Live signal deep in an arbitrary folder -> warning.
+        File.WriteAllText(Path.Combine(deepDir, "observed.md"),
+            "---\nstatus: observed\nhuman-action: Rotate the token.\n---\n# Observed\n");
+        // Resolved signal -> no warning despite the human-action field.
+        File.WriteAllText(Path.Combine(deepDir, "resolved.md"),
+            "---\nstatus: resolved\nhuman-action: Already handled.\n---\n# Resolved\n");
+        // Live status without a human-action field -> no warning.
+        File.WriteAllText(Path.Combine(docsDir, "operations", "no-action.md"),
+            "---\nstatus: active\n---\n# No action\n");
+
+        var docs = BuildDocsService(("HumanAction", repoRoot));
+        var git = BuildGitService(("HumanAction", repoRoot));
+
+        var pulse = docs.GetWikiPulse("HumanAction", git);
+
+        Assert.NotNull(pulse);
+        Assert.True(pulse!.Warnings.Available);
+        var warning = Assert.Single(pulse.Warnings.Items, w => w.Kind == "human-action");
+        Assert.Equal("operations/runbooks/observed.md", warning.RelPath);
+        Assert.Equal("observed", warning.Status);
+        Assert.Equal("Rotate the token.", warning.HumanAction);
+    }
+
+    [Fact]
+    public void GetWikiTree_HasNoPinnedFolder_SiblingsSortByPrefixAndName()
+    {
+        var projectRoot = Path.Combine(_tempDir, "tree-no-pin");
+        var docsDir = Path.Combine(projectRoot, "docs");
+        foreach (var folder in new[] { "concepts", "architecture", "engineering-workstream" })
+        {
+            Directory.CreateDirectory(Path.Combine(docsDir, folder));
+            File.WriteAllText(Path.Combine(docsDir, folder, "page.md"), $"# {folder}\n");
+        }
+
+        var docs = BuildDocsService(("Tree", projectRoot));
+        var tree = docs.GetWikiTree("Tree");
+
+        Assert.NotNull(tree);
+        // No frame pin: plain alphabetical folder order, and no relabelling of
+        // the historical engineering-workstream folder name.
+        Assert.Equal(
+            ["architecture", "concepts", "engineering-workstream"],
+            tree!.Root.Where(n => n.Type == "folder").Select(n => n.Name).ToArray());
+        Assert.Equal("engineering-workstream",
+            tree.Root.Single(n => n.Name == "engineering-workstream").Title);
     }
 
     [Fact]

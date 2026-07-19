@@ -2,6 +2,8 @@
 
 namespace AgentStudio.Host;
 
+using System.Reflection;
+
 /// <summary>
 /// Cross-cutting routes that don't fit any of the resource-scoped
 /// groups: workspace enumeration, environment flags consumed by the
@@ -30,6 +32,31 @@ public static class SystemEndpoints
                 deleteE2EJobsEnabled = config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled")
             };
             return Results.Ok(new { isDev, devTools });
+        });
+
+        // Runtime identity is taken from the loaded backend assembly, not from
+        // the checkout on disk. This remains truthful when main has advanced or
+        // files were pulled without restarting the running process.
+        app.MapGet("/api/system/version", () =>
+        {
+            var assembly = typeof(SystemEndpoints).Assembly;
+            var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            var deployedAt = File.GetLastWriteTimeUtc(assembly.Location);
+            var configuredSha = Environment.GetEnvironmentVariable("ATP_DEPLOY_SHA");
+            var configuredAt = Environment.GetEnvironmentVariable("ATP_DEPLOYED_AT");
+            var sourceSha = !string.IsNullOrWhiteSpace(configuredSha)
+                ? configuredSha
+                : informational?.Split('+', 2).ElementAtOrDefault(1)?.Split('.', 2)[0] ?? "unknown";
+            var builtAt = DateTime.TryParse(configuredAt, out var parsedAt)
+                ? parsedAt.ToUniversalTime()
+                : deployedAt;
+            return Results.Ok(new
+            {
+                version = $"{builtAt:yyyy.MM.dd-HHmm}+{sourceSha[..Math.Min(8, sourceSha.Length)]}",
+                commit = sourceSha,
+                deployedAt = builtAt,
+                informationalVersion = informational
+            });
         });
 
         // Lists the centrally-managed agent-rule files that are appended as a

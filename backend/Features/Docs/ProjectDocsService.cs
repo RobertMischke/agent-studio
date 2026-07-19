@@ -22,8 +22,24 @@ public class ProjectDocsService
 
     private const string SecurityRel = "docs/operations/security";
     private const string SecurityStateFile = "state.json";
-    private const string AdrRel = "docs/architecture/decisions/adr-archive.md";
-    private const string WikiRel = "docs";
+    private const string AdrRel = "docs/system/architecture/decisions/adr-archive.md";
+    internal const string WikiRel = "docs";
+
+    // The code-contract area under docs/. Everything below docs/app/ is a
+    // machine contract (JSON schemas, in-app help bodies, wiki config) whose
+    // path and format only change alongside code - it is NOT knowledge content,
+    // so it is hidden from every reading surface (tree, folder, search, pulse,
+    // grading) exactly like a config file. Direct-path serving (schema loader,
+    // help resolver, home config) still reaches into it by explicit path.
+    internal const string WikiAppRel = "app";
+
+    private const string WikiHomeRel = "app/config/home.json";
+
+    // Stored display order of sibling category folders, keyed by parent folder
+    // rel path ("" = docs root). Lives in the code-contract area under docs/app/
+    // (moved out of the dot-prefixed root file in the 2026-07 app/ migration);
+    // reserved via IsWikiConfigFile and hidden with the rest of docs/app/.
+    internal const string WikiFolderOrderRel = "app/config/wiki-order.json";
 
     // The wiki tree is the physical docs/ hierarchy itself - folders are nodes,
     // files are pages - so there is no virtual organisation layer to maintain.
@@ -236,8 +252,6 @@ public class ProjectDocsService
 
     public WikiSaveResult WriteWikiFile(string projectName, string relPath, string content)
     {
-        if (EngineeringWorkstreamFrame.IsContentLocked(relPath))
-            return WikiSaveResult.Fail(FrameLockMessage(relPath, "overwritten"));
         var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
         if (full == null) return WikiSaveResult.Fail("Invalid path.");
         if (!File.Exists(full)) return WikiSaveResult.Fail("File not found.");
@@ -346,7 +360,8 @@ public class ProjectDocsService
             new DirectoryInfo(wikiDir),
             fullWikiDir,
             LoadWikiMetadataIndex(wikiDir),
-            _titleCache);
+            _titleCache,
+            LoadWikiFolderOrder(fullWikiDir));
         var tree = new WikiTree(projectName, wikiDir, true, root);
         var etag = FormatETag("wiki-tree-" + (signature ?? "nosig"));
 
@@ -464,7 +479,7 @@ public class ProjectDocsService
             var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
             var ext = Path.GetExtension(full);
             if (!WikiDocExtensions.Contains(ext)) continue;
-            if (IsWikiCompanionFile(docsRel)) continue;
+            if (IsHiddenWikiPath(docsRel) || IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
             if (!File.Exists(full)) continue; // a deletion in the log
 
             var title = ExtractDocTitle(full, ext)
@@ -483,7 +498,7 @@ public class ProjectDocsService
         return new WikiRecentEdits(projectName, wikiDir, true, results);
     }
 
-    // -------- Wiki Pulse (PULSE-1: change-feed + inbox + drift grading) --------
+    // -------- Wiki Pulse (generated wiki landing view) --------
 
     // Top-level repo directories that are code (not knowledge) but are never a
     // "code root" for the drift heuristic: the wiki root itself plus build
@@ -515,15 +530,14 @@ public class ProjectDocsService
     /// multiplies the slow per-doc git calls (two <c>git log</c> spawns total):
     /// <list type="number">
     ///   <item><b>Change feed</b> - the recently-edited pages (git author + when),
-    ///   each enriched with its Workstream frame-area badge and a task key parsed
+    ///   each enriched with its top-level docs-folder badge and a task key parsed
     ///   from the page frontmatter or the commit subject.</item>
     ///   <item><b>Inbox</b> - loose / unfiled knowledge pages that sit at the wiki
-    ///   root or inside the frame but under no area; an empty inbox is the healthy
-    ///   state.</item>
-    ///   <item><b>Drift grading v1</b> - per frame area, how many commits landed
-    ///   under the code roots since each page was last updated, banded
-    ///   Fresh (0-9) / Aging (10-49) / Stale (50+); the area grade is its worst
-    ///   page.</item>
+    ///   root; an empty inbox is the healthy state.</item>
+    ///   <item><b>Drift grading v1</b> - per top-level docs folder with pages, how
+    ///   many commits landed under the code roots since each page was last
+    ///   updated, banded Fresh (0-9) / Aging (10-49) / Stale (50+); the folder
+    ///   grade is its worst page.</item>
     /// </list>
     /// Each section degrades to an "unavailable" state carrying a reason rather
     /// than failing, so a missing docs folder or repository never blank-screens
@@ -545,7 +559,9 @@ public class ProjectDocsService
                 new WikiPulseFeed(false, reason, []),
                 new WikiPulseInbox(false, reason, 0, []),
                 WikiPulseDrift.Unavailable(reason),
-                WikiPulseCritical.Unavailable(reason));
+                WikiPulseCritical.Unavailable(reason),
+                WikiPulseWarnings.Unavailable(reason),
+                WikiPulseActivity.Unavailable(reason));
         }
 
         // Inbox + the LLM critical-pages list are pure filesystem reads (no git),
@@ -555,6 +571,8 @@ public class ProjectDocsService
         var allDocs = ListWikiDocs(wikiDir);
         var inbox = BuildPulseInbox(allDocs);
         var critical = BuildPulseCritical(allDocs, LoadWikiMetadataIndex(wikiDir));
+        var warnings = BuildPulseWarnings(wikiDir, allDocs);
+        var activity = BuildPulseActivity(projectName, git);
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
@@ -564,7 +582,9 @@ public class ProjectDocsService
                 new WikiPulseFeed(false, reason, []),
                 inbox,
                 WikiPulseDrift.Unavailable(reason),
-                critical);
+                critical,
+                warnings,
+                activity);
         }
 
         var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
@@ -583,7 +603,7 @@ public class ProjectDocsService
             var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
             var ext = Path.GetExtension(full);
             if (!WikiDocExtensions.Contains(ext)) continue;
-            if (IsWikiCompanionFile(docsRel)) continue;
+            if (IsHiddenWikiPath(docsRel) || IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
             if (!File.Exists(full)) continue; // a deletion in the log
 
             lastUpdateByRel[docsRel] = e.AuthorDateUtc;
@@ -592,7 +612,7 @@ public class ProjectDocsService
             {
                 var title = ExtractDocTitle(full, ext)
                     ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
-                var area = EngineeringWorkstreamFrame.AreaForPath(docsRel);
+                var areaSlug = TopFolderForPath(docsRel);
                 feedItems.Add(new WikiPulseFeedItem(
                     RelPath: docsRel,
                     Title: title,
@@ -601,8 +621,8 @@ public class ProjectDocsService
                     Sha: e.Sha,
                     ShortSha: e.ShortSha,
                     Subject: e.Subject,
-                    FrameAreaSlug: area?.Slug,
-                    FrameAreaTitle: area?.Title,
+                    AreaSlug: areaSlug,
+                    AreaTitle: areaSlug == null ? null : StripOrderPrefix(areaSlug),
                     TaskKey: ExtractPulseTaskKey(full, ext, e.Subject)));
             }
         }
@@ -610,9 +630,112 @@ public class ProjectDocsService
         var feed = new WikiPulseFeed(true, feedItems.Count == 0 ? "No recent edits in git history." : null, feedItems);
 
         var codeRoots = ResolveCodeRoots(repoRoot);
-        var drift = BuildPulseDrift(allDocs, lastUpdateByRel, repoRoot, codeRoots, git);
+        var drift = BuildPulseDrift(
+            allDocs, lastUpdateByRel, repoRoot, codeRoots, git,
+            BuildFolderOrderIndex(LoadWikiFolderOrder(wikiDir), parentRel: string.Empty));
 
-        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical);
+        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity);
+    }
+
+    private static readonly Regex MarkdownLinkRegex =
+        new(@"!?\[[^\]]*\]\((?<target>[^)\s]+)(?:\s+[^)]*)?\)", RegexOptions.Compiled);
+    private static readonly Regex HtmlLinkRegex =
+        new(@"(?:href|src)\s*=\s*[""'](?<target>[^""']+)[""']", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// PULSE-2 warnings from deterministic docs integrity checks. The
+    /// <c>human-action</c> signal is a folder-independent frontmatter convention
+    /// (see <c>docs/system/contracts/wiki-tree.md</c>): any page carrying a
+    /// <c>human-action</c> value whose <c>status</c> is <c>observed</c> or
+    /// <c>active</c> raises a Pulse warning, wherever it lives.
+    /// </summary>
+    private static WikiPulseWarnings BuildPulseWarnings(string wikiDir, IReadOnlyList<WikiFileEntry> docs)
+    {
+        var items = new List<WikiPulseWarningItem>();
+        foreach (var doc in docs)
+        {
+            var full = Path.Combine(wikiDir, doc.RelPath.Replace('/', Path.DirectorySeparatorChar));
+            string text;
+            try { text = File.ReadAllText(full); }
+            catch { continue; }
+
+            var action = FrontmatterScalar(text, "human-action");
+            var status = FrontmatterScalar(text, "status");
+            if (!string.IsNullOrWhiteSpace(action)
+                && status is not null
+                && (status.Equals("observed", StringComparison.OrdinalIgnoreCase)
+                    || status.Equals("active", StringComparison.OrdinalIgnoreCase)))
+            {
+                items.Add(new("human-action", doc.Title,
+                    $"Development signal is {status.ToLowerInvariant()}.", action, doc.RelPath, status.ToLowerInvariant()));
+            }
+
+            // NOTE (Welle 2 review): an "unclassified page" nudge was emitted here
+            // for every knowledge page whose sidecar carries no classification and
+            // whose folder has no default type. The born-classified stamp
+            // (WriteCreationClassification) only covers pages created *after* the
+            // 2026-07 convention, so the pre-existing corpus (161 of 375 pages in
+            // stable) is not backfilled and the panel shipped flooded with ~160
+            // low-signal nudges that buried the actionable dead-link / human-action
+            // warnings. The nudge was removed until a real backfill classifies the
+            // existing corpus; re-introducing it requires that backfill first (a
+            // blind stamp of status=aktuell/analyzedAt=today would fabricate an
+            // "analyzed" signal the grading/drift surfaces trust).
+
+            foreach (Match match in (Path.GetExtension(full).Equals(".md", StringComparison.OrdinalIgnoreCase)
+                         ? MarkdownLinkRegex.Matches(text)
+                         : HtmlLinkRegex.Matches(text)))
+            {
+                var target = match.Groups["target"].Value.Trim();
+                if (!IsInternalLink(target) || InternalLinkExists(wikiDir, doc.RelPath, target)) continue;
+                items.Add(new("dead-link", $"Dead link in {doc.Title}", target,
+                    "Repair or remove this internal link.", doc.RelPath, null));
+            }
+        }
+
+        return new(true, items.Count == 0 ? "No warnings need human attention." : null, items.Count, items);
+    }
+
+    private WikiPulseActivity BuildPulseActivity(string projectName, GitService git)
+    {
+        var runs = new List<WikiPulseLiveRun>();
+        foreach (var task in _scanner.ScanAllJobs().Where(t =>
+                     string.Equals(t.ProjectName, projectName, StringComparison.OrdinalIgnoreCase)
+                     && string.Equals(t.State, TaskStates.Progress, StringComparison.Ordinal)))
+        {
+            var status = git.GetStatus(task.Id, task.WatchPath, preferRunLocation: true);
+            if (!status.IsRepo || !status.Files.Any(f => f.Path.Replace('\\', '/').StartsWith("docs/", StringComparison.OrdinalIgnoreCase))) continue;
+            var taskKey = !string.IsNullOrWhiteSpace(task.Key) ? task.Key
+                : !string.IsNullOrWhiteSpace(task.TaskKey) ? task.TaskKey : task.Id;
+            runs.Add(new(taskKey, task.State, task.EnteredLaneAt,
+                status.Files.Count(f => f.Path.Replace('\\', '/').StartsWith("docs/", StringComparison.OrdinalIgnoreCase))));
+        }
+
+        return new(true, runs.Count == 0 ? "No live run currently touches docs/." : null, runs);
+    }
+
+    private static string? FrontmatterScalar(string text, string key)
+    {
+        var frontmatter = WikiFrontmatterRegex.Match(text);
+        if (!frontmatter.Success) return null;
+        var match = Regex.Match(frontmatter.Groups["body"].Value, $@"(?im)^{Regex.Escape(key)}:\s*(?<value>[^\r\n]+)$");
+        return match.Success ? match.Groups["value"].Value.Trim().Trim('"', '\'') : null;
+    }
+
+    private static bool IsInternalLink(string target) =>
+        !string.IsNullOrWhiteSpace(target) && !target.StartsWith('#') && !target.StartsWith('/')
+        && !Regex.IsMatch(target, @"^[a-z][a-z0-9+.-]*:", RegexOptions.IgnoreCase);
+
+    private static bool InternalLinkExists(string wikiDir, string sourceRel, string target)
+    {
+        var clean = Uri.UnescapeDataString(target.Split('#', '?')[0]).Replace('/', Path.DirectorySeparatorChar);
+        var sourceDir = Path.GetDirectoryName(Path.Combine(wikiDir, sourceRel.Replace('/', Path.DirectorySeparatorChar))) ?? wikiDir;
+        string full;
+        try { full = Path.GetFullPath(Path.Combine(sourceDir, clean)); }
+        catch { return false; }
+        if (!full.StartsWith(Path.GetFullPath(wikiDir), StringComparison.OrdinalIgnoreCase)) return false;
+        return File.Exists(full) || Directory.Exists(full)
+            || File.Exists(full + ".md") || File.Exists(Path.Combine(full, "README.md")) || File.Exists(Path.Combine(full, "index.html"));
     }
 
     /// <summary>
@@ -646,7 +769,7 @@ public class ProjectDocsService
                     GradedAt: meta.GradedAt,
                     Model: meta.GradingModel,
                     ReportPath: meta.ReportPath,
-                    FrameAreaTitle: EngineeringWorkstreamFrame.AreaForPath(doc.RelPath)?.Title));
+                    AreaTitle: TopFolderForPath(doc.RelPath) is { } top ? StripOrderPrefix(top) : null));
             }
         }
 
@@ -706,9 +829,8 @@ public class ProjectDocsService
 
     /// <summary>
     /// Loose / unfiled knowledge pages for the Pulse inbox: a knowledge doc that
-    /// sits directly at the wiki root (and is not a conventional landing file), or
-    /// one dropped inside the Workstream frame root but under no area. Both are
-    /// "needs sorting" signals; an empty list is the healthy state.
+    /// sits directly at the wiki root and is not a conventional landing file.
+    /// That is a "needs sorting" signal; an empty list is the healthy state.
     /// </summary>
     private static WikiPulseInbox BuildPulseInbox(IReadOnlyList<WikiFileEntry> docs)
     {
@@ -716,38 +838,45 @@ public class ProjectDocsService
         foreach (var doc in docs)
         {
             var rel = doc.RelPath;
-            string? reason = null;
-            if (!rel.Contains('/', StringComparison.Ordinal) && !RootIndexNames.Contains(rel))
-            {
-                reason = "Loose page at the wiki root - not filed under a category.";
-            }
-            else if (EngineeringWorkstreamFrame.IsWithinFrame(rel)
-                     && !EngineeringWorkstreamFrame.IsFrameShell(rel)
-                     && EngineeringWorkstreamFrame.AreaForPath(rel) == null)
-            {
-                reason = "Inside the Workstream frame but not filed under one of the five areas.";
-            }
-            if (reason == null) continue;
-            items.Add(new WikiPulseInboxItem(rel, doc.Title, TypeFromExtension(rel), reason));
+            if (rel.Contains('/', StringComparison.Ordinal) || RootIndexNames.Contains(rel)) continue;
+            items.Add(new WikiPulseInboxItem(rel, doc.Title, TypeFromExtension(rel),
+                "Loose page at the wiki root - not filed under a category."));
         }
         items.Sort((a, b) => string.Compare(a.RelPath, b.RelPath, StringComparison.OrdinalIgnoreCase));
         return new WikiPulseInbox(true, null, items.Count, items);
     }
 
     /// <summary>
-    /// Deterministic drift grade bar (PULSE-1, no LLM): for each Workstream frame
-    /// area, count how many commits under the code roots landed after each page's
-    /// last update, band each page Fresh / Aging / Stale, and grade the area by
-    /// its worst page. Areas with no filed pages report <c>Empty</c>. A page whose
-    /// last-update timestamp is unknown (outside the git scan window) is left
-    /// Unknown and excluded from the counts.
+    /// The top-level docs folder a page lives under (the first path segment), or
+    /// <c>null</c> for a page directly at the wiki root. Backs the Pulse
+    /// change-feed area badge and the per-folder drift grade bar.
+    /// </summary>
+    internal static string? TopFolderForPath(string? relPath)
+    {
+        if (string.IsNullOrWhiteSpace(relPath)) return null;
+        var rel = relPath.Replace('\\', '/').Trim().Trim('/');
+        var idx = rel.IndexOf('/', StringComparison.Ordinal);
+        return idx <= 0 ? null : rel[..idx];
+    }
+
+    /// <summary>
+    /// Deterministic drift grade bar (PULSE-1, no LLM): for each top-level docs
+    /// folder that actually holds pages, count how many commits under the code
+    /// roots landed after each page's last update, band each page Fresh / Aging /
+    /// Stale, and grade the folder by its worst page. Folders without pages do
+    /// not appear; ordering follows the saved wiki folder order
+    /// (<c>docs/app/config/wiki-order.json</c>), unlisted folders behind in the tree's
+    /// default order (numeric <c>NN-</c> prefix, then name). A
+    /// page whose last-update timestamp is unknown (outside the git scan window)
+    /// is left Unknown and excluded from the counts.
     /// </summary>
     private static WikiPulseDrift BuildPulseDrift(
         IReadOnlyList<WikiFileEntry> docs,
         IReadOnlyDictionary<string, DateTime> lastUpdateByRel,
         string repoRoot,
         IReadOnlyList<string> codeRoots,
-        GitService git)
+        GitService git,
+        IReadOnlyDictionary<string, int> rootFolderOrderIndex)
     {
         if (codeRoots.Count == 0)
             return WikiPulseDrift.Unavailable("No code roots found to grade drift against.");
@@ -756,17 +885,23 @@ public class ProjectDocsService
         // newer than a page's last update is the deterministic drift score.
         var codeTimes = git.GetCommitAuthorDatesUnderPaths(repoRoot, codeRoots, maxCommits: 500);
 
+        // Drift groups are the real top-level docs folders that hold pages.
+        var folders = docs
+            .GroupBy(d => TopFolderForPath(d.RelPath), StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Key != null)
+            .OrderBy(g => rootFolderOrderIndex.TryGetValue(g.Key!, out var pos) ? pos : int.MaxValue)
+            .ThenBy(g => OrderPrefixValue(g.Key!))
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var areas = new List<WikiPulseDriftArea>();
         int totalFresh = 0, totalAging = 0, totalStale = 0, totalGraded = 0;
         var worstOverall = DriftGradeRank("Empty");
         string overall = "Empty";
 
-        foreach (var area in EngineeringWorkstreamFrame.Areas)
+        foreach (var folder in folders)
         {
-            var pages = docs.Where(d =>
-                    !EngineeringWorkstreamFrame.IsFrameShell(d.RelPath)
-                    && EngineeringWorkstreamFrame.AreaForPath(d.RelPath)?.Slug == area.Slug)
-                .ToList();
+            var pages = folder.ToList();
 
             int fresh = 0, aging = 0, stale = 0, worstCount = 0;
             var areaWorst = DriftGradeRank("Empty");
@@ -799,8 +934,8 @@ public class ProjectDocsService
             }
 
             areas.Add(new WikiPulseDriftArea(
-                Slug: area.Slug,
-                Title: area.Title,
+                Slug: folder.Key!,
+                Title: StripOrderPrefix(folder.Key!),
                 Grade: areaGrade,
                 PageCount: pages.Count,
                 GradedPageCount: graded,
@@ -811,7 +946,9 @@ public class ProjectDocsService
         }
 
         var reason = totalGraded == 0
-            ? "No knowledge pages filed under the Workstream frame yet."
+            ? (areas.Count == 0
+                ? "No knowledge pages in any top-level docs folder yet."
+                : "No page has an update inside the recent git scan window to grade drift against.")
             : null;
         return new WikiPulseDrift(true, reason, overall, areas,
             new WikiPulseDriftCounts(totalFresh, totalAging, totalStale, totalGraded));
@@ -960,21 +1097,23 @@ public class ProjectDocsService
         DirectoryInfo dir,
         string docsRoot,
         IReadOnlyDictionary<string, WikiTreeMetadata> metadataByRelPath,
-        ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> titleCache)
+        ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> titleCache,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> folderOrderByParent)
     {
         var nodes = new List<WikiTreeNode>();
 
         foreach (var sub in dir.GetDirectories())
         {
             if (sub.Name.StartsWith('.')) continue;
-            var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath, titleCache);
+            var subRel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
+            if (IsWikiAppPath(subRel)) continue; // docs/app/ is code contract, not a wiki page
+            var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath, titleCache, folderOrderByParent);
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
             nodes.Add(new WikiTreeNode(
                 sub.Name,
-                EngineeringWorkstreamFrame.DisplayTitle(rel) ?? StripOrderPrefix(sub.Name),
-                rel, "folder", children, null,
-                EngineeringWorkstreamFrame.IsStructural(rel)));
+                StripOrderPrefix(sub.Name),
+                rel, "folder", children, null));
         }
 
         foreach (var file in dir.GetFiles())
@@ -982,7 +1121,7 @@ public class ProjectDocsService
             if (file.Name.StartsWith('.')) continue;
             var ext = file.Extension;
             var rel = Path.GetRelativePath(docsRoot, file.FullName).Replace('\\', '/');
-            if (!WikiDocExtensions.Contains(ext) || IsWikiCompanionFile(rel)) continue;
+            if (!WikiDocExtensions.Contains(ext) || IsWikiCompanionFile(rel) || IsWikiConfigFile(rel)) continue;
             var type = ext.Equals(".md", StringComparison.OrdinalIgnoreCase)
                 ? "md"
                 : ext.Equals(".json", StringComparison.OrdinalIgnoreCase)
@@ -993,10 +1132,18 @@ public class ProjectDocsService
             metadataByRelPath.TryGetValue(rel, out var metadata);
             nodes.Add(new WikiTreeNode(
                 file.Name, title, rel, type, [], metadata,
-                EngineeringWorkstreamFrame.IsStructural(rel)));
+                BuildClassification(
+                    rel,
+                    metadata?.ClassificationStatus,
+                    metadata?.ClassificationSupersededBy,
+                    metadata?.ClassificationType,
+                    metadata?.ClassificationAnalyzedAt)));
         }
 
-        nodes.Sort(CompareTreeNodes);
+        var dirRel = Path.GetRelativePath(docsRoot, dir.FullName).Replace('\\', '/');
+        if (dirRel == ".") dirRel = string.Empty;
+        var orderIndex = BuildFolderOrderIndex(folderOrderByParent, dirRel);
+        nodes.Sort((a, b) => CompareTreeNodes(a, b, orderIndex));
         return nodes;
     }
 
@@ -1076,7 +1223,11 @@ public class ProjectDocsService
                     GradingGrade: JsonString(grading, "grade"),
                     GradingAssessment: JsonString(grading, "assessment"),
                     GradedAt: JsonString(grading, "gradedAt"),
-                    GradingModel: JsonString(grading, "model"));
+                    GradingModel: JsonString(grading, "model"),
+                    ClassificationStatus: JsonString(classification, "status"),
+                    ClassificationSupersededBy: JsonString(classification, "supersededBy"),
+                    ClassificationType: JsonString(classification, "type"),
+                    ClassificationAnalyzedAt: JsonString(classification, "analyzedAt"));
                 index[sourceRel] = metadata;
             }
             catch (Exception __ex)
@@ -1088,10 +1239,131 @@ public class ProjectDocsService
         return index;
     }
 
+    /// <summary>
+    /// Hidden wiki paths - any dot-prefixed path segment (e.g. <c>.curator/…</c>,
+    /// <c>.obsidian/…</c>, <c>.gitkeep</c>) - are config/tooling sidecars, not
+    /// pages. The tree builder skips them, so every other doc-listing surface
+    /// (pulse, feed, grading input) must skip them too or Pulse would count
+    /// pages the tree never shows.
+    /// </summary>
+    private static bool IsHiddenWikiPath(string relPath)
+    {
+        foreach (var segment in relPath.Split('/'))
+            if (segment.StartsWith('.')) return true;
+        return false;
+    }
+
     private static bool IsWikiCompanionFile(string relPath) =>
         relPath.EndsWith(".meta.json", StringComparison.OrdinalIgnoreCase)
         || relPath.EndsWith(".report.html", StringComparison.OrdinalIgnoreCase)
         || relPath.EndsWith(".report.htm", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The docs/app/ code-contract subtree - JSON schemas, in-app help bodies,
+    /// and wiki config (<c>app/config/home.json</c>, <c>app/config/wiki-order.json</c>)
+    /// - is machine contract, not knowledge content. Every reading surface (tree,
+    /// folder, search, pulse, grading) skips it the same way it skips dot-prefixed
+    /// and companion files; direct-path serving still reaches it by explicit path.
+    /// </summary>
+    internal static bool IsWikiAppPath(string relPath)
+    {
+        var rel = relPath.Replace('\\', '/');
+        return rel.Equals(WikiAppRel, StringComparison.OrdinalIgnoreCase)
+            || rel.StartsWith(WikiAppRel + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Wiki configuration and code-contract paths, not pages: everything under
+    /// <c>docs/app/</c> (which includes the curated home config and the saved
+    /// category order). Hidden from every reading surface the same way companion
+    /// sidecars are hidden.
+    /// </summary>
+    private static bool IsWikiConfigFile(string relPath) =>
+        IsWikiAppPath(relPath)
+        || relPath.Equals(WikiHomeRel, StringComparison.OrdinalIgnoreCase)
+        || relPath.Equals(WikiFolderOrderRel, StringComparison.OrdinalIgnoreCase);
+
+    // ---- Wiki page classification (consolidation-analysis metadata) ----
+
+    /// <summary>
+    /// Projects the sidecar classification fields onto a page node, falling back
+    /// to the per-folder default type when the sidecar carries no classification.
+    /// A page with neither sidecar fields nor a folder default has no
+    /// classification (null), so the UI renders nothing rather than noise.
+    /// </summary>
+    internal static WikiClassification? BuildClassification(
+        string relPath, string? status, string? supersededBy, string? type, string? analyzedAt)
+    {
+        status = NormalizeClassificationValue(status);
+        supersededBy = NormalizeClassificationValue(supersededBy);
+        type = NormalizeClassificationValue(type) ?? DefaultClassificationType(relPath);
+        analyzedAt = NormalizeClassificationValue(analyzedAt);
+        if (status == null && supersededBy == null && type == null && analyzedAt == null) return null;
+        return new WikiClassification(status, supersededBy, type, analyzedAt);
+    }
+
+    /// <summary>
+    /// Default document type for pages without a sidecar classification, derived
+    /// from the docs folder they live in. Covers the uniform generated families
+    /// (common-problems, proposals, ...) so they never need per-page sidecars;
+    /// folders without an agreed default return null.
+    /// </summary>
+    internal static string? DefaultClassificationType(string relPath)
+    {
+        var rel = relPath.Replace('\\', '/').TrimStart('/');
+        // The docs tree is organised by theme (start/system/concepts/operations/
+        // quality), so the uniform generated families are matched by the folder
+        // segment they carry anywhere in the path, not by the top-level folder.
+        if (rel.Contains("architecture/decisions/", StringComparison.OrdinalIgnoreCase)) return "adr";
+        if (rel.Contains("common-problems/", StringComparison.OrdinalIgnoreCase)) return "generiert";
+        if (rel.Contains("proposals/", StringComparison.OrdinalIgnoreCase)) return "proposal";
+        if (rel.Contains("system/domains/", StringComparison.OrdinalIgnoreCase)) return "domain-map";
+        if (rel.Contains("system/contracts/", StringComparison.OrdinalIgnoreCase)) return "contract";
+        // Standalone mockups live under docs/concepts/mockups/; the active
+        // families were promoted to top-level docs/concepts/<family>/ folders in
+        // the 2026-07 migration and no longer carry a "/mockups/" path segment.
+        if (rel.Contains("/mockups/", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains("concepts/project-urls/", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains("concepts/project-overview-dashboard/", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains("concepts/task-processing-pipeline/", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains("concepts/task-detail-header-state-actions/", StringComparison.OrdinalIgnoreCase))
+            return "mockup";
+        return null;
+    }
+
+    private static string? NormalizeClassificationValue(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Classification for one folder-overview page row: read from the page's own
+    /// adjacent companion (a single file probe, no recursive sidecar scan), with
+    /// the same folder-default fallback as the tree.
+    /// </summary>
+    private static WikiClassification? ReadPageClassification(string pageFullPath, string relPath)
+    {
+        string? status = null, supersededBy = null, type = null, analyzedAt = null;
+        var companion = pageFullPath + ".meta.json";
+        if (File.Exists(companion))
+        {
+            try
+            {
+                GitProcessTelemetry.RecordFileRead();
+                using var doc = JsonDocument.Parse(File.ReadAllText(companion));
+                if (TryJsonObject(doc.RootElement, "classification", out var classification))
+                {
+                    status = JsonString(classification, "status");
+                    supersededBy = JsonString(classification, "supersededBy");
+                    type = JsonString(classification, "type");
+                    analyzedAt = JsonString(classification, "analyzedAt");
+                }
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "ProjectDocsService: unreadable companion during folder classification read.");
+            }
+        }
+        return BuildClassification(relPath, status, supersededBy, type, analyzedAt);
+    }
 
     private static string? NormalizeMetadataSourcePath(string? sourcePath)
     {
@@ -1217,26 +1489,165 @@ public class ProjectDocsService
     }
 
     /// <summary>
-    /// Workstream frame root first (pinned as the top wiki element); then folders
-    /// before files; then by numeric order prefix; then name.
+    /// Folders before files; folders in the saved drag-order when one is stored
+    /// for this sibling group (unknown folders behind); then by numeric order
+    /// prefix; then name.
     /// </summary>
-    private static int CompareTreeNodes(WikiTreeNode a, WikiTreeNode b)
+    private static int CompareTreeNodes(
+        WikiTreeNode a, WikiTreeNode b, IReadOnlyDictionary<string, int> folderOrderIndex)
     {
-        // The Workstream frame is pinned to the top of the tree. Only the frame
-        // root matches (a top-level node), so nested siblings keep normal order.
-        var aPin = EngineeringWorkstreamFrame.IsFrameRoot(a.RelPath) ? 0 : 1;
-        var bPin = EngineeringWorkstreamFrame.IsFrameRoot(b.RelPath) ? 0 : 1;
-        if (aPin != bPin) return aPin - bPin;
-
         var aFolder = a.Type == "folder";
         var bFolder = b.Type == "folder";
         if (aFolder != bFolder) return aFolder ? -1 : 1;
+
+        if (aFolder)
+        {
+            var cmp = CompareBySavedFolderOrder(a.Name, b.Name, folderOrderIndex);
+            if (cmp != 0) return cmp;
+        }
 
         var ao = OrderPrefixValue(a.Name);
         var bo = OrderPrefixValue(b.Name);
         if (ao != bo) return ao.CompareTo(bo);
 
         return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Saved drag-order comparison for two sibling folder names: listed folders
+    /// sort by their stored position, unlisted folders behind (falling through
+    /// to the caller's prefix/name ordering).
+    /// </summary>
+    private static int CompareBySavedFolderOrder(
+        string aName, string bName, IReadOnlyDictionary<string, int> folderOrderIndex)
+    {
+        if (folderOrderIndex.Count == 0) return 0;
+        var ai = folderOrderIndex.TryGetValue(aName, out var av) ? av : int.MaxValue;
+        var bi = folderOrderIndex.TryGetValue(bName, out var bv) ? bv : int.MaxValue;
+        return ai.CompareTo(bi);
+    }
+
+    // -------- Wiki folder order (saved category drag-order) --------
+
+    private static readonly IReadOnlyDictionary<string, int> EmptyFolderOrderIndex =
+        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Reads <c>docs/app/config/wiki-order.json</c>: the persisted display order of sibling
+    /// category folders, keyed by parent folder rel path ("" = docs root).
+    /// Missing or malformed files degrade to an empty map (= the default
+    /// prefix/name ordering), mirroring how <c>home.json</c> fails open.
+    /// </summary>
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> LoadWikiFolderOrder(string wikiDir)
+    {
+        var empty = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var path = Path.Combine(wikiDir, WikiFolderOrderRel.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(path)) return empty;
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return empty;
+            if (!doc.RootElement.TryGetProperty("folderOrder", out var map)
+                || map.ValueKind != JsonValueKind.Object)
+                return empty;
+
+            var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var prop in map.EnumerateObject())
+            {
+                if (prop.Value.ValueKind != JsonValueKind.Array) continue;
+                var names = prop.Value.EnumerateArray()
+                    .Where(e => e.ValueKind == JsonValueKind.String)
+                    .Select(e => (e.GetString() ?? string.Empty).Trim())
+                    .Where(n => n.Length > 0)
+                    .ToList();
+                var key = prop.Name.Replace('\\', '/').Trim().Trim('/');
+                result[key] = names;
+            }
+            return result;
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable wiki folder-order file ignored; default ordering applies.");
+            return empty;
+        }
+    }
+
+    /// <summary>Name → saved position for one sibling group; empty when no order is stored.</summary>
+    private static IReadOnlyDictionary<string, int> BuildFolderOrderIndex(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> folderOrderByParent,
+        string parentRel)
+    {
+        if (!folderOrderByParent.TryGetValue(parentRel, out var names) || names.Count == 0)
+            return EmptyFolderOrderIndex;
+        var index = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < names.Count; i++) index.TryAdd(names[i], i);
+        return index;
+    }
+
+    /// <summary>
+    /// Persists the display order of the category folders directly under
+    /// <paramref name="parentRelPath"/> ("" = the docs root) into
+    /// <c>docs/app/config/wiki-order.json</c>, beside the other wiki metadata. Orders for
+    /// other parents are preserved. The endpoint commits the file like every
+    /// other wiki mutation; folders missing from the stored list keep sorting
+    /// behind the listed ones in the default prefix/name order. Returns the
+    /// order file's absolute path for that commit.
+    /// </summary>
+    public WikiMutationResult SetWikiFolderOrder(
+        string projectName, string? parentRelPath, IReadOnlyList<string> orderedNames)
+    {
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return WikiMutationResult.Fail("Unknown project.");
+
+        var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var parent = (parentRelPath ?? string.Empty).Replace('\\', '/').Trim().Trim('/');
+        if (parent.Contains("..", StringComparison.Ordinal) || Path.IsPathRooted(parent))
+            return WikiMutationResult.Fail("Invalid parent path.");
+
+        var parentFull = parent.Length == 0 ? wikiDir : Path.GetFullPath(Path.Combine(wikiDir, parent));
+        var rootWithSep = wikiDir.EndsWith(Path.DirectorySeparatorChar) ? wikiDir : wikiDir + Path.DirectorySeparatorChar;
+        if (parent.Length > 0 && !parentFull.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+            return WikiMutationResult.Fail("Invalid parent path.");
+        if (!Directory.Exists(parentFull))
+            return WikiMutationResult.Fail("Parent folder not found.");
+        if (orderedNames.Count > 500)
+            return WikiMutationResult.Fail("Too many folder names.");
+
+        var cleaned = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in orderedNames)
+        {
+            var name = (raw ?? string.Empty).Trim();
+            if (name.Length == 0)
+                return WikiMutationResult.Fail("Folder names must not be empty.");
+            if (name.Contains('/') || name.Contains('\\') || name.StartsWith('.'))
+                return WikiMutationResult.Fail($"'{name}' is not a valid folder name.");
+            if (seen.Add(name)) cleaned.Add(name);
+        }
+
+        var merged = new Dictionary<string, IReadOnlyList<string>>(
+            LoadWikiFolderOrder(wikiDir), StringComparer.OrdinalIgnoreCase)
+        {
+            [parent] = cleaned,
+        };
+        var payload = new Dictionary<string, object>
+        {
+            ["schemaVersion"] = "wiki-folder-order/v1",
+            ["folderOrder"] = merged
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .ToDictionary(kv => kv.Key, kv => kv.Value),
+        };
+
+        var path = Path.Combine(wikiDir, WikiFolderOrderRel.Replace('/', Path.DirectorySeparatorChar));
+        // The order file now lives under docs/app/config/; ensure that
+        // code-contract folder exists before the first write in a fresh repo.
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+        // The docs signature covers the order file, but timestamp resolution can
+        // hide a same-tick rewrite - drop the memo so the next tree read rebuilds.
+        InvalidateWikiTreeCache();
+        return WikiMutationResult.Ok(path);
     }
 
     /// <summary>Numeric value of a leading <c>NN-</c> prefix, or max when absent.</summary>
@@ -1263,15 +1674,6 @@ public class ProjectDocsService
         ResolveWikiPath(projectName, relPath, requireDoc: false);
 
     /// <summary>
-    /// Rejection message for a blocked structural or content mutation of a fixed
-    /// Engineering Workstream frame node. Kept in one place so the service and the
-    /// endpoints phrase the immutability rule identically.
-    /// </summary>
-    public static string FrameLockMessage(string relPath, string verb) =>
-        $"'{relPath}' is part of the fixed Workstream frame and cannot be {verb}. "
-        + "Create or edit subpages under an area folder instead.";
-
-    /// <summary>
     /// Creates a new wiki document on disk (seed content optional). Returns the
     /// absolute path so the endpoint can commit it; fails when the path is
     /// unsafe, the extension is not a wiki document type, or the file exists.
@@ -1289,7 +1691,18 @@ public class ProjectDocsService
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var seed = content ?? DefaultPageSeed(relPath, ext);
         File.WriteAllText(full, seed);
-        return WikiMutationResult.Ok(full);
+
+        // Metadata convention (2026-07): stamp a minimal classification sidecar at
+        // creation so a hand-authored page is born classified (type = folder
+        // default, status = aktuell, analyzedAt = today) rather than surfacing as
+        // an "unclassified page" warning on the pulse dashboard.
+        var wikiDir = Path.GetFullPath(Path.Combine(ResolveBaseDir(projectName)!, WikiRel));
+        var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
+        var title = StripOrderPrefix(Path.GetFileNameWithoutExtension(relPath));
+        var companion = new WikiCompanionStore().WriteCreationClassification(
+            wikiDir, docsRel, title, seed, DefaultClassificationType(docsRel), DateTime.UtcNow);
+
+        return WikiMutationResult.Ok(full, new[] { companion.CompanionAbsPath });
     }
 
     private static string DefaultPageSeed(string relPath, string ext)
@@ -1378,7 +1791,7 @@ public class ProjectDocsService
             if (!WikiDocExtensions.Contains(ext)) continue;
             var fi = new FileInfo(f);
             var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
-            if (IsWikiCompanionFile(rel)) continue;
+            if (IsHiddenWikiPath(rel) || IsWikiCompanionFile(rel) || IsWikiConfigFile(rel)) continue;
             results.Add(new WikiFileEntry(
                 Name: Path.GetFileName(f),
                 RelPath: rel,
@@ -1477,6 +1890,342 @@ public class ProjectDocsService
 
     private static string StripHtml(string text) =>
         Regex.Replace(text, "<.*?>", "", RegexOptions.Singleline).Trim();
+
+    // -------- Wiki folder view (one directory level for the folder overview) --------
+
+    // Page extensions the folder overview lists: markdown plus HTML concept
+    // pages. JSON metadata pages are deliberately omitted here - the folder
+    // card surface is a reading surface and its DTO contract only knows
+    // fileType "md" | "html" (null for folders).
+    private static readonly HashSet<string> WikiFolderPageExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".md", ".html", ".htm" };
+
+    /// <summary>
+    /// One directory level of the wiki for the folder-overview surface: the
+    /// folder's own identity plus every direct child, folders first then pages,
+    /// each alphabetical. Pages carry a sniffed title (first H1 / frontmatter
+    /// title for markdown, <c>&lt;title&gt;</c> for HTML, file name fallback)
+    /// and a plain-text summary (first text paragraph, markup stripped, max 240
+    /// chars); folders carry a non-recursive child count instead. An empty
+    /// <paramref name="relPath"/> lists the wiki root. Returns null when the
+    /// project is unknown, the path is unsafe (same traversal guard as the
+    /// file endpoints), or the folder does not exist.
+    /// </summary>
+    public WikiFolderView? GetWikiFolder(string projectName, string? relPath)
+    {
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return null;
+
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/folder", _logger);
+
+        var root = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var rel = (relPath ?? string.Empty).Replace('\\', '/').Trim().Trim('/');
+
+        string full;
+        if (rel.Length == 0)
+        {
+            full = root;
+        }
+        else
+        {
+            if (rel.Contains("..", StringComparison.Ordinal)) return null;
+            if (Path.IsPathRooted(rel)) return null;
+            full = Path.GetFullPath(Path.Combine(root, rel));
+            // Append a separator to the root so "docs-other/" can't satisfy the prefix.
+            var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+            if (!full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase)) return null;
+        }
+        if (!Directory.Exists(full)) return null;
+        if (IsWikiAppPath(rel)) return null; // docs/app/ is code contract, never a wiki folder
+
+        var dir = new DirectoryInfo(full);
+        var children = new List<WikiFolderChild>();
+
+        foreach (var sub in dir.GetDirectories())
+        {
+            if (sub.Name.StartsWith('.')) continue;
+            var subRel = Path.GetRelativePath(root, sub.FullName).Replace('\\', '/');
+            if (IsWikiAppPath(subRel)) continue; // hide docs/app/ from the folder overview
+            if (!HasWikiPageDescendant(sub)) continue; // prune empty folders, like the tree
+            children.Add(new WikiFolderChild(
+                Name: sub.Name,
+                RelPath: subRel,
+                Kind: "folder",
+                FileType: null,
+                Title: StripOrderPrefix(sub.Name),
+                Summary: null,
+                UpdatedAt: sub.LastWriteTimeUtc,
+                Size: null,
+                ChildCount: CountDirectFolderChildren(sub)));
+        }
+
+        foreach (var file in dir.GetFiles())
+        {
+            if (!IsWikiFolderPage(file)) continue;
+            var fileRel = Path.GetRelativePath(root, file.FullName).Replace('\\', '/');
+            children.Add(new WikiFolderChild(
+                Name: file.Name,
+                RelPath: fileRel,
+                Kind: "page",
+                FileType: file.Extension.Equals(".md", StringComparison.OrdinalIgnoreCase) ? "md" : "html",
+                Title: ExtractWikiPageTitle(file.FullName, file.Extension)
+                    ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name)),
+                Summary: ExtractWikiPageSummary(file.FullName, file.Extension),
+                UpdatedAt: file.LastWriteTimeUtc,
+                Size: file.Length,
+                ChildCount: null,
+                Classification: ReadPageClassification(file.FullName, fileRel)));
+        }
+
+        // Same saved category drag-order as the tree; unlisted folders keep the
+        // alphabetical fallback behind the listed ones. Pages stay alphabetical.
+        var orderIndex = BuildFolderOrderIndex(LoadWikiFolderOrder(root), rel);
+        children.Sort((a, b) =>
+        {
+            var aFolder = a.Kind == "folder";
+            var bFolder = b.Kind == "folder";
+            if (aFolder != bFolder) return aFolder ? -1 : 1;
+            if (aFolder)
+            {
+                var cmp = CompareBySavedFolderOrder(a.Name, b.Name, orderIndex);
+                if (cmp != 0) return cmp;
+            }
+            return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        });
+
+        return new WikiFolderView(rel, dir.Name, children);
+    }
+
+    private static bool IsWikiFolderPage(FileInfo file) =>
+        !file.Name.StartsWith('.')
+        && WikiFolderPageExtensions.Contains(file.Extension)
+        && !IsWikiCompanionFile(file.Name);
+
+    /// <summary>Any page anywhere below this folder? Used to prune folders with no navigable content.</summary>
+    private static bool HasWikiPageDescendant(DirectoryInfo dir)
+    {
+        try
+        {
+            return dir.EnumerateFiles("*", SearchOption.AllDirectories).Any(IsWikiFolderPage);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable folder while probing for wiki pages; treating as empty.");
+            return false;
+        }
+    }
+
+    /// <summary>Direct pages + direct non-empty subfolders. Deliberately not recursive.</summary>
+    private static int CountDirectFolderChildren(DirectoryInfo dir)
+    {
+        var count = dir.GetFiles().Count(IsWikiFolderPage);
+        count += dir.GetDirectories().Count(d => !d.Name.StartsWith('.') && HasWikiPageDescendant(d));
+        return count;
+    }
+
+    /// <summary>
+    /// Display title for a wiki page in the folder overview. Markdown: first
+    /// <c># </c> heading outside the frontmatter, else the frontmatter
+    /// <c>title:</c>. HTML: the <c>&lt;title&gt;</c> tag, else the first
+    /// <c>&lt;h1&gt;</c>. Null (caller falls back to the file name) when the
+    /// file is unreadable or carries neither.
+    /// </summary>
+    internal static string? ExtractWikiPageTitle(string path, string extension)
+    {
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            var text = File.ReadAllText(path);
+            if (extension.Equals(".md", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var line in StripWikiFrontmatter(text).Split('\n'))
+                {
+                    var trimmed = line.TrimStart();
+                    if (trimmed.StartsWith("# ", StringComparison.Ordinal))
+                        return trimmed[2..].Trim();
+                }
+                return FrontmatterScalar(text, "title");
+            }
+
+            var title = Regex.Match(text, @"<title[^>]*>(?<title>.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (title.Success)
+            {
+                var t = System.Net.WebUtility.HtmlDecode(StripHtml(title.Groups["title"].Value));
+                if (!string.IsNullOrWhiteSpace(t)) return t;
+            }
+            var h1 = Regex.Match(text, @"<h1[^>]*>(?<title>.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (h1.Success)
+            {
+                var t = System.Net.WebUtility.HtmlDecode(StripHtml(h1.Groups["title"].Value));
+                if (!string.IsNullOrWhiteSpace(t)) return t;
+            }
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable page title: fall back to the file name in the caller.");
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// First text paragraph of a wiki page as a plain-text summary: markdown
+    /// syntax / HTML tags stripped, whitespace collapsed, hard-capped at 240
+    /// characters. Null when the page has no prose (or is unreadable).
+    /// </summary>
+    private static string? ExtractWikiPageSummary(string path, string extension)
+    {
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            var text = File.ReadAllText(path);
+            var summary = extension.Equals(".md", StringComparison.OrdinalIgnoreCase)
+                ? FirstMarkdownParagraph(text)
+                : FirstHtmlParagraph(text);
+            return TruncateSummary(summary);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unreadable page summary; omitting it.");
+            return null;
+        }
+    }
+
+    /// <summary>Body of a markdown doc without its leading YAML frontmatter block.</summary>
+    internal static string StripWikiFrontmatter(string text)
+    {
+        var m = WikiFrontmatterRegex.Match(text);
+        return m.Success ? text[(m.Index + m.Length)..] : text;
+    }
+
+    /// <summary>
+    /// First contiguous run of prose lines in a markdown body - headings, code
+    /// fences, tables, and HTML comments are skipped; inline markdown (links,
+    /// images, emphasis, inline code) is stripped down to its text.
+    /// </summary>
+    private static string? FirstMarkdownParagraph(string text)
+    {
+        var lines = StripWikiFrontmatter(text).Split('\n');
+        var paragraph = new List<string>();
+        var inFence = false;
+        foreach (var raw in lines)
+        {
+            var line = raw.TrimEnd('\r');
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal))
+            {
+                inFence = !inFence;
+                continue;
+            }
+            if (inFence) continue;
+            var isProse = trimmed.Length > 0
+                && !trimmed.StartsWith('#')
+                && !trimmed.StartsWith('|')
+                && !trimmed.StartsWith("<!--", StringComparison.Ordinal)
+                && !trimmed.StartsWith("![", StringComparison.Ordinal)
+                && !trimmed.StartsWith("---", StringComparison.Ordinal);
+            if (isProse)
+            {
+                paragraph.Add(trimmed.TrimStart('>', ' ').TrimStart('-', '*', ' '));
+            }
+            else if (paragraph.Count > 0)
+            {
+                break; // paragraph ended
+            }
+        }
+        if (paragraph.Count == 0) return null;
+
+        var joined = string.Join(" ", paragraph);
+        joined = Regex.Replace(joined, @"!\[[^\]]*\]\([^)]*\)", "");        // images
+        joined = Regex.Replace(joined, @"\[([^\]]*)\]\([^)]*\)", "$1");      // links -> text
+        joined = Regex.Replace(joined, @"`([^`]*)`", "$1");                  // inline code
+        joined = Regex.Replace(joined, @"(\*\*|__|\*|~~)", "");              // emphasis markers
+        joined = StripHtml(joined);                                          // inline HTML
+        return joined;
+    }
+
+    /// <summary>First <c>&lt;p&gt;</c> with text, else the tag-stripped body text.</summary>
+    private static string? FirstHtmlParagraph(string text)
+    {
+        var cleaned = Regex.Replace(text, @"<script[^>]*>.*?</script>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        cleaned = Regex.Replace(cleaned, @"<style[^>]*>.*?</style>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        cleaned = Regex.Replace(cleaned, @"<head[^>]*>.*?</head>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        foreach (Match p in Regex.Matches(cleaned, @"<p[^>]*>(?<body>.*?)</p>", RegexOptions.IgnoreCase | RegexOptions.Singleline))
+        {
+            var candidate = System.Net.WebUtility.HtmlDecode(StripHtml(p.Groups["body"].Value));
+            if (!string.IsNullOrWhiteSpace(candidate)) return candidate;
+        }
+
+        var fallback = System.Net.WebUtility.HtmlDecode(StripHtml(cleaned));
+        return string.IsNullOrWhiteSpace(fallback) ? null : fallback;
+    }
+
+    /// <summary>Collapses whitespace and hard-caps the summary at 240 characters.</summary>
+    private static string? TruncateSummary(string? summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary)) return null;
+        var collapsed = Regex.Replace(summary, @"\s+", " ").Trim();
+        if (collapsed.Length == 0) return null;
+        return collapsed.Length <= 240 ? collapsed : collapsed[..240].TrimEnd();
+    }
+
+    // -------- Wiki home (curated landing sections from docs/app/config/home.json) --------
+
+    /// <summary>
+    /// The curated wiki home sections read from <c>docs/app/config/home.json</c>.
+    /// Every configured link is kept and annotated with an <c>exists</c> flag
+    /// (checked against the docs tree with the standard traversal guard) so the
+    /// UI can render a dead link visibly instead of silently dropping it. A
+    /// missing or malformed <c>home.json</c> degrades to empty sections, never
+    /// an error; null only when the project itself is unknown.
+    /// </summary>
+    public WikiHomeView? GetWikiHome(string projectName)
+    {
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return null;
+
+        var homePath = Path.Combine(baseDir, WikiRel, WikiHomeRel.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(homePath)) return new WikiHomeView([]);
+
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            using var doc = JsonDocument.Parse(File.ReadAllText(homePath));
+            var sections = new List<WikiHomeSection>();
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("sections", out var rawSections)
+                && rawSections.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var rawSection in rawSections.EnumerateArray())
+                {
+                    if (rawSection.ValueKind != JsonValueKind.Object) continue;
+                    var links = new List<WikiHomeLink>();
+                    if (rawSection.TryGetProperty("links", out var rawLinks) && rawLinks.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var rawLink in rawLinks.EnumerateArray())
+                        {
+                            if (rawLink.ValueKind != JsonValueKind.Object) continue;
+                            var rel = JsonString(rawLink, "relPath")?.Replace('\\', '/').Trim().TrimStart('/');
+                            if (string.IsNullOrWhiteSpace(rel)) continue;
+                            var target = ResolveWikiPath(projectName, rel, requireDoc: false);
+                            links.Add(new WikiHomeLink(
+                                RelPath: rel,
+                                Label: JsonString(rawLink, "label") ?? rel,
+                                Note: JsonString(rawLink, "note"),
+                                Exists: target != null && File.Exists(target)));
+                        }
+                    }
+                    sections.Add(new WikiHomeSection(JsonString(rawSection, "title") ?? "", links));
+                }
+            }
+            return new WikiHomeView(sections);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: malformed wiki home.json; serving empty sections.");
+            return new WikiHomeView([]);
+        }
+    }
 
     // -------- Architecture decisions --------
 
@@ -1620,7 +2369,31 @@ public record WikiTreeMetadata(
     string? GradingGrade = null,
     string? GradingAssessment = null,
     string? GradedAt = null,
-    string? GradingModel = null);
+    string? GradingModel = null,
+    // Curated consolidation classification (konsolidierung-analyse 2026-07-18):
+    // the status / successor / doc-type fields of the companion's
+    // `classification` block. All optional - older sidecars carry none.
+    string? ClassificationStatus = null,
+    string? ClassificationSupersededBy = null,
+    string? ClassificationType = null,
+    string? ClassificationAnalyzedAt = null);
+
+/// <summary>
+/// Curation classification of one wiki page, projected onto tree and folder
+/// rows. <see cref="Status"/> is <c>aktuell</c> / <c>veraltet</c> /
+/// <c>ueberholt</c> (null = unclassified); <see cref="SupersededBy"/> is the
+/// docs-relative path of the successor page for <c>ueberholt</c> pages;
+/// <see cref="Type"/> is the document kind (<c>konzept</c> / <c>adr</c> /
+/// <c>contract</c> / <c>domain-map</c> / <c>analyse</c> / <c>runbook</c> /
+/// <c>workbench</c> / <c>mockup</c> / <c>proposal</c> / <c>generiert</c> /
+/// <c>index</c>), either from the sidecar or from the per-folder default;
+/// <see cref="AnalyzedAt"/> is the consolidation-analysis date (ISO date).
+/// </summary>
+public record WikiClassification(
+    string? Status,
+    string? SupersededBy,
+    string? Type,
+    string? AnalyzedAt);
 
 public record WikiTreeNode(
     string Name,
@@ -1629,7 +2402,9 @@ public record WikiTreeNode(
     string Type,
     List<WikiTreeNode> Children,
     WikiTreeMetadata? Metadata,
-    bool Immutable = false);
+    // Page nodes only: the curated classification (sidecar first, folder-default
+    // type as fallback); null for folders and unclassified pages.
+    WikiClassification? Classification = null);
 
 /// <summary>The physical docs/ folder tree exposed to the wiki UI.</summary>
 public record WikiTree(string ProjectName, string BaseDir, bool Exists, List<WikiTreeNode> Root);
@@ -1649,9 +2424,10 @@ public record WikiRevisionResult(WikiRevisionContent Revision, string ETag);
 public record WikiRevisionContent(string RelPath, string Sha, string Content);
 
 /// <summary>Outcome of a wiki filesystem mutation (create/move/delete).</summary>
-public record WikiMutationResult(bool Success, string? FullPath, string? Error)
+public record WikiMutationResult(bool Success, string? FullPath, string? Error, IReadOnlyList<string>? ExtraPaths = null)
 {
     public static WikiMutationResult Ok(string fullPath) => new(true, fullPath, null);
+    public static WikiMutationResult Ok(string fullPath, IReadOnlyList<string> extraPaths) => new(true, fullPath, null, extraPaths);
     public static WikiMutationResult Fail(string error) => new(false, null, error);
 }
 
@@ -1698,7 +2474,30 @@ public record WikiPulse(
     WikiPulseFeed Feed,
     WikiPulseInbox Inbox,
     WikiPulseDrift Drift,
-    WikiPulseCritical Critical);
+    WikiPulseCritical Critical,
+    WikiPulseWarnings Warnings,
+    WikiPulseActivity Activity)
+{
+    /// <summary>Open experiment questions projected into Pulse as a thinking inbox.</summary>
+    public WorkbenchCatalogue? Workbenches { get; init; }
+}
+
+public record WikiPulseWarnings(bool Available, string? Reason, int Count, List<WikiPulseWarningItem> Items)
+{
+    public static WikiPulseWarnings Unavailable(string reason) => new(false, reason, 0, []);
+}
+
+public record WikiPulseWarningItem(string Kind, string Title, string Detail, string HumanAction, string? RelPath, string? Status);
+
+public record WikiPulseActivity(
+    bool Available,
+    string? Reason,
+    List<WikiPulseLiveRun> Runs)
+{
+    public static WikiPulseActivity Unavailable(string reason) => new(false, reason, []);
+}
+
+public record WikiPulseLiveRun(string TaskKey, string Lane, DateTime StartedAtUtc, int DocsFilesChanged);
 
 /// <summary>
 /// Critical-pages section (AGT-2051): pages a wiki-grading run scored C or D,
@@ -1727,14 +2526,15 @@ public record WikiPulseCriticalItem(
     string? GradedAt,
     string? Model,
     string? ReportPath,
-    string? FrameAreaTitle);
+    string? AreaTitle);
 
 /// <summary>Change-feed section: recently-edited pages, newest first.</summary>
 public record WikiPulseFeed(bool Available, string? Reason, List<WikiPulseFeedItem> Items);
 
 /// <summary>
-/// One change-feed row: a recently-edited page plus its owning Workstream frame
-/// area (the badge) and a task key parsed from frontmatter or the commit subject.
+/// One change-feed row: a recently-edited page plus its owning top-level docs
+/// folder (the badge) and a task key parsed from frontmatter or the commit
+/// subject.
 /// </summary>
 public record WikiPulseFeedItem(
     string RelPath,
@@ -1744,8 +2544,8 @@ public record WikiPulseFeedItem(
     string Sha,
     string ShortSha,
     string Subject,
-    string? FrameAreaSlug,
-    string? FrameAreaTitle,
+    string? AreaSlug,
+    string? AreaTitle,
     string? TaskKey);
 
 /// <summary>Inbox section: loose / unfiled pages that need sorting.</summary>
@@ -1755,8 +2555,8 @@ public record WikiPulseInbox(bool Available, string? Reason, int Count, List<Wik
 public record WikiPulseInboxItem(string RelPath, string Title, string Type, string Reason);
 
 /// <summary>
-/// Drift-grading section: the per-frame-area grade bar plus roll-up counts.
-/// <see cref="OverallGrade"/> is the worst area grade (Fresh / Aging / Stale /
+/// Drift-grading section: the per-top-folder grade bar plus roll-up counts.
+/// <see cref="OverallGrade"/> is the worst folder grade (Fresh / Aging / Stale /
 /// Empty).
 /// </summary>
 public record WikiPulseDrift(
@@ -1771,8 +2571,9 @@ public record WikiPulseDrift(
 }
 
 /// <summary>
-/// One frame area's drift grade. <see cref="Grade"/> is the worst page's band;
-/// <see cref="WorstCommitCount"/> is that page's code-commits-since-update count.
+/// One top-level docs folder's drift grade. <see cref="Grade"/> is the worst
+/// page's band; <see cref="WorstCommitCount"/> is that page's
+/// code-commits-since-update count.
 /// </summary>
 public record WikiPulseDriftArea(
     string Slug,
@@ -1787,6 +2588,46 @@ public record WikiPulseDriftArea(
 
 /// <summary>Roll-up of how many graded pages fall in each drift band.</summary>
 public record WikiPulseDriftCounts(int Fresh, int Aging, int Stale, int Graded);
+
+// ---- Wiki folder view (one directory level) ----
+
+/// <summary>
+/// One wiki directory level for the folder-overview surface. <see cref="Path"/>
+/// is the docs-root-relative folder path (empty string for the wiki root);
+/// children are sorted folders first, then pages, each alphabetical.
+/// </summary>
+public record WikiFolderView(string Path, string Name, List<WikiFolderChild> Children);
+
+/// <summary>
+/// One direct child of a wiki folder. <c>Kind</c> is <c>folder</c> or
+/// <c>page</c>; <c>FileType</c> is <c>md</c> / <c>html</c> for pages and null
+/// for folders. <c>Summary</c> (pages only) is the first text paragraph,
+/// markup-stripped, max 240 chars. <c>ChildCount</c> (folders only) counts
+/// direct pages + direct non-empty subfolders, not recursive.
+/// </summary>
+public record WikiFolderChild(
+    string Name,
+    string RelPath,
+    string Kind,
+    string? FileType,
+    string Title,
+    string? Summary,
+    DateTime UpdatedAt,
+    long? Size,
+    int? ChildCount,
+    // Page rows only: the curated classification (sidecar first, folder-default
+    // type as fallback); null for folders and unclassified pages.
+    WikiClassification? Classification = null);
+
+// ---- Wiki home (curated landing sections) ----
+
+/// <summary>Curated wiki home payload backed by <c>docs/app/config/home.json</c>.</summary>
+public record WikiHomeView(List<WikiHomeSection> Sections);
+public record WikiHomeSection(string Title, List<WikiHomeLink> Links);
+
+/// <summary>One curated link. <see cref="Exists"/> flags whether the target
+/// page is actually on disk so the UI can render dead links visibly.</summary>
+public record WikiHomeLink(string RelPath, string Label, string? Note, bool Exists);
 
 public record SecurityMeta(string? LastReviewDate, string? Rating, string? Summary);
 public record SecurityFileEntry(string Name, string RelPath, DateTime UpdatedAt, long Size);

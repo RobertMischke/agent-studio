@@ -102,6 +102,29 @@ public sealed class UpdateStatusStore
         }
     }
 
+    public void SetVersionTopology(RuntimeVersion runtime, VersionTopology topology)
+    {
+        lock (_lock)
+        {
+            var changed = _status.RunningVersion?.Version != runtime.Version
+                || _status.MainVersion?.Commit != topology.Main.Commit
+                || _status.DevelopVersion?.Commit != topology.Develop.Commit;
+            _status = _status with
+            {
+                RunningVersion = runtime,
+                MainVersion = topology.Main,
+                DevelopVersion = topology.Develop,
+                ProductVersion = runtime.Version,
+            };
+            if (changed)
+            {
+                _logger.LogInformation(
+                    "update_version_topology_resolved running={RunningCommit} main={MainCommit} develop={DevelopCommit}",
+                    runtime.Commit, topology.Main.Commit, topology.Develop.Commit);
+            }
+        }
+    }
+
     /// <summary>
     /// Phase transition. Phases that imply "in-flight" (anything that is not
     /// idle / done / failed) flip <c>IsRunning=true</c> so the FE block-modal

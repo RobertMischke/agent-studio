@@ -1,5 +1,7 @@
 
 
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -14,8 +16,9 @@ public static class TaskRunnerEndpoints
 {
     public static void MapTaskRunnerEndpoints(this RouteGroupBuilder group)
     {
-        group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, StartJobRequest? req, TaskRunnerService runner, TaskScannerService scanner, CancellationToken ct) =>
+        group.MapPost("/{jobId}/start", async (string jobId, string? project, string? watchPath, StartJobRequest? req, TaskRunnerService runner, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var job = scanner.FindJob(jobId, watchPath);
             if (job == null)
                 return Results.NotFound(new { error = "Job not found" });
@@ -36,8 +39,9 @@ public static class TaskRunnerEndpoints
             }
         });
 
-        group.MapPost("/{jobId}/stop", (string jobId, string? watchPath, string? reason, TaskRunnerService runner) =>
+        group.MapPost("/{jobId}/stop", (string jobId, string? project, string? watchPath, string? reason, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             // 'reason' is a hint that travels into RunStatusClassifier so the
             // resulting CliExecution.Status reads as 'stopped' instead of
             // 'failed'. UI sends 'followup' for Pause & Send so the next
@@ -54,8 +58,9 @@ public static class TaskRunnerEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/{jobId}/continue", async (string jobId, string? watchPath, ContinueJobRequest req, TaskRunnerService runner, CancellationToken ct) =>
+        group.MapPost("/{jobId}/continue", async (string jobId, string? project, string? watchPath, ContinueJobRequest req, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects, CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             if (string.IsNullOrWhiteSpace(req?.Prompt))
                 return Results.BadRequest(new { error = "Prompt is required" });
 
@@ -73,8 +78,9 @@ public static class TaskRunnerEndpoints
             }
         });
 
-        group.MapGet("/{jobId}/output", (string jobId, string? watchPath, TaskRunnerService runner) =>
+        group.MapGet("/{jobId}/output", (string jobId, string? project, string? watchPath, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var output = runner.GetJobOutput(jobId, watchPath);
             return Results.Ok(output);
         });
@@ -85,8 +91,9 @@ public static class TaskRunnerEndpoints
         // gives the user a paper trail when continuations don't behave as
         // expected. Includes the current sessionChain so the frontend can
         // render a chip without a second round-trip.
-        group.MapGet("/{jobId}/session-events", (string jobId, string? watchPath, TaskScannerService scanner, TaskSessionLog sessions) =>
+        group.MapGet("/{jobId}/session-events", (string jobId, string? project, string? watchPath, TaskScannerService scanner, TaskSessionLog sessions, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             var events = sessions.ReadSessionEvents(jobId, watchPath);
@@ -105,8 +112,9 @@ public static class TaskRunnerEndpoints
         // Drives the Overview tab's Agent Work block; replaces the inert
         // raw session-id row the operator flagged as no-value noise. The
         // current session id rides along for the debug tooltip only.
-        group.MapGet("/{jobId}/agent-work-summary", (string jobId, string? watchPath, TaskScannerService scanner) =>
+        group.MapGet("/{jobId}/agent-work-summary", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             return Results.Ok(AgentWorkSummaryReader.Read(info));
@@ -118,8 +126,9 @@ public static class TaskRunnerEndpoints
         // tab's Agent Work block can show *what* the agent did - the command /
         // file / pattern of each call - in a grouped, expandable view, not just
         // a per-tool count. Read-only; tolerant of missing / torn logs.
-        group.MapGet("/{jobId}/agent-work-detail", (string jobId, string? watchPath, TaskScannerService scanner) =>
+        group.MapGet("/{jobId}/agent-work-detail", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             return Results.Ok(AgentWorkSummaryReader.ReadDetail(info));
@@ -131,8 +140,9 @@ public static class TaskRunnerEndpoints
         // logs/plan-snapshots.jsonl + logs/tool-calls.jsonl by PlanReader -
         // read-only, no model call. Live updates ride the SignalR planUpdated
         // event; this endpoint is the initial fetch + refetch target.
-        group.MapGet("/{jobId}/plan", (string jobId, string? watchPath, TaskScannerService scanner) =>
+        group.MapGet("/{jobId}/plan", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             return Results.Ok(PlanReader.Read(info));
@@ -141,11 +151,12 @@ public static class TaskRunnerEndpoints
         // The condensed run timeline that drives the protocol-pane redesign.
         // One record per CLI invocation between user inputs, paired with the
         // [taskboard] Started/exited markers in cli-output.log so the frontend
-        // can render line-spans for drill-down. See docs/product/design-principles.md
+        // can render line-spans for drill-down. See docs/quality/design-principles.md
         // for the contract this surface has to honour: top-level summary +
         // always-available drill-down.
-        group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, TaskReader reader) =>
+        group.MapGet("/{jobId}/runs", (string jobId, string? project, string? watchPath, TaskReader reader, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             // T2b (ASS-1740): the run timeline is now one projection of the
             // unified per-task read model instead of a private parse here.
             var model = reader.Read(jobId, watchPath);
@@ -159,8 +170,9 @@ public static class TaskRunnerEndpoints
         // one greppable, time-ordered stream. Drives the Overview attempt
         // indicator and the Timeline tab. Read-only and tolerant of torn
         // trailing lines.
-        group.MapGet("/{jobId}/timeline", (string jobId, string? watchPath, TaskReader reader) =>
+        group.MapGet("/{jobId}/timeline", (string jobId, string? project, string? watchPath, TaskReader reader, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             // T2b (ASS-1740): the same unified read model also projects the
             // ledger, meshing each lane_changed row with its ASS-1724 anchor.
             var model = reader.Read(jobId, watchPath);
@@ -178,9 +190,10 @@ public static class TaskRunnerEndpoints
         // the source of truth for new runs and is what the integration
         // test pins. Index is 1-based to match RunRecord.Index.
         group.MapGet("/{jobId}/runs/{index:int}/commits", (
-            string jobId, int index, string? watchPath,
-            TaskReader reader, GitService git) =>
+            string jobId, int index, string? project, string? watchPath,
+            TaskReader reader, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var model = reader.Read(jobId, watchPath);
             if (model == null) return Results.NotFound(new { error = "Job not found" });
             var run = model.ResolveRun(index, out var error);
@@ -208,9 +221,10 @@ public static class TaskRunnerEndpoints
         // commit in HeadShaBefore..HeadShaAfter, with combined +/-
         // counts. Drives the file-tree side of the run's git viewer.
         group.MapGet("/{jobId}/runs/{index:int}/files", (
-            string jobId, int index, string? watchPath,
-            TaskReader reader, GitService git) =>
+            string jobId, int index, string? project, string? watchPath,
+            TaskReader reader, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var model = reader.Read(jobId, watchPath);
             if (model == null) return Results.NotFound(new { error = "Job not found" });
             var run = model.ResolveRun(index, out var error);
@@ -242,9 +256,10 @@ public static class TaskRunnerEndpoints
         // the raw diff body so the frontend's existing diff renderer
         // can consume it without re-parsing.
         group.MapGet("/{jobId}/runs/{index:int}/diff", (
-            string jobId, int index, string? path, string? watchPath,
-            TaskReader reader, GitService git) =>
+            string jobId, int index, string? path, string? project, string? watchPath,
+            TaskReader reader, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var model = reader.Read(jobId, watchPath);
             if (model == null) return Results.NotFound(new { error = "Job not found" });
             var run = model.ResolveRun(index, out var error);
@@ -266,9 +281,10 @@ public static class TaskRunnerEndpoints
         // card can show *what* the run was started with. Index is 1-based to
         // match RunRecord.Index.
         group.MapGet("/{jobId}/runs/{index:int}/context", (
-            string jobId, int index, string? watchPath,
-            TaskReader reader) =>
+            string jobId, int index, string? project, string? watchPath,
+            TaskReader reader, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var model = reader.Read(jobId, watchPath);
             if (model == null) return Results.NotFound(new { error = "Job not found" });
             var info = model.Info;
@@ -319,8 +335,9 @@ public static class TaskRunnerEndpoints
         // GenerateAsync so the failure mode is recorded as a regular Failed
         // SummaryState the UI can render in-place — surfacing the precise
         // reason via the banner instead of a top-level error dialog.
-        group.MapPost("/{jobId}/summary/regenerate", (string jobId, string? watchPath, TaskScannerService scanner, SummaryGenerationService summaries) =>
+        group.MapPost("/{jobId}/summary/regenerate", (string jobId, string? project, string? watchPath, TaskScannerService scanner, SummaryGenerationService summaries, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null)
                 return Results.NotFound(new { error = "Job not found" });
@@ -337,8 +354,9 @@ public static class TaskRunnerEndpoints
         // post-run summary still owns it. Surfaced by the "Interim status"
         // button in the protocol pane so the user can check on a long-running
         // task without stopping it.
-        group.MapPost("/{jobId}/summary/interim", async (string jobId, string? watchPath, TaskScannerService scanner, SummaryGenerationService summaries, CancellationToken ct) =>
+        group.MapPost("/{jobId}/summary/interim", async (string jobId, string? project, string? watchPath, TaskScannerService scanner, SummaryGenerationService summaries, AgentStudio.Registry.ProjectRegistry projects, CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null)
                 return Results.NotFound(new { error = "Job not found" });
@@ -350,8 +368,9 @@ public static class TaskRunnerEndpoints
             return Results.Ok(new { markdown = result.Markdown, durationMs = result.DurationMs });
         });
 
-        group.MapPost("/{jobId}/context-usage/refresh", async (string jobId, string? watchPath, TaskRunnerService runner, CancellationToken ct) =>
+        group.MapPost("/{jobId}/context-usage/refresh", async (string jobId, string? project, string? watchPath, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects, CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var (snapshot, error) = await runner.RefreshContextUsageAsync(jobId, watchPath, ct);
             return snapshot is not null
                 ? Results.Ok(snapshot)

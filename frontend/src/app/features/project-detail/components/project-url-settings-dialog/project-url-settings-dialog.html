@@ -1,0 +1,49 @@
+<app-dialog
+  eyebrow="Embed settings"
+  [title]="url().label"
+  subtitle="Changes apply only to this project URL."
+  size="sm"
+  testid="url-preview-settings-dialog"
+  (closeRequest)="closeRequest.emit()"
+  (backdropClick)="closeRequest.emit()">
+  <form class="embed-settings" (ngSubmit)="save()">
+    <label>
+      <span>URL</span>
+      <input type="url" name="address" required data-testid="url-preview-settings-url"
+             [ngModel]="address()" (ngModelChange)="address.set($event)" />
+    </label>
+    <label>
+      <span>Start command</span>
+      <input type="text" name="command" data-testid="url-preview-settings-command"
+             placeholder="npm run website"
+             [ngModel]="command()" (ngModelChange)="command.set($event)" />
+    </label>
+    <label>
+      <span>Working directory</span>
+      <input type="text" name="cwd" data-testid="url-preview-settings-cwd"
+             placeholder="Use project repository or root path"
+             [ngModel]="cwd()" (ngModelChange)="cwd.set($event)" />
+    </label>
+    <label>
+      <span>Port</span>
+      <input type="number" name="port" min="1" max="65535"
+             data-testid="url-preview-settings-port" placeholder="4202"
+             [ngModel]="port()" (ngModelChange)="port.set($event)" />
+    </label>
+    @if (error()) {
+      <p class="embed-settings__error" role="alert">{{ error() }}</p>
+    }
+    <button type="submit" hidden></button>
+  </form>
+
+  <div footer class="embed-settings__actions">
+    <button type="button" (click)="closeRequest.emit()">Cancel</button>
+    <button type="button"
+            class="embed-settings__save"
+            data-testid="url-preview-settings-save"
+            [appPendingButton]="saving()"
+            pendingLabel="Saving embed settings..."
+            [disabled]="!address().trim()"
+            (click)="save()">Save</button>
+  </div>
+</app-dialog>

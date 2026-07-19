@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { StudioIconComponent } from '../../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
-import { WikiNodeType, WikiPulse, WikiPulseDriftArea, WikiPulseFeedItem } from '../../../../../models/project-docs.model';
+import { WikiNodeType, WikiPulse, WikiPulseDriftArea, WikiPulseFeedItem, WorkbenchListItem } from '../../../../../models/project-docs.model';
+import { WorkbenchInboxComponent } from './workbench-inbox/workbench-inbox.component';
 
 /** What the parent needs to open a page from a Pulse row. */
 export interface WikiPulseOpenRequest {
@@ -9,24 +10,21 @@ export interface WikiPulseOpenRequest {
   type: WikiNodeType;
 }
 
-/** A change-feed day bucket (newest day first). */
-interface WikiPulseFeedGroup {
-  key: string;
-  label: string;
-  items: WikiPulseFeedItem[];
-}
-
 type WikiPulseTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
 
+/** The compact feed shows this many rows; the rest sits behind "Alle anzeigen". */
+const FEED_COMPACT_COUNT = 8;
+
 /**
- * The generated wiki Pulse landing view (PULSE-1): the read-only entry surface
- * the wiki opens on. It is not a wiki page - it is composed from git history and
- * the docs tree, never editable. Three sections answer "what changed, what needs
- * sorting, and how stale is the knowledge":
+ * The generated Pulse cards of the wiki landing dashboard (PULSE-1). The host
+ * renders `display: contents`, so each card slots directly into the dashboard's
+ * grid:
  *
- *  - the drift grade bar (per Workstream frame area, deterministic, no LLM),
- *  - the change feed grouped by day (frame-area badge + task key, click to open),
- *  - the inbox of loose / unfiled pages (an empty inbox is the healthy state).
+ *  - the full-width drift strip (per top-level docs folder, deterministic),
+ *  - "Zuletzt geändert" (compact change feed, expandable behind a UI toggle),
+ *  - "Aufmerksamkeit" (warnings + unfiled inbox; the card hides when clear),
+ *  - "Workbenches" (catalogue via {@link WorkbenchInboxComponent}),
+ *  - "In Arbeit" (docs-touching live runs).
  *
  * Purely presentational: the parent owns fetching and feeds the fully-composed
  * {@link WikiPulse}; this component only formats and emits navigation intent.
@@ -34,7 +32,7 @@ type WikiPulseTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
 @Component({
   selector: 'app-wiki-pulse',
   standalone: true,
-  imports: [StudioIconComponent, TooltipDirective],
+  imports: [StudioIconComponent, TooltipDirective, WorkbenchInboxComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './wiki-pulse.component.html',
   styleUrl: './wiki-pulse.component.scss',
@@ -44,36 +42,45 @@ export class WikiPulseComponent {
   readonly loading = input(false);
 
   readonly openPage = output<WikiPulseOpenRequest>();
+  readonly openWorkbench = output<WorkbenchListItem>();
 
   readonly feed = computed(() => this.pulse()?.feed ?? null);
   readonly inbox = computed(() => this.pulse()?.inbox ?? null);
   readonly drift = computed(() => this.pulse()?.drift ?? null);
+  readonly warnings = computed(() => this.pulse()?.warnings ?? null);
+  readonly activity = computed(() => this.pulse()?.activity ?? null);
 
-  /** Change-feed rows bucketed by local calendar day, newest day first. */
-  readonly feedGroups = computed<WikiPulseFeedGroup[]>(() => {
-    const items = this.feed()?.items ?? [];
-    const groups: WikiPulseFeedGroup[] = [];
-    const index = new Map<string, number>();
-    for (const item of items) {
-      const key = this.dayKey(item.authorDateUtc);
-      let gi = index.get(key);
-      if (gi === undefined) {
-        gi = groups.length;
-        index.set(key, gi);
-        groups.push({ key, label: this.dayLabel(item.authorDateUtc), items: [] });
-      }
-      groups[gi].items.push(item);
-    }
-    return groups;
-  });
+  readonly feedItems = computed<readonly WikiPulseFeedItem[]>(() => this.feed()?.items ?? []);
+  readonly hasFeedItems = computed(() => this.feedItems().length > 0);
 
-  readonly hasFeedItems = computed(() => (this.feed()?.items.length ?? 0) > 0);
+  /** Pure UI state: whether the feed card shows all rows or the compact head. */
+  readonly feedExpanded = signal(false);
 
-  /** True when the inbox is available and clear - the healthy resting state. */
-  readonly inboxClear = computed(() => {
+  readonly visibleFeedItems = computed<readonly WikiPulseFeedItem[]>(() =>
+    this.feedExpanded() ? this.feedItems() : this.feedItems().slice(0, FEED_COMPACT_COUNT));
+
+  readonly hiddenFeedCount = computed(() =>
+    Math.max(0, this.feedItems().length - FEED_COMPACT_COUNT));
+
+  toggleFeedExpanded(): void {
+    this.feedExpanded.update(v => !v);
+  }
+
+  /**
+   * The "Aufmerksamkeit" card mounts only when something needs a human: at
+   * least one warning or unfiled page, or a source that degraded to a reason.
+   * A clear inbox with no warnings leaves no card in the grid.
+   */
+  readonly attentionVisible = computed(() => {
+    const warnings = this.warnings();
     const inbox = this.inbox();
-    return !!inbox && inbox.available && inbox.count === 0;
+    const warningsNeed = !!warnings && (!warnings.available || warnings.count > 0);
+    const inboxNeeds = !!inbox && (!inbox.available || inbox.count > 0);
+    return warningsNeed || inboxNeeds;
   });
+
+  readonly attentionCount = computed(() =>
+    (this.warnings()?.count ?? 0) + (this.inbox()?.count ?? 0));
 
   openFeed(item: WikiPulseFeedItem): void {
     this.openPage.emit({ relPath: item.relPath, type: this.typeForRel(item.relPath) });
@@ -133,22 +140,12 @@ export class WikiPulseComponent {
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
   }
 
-  private dayKey(iso: string): string {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  }
-
-  /** Human day heading: Today / Yesterday / a locale date. */
-  private dayLabel(iso: string): string {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    const now = new Date();
-    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-    const dayMs = 86_400_000;
-    const delta = Math.round((startOf(now) - startOf(d)) / dayMs);
-    if (delta === 0) return 'Today';
-    if (delta === 1) return 'Yesterday';
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  runtime(iso: string): string {
+    const ms = Date.now() - new Date(iso).getTime();
+    if (!Number.isFinite(ms) || ms < 0) return 'just started';
+    const minutes = Math.max(1, Math.floor(ms / 60_000));
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
   }
 }

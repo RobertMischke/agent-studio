@@ -166,20 +166,37 @@ describe('TaskColumnComponent (smoke)', () => {
   // job was active leaves the live mode at auto-* and queues the requested
   // mode in status.pendingMode. The pill renders an arrow + the deferred
   // value so the operator sees the change took, just not yet.
-  it('cluster: pendingMode on auto-continuous renders "AUTO → MANUAL" with deferred-mode tooltip', async () => {
+  it('cluster: one pending active task renders its count and title in the tooltip', async () => {
     const fixture = await buildColumn({
       mode: 'auto-continuous',
       status: makeStatus({
         mode: 'auto-continuous',
         activeJobId: 'running-task',
         pendingMode: 'manual',
-        pendingModeWillApplyAfter: 'running-task'
+        pendingModeWillApplyAfter: 'running-task',
+        pendingModeActiveTaskCount: 1,
+        pendingModeActiveTaskTitle: 'Publish release notes'
       })
     });
     const cluster = fixture.componentInstance.statusCluster();
     expect(cluster!.mode.label).toBe('AUTO → MANUAL');
-    expect(cluster!.mode.tooltip).toContain('Deferred change pending');
-    expect(cluster!.mode.tooltip).toContain('running-task');
+    expect(cluster!.mode.tooltip).toBe('Switches to MANUAL when 1 active task finishes (Publish release notes).');
+  });
+
+  it('cluster: multiple pending active tasks renders concise plural semantics', async () => {
+    const fixture = await buildColumn({
+      mode: 'auto-continuous',
+      status: makeStatus({
+        mode: 'auto-continuous',
+        activeJobId: 'task-a',
+        pendingMode: 'manual',
+        pendingModeActiveTaskCount: 4
+      })
+    });
+
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster!.mode.label).toBe('AUTO → MANUAL');
+    expect(cluster!.mode.tooltip).toBe('Switches to MANUAL when 4 active tasks finish.');
   });
 
   // ADR-0044: a test-subject backend's lane pill should explain why no
@@ -425,6 +442,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     fixture.componentRef.setInput('title', 'Archive');
     fixture.componentRef.setInput('state', '7-archive');
     fixture.componentRef.setInput('jobs', []);
+    fixture.componentRef.setInput('projectScope', 'Token Economy');
     fixture.detectChanges(); // first CD runs ngOnInit → initial fetch
     return { fixture, httpMock };
   }
@@ -437,6 +455,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     const req = httpMock.expectOne((r) => isArchiveReq(r.url));
     expect(req.request.params.get('offset')).toBe('0');
     expect(req.request.params.get('limit')).toBe('50');
+    expect(req.request.params.get('project')).toBe('Token Economy');
     req.flush({
       items: [makeArchived({ id: 'a1', title: 'Archived One' })],
       total: 1,
@@ -455,6 +474,23 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     httpMock.verify();
   });
 
+  it('reloads the archive when the active project scope changes', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+    httpMock.expectOne((r) => r.url === '/api/tasks/archive' && r.params.get('project') === 'Token Economy')
+      .flush({ items: [], total: 0, offset: 0, limit: 50 });
+
+    fixture.componentRef.setInput('projectScope', 'Agent Studio');
+    fixture.detectChanges();
+
+    const req = httpMock.expectOne((r) => r.url === '/api/tasks/archive' && r.params.get('project') === 'Agent Studio');
+    expect(req.request.params.get('offset')).toBe('0');
+    req.flush({ items: [makeArchived({ id: 'agt-archived', projectName: 'Agent Studio' })], total: 1, offset: 0, limit: 50 });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.archiveItems().map((item) => item.id)).toEqual(['agt-archived']);
+    httpMock.verify();
+  });
+
   it('shows the empty state only after a genuine zero-total response', async () => {
     const { fixture, httpMock } = await buildArchiveColumn();
 
@@ -467,6 +503,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     expect(fixture.componentInstance.archiveIsEmpty()).toBe(true);
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="archive-empty"]')).toBeTruthy();
+    expect(host.textContent ?? '').toContain('No archived ticket in this project');
     httpMock.verify();
   });
 

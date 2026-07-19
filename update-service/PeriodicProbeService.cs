@@ -51,6 +51,12 @@ public sealed class PeriodicProbeService : BackgroundService
 
                 var healthy = await _backend.IsHealthyAsync(stoppingToken);
                 _store.SetBackendReachable(healthy);
+                if (healthy)
+                {
+                    var runtime = await _backend.ReadRuntimeVersionAsync(stoppingToken);
+                    if (runtime is not null)
+                        _store.SetVersionTopology(runtime, _git.ReadVersionTopology(runtime.Commit));
+                }
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex)

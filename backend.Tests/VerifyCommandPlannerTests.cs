@@ -61,6 +61,23 @@ public sealed class VerifyCommandPlannerTests : IDisposable
     }
 
     [Fact]
+    public void DotNet_SlnxWithNoRootProject_DerivesCommandsAtRepositoryRoot()
+    {
+        // TE-3 / AGT-2099: the solution is at the worktree root while its
+        // projects live below it. A target-less dotnet command is valid only
+        // when the runner preserves that root as its cwd.
+        Write("TokenEconomy.slnx", "<Solution><Project Path=\"src/App/App.csproj\" /></Solution>");
+        Write("src/App/App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+
+        var plan = VerifyCommandPlanner.Plan(_root, profile: null);
+
+        Assert.Equal(VerifyPlan.SourceAutoDiscovery, plan.Source);
+        Assert.Collection(plan.Commands,
+            c => AssertCommandAtRepositoryRoot(c, VerifyCommandKind.Build, "dotnet build"),
+            c => AssertCommandAtRepositoryRoot(c, VerifyCommandKind.Test, "dotnet test"));
+    }
+
+    [Fact]
     public void DotNet_NestedCsprojOnly_NotDerivable_HonestFallback()
     {
         // A project a level down cannot be resolved by a bare `dotnet build` at the
@@ -265,6 +282,13 @@ public sealed class VerifyCommandPlannerTests : IDisposable
         Assert.Equal(subdir, cmd.WorkingSubdir);
         Assert.Equal(command, cmd.Command);
     }
+
+    private void AssertCommandAtRepositoryRoot(
+        VerifyCommand cmd, VerifyCommandKind kind, string command)
+    {
+        AssertCommand(cmd, VerifyEcosystem.DotNet, kind, "", command);
+        Assert.Equal(Path.GetFullPath(_root), BuildTestGateRunner.ResolveWorkingDirectory(_root, cmd));
+    }
 }
 
 /// <summary>
@@ -336,6 +360,21 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     }
 
     [Fact]
+    public async Task CommandExecution_CanonicalizesRelativeRepositoryPathAsCwd()
+    {
+        var printWorkingDirectory = OperatingSystem.IsWindows() ? "cd" : "pwd";
+        var relativeRoot = Path.GetRelativePath(Environment.CurrentDirectory, _root);
+        var profile = new BuildProfile { BuildCmds = [printWorkingDirectory] };
+
+        var r = await _runner.RunAsync(
+            relativeRoot, changedFiles: null, profile, PostStepMode.Fail,
+            TimeSpan.FromSeconds(30), CancellationToken.None);
+
+        Assert.Equal(BuildTestGateVerdict.Ok, r.Verdict);
+        Assert.Contains(Path.GetFullPath(_root), r.Output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ProfileOverride_FirstFailure_StopsAndFails()
     {
         var profile = new BuildProfile { BuildCmds = ["exit 7", "exit 0"] };
@@ -357,5 +396,111 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
 
         Assert.Equal(BuildTestGateVerdict.Warn, r.Verdict);
         Assert.Equal(3, r.ExitCode);
+    }
+
+    [Fact]
+    public async Task ConcurrentRuns_ForSameRepository_DoNotOverlapCommands()
+    {
+        const string activeFile = "build-gate-active.tmp";
+        const string overlapFile = "build-gate-overlap.tmp";
+        var holdCommand = OperatingSystem.IsWindows()
+            ? $"type nul > {activeFile} & ping 127.0.0.1 -n 3 > nul & del {activeFile}"
+            : $"touch {activeFile}; sleep 2; rm -f {activeFile}";
+        var probeCommand = OperatingSystem.IsWindows()
+            ? $"if exist {activeFile} type nul > {overlapFile}"
+            : $"if [ -e {activeFile} ]; then touch {overlapFile}; fi";
+
+        var first = Run(new BuildProfile { BuildCmds = [holdCommand] });
+        var activePath = Path.Combine(_root, activeFile);
+        for (var i = 0; i < 100 && !File.Exists(activePath); i++)
+            await Task.Delay(25);
+        Assert.True(File.Exists(activePath), "The first gate command did not enter its critical section.");
+
+        var second = Run(new BuildProfile { BuildCmds = [probeCommand] });
+        var results = await Task.WhenAll(first, second);
+
+        Assert.All(results, result => Assert.Equal(BuildTestGateVerdict.Ok, result.Verdict));
+        Assert.False(File.Exists(Path.Combine(_root, overlapFile)),
+            "Two verification command loops ran concurrently in the same repository.");
+    }
+
+    // MachineBound 19.07.: TCS/Cancellation-Timing flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
+    [Fact]
+    public async Task CancellationDuringHostLoadWait_ReleasesRepositoryAdmission()
+    {
+        var loadThrottle = new CancelFirstLoadThrottle();
+        var runner = new BuildTestGateRunner(
+            NullLogger<BuildTestGateRunner>.Instance,
+            loadThrottle);
+        var profile = new BuildProfile { BuildCmds = ["exit 0"] };
+        using var firstCancellation = new CancellationTokenSource();
+
+        var canceled = runner.RunAsync(
+            _root, changedFiles: null, profile, PostStepMode.Fail,
+            TimeSpan.FromSeconds(30), firstCancellation.Token);
+        await loadThrottle.FirstWaitEntered.WaitAsync(TimeSpan.FromSeconds(5));
+        firstCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await canceled);
+
+        using var followupCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var followup = await runner.RunAsync(
+            _root, changedFiles: null, profile, PostStepMode.Fail,
+            TimeSpan.FromSeconds(30), followupCancellation.Token);
+
+        Assert.Equal(BuildTestGateVerdict.Ok, followup.Verdict);
+    }
+
+    // MachineBound 19.07.: Queue-Cancellation-Timing flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
+    [Fact]
+    public async Task CancellationWhileQueued_DoesNotOpenAdmissionForAnotherRun()
+    {
+        const string activeFile = "build-gate-queued-active.tmp";
+        const string overlapFile = "build-gate-queued-overlap.tmp";
+        var holdCommand = OperatingSystem.IsWindows()
+            ? $"type nul > {activeFile} & ping 127.0.0.1 -n 3 > nul & del {activeFile}"
+            : $"touch {activeFile}; sleep 2; rm -f {activeFile}";
+        var probeCommand = OperatingSystem.IsWindows()
+            ? $"if exist {activeFile} type nul > {overlapFile}"
+            : $"if [ -e {activeFile} ]; then touch {overlapFile}; fi";
+
+        var leader = Run(new BuildProfile { BuildCmds = [holdCommand] });
+        var activePath = Path.Combine(_root, activeFile);
+        for (var i = 0; i < 100 && !File.Exists(activePath); i++)
+            await Task.Delay(25);
+        Assert.True(File.Exists(activePath), "The leader gate did not enter its critical section.");
+
+        using var queuedCancellation = new CancellationTokenSource();
+        var queued = _runner.RunAsync(
+            _root, changedFiles: null, new BuildProfile { BuildCmds = ["exit 0"] },
+            PostStepMode.Fail, TimeSpan.FromSeconds(30), queuedCancellation.Token);
+        queuedCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await queued);
+
+        var follower = Run(new BuildProfile { BuildCmds = [probeCommand] });
+        var results = await Task.WhenAll(leader, follower);
+
+        Assert.All(results, result => Assert.Equal(BuildTestGateVerdict.Ok, result.Verdict));
+        Assert.False(File.Exists(Path.Combine(_root, overlapFile)),
+            "Canceling a queued gate released an admission it did not own.");
+    }
+
+    private sealed class CancelFirstLoadThrottle : ILoadThrottleGate
+    {
+        private readonly TaskCompletionSource _firstWaitEntered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _calls;
+
+        public LoadThrottleDecision Current => new(false, 0, TimeSpan.Zero);
+        public bool WasRecentlyActive => false;
+        public Task FirstWaitEntered => _firstWaitEntered.Task;
+
+        public async Task WaitUntilReadyAsync(string reason, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref _calls) != 1) return;
+            _firstWaitEntered.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        }
     }
 }

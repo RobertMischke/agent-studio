@@ -86,7 +86,7 @@ export class PlanningSpawnPanelComponent {
 
   /** Reset the local override when the parent hands a different task (navigation). */
   private readonly resetOnJobChange = effect(() => {
-    this.job().id;
+    void this.job().id;
     this.summaryOverride.set(null);
     this.declaring.set(false);
   });

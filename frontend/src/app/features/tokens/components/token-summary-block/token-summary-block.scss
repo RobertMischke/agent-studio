@@ -66,6 +66,19 @@
   font-variant-numeric: tabular-nums;
 }
 .tok-sum__cost-amount--partial { color: #fde68a; }
+.tok-sum__cost-button,
+.tok-sum__table-cost {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
 .tok-sum__partial { font-weight: 400; font-size: 0.74rem; color: rgba(255,255,255,0.50); }
 
 .tok-sum__breakdown { margin-bottom: 8px; }

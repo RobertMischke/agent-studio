@@ -114,6 +114,20 @@ const CODE_REVIEW_LIST = {
 
 const TIMELINE = [
   {
+    ts: '2026-07-09T18:20:00Z',
+    kind: 'quality_loop_reopened',
+    actor: 'quality-loop',
+    summary: 'Reopened after build/test gate.',
+    details: { cause: 'build/test gate failed', reason: 'npm test exit 1' },
+  },
+  {
+    ts: '2026-07-09T19:10:00Z',
+    kind: 'quality_loop_reopened',
+    actor: 'quality-loop',
+    summary: 'Reopened after verification findings.',
+    details: { cause: 'verification gate', reason: 'bundle budget and apply_patch stderr' },
+  },
+  {
     ts: '2026-07-09T19:45:00Z',
     kind: 'orchestrator_escalated',
     actor: 'orchestrator',
@@ -241,18 +255,38 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
 
     // 2. The header carries the compact one-line essence at all times.
     await expect(page.getByTestId('escalation-essence-grade')).toHaveText('B');
-    await expect(page.getByTestId('escalation-essence-merge')).toBeVisible();
+    await expect(page.getByTestId('escalation-state-sentence')).toHaveText(
+      'Delivered and merged; waiting for your decision because the reissue budget is exhausted, and 3 gate points remain open.',
+    );
     // Recommendation stays on the header.
     await expect(page.getByTestId('escalation-recommendation')).toHaveText('Needs decision');
 
-    // 3. No left accent line: the left border matches the 1px all-round border
-    //    (round 1 used a 3px severity stripe here — the operator hard-rule bans it).
+    // 3. The section is fully borderless. Separation comes from its quiet wash.
     const borders = await panel.evaluate((el) => {
       const s = getComputedStyle(el);
-      return { left: s.borderLeftWidth, top: s.borderTopWidth };
+      return {
+        left: s.borderLeftWidth,
+        right: s.borderRightWidth,
+        top: s.borderTopWidth,
+        bottom: s.borderBottomWidth,
+      };
     });
-    expect(borders.left).toBe(borders.top);
-    expect(borders.left).toBe('1px');
+    expect(borders.left).toBe('0px');
+    expect(borders.right).toBe('0px');
+    expect(borders.top).toBe('1px');
+    expect(borders.bottom).toBe(borders.top);
+
+    const geometry = await panel.evaluate((el) => {
+      const panelRect = el.getBoundingClientRect();
+      const workspaceRect = el.closest('.workspace__main--studio')?.getBoundingClientRect();
+      return workspaceRect ? {
+        leftDelta: Math.abs(panelRect.left - workspaceRect.left),
+        rightDelta: Math.abs(panelRect.right - workspaceRect.right),
+      } : null;
+    });
+    expect(geometry).not.toBeNull();
+    expect(geometry!.leftDelta).toBeLessThanOrEqual(1);
+    expect(geometry!.rightDelta).toBeLessThanOrEqual(1);
 
     await dismissAppErrorDialog(page);
     const afterShots = await shootBothThemes(page, testInfo, 'escalation-collapsed');
@@ -276,6 +310,13 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     await expect(page.getByTestId('escalation-delivery-counts')).toContainText('4 files');
     // Escalation reason headline from the timeline event.
     await expect(page.getByTestId('escalation-reason')).toContainText('Completion gate');
+    const reissues = page.getByTestId('escalation-reissues');
+    await expect(reissues).toBeVisible();
+    await reissues.locator('summary').click();
+    await expect(page.getByTestId('escalation-reissue-1')).toContainText('npm test exit 1');
+    await expect(page.getByTestId('escalation-reissue-2')).toContainText('bundle budget and apply_patch stderr');
+    // The escalation section no longer contributes a second merge signal.
+    await expect(page.getByTestId('escalation-essence-merge')).toHaveCount(1);
 
     await dismissAppErrorDialog(page);
     await shootBothThemes(page, testInfo, 'escalation-expanded');

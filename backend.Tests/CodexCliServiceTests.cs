@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
 
@@ -13,6 +14,84 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class CodexCliServiceTests
 {
+    [Fact]
+    public void CanResume_CleanContextRejectsEvenWhenSharedRolloutExists()
+    {
+        var home = CreateCodexHomeWithRollout("019dee65-7a9b-7843-bfd9-06e555fff02b");
+        try
+        {
+            Assert.False(CodexRolloutStore.CanResume(
+                "019dee65-7a9b-7843-bfd9-06e555fff02b", "clean", home));
+        }
+        finally { Directory.Delete(home, recursive: true); }
+    }
+
+    [Fact]
+    public void CanResume_SharedContextRequiresMatchingRollout()
+    {
+        var home = CreateCodexHomeWithRollout("019dee65-7a9b-7843-bfd9-06e555fff02b");
+        try
+        {
+            Assert.True(CodexRolloutStore.CanResume(
+                "019dee65-7a9b-7843-bfd9-06e555fff02b", "shared", home));
+            Assert.False(CodexRolloutStore.CanResume(
+                "11111111-2222-4333-8444-555555555555", "shared", home));
+        }
+        finally { Directory.Delete(home, recursive: true); }
+    }
+
+    [Fact]
+    public void StillbornIndexEntry_IsPrunableOnlyAfterGrace_AndWithoutRollout()
+    {
+        const string id = "019dee65-7a9b-7843-bfd9-06e555fff02b";
+        var now = DateTime.UtcNow;
+        var old = $$"""{"id":"{{id}}","updated_at":"{{now.AddMinutes(-10):O}}"}""";
+        var recent = $$"""{"id":"{{id}}","updated_at":"{{now.AddMinutes(-1):O}}"}""";
+
+        Assert.True(SessionRegistry.TryReadStaleIndexOnlyCodexId(
+            old, new HashSet<string>(), now, out var parsed));
+        Assert.Equal(id, parsed);
+        Assert.False(SessionRegistry.TryReadStaleIndexOnlyCodexId(
+            recent, new HashSet<string>(), now, out _));
+        Assert.False(SessionRegistry.TryReadStaleIndexOnlyCodexId(
+            old, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { id }, now, out _));
+    }
+
+    [Fact]
+    public void StillbornCleanup_CompactsOldIndexOnlyRows_ButKeepsLiveAndRecentRows()
+    {
+        const string staleId = "019dee65-7a9b-7843-bfd9-06e555fff02b";
+        const string recentId = "11111111-2222-4333-8444-555555555555";
+        const string liveId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+        var now = DateTime.UtcNow;
+        var dir = Path.Combine(Path.GetTempPath(), $"codex-index-cleanup-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var index = Path.Combine(dir, "session_index.jsonl");
+        File.WriteAllLines(index,
+        [
+            $$"""{"id":"{{staleId}}","updated_at":"{{now.AddMinutes(-10):O}}"}""",
+            $$"""{"id":"{{recentId}}","updated_at":"{{now.AddMinutes(-1):O}}"}""",
+            $$"""{"id":"{{liveId}}","updated_at":"{{now.AddMinutes(-10):O}}"}""",
+            "not-json",
+        ]);
+
+        try
+        {
+            var registry = new SessionRegistry(NullLogger<SessionRegistry>.Instance, null!);
+            registry.PruneStaleCodexIndexEntries(
+                index,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { liveId },
+                now);
+
+            var kept = File.ReadAllLines(index);
+            Assert.DoesNotContain(kept, line => line.Contains(staleId, StringComparison.Ordinal));
+            Assert.Contains(kept, line => line.Contains(recentId, StringComparison.Ordinal));
+            Assert.Contains(kept, line => line.Contains(liveId, StringComparison.Ordinal));
+            Assert.Contains("not-json", kept);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     [Fact]
     public void TryExtractSessionId_ThreadStartedFrame_ReturnsThreadId()
     {
@@ -379,5 +458,14 @@ public class CodexCliServiceTests
                 cfg),
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
+    }
+
+    private static string CreateCodexHomeWithRollout(string id)
+    {
+        var home = Path.Combine(Path.GetTempPath(), $"codex-rollout-test-{Guid.NewGuid():N}");
+        var day = Path.Combine(home, "sessions", "2026", "07", "11");
+        Directory.CreateDirectory(day);
+        File.WriteAllText(Path.Combine(day, $"rollout-2026-07-11T18-41-00-{id}.jsonl"), "{}\n");
+        return home;
     }
 }

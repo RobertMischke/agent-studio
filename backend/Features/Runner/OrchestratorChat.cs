@@ -413,6 +413,7 @@ public class OrchestratorChatService
     private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorChatService> _logger;
     private readonly ClientIdentityStore? _identityStore;
+    private readonly OrchestratorContextDigestService? _contextDigests;
 
     /// <summary>
     /// Serializes concurrent <see cref="SendAsync"/> calls because the
@@ -442,7 +443,8 @@ public class OrchestratorChatService
         TaskScannerService scanner,
         IConfiguration config,
         ILogger<OrchestratorChatService> logger,
-        ClientIdentityStore? identityStore = null)
+        ClientIdentityStore? identityStore = null,
+        OrchestratorContextDigestService? contextDigests = null)
     {
         _chat = chat;
         _runner = runner;
@@ -452,6 +454,7 @@ public class OrchestratorChatService
         _config = config;
         _logger = logger;
         _identityStore = identityStore;
+        _contextDigests = contextDigests;
     }
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
@@ -478,12 +481,11 @@ public class OrchestratorChatService
     /// <summary>
     /// Send a user message and persist both turns to the transcript for the
     /// given navigation context (MC-2, Concept §4). <paramref name="context"/>
-    /// only selects which on-disk thread the turns land in and are read back
-    /// from; the resumed Claude session, prompt, and usage accounting stay
-    /// project-level (one shared session across contexts, as before). A task
-    /// context therefore keeps its own visible history while still speaking
-    /// to the same orchestrator. Passing <c>null</c> is identical to the
-    /// pre-MC-2 per-project behaviour.
+    /// selects both the on-disk thread and the ORCH-1 read digest injected into
+    /// this turn. The resumed Claude session and usage accounting remain shared,
+    /// while project/task scoping is enforced by the digest builder. Passing
+    /// <c>null</c> keeps the legacy project transcript and resolves an equivalent
+    /// <c>project:&lt;projectName&gt;</c> digest.
     /// </summary>
     public async Task<OrchestratorChatTurn> SendAsync(
         string projectName,
@@ -532,7 +534,7 @@ public class OrchestratorChatService
                 return failure;
             }
 
-            var prompt = BuildPrompt(projectName, watchPath, req, clientId);
+            var prompt = await BuildPromptAsync(projectName, watchPath, req, clientId, context, ct).ConfigureAwait(false);
             var modelId = _config["GlobalOrchestrator:Model"] ?? OrchestratorRunner.DefaultModel;
             var workingDirectory = ResolveWorkingDirectory(watchPath);
             var inlineImages = ExtractInlineImages(req.Attachments);
@@ -684,7 +686,13 @@ public class OrchestratorChatService
         }
     }
 
-    private string BuildPrompt(string projectName, string watchPath, SendOrchestratorChatRequest req, string? clientId)
+    private async Task<string> BuildPromptAsync(
+        string projectName,
+        string watchPath,
+        SendOrchestratorChatRequest req,
+        string? clientId,
+        OrchestratorContextKey? context,
+        CancellationToken ct)
     {
         var sb = new StringBuilder();
         sb.AppendLine("=== ACTIVE PROJECT CONTEXT ===");
@@ -693,18 +701,51 @@ public class OrchestratorChatService
         sb.AppendLine("Answer ONLY about \"" + projectName + "\". Do not refer to other projects unless the user asks.");
         sb.AppendLine();
 
-        try
+        var digestAdded = false;
+        if (_contextDigests != null)
         {
-            var tasks = _scanner.ScanAllJobs()
-                .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            AppendProjectStateSnapshot(sb, projectName, tasks);
+            try
+            {
+                var effectiveContext = context;
+                if (effectiveContext == null)
+                    OrchestratorContextKey.TryParse($"project:{projectName}", out effectiveContext);
+                if (effectiveContext != null)
+                {
+                    var digest = await _contextDigests.BuildAsync(effectiveContext, ct: ct).ConfigureAwait(false);
+                    sb.AppendLine(digest.Digest);
+                    sb.AppendLine();
+                    digestAdded = true;
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "orchestrator_context_digest_injection_failed contextKey={ContextKey} project={Project}",
+                    context?.Value ?? $"project:{projectName}",
+                    projectName);
+            }
         }
-        catch (Exception __ex)
+
+        if (!digestAdded)
         {
-            SilentCatch.Note(__ex, "OrchestratorChat: Best-effort: missing snapshot is fine; the orchestrator can");
-            // Best-effort: missing snapshot is fine; the orchestrator can
-            // still answer general questions from session memory.
+            try
+            {
+                var tasks = _scanner.ScanAllJobs()
+                    .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                AppendProjectStateSnapshot(sb, projectName, tasks);
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "OrchestratorChat: Best-effort: missing snapshot is fine; the orchestrator can");
+                // Best-effort: missing snapshot is fine; the orchestrator can
+                // still answer general questions from session memory.
+            }
         }
 
         // Per-turn refresh of the user's CLI / model defaults. The boot

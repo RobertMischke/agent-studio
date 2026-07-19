@@ -15,6 +15,9 @@ public static class HumanReviewEscalationCategories
     public const string EnvironmentBlocker = "environment-blocker";
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
+    /// <summary>A task worktree remained locked after bounded cleanup retries.
+    /// The busy path is included in the escalation reason for operator action.</summary>
+    public const string WorktreeBlocked = "worktree-blocked";
     public const string EmptyFastExit = "empty-fast-exit";
 
     /// <summary>The agent CLI process died hard (exitCode &lt; 0) before it could
@@ -58,6 +61,13 @@ public static class HumanReviewEscalationCategories
     /// AGT-1945/1929/1930).</summary>
     public const string CliLaunchFailed = "cli-launch-failed";
 
+    /// <summary>The agent CLI could not launch because its OAuth session expired
+    /// and the token refresh failed. Non-retryable and shared across every
+    /// parallel run, so the orchestrator STOPS immediately (breaker) and escalates
+    /// with a re-auth instruction instead of burning further launches - the
+    /// AGT-2066 token-roulette signature (17 cards drained on 2026-07-10).</summary>
+    public const string AuthRefreshFailed = "auth-refresh-failed";
+
     /// <summary>The run could not be mapped to a terminal verdict, but it left
     /// files in <c>results/</c>. Routed to human review WITH a "there is partial
     /// work to inspect" hint rather than a bare inconclusive park, so a reviewer
@@ -83,7 +93,7 @@ public static class HumanReviewEscalationCategories
     /// Slice B, concept Rule 2) and the answer was not derivable from the task
     /// context. Routed to 5e-escalated with a clear reason instead of waiting
     /// indefinitely (belegt 2062/2067/2068, 2026-07-10).</summary>
-    public const string SteerTimeout = "steer-timeout";
+    public const string SteerUnanswered = "steer-unanswered";
 
     /// <summary>Retroactive category for cards parked in 5-human-review before
     /// the escalation funnel existed (boot-time backfill).</summary>

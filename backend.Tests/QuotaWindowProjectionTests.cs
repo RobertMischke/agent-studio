@@ -135,4 +135,86 @@ public sealed class QuotaWindowProjectionTests
         };
         Assert.Null(QuotaWindowProjection.EvaluateProjectedBreach(snapshot, Caps(), Now));
     }
+
+    [Fact]
+    public void AgT2107_Honest1209Snapshot_ProjectsAbout24Pct()
+    {
+        var now = new DateTime(2026, 7, 11, 12, 9, 0, DateTimeKind.Utc);
+        var window = new QuotaWindow
+        {
+            Label = "5-hour", UsedPct = 19,
+            ResetAt = new DateTime(2026, 7, 11, 13, 14, 0, DateTimeKind.Utc),
+        };
+
+        var projection = QuotaWindowProjection.Project(window, now, capPct: 95);
+
+        Assert.NotNull(projection);
+        Assert.Equal(0.783, projection!.ElapsedFraction!.Value, precision: 3);
+        Assert.Equal(24.3, projection.ProjectedUsedPct, precision: 1);
+        Assert.False(projection.BreachesBeforeReset);
+    }
+
+    [Fact]
+    public void AgT2107_PoisonedResetConflictsWithObservedStart_SuspendsProjection()
+    {
+        var now = new DateTime(2026, 7, 11, 12, 9, 0, DateTimeKind.Utc);
+        var observedStart = new DateTime(2026, 7, 11, 8, 14, 0, DateTimeKind.Utc);
+        var snapshot = new QuotaSnapshot
+        {
+            CliType = "codex",
+            Windows =
+            {
+                new QuotaWindow
+                {
+                    Label = "5-hour", UsedPct = 19, ResetAt = now.AddHours(4),
+                    ObservedStartAt = observedStart,
+                },
+            },
+        };
+
+        Assert.Null(QuotaWindowProjection.Project(snapshot.Windows[0], now, capPct: 95));
+        Assert.Null(QuotaWindowProjection.EvaluateProjectedBreach(snapshot, Caps(), now));
+        var warning = Assert.IsType<QuotaProjectionWarning>(QuotaWindowProjection.FindWarning(snapshot, now));
+        Assert.Contains("observed window start", warning.Reason);
+        Assert.Equal(observedStart, warning.AssumedStartAt);
+    }
+
+    [Fact]
+    public void AgT2107_AbsurdFiveXProjectionNearStart_IsWarningNotBreach()
+    {
+        var now = new DateTime(2026, 7, 11, 12, 9, 0, DateTimeKind.Utc);
+        var snapshot = new QuotaSnapshot
+        {
+            CliType = "codex",
+            Windows = { new QuotaWindow { Label = "5-hour", UsedPct = 19, ResetAt = now.AddHours(4) } },
+        };
+
+        Assert.Null(QuotaWindowProjection.EvaluateProjectedBreach(snapshot, Caps(), now));
+        var warning = Assert.IsType<QuotaProjectionWarning>(QuotaWindowProjection.FindWarning(snapshot, now));
+        Assert.Equal(0.2, warning.ElapsedFraction, precision: 3);
+        Assert.Equal(95, warning.ProjectedUsedPct, precision: 1);
+        Assert.Contains("ratio exceeds 4", warning.Reason);
+    }
+
+    [Fact]
+    public void AnchorWindowStarts_ResetMovesBeforeObservedReset_MarksCandidateSuspicious()
+    {
+        var now = new DateTime(2026, 7, 11, 12, 9, 0, DateTimeKind.Utc);
+        var previous = new QuotaSnapshot
+        {
+            CliType = "codex",
+            Windows = { new QuotaWindow { Label = "5-hour", UsedPct = 18, ResetAt = now.AddHours(1.083333) } },
+        };
+        var candidate = new QuotaSnapshot
+        {
+            CliType = "codex",
+            Windows = { new QuotaWindow { Label = "5-hour", UsedPct = 19, ResetAt = now.AddHours(4) } },
+        };
+
+        var anchored = QuotaWindowProjection.AnchorWindowStarts(previous, candidate, now);
+
+        Assert.Equal(previous.Windows[0].ResetAt!.Value.AddHours(-5), anchored.Windows[0].ObservedStartAt);
+        Assert.Contains("resetAt moved", anchored.Windows[0].ProjectionSuspiciousReason);
+        Assert.Null(QuotaWindowProjection.Project(anchored.Windows[0], now, capPct: 95));
+    }
 }

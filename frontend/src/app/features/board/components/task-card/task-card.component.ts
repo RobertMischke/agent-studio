@@ -226,7 +226,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
   ngOnDestroy(): void { this.stopPolling?.(); }
 
-  phaseBadge() { return buildPhaseBadge(this.job().phase, this.job().steerPendingSince, nowTick()); }
+  phaseBadge() { return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, nowTick()); }
 
   executionBadge() { return buildExecutionBadge(this.job()); }
 
@@ -420,9 +420,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return verdict ? verdict.replace(/-/g, ' ') : null;
   }
 
-  readonly isRunning = computed(() =>
-    this.job().state === TaskState.Progress && this.job().execution?.status === 'running'
-  );
+  readonly isRunning = computed(() => this.job().state === TaskState.Progress
+    && (this.job().execution?.status === 'running' || this.job().runner != null));
 
   /**
    * DtC step 6 CooldownRetry banner. Non-null only while a 3-progress card is

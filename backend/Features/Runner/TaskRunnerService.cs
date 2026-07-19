@@ -45,6 +45,8 @@ public class TaskRunnerService : BackgroundService
     private readonly IntegrationLeaseService? _integrationLeases;
     private readonly TimelineLog? _timeline;
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
+    private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     // Forwarded to each ProjectRunner. DI injects the registered singleton; the
     // step is default-OFF per project, so a wired-but-disabled step changes
     // nothing. Null only when a test fixture builds the service directly.
@@ -75,6 +77,7 @@ public class TaskRunnerService : BackgroundService
     // surfaced (the card falls back to the plain local-run presentation).
     private readonly RunLeaseService? _runLeases;
     private readonly RunnerIdentity? _runnerIdentity;
+    private readonly ILoadThrottleGate? _loadThrottle;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -132,7 +135,10 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
         RunLeaseService? runLeases = null,
         RunnerIdentity? runnerIdentity = null,
-        CliQuotaFallbackService? quotaFallback = null)
+        CliQuotaFallbackService? quotaFallback = null,
+        ILoadThrottleGate? loadThrottle = null,
+        AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
+        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null)
     {
         _config = config;
         _logger = logger;
@@ -149,6 +155,7 @@ public class TaskRunnerService : BackgroundService
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
         _quotaFallback = quotaFallback;
+        _loadThrottle = loadThrottle;
         _chatLog = chatLog;
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
@@ -164,6 +171,8 @@ public class TaskRunnerService : BackgroundService
         _integrationLeases = integrationLeases;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
+        _modelQualification = modelQualification;
+        _integrationPushQueue = integrationPushQueue;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
         _keepAwake = keepAwake;
@@ -336,7 +345,10 @@ public class TaskRunnerService : BackgroundService
                 postAbortReview: _postAbortReview,
                 sessionInspector: _sessionInspector,
                 orchestratorDefaults: _orchestratorDefaults,
-                quotaFallback: _quotaFallback);
+                quotaFallback: _quotaFallback,
+                loadThrottle: _loadThrottle,
+                modelQualification: _modelQualification,
+                integrationPushQueue: _integrationPushQueue);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -973,21 +985,98 @@ public class TaskRunnerService : BackgroundService
     }
 
     /// <summary>
-    /// Sweeps every project runner's defensive
-    /// <see cref="ProjectRunner.ReconcileActiveJobAgainstDisk"/>. Cheap when
-    /// no project has an active-job latch held; one disk scan per project
-    /// otherwise. Wired off <see cref="TaskWatcherService.OnJobChanged"/> so
-    /// non-API folder changes (external scripts, hand edits, boot-time
-    /// stuck-folder sweep) get reconciled within the watcher's debounce
-    /// interval rather than waiting for the next 5 s pickup tick.
+    /// Reconciles only the project whose watch tree emitted the change. The
+    /// runner inspects its captured active task folder directly, avoiding the
+    /// global task-index lookup that used to run synchronously on every watcher
+    /// event.
     /// </summary>
-    public void ReconcileAllRunners()
+    public void ReconcileRunnerForPath(string changedPath)
     {
         foreach (var runner in _runners.Values)
         {
+            if (!PathIsUnder(runner.Entry.Path, changedPath)) continue;
             try { runner.ReconcileActiveJobAgainstDisk(); }
             catch (Exception ex) { _logger.LogDebug(ex, "Reconcile failed for runner {Project}", runner.ProjectName); }
+            return;
         }
+    }
+
+    private static bool PathIsUnder(string root, string path)
+    {
+        try
+        {
+            var relative = Path.GetRelativePath(root, path);
+            return relative != "."
+                   && !Path.IsPathRooted(relative)
+                   && !relative.Split(
+                           [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                           StringSplitOptions.RemoveEmptyEntries)
+                       .Any(part => part == "..");
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Activates a runner for a project created after host startup. This is
+    /// intentionally idempotent so POST retries cannot duplicate pickup loops.
+    /// </summary>
+    public bool EnsureRunner(WatchPathEntry rawEntry)
+    {
+        if (_runners.ContainsKey(rawEntry.Name)) return true;
+
+        var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
+        var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
+            ? rawEntry
+            : rawEntry with { RootPath = registryRootPath };
+        if (string.IsNullOrWhiteSpace(entry.RootPath) || !Directory.Exists(entry.RootPath))
+        {
+            _logger.LogInformation(
+                "runner-activation-skipped project={Project} reason=root-path-unavailable root={RootPath}",
+                entry.Name, entry.RootPath);
+            return false;
+        }
+
+        var runner = new ProjectRunner(
+            entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService,
+            _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner,
+            _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git,
+            _pickupFailures, _infraBreaker, _taskAccess, _bus,
+            role: Role,
+            pickupLock: _pickupLock,
+            pickupLockOwner: BuildPickupLockOwner(entry.Name),
+            integrationLeases: _integrationLeases,
+            timeline: _timeline,
+            pipelineLog: _pipelineLog,
+            humanReviewEscalation: _humanReviewEscalation,
+            postAbortReview: _postAbortReview,
+            sessionInspector: _sessionInspector,
+            orchestratorDefaults: _orchestratorDefaults,
+            quotaFallback: _quotaFallback,
+            loadThrottle: _loadThrottle);
+        runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
+        runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
+        runner.ConfigureStuckLoopBudget(LoadStuckLoopBudget(_config));
+        runner.OnStatusChanged += status =>
+        {
+            try { OnRunnerStatusChanged?.Invoke(entry.Name, status); }
+            catch (Exception ex) { _logger.LogWarning(ex, "OnRunnerStatusChanged subscriber threw for {Project}", entry.Name); }
+        };
+        runner.OnModePersist += (mode, source) => _projectSettings.SetRunnerMode(entry.Name, mode, source);
+
+        if (!_runners.TryAdd(entry.Name, runner)) return true;
+        var saved = _projectSettings.Get(entry.Name);
+        var savedMode = string.IsNullOrWhiteSpace(saved.DesiredRunnerMode) ? saved.RunnerMode : saved.DesiredRunnerMode;
+        if (!string.IsNullOrWhiteSpace(savedMode) && savedMode != "manual") runner.RestoreMode(savedMode!);
+        _logger.LogInformation("runner-activated project={Project} root={RootPath}", entry.Name, entry.RootPath);
+        _ = Task.Run(async () =>
+        {
+            try { await runner.BootOrchestratorSessionAsync(CancellationToken.None); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Orchestrator boot failed for {Project}", entry.Name); }
+        });
+        return true;
     }
 
     public bool StartRunner(string projectName)

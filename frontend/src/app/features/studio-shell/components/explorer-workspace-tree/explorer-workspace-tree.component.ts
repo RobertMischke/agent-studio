@@ -35,6 +35,8 @@ import {
   type ProjectPulseState,
 } from '../../studio-shell.pulse';
 import { ExplorerAutoPulseComponent } from '../explorer-auto-pulse/explorer-auto-pulse.component';
+import type { WorkbenchListItem } from '../../../../models/project-docs.model';
+import { ExplorerWorkbenchListComponent } from '../explorer-workbench-list/explorer-workbench-list.component';
 
 /** Flat project row as computed by the shell (`ProjectSidebarRow`). */
 export interface ExplorerProjectRow {
@@ -62,7 +64,6 @@ export interface ExplorerProjectNode extends ExplorerProjectRow {
   urls: readonly RegistryProjectUrl[]; // configured URLs → extra child rows
 }
 
-/** One workspace folder and the project rows that belong to it. */
 export interface ExplorerWorkspaceGroup {
   id: string;
   displayName: string;
@@ -70,7 +71,7 @@ export interface ExplorerWorkspaceGroup {
   projects: ExplorerProjectNode[];
 }
 
-export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'epics';
+export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'workbench' | 'epics';
 function folderTail(path: string): string {
   const parts = path.split(/[\\/]+/).filter(Boolean);
   return parts.length ? parts[parts.length - 1] : path;
@@ -94,7 +95,7 @@ function normalizeStorage(path: string): string {
 @Component({
   selector: 'app-explorer-workspace-tree',
   standalone: true,
-  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent, ExplorerAutoPulseComponent, ExplorerLaneDashboardComponent],
+  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent, ExplorerAutoPulseComponent, ExplorerLaneDashboardComponent, ExplorerWorkbenchListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './explorer-workspace-tree.component.html',
@@ -123,11 +124,9 @@ export class ExplorerWorkspaceTreeComponent {
   readonly openHubRequest = output<string>();
   /** AGT-2067 — open a URL row's embedded preview tab (project + url id). */
   readonly openUrlPreviewRequest = output<{ projectName: string; urlId: string }>();
-  /** Open the project's Project Hub deep-linked to its Wiki rail. */
   readonly openWikiRequest = output<string>();
-  /** Project-scoped epic overview open for the named project (ASS-658). */
+  readonly openWorkbenchRequest = output<{ projectName: string; workbench: WorkbenchListItem }>();
   readonly openEpicsRequest = output<string>();
-  /** Open the project onboarding modal preselected to this workspace. */
   readonly onboardProjectRequest = output<string>();
   /** Open the create-workspace dialog from the Workspaces section header. */
   readonly onboardWorkspaceRequest = output<void>();
@@ -213,6 +212,7 @@ export class ExplorerWorkspaceTreeComponent {
   }
 
   readonly totalProjectCount = computed(() => this.projectRows().length);
+
 
   readonly groups = computed<ExplorerWorkspaceGroup[]>(() => {
     const rows = this.projectRows();

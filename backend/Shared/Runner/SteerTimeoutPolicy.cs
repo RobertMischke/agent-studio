@@ -5,8 +5,8 @@ namespace AgentStudio.Shared;
 /// (see <c>docs/concepts/run-liveness-and-slot-semantics.md</c>, Rule 2).
 /// Answers one question for a single <c>3-progress</c> card that is waiting on
 /// an unanswered steer / <c>[[TASK_NEEDS_INPUT]]</c> question: given how long it
-/// has waited, its configured timeout, whether a human is attending it, and
-/// whether the task context yields an unambiguous answer, what must the runner
+/// has waited, its configured timeout, and whether the task context yields an
+/// unambiguous answer, what must the runner
 /// do so that <b>no steered card waits indefinitely</b>?
 ///
 /// <para>
@@ -28,7 +28,7 @@ namespace AgentStudio.Shared;
 ///   <see cref="SteerTimeoutReasons.AutoAnswered"/>.</item>
 ///   <item><b>Ambiguous</b> (no confident answer): route the card to a normal
 ///   <c>blocked</c> escalation with a clear reason, reason
-///   <see cref="SteerTimeoutReasons.BlockedAmbiguous"/> - never an endless
+///   <see cref="SteerTimeoutReasons.SteerUnanswered"/> - never an endless
 ///   wait.</item>
 /// </list>
 /// </para>
@@ -48,19 +48,6 @@ public static class SteerTimeoutPolicy
     /// </summary>
     public static SteerTimeoutDecision Decide(SteerTimeoutFacts facts)
     {
-        // A human is attending this wait (the project is in a manual mode, or a
-        // person is otherwise at the wheel). A manual-mode NeedsInput card
-        // legitimately blocks on a human answer, so the automatic timeout must
-        // not fire - never auto-answer or escalate a question someone chose to
-        // answer themselves. This matches the existing "manual-mode NeedsInput
-        // legitimately stays in progress" behaviour.
-        if (facts.Attended)
-            return new SteerTimeoutDecision(
-                SteerTimeoutAction.KeepWaiting,
-                SteerTimeoutReasons.AttendedWait,
-                null,
-                "a human is attending this wait (manual mode); the automatic steer-timeout does not apply");
-
         // Still inside the bounded wait. The card shows its "waiting for answer
         // since mm:ss" pill; the caller re-checks on the next sweep. The
         // boundary is inclusive (>= timeout acts) so a card cannot sit forever
@@ -83,7 +70,7 @@ public static class SteerTimeoutPolicy
 
         return new SteerTimeoutDecision(
             SteerTimeoutAction.RouteBlocked,
-            SteerTimeoutReasons.BlockedAmbiguous,
+            SteerTimeoutReasons.SteerUnanswered,
             null,
             string.IsNullOrWhiteSpace(facts.AmbiguityReason)
                 ? $"steer unanswered for {facts.SecondsWaiting:F0}s (> {facts.TimeoutSeconds:F0}s) and the answer is not derivable from the task context; routing to blocked + human escalation rather than waiting indefinitely"
@@ -96,18 +83,12 @@ public static class SteerTimeoutPolicy
 /// caller from durable on-disk state (the steer-pending marker) plus the
 /// resolver's verdict, so the policy stays a pure function.
 /// </summary>
-/// <param name="Attended">
-/// True when a human is attending the wait (the project runner is in a manual
-/// mode). An attended wait is never auto-resolved - the timeout applies only to
-/// unattended auto-mode runs, which are the ones that hang overnight.
-/// </param>
 /// <param name="SecondsWaiting">Seconds since the steer question started waiting (marker <c>WaitStartedAt</c>).</param>
 /// <param name="TimeoutSeconds">The bounded wait this card is allowed before the timeout fires. Default 120s; per-card / config override.</param>
 /// <param name="HasConfidentAutoAnswer">True when the resolver produced an unambiguous answer from prompt.md / the task context.</param>
 /// <param name="AutoAnswerText">The answer to feed back as a Continue when <paramref name="HasConfidentAutoAnswer"/>.</param>
 /// <param name="AmbiguityReason">Optional human reason why no confident answer was found (surfaced in the blocked escalation).</param>
 public sealed record SteerTimeoutFacts(
-    bool Attended,
     double SecondsWaiting,
     double TimeoutSeconds,
     bool HasConfidentAutoAnswer,
@@ -124,7 +105,7 @@ public sealed record SteerTimeoutDecision(
 /// <summary>The three possible steer-timeout verdicts for a waiting <c>3-progress</c> card.</summary>
 public enum SteerTimeoutAction
 {
-    /// <summary>Still inside the bounded wait (or attended); leave it, re-check next sweep.</summary>
+    /// <summary>Still inside the bounded wait; leave it, re-check next sweep.</summary>
     KeepWaiting,
     /// <summary>Timed out and the answer is unambiguous: feed it back as a Continue so the run resumes.</summary>
     AutoAnswer,
@@ -135,12 +116,10 @@ public enum SteerTimeoutAction
 /// <summary>Stable taxonomy codes carried on a <see cref="SteerTimeoutDecision"/> and in the audit log / timeline.</summary>
 public static class SteerTimeoutReasons
 {
-    /// <summary>A human is attending the wait (manual mode); the timeout does not apply.</summary>
-    public const string AttendedWait = "attended-wait";
     /// <summary>Still inside the bounded steer wait; card keeps its "waiting for answer" pill.</summary>
     public const string WithinTimeout = "within-timeout";
     /// <summary>Timed out; the answer was unambiguous and auto-fed as a Continue.</summary>
     public const string AutoAnswered = "auto-answered";
     /// <summary>Timed out; no confident answer, routed to blocked + human escalation.</summary>
-    public const string BlockedAmbiguous = "blocked-ambiguous";
+    public const string SteerUnanswered = "steer-unanswered";
 }

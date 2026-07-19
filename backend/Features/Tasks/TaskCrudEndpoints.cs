@@ -179,9 +179,16 @@ public static class TaskCrudEndpoints
         // archived card renders. Query: watchPath (optional project filter),
         // offset/limit (paging), search (case-insensitive title/key/id), and
         // includeFixtures (default false, mirroring the board endpoints).
-        group.MapGet("/archive", (string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures,
-            TaskScannerService scanner, ILoggerFactory loggerFactory) =>
+        group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures,
+            TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, ILoggerFactory loggerFactory) =>
         {
+            var projectRequested = !string.IsNullOrWhiteSpace(project);
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            // A project-scoped archive must never degrade to the workspace-wide
+            // archive when a UI sends an unknown/stale handle. That leak made a
+            // Token Economy tab display Agent Studio's 1,000+ archived cards.
+            if (projectRequested && string.IsNullOrWhiteSpace(watchPath))
+                return Results.NotFound(new { error = $"Unknown project '{project}'" });
             var logger = loggerFactory.CreateLogger("TaskArchiveEndpoint");
             var sw = Stopwatch.StartNew();
             var all = scanner.ScanArchivedJobs();
@@ -240,8 +247,9 @@ public static class TaskCrudEndpoints
             });
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
+        group.MapGet("/{jobId}", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var detail = scanner.GetJobDetail(jobId, watchPath);
             if (detail is null) return Results.NotFound();
             // ASS-1712: an in-progress per-task-worktree task's persisted commits[]
@@ -274,9 +282,10 @@ public static class TaskCrudEndpoints
         // mode=coding, state=1-preparation) that the frontend feeds into the
         // existing create-task modal. The modal stays the single source of
         // truth for create UX; this endpoint only reads. See
-        // docs/research/planning-research-task-kinds-2026-05.md.
-        group.MapGet("/{jobId}/promote-to-coding", (string jobId, string? watchPath, TaskScannerService scanner) =>
+        // docs/concepts/planning-research-task-kinds-2026-05.md.
+        group.MapGet("/{jobId}/promote-to-coding", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info is null) return Results.NotFound();
             if (TaskModes.Normalize(info.Mode) != TaskModes.Planning)
@@ -305,11 +314,13 @@ public static class TaskCrudEndpoints
         // silent slip past the AGT-1915 trap. Writes the app-owned
         // .metadata/planning-closure.json sidecar (never task.json) and returns
         // the recomputed spawn summary so the UI updates without a re-fetch.
-        group.MapPost("/{jobId}/planning-closure", (string jobId, string? watchPath,
+        group.MapPost("/{jobId}/planning-closure", (string jobId, string? project, string? watchPath,
             SetPlanningClosureRequest req,
             TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
             ILoggerFactory loggerFactory) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info is null) return Results.NotFound();
             if (!PlanningCompletionGate.Applies(info.Mode))
@@ -332,10 +343,12 @@ public static class TaskCrudEndpoints
             return Results.Ok(BuildPlanningSpawnSummary(info) ?? new PlanningSpawnSummary());
         });
 
-        group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,
+        group.MapPut("/{jobId}/state", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
             TaskTransitionService transitions,
+            AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
 
@@ -346,10 +359,12 @@ public static class TaskCrudEndpoints
             return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex, cause: TimelineActors.Human("")));
         });
 
-        group.MapPost("/{jobId}/move", async (string jobId, string? watchPath, MoveJobRequest req,
+        group.MapPost("/{jobId}/move", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
             TaskTransitionService transitions,
+            AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
 
@@ -382,11 +397,13 @@ public static class TaskCrudEndpoints
         // forensics row to <workspace>/logs/pickup-failures.jsonl so the
         // dead-letter -> restore lifecycle is reviewable per-slug.
         group.MapPost("/{jobId}/restore-from-failed-pickup",
-            (string jobId, string? watchPath, RestoreFromFailedPickupRequest? req,
+            (string jobId, string? project, string? watchPath, RestoreFromFailedPickupRequest? req,
                 TaskScannerService scanner,
                 TaskStateMachine states,
+                AgentStudio.Registry.ProjectRegistry projects,
                 PickupFailureLog pickupFailures) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var keepDeadLetterSlug = req?.KeepDeadLetterSlug ?? false;
 
             // Capture the project name before the move so the forensics row
@@ -455,8 +472,9 @@ public static class TaskCrudEndpoints
             };
         });
 
-        group.MapDelete("/{jobId}", (string jobId, string? watchPath, TaskStateMachine states) =>
+        group.MapDelete("/{jobId}", (string jobId, string? project, string? watchPath, TaskStateMachine states, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var success = states.DeleteJob(jobId, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
@@ -496,34 +514,42 @@ public static class TaskCrudEndpoints
         // queue with one click. The state machine handles the reorder atomically
         // on disk and preserves the relative position of any other queued
         // jobs that already carry a PendingIntent.
-        group.MapPost("/{jobId}/move-to-top", (string jobId, string? watchPath, TaskStateMachine states) =>
+        group.MapPost("/{jobId}/move-to-top", (string jobId, string? project, string? watchPath, TaskStateMachine states, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var position = states.PromoteToReadyTop(jobId, watchPath);
             return position == 0 ? Results.NotFound() : Results.Ok(new { position });
         });
 
-        group.MapPost("/{jobId}/change-project", (string jobId, string? watchPath, ChangeProjectRequest req, TaskStateMachine states) =>
+        group.MapPost("/{jobId}/change-project", (string jobId, string? project, string? watchPath, ChangeProjectRequest req, TaskStateMachine states, AgentStudio.Registry.ProjectRegistry projects) =>
         {
-            var success = states.ChangeProject(jobId, req.TargetWatchPath, watchPath);
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            // The target project is likewise addressable by a path-free handle;
+            // resolve it so a caller can move a task with {"targetProject":"ASS"}.
+            var targetWatchPath = ResolveWatchPath(projects, req.TargetProject, req.TargetWatchPath);
+            var success = states.ChangeProject(jobId, targetWatchPath, watchPath);
             return success ? Results.Ok() : Results.BadRequest("Failed to change project");
         });
 
-        group.MapPut("/{jobId}/model", (string jobId, string? watchPath, SetJobModelRequest req, TaskMutationService mutations) =>
+        group.MapPut("/{jobId}/model", (string jobId, string? project, string? watchPath, SetJobModelRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var success = mutations.SetJobModel(jobId, req?.Model, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPut("/{jobId}/thinking-level", (string jobId, string? watchPath, SetJobThinkingLevelRequest req, TaskMutationService mutations) =>
+        group.MapPut("/{jobId}/thinking-level", (string jobId, string? project, string? watchPath, SetJobThinkingLevelRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var success = mutations.SetJobThinkingLevel(jobId, req?.ThinkingLevel, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPut("/{jobId}/cli-type", (string jobId, string? watchPath, SetJobCliTypeRequest req, TaskMutationService mutations) =>
+        group.MapPut("/{jobId}/cli-type", (string jobId, string? project, string? watchPath, SetJobCliTypeRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             if (req is null || !CliTypes.IsValid(req.CliType))
                 return Results.BadRequest(new { error = $"cliType must be one of {string.Join(", ", CliTypes.All)}" });
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var ok = mutations.SetJobCliType(jobId, req.CliType, watchPath);
             if (!ok) return Results.NotFound();
             if (req.UseOwnSession.HasValue)
@@ -535,25 +561,28 @@ public static class TaskCrudEndpoints
         // Body { epicId }: null or empty detaches. (Way 1 is CreateTaskRequest.EpicId
         // at create time; way 3 is an epic's decomposition run creating sub-tasks
         // with epicId via the create path.)
-        group.MapPut("/{jobId}/epic", (string jobId, string? watchPath, SetJobEpicRequest req, TaskMutationService mutations) =>
+        group.MapPut("/{jobId}/epic", (string jobId, string? project, string? watchPath, SetJobEpicRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var ok = mutations.SetJobEpic(jobId, req?.EpicId, watchPath);
             return ok ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPut("/{jobId}/title", (string jobId, string? watchPath, SetJobTitleRequest req, TaskMutationService mutations) =>
+        group.MapPut("/{jobId}/title", (string jobId, string? project, string? watchPath, SetJobTitleRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             if (req is null || string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest(new { error = "Title is required" });
 
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var success = mutations.SetJobTitle(jobId, req.Title, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPut("/{jobId}/task-type", (string jobId, string? watchPath, SetJobTaskTypeRequest req, TaskMutationService mutations) =>
+        group.MapPut("/{jobId}/task-type", (string jobId, string? project, string? watchPath, SetJobTaskTypeRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             if (req is null || string.IsNullOrWhiteSpace(req.TaskType))
                 return Results.BadRequest(new { error = "taskType is required" });
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var success = mutations.SetJobTaskType(jobId, req.TaskType, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
@@ -562,8 +591,9 @@ public static class TaskCrudEndpoints
         // the job. Empty list clears tags. Unknown ids are accepted (the
         // registry may evolve out from under a job); ghost rendering is the
         // FE's responsibility.
-        group.MapPut("/{jobId}/tags", (string jobId, string? watchPath, SetJobTagsRequest req, TaskMutationService mutations) =>
+        group.MapPut("/{jobId}/tags", (string jobId, string? project, string? watchPath, SetJobTagsRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var success = mutations.SetJobTags(jobId, req?.Tags ?? new List<string>(), watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
@@ -576,9 +606,10 @@ public static class TaskCrudEndpoints
         // unknown key is NOT a hard failure (AGT-2029): the waits-on target may
         // be created later, so the write persists and the unknown edges come
         // back as `warnings` for the FE to surface as an open dependency chip.
-        group.MapPut("/{jobId}/references", (string jobId, string? watchPath, SetTaskReferencesRequest req,
-            TaskScannerService scanner, TaskMutationService mutations) =>
+        group.MapPut("/{jobId}/references", (string jobId, string? project, string? watchPath, SetTaskReferencesRequest req,
+            TaskScannerService scanner, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound();
 
@@ -620,9 +651,10 @@ public static class TaskCrudEndpoints
         // supersedes). Drives the detail-view "referenced by" list and the
         // "show dependents of X" board filter. A keyless task (pre-F33) can
         // never be referenced, so it returns an empty list.
-        group.MapGet("/{jobId}/dependents", (string jobId, string? watchPath, string? kind,
-            TaskScannerService scanner) =>
+        group.MapGet("/{jobId}/dependents", (string jobId, string? project, string? watchPath, string? kind,
+            TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound();
             if (string.IsNullOrWhiteSpace(info.Key))

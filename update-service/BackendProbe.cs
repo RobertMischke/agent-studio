@@ -47,6 +47,21 @@ public sealed class BackendProbe : IBackendProbe
         return r.Ok;
     }
 
+    public async Task<RuntimeVersion?> ReadRuntimeVersionAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(2));
+            return await _http.GetFromJsonAsync<RuntimeVersion>($"{_baseUrl}/api/system/version", cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Runtime version probe failed");
+            return null;
+        }
+    }
+
     public async Task<bool> WaitForHealthyAsync(TimeSpan timeout, CancellationToken ct = default)
     {
         var deadline = DateTime.UtcNow + timeout;

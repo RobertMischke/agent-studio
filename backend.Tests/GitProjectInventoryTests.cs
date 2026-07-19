@@ -85,6 +85,9 @@ public class GitProjectInventoryTests : IDisposable
 
         // Back on main so task/42 is free to be checked out in the worktree.
         RunGit(repoRoot, "checkout", "-q", "main");
+        // Operational safety refs can be numerous in a long-lived repository.
+        // They must not enter the user-facing branch inventory scan.
+        RunGit(repoRoot, "update-ref", "refs/backups/task-42", "task/42");
         var worktreePath = Path.Combine(_tempDir, "worktrees", "task-42");
         Directory.CreateDirectory(Path.GetDirectoryName(worktreePath)!);
         RunGit(repoRoot, "worktree", "add", worktreePath, "task/42");
@@ -104,6 +107,7 @@ public class GitProjectInventoryTests : IDisposable
         Assert.Equal("develop", byName["develop"].Category);
         Assert.Equal("feature", byName["feature/login"].Category);
         Assert.Equal("task", byName["task/42"].Category);
+        Assert.DoesNotContain(inv.Branches, b => b.Name.Contains("backups", StringComparison.Ordinal));
         Assert.True(byName["main"].IsCurrent);
         Assert.False(byName["task/42"].IsCurrent);
         Assert.All(inv.Branches, b => Assert.False(string.IsNullOrWhiteSpace(b.TipShortSha)));

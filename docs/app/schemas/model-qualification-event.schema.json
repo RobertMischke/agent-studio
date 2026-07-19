@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/model-qualification-event.schema.json",
+  "title": "ModelQualificationEvent",
+  "description": "One decision or outcome row in a task's model-qualification.jsonl benchmark stream.",
+  "type": "object",
+  "required": ["at", "event", "jobId", "project"],
+  "properties": {
+    "at": { "type": "string", "format": "date-time", "description": "UTC event time." },
+    "event": { "type": "string", "enum": ["decision", "outcome"], "description": "Row discriminator." },
+    "decisionId": { "type": "string", "description": "Unique qualification decision id." },
+    "jobId": { "type": "string", "description": "Task slug." },
+    "project": { "type": "string", "description": "Project name." },
+    "cliType": { "type": "string", "description": "Primary CLI whose live catalogue was ranked." },
+    "taskType": { "type": "string", "description": "Structural task type." },
+    "surface": { "type": "string", "description": "Affected product surface classification." },
+    "complexity": { "type": "string", "enum": ["small", "medium", "large"], "description": "Qualified complexity." },
+    "score": { "type": "integer", "description": "Deterministic classification score." },
+    "recommendedModel": { "type": "string", "description": "Model recommended from the live ladder." },
+    "recommendedThinkingLevel": { "type": ["string", "null"], "description": "Recommended reasoning level." },
+    "selectedModel": { "type": "string", "description": "Effective input selection after card overrides." },
+    "selectedThinkingLevel": { "type": ["string", "null"], "description": "Effective reasoning level after overrides." },
+    "selectionSource": { "type": "string", "enum": ["qualification", "task-override"], "description": "Why the effective pair won." },
+    "estimatedSavingsPercent": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Heuristic saving versus the top live rung." },
+    "reason": { "type": "string", "description": "Human-readable rationale shown in the pipeline." },
+    "catalogueSource": { "type": "string", "description": "CLI catalogue provenance." },
+    "model": { "type": ["string", "null"], "description": "Model actually used by CORE." },
+    "thinkingLevel": { "type": ["string", "null"], "description": "Reasoning level actually used by CORE." },
+    "status": { "type": "string", "description": "CORE run status." },
+    "verdict": { "type": ["string", "null"], "description": "Reconciled CORE verdict." },
+    "inputTokens": { "type": "integer", "minimum": 0, "description": "Actual input tokens." },
+    "outputTokens": { "type": "integer", "minimum": 0, "description": "Actual output tokens." },
+    "cacheReadTokens": { "type": "integer", "minimum": 0, "description": "Actual cache-read tokens." },
+    "cacheCreationTokens": { "type": "integer", "minimum": 0, "description": "Actual cache-creation tokens." },
+    "attempt": { "type": "integer", "minimum": 1, "description": "Pipeline attempt for the outcome." }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event": { "const": "decision" } } },
+      "then": { "required": ["decisionId", "cliType", "taskType", "surface", "complexity", "score", "recommendedModel", "selectedModel", "selectionSource", "estimatedSavingsPercent", "reason", "catalogueSource"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "outcome" } } },
+      "then": { "required": ["status", "inputTokens", "outputTokens", "cacheReadTokens", "cacheCreationTokens", "attempt"] }
+    }
+  ],
+  "additionalProperties": false
+}

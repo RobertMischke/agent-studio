@@ -1,30 +1,26 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
-import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
-import type { CliType } from '../../../../models/task.model';
-import type { ProjectSourceDescriptor, ProjectSourceType } from '../../../../models/task.model';
+import { PendingButtonDirective } from '../../../../components/async-feedback';
+import { ProjectBasicsFormComponent } from '../../../../components/project-basics-form';
+import type { CliType, RegistryWorkspaceListItem } from '../../../../models/task.model';
+import {
+  PROJECT_COLOR_SWATCHES,
+  projectBasicsAreValid,
+  validateProjectBasics,
+  type ProjectBasicsValue,
+} from '../../../../models/project-basics.model';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 import { WorkspaceManagerService } from '../../state/workspace-manager.service';
-
-const COLORS = ['#569cd6', '#4ec9b0', '#c586c0', '#d97757', '#f59e0b', '#8b5cf6'];
-
-function deriveCode(value: string): string {
-  const words = value.trim().split(/[^A-Za-z0-9]+/).filter(Boolean);
-  if (words.length === 0) return '';
-  const seed = words.length === 1
-    ? words[0].slice(0, 3)
-    : words.slice(0, 3).map(w => w[0]).join('');
-  return seed.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-}
+import { RemoteHostsService } from '../../../remote-hosts';
 
 @Component({
   selector: 'app-onboard-project-dialog',
   standalone: true,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent],
+  imports: [FormsModule, DialogComponent, ProjectBasicsFormComponent, PendingButtonDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './onboard-project-dialog.component.html',
   styleUrl: './onboard-project-dialog.component.scss',
@@ -34,69 +30,65 @@ export class OnboardProjectDialogComponent {
   private readonly tasks = inject(TaskService);
   private readonly notifications = inject(NotificationService);
   private readonly catalog = inject(CliCatalogStore);
+  readonly hostRegistry = inject(RemoteHostsService);
 
-  readonly swatches = COLORS;
   readonly workspaceId = signal('');
   readonly displayName = signal('');
   readonly shortCode = signal('');
-  readonly userEditedCode = signal(false);
   readonly cliDefault = signal<CliType>('claude');
   readonly modelDefault = signal('');
-  readonly color = signal(COLORS[0]);
-  /**
-   * Optional CLI working directory. Without this, the project has no
-   * auto-pickup runner until someone sets it later - the mode toggle then
-   * fails with a "no RootPath configured" error instead of "unknown
-   * project", but only once RunnerEndpoints knows to say so (see the
-   * 2026-07-05 "Agent Studio" incident).
-   */
+  readonly color = signal<string>(PROJECT_COLOR_SWATCHES[0]);
+  readonly repositoryPath = signal('');
   readonly rootPath = signal('');
-  readonly sourceType = signal<ProjectSourceType>('local-folder');
-  readonly projectSources = signal<readonly ProjectSourceDescriptor[]>([]);
+  readonly repositoryUrl = signal('');
+  readonly executionRunner = signal('local');
   readonly submitting = signal(false);
   readonly errorMsg = signal<string | null>(null);
-  readonly registryWorkspaces = signal<readonly { id: string; displayName: string; projects: readonly unknown[] }[]>([]);
+  readonly registryWorkspaces = signal<readonly RegistryWorkspaceListItem[]>([]);
 
-  @ViewChild('nameInput') private nameInput?: ElementRef<HTMLInputElement>;
+  private readonly form = viewChild(ProjectBasicsFormComponent);
 
   readonly currentWorkspaceName = computed(() => {
-    const id = this.workspaceId();
-    for (const ws of this.registryWorkspaces()) {
-      if (ws.id === id) return ws.displayName;
-    }
-    return id || 'Workspace';
+    const workspace = this.registryWorkspaces().find((item) => item.id === this.workspaceId());
+    return (workspace?.displayName ?? this.workspaceId()) || 'Workspace';
   });
 
+  readonly allProjects = computed(() => this.registryWorkspaces().flatMap((workspace) => workspace.projects));
   readonly models = computed(() => this.catalog.modelsFor(this.cliDefault()));
-  readonly previewProjectId = computed(() => `PROJ-${String(this.registryWorkspaces().flatMap(ws => ws.projects).length + 1).padStart(3, '0')}`);
+  readonly formValue = computed<ProjectBasicsValue>(() => ({
+    workspaceId: this.workspaceId(),
+    displayName: this.displayName(),
+    shortCode: this.shortCode(),
+    color: this.color(),
+    repositoryPath: this.repositoryPath(),
+    rootPath: this.rootPath(),
+    repositoryUrl: this.repositoryUrl(),
+    agentOverrideEnabled: true,
+    cliDefault: this.cliDefault(),
+    modelDefault: this.modelDefault(),
+  }));
   readonly canSubmit = computed(() =>
-    !this.submitting() &&
-    this.workspaceId().trim().length > 0 &&
-    this.displayName().trim().length > 0 &&
-    /^[A-Z][A-Z0-9]{1,5}$/.test(this.shortCode()),
+    !this.submitting()
+    && projectBasicsAreValid(validateProjectBasics(this.formValue(), {
+      workspaces: this.registryWorkspaces(),
+      projects: this.allProjects(),
+    })),
   );
 
   constructor() {
     effect(() => {
       if (!this.manager.onboardProjectOpen()) return;
-      const ws = this.manager.onboardWorkspaceId() ?? '';
-      this.workspaceId.set(ws);
-      this.displayName.set('');
-      this.shortCode.set('');
-      this.userEditedCode.set(false);
-      this.cliDefault.set('claude');
-      this.modelDefault.set('');
-      this.color.set(COLORS[0]);
-      this.rootPath.set('');
-      this.sourceType.set('local-folder');
-      this.errorMsg.set(null);
-      this.tasks.getRegistryWorkspaces().subscribe({
-        next: list => this.registryWorkspaces.set(list ?? []),
+      this.reset(this.manager.onboardWorkspaceId() ?? '');
+      this.tasks.getRegistryWorkspaces({ includeArchived: true }).subscribe({
+        next: (list) => {
+          this.registryWorkspaces.set(list ?? []);
+          if (!this.workspaceId() && list?.length) this.workspaceId.set(list[0].id);
+        },
         error: () => this.registryWorkspaces.set([]),
       });
-      this.tasks.getProjectSources().subscribe({ next: sources => this.projectSources.set(sources), error: () => this.projectSources.set([]) });
       this.catalog.ensure('claude').subscribe({ error: () => void 0 });
-      queueMicrotask(() => this.nameInput?.nativeElement.focus());
+      this.hostRegistry.ensureLoaded();
+      queueMicrotask(() => this.form()?.focusDisplayName());
     });
     effect(() => {
       const cli = this.cliDefault();
@@ -106,61 +98,70 @@ export class OnboardProjectDialogComponent {
     });
   }
 
-  onNameChange(value: string): void {
-    this.displayName.set(value);
-    if (!this.userEditedCode()) this.shortCode.set(deriveCode(value));
-  }
-
-  onCodeChange(value: string): void {
-    this.userEditedCode.set(true);
-    this.shortCode.set(value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6));
-  }
-
-  onAgentCommit(selection: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
-    this.cliDefault.set(selection.cliType);
-    this.modelDefault.set(selection.model);
-  }
-
   onCancel(): void {
     if (!this.submitting()) this.manager.closeProjectOnboard();
   }
 
+  runnerUnavailable(host: { status: string }): boolean {
+    return host.status === 'offline' || host.status === 'draining';
+  }
+
+  runnerLabel(host: { name: string; status: string }): string {
+    return this.runnerUnavailable(host) ? `${host.name} (${host.status})` : host.name;
+  }
+
   onSubmit(): void {
     if (!this.canSubmit()) return;
-    const payload = {
-      workspaceId: this.workspaceId(),
-      sourceType: this.sourceType(),
-      displayName: this.displayName().trim(),
-      shortCode: this.shortCode(),
-      cliDefault: this.cliDefault(),
-      modelDefault: this.modelDefault() || null,
-      color: this.color(),
-      rootPath: this.rootPath().trim() || undefined,
-    };
+    const value = this.formValue();
     this.submitting.set(true);
     this.errorMsg.set(null);
-    this.tasks.createRegistryProject(payload).subscribe({
-      next: project => {
+    this.tasks.createRegistryProject({
+      workspaceId: value.workspaceId.trim(),
+      displayName: value.displayName.trim(),
+      shortCode: value.shortCode.trim().toUpperCase(),
+      cliDefault: value.cliDefault,
+      modelDefault: value.modelDefault.trim() || null,
+      color: value.color,
+      repositoryPath: value.repositoryPath.trim() || undefined,
+      rootPath: value.rootPath.trim() || undefined,
+      repositoryUrl: value.repositoryUrl.trim() || undefined,
+      executionRunner: this.executionRunner() === 'local' ? undefined : this.executionRunner(),
+    }).subscribe({
+      next: (project) => {
         this.submitting.set(false);
         this.notifications.success(`Project "${project.displayName}" created.`);
         this.manager.refreshAfterProjectCreate();
       },
-      error: err => {
+      error: (error) => {
         this.submitting.set(false);
-        const msg = formatError(err);
-        this.errorMsg.set(msg);
-        this.notifications.error(`Could not create project: ${msg}`);
+        const message = formatError(error);
+        this.errorMsg.set(message);
+        this.notifications.error(`Could not create project: ${message}`);
       },
     });
   }
+
+  private reset(workspaceId: string): void {
+    this.workspaceId.set(workspaceId);
+    this.displayName.set('');
+    this.shortCode.set('');
+    this.cliDefault.set('claude');
+    this.modelDefault.set('');
+    this.color.set(PROJECT_COLOR_SWATCHES[0]);
+    this.repositoryPath.set('');
+    this.rootPath.set('');
+    this.repositoryUrl.set('');
+    this.executionRunner.set('local');
+    this.errorMsg.set(null);
+  }
 }
 
-function formatError(err: unknown): string {
-  if (err instanceof HttpErrorResponse) {
-    const body = err.error as { error?: string } | null;
+function formatError(error: unknown): string {
+  if (error instanceof HttpErrorResponse) {
+    const body = error.error as { error?: string } | null;
     if (body?.error) return body.error;
-    if (err.status === 0) return 'Backend unreachable.';
-    return `Create failed (HTTP ${err.status}).`;
+    if (error.status === 0) return 'Backend unreachable.';
+    return `Create failed (HTTP ${error.status}).`;
   }
   return 'Create failed.';
 }

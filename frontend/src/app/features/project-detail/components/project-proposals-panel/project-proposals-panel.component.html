@@ -1,0 +1,180 @@
+<section class="proposals" data-testid="project-proposals-panel">
+  <header class="proposals__header">
+    <div>
+      <p class="proposals__eyebrow">Operator review queue</p>
+      <h2>Project proposals</h2>
+      <p>Measured findings translated into implementation-ready decisions.</p>
+    </div>
+    <div class="proposals__stats" aria-label="Proposal summary">
+      <span><strong>{{ proposedCount() }}</strong> awaiting review</span>
+      <span><strong>{{ items().length }}</strong> total</span>
+      <span><strong>{{ generations() }}</strong> generations</span>
+    </div>
+  </header>
+
+  <div class="proposal-management" aria-label="Proposal management">
+    <button type="button" class="proposal-action proposal-action--primary" data-testid="proposal-new"
+            (click)="generationFormOpen.set(!generationFormOpen())">Generate new proposal</button>
+    <label>Generation
+      <select [value]="generationFilter()" (change)="setGenerationFilter($event)">
+        <option value="all">All generations</option>
+        @for (generation of generationOptions(); track generation) { <option [value]="generation">{{ generation }}</option> }
+      </select>
+    </label>
+    <label>Status
+      <select [value]="statusFilter()" (change)="setStatusFilter($event)">
+        <option value="all">All decisions</option><option value="proposed">Awaiting review</option>
+        <option value="spawned">Card created</option><option value="rejected">Rejected</option>
+      </select>
+    </label>
+    <button type="button" class="proposal-action proposal-action--secondary proposal-management__cleanup"
+            [disabled]="generations() < 2" (click)="removalConfirmation.set('older')">Delete older generations</button>
+  </div>
+
+  @if (generationFormOpen()) {
+    <form class="proposal-compose" data-testid="proposal-generation-form" (submit)="$event.preventDefault(); generateProposal()">
+      <div><strong>Generate a focused proposal</strong><span>The CLI inspects the project read-only and grounds one draft in this topic.</span></div>
+      <label>Topic<input [value]="generationTopic()" (input)="setGenerationTopic($event)" placeholder="e.g. Responsiveness" required /></label>
+      <label>Additional guidance<textarea [value]="generationGuidance()" (input)="setGenerationGuidance($event)" placeholder="Optional constraints or surfaces to inspect"></textarea></label>
+      <div class="proposal-compose__actions">
+        <button type="button" class="proposal-action proposal-action--secondary" (click)="generationFormOpen.set(false)">Cancel</button>
+        <button type="submit" class="proposal-action proposal-action--primary" [appPendingButton]="generating()" pendingLabel="Generating…"><span>Generate proposal</span></button>
+      </div>
+    </form>
+  }
+
+  @if (removalConfirmation() === 'older') {
+    <div class="proposal-confirm" role="alertdialog" aria-label="Delete older proposal generations">
+      <span><strong>Delete all generations older than {{ generationOptions()[0] }}?</strong> Proposal documents and unreferenced evidence will be permanently removed.</span>
+      <button type="button" class="proposal-action proposal-action--secondary" (click)="removalConfirmation.set(null)">Cancel</button>
+      <button type="button" class="proposal-action proposal-action--danger" data-testid="proposal-delete-older-confirm" (click)="removeOlder()">Delete older</button>
+    </div>
+  }
+
+  @if (error()) { <p class="proposals__error" role="alert">{{ error() }}</p> }
+  @if (loading()) {
+    <p class="proposals__empty">Loading proposals...</p>
+  } @else if (!items().length) {
+    <p class="proposals__empty">No proposal generation exists yet.</p>
+  } @else if (!filteredItems().length) {
+    <p class="proposals__empty">No proposals match these history filters.</p>
+  } @else {
+    <div class="proposals__workspace">
+      <ol class="proposals__list" aria-label="Proposals">
+        @for (item of filteredItems(); track item.id) {
+          <li>
+            <button type="button" class="proposal-row"
+                    [class.proposal-row--active]="selectedId() === item.id"
+                    [attr.aria-current]="selectedId() === item.id ? 'true' : null"
+                    [attr.data-severity]="item.severity"
+                    [attr.data-testid]="'proposal-row-' + item.id"
+                    (click)="select(item.id)">
+              <span class="proposal-row__preview" [class.proposal-row__preview--loaded]="loadedThumbnails().has(item.id)">
+                @if (item.evidenceScreenshot) {
+                  <span class="proposal-row__preview-status" aria-hidden="true">Loading preview</span>
+                  <img [src]="evidenceUrl(item)" alt="" loading="lazy" decoding="async" fetchpriority="low"
+                       (load)="markThumbnailLoaded(item.id)" />
+                } @else { <span class="proposal-row__no-evidence">No visual evidence</span> }
+              </span>
+              <span class="proposal-row__copy">
+                <span class="proposal-row__meta">
+                  <span class="severity-dot" aria-hidden="true"></span>{{ item.severity }}
+                  <span>{{ item.generation }}</span>
+                </span>
+                <span class="topic-chip">{{ item.topic }}</span>
+                <strong>{{ item.proposal }}</strong>
+                <span class="status-chip" [attr.data-status]="item.status">{{ item.status }}</span>
+              </span>
+            </button>
+          </li>
+        }
+      </ol>
+
+      @if (selected(); as item) {
+        <article class="proposal-detail" data-testid="proposal-detail">
+          @if (item.evidenceScreenshot) {
+          <div class="proposal-detail__hero" [attr.aria-busy]="detailImageState() === 'loading'">
+            @if (detailImageState() === 'loading') {
+              <div class="proposal-detail__image-status" data-testid="proposal-image-loading" role="status">
+                <span class="proposal-detail__spinner" aria-hidden="true"></span>
+                <span>Loading evidence…</span>
+              </div>
+            } @else if (detailImageState() === 'error') {
+              <div class="proposal-detail__image-status proposal-detail__image-status--error" role="alert">Evidence could not be loaded.</div>
+            }
+            <img [src]="evidenceUrl(item)" [alt]="'Evidence for ' + item.id" loading="eager" decoding="async" fetchpriority="high"
+                 [class.proposal-detail__image--loaded]="detailImageState() === 'loaded'"
+                 (load)="detailImageState.set('loaded')" (error)="detailImageState.set('error')" />
+            <span class="proposal-detail__severity" [attr.data-severity]="item.severity">{{ item.severity }}</span>
+          </div>
+          }
+          <div class="proposal-detail__body">
+            <div class="proposal-detail__topic" data-testid="proposal-topic"><span>Topic</span><strong>{{ item.topic }}</strong>
+              @for (category of item.categories; track category) { <span class="topic-chip">{{ category }}</span> }
+            </div>
+            <dl class="proposal-detail__meta" aria-label="Proposal metadata">
+              <div><dt>Proposal</dt><dd>{{ item.id }}</dd></div>
+              <div><dt>Generation</dt><dd>{{ item.generation }}</dd></div>
+              <div><dt>Effort</dt><dd>{{ item.estimatedEffort }}</dd></div>
+            </dl>
+            <p class="proposal-detail__source"><strong>Source</strong> {{ item.source }}</p>
+            <h3>{{ item.proposal }}</h3>
+            <section><h4>Finding</h4><p>{{ item.finding }}</p></section>
+            <section><h4>Proposal</h4><p>{{ item.proposal }}</p></section>
+            @if (item.rejectionReason) {
+              <section class="proposal-detail__rejection"><h4>Rejection feedback</h4><p>{{ item.rejectionReason }}</p>
+                @if (item.rejectionReasonRaw && item.rejectionReasonRaw !== item.rejectionReason) {
+                  <details><summary>Original operator feedback</summary><p>{{ item.rejectionReasonRaw }}</p></details>
+                }
+              </section>
+            }
+            @if (item.spawnedTask && taskStatus(item.spawnedTask); as status) {
+              <div class="proposal-detail__spawned">
+                <span>Implementation card</span>
+                <app-task-reference-microcard [status]="status" />
+              </div>
+            }
+            <footer class="proposal-detail__actions">
+              @if (item.status === 'proposed' || item.status === 'approved') {
+                <div class="proposal-detail__action-copy"><strong>Review decision</strong><span>Approval creates an implementation card.</span></div>
+                <div class="proposal-detail__action-buttons">
+                  <button type="button" class="proposal-action proposal-action--secondary" data-testid="proposal-reject" [disabled]="deciding()" (click)="beginReject()">Reject with reason</button>
+                  <button type="button" class="proposal-action proposal-action--primary" data-testid="proposal-approve"
+                          [appPendingButton]="deciding()" pendingLabel="Creating card…" (click)="decide('approve')">
+                    <span>Approve and create card</span>
+                  </button>
+                </div>
+              } @else {
+                <span class="proposal-detail__resolved">Decision recorded: {{ item.status }}</span>
+              }
+            </footer>
+            @if (rejectionFormOpen() && (item.status === 'proposed' || item.status === 'approved')) {
+              <section class="proposal-rejection-form" data-testid="proposal-rejection-form">
+                <div><h4>Reject with durable feedback</h4><p>Speak or type naturally in any language. The CLI translates and tightens it before the decision is recorded.</p></div>
+                <label>Original feedback<textarea [value]="rejectionRaw()" (input)="setRejectionRaw($event)" placeholder="Explain what is wrong or missing"></textarea></label>
+                <button type="button" class="proposal-action proposal-action--secondary" [appPendingButton]="refining()" pendingLabel="Refining…" (click)="refineRejection()"><span>Refine with CLI</span></button>
+                @if (rejectionRefined()) {
+                  <label>Refined historical record<textarea [value]="rejectionRefined()" (input)="setRejectionRefined($event)"></textarea></label>
+                }
+                <div class="proposal-compose__actions">
+                  <button type="button" class="proposal-action proposal-action--secondary" (click)="rejectionFormOpen.set(false)">Cancel</button>
+                  <button type="button" class="proposal-action proposal-action--danger" data-testid="proposal-reject-confirm"
+                          [disabled]="!rejectionRefined().trim() || deciding()" (click)="recordRejection()">Record rejection</button>
+                </div>
+              </section>
+            }
+            <div class="proposal-remove">
+              @if (removalConfirmation() === 'proposal') {
+                <span>Remove this proposal from history?</span>
+                <button type="button" class="proposal-action proposal-action--secondary" (click)="removalConfirmation.set(null)">Cancel</button>
+                <button type="button" class="proposal-action proposal-action--danger" data-testid="proposal-remove-confirm" (click)="removeSelected()">Remove permanently</button>
+              } @else {
+                <button type="button" class="proposal-link-danger" (click)="removalConfirmation.set('proposal')">Remove this proposal</button>
+              }
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</section>

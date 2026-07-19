@@ -1,4 +1,4 @@
-namespace AgentStudio.Docs.Grading;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// HTTP surface for the wiki-grading maintenance run (AGT-2051): start / poll /

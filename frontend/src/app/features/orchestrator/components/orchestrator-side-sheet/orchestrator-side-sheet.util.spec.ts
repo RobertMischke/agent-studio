@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDemoEvents,
+  buildOrchestratorConversationEvents,
   parseBugHashtags,
   resolveAttachmentUrl,
   suppressLocalDuplicates,
 } from './orchestrator-side-sheet.util';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
+import type { ChatEvent } from 'coding-agent-chat/core';
 
 /**
  * Direct coverage for the pure helpers extracted out of the side-sheet
@@ -56,6 +59,179 @@ describe('orchestrator-side-sheet.util', () => {
       const server = [turn('s1', 'hello'), turn('s2', 'world')];
       const local = [turn('l1', 'hello')];
       expect(suppressLocalDuplicates(server, local).map((t) => t.id)).toEqual(['s2']);
+    });
+  });
+
+  describe('buildOrchestratorConversationEvents', () => {
+    it('dedupes optimistic turns, resolves attachments, maps actors, and sorts the transcript', () => {
+      const server: OrchestratorChatTurn[] = [
+        {
+          id: 'persisted-user',
+          ts: '2026-07-08T00:01:00Z',
+          role: 'user',
+          text: 'hello',
+          attachments: [{ alt: 'local shot', relativePath: 'chat-attachments/local.png' }],
+        },
+        {
+          id: 'reply',
+          ts: '2026-07-08T00:02:00Z',
+          role: 'orchestrator',
+          text: 'partial answer',
+          model: 'claude-opus-4-8',
+          tokenUsage: {
+            model: 'claude-opus-4-8',
+            thinkingLevel: 'high',
+            inputTokens: 20,
+            outputTokens: 10,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+          },
+          errorMessage: 'connection closed',
+          attachments: [{ alt: 'reply shot', relativePath: 'chat-attachments/reply image.png' }],
+        },
+      ];
+      const local = [{
+        id: 'local-user',
+        ts: '2026-07-08T00:01:00Z',
+        role: 'user' as const,
+        text: 'hello',
+        pending: true,
+        localAttachments: [{ alt: 'local shot', previewUrl: 'blob:local-shot' }],
+      }];
+      const inline: ChatEvent[] = [{
+        id: 'memory',
+        kind: 'memory-refreshed',
+        timestamp: '2026-07-08T00:00:00Z',
+        summary: 'Context rebuilt',
+      }];
+
+      const events = buildOrchestratorConversationEvents(
+        server,
+        local,
+        inline,
+        'Agent Studio',
+        'project:Agent Studio',
+      );
+
+      expect(events.map(event => event.id)).toEqual([
+        'memory',
+        'local-user',
+        'local-user:attachment:0',
+        'reply',
+        'reply:attachment:0',
+      ]);
+      expect(events[0]).toMatchObject({
+        kind: 'system.status',
+        category: 'memory-refreshed',
+        label: 'Memory refreshed',
+      });
+      expect(events[1]).toMatchObject({
+        kind: 'message.user',
+        actor: 'You',
+        body: 'hello',
+      });
+      expect(events[2]).toMatchObject({
+        kind: 'artifact.image',
+        caption: 'local shot',
+        url: 'blob:local-shot',
+      });
+      expect(events[3]).toMatchObject({
+        kind: 'message.orchestrator',
+        actor: 'Orchestrator',
+        severity: 'error',
+        model: 'claude-opus-4-8',
+        thinkingLevel: 'high',
+      });
+      expect((events[3] as { body: string }).body).toContain('**Error:** connection closed');
+      expect(events[4]).toMatchObject({
+        kind: 'artifact.image',
+        caption: 'reply shot',
+        url: '/api/runner/Agent%20Studio/orchestrator-chat/attachments/reply%20image.png',
+      });
+      expect(events.every(event => event.rawRange.source === 'project:Agent Studio')).toBe(true);
+    });
+
+    it('maps each legacy inline card to the closest semantic conversation event', () => {
+      const inline: ChatEvent[] = [
+        {
+          id: 'tool', kind: 'tool-call', timestamp: '2026-07-08T00:00:00Z',
+          summary: 'Read src/app.ts',
+        },
+        {
+          id: 'watchdog', kind: 'watchdog', timestamp: '2026-07-08T00:01:00Z',
+          summary: 'Tool phase silent for 90s', severity: 'warn', detail: 'Waiting for output',
+        },
+        {
+          id: 'rate', kind: 'rate-limit', timestamp: '2026-07-08T00:02:00Z',
+          summary: '5h window at 78%',
+        },
+        {
+          id: 'decision', kind: 'decision', timestamp: '2026-07-08T00:03:00Z',
+          summary: 'Reissue once', detail: 'Open items remain', decisionType: 'reissue',
+        },
+        {
+          id: 'update', kind: 'update', timestamp: '2026-07-08T00:04:00Z',
+          summary: 'Index updated',
+        },
+        {
+          id: 'task', kind: 'task', timestamp: '2026-07-08T00:05:00Z',
+          summary: 'Created AGT-1', actionLabel: 'Open task',
+        },
+        {
+          id: 'recovered', kind: 'session-recovered', timestamp: '2026-07-08T00:06:00Z',
+          summary: 'Retry succeeded',
+        },
+      ];
+
+      const events = buildOrchestratorConversationEvents([], [], inline, 'demo', 'project:demo');
+
+      expect(events.map(event => event.kind)).toEqual([
+        'toolBurst',
+        'supervisor.wait',
+        'system.status',
+        'decision.orchestrator',
+        'system.status',
+        'system.status',
+        'supervisor.wait',
+      ]);
+      expect(events[0]).toMatchObject({
+        count: 1,
+        families: { other: 1 },
+        samples: { other: 'Read src/app.ts' },
+      });
+      expect(events[1]).toMatchObject({ state: 'quiet', quietSeconds: 90 });
+      expect(events[3]).toMatchObject({
+        decisionType: 'reissue',
+        reason: 'Reissue once',
+        evidence: 'Open items remain',
+      });
+      expect(events[5]).toMatchObject({ category: 'task', nextStep: 'Open task' });
+      expect(events[6]).toMatchObject({ state: 'resumed', quietSeconds: 0 });
+    });
+  });
+
+  describe('buildDemoEvents', () => {
+    it('seeds one card per demo event kind, anchored on baseTs', () => {
+      const base = Date.parse('2026-07-08T00:00:00Z');
+      const events = buildDemoEvents(base);
+      // Six event kinds plus the four decision sub-types = nine cards.
+      expect(events).toHaveLength(9);
+      expect(events.map((e) => e.kind)).toEqual([
+        'tool-call',
+        'watchdog',
+        'rate-limit',
+        'session-recovered',
+        'memory-refreshed',
+        'decision',
+        'decision',
+        'decision',
+        'decision',
+      ]);
+      // First card sits exactly on baseTs; later cards are offset forward
+      // so the demo timeline renders in a stable chronological order.
+      expect(events[0].timestamp).toBe(new Date(base).toISOString());
+      const ordered = events.map((e) => Date.parse(e.timestamp));
+      expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
     });
   });
 });

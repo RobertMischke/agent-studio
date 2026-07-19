@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output } from '@angular/core';
 import type { CliType } from '../../../../models/task.model';
 import { CliUsageStore } from '../../services/cli-usage.store';
 import { CliUsageDetailComponent } from '../cli-usage-detail/cli-usage-detail';
+import { CliWindowAnalysisComponent } from '../cli-window-analysis/cli-window-analysis';
+
+type WorkspaceTokenUsagePage = 'workspace' | 'claude' | 'codex';
 import { WorkspaceTokenTimelineComponent } from '../workspace-token-timeline/workspace-token-timeline';
 
 /**
@@ -22,13 +25,16 @@ import { WorkspaceTokenTimelineComponent } from '../workspace-token-timeline/wor
 @Component({
   selector: 'app-token-usage-section',
   standalone: true,
-  imports: [WorkspaceTokenTimelineComponent, CliUsageDetailComponent],
+  imports: [WorkspaceTokenTimelineComponent, CliUsageDetailComponent, CliWindowAnalysisComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './token-usage-section.component.html',
   styleUrl: './token-usage-section.component.scss',
 })
 export class TokenUsageSectionComponent implements OnInit, OnDestroy {
   readonly usage = inject(CliUsageStore);
+  readonly page = input<WorkspaceTokenUsagePage>('workspace');
+  readonly pageChange = output<WorkspaceTokenUsagePage>();
+  readonly cliPage = computed<'claude' | 'codex'>(() => this.page() === 'codex' ? 'codex' : 'claude');
 
   /** Bubbled up (through WorkspaceOverlaysComponent) so the shell can route to a
    *  project's Settings when a "By project" usage row is clicked. */

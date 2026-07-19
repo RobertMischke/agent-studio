@@ -1,103 +1,218 @@
-# Onboarding a new project
+# Onboard a project
 
-This page covers attaching an additional watched project to a running agent-orchestrator instance. The board can drive any number of projects in parallel (one sequential pipeline per project; see [../../AGENTS.md](../../../AGENTS.md) "Product Goal & Non-Goals").
+Project onboarding is a product workflow. It registers identity, creates the central task store, activates discovery, and optionally assigns execution. It does not put Agent Studio jobs in the product repository and it does not require a backend restart.
 
-> **For a normal new project, use the in-app "Onboard Project" dialog** (workspace sidebar "+" -> "+" on a workspace), not the steps below. It calls the project registry API (`POST /api/projects`, ADR-0042/ADR-0046) and needs no backend restart. See [getting-started.md](./getting-started.md) step 3. The `WatchPaths` flow documented on this page is now a legacy bootstrap-only mechanism (still real, still supported, but the harder path) - useful for scripted setups or when you deliberately want an explicit `.orchestrator.yml` project key.
+Project onboarding and [remote runner host onboarding](./linux-runner-host.md) are the two independent onboarding axes:
 
-## Prerequisites
+- Onboard a project to define what work exists, where its repository is, and where its tasks are stored.
+- Onboard a host to define where work can execute. Then select that host as the project's execution runner.
 
-- The backend is already running locally (`./api.sh start`, see [getting-started.md](./getting-started.md)).
-- The target project lives in a Git working tree on disk. The board only watches checked-out repositories; bare repos and remote URLs are not supported.
-- You know the project's CLI working directory. This is the path the agent's `cwd` will be set to when it picks up a task.
+## Before you start
 
-## Step 1 - Add a `WatchPaths` entry
+Choose:
 
-The watch list lives in `backend/appsettings.Local.json` (gitignored, per-checkout). Two shapes are supported.
+- A display name, such as `Quality Studio`.
+- A unique 2 to 6 character short code, such as `QS`. Task keys use this prefix.
+- The workspace that should contain the project.
+- An optional local Git checkout path, CLI working directory, repository URL,
+  or any useful combination of them.
+- A default coding CLI/model and project colour. Both can be changed later.
+- An optional execution runner. Onboard the host first if it is not listed yet.
 
-### Self-contained repo (the common case)
+For a local runner, the repository path must be an existing absolute Git
+checkout on the backend host. The working directory must also exist and may be
+the checkout itself or a subdirectory. For a remote runner whose checkout is
+not visible on the backend host, omit both local paths and provide the
+repository URL. The selected remote host resolves its own checkout.
 
-The Git repo *is* the CLI working directory and the project state lives in `agent-taskboard-workspace/projects/<derived-key>/`.
+## UI workflow
 
-```json
-{
-  "WatchPaths": [
-    {
-      "Name": "Lotta Dashboard",
-      "RootPath": "C:\\Projects\\Lotta\\Dashboard"
-    }
-  ]
-}
-```
+1. Open Agent Studio and find the target workspace in the Explorer.
+2. Open its actions and choose **New project**.
+3. Under **Identity**, enter the workspace, display name, short code, and
+   colour.
+4. Under **Code location**, enter the local checkout, CLI working directory,
+   and/or HTTP(S) repository URL.
+5. Under **Default coding agent**, select the default CLI/model, then choose
+   the local host or an onboarded runner under **Execution location**.
+6. Choose **Create project**.
 
-`RootPath` is the CLI's `cwd` and, by default, becomes the project key. Stick to alphanumerics + `-` in the folder name; spaces produce ugly slugs.
+There is no project-source selection or Project Sources administration step.
+Local project onboarding is the available product workflow. A repository URL
+does not by itself create a managed checkout.
 
-### Repo with an `.orchestrator.yml` pointer
+The dialog closes after the server confirms creation. The project is
+immediately present on the board. No settings file edit or backend restart is
+needed.
 
-When the project wants an explicit, stable project key (for example a monorepo with several apps that should each land on the board as a separate project), drop an `.orchestrator.yml` at `RootPath`:
+## API workflow
 
-```yaml
-# C:\Projects\Lotta\Dashboard\.orchestrator.yml
-projectKey: lotta-dashboard
-```
-
-The scanner reads `projectKey` and resolves jobs under `<TaskRepository>/projects/<projectKey>/` instead of deriving the folder name. See [../../backend/Services/Jobs/JobScannerService.cs](../../../backend/Services/Jobs/JobScannerService.cs) (`OrchestratorPointer`).
-
-### Repo and CLI cwd are not the same folder
-
-When the Git repository root differs from the CLI working directory (monorepo with an app under a parent repo), add `RepositoryPath`:
-
-```json
-{
-  "Name": "Runbook",
-  "RootPath": "C:\\Projects\\Runbook\\App",
-  "RepositoryPath": "C:\\Projects\\Runbook"
-}
-```
-
-Git status, diff, commits, and the VS Code handoff use `RepositoryPath`; `RootPath` is still where the agent runs. When omitted, both fall back to `RootPath` (and `git rev-parse --show-toplevel` discovers the actual repo root).
-
-## Step 2 - Restart the backend
-
-**Today this is mandatory.** Config hot-reload makes the project visible at `GET /api/watch-paths`, but `TaskRunnerService` only creates per-project runners at startup, so `PUT /api/runner/<project>/mode` returns `400 Invalid project or mode` for the new project until the backend restarts.
+Send `POST /api/projects`. `X-Client-Id` must identify a registered operator or automation client and is included in mutation telemetry. The bootstrap identity is `local-default`.
 
 ```sh
-./api.sh restart
+curl -i http://localhost:5030/api/projects \
+  -H 'Content-Type: application/json' \
+  -H 'X-Client-Id: local-default' \
+  --data '{
+    "displayName": "Quality Studio",
+    "shortCode": "QS",
+    "workspaceId": "ws-default",
+    "repositoryPath": "C:\\Projects\\quality-studio",
+    "rootPath": "C:\\Projects\\quality-studio",
+    "repositoryUrl": "https://github.com/example/quality-studio",
+    "cliDefault": "codex",
+    "color": "#569cd6",
+    "executionRunner": "agent-runner-01"
+  }'
 ```
 
-Tracked for a durable fix as `fix-runner-mode-rejects-newly-added-projects` (see [../../.agents/skills/task-api/references/known-pitfalls.md](../../../.agents/skills/task-api/references/known-pitfalls.md) §4). Once that lands you can skip this step.
+`repositoryPath`, `rootPath`, `repositoryUrl`, `cliDefault`, `modelDefault`,
+`color`, and `executionRunner` are optional. `repositoryUrl` must be an
+absolute HTTP(S) URL. For a board-only project, omit repository and runner
+fields. The local folder workflow is implicit; clients do not need to send a
+source type.
 
-## Step 3 - Pick the project in the UI
+A successful request returns `201 Created` and the new `PROJ-NNN` record. A
+display-name or short-code collision returns `409 Conflict`; malformed values
+return `400 Bad Request`; an unknown workspace returns `404 Not Found`.
+Retrying a request after a `201` cannot create a second project with the same
+identity: the retry receives `409`.
 
-Open `http://localhost:4010`, then use the project switcher in the header. The new project appears as soon as `/api/watch-paths` lists it. The lane structure (`0-backlog`, `1-preparation`, `2-ready`, ...) is created lazily under `agent-taskboard-workspace/projects/<projectKey>/` the moment the first task is created; no extra bootstrap is needed.
+## Validation contract
 
-## Step 4 - Set defaults and queue the first task
+Both onboarding and later edits use the same rules:
 
-Per-project preferences are persisted in `<TaskRepository>/project-settings.json` (see [../../backend/Services/ProjectSettingsService.cs](../../../backend/Services/ProjectSettingsService.cs)). The relevant ones today:
+- Workspace, display name, and short code are required.
+- Short codes are uppercased, contain 2 to 6 characters, start with `A-Z`, and
+  use only `A-Z` or `0-9` after that.
+- Display names and short codes are unique across the registry.
+- A repository checkout is an absolute local path to an existing Git checkout.
+  UNC paths, filesystem roots, missing folders, and folders without `.git` are
+  rejected.
+- A working directory is an absolute existing local directory. It may be a
+  subdirectory and does not need its own `.git` entry.
+- A repository URL is either empty or an absolute HTTP(S) URL.
+- Optional fields may be left empty during onboarding and set later. An error
+  keeps the form open and preserves the entered values so the operator can
+  correct only the invalid field.
 
-| Setting | Where to set | Default | What it does |
-|---|---|---|---|
-| `RunnerMode` | Project switcher / header pause toggle, or `PUT /api/runner/<project>/mode` | `manual` | `auto-continuous` lets the runner pick up `2-ready` jobs without a manual click. |
-| `AutoCommit` | Project settings drawer | `true` | Stamps the lane-transition commit when a run moves `3-progress -> 4-auto-review`. |
-| `OrchestratorModel` | Project settings drawer | `claude-opus-*` | Model the orchestrator uses when it decides on the user's behalf (re-issue / accept / escalate). |
-| `AutonomyLevel` | Project settings drawer | `2` (balanced) | ADR-0026 autonomy scale for the orchestrator-prep loop. |
-| `WorkstreamFramePublic` | `project-settings.json` | heuristic (English) | Language of the self-provisioned Workstream wiki frame (see below). `false` seeds a localized frame for an internal project. |
+## What happens automatically
 
-`DefaultAgent` is **not** persisted per project today; the agent / CLI / model is chosen per job at create time. If you find yourself setting the same `cliType` on every task for a given project, raise that as a feature request rather than working around it in scripts.
+The server performs these steps in one onboarding workflow:
 
-## The Workstream wiki frame is self-provisioned
+1. Allocates a monotonic registry id such as `PROJ-023` and initializes `NextTaskKeySeq` to `1`.
+2. Persists the project in `<TaskRepository>/.metadata/projects.json` and assigns it to the requested workspace.
+3. Creates `<TaskRepository>/projects/PROJ-023/tasks/` as the only task-store root for the new project. Lane and task directories are created on demand.
+4. Stores the local checkout separately as `RepositoryPath`. It never uses `<repository>/.orchestrator/jobs` for a newly onboarded project.
+5. Stores the CLI working directory separately as `RootPath`, falling back to
+   the repository checkout when no distinct working directory was supplied.
+6. Stores the repository URL as the well-known project URL with id `repo`.
+7. Persists the project colour and default coding CLI/model.
+8. Adds the project to the scanner and filesystem watcher from the registry,
+   without adding a `WatchPaths` setting.
+9. Creates a live local runner immediately when the local working directory
+   exists, or persists the selected remote-runner assignment.
 
-There is nothing to bootstrap by hand and no "onboard the wiki" step. The fixed **Workstream** frame (the five immutable areas plus their landing pages, under the project's `docs/engineering-workstream/`) is created automatically the first time a wiki-writing pipeline step runs for the project. Onboarding a project's wiki is therefore just: register the project (above) and enable a wiki-writing step (`post-wiki-maintenance` or `post-wiki-learnings` in the pipeline-step settings). On that step's first run the frame is materialized; later runs complete it idempotently and never overwrite existing pages. See [../../concepts/engineering-workstream.md](../../concepts/engineering-workstream.md) for the frame itself. Frame pages default to English for public / open-source repos; set `WorkstreamFramePublic` to `false` in `project-settings.json` to seed a localized frame.
+The board refresh after creation reads the same registry-backed source, so the new empty project is visible immediately.
 
-For the first task, follow [your-first-task.md](./your-first-task.md). The Task API skill ([../../.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md)) is the right path when you script the creation rather than clicking through the dialog.
+## Edit project basics later
 
-## What to expect after pickup
+Creation is not the only chance to enter these values. Open the project, choose
+**Settings**, and edit the **Project basics** section. It exposes the same
+identity, repository, and coding-default groups as onboarding. The existing
+**Execution assignment** card on the same Settings page remains the place to
+change the execution runner:
 
-- The runner walks the job through `2-ready -> 3-progress -> 4-auto-review`. The lane catalog and state strings are in [../filesystem-contract.md](../../contracts/filesystem.md).
-- `4-auto-review` is the machine lane: the `ReviewDecisionOrchestrator` decides re-issue / accept-as-done / escalate. `5-human-review` is the lane that waits for you.
-- The Activity Log streams live from the CLI via SignalR. Per-CLI frame semantics live in [../cli-skills/](../../cli/skills).
-- Auto-commit (when enabled) stamps the `3-progress -> 4-auto-review` transition. Push is **not** automatic; see [../commit-push-doctrine.md](../git/commit-push-doctrine.md).
-- Auto-review may decide to re-issue. The reissue lands the job back in `2-ready order=0`, not `3-progress` (fixes the dual-3-progress race; see [troubleshooting.md](./troubleshooting.md)).
+| Group | Editable values |
+|---|---|
+| Identity | Workspace, display name, short code, colour |
+| Code location | Repository checkout, CLI working directory, repository URL |
+| Default coding agent | Default coding CLI/model |
+| Execution assignment | Local execution or a registered remote runner, saved by the dedicated execution card |
 
-## Removing a project
+The UI saves the Project basics section through one canonical registry request:
 
-Delete the entry from `WatchPaths` and restart. The on-disk job folders under `agent-taskboard-workspace/projects/<projectKey>/` are **not** deleted; the board just stops watching them. Archive or move them by hand if you want them gone.
+```sh
+curl -i -X PUT http://localhost:5030/api/projects/PROJ-023 \
+  -H 'Content-Type: application/json' \
+  -H 'X-Client-Id: local-default' \
+  --data '{
+    "displayName": "Quality Studio",
+    "shortCode": "QS",
+    "workspaceId": "ws-default",
+    "repositoryPath": "C:\\Projects\\quality-studio",
+    "rootPath": "C:\\Projects\\quality-studio\\src",
+    "repositoryUrl": "https://github.com/example/quality-studio",
+    "cliDefault": "codex",
+    "modelDefault": "<model id from the Codex catalogue>",
+    "color": "#569cd6"
+  }'
+```
+
+`PUT /api/projects/{PROJ-NNN}` has optional patch semantics. Omitted values stay
+unchanged. To remove an optional value, send its explicit flag, for example
+`{"clearRepositoryUrl": true}` or `{"clearModelDefault": true}`. API clients
+may also set `executionRunner` or `clearExecutionRunner` on this endpoint; that
+value is delegated to the existing project-settings owner rather than stored in
+the registry. The product UI deliberately keeps the runner in its dedicated
+execution card and `PUT /api/projects/{projectName}/execution-runner` contract.
+Clearing it restores local execution.
+
+The stable project id, central storage location, creation time, and task-key
+counter are not editable. Changing the short code does not rewrite existing
+task keys; newly created tasks use the new prefix and continue from the
+preserved counter. A successful update returns `200 OK`; the same `400`, `404`,
+and `409` validation outcomes used during creation apply. Repository/wiki reads
+see updated registry paths on subsequent requests. An already instantiated
+local runner does not hot-swap its captured project name, repository checkout,
+or working directory. Restart the backend after changing any of those three
+values and before enabling local auto-pickup. A runner assignment change is
+persisted immediately.
+
+## Store convention
+
+New project task data always lives below the task-server workspace:
+
+```text
+<TaskRepository>/
+  .metadata/projects.json
+  projects/
+    PROJ-023/
+      tasks/
+        lane and task data created by the task API
+```
+
+Never create or copy a task store into the product checkout. In-repository stores can expose prompts, logs, attachments, or operational metadata when the repository is pushed, and they mix product source with orchestration state.
+
+TE, CAC, and CAR are documented legacy exceptions. Do not use them as examples
+for a new project and do not move them as part of ordinary onboarding. A
+purpose-built migration must pause pickup, back up and copy the existing task
+data, update `StorageLocation`, verify task counts and keys, and only then
+remove the old in-repository copy. This migration is intentionally outside
+AGT-2144. Do not hand-edit registry metadata or move folders under the central
+task store to perform it.
+
+## Verify the onboarding
+
+1. Confirm `GET /api/projects` contains the new id and `storageLocation` is `<TaskRepository>/projects/PROJ-NNN/tasks`.
+2. Create a small task through the UI or task API and place it in Ready.
+3. For an executable project, start or enable its runner and confirm the task reaches review.
+4. Return to **Project basics**, change one optional value, save, reload the
+   project, and confirm the value remains editable and persisted.
+5. Clear that optional value and confirm the project still appears and its
+   `storageLocation` did not change.
+6. Delete the test task.
+7. Remove a disposable test project with `DELETE /api/projects/PROJ-NNN`. The endpoint removes its central project store and registry record.
+
+## Troubleshooting
+
+| Symptom | Cause and action |
+|---|---|
+| `409 shortCode ... is already used` | Choose another 2 to 6 character code. Codes are case-insensitively unique. |
+| `400 repositoryPath ...` | Use an existing absolute local Git checkout. For a repository available only to a remote runner, omit the local path and provide `repositoryUrl`. |
+| `404 Unknown workspaceId` | Read `GET /api/workspaces` and use a current workspace id. |
+| Project exists but auto-pickup is unavailable | A board-only project has no local working directory, or the selected remote host is not ready. Set a valid working directory in Project Settings and restart the backend to instantiate a local runner, or complete [remote host onboarding](./linux-runner-host.md). |
+| Project is missing from the board after `201` | Refresh once and inspect `GET /api/workspaces`. If the API listing is also missing, inspect structured `project-onboarded` and `watch-path-activated` log events. No restart should be required. |
+| Old project uses `.orchestrator/jobs` | Treat it as legacy. Follow the migration outline above; do not onboard a duplicate project or push that folder. |
+
+For the first real run, continue with [Your first task](./your-first-task.md). For general setup failures, see [Troubleshooting](./troubleshooting.md).

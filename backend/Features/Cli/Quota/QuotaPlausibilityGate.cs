@@ -8,9 +8,10 @@ namespace AgentStudio.Cli;
 /// quota-aware admission gate, would launch onto a CLI that is really at its
 /// limit and take a launch-fail wave.
 ///
-/// The rule the runner enforces: a window that jumps DOWN by more than
-/// <see cref="DefaultDropThresholdPoints"/> points with no reset to explain it
-/// is suspicious. A suspicious reading is not trusted until a second,
+/// The rule the runner enforces: any Weekly-window decrease, or another window
+/// that jumps DOWN by more than <see cref="DefaultDropThresholdPoints"/> points,
+/// is suspicious when the previously announced reset has not passed. A
+/// suspicious reading is not trusted until a second,
 /// independent probe agrees with it (see <see cref="AreConsistent"/>); only
 /// then does the drop replace the old value.
 /// </summary>
@@ -25,8 +26,8 @@ public static class QuotaPlausibilityGate
     /// <summary>
     /// Decide whether <paramref name="candidate"/> is an implausible downward
     /// jump versus the last trusted <paramref name="previous"/> snapshot.
-    /// Returns not-suspicious when there is nothing to compare against, when no
-    /// window dropped past the threshold, or when a reset explains the drop.
+    /// Weekly windows are monotonic within one reset cycle, so every decrease
+    /// is checked; other windows retain the broad spike threshold.
     /// </summary>
     public static SuspicionResult Evaluate(
         QuotaSnapshot? previous,
@@ -44,8 +45,9 @@ public static class QuotaPlausibilityGate
             if (cand?.UsedPct is not double candUsed) continue;
 
             var drop = prevUsed - candUsed;
-            if (drop <= dropThresholdPoints) continue;
-            if (ResetExplainsDrop(prev, cand, nowUtc)) continue;
+            var isWeekly = IsWeeklyWindow(prev.Label);
+            if (drop <= 0 || (!isWeekly && drop <= dropThresholdPoints)) continue;
+            if (ResetExplainsDrop(prev, cand, nowUtc, requireElapsedBoundary: isWeekly)) continue;
 
             return new SuspicionResult(
                 true,
@@ -82,20 +84,32 @@ public static class QuotaPlausibilityGate
     }
 
     /// <summary>
-    /// A large downward jump is legitimate when the window rolled over between
-    /// the two observations: either the reset time the previous snapshot
-    /// announced has since passed, or the candidate reports a later reset
-    /// boundary than the previous snapshot did (a fresh cycle started).
+    /// A downward jump is legitimate when the previously announced reset has
+    /// passed. For non-Weekly windows, a later candidate boundary also retains
+    /// the legacy allowance for short-window probe timing jitter.
     /// </summary>
-    private static bool ResetExplainsDrop(QuotaWindow prev, QuotaWindow cand, DateTime nowUtc)
+    private static bool ResetExplainsDrop(
+        QuotaWindow prev,
+        QuotaWindow cand,
+        DateTime nowUtc,
+        bool requireElapsedBoundary)
     {
         if (prev.ResetAt is DateTime prevReset)
         {
             if (prevReset <= nowUtc) return true;
-            if (cand.ResetAt is DateTime candReset && candReset > prevReset) return true;
+            // A Weekly candidate must not legitimise its own decrease merely by
+            // advertising a later boundary. Until the previous boundary passes,
+            // the cumulative weekly percentage is monotonic. Short windows keep
+            // the legacy boundary-advance allowance for probe timing jitter.
+            if (!requireElapsedBoundary
+                && cand.ResetAt is DateTime candReset
+                && candReset > prevReset) return true;
         }
         return false;
     }
+
+    private static bool IsWeeklyWindow(string? label)
+        => label?.Contains("Weekly", StringComparison.OrdinalIgnoreCase) == true;
 
     private static QuotaWindow? FindWindow(IEnumerable<QuotaWindow> windows, string label)
     {

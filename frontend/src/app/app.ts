@@ -48,7 +48,6 @@ import {
   type TriageButton,
 } from './features/task-detail';
 import {
-  OrchestratorSettingsModalComponent,
   OrchestratorSideSheetComponent,
 } from './features/orchestrator';
 import {
@@ -57,6 +56,7 @@ import {
   ProjectOverlaysService,
   ProjectRailKey,
   ProjectUrlPreviewTabComponent,
+  WorkbenchViewerComponent,
 } from './features/project-detail';
 import {
   AutoReviewIndicatorComponent,
@@ -121,7 +121,8 @@ import type { RunTimeline } from './features/run-timeline';
 import type { TaskScreenshot } from './features/screenshots';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from './components/menu';
-import type { TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
+import { CostBreakdownDialogComponent, type TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
+import { LoadingSurfaceComponent, PendingButtonDirective } from './components/async-feedback';
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];
@@ -149,7 +150,6 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     TaskColumnComponent,
     TaskDetailComponent,
     OrchestratorSideSheetComponent,
-    OrchestratorSettingsModalComponent,
     ProjectOverlaysComponent,
     AutoReviewIndicatorComponent,
     StatusBarComponent,
@@ -180,7 +180,11 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     ProjectHubViewComponent,
     StudioDiffViewComponent,
     StudioActivityViewComponent,
+    LoadingSurfaceComponent,
+    PendingButtonDirective,
+    CostBreakdownDialogComponent,
     ProjectUrlPreviewTabComponent,
+    WorkbenchViewerComponent,
     StudioIconComponent,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
@@ -225,6 +229,8 @@ export class App implements OnInit, OnDestroy {
   private readonly jobSelection = inject(TaskSelectionService);
   private readonly lanePager = inject(LanePagerService);
   readonly selectedJob = this.jobSelection.selected;
+  readonly boardLoading = this.jobService.loading;
+  readonly detailLoading = this.jobSelection.detailLoading;
   readonly triageToast = this.jobSelection.triageToast;
   // ASS-1751: run-activity pill for the slim studio tab-bar header. The
   // studio shell hides <app-detail-header>, so the open task's run state is
@@ -257,6 +263,7 @@ export class App implements OnInit, OnDestroy {
   @ViewChild('jobDetail') private jobDetailRef?: TaskDetailComponent;
   @ViewChild('orchSideSheet') private orchSideSheetRef?: OrchestratorSideSheetComponent;
   private readonly jobDetailSig = viewChild<TaskDetailComponent>('jobDetail');
+  readonly studioTriageActingId = computed(() => this.jobDetailSig()?.triageActingId() ?? null);
   readonly shellPanesVisible = computed<ShellPanesVisible>(
     () => this.jobDetailSig()?.panesVisible() ?? SHELL_PANES_FALLBACK,
   );
@@ -274,8 +281,8 @@ export class App implements OnInit, OnDestroy {
   /**
    * Whether the studio active tab the active-tab→selection effect last saw
    * was a task. Lets that effect distinguish "user navigated away FROM a task
-   * tab" (strip the stale `?job=`, even if the detail fetch is still in flight)
-   * from "cold boot landed on a non-task tab that carries a `?job=` deep link"
+   * tab" (strip the stale task route, even if the detail fetch is still in flight)
+   * from "cold boot landed on a non-task tab that carries a task deep link"
    * (leave it for `restoreFromUrl`). Without it, a fast task→board switch made
    * before the detail resolved would keep the stale param and let the late
    * fetch yank the user back onto the task — the very F5 symptom, mid-session.
@@ -375,14 +382,6 @@ export class App implements OnInit, OnDestroy {
   // Cycle 9: side-sheet width owned by UiPreferencesService.
   private readonly uiPrefs = inject(UiPreferencesService);
   readonly sideSheetWidth = this.uiPrefs.sideSheetWidth;
-  /**
-   * Orchestrator Settings modal visibility. Replaces the former "Logic" tab
-   * inside the sidesheet; the modal uses the project-shell rail + panel
-   * layout so settings sit visually alongside the project window pattern.
-   * Persisted via UiPreferencesService so an F5 reload reopens the modal
-   * instead of dropping it.
-   */
-  readonly orchestratorSettingsOpen = this.uiPrefs.orchestratorSettingsOpen;
   readonly collapsedGroups = signal<Set<string>>(
     new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')),
   );
@@ -878,12 +877,18 @@ export class App implements OnInit, OnDestroy {
     this.openOrchestratorSettings();
   }
 
+  /**
+   * AGT-1812: the standalone Orchestrator-settings modal was retired. The header
+   * Dev-tools "Orchestrator config" entry and the orchestrator side-sheet gear
+   * now open the platform-global lifecycle flags as the "Orchestrator" section of
+   * the one consolidated Settings view (Global group).
+   */
   openOrchestratorSettings(): void {
-    this.uiPrefs.setOrchestratorSettingsOpen(true);
-  }
-
-  closeOrchestratorSettings(): void {
-    this.uiPrefs.setOrchestratorSettingsOpen(false);
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('orchestrator');
+      return;
+    }
+    this.workspaceOverlays.openOrchestrator();
   }
 
   /**
@@ -983,29 +988,45 @@ export class App implements OnInit, OnDestroy {
       untracked(() => this.mirrorSelectionToStudioTab(selected, retargetNav));
     });
 
+    // Browser Back from a key-based task URL to a non-task URL must move the
+    // editor shell with it. Selection alone is not tracked by the active-tab
+    // effect below, so consume the explicit history event from the routing
+    // service and focus the workspace board instead of leaving an empty task
+    // tab active under a board URL.
+    effect(() => {
+      const revision = this.jobSelection.browserRouteCleared();
+      if (revision === 0 || !this.featureFlags.vsCodeLayout()) return;
+      untracked(() => {
+        const tab = this.studioTabState.activeTab();
+        if (tab?.kind === 'task' || tab?.kind === 'epic') {
+          this.studioTabState.activateAllProjectsBoard();
+        }
+      });
+    });
+
     // Studio-shell active-tab → selection sync (F5/reload fix). Makes the
     // active studio tab the single source of truth for `selectedJob()` and
-    // the `?job=` URL param, so a reload restores the *current* view:
+    // the canonical `?task=` URL param, so a reload restores the *current* view:
     //
     //   - Active tab is a task  → ensure `selectedJob` holds that task
     //     (re-hydrating from the persisted tab on a cold reload, so the
     //     task case paints its detail instead of "No task selected"; and
     //     covering in-session selectTab() which only flips the active key).
     //   - Active tab is NOT a task (board / project / hub / diff / activity)
-    //     → drop any lingering selection and strip the stale `?job=` param.
-    //     Without this, switching task→board leaves `?job=` in the URL and
+    //     → drop any lingering selection and strip stale task route params.
+    //     Without this, switching task→board leaves `?task=` in the URL and
     //     the next F5 re-opens the task detail instead of the board.
     //
     // Only `activeTab()` is tracked; `selectedJob()` is read untracked so
     // the effect reacts to tab changes (not to the selection updates it and
     // the mirror effect above make), avoiding a feedback loop.
     //
-    // The non-task branch strips `?job=` when we either still hold a selection
+    // The non-task branch strips task route params when we either still hold a selection
     // OR just came from a task tab (`studioActiveTabWasTask`). The latter
     // catches a task→board switch made before the detail fetch resolved:
     // without it the stale param would survive and the in-flight fetch would
     // re-select the task (mid-session replay of the F5 bug). A cold boot that
-    // lands on a non-task tab carrying a `?job=` deep link is *not* "coming
+    // lands on a non-task tab carrying a task deep link is *not* "coming
     // from a task", so the param is preserved for `restoreFromUrl`.
     effect(() => {
       if (!this.featureFlags.vsCodeLayout()) return;
@@ -1645,6 +1666,25 @@ export class App implements OnInit, OnDestroy {
     this.orchSideSheetRef?.toggle();
   }
 
+  onNavigateToChatContext(contextKey: string): void {
+    if (contextKey === 'global') {
+      this.studioTabState.activateAllProjectsBoard();
+      return;
+    }
+    if (contextKey.startsWith('project:')) {
+      this.studioTabState.open({ kind: 'board', projectName: contextKey.slice('project:'.length) });
+      return;
+    }
+    if (!contextKey.startsWith('task:')) return;
+    const slash = contextKey.indexOf('/');
+    if (slash < 0) return;
+    const projectName = contextKey.slice('task:'.length, slash);
+    const taskKey = contextKey.slice(slash + 1);
+    const task = this.jobService.jobs().find(item => item.projectName === projectName
+      && (item.taskKey === taskKey || item.displayKey === taskKey || item.key === taskKey));
+    if (task) this.studioTabState.open({ kind: 'task', taskKey: task.taskKey });
+  }
+
   /**
    * Phase 5: orchestrator side sheet emitted "make a task from this".
    * Picks the watch path that matches the named project, opens the
@@ -1694,13 +1734,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   private selectFetchedDetail(detail: TaskDetail): void {
-    history.replaceState(
-      null,
-      '',
-      `?job=${encodeURIComponent(detail.info.id)}&watchPath=${encodeURIComponent(detail.info.watchPath)}`,
-    );
-    const token = this.jobSelection.bumpOpenDetailToken();
-    this.jobSelection.setSelectedFromAdvance(detail, token);
+    this.jobSelection.selectResolvedDetail(detail, 'push');
   }
 
   private openEpicAsTab(job: TaskInfo, viewTaskKey?: string): void {
@@ -2130,16 +2164,11 @@ export class App implements OnInit, OnDestroy {
    * originating job. Mirrors the open-task pattern used by the
    * orchestrator feed.
    */
-  onOpenTaskFromReel(s: TaskScreenshot): void {
+  onOpenTaskFromReel(s: Pick<TaskScreenshot, 'jobId' | 'watchPath'>): void {
     this.closeWorkspaceScreenshots();
     if (!s?.jobId || !s?.watchPath) return;
-    history.replaceState(
-      null,
-      '',
-      `?job=${encodeURIComponent(s.jobId)}&watchPath=${encodeURIComponent(s.watchPath)}`,
-    );
     this.jobService.getDetail(s.jobId, s.watchPath).subscribe({
-      next: (detail) => this.selectedJob.set(detail),
+      next: (detail) => this.jobSelection.selectResolvedDetail(detail, 'push'),
       error: () => {
         /* keep the user where they were */
       },
@@ -2170,13 +2199,8 @@ export class App implements OnInit, OnDestroy {
   onOpenTaskFromSession(ref: { jobId: string; watchPath: string }): void {
     this.workspaceOverlays.close();
     if (!ref?.jobId || !ref?.watchPath) return;
-    history.replaceState(
-      null,
-      '',
-      `?job=${encodeURIComponent(ref.jobId)}&watchPath=${encodeURIComponent(ref.watchPath)}`,
-    );
     this.jobService.getDetail(ref.jobId, ref.watchPath).subscribe({
-      next: (detail) => this.selectedJob.set(detail),
+      next: (detail) => this.jobSelection.selectResolvedDetail(detail, 'push'),
       error: () => {
         /* keep the user where they were */
       },
@@ -2267,6 +2291,12 @@ export class App implements OnInit, OnDestroy {
     const first = jobs[0].projectName ?? null;
     if (!first) return null;
     return jobs.every((j) => j.projectName === first) ? first : null;
+  }
+
+  /** Project selected by the active board tab; null preserves the explicit workspace-wide board. */
+  boardProjectScope(): string | null {
+    const tab = this.studioTabState.activeTab();
+    return tab?.kind === 'board' && tab.projectName !== '__all__' ? tab.projectName : null;
   }
 
   /** Current runner mode (lookup mirrors the studio-shell header chip). */

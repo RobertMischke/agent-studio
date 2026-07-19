@@ -18,6 +18,7 @@ public sealed record EpicRollup(
     int Completed,
     int InProgress,
     int Open,
+    DateTime? CompletedAt,
     IReadOnlyDictionary<string, int> ByState,
     IReadOnlyList<EpicSubTaskRef> SubTasks);
 

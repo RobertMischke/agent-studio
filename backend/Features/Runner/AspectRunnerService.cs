@@ -85,11 +85,11 @@ public sealed class AspectRunnerService
 
     private async Task<string> RunViaOneShotAsync(string aspectId, string cli, string model, string prompt, string? thinkingLevel, TimeSpan timeout, string jobFolderPath, CancellationToken ct)
     {
-        var oneShot = _oneShotRegistry?.Get("claude");
+        var oneShot = _oneShotRegistry?.Get(cli);
         if (oneShot == null) return await DefaultRunCliAsync(aspectId, cli, model, prompt, timeout, ct);
 
         var result = await oneShot.RunAsync(new CliOneShotRequest(
-            CliType: "claude",
+            CliType: cli,
             Model: model,
             Prompt: prompt)
         {
@@ -110,7 +110,21 @@ public sealed class AspectRunnerService
                 "Aspect '{AspectId}' CLI call failed: exit={ExitCode} duration={Duration}ms error={Error}",
                 aspectId, result.ExitCode, result.Duration.TotalMilliseconds, result.Error);
         }
-        return result.Stdout; // raw JSON wrapper; caller still runs ParseOrFallback
+        // Keep the legacy runner seam stable: its caller expects a Claude-style
+        // result envelope so it can reuse ParseOrFallback and usage recording.
+        return JsonSerializer.Serialize(new
+        {
+            type = "result",
+            result = result.ParsedText,
+            usage = result.Usage is null ? null : new
+            {
+                input_tokens = result.Usage.InputTokens,
+                output_tokens = result.Usage.OutputTokens,
+                cache_read_input_tokens = result.Usage.CacheReadTokens,
+                cache_creation_input_tokens = result.Usage.CacheCreationTokens,
+            },
+            model = result.Usage?.Model ?? model,
+        });
     }
 
     /// <summary>
@@ -139,7 +153,7 @@ public sealed class AspectRunnerService
                 ConcernNamespace: "docs",
                 PromptTemplate: "review-aspect-documentation-impact.md",
                 Title: "Documentation impact",
-                FallbackSystem: "Does the change require an update to AGENTS.md / ROADMAP / ADRs / cli-skills / docs/README.md? Are those updated?"),
+                FallbackSystem: "Does the change require an update to AGENTS.md / ROADMAP / ADRs / cli-skills / docs/start/README.md? Are those updated?"),
             ["tests-and-evidence"] = new AspectDefinition(
                 Id: "tests-and-evidence",
                 ConcernNamespace: "quality",
@@ -179,7 +193,8 @@ public sealed class AspectRunnerService
         CancellationToken ct,
         Func<string, string>? modelForAspect = null,
         Func<string, string?>? thinkingLevelForAspect = null,
-        Func<string, string?>? promptForAspect = null)
+        Func<string, string?>? promptForAspect = null,
+        Func<string, string?>? cliForAspect = null)
     {
         var now = DateTime.UtcNow;
 
@@ -215,7 +230,9 @@ public sealed class AspectRunnerService
                 if (string.IsNullOrWhiteSpace(stepModel)) stepModel = model;
                 var stepThinkingLevel = thinkingLevelForAspect?.Invoke(entry.Def.Id);
                 var stepPrompt = promptForAspect?.Invoke(entry.Def.Id);
-                return RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, stepModel, stepThinkingLevel,
+                var stepCli = cliForAspect?.Invoke(entry.Def.Id);
+                if (string.IsNullOrWhiteSpace(stepCli)) stepCli = cliBinary;
+                return RunOneAspectAsync(entry.Index, entry.Def, inputs, stepCli, stepModel, stepThinkingLevel,
                     stepPrompt, perAspectTimeout, gate, now, ct);
             })
             .ToArray();
@@ -882,6 +899,23 @@ internal static class ConcernTagWriter
     public static void ReplaceCodeReviewGradeTag(string jobFolderPath, string gradeTagId, ILogger logger)
     {
         if (string.IsNullOrWhiteSpace(gradeTagId)) return;
+        ReconcileCodeReviewGradeTag(jobFolderPath, gradeTagId, logger);
+    }
+
+    /// <summary>
+    /// Remove every stale quality-grade tag while preserving all unrelated
+    /// tags. Used when a new grade dispatch failed before producing an
+    /// authoritative grade, so the card cannot keep advertising an older A-D
+    /// result beside a failed pipeline row.
+    /// </summary>
+    public static void ClearCodeReviewGradeTags(string jobFolderPath, ILogger logger)
+        => ReconcileCodeReviewGradeTag(jobFolderPath, gradeTagId: null, logger);
+
+    private static void ReconcileCodeReviewGradeTag(
+        string jobFolderPath,
+        string? gradeTagId,
+        ILogger logger)
+    {
         var jobJsonPath = Path.Combine(jobFolderPath, "task.json");
         if (!File.Exists(jobJsonPath)) return;
 
@@ -905,9 +939,12 @@ internal static class ConcernTagWriter
 
             var reconciled = existing
                 .Where(t => !t.StartsWith(CodeReviewGradeTagPrefix, StringComparison.OrdinalIgnoreCase))
-                .Append(gradeTagId)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            if (!string.IsNullOrWhiteSpace(gradeTagId))
+            {
+                reconciled.Add(gradeTagId);
+            }
 
             var before = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
             var after = new HashSet<string>(reconciled, StringComparer.OrdinalIgnoreCase);
@@ -918,7 +955,7 @@ internal static class ConcernTagWriter
         catch (Exception ex)
         {
             logger.LogWarning(ex,
-                "ConcernTagWriter: failed to set code-review grade tag into {TaskFolder}",
+                "ConcernTagWriter: failed to reconcile code-review grade tag in {TaskFolder}",
                 jobFolderPath);
         }
     }

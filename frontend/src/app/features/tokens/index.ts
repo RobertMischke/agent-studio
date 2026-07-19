@@ -8,6 +8,10 @@ export { CliUsageModalComponent } from './components/cli-usage-modal/cli-usage-m
 export { CliUsageDetailComponent } from './components/cli-usage-detail/cli-usage-detail';
 export { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline/workspace-token-timeline';
 export { TokenUsageSectionComponent } from './components/token-usage-section/token-usage-section.component';
+export { CostBreakdownDialogComponent } from './components/cost-breakdown-dialog/cost-breakdown-dialog';
+export { CostBreakdownTriggerDirective } from './components/cost-breakdown-trigger.directive';
+export { CostBreakdownService } from './services/cost-breakdown.service';
+export type { CostBreakdownRequestItem } from './services/cost-breakdown.service';
 export type {
   TaskTokenCall,
   TaskTokenSummary,

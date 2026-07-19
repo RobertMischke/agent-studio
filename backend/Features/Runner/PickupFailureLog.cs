@@ -24,7 +24,7 @@ namespace AgentStudio.Runner;
 /// <c>BuildArchiveSlug</c> helper survive only for reading old on-disk rows and
 /// draining historical lane contents.</para>
 ///
-/// <para>Schema: <c>docs/schemas/pickup-failure.schema.json</c>.</para>
+/// <para>Schema: <c>docs/app/schemas/pickup-failure.schema.json</c>.</para>
 /// </summary>
 public sealed class PickupFailureLog
 {
@@ -133,7 +133,7 @@ public sealed class PickupFailureLog
 }
 
 /// <summary>One row in <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>.</summary>
-/// <remarks>Schema: <c>docs/schemas/pickup-failure.schema.json</c>.</remarks>
+/// <remarks>Schema: <c>docs/app/schemas/pickup-failure.schema.json</c>.</remarks>
 public sealed record PickupFailureRecord
 {
     [JsonPropertyName("at")] public DateTime At { get; init; }
@@ -157,6 +157,7 @@ public sealed record PickupAttemptDiagnostic
     [JsonPropertyName("durationSeconds")] public double DurationSeconds { get; init; }
     [JsonPropertyName("outputLines")] public int OutputLines { get; init; }
     [JsonPropertyName("executionStatus")] public string? ExecutionStatus { get; init; }
+    [JsonPropertyName("error")] public string? Error { get; init; }
 }
 
 /// <summary>
@@ -165,7 +166,7 @@ public sealed record PickupAttemptDiagnostic
 /// from <c>3a-failed-pickup</c> back into a live lane (usually
 /// <c>2-ready</c>) via <c>POST /api/tasks/{id}/restore-from-failed-pickup</c>.
 /// The two row shapes share the file and are disambiguated by
-/// <c>kind</c>; see <c>docs/schemas/pickup-failure.schema.json</c>.
+/// <c>kind</c>; see <c>docs/app/schemas/pickup-failure.schema.json</c>.
 /// </summary>
 public sealed record PickupRestoreRecord
 {

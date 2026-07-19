@@ -29,6 +29,9 @@ public static class QuotaWindowProjection
     /// window is 15 minutes).
     /// </summary>
     private const double MinElapsedFraction = 0.05;
+    private const double MaxProjectedToUsedRatio = 4d;
+    private const double SuspiciousEarlyFraction = 0.25;
+    private static readonly TimeSpan StartAnchorTolerance = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// Project one window to the end of its current period. Returns null when
@@ -42,7 +45,13 @@ public static class QuotaWindowProjection
         if (length is null) return null;
 
         var reset = window.ResetAt.Value;
-        var start = reset - length.Value;
+        var impliedStart = reset - length.Value;
+        var start = window.ObservedStartAt ?? impliedStart;
+        if (!string.IsNullOrWhiteSpace(window.ProjectionSuspiciousReason)) return null;
+        if (window.ObservedStartAt is not null
+            && nowUtc < start + length.Value
+            && (impliedStart - start).Duration() > StartAnchorTolerance)
+            return null;
         var elapsed = nowUtc - start;
         if (elapsed <= TimeSpan.Zero) return null;                 // window not started yet (clock skew)
         if (elapsed > length.Value) elapsed = length.Value;         // stale snapshot past its reset
@@ -52,6 +61,10 @@ public static class QuotaWindowProjection
 
         var used = window.UsedPct.Value;
         var projected = used / fraction;                            // "if this pace holds to reset"
+        if (used > 0d
+            && projected / used > MaxProjectedToUsedRatio
+            && fraction <= SuspiciousEarlyFraction)
+            return null;
         var burnPerHour = used / elapsed.TotalHours;
         var hoursRemaining = Math.Max(0d, (reset - nowUtc).TotalHours);
 
@@ -66,7 +79,78 @@ public static class QuotaWindowProjection
             // Only a window that is currently UNDER the cap but projected to
             // cross it is a "wall ahead". An already-over-cap window is handled
             // by the strict cap check, not the projection.
-            BreachesBeforeReset: used < capPct && projected >= capPct);
+            BreachesBeforeReset: used < capPct && projected >= capPct,
+            AssumedStartAt: start,
+            ElapsedFraction: fraction);
+    }
+
+    /// <summary>
+    /// Carry the first observed start of an active reset cycle forward. A reset
+    /// timestamp that moves while the anchored cycle is still active is retained
+    /// for display but marked unusable for projection until a reset is observed.
+    /// </summary>
+    public static QuotaSnapshot AnchorWindowStarts(
+        QuotaSnapshot? previous, QuotaSnapshot candidate, DateTime nowUtc)
+    {
+        if (candidate.Windows.Count == 0) return candidate;
+        var windows = candidate.Windows.Select(current =>
+        {
+            var length = InferWindowLength(current.Label);
+            if (length is null || current.ResetAt is null) return current;
+            var prior = previous?.Windows.FirstOrDefault(w =>
+                string.Equals(w.Label?.Trim(), current.Label?.Trim(), StringComparison.OrdinalIgnoreCase));
+            var priorStart = prior?.ObservedStartAt
+                ?? (prior?.ResetAt is { } priorReset ? priorReset - length.Value : null);
+            if (priorStart is null || priorStart.Value + length.Value <= nowUtc)
+            {
+                return current with
+                {
+                    ObservedStartAt = current.ResetAt.Value - length.Value,
+                    ProjectionSuspiciousReason = null,
+                };
+            }
+
+            var impliedStart = current.ResetAt.Value - length.Value;
+            var shifted = (impliedStart - priorStart.Value).Duration() > StartAnchorTolerance;
+            return current with
+            {
+                ObservedStartAt = priorStart,
+                ProjectionSuspiciousReason = shifted
+                    ? $"{current.Label} resetAt moved before the anchored window reset was observed"
+                    : null,
+            };
+        }).ToList();
+        return candidate with { Windows = windows };
+    }
+
+    /// <summary>Explain why a snapshot was deliberately excluded from projection.</summary>
+    public static QuotaProjectionWarning? FindWarning(QuotaSnapshot? snapshot, DateTime nowUtc)
+    {
+        if (snapshot?.Windows == null) return null;
+        foreach (var window in snapshot.Windows)
+        {
+            if (window.UsedPct is not double used || window.ResetAt is not DateTime reset) continue;
+            var length = InferWindowLength(window.Label);
+            if (length is null) continue;
+            var impliedStart = reset - length.Value;
+            var start = window.ObservedStartAt ?? impliedStart;
+            var elapsed = nowUtc - start;
+            if (elapsed <= TimeSpan.Zero) continue;
+            var fraction = Math.Min(1d, elapsed.TotalHours / length.Value.TotalHours);
+            var projected = used / fraction;
+            var anchorConflict = window.ObservedStartAt is not null
+                && nowUtc < start + length.Value
+                && (impliedStart - start).Duration() > StartAnchorTolerance;
+            var ratioConflict = used > 0d
+                && projected / used > MaxProjectedToUsedRatio
+                && fraction <= SuspiciousEarlyFraction;
+            var reason = window.ProjectionSuspiciousReason
+                ?? (anchorConflict ? $"{window.Label} resetAt conflicts with the observed window start" : null)
+                ?? (ratioConflict ? $"{window.Label} projected/used ratio exceeds {MaxProjectedToUsedRatio:0.#} near window start" : null);
+            if (reason is not null)
+                return new(window.Label, reason, reset, start, fraction, used, projected);
+        }
+        return null;
     }
 
     /// <summary>
@@ -162,4 +246,15 @@ public sealed record QuotaProjection(
     double HoursRemaining,
     int CapPct,
     DateTime? ResetAt,
-    bool BreachesBeforeReset);
+    bool BreachesBeforeReset,
+    DateTime? AssumedStartAt = null,
+    double? ElapsedFraction = null);
+
+public sealed record QuotaProjectionWarning(
+    string WindowLabel,
+    string Reason,
+    DateTime ResetAt,
+    DateTime AssumedStartAt,
+    double ElapsedFraction,
+    double CurrentUsedPct,
+    double ProjectedUsedPct);

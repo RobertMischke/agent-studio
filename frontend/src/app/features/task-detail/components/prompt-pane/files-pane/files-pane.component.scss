@@ -91,6 +91,11 @@
     color: var(--severity-info, var(--studio-accent));
     border-color: color-mix(in srgb, var(--severity-info, var(--studio-accent)) 32%, transparent);
   }
+  &--html {
+    background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+    color: var(--studio-accent);
+    border-color: color-mix(in srgb, var(--studio-accent) 32%, transparent);
+  }
 }
 
 .file-card__provenance {
@@ -144,6 +149,15 @@
 
 .file-card__markdown {
   display: block;
+}
+
+.file-card__html-frame {
+  display: block;
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-editor);
 }
 
 ::ng-deep .file-card__markdown .markdown-body h1 {

@@ -113,7 +113,7 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
     expect(c.contextKey()).toBe('task:demo-project/AGT-2000');
   });
 
-  it('context chip + subtitle track the effective (frozen) scope while pinned', async () => {
+  it('context label tracks the effective frozen scope while pinned', async () => {
     const fixture = await makeFixture();
     const c = fixture.componentInstance;
 
@@ -128,7 +128,6 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
     fixture.componentRef.setInput('activeJobTitle', null);
 
     expect(c.contextChipText()).toBe(`Context: demo-project · Task 'Fix the header'`);
-    expect(c.subtitleText()).toBe('demo-project · canonical session');
   });
 
   // MC-2: the chat body must actually READ the per-context thread, not just

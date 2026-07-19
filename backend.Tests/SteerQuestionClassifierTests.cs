@@ -19,6 +19,9 @@ public sealed class SteerQuestionClassifierTests
     [InlineData("The reviewer asked whether this was already merged into develop.")]
     [InlineData("Was this already done in a previous task?")]
     [InlineData("is the sidebar already integrated into main")]
+    [InlineData("ist iframe schon implementiert?")]
+    [InlineData("Ist das Feature bereits umgesetzt?")]
+    [InlineData("Wurde der Export schon gemergt?")]
     public void RecognizesAlreadyImplementedQuestions(string q)
         => Assert.True(SteerQuestionClassifier.IsAlreadyImplementedQuestion(q));
 

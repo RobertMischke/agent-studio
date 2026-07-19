@@ -13,7 +13,7 @@ namespace AgentStudio.Shared;
 /// <para>This is the recurring "in-progress lane kaputt" incident: a rapid
 /// stale-session resume crash (exit code 1, zero output) that the typed
 /// human-review routes never matched. See
-/// <c>docs/wiki/concepts/runner-stability-incidents.html</c>.</para>
+/// <c>docs/concepts/runner-stability-incidents.html</c>.</para>
 ///
 /// <para>Invariant: <b>no genuinely FAILED run ever stays in 3-progress</b>;
 /// it always reaches a terminal lane with an honest, visible reason. The only

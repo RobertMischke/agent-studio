@@ -1,8 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  OnChanges,
   OnDestroy,
   OnInit,
+  SimpleChanges,
   computed,
   inject,
   input,
@@ -47,7 +49,7 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
   templateUrl: './task-column.html',
   styleUrl: './task-column.scss'
 })
-export class TaskColumnComponent implements OnInit, OnDestroy {
+export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   private readonly taskService = inject(TaskService);
 
   readonly title = input.required<string>();
@@ -75,6 +77,8 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
    * lane (state = '3-progress') reads these inputs today.
    */
   readonly autoProject = input<string | null>(null);
+  /** Project scope for project-owned lane data such as the lazy archive feed. */
+  readonly projectScope = input<string | null>(null);
   /** Current runner mode for the auto project, drives the chip's on/off look. */
   readonly autoMode = input<string>('manual');
   /**
@@ -169,6 +173,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     const role = status?.role ?? null;
     const pendingMode = status?.pendingMode ?? null;
     const pendingAfter = status?.pendingModeWillApplyAfter ?? null;
+    const pendingActiveCount = status?.pendingModeActiveTaskCount ?? (pendingAfter ? 1 : 0);
     const breakerState = status?.breakerState ?? null;
     const breakerCooldownUntil = status?.breakerCooldownUntil ?? null;
     const breakerReason = status?.breakerReason ?? null;
@@ -218,10 +223,10 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     if (pendingMode) {
       const pendingPretty = pendingMode === 'paused' ? 'PAUSED' : pendingMode.toUpperCase();
       modeLabel = `${modeLabel} → ${pendingPretty}`;
-      modeTooltip =
-        `${modeTooltip}\n\nDeferred change pending: mode will flip to "${pendingMode}" when the active job (${pendingAfter ?? 'in flight'}) finishes (ADR-0044).`;
+      const taskDetail = pendingActiveCount === 1 ? ` (${status?.pendingModeActiveTaskTitle ?? pendingAfter ?? 'active task'})` : '';
+      const finishVerb = pendingActiveCount === 1 ? 'finishes' : 'finish';
+      modeTooltip = `Switches to ${pendingPretty} when ${pendingActiveCount} active task${pendingActiveCount === 1 ? '' : 's'} ${finishVerb}${taskDetail}.`;
     }
-
     // ADR-0044: test-subject backends never auto-pick. The label still
     // shows the configured mode (operators can leave it on auto for
     // future role flips), but we annotate the tooltip so the lane pill
@@ -392,7 +397,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
 
   /**
    * Every lane carries an info trigger: each one maps to a committed
-   * concept doc under <c>docs/in-app-help/lane-guides/lane-*.md</c>, served by
+   * concept doc under <c>docs/app/help/lane-guides/lane-*.md</c>, served by
    * <c>GET /api/concept-docs/{topic}</c> and shown in the lane-info
    * modal. Virtual sub-lanes (e.g. <c>2-ready-intake</c>, <c>4-review</c>)
    * collapse to their parent's doc. Returns <c>null</c> only for a state
@@ -444,6 +449,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   readonly archiveLoaded = signal<boolean>(false);
   private archiveSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private archiveSub: Subscription | null = null;
+  private archiveInitialized = false;
 
   /** Unloaded archived rows behind the current page (drives "load more"). */
   readonly archiveRemaining = computed(() => Math.max(0, this.archiveTotal() - this.archiveItems().length));
@@ -454,7 +460,17 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   readonly headerCount = computed(() => (this.isArchive() ? this.archiveTotal() : this.jobs().length));
 
   ngOnInit(): void {
-    if (this.isArchive()) this.loadArchive(true);
+    if (this.isArchive()) {
+      this.archiveInitialized = true;
+      this.loadArchive(true);
+    }
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.archiveInitialized || !changes['projectScope'] || changes['projectScope'].firstChange) return;
+    this.archiveSub?.unsubscribe();
+    this.archiveLoading.set(false);
+    this.loadArchive(true);
   }
 
   ngOnDestroy(): void {
@@ -473,7 +489,12 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     this.archiveError.set(null);
     this.archiveSub?.unsubscribe();
     this.archiveSub = this.taskService
-      .getArchivedTasks({ offset, limit: ARCHIVE_PAGE_SIZE, search: this.archiveSearch() })
+      .getArchivedTasks({
+        project: this.projectScope() ?? undefined,
+        offset,
+        limit: ARCHIVE_PAGE_SIZE,
+        search: this.archiveSearch(),
+      })
       .subscribe({
         next: (res) => {
           this.archiveItems.set(reset ? res.items : [...this.archiveItems(), ...res.items]);

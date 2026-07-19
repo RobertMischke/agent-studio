@@ -58,6 +58,19 @@
     }
   </header>
 
+  @if (deepLinkMissing(); as missing) {
+    <div class="pwiki__deeplink-hint" role="status" data-testid="project-wiki-deeplink-missing">
+      <app-studio-icon name="warn" [size]="13"></app-studio-icon>
+      <span>{{ missing.kind === 'folder' ? 'Der verlinkte Ordner' : 'Die verlinkte Seite' }} <code>{{ missing.relPath }}</code> wurde nicht gefunden.</span>
+      <button class="pwiki__deeplink-dismiss" type="button"
+              data-testid="project-wiki-deeplink-dismiss"
+              aria-label="Hinweis schließen"
+              (click)="dismissDeepLinkHint()">
+        <app-studio-icon name="close" [size]="12"></app-studio-icon>
+      </button>
+    </div>
+  }
+
   @if (loading()) {
     <p class="studio-empty">Loading...</p>
   } @else if (!tree()) {
@@ -73,6 +86,17 @@
          [style.--pwiki-nav-width]="navWidthStyle()">
       @if (!navCollapsed()) {
       <nav class="pwiki__tree" id="project-wiki-tree" data-testid="project-wiki-tree" aria-label="Knowledge categories">
+        <label class="pwiki__filter-wrap">
+          <app-studio-icon name="search" [size]="13"></app-studio-icon>
+          <input class="pwiki__filter"
+                 type="search"
+                 [ngModel]="searchQuery()"
+                 (ngModelChange)="onSearchQueryChange($event)"
+                 (keydown.enter)="openTopSearchResult()"
+                 (keydown.escape)="clearSearch()"
+                 placeholder="Wiki durchsuchen…"
+                 data-testid="project-wiki-search">
+        </label>
         <div class="pwiki__tree-top">
           <span>Categories</span>
           <span>{{ docCount() }}</span>
@@ -102,6 +126,17 @@
           </label>
         }
 
+        <button class="pwiki__overview-node"
+                type="button"
+                data-testid="project-wiki-overview-node"
+                [class.pwiki__overview-node--active]="overviewActive()"
+                [attr.aria-pressed]="overviewActive()"
+                cacTooltip="Open the knowledge dashboard"
+                (click)="openOverview()">
+          <span class="pwiki__chevron-spacer"></span>
+          <app-studio-icon name="layout" [size]="13"></app-studio-icon>
+          <span class="pwiki__overview-label">Overview</span>
+        </button>
         <div class="pwiki__rows"
              role="tree"
              aria-label="Knowledge document tree">
@@ -111,7 +146,7 @@
                  [attr.tabindex]="rowTabIndex(row, index)"
                  [class.pwiki__row--group]="row.node.type === 'folder'"
                  [class.pwiki__row--doc]="row.node.type !== 'folder'"
-                 [class.pwiki__row--active]="openedRel() === row.node.relPath"
+                 [class.pwiki__row--active]="openedRel() === row.node.relPath || selectedFolderRel() === row.node.relPath"
                  [class.pwiki__row--drop]="dropTargetId() === nodeId(row.node)"
                  [style.padding-left.px]="rowPad(row.depth)"
                  [attr.aria-level]="row.depth + 1"
@@ -119,11 +154,11 @@
                  [attr.aria-selected]="openedRel() === row.node.relPath ? 'true' : null"
                  [attr.data-testid]="'project-wiki-node-' + nodeId(row.node)"
                  [attr.data-wiki-row-id]="nodeId(row.node)"
-                 [draggable]="row.node.type !== 'folder'"
+                 [draggable]="true"
                  (focusin)="focusTreeRow(row.node)"
                  (click)="focusTreeRowElement($event, row.node)"
                  (keydown)="onTreeKeydown($event)"
-                 (dragstart)="onFileDragStart($event, row.node)"
+                 (dragstart)="onNodeDragStart($event, row.node)"
                  (dragend)="onDragEnd()"
                  (dragover)="onFolderDragOver($event, row.node)"
                  (dragleave)="onFolderDragLeave(row.node)"
@@ -154,7 +189,8 @@
               } @else if (row.node.type === 'folder') {
                 <button class="pwiki__label pwiki__label--group" type="button"
                         tabindex="-1"
-                        (click)="toggleExpand(nodeId(row.node))">
+                        [attr.data-testid]="'project-wiki-folder-label-' + nodeId(row.node)"
+                        (click)="selectFolder(row.node)">
                   <app-studio-icon name="folder" [size]="13"></app-studio-icon>
                   <span class="pwiki__label-copy">
                     <span class="pwiki__label-text">{{ row.node.title }}</span>
@@ -200,18 +236,22 @@
                         </button>
                       }
                     </span>
+                    @if (classificationBadges(row.node.classification).length) {
+                      <span class="pwiki__class-strip"
+                            [attr.data-testid]="'project-wiki-class-' + row.node.relPath">
+                        @for (badge of classificationBadges(row.node.classification); track badge.key) {
+                          <span class="pwiki__class-chip"
+                                [attr.data-kind]="badge.key"
+                                [attr.data-tone]="badge.tone"
+                                [attr.data-testid]="'project-wiki-class-' + row.node.relPath + '-' + badge.key"
+                                [cacTooltip]="badge.tooltip">{{ badge.label }}</span>
+                        }
+                      </span>
+                    }
                   </span>
                 </div>
               }
 
-              @if (row.node.immutable) {
-                <span class="pwiki__lock"
-                      aria-label="Fixed frame page"
-                      [attr.data-testid]="'project-wiki-lock-' + nodeId(row.node)"
-                      cacTooltip="Fixed Workstream frame page. It cannot be renamed, moved, or deleted. Add subpages under it instead.">
-                  <app-studio-icon name="pin" [size]="11"></app-studio-icon>
-                </span>
-              }
             </div>
           }
           @if (rows().length === 0) {
@@ -241,7 +281,18 @@
       }
 
       <div class="pwiki__viewer">
-        @if (openedRel(); as rel) {
+        @if (searchActive()) {
+          <app-wiki-search-results
+              [projectName]="projectName()"
+              [query]="searchQuery()"
+              [response]="searchResponse()"
+              [loading]="searchLoading()"
+              [semanticLoading]="semanticLoading()"
+              [semanticRequested]="semanticRequested()"
+              [error]="searchError()"
+              (openResult)="openSearchResult($event)"
+              (expandSemantic)="expandSearchSemantically()" />
+        } @else if (openedRel(); as rel) {
           <header class="pwiki__viewer-head">
             <div class="pwiki__tabs" role="tablist" aria-label="Page view modes">
               <button class="pwiki__tab" type="button"
@@ -280,6 +331,21 @@
                     data-testid="project-wiki-edit">
               <app-studio-icon name="code" [size]="12"></app-studio-icon>
               <span>Edit</span>
+            </button>
+            <button class="pwiki__copy-link" type="button"
+                    data-testid="project-wiki-copy-link"
+                    cacTooltip="Link zu dieser Seite kopieren"
+                    aria-label="Link zu dieser Seite kopieren"
+                    (click)="copyOpenedPageLink()">
+              <app-studio-icon name="link" [size]="13"></app-studio-icon>
+            </button>
+            <button class="pwiki__star-toggle" type="button"
+                    data-testid="project-wiki-star-toggle"
+                    [class.pwiki__star-toggle--active]="openedStarred()"
+                    [attr.aria-pressed]="openedStarred()"
+                    [cacTooltip]="openedStarred() ? 'Stern entfernen' : 'Starren'"
+                    (click)="toggleOpenedStar($event)">
+              <app-studio-icon [name]="openedStarred() ? 'starFilled' : 'star'" [size]="13"></app-studio-icon>
             </button>
             <button class="pwiki__viewer-close" type="button" (click)="closeFile()"
                     data-testid="project-wiki-close">
@@ -320,7 +386,7 @@
                   } @else {
                     <iframe class="pwiki__html-frame pwiki__report-frame"
                             data-testid="project-wiki-report-frame"
-                            sandbox=""
+                            sandbox="allow-scripts"
                             [srcdoc]="trustedReportHtml()"
                     title="Document metadata reasoning report"></iframe>
                   }
@@ -379,7 +445,7 @@
               } @else if (openedType() === 'html') {
                 <iframe class="pwiki__html-frame"
                         data-testid="project-wiki-html-frame"
-                        sandbox=""
+                        sandbox="allow-scripts"
                         [srcdoc]="trustedHtml()"
                 title="HTML knowledge page"></iframe>
               } @else if (openedType() === 'json') {
@@ -480,6 +546,45 @@
                 </div>
               </section>
 
+              @if (openedClassification(); as cls) {
+                <section class="pwiki__panel" data-testid="project-wiki-classification-panel">
+                  <div class="pwiki__panel-head">
+                    <span>Klassifikation</span>
+                  </div>
+                  <dl class="pwiki__info-list">
+                    @if (cls.status; as status) {
+                      <div data-testid="project-wiki-classification-status">
+                        <dt>Status</dt>
+                        <dd class="pwiki__class-status">
+                          <span class="pwiki__class-chip"
+                                [attr.data-tone]="status.tone"
+                                data-testid="project-wiki-classification-status-chip">{{ status.label }}</span>
+                          @if (status.supersededBy; as successor) {
+                            <button class="pwiki__class-successor"
+                                    type="button"
+                                    data-testid="project-wiki-classification-superseded-link"
+                                    [cacTooltip]="'Nachfolger-Seite öffnen: ' + successor"
+                                    (click)="openSupersededBy(successor)">{{ successor }}</button>
+                          }
+                        </dd>
+                      </div>
+                    }
+                    @if (cls.typeLabel; as typeLabel) {
+                      <div data-testid="project-wiki-classification-type">
+                        <dt>Typ</dt>
+                        <dd>{{ typeLabel }}</dd>
+                      </div>
+                    }
+                    @if (cls.analyzedAt; as analyzedAt) {
+                      <div data-testid="project-wiki-classification-analyzed">
+                        <dt>Analyse</dt>
+                        <dd>{{ analyzedAt }}</dd>
+                      </div>
+                    }
+                  </dl>
+                </section>
+              }
+
               <section class="pwiki__panel pwiki__panel--history" data-testid="project-wiki-history-panel">
                 <div class="pwiki__panel-head">
                   <span>History</span>
@@ -491,7 +596,6 @@
                                       data-testid="project-wiki-history"
                                       [history]="history()"
                                       [loading]="loadingHistory()"
-                                      (openTask)="openRelatedTask($event)"
                                       (viewRevision)="onViewRevision($event)" />
               </section>
 
@@ -561,6 +665,15 @@
               </div>
             </aside>
           </div>
+        } @else if (selectedFolderRel(); as folderRel) {
+          <app-wiki-folder-view
+              [projectName]="projectName()"
+              [relPath]="folderRel"
+              [reloadNonce]="folderReloadNonce()"
+              (openFolder)="openFolderOverview($event)"
+              (openPage)="openFile($event.relPath, $event.type)"
+              (copyLink)="copyFolderLink($event)"
+              (openRoot)="showWikiLanding()" />
         } @else {
           <header class="pwiki__viewer-head" data-testid="project-wiki-tabs-empty">
             <div class="pwiki__tabs" role="tablist" aria-label="Root page modes">
@@ -579,48 +692,26 @@
                [class.pwiki__workspace--resizing]="resizingPanel() === 'context'"
                [style.--pwiki-context-width]="contextWidthStyle()">
             <article class="pwiki__reader pwiki__landing" data-testid="project-wiki-viewer-empty">
-              <header class="pwiki__landing-head">
-                <span class="pwiki__doc-kind">Pulse</span>
-                <h2 class="pwiki__doc-title">What changed, what needs sorting, and how stale the knowledge is.</h2>
-                <p>
-                  A generated entry view over this wiki - the recent-edits feed, the unfiled inbox, and
-                  deterministic drift grading per Workstream area. It is not a wiki page and cannot be edited.
-                </p>
-              </header>
-
-              <div class="pwiki__landing-actions">
-                <button class="pwiki__landing-action" type="button"
-                        data-testid="project-wiki-open-first"
-                        (click)="openFirstDoc()">
-                  <app-studio-icon name="book" [size]="14"></app-studio-icon>
-                  <span>Open first page</span>
-                </button>
-                <button class="pwiki__landing-action" type="button"
-                        data-testid="project-wiki-drift-open-empty"
-                        (click)="openDriftModal()">
-                  <app-studio-icon name="diff" [size]="14"></app-studio-icon>
-                  <span>Start drift analysis</span>
-                </button>
-              </div>
-
-              <app-wiki-pulse
-                  class="pwiki__pulse"
+              <app-wiki-dashboard
+                  [projectName]="projectName()"
+                  [docCount]="docCount()"
                   [pulse]="pulse()"
                   [loading]="pulseLoading()"
-                  (openPage)="onPulseOpen($event)" />
-
-              <app-wiki-grade-panel
-                  class="pwiki__grade"
+                  [hasStarred]="hasStarred()"
                   [gradingStatus]="gradingStatus()"
                   [gradeModel]="gradeModel()"
                   [gradeLevel]="gradeLevel()"
                   [gradeModels]="gradeModelOptions()"
-                  [critical]="pulse()?.critical ?? null"
+                  (openPage)="onPulseOpen($event)"
+                  (openWorkbench)="openWorkbench.emit($event)"
+                  (openFirst)="openFirstDoc()"
+                  (openDrift)="openDriftModal()"
                   (startGrading)="startWikiGrading()"
                   (abortGrading)="abortWikiGrading()"
                   (gradeModelChange)="onGradeModelChange($event)"
                   (gradeLevelChange)="onGradeLevelChange($event)"
-                  (openReport)="openReportPage($event)" />
+                  (openReport)="openReportPage($event)"
+                  (openGuide)="openFile($event, 'md')" />
             </article>
 
             <div class="pwiki__splitter pwiki__splitter--context"
@@ -678,7 +769,7 @@
                     </div>
                     <div>
                       <dt>Navigation</dt>
-                      <dd>Categories, search, drag move, context actions</dd>
+                      <dd>Categories, search, drag move &amp; reorder, context actions</dd>
                     </div>
                   </dl>
                 </section>

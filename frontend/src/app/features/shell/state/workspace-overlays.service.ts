@@ -6,9 +6,17 @@ import { Injectable, computed, signal } from '@angular/core';
  * AGT-2035 folded the formerly scattered surfaces into one view with a clean
  * Global-vs-Workspace split:
  *   - Global (per-user / app-wide): `appearance` (Theme + Activity bar),
- *     `updates`, `workspaces` (registry management, moved off the sidebar).
- *   - Workspace defaults: `caps`, `working-memory` (extracted from caps),
- *     `prompts`, `tokens` (now the single usage area), `screenshots`.
+ *     `updates`, `workspaces` (registry management, moved off the sidebar),
+ *     `task-server` (the durable task server's URL, store, evidence git,
+ *     client registry and management sweeps — AGT-1924), `remote-hosts`,
+ *     `orchestrator` (the platform-global supervisor / orchestrator lifecycle
+ *     flags — AGT-1812 retired their standalone modal into this section).
+ *   - Workspace defaults: `caps` (the "CLI Management" hub - CLI catalog,
+ *     models/routes, usage caps and completion contracts), `cli-sessions`
+ *     and `cli-paths` (the encapsulated CLI-session inventory and per-CLI
+ *     filesystem-location pages split out of the CLI Management hub -
+ *     AGT-2101), `working-memory` (extracted from caps), `prompts`,
+ *     `tokens` (now the single usage area), `screenshots`.
  * `overview` is the landing rail item that links into each section.
  *
  * The `summary` section was removed (executive summary is a project-level
@@ -19,13 +27,18 @@ export type WorkspaceSettingsSection =
   | 'appearance'
   | 'updates'
   | 'workspaces'
+  | 'task-server'
   | 'remote-hosts'
-  | 'project-sources'
+  | 'orchestrator'
   | 'caps'
+  | 'cli-sessions'
+  | 'cli-paths'
   | 'working-memory'
   | 'prompts'
   | 'tokens'
   | 'screenshots';
+
+export type WorkspaceTokenUsagePage = 'workspace' | 'claude' | 'codex';
 
 /**
  * Shell-feature service: open/close state + URL-hash sync for the consolidated
@@ -46,6 +59,7 @@ export class WorkspaceOverlaysService {
   readonly settingsOpen = signal<boolean>(false);
   /** The active section inside the view. */
   readonly section = signal<WorkspaceSettingsSection>('overview');
+  readonly tokenUsagePage = signal<WorkspaceTokenUsagePage>('workspace');
 
   /**
    * Back-compat read signals. Each loose overlay is now a section of the one
@@ -65,7 +79,7 @@ export class WorkspaceOverlaysService {
    * (CLI usage) section has its own dedicated "Usage" status-bar pill, so the
    * "Settings" pill must not also light up while Usage is showing — otherwise
    * both pills carry the single `--studio-accent` active fill at once (see
-   * docs/frontend/design-system.md, "one accent per rail").
+   * docs/quality/frontend/design-system.md, "one accent per rail").
    */
   readonly anyOpenExceptUsage = computed(() => this.settingsOpen() && this.section() !== 'caps');
 
@@ -79,6 +93,7 @@ export class WorkspaceOverlaysService {
 
   open(section: WorkspaceSettingsSection): void {
     this.section.set(section);
+    if (section === 'tokens') this.tokenUsagePage.set('workspace');
     this.settingsOpen.set(true);
     this.openedViaHash = false;
     this.writeHash(this.hashForSection(section));
@@ -93,6 +108,11 @@ export class WorkspaceOverlaysService {
     if (this.section() === section) return;
     this.section.set(section);
     this.writeHash(this.hashForSection(section));
+  }
+
+  selectTokenUsagePage(page: WorkspaceTokenUsagePage): void {
+    this.tokenUsagePage.set(page);
+    this.writeHash(page === 'workspace' ? '#/workspace/tokens' : `#/workspace/tokens/${page}`);
   }
 
   close(): void {
@@ -133,16 +153,30 @@ export class WorkspaceOverlaysService {
   togglePromptAdmin(): void { this.toggle('prompts'); }
 
   /**
+   * AGT-1812: open the platform-global orchestrator / supervisor lifecycle
+   * flags. This is the new home of the retired standalone "Orchestrator config"
+   * modal — the header Dev-tools entry and the orchestrator side-sheet gear both
+   * route here now.
+   */
+  openOrchestrator(): void { this.open('orchestrator'); }
+  toggleOrchestrator(): void { this.toggle('orchestrator'); }
+
+  /**
    * Reconcile open state with the current URL hash. Call once on app boot and
    * on every `hashchange` event. A recognised section hash opens (or switches)
    * the view; dropping a hash that opened the view closes it.
    */
   syncFromHash(): void {
-    const section = this.sectionForHash(window.location.hash);
+    const hash = window.location.hash;
+    const section = this.sectionForHash(hash);
     if (section) {
+      this.tokenUsagePage.set(this.tokenUsagePageForHash(hash));
       if (this.section() !== section) this.section.set(section);
       if (!this.settingsOpen()) this.settingsOpen.set(true);
       this.openedViaHash = true;
+      if (hash === '#/workspace/settings/project-sources') {
+        this.writeHash('#/workspace/settings');
+      }
     } else if (this.settingsOpen() && this.openedViaHash) {
       this.settingsOpen.set(false);
       this.openedViaHash = false;
@@ -152,16 +186,23 @@ export class WorkspaceOverlaysService {
   private sectionForHash(hash: string): WorkspaceSettingsSection | null {
     switch (hash) {
       case '#/workspace/tokens': return 'tokens';
+      case '#/workspace/tokens/claude': return 'tokens';
+      case '#/workspace/tokens/codex': return 'tokens';
       case '#/workspace/screenshots': return 'screenshots';
       case '#/workspace/settings/caps':
       case '#/workspace/caps': return 'caps';
+      case '#/workspace/settings/cli-sessions': return 'cli-sessions';
+      case '#/workspace/settings/cli-paths': return 'cli-paths';
       case '#/workspace/settings/prompts':
       case '#/workspace/prompts': return 'prompts';
       case '#/workspace/settings/appearance': return 'appearance';
       case '#/workspace/settings/updates': return 'updates';
       case '#/workspace/settings/workspaces': return 'workspaces';
+      case '#/workspace/settings/task-server': return 'task-server';
       case '#/workspace/settings/remote-hosts': return 'remote-hosts';
-      case '#/workspace/settings/project-sources': return 'project-sources';
+      // Retired project-source catalogue: old bookmarks land safely on Overview.
+      case '#/workspace/settings/project-sources': return 'overview';
+      case '#/workspace/settings/orchestrator': return 'orchestrator';
       case '#/workspace/settings/working-memory': return 'working-memory';
       // Retired 'summary' aliases resolve to the overview (migration: no crash).
       case '#/workspace/summary':
@@ -171,17 +212,26 @@ export class WorkspaceOverlaysService {
     }
   }
 
+  private tokenUsagePageForHash(hash: string): WorkspaceTokenUsagePage {
+    if (hash === '#/workspace/tokens/claude') return 'claude';
+    if (hash === '#/workspace/tokens/codex') return 'codex';
+    return 'workspace';
+  }
+
   private hashForSection(section: WorkspaceSettingsSection): string {
     switch (section) {
       case 'tokens': return '#/workspace/tokens';
       case 'screenshots': return '#/workspace/screenshots';
       case 'caps': return '#/workspace/settings/caps';
+      case 'cli-sessions': return '#/workspace/settings/cli-sessions';
+      case 'cli-paths': return '#/workspace/settings/cli-paths';
       case 'prompts': return '#/workspace/settings/prompts';
       case 'appearance': return '#/workspace/settings/appearance';
       case 'updates': return '#/workspace/settings/updates';
       case 'workspaces': return '#/workspace/settings/workspaces';
+      case 'task-server': return '#/workspace/settings/task-server';
       case 'remote-hosts': return '#/workspace/settings/remote-hosts';
-      case 'project-sources': return '#/workspace/settings/project-sources';
+      case 'orchestrator': return '#/workspace/settings/orchestrator';
       case 'working-memory': return '#/workspace/settings/working-memory';
       case 'overview': return '#/workspace/settings';
     }
@@ -190,16 +240,22 @@ export class WorkspaceOverlaysService {
   private readonly ownHashes = new Set<string>([
     '#/workspace/settings',
     '#/workspace/settings/caps',
+    '#/workspace/settings/cli-sessions',
+    '#/workspace/settings/cli-paths',
     '#/workspace/settings/prompts',
     '#/workspace/settings/appearance',
     '#/workspace/settings/updates',
     '#/workspace/settings/workspaces',
+    '#/workspace/settings/task-server',
     '#/workspace/settings/remote-hosts',
     '#/workspace/settings/project-sources',
+    '#/workspace/settings/orchestrator',
     '#/workspace/settings/working-memory',
     '#/workspace/caps',
     '#/workspace/prompts',
     '#/workspace/tokens',
+    '#/workspace/tokens/claude',
+    '#/workspace/tokens/codex',
     '#/workspace/screenshots',
     // Retired aliases stay here so a stale summary hash still clears on close.
     '#/workspace/summary',

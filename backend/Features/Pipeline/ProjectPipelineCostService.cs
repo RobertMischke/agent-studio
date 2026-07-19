@@ -113,7 +113,7 @@ public sealed class ProjectPipelineCostService
                 var stepTokens = s.InputTokens + s.OutputTokens + s.CacheReadTokens + s.CacheCreationTokens;
                 if (stepTokens <= 0) continue;
                 var est = TokenPricing.Estimate(
-                    s.Model, s.InputTokens, s.OutputTokens, s.CacheReadTokens, s.CacheCreationTokens);
+                    s.Model, s.InputTokens, s.OutputTokens, s.CacheReadTokens, s.CacheCreationTokens, ts);
 
                 Add(perKindDay, (s.Kind, dayKey), stepTokens, est);
                 Add(perKind, s.Kind, stepTokens, est);

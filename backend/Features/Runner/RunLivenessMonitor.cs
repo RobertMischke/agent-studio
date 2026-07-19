@@ -149,6 +149,14 @@ public sealed class RunLivenessMonitor
             {
                 ct.ThrowIfCancellationRequested();
                 var folder = laneFolder.FolderPath;
+                // Slice B owns a valid steer-pending wait: it intentionally has
+                // no live CLI heartbeat and must receive its configured T-second
+                // auto-answer / blocked decision, not Slice A's 30s process-lost
+                // recovery. Only exclude a successfully parsed marker. A torn or
+                // unreadable marker falls through to the ordinary liveness net
+                // instead of creating a new indefinite wait.
+                if (SteerPendingMarker.TryRead(folder, _logger) != null)
+                    continue;
                 var isActiveHere = !string.IsNullOrEmpty(activeJobId)
                     && string.Equals(laneFolder.Slug, activeJobId, StringComparison.OrdinalIgnoreCase);
                 // A folder-shaped orphan (no task.json) is not a runnable run;
@@ -160,6 +168,7 @@ public sealed class RunLivenessMonitor
                     hasJobJson,
                     isActiveHere,
                     HasLiveHeartbeat: isActiveHere || _pickupLock.HasLiveOwner(folder),
+                    HasVisibleWaitingState: hasJobJson && HasVisibleWaitingState(folder),
                     CoreRunFinished: hasJobJson && RunFinishedSignal.CoreRunFinished(folder),
                     SecondsSinceActivity: (now - MeasureLastActivity(folder)).TotalSeconds));
             }
@@ -178,12 +187,14 @@ public sealed class RunLivenessMonitor
                     HasLiveRunHeartbeat: c.HasLiveHeartbeat,
                     CoreRunFinished: c.CoreRunFinished,
                     SecondsSinceActivity: c.SecondsSinceActivity,
-                    GraceSeconds: graceSeconds);
+                    GraceSeconds: graceSeconds,
+                    HasVisibleWaitingState: c.HasVisibleWaitingState);
                 var decision = RunLivenessPolicy.Decide(facts);
 
                 switch (decision.Action)
                 {
                     case RunLivenessAction.Healthy:
+                    case RunLivenessAction.VisibleWait:
                     case RunLivenessAction.WithinGrace:
                         // Healthy / too-fresh: no move, no audit-log noise (mirrors
                         // the archiver leaving "fresh" verdicts unpersisted).
@@ -219,6 +230,23 @@ public sealed class RunLivenessMonitor
         }
 
         return outcomes;
+    }
+
+    private static bool HasVisibleWaitingState(string jobFolder)
+    {
+        try
+        {
+            var path = Path.Combine(jobFolder, "task.json");
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (!doc.RootElement.TryGetProperty("phase", out var phase)) return false;
+            var value = phase.GetString();
+            return string.Equals(value, LifecyclePhases.LoopWaiting, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, LifecyclePhases.SteerPending, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task<RunLivenessOutcome> DemoteToReadyAsync(
@@ -476,6 +504,7 @@ public sealed class RunLivenessMonitor
         bool HasJobJson,
         bool IsActiveHere,
         bool HasLiveHeartbeat,
+        bool HasVisibleWaitingState,
         bool CoreRunFinished,
         double SecondsSinceActivity);
 }

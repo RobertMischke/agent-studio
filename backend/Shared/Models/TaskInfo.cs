@@ -42,8 +42,16 @@ public record TaskInfo
     public string? SessionName { get; init; }
     /// <summary>Preferred model for this job (e.g. <c>claude-sonnet-4.5</c>); passed via <c>--model</c> when supported.</summary>
     public string? Model { get; init; }
+    /// <summary>
+    /// True when the model was explicitly pinned on the card. Legacy tasks
+    /// without provenance default to true so an upgrade never changes their
+    /// execution model unexpectedly.
+    /// </summary>
+    public bool ModelExplicit { get; init; } = true;
     /// <summary>Optional thinking / reasoning effort level for the selected CLI model.</summary>
     public string? ThinkingLevel { get; init; }
+    /// <summary>True when the card explicitly pins its reasoning level.</summary>
+    public bool ThinkingLevelExplicit { get; init; } = true;
     /// <summary>Which CLI backend executes this job: <c>claude</c>, <c>codex</c>, or <c>gemini</c>. Defaults to <c>claude</c>.</summary>
     public string? CliType { get; init; }
     /// <summary>Effective fallback for the current run; null outside a quota-routed run.</summary>
@@ -69,7 +77,7 @@ public record TaskInfo
     /// <summary>
     /// Whether the agent may use web search / fetch for this run. Default off for
     /// coding/planning, on for research (set at create time). See decision 2 in
-    /// docs/research/planning-research-task-kinds-2026-05.md.
+    /// docs/concepts/planning-research-task-kinds-2026-05.md.
     /// </summary>
     public bool AllowWebAccess { get; init; }
     /// <summary>
@@ -209,7 +217,7 @@ public record TaskInfo
     /// Optional lifecycle substate, read from the <c>"phase"</c> field in
     /// <c>job.json</c>. Drives the kanban board's lane projection in the
     /// expanded-lifecycle-lanes model (see
-    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>).
+    /// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>).
     /// Application-owned: agents must not write to this field. Values come
     /// from <see cref="LifecyclePhases"/> and are constrained per state by
     /// <see cref="LifecyclePhases.AllowedByState"/>. Null means "no explicit
@@ -219,6 +227,9 @@ public record TaskInfo
     /// without rewriting every <c>job.json</c>.
     /// </summary>
     public string? Phase { get; init; }
+
+    /// <summary>UTC timestamp written whenever <see cref="Phase"/> changes.</summary>
+    public DateTime? PhaseEnteredAt { get; init; }
 
     /// <summary>
     /// Run-Liveness Slice B (concept Rule 2): when this <c>3-progress</c> card is

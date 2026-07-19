@@ -1,0 +1,66 @@
+:host { display: block; width: 100%; height: 100%; min-width: 0; }
+
+.workbench-viewer {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: var(--studio-bg);
+  color: var(--studio-fg);
+}
+
+.workbench-viewer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--studio-spacing-4);
+  padding: var(--studio-spacing-4) var(--studio-spacing-5) var(--studio-spacing-3);
+  border-bottom: 1px solid var(--studio-border);
+}
+
+.workbench-viewer__identity { min-width: 0; }
+.workbench-viewer__eyebrow {
+  display: block;
+  color: var(--studio-fg-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.workbench-viewer h1 { margin: var(--studio-spacing-1) 0; font-size: 1.2rem; line-height: 1.25; }
+.workbench-viewer p { margin: 0; color: var(--studio-fg-muted); font-size: 0.78rem; }
+.workbench-viewer__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  color: var(--studio-fg);
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.workbench-viewer__status i { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-accent-3); }
+.workbench-viewer__status[data-status='decision-pending'] { background: color-mix(in srgb, var(--studio-warn) 16%, transparent); }
+.workbench-viewer__status[data-status='decision-pending'] i { background: var(--studio-warn); }
+.workbench-viewer__provenance {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-2) var(--studio-spacing-5);
+  border-bottom: 1px solid var(--studio-border);
+  color: var(--studio-fg-muted);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.workbench-viewer__provenance code { overflow: hidden; text-overflow: ellipsis; color: var(--studio-fg); }
+.workbench-viewer__frame { width: 100%; height: 100%; min-height: 0; border: 0; background: var(--studio-bg-elevated); }
+.workbench-viewer__state { padding: var(--studio-spacing-5); color: var(--studio-fg-muted); }
+.workbench-viewer__state--error { color: var(--studio-error); }
+
+@media (max-width: 700px) {
+  .workbench-viewer__header { flex-direction: column; }
+  .workbench-viewer__provenance { padding-inline: var(--studio-spacing-3); }
+}

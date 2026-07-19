@@ -11,7 +11,7 @@
 # vars, and tears everything down cleanly.
 #
 # Commands:
-#   up [--with-frontend]   allocate free ports, boot backend (+frontend), write env file
+#   up [--with-frontend] [--demo]   allocate free ports, boot backend (+frontend), write env file
 #   down                   stop frontend + backend, remove isolated workspace + state
 #   env                    print the stack env file (use: eval "$(./worktree-test-stack.sh env)")
 #   status                 report health of the stack
@@ -44,35 +44,23 @@ PROXY_CONFIG="proxy.dynamic.cjs"   # relative to frontend/
 log() { echo "[worktree-test-stack] $*"; }
 err() { echo "[worktree-test-stack] ERROR: $*" >&2; }
 
-is_windows() {
-  case "$(uname -s 2>/dev/null)" in
-    MINGW*|MSYS*|CYGWIN*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 pid_alive() {
   local pid="$1"
   [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]] || return 1
-  if is_windows; then
-    tasklist //FI "PID eq ${pid}" 2>/dev/null | grep -qi "${pid}"
-  else
-    kill -0 "$pid" 2>/dev/null
-  fi
+  # `$!` is an MSYS process id under Git Bash, not the native Windows id
+  # displayed by tasklist. `kill -0` understands that id on every supported
+  # shell and therefore tracks the process we actually launched.
+  kill -0 "$pid" 2>/dev/null
 }
 
 kill_tree() {
   local pid="$1"
   [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]] || return 0
-  if is_windows; then
-    taskkill //F //T //PID "$pid" >/dev/null 2>&1 || true
-  else
-    pkill -TERM -P "$pid" 2>/dev/null || true
-    kill -TERM "$pid" 2>/dev/null || true
-    sleep 0.3
-    pkill -KILL -P "$pid" 2>/dev/null || true
-    kill -KILL "$pid" 2>/dev/null || true
-  fi
+  pkill -TERM -P "$pid" 2>/dev/null || true
+  kill -TERM "$pid" 2>/dev/null || true
+  sleep 0.3
+  pkill -KILL -P "$pid" 2>/dev/null || true
+  kill -KILL "$pid" 2>/dev/null || true
 }
 
 http_code() {
@@ -100,9 +88,11 @@ read_env_var() {
 
 cmd_up() {
   local with_frontend=0
+  local demo_mode=0
   for a in "$@"; do
     case "$a" in
       --with-frontend) with_frontend=1 ;;
+      --demo) demo_mode=1 ;;
       *) err "unknown 'up' argument: $a"; exit 2 ;;
     esac
   done
@@ -130,10 +120,20 @@ cmd_up() {
   backend_port="$(echo "${ports}" | awk '{print $1}')"
   frontend_port="$(echo "${ports}" | awk '{print $2}')"
 
-  # Isolated workspace: empty temp dir => no projects => inert pickup loop.
+  # Isolated workspace: empty by default, or populated exclusively with the
+  # deterministic ADR-0056 demo projects for presentation capture.
   local workspace
   workspace="$(mktemp -d "${TMPDIR:-/tmp}/atp-worktree-test-XXXXXX")" || { err "mktemp failed"; exit 1; }
   echo "${workspace}" > "${WORKSPACE_LINK}"
+
+  if [[ "${demo_mode}" -eq 1 ]]; then
+    log "seeding ADR-0056 demo workspace"
+    if ! node "${REPO_ROOT}/scripts/seed-demo-workspace.mjs" --root "${workspace}"; then
+      err "demo workspace seed failed"
+      cmd_down || true
+      exit 1
+    fi
+  fi
 
   log "allocating: backend :${backend_port}$([[ ${with_frontend} -eq 1 ]] && echo ", frontend :${frontend_port}")"
   log "isolated workspace: ${workspace}"
@@ -156,11 +156,26 @@ cmd_up() {
   fi
 
   # --- boot backend via api.sh worktree mode (dynamic port, isolated repo) ---
-  if ! PORT="${backend_port}" \
-       API_PORT_OVERRIDE=1 \
-       ATP_WORKTREE_TEST_BACKEND=1 \
-       TaskRepository="${workspace}" \
-       bash "${REPO_ROOT}/api.sh" start; then
+  local demo_app="${workspace}/projects/demo-app"
+  local demo_platform="${workspace}/projects/demo-platform"
+  local backend_env=(
+    "PORT=${backend_port}"
+    "API_PORT_OVERRIDE=1"
+    "ATP_WORKTREE_TEST_BACKEND=1"
+    "TaskRepository=${workspace}"
+    "Runner__Role=test-subject"
+  )
+  if [[ "${demo_mode}" -eq 1 ]]; then
+    backend_env+=(
+      "WatchPaths__0__Name=Demo App"
+      "WatchPaths__0__Path=${demo_app}"
+      "WatchPaths__0__RootPath=${demo_app}"
+      "WatchPaths__1__Name=Demo Platform"
+      "WatchPaths__1__Path=${demo_platform}"
+      "WatchPaths__1__RootPath=${demo_platform}"
+    )
+  fi
+  if ! env "${backend_env[@]}" bash "${REPO_ROOT}/api.sh" start; then
     err "backend failed to start on :${backend_port}"
     cmd_down || true
     exit 1
@@ -186,13 +201,13 @@ cmd_up() {
     log "starting frontend dev server on :${frontend_port} (proxy -> ${backend_url})"
     : > "${FE_LOG}"
     (
-      cd "${REPO_ROOT}/frontend" \
-        && BACKEND_PORT="${backend_port}" BACKEND_HOST="127.0.0.1" \
-           nohup npx --no-install ng serve frontend \
-             --port "${frontend_port}" \
-             --host 127.0.0.1 \
-             --proxy-config "${PROXY_CONFIG}" \
-             > "${FE_LOG}" 2>&1 &
+      cd "${REPO_ROOT}/frontend" || exit 1
+      BACKEND_PORT="${backend_port}" BACKEND_HOST="127.0.0.1" \
+        nohup node ./node_modules/@angular/cli/bin/ng.js serve frontend \
+          --port "${frontend_port}" \
+          --host 127.0.0.1 \
+          --proxy-config "${PROXY_CONFIG}" \
+          > "${FE_LOG}" 2>&1 &
       echo $! > "${FE_PID_FILE}"
     )
     local fe_pid; fe_pid="$(tr -d ' \r\n' < "${FE_PID_FILE}" 2>/dev/null || true)"
@@ -208,6 +223,7 @@ cmd_up() {
       fi
       if ! pid_alive "${fe_pid}"; then
         err "frontend process exited early; see ${FE_LOG}"
+        tail -n 80 "${FE_LOG}" >&2 || true
         cmd_down || true
         exit 1
       fi
@@ -215,6 +231,7 @@ cmd_up() {
     done
     if (( waited >= timeout )); then
       err "frontend did not become ready within ${timeout}s; see ${FE_LOG}"
+      tail -n 80 "${FE_LOG}" >&2 || true
       cmd_down || true
       exit 1
     fi
@@ -298,7 +315,9 @@ print_usage() {
   Usage: ./scripts/worktree-test-stack.sh <command>
 
   Commands:
-    up [--with-frontend]   allocate free ports + boot backend (+ frontend)
+    up [--with-frontend] [--demo]
+                           allocate free ports + boot backend (+ frontend);
+                           --demo seeds and registers only ADR-0056 demo data
     down                   tear everything down, remove isolated workspace
     env                    print the stack env file (eval it in your runner)
     status                 report stack health

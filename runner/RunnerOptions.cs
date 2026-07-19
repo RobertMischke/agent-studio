@@ -17,6 +17,14 @@ public sealed class RunnerOptions
     /// <summary>Human-facing runner name shown on the board (the project the board assigns, e.g. agent-runner-01).</summary>
     public required string RunnerName { get; init; }
 
+    /// <summary>
+    /// Optional pre-registered Task Server client identity. When set, startup
+    /// verifies this exact identity instead of silently registering another id
+    /// from <see cref="RunnerName"/>. This is the systemd-friendly onboarding
+    /// path for hosts whose X-Client-Id was created before the runner install.
+    /// </summary>
+    public string? ClientId { get; init; }
+
     /// <summary>Reported hostname; defaults to the machine name.</summary>
     public required string Hostname { get; init; }
 
@@ -26,8 +34,11 @@ public sealed class RunnerOptions
     /// <summary>Optional bearer token sent as Authorization on every request (Phase 2 auth).</summary>
     public string? AuthToken { get; init; }
 
-    /// <summary>Git remote the code arrives from. Code is read-only here; results leave via the API.</summary>
-    public required string GitRemote { get; init; }
+    /// <summary>Fallback git remote for one-shot runs and claims from older servers.</summary>
+    public string? GitRemote { get; init; }
+
+    /// <summary>Optional write-only URL installed as origin.pushurl while fetches keep using <see cref="GitRemote"/>.</summary>
+    public string? GitPushRemote { get; init; }
 
     /// <summary>Directory the runner checks the repo out into on the runner host.</summary>
     public required string WorkDir { get; init; }
@@ -111,10 +122,12 @@ public sealed class RunnerOptions
             ServerUrl = Val("server", "RUNNER_SERVER_URL", "http://127.0.0.1:5030").TrimEnd('/'),
             RunnerId = Val("runner-id", "RUNNER_ID", $"agent-runner-{Environment.MachineName}".ToLowerInvariant()),
             RunnerName = Val("runner-name", "RUNNER_NAME", "agent-runner-01"),
+            ClientId = Val("client-id", "RUNNER_CLIENT_ID").Trim() is { Length: > 0 } clientId ? clientId : null,
             Hostname = Val("hostname", "RUNNER_HOSTNAME", Environment.MachineName),
             BackendName = Val("backend-name", "RUNNER_BACKEND_NAME", "remote-runner"),
             AuthToken = Val("auth-token", "RUNNER_AUTH_TOKEN") is { Length: > 0 } t ? t : null,
-            GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE"),
+            GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE").Trim() is { Length: > 0 } gitRemote ? gitRemote : null,
+            GitPushRemote = Val("git-push-remote", "RUNNER_GIT_PUSH_REMOTE").Trim() is { Length: > 0 } gitPushRemote ? gitPushRemote : null,
             WorkDir = Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),

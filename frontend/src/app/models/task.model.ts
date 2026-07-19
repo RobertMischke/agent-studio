@@ -300,7 +300,7 @@ export interface TaskInfo {
    * the kanban Ready group split (Human Ready vs Intake) and the per-card
    * phase chip. Null means "no explicit phase on disk"; the Ready lane
    * defaults to Human Ready in that case (compatibility contract from
-   * docs/research/expanded-lifecycle-lanes-plan-2026-05.md).
+   * docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md).
    *
    * Allowed values for 2-ready: `human-ready`, `intake-running`,
    * `intake-blocked`, `intake-passed`. The 3-progress phase values
@@ -308,6 +308,8 @@ export interface TaskInfo {
    * same field but are owned by the post-processing slice.
    */
   phase?: string | null;
+  /** UTC time at which the current lifecycle phase was entered. */
+  phaseEnteredAt?: string | null;
   /**
    * Run-Liveness Slice B: when this 3-progress card is waiting on an unanswered
    * steer / NeedsInput question (`phase === 'steer-pending'`), the ISO UTC time
@@ -480,6 +482,15 @@ export interface ClientSummary {
   defaultCliType?: string | null;
   defaultModel?: string | null;
   defaultThinkingLevel?: string | null;
+  runnerGitStatus?: 'ready' | 'read-only' | null;
+  runnerGitDetail?: string | null;
+  runnerGitCheckedAt?: string | null;
+  drainRequestedAt?: string | null;
+  retireRequestedAt?: string | null;
+  runnerDaemonState?: 'running' | 'read-only' | 'stopped' | null;
+  runnerLastClaimAt?: string | null;
+  runnerActiveSlots?: number | null;
+  runnerAvailableSlots?: number | null;
 }
 
 /**
@@ -670,7 +681,7 @@ export interface TaskDetail {
    * audits, code-review passes, task checks, or human notes. Empty when
    * the file is absent. Findings are evidence for review, not blockers:
    * the lane transitions never gate on them. See
-   * `docs/contracts/filesystem.md` "results/review-evidence.jsonl".
+   * `docs/system/contracts/filesystem.md` "results/review-evidence.jsonl".
    */
   reviewEvidence: ReviewEvidenceEntry[];
 }
@@ -743,10 +754,10 @@ export interface FileGenerationMeta {
 }
 
 /**
- * One `.md` file in the job root surfaced by the Files tab. The content
+ * One supported document in the job root surfaced by the Files tab. Markdown,
+ * HTML, and structured aspect JSON are listed. The content
  * itself is not embedded — the Files tab fetches it lazily through
- * `GET /api/tasks/{id}/files/{fileName}` only when the user expands the
- * card (or when it's the sole prompt and auto-expanded).
+ * `GET /api/tasks/{id}/files/{fileName}` lazily for the Files-tab surface.
  */
 export interface TaskArtifact {
   name: string;
@@ -871,6 +882,8 @@ export interface CreateTaskRequest {
   cliType?: CliType;
   model?: string;
   thinkingLevel?: string;
+  modelExplicit?: boolean;
+  thinkingLevelExplicit?: boolean;
   /** One of `bug`, `feature`, `chore`. Defaults to `chore` server-side. */
   taskType?: string;
   /** Workspace tag ids to attach on create. */
@@ -889,7 +902,7 @@ export interface CreateTaskRequest {
  * Payload from GET /api/tasks/{id}/promote-to-coding: a pre-filled coding-task
  * draft derived from a finished planning task. The frontend seeds the existing
  * create-task modal with these fields and re-uploads `attachments` byte-for-byte
- * into the new task. See docs/research/planning-research-task-kinds-2026-05.md.
+ * into the new task. See docs/concepts/planning-research-task-kinds-2026-05.md.
  */
 export interface PromoteToCodingResponse {
   title: string;
@@ -926,6 +939,8 @@ export interface EpicRollup {
   completed: number;
   inProgress: number;
   open: number;
+  /** Latest lane-entry timestamp among all members once the epic is complete. */
+  completedAt?: string | null;
   byState: Record<string, number>;
   subTasks: EpicSubTaskRef[];
 }
@@ -982,6 +997,21 @@ export interface ProjectUrlStartRule {
   source: string;
 }
 
+/** Snapshot of a backend-owned dev-server process for a project URL. */
+export interface ProjectUrlProcessSnapshot {
+  started: boolean;
+  projectId: string;
+  urlId: string;
+  command: string;
+  cwd: string;
+  state: 'starting' | 'running' | 'exited' | 'stopped' | 'failed';
+  processId: number | null;
+  startedAtUtc: string;
+  finishedAtUtc: string | null;
+  exitCode: number | null;
+  output: string[];
+}
+
 /** Mirrors backend `ProjectUrlRecord`: one watchable URL on a project. */
 export interface RegistryProjectUrl {
   id: string;
@@ -1002,14 +1032,16 @@ export interface ProjectUrlSuggestion {
   source: string;
 }
 
+/** Compatibility name retained for existing start-only consumers. */
+export type ProjectUrlStartResponse = ProjectUrlProcessSnapshot;
+
 /**
  * F45a / ADR-0042 — flat project summary returned by `GET /api/projects`
  * and embedded under `WorkspaceListItem.projects`. Mirrors backend
  * `ProjectSummary`.
  */
 export interface RegistryProjectSummary {
-  /** Older persisted registry projections omit this and imply local-folder. */
-  sourceType?: ProjectSourceType;
+  sourceType: ProjectSourceType;
   id: string;
   displayName: string;
   shortCode: string;
@@ -1019,6 +1051,10 @@ export interface RegistryProjectSummary {
   modelDefault: string | null;
   sortOrder: number;
   storageLocation: string;
+  repositoryPath: string | null;
+  rootPath: string | null;
+  /** Well-known repository URL (`urls[id=repo]`) projected for project basics editing. */
+  repositoryUrl: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
   archived: boolean;
@@ -1026,7 +1062,6 @@ export interface RegistryProjectSummary {
 }
 
 export interface CreateRegistryProjectRequest {
-  sourceType?: ProjectSourceType;
   workspaceId: string;
   displayName: string;
   shortCode?: string;
@@ -1039,15 +1074,12 @@ export interface CreateRegistryProjectRequest {
    * (or hand-edits the gitignored appsettings.Local.json WatchPaths entry).
    */
   rootPath?: string;
+  repositoryPath?: string;
+  repositoryUrl?: string;
+  executionRunner?: string;
 }
 
-export type ProjectSourceType = 'local-folder' | 'remote-git' | 'cloud';
-export interface ProjectSourceDescriptor {
-  id: ProjectSourceType;
-  label: string;
-  available: boolean;
-  description: string;
-}
+export type ProjectSourceType = 'local-folder';
 
 /**
  * F45a / ADR-0042 — workspace listing entry returned by `GET /api/workspaces`.
@@ -1165,25 +1197,26 @@ export interface ProjectRunnerStatus {
    */
   role?: 'orchestrator' | 'test-subject' | string | null;
   /**
-   * Mode the operator asked for while a job was still running. Non-null only
+   * Mode the operator asked for while tasks were still running. Non-null only
    * when a `PUT /api/runner/{project}/mode` with `manual` / `paused` arrived
-   * while {@link activeJobId} was set. The runner applies the value the
-   * moment the active job clears; the lane pill renders as
-   * "MANUAL (after current)" while this is populated. See ADR-0044.
+   * while tasks were active. Auto admission closes immediately, and the runner
+   * applies the value after the request-time active set drains. See ADR-0044.
    */
   pendingMode?: string | null;
-  /** Job id the deferred mode change is waiting on. */
+  /** Job id of the sole remaining request-time task; null while several remain. */
   pendingModeWillApplyAfter?: string | null;
+  /** Remaining tasks from the active snapshot captured when the change was requested. */
+  pendingModeActiveTaskCount?: number;
+  /** Title of the sole remaining snapshot task, when exactly one remains. */
+  pendingModeActiveTaskTitle?: string | null;
 }
 
 /**
  * Response body for `PUT /api/runner/{project}/mode` (ADR-0044).
  * `applied: true` means the live mode moved immediately; `applied: false`
- * means the change is queued behind the active job, in which case
+ * means the change is queued behind the request-time active task set, in which case
  * {@link pendingMode} + {@link willApplyAfterJobId} carry the deferred
- * value. The frontend renders the lane pill as
- * "{mode} (then {pendingMode} after {willApplyAfterJobId})" while the
- * deferred change is pending.
+ * value. `willApplyAfterJobId` is populated only when one snapshot task remains.
  */
 export interface SetRunnerModeResponse {
   applied: boolean;
@@ -1259,6 +1292,38 @@ export interface PublishTarget {
   referenceKind: string;
   /** The reference the baseline resolves to (tag name or date); null for 'none'. */
   reference: string | null;
+}
+
+export type PublishAutomationMode = 'manual' | 'suggest' | 'auto';
+
+export interface PublishPendingTask {
+  taskId: string;
+  taskKey: string;
+  title: string;
+  taskType: 'bug' | 'feature' | 'chore';
+}
+
+export interface PublishWorkflowRun {
+  project: string;
+  targetId: string;
+  workflow: string;
+  runId: number | null;
+  status: string;
+  conclusion: string | null;
+  version: string | null;
+  url: string | null;
+  triggeredAt: string;
+  error: string | null;
+}
+
+export interface PublishActionPanel {
+  project: string;
+  target: PublishTarget;
+  automationMode: PublishAutomationMode;
+  pendingTasks: PublishPendingTask[];
+  suggestedVersion: string | null;
+  notice: string | null;
+  lastRun: PublishWorkflowRun | null;
 }
 
 /**

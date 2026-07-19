@@ -19,6 +19,14 @@ public record QuotaWindow
     public string? Unit { get; init; }
     /// <summary>UTC timestamp when this window resets, when computable.</summary>
     public DateTime? ResetAt { get; init; }
+    /// <summary>
+    /// Start of the active window as established by the first trusted snapshot.
+    /// Projection keeps this anchor until its expected reset has actually passed,
+    /// so a later parser glitch cannot move the start forward and inflate burn rate.
+    /// </summary>
+    public DateTime? ObservedStartAt { get; init; }
+    /// <summary>Why this window must not currently be used for projection.</summary>
+    public string? ProjectionSuspiciousReason { get; init; }
     /// <summary>Original human-readable reset string from the CLI ("3:40am (Europe/Berlin)" / "Mar 1").</summary>
     public string? ResetLabel { get; init; }
 }

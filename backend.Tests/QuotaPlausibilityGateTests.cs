@@ -39,11 +39,24 @@ public sealed class QuotaPlausibilityGateTests
     }
 
     [Fact]
-    public void Evaluate_SmallDrop_IsTrusted()
+    public void Evaluate_SmallWeeklyDropBeforeReset_IsSuspicious()
     {
-        // A 49-point drop is under the 50-point threshold: normal consumption.
-        var prev = Snap("Weekly", 60, resetAt: Now.AddDays(1));
-        var cand = Snap("Weekly", 11, resetAt: Now.AddDays(1));
+        // AGT-2082: weekly usage is cumulative within one cycle. Even the
+        // operator's observed 16% -> 2% drop is impossible before reset.
+        var prev = Snap("Weekly", 16, resetAt: Now.AddDays(1));
+        var cand = Snap("Weekly", 2, resetAt: Now.AddDays(1));
+
+        var result = QuotaPlausibilityGate.Evaluate(prev, cand, Now);
+
+        Assert.True(result.Suspicious);
+        Assert.Contains("14 points", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_SmallNonWeeklyDrop_IsTrusted()
+    {
+        var prev = Snap("5-hour", 60, resetAt: Now.AddHours(1));
+        var cand = Snap("5-hour", 11, resetAt: Now.AddHours(1));
 
         Assert.False(QuotaPlausibilityGate.Evaluate(prev, cand, Now).Suspicious);
     }
@@ -60,14 +73,14 @@ public sealed class QuotaPlausibilityGateTests
     }
 
     [Fact]
-    public void Evaluate_BigDropWithLaterResetBoundary_IsTrusted()
+    public void Evaluate_WeeklyDropWithLaterUnelapsedResetBoundary_IsSuspicious()
     {
-        // Candidate reports a later reset than the previous snapshot -> a fresh
-        // cycle started, which legitimately explains the drop.
+        // A parser artefact can pair a false low value with a later boundary.
+        // The candidate cannot prove its own reset while the prior reset is future.
         var prev = Snap("Weekly", 90, resetAt: Now.AddHours(2));
         var cand = Snap("Weekly", 5, resetAt: Now.AddDays(7));
 
-        Assert.False(QuotaPlausibilityGate.Evaluate(prev, cand, Now).Suspicious);
+        Assert.True(QuotaPlausibilityGate.Evaluate(prev, cand, Now).Suspicious);
     }
 
     [Fact]

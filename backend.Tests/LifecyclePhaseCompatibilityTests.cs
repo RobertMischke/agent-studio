@@ -8,7 +8,7 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// Backwards-compatibility coverage for the optional <c>phase</c> field added
 /// by the expanded-lifecycle-lanes hybrid V1 model
-/// (<c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>).
+/// (<c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>).
 ///
 /// The compatibility contract: existing job folders that predate the
 /// <c>phase</c> field must keep parsing and must render in the default lane
@@ -98,6 +98,14 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     {
         Assert.False(LifecyclePhases.IsAllowed(TaskStates.Ready, LifecyclePhases.ExecutionRunning));
         Assert.False(LifecyclePhases.IsAllowed(TaskStates.Progress, LifecyclePhases.IntakeBlocked));
+    }
+
+    [Fact]
+    public void IsAllowed_ProgressAcceptsVisibleNoSlotWaitPhases()
+    {
+        Assert.True(LifecyclePhases.IsAllowed(TaskStates.Progress, LifecyclePhases.LoopWaiting));
+        Assert.True(LifecyclePhases.IsAllowed(TaskStates.Progress, LifecyclePhases.SteerPending));
+        Assert.False(LifecyclePhases.IsAllowed(TaskStates.AutoReview, LifecyclePhases.LoopWaiting));
     }
 
     [Fact]

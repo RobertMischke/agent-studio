@@ -57,7 +57,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
         id: 'aspect-requirement-fit', displayName: 'Requirement fit', kind: 'aspect', phase: 'aspect',
         runMode: 'parallel', dependsOn: ['core-run'], idempotent: true, stub: false,
         resolvedModel: 'claude-opus-4.8', modelSource: 'runtime', resolvedThinkingLevel: 'medium',
-        usesModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
+        usesModel: true, supportsEconomyModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
         promptTemplate: 'aspect-requirement-fit', canDisable: true, defaultEnabled: true, supportsCondition: true,
       },
       {
@@ -106,12 +106,14 @@ describe('ProjectPipelinePanelComponent (render)', () => {
 
     const fixture = TestBed.createComponent(ProjectPipelinePanelComponent);
     fixture.componentRef.setInput('projectName', 'demo');
+    fixture.componentRef.setInput('focusStepId', 'aspect-requirement-fit');
     try { fixture.detectChanges(); } catch { /* pending HTTP, ignore */ }
 
     fixture.componentInstance.catalogue.set(catalogue());
     fixture.componentInstance.overrides.set(overrides());
     fixture.componentInstance.pipelineCost.set(fakeCost());
     fixture.detectChanges();
+    await fixture.whenStable();
 
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('[data-testid="project-detail-pipeline"]')).toBeTruthy();
@@ -123,6 +125,8 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-step-row-core-run"]')).toBeTruthy();
     const aspectRow = host.querySelector('[data-testid="pipeline-step-row-aspect-requirement-fit"]');
     expect(aspectRow).toBeTruthy();
+    expect(aspectRow?.getAttribute('aria-current')).toBe('location');
+    expect((aspectRow as HTMLDetailsElement | null)?.open).toBe(true);
     expect(aspectRow?.getAttribute('data-kind')).toBe('aspect');
     expect(aspectRow?.textContent).toContain('claude-opus-4.8');
     expect(host.querySelector('[data-testid="pipeline-step-info-aspect-requirement-fit"]')).toBeTruthy();
@@ -134,6 +138,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-step-setting-run-aspect-requirement-fit"]')?.textContent).toContain('parallel after core-run');
     expect(host.querySelector('[data-testid="pipeline-step-setting-active-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-model-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-economy-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-prompt-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-gate-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-condition-aspect-requirement-fit"]')).toBeTruthy();

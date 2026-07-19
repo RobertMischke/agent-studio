@@ -66,6 +66,7 @@
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
           (openJobDetail)="onOpenJobDetailFromSheet($event)"
+          (navigateToContext)="onNavigateToChatContext($event)"
           (openSettings)="openOrchestratorSettings()" />
         <!-- Inline filter UI for the activity-bar Filter panel. Same
              component as the right-edge sheet, just rendered without
@@ -205,12 +206,8 @@
             @if (studioTriageHasActions()) {
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <div class="studio-tab-action__triage" data-testid="studio-triage-panel" data-triage-root>
-                <!--
-                  The landed-status ("Merged to develop") is intentionally NOT
-                  shown here. The task's on-develop state lives once, at the task
-                  commit (git pane landed ladder). This cluster only offers the
-                  acceptance action; when the work has already landed the primary
-                  relabels to "Accept" and its hover tooltip explains why. -->
+                <!-- Landed status stays in the git pane; this cluster only offers
+                     the acceptance action and its context-aware label. -->
                 @if (studioTriagePrimary(); as primary) {
                   <button type="button"
                           class="studio-tab-action studio-tab-action--primary"
@@ -218,7 +215,9 @@
                           [attr.data-testid]="'studio-triage-action-' + primary.id"
                           [attr.data-action-id]="primary.id"
                           [attr.data-git-loading]="studioPrimaryAwaitingGit() ? 'true' : null"
-                          [disabled]="updateClient.mutationsBlocked() || studioPrimaryAwaitingGit()"
+                          [disabled]="updateClient.mutationsBlocked() || studioPrimaryAwaitingGit() || studioTriageActingId() !== null"
+                          [appPendingButton]="studioTriageActingId() === primary.id"
+                          [pendingLabel]="studioPrimaryLabel() + '…'"
                           [cacTooltip]="studioPrimaryAwaitingGit()
                             ? 'Checking git status — action available once loaded.'
                             : (studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
@@ -256,6 +255,9 @@
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
+              @if (boardLoading() && jobService.jobs().length === 0) {
+                <app-loading-surface kind="board" label="Loading board…" />
+              } @else {
               @if (hasActiveFiltersOrSearch() && filteredTaskCount() === 0) {
                 <div class="board-filter-empty-hint" data-testid="board-filter-empty-hint">
                   <span class="board-filter-empty-hint__text">
@@ -307,6 +309,7 @@
                           [sortStrategy]="laneSortStrategy(lane.state, lane.jobs)"
                           [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)"
                           [autoProject]="laneAutoProject(lane.state, lane.jobs)"
+                          [projectScope]="boardProjectScope()"
                           [autoMode]="laneAutoMode(lane.state, lane.jobs)"
                           [runnerStatus]="laneAutoRunner(lane.state, lane.jobs)"
                           [nowMs]="nowMs()"
@@ -325,9 +328,12 @@
                 }
               </main>
               }
+              }
             }
             @case ('task') {
-              @if (selectedJob(); as detail) {
+              @if (detailLoading()) {
+                <app-loading-surface kind="task-detail" label="Loading task details…" />
+              } @else if (selectedJob(); as detail) {
                 <main class="workspace__main workspace__main--studio" data-testid="studio-task">
                   <app-job-detail #jobDetail
                                   [detail]="detail"
@@ -361,13 +367,8 @@
                 @if (tab.kind === 'epic' && selectedJob(); as detail) {
                   <main class="workspace__main workspace__main--studio" data-testid="studio-epic">
                     @if (epicTabTaskDetail(); as subDetail) {
-                      <!-- In-place sub-task view: clicking a sub-task in the epic
-                           rollup swaps THIS same panel from the epic to the task,
-                           reusing the single-panel detail. No right-hand panel or
-                           sheet is opened. The epic-membership banner rendered
-                           inside the detail is the consistent "back to epic" path
-                           (and the pager prev/next stays within the epic's
-                           sub-tasks). -->
+                  <!-- In-place sub-task view reuses this panel; the membership
+                       banner returns to the epic and paging stays within it. -->
                       <app-job-detail #jobDetail
                         [detail]="subDetail"
                         data-testid="studio-epic-subtask-detail"
@@ -417,7 +418,8 @@
                 @if (tab.kind === 'hub') {
                   <app-project-hub-view
                     [projectName]="tab.projectName"
-                    [initialSection]="tab.section ?? 'overview'" />
+                    [initialSection]="tab.section ?? 'overview'" [pipelineStepId]="tab.pipelineStepId"
+                    (openTask)="onOpenTaskFromReel($event)" />
                 }
               }
             }
@@ -454,15 +456,17 @@
                 }
               }
             }
+            @case ('workbench') { @if (studioTabState.activeTab(); as tab) { @if (tab.kind === 'workbench') {
+              <app-workbench-viewer [projectName]="tab.projectName" [workbenchId]="tab.workbenchId" />
+            } } }
             @case ('workspace-settings') {
               <app-workspace-overlays [inline]="true"
+                                      [watchPaths]="watchPaths()"
                                       (openTask)="onOpenTaskFromReel($event)"
                                       (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
                                       (openJobDetail)="onOpenTaskFromSession($event)" />
             }
-            @default {
-              <!-- Welcome screen owned by the shell itself when no tab is active. -->
-            }
+            @default { <!-- Welcome screen owned by the shell when no tab is active. --> }
           }
         </div>
       </app-studio-shell>
@@ -480,6 +484,7 @@
       }
       <app-notification-stack />
       <app-media-lightbox />
+      <app-cost-breakdown-dialog />
       @if (errorDialog.activeError(); as error) {
         <app-error-dialog
           [error]="error"
@@ -508,7 +513,9 @@
           [(newMode)]="createJobForm.newMode"
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
+          (modelSelectionTouched)="createJobForm.markModelSelectionExplicit()"
           (cancelRequest)="cancelCreate()"
+          (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
       }
       @if (showE2ECleanup()) {
@@ -519,10 +526,6 @@
       @if (showTagManager()) {
         <app-tag-manager-dialog
           (closed)="onTagManagerClosed()" />
-      }
-      @if (orchestratorSettingsOpen()) {
-        <app-orchestrator-settings-modal
-          (closed)="closeOrchestratorSettings()" />
       }
       <app-workspace-banner [projects]="bannerProjects()" />
       <app-project-overlays
@@ -792,6 +795,7 @@
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
           (openJobDetail)="onOpenJobDetailFromSheet($event)"
+          (navigateToContext)="onNavigateToChatContext($event)"
           (openSettings)="openOrchestratorSettings()" />
       </div>
 
@@ -818,7 +822,8 @@
         (openTask)="onOpenTaskFromReel($event)" />
 
 
-      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
+      <app-workspace-overlays [watchPaths]="watchPaths()"
+                              (openTask)="onOpenTaskFromReel($event)"
                               (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
                               (openJobDetail)="onOpenTaskFromSession($event)" />
 
@@ -842,7 +847,9 @@
           [(newMode)]="createJobForm.newMode"
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
+          (modelSelectionTouched)="createJobForm.markModelSelectionExplicit()"
           (cancelRequest)="cancelCreate()"
+          (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
       }
 
@@ -876,11 +883,6 @@
       }
       <app-notification-stack />
       <app-media-lightbox />
-
-      @if (orchestratorSettingsOpen()) {
-        <app-orchestrator-settings-modal
-          (closed)="closeOrchestratorSettings()" />
-      }
 
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {

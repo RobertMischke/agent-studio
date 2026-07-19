@@ -106,4 +106,27 @@ public sealed class RunLivenessPolicyTests
 
         Assert.Equal(RunLivenessAction.DemoteToReady, d.Action);
     }
+
+    [Theory]
+    [InlineData(61)]
+    [InlineData(3600)]
+    public void NoHeartbeat_PastSixtySeconds_IsOnlyLegalWithVisibleWait(double seconds)
+    {
+        var zombie = RunLivenessPolicy.Decide(new RunLivenessFacts(
+            HasLiveRunHeartbeat: false,
+            CoreRunFinished: false,
+            SecondsSinceActivity: seconds,
+            GraceSeconds: 30,
+            HasVisibleWaitingState: false));
+        var visibleWait = RunLivenessPolicy.Decide(new RunLivenessFacts(
+            HasLiveRunHeartbeat: false,
+            CoreRunFinished: false,
+            SecondsSinceActivity: seconds,
+            GraceSeconds: 30,
+            HasVisibleWaitingState: true));
+
+        Assert.Equal(RunLivenessAction.DemoteToReady, zombie.Action);
+        Assert.Equal(RunLivenessAction.VisibleWait, visibleWait.Action);
+        Assert.Equal(RunLivenessReasons.VisibleWait, visibleWait.ReasonCode);
+    }
 }

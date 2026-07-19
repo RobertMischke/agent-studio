@@ -196,11 +196,7 @@
         </div>
       }
     }
-    <!-- Visual evidence (screenshot strip), review-evidence panel, and
-         code-review panel all live in the prompt pane's Evidence and
-         Code Review tabs (F38: visual-evidence dedup). The protocol
-         pane stays focused on the live run timeline + chat composer. -->
-
+    <!-- Visual evidence and code review live in the prompt pane (F38). -->
     @if (followupCreated(); as fc) {
       <div class="evidence-followup-banner"
            data-testid="review-evidence-followup-banner">
@@ -209,16 +205,14 @@
         <button type="button"
                 class="evidence-followup-banner__open"
                 data-testid="review-evidence-followup-open"
-                (click)="onOpenFollowup(fc.jobId)">Open</button>
+                (click)="onOpenFollowup(fc)">Open</button>
         <button type="button"
                 class="evidence-followup-banner__dismiss"
                 data-testid="review-evidence-followup-dismiss"
                 (click)="dismissFollowupBanner()">×</button>
       </div>
     }
-    <!-- Inspector body. Tabs were lifted into the pane-header `[tabs]`
-         slot (F38), so the section is just the content-switching
-         container now. -->
+    <!-- Tabs live in the pane header; this section only switches content. -->
     <section class="inspector">
       <div class="inspector__body">
         @if (activeInspectorTab() === 'protocol') {
@@ -231,11 +225,8 @@
                 </div>
                 <pre class="summary-error__body" data-testid="protocol-summary-error-message">{{ detail().summaryState?.errorMessage || 'Unknown error — no detail from backend.' }}</pre>
                 <div class="summary-error__actions">
-                  <button type="button"
-                          class="btn-regen"
-                          data-testid="protocol-regenerate-summary"
-                          [cacTooltip]="'Re-run the Haiku summary on the CLI output'"
-                          [disabled]="regenerating()"
+                  <button type="button" class="btn-regen" data-testid="protocol-regenerate-summary"
+                          [cacTooltip]="'Re-run the Haiku summary on the CLI output'" [disabled]="regenerating()"
                           (click)="regenerateSummary.emit()">
                     <span class="btn-regen__icon" aria-hidden="true">✨</span>
                     <span>{{ regenerating() ? 'Generating…' : 'Try again' }}</span>
@@ -244,7 +235,6 @@
                 </div>
               </div>
             }
-
             @if (summaryStatus() === 'generating' && !detail().statusMarkdown) {
               <div class="notes-panel__placeholder" data-testid="protocol-generating-placeholder">
                 <span class="spinner-ring spinner-ring--lg"></span>
@@ -252,7 +242,17 @@
               </div>
             } @else if (!detail().statusMarkdown && summaryStatus() !== 'failed') {
               <div class="notes-panel__placeholder">
-                <p>No protocol yet. It will be generated automatically after the first run.</p>
+                @if (canRegenerate()) {
+                  <p>No result was generated for this activity yet.</p>
+                  <button type="button" class="btn-regen btn-regen--placeholder" data-testid="protocol-regenerate-summary"
+                          [cacTooltip]="'Generate a short result from the recorded CLI activity'" [disabled]="regenerating()" [attr.aria-busy]="regenerating()"
+                          (click)="regenerateSummary.emit()">
+                    <span class="btn-regen__icon" aria-hidden="true">✨</span>
+                    <span>{{ regenerating() ? 'Generating…' : 'Generate result' }}</span>
+                  </button>
+                } @else {
+                  <p>No result yet. There is no CLI activity to summarize.</p>
+                }
               </div>
             } @else if (detail().statusMarkdown) {
               <div class="notes-panel__toolbar" data-testid="protocol-toolbar">

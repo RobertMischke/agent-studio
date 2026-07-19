@@ -1,4 +1,5 @@
 using Xunit;
+using Microsoft.Extensions.Configuration;
 
 namespace AgentStudio.Tests;
 
@@ -8,7 +9,6 @@ namespace AgentStudio.Tests;
 /// cases so the monitor only has to gather facts + resolve the answer:
 ///
 /// <list type="bullet">
-///   <item>an attended (manual-mode) wait is never auto-resolved;</item>
 ///   <item>inside the timeout -> KeepWaiting (re-checked next sweep);</item>
 ///   <item>timed out + an unambiguous answer -> AutoAnswer;</item>
 ///   <item>timed out + no confident answer -> RouteBlocked (never an endless wait).</item>
@@ -17,24 +17,12 @@ namespace AgentStudio.Tests;
 public sealed class SteerTimeoutPolicyTests
 {
     private static SteerTimeoutFacts Facts(
-        bool attended = false,
         double secondsWaiting = 200,
         double timeoutSeconds = 120,
         bool hasAnswer = false,
         string? answer = null,
         string? ambiguity = null)
-        => new(attended, secondsWaiting, timeoutSeconds, hasAnswer, answer, ambiguity);
-
-    [Fact]
-    public void AttendedWait_IsNeverAutoResolved_EvenWhenTimedOut()
-    {
-        // Manual mode: a human is at the wheel and legitimately takes time. The
-        // automatic timeout must not fire - it targets unattended auto runs.
-        var d = SteerTimeoutPolicy.Decide(Facts(attended: true, secondsWaiting: 99999, hasAnswer: true, answer: "x"));
-
-        Assert.Equal(SteerTimeoutAction.KeepWaiting, d.Action);
-        Assert.Equal(SteerTimeoutReasons.AttendedWait, d.ReasonCode);
-    }
+        => new(secondsWaiting, timeoutSeconds, hasAnswer, answer, ambiguity);
 
     [Fact]
     public void WithinTimeout_KeepsWaiting()
@@ -67,7 +55,7 @@ public sealed class SteerTimeoutPolicyTests
         var d = SteerTimeoutPolicy.Decide(Facts(hasAnswer: true, answer: "   "));
 
         Assert.Equal(SteerTimeoutAction.RouteBlocked, d.Action);
-        Assert.Equal(SteerTimeoutReasons.BlockedAmbiguous, d.ReasonCode);
+        Assert.Equal(SteerTimeoutReasons.SteerUnanswered, d.ReasonCode);
     }
 
     [Fact]
@@ -78,7 +66,7 @@ public sealed class SteerTimeoutPolicyTests
             hasAnswer: false, ambiguity: "the question is a design choice"));
 
         Assert.Equal(SteerTimeoutAction.RouteBlocked, d.Action);
-        Assert.Equal(SteerTimeoutReasons.BlockedAmbiguous, d.ReasonCode);
+        Assert.Equal(SteerTimeoutReasons.SteerUnanswered, d.ReasonCode);
         Assert.Contains("design choice", d.Detail);
     }
 
@@ -119,5 +107,32 @@ public sealed class SteerTimeoutPolicyTests
         Assert.DoesNotContain(
             new[] { c2067, c2068, c2062 },
             d => d.Action == SteerTimeoutAction.KeepWaiting);
+    }
+
+    [Theory]
+    [InlineData(null, 20)]
+    [InlineData("1", 5)]
+    [InlineData("20", 20)]
+    [InlineData("99", 55)]
+    public void SweepInterval_DefaultAndClampBoundTimeoutTolerance(string? configured, int expectedSeconds)
+    {
+        var values = new Dictionary<string, string?>();
+        if (configured != null) values["Runner:SteerTimeout:IntervalSeconds"] = configured;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+
+        Assert.Equal(
+            TimeSpan.FromSeconds(expectedSeconds),
+            SteerTimeoutMonitorHostedService.ResolveInterval(config));
+    }
+
+    [Fact]
+    public void AutoPickedNeedsInput_RemainsUnattendedAfterModeFlipAndWithoutRunPlan()
+    {
+        var task = new TaskInfo { Id = "AGT-2087" };
+
+        Assert.True(ProjectRunner.ShouldHandleNeedsInputUnattended(
+            AgentOutcomeKind.NeedsInput, RunIntent.AutoPickup, "manual", task));
+        Assert.False(ProjectRunner.ShouldHandleNeedsInputUnattended(
+            AgentOutcomeKind.NeedsInput, RunIntent.ManualStart, "manual", task));
     }
 }

@@ -39,28 +39,7 @@
       </dl>
     }
 
-    @if (relatedTasks().length > 0) {
-      <div class="wdh__related" data-testid="wiki-related-tasks">
-        <div class="wdh__commits-label">Related tasks</div>
-        <div class="wdh__task-cards">
-          @for (task of relatedTasks(); track task.key) {
-            <button type="button" class="wdh__task-card"
-                 [class.wdh__task-card--ghost]="task.exists === false"
-                 [disabled]="task.exists === false"
-                 (click)="openTask.emit(task.key)"
-                 [attr.data-testid]="'wiki-related-task-' + task.key">
-              <strong>{{ task.key }}</strong>
-              <span>{{ task.title }}</span>
-              @if (task.exists === false) {
-                <small>Reference existed; target no longer exists</small>
-              } @else {
-                <small>{{ task.source }} · {{ formatTime(task.linkedAt) }}</small>
-              }
-            </button>
-          }
-        </div>
-      </div>
-    }
+    <app-wiki-related-tasks [related]="relatedTasks()" />
 
     <div class="wdh__commits">
       <div class="wdh__commits-label">Git history</div>

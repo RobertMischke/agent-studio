@@ -27,6 +27,32 @@ internal sealed class ActiveRun
     public int ReissueAttempt { get; init; }
 
     /// <summary>
+    /// True only while a coding CLI process is alive. The record remains in the
+    /// registry during finalisation so run-scoped data stays addressable, but
+    /// loop waits and post-processing do not consume an execution slot.
+    /// </summary>
+    private int _holdsExecutionSlot = 1;
+
+    public bool HoldsExecutionSlot => Volatile.Read(ref _holdsExecutionSlot) == 1;
+
+    /// <summary>
+    /// Atomically releases this run's execution seat. Multiple finish signals
+    /// can race, but exactly one caller observes a successful release.
+    /// </summary>
+    public bool TryReleaseExecutionSlot()
+        => Interlocked.Exchange(ref _holdsExecutionSlot, 0) == 1;
+
+    /// <summary>Job folder whose process lease belongs to this run.</summary>
+    public string? PickupLockFolder { get; set; }
+
+    /// <summary>
+    /// Canonical task folder captured at admission time. Watcher reconciliation
+    /// uses this path directly so an external move cannot force a global task
+    /// index scan merely to decide whether the active latch is still valid.
+    /// </summary>
+    public string? JobFolder { get; set; }
+
+    /// <summary>
     /// ADR-0052 slice 2: parallelisability facts (exclusive / predicted scope /
     /// read-only) so <see cref="ParallelSlotPolicy"/> can prove this run disjoint
     /// from a candidate before a second slot is admitted. Default = unknown scope.
@@ -82,13 +108,16 @@ internal sealed class ActiveRuns
 {
     private readonly ConcurrentDictionary<string, ActiveRun> _runs = new(StringComparer.Ordinal);
 
-    /// <summary>Number of occupied slots.</summary>
-    public int Count => _runs.Count;
+    /// <summary>Number of slots backed by a live coding CLI process.</summary>
+    public int Count => _runs.Values.Count(r => r.HoldsExecutionSlot);
 
     /// <summary>True when another run may be admitted under <paramref name="maxParallelism"/>.</summary>
-    public bool HasFreeSlot(int maxParallelism) => _runs.Count < ParallelSlotPolicy.ClampMax(maxParallelism);
+    public bool HasFreeSlot(int maxParallelism) => Count < ParallelSlotPolicy.ClampMax(maxParallelism);
 
     public bool Contains(string jobId) => _runs.ContainsKey(jobId);
+
+    public bool HoldsExecutionSlot(string jobId)
+        => _runs.TryGetValue(jobId, out var run) && run.HoldsExecutionSlot;
 
     public ActiveRun? Get(string jobId) => _runs.TryGetValue(jobId, out var r) ? r : null;
 
@@ -99,13 +128,14 @@ internal sealed class ActiveRuns
     /// <c>MaxParallelism == 1</c>; multi-slot callers use <see cref="Snapshot"/>
     /// or address a run by job id.
     /// </summary>
-    public ActiveRun? Single => _runs.Values.FirstOrDefault();
+    public ActiveRun? Single => _runs.Values.FirstOrDefault(r => r.HoldsExecutionSlot);
 
     /// <summary>Job id of the single active run, or null when idle.</summary>
-    public string? SingleJobId => _runs.Keys.FirstOrDefault();
+    public string? SingleJobId => Single?.JobId;
 
     /// <summary>Snapshot of all active runs (stable copy for iteration).</summary>
-    public IReadOnlyCollection<ActiveRun> Snapshot() => _runs.Values.ToArray();
+    public IReadOnlyCollection<ActiveRun> Snapshot()
+        => _runs.Values.Where(r => r.HoldsExecutionSlot).ToArray();
 
     /// <summary>
     /// The currently-running tasks as <see cref="RunningTask"/> facts for
@@ -113,7 +143,19 @@ internal sealed class ActiveRuns
     /// candidate disjoint from everything already in a slot.
     /// </summary>
     public IReadOnlyList<RunningTask> RunningTasks()
-        => _runs.Values.Select(r => new RunningTask(r.JobId, r.Parallelism ?? TaskParallelism.Default)).ToArray();
+        => _runs.Values
+            .Where(r => r.HoldsExecutionSlot)
+            .Select(r => new RunningTask(r.JobId, r.Parallelism ?? TaskParallelism.Default))
+            .ToArray();
+
+    /// <summary>
+    /// Free the execution seat when the CLI exits while retaining the run record
+    /// for post-processing. Idempotent so competing finish paths release once.
+    /// </summary>
+    public bool ReleaseExecutionSlot(string jobId)
+    {
+        return _runs.TryGetValue(jobId, out var run) && run.TryReleaseExecutionSlot();
+    }
 
     /// <summary>Find the active run whose job key matches, or null.</summary>
     public ActiveRun? ByJobKey(Func<string, string> jobKeyOf, string jobKey)

@@ -95,6 +95,25 @@ export interface RelatedTaskReference {
 /** Kind of a wiki tree node: a folder, or a document by source type. */
 export type WikiNodeType = 'folder' | 'md' | 'html' | 'json';
 
+/** Curated consolidation status of a wiki page. */
+export type WikiClassificationStatus = 'aktuell' | 'veraltet' | 'ueberholt';
+
+/**
+ * Curation classification of one wiki page (mirrors backend
+ * `WikiClassification`): read from the companion sidecar's `classification`
+ * block, with the backend filling the `type` from a per-folder default when a
+ * page has no sidecar. Absent/null on folders and unclassified pages.
+ */
+export interface WikiClassification {
+  status: WikiClassificationStatus | string | null;
+  /** Docs-relative path of the successor page when status is `ueberholt`. */
+  supersededBy: string | null;
+  /** konzept | adr | contract | domain-map | analyse | runbook | workbench | mockup | proposal | generiert | index */
+  type: string | null;
+  /** ISO date of the consolidation analysis. */
+  analyzedAt: string | null;
+}
+
 /** Compact per-document metadata shown in the tree (mirrors backend WikiTreeMetadata). */
 export interface WikiTreeMetadata {
   documentMode: string | null;
@@ -128,13 +147,8 @@ export interface WikiTreeNode {
   type: WikiNodeType;
   children: WikiTreeNode[];
   metadata?: WikiTreeMetadata | null;
-  /**
-   * True for a fixed Engineering Workstream frame node (a frame folder or a
-   * landing shell). The tree marks such nodes with a lock affordance and the
-   * context menu suppresses rename/delete/move so the frame's shape stays
-   * stable. Mirrors backend `WikiTreeNode.Immutable`.
-   */
-  immutable?: boolean;
+  /** Curated classification (pages only; null for folders and unclassified pages). */
+  classification?: WikiClassification | null;
 }
 
 /** The physical docs/ folder tree backing the wiki navigation. */
@@ -171,9 +185,39 @@ export interface WikiRevisionContent {
   content: string;
 }
 
+export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'archived' | 'invalid';
+
+export interface WorkbenchListItem {
+  id: string;
+  title: string;
+  summary: string;
+  status: WorkbenchStatus;
+  phase: 'shaping' | 'testing' | 'decision-ready' | null;
+  updatedAtUtc: string;
+  entryPath: string;
+  valid: boolean;
+  error: string | null;
+  sourceTaskKeys: string[];
+}
+
+export interface WorkbenchCatalogue {
+  projectName: string;
+  includesHistory: boolean;
+  count: number;
+  items: WorkbenchListItem[];
+}
+
+export interface WorkbenchDocument {
+  workbench: WorkbenchListItem;
+  html: string;
+  branch: string | null;
+  revision: string | null;
+  workingTreeModified: boolean;
+}
+
 // ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
 
-/** One change-feed row: a recently-edited page + frame-area badge + task key. */
+/** One change-feed row: a recently-edited page + top-folder badge + task key. */
 export interface WikiPulseFeedItem {
   relPath: string;
   title: string;
@@ -182,8 +226,8 @@ export interface WikiPulseFeedItem {
   sha: string;
   shortSha: string;
   subject: string;
-  frameAreaSlug: string | null;
-  frameAreaTitle: string | null;
+  areaSlug: string | null;
+  areaTitle: string | null;
   taskKey: string | null;
 }
 
@@ -210,7 +254,7 @@ export interface WikiPulseInbox {
   items: WikiPulseInboxItem[];
 }
 
-/** One frame area's drift grade (worst page band + code-commit counts). */
+/** One top-level docs folder's drift grade (worst page band + code-commit counts). */
 export interface WikiPulseDriftArea {
   slug: string;
   title: string;
@@ -231,7 +275,7 @@ export interface WikiPulseDriftCounts {
   graded: number;
 }
 
-/** Drift-grading section (the per-area grade bar + roll-up counts). */
+/** Drift-grading section (the per-top-folder grade bar + roll-up counts). */
 export interface WikiPulseDrift {
   available: boolean;
   reason: string | null;
@@ -249,7 +293,7 @@ export interface WikiPulseCriticalItem {
   gradedAt: string | null;
   model: string | null;
   reportPath: string | null;
-  frameAreaTitle: string | null;
+  areaTitle: string | null;
 }
 
 /**
@@ -264,6 +308,35 @@ export interface WikiPulseCritical {
   count: number;
   overallGrade: string; // D | C | none
   items: WikiPulseCriticalItem[];
+}
+
+export interface WikiPulseWarningItem {
+  kind: 'human-action' | 'dead-link';
+  title: string;
+  detail: string;
+  humanAction: string;
+  relPath: string | null;
+  status: string | null;
+}
+
+export interface WikiPulseWarnings {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  items: WikiPulseWarningItem[];
+}
+
+export interface WikiPulseLiveRun {
+  taskKey: string;
+  lane: string;
+  startedAtUtc: string;
+  docsFilesChanged: number;
+}
+
+export interface WikiPulseActivity {
+  available: boolean;
+  reason: string | null;
+  runs: WikiPulseLiveRun[];
 }
 
 /**
@@ -282,6 +355,82 @@ export interface WikiPulse {
   inbox: WikiPulseInbox;
   drift: WikiPulseDrift;
   critical: WikiPulseCritical;
+  warnings?: WikiPulseWarnings;
+  activity?: WikiPulseActivity;
+  workbenches?: WorkbenchCatalogue | null;
+}
+
+// ---- Wiki folder overview / search / curated home (agreed backend contracts) ----
+
+/** Kind of a folder-overview child: a subfolder or a document page. */
+export type WikiFolderChildKind = 'folder' | 'page';
+
+/**
+ * One row of a folder overview (mirrors the agreed
+ * `GET /api/projects/{p}/wiki/folder/{relPath}` contract). Folders carry
+ * `childCount` (and a null `fileType`); pages carry `fileType` + `size`.
+ */
+export interface WikiFolderChild {
+  name: string;
+  relPath: string;
+  kind: WikiFolderChildKind;
+  fileType: 'md' | 'html' | null;
+  title: string;
+  summary: string | null;
+  updatedAt: string | null;
+  size: number | null;
+  childCount: number | null;
+  /** Curated classification (pages only; null for folders and unclassified pages). */
+  classification?: WikiClassification | null;
+}
+
+/** Overview of one wiki folder: its path, display name, and direct children. */
+export interface WikiFolderOverview {
+  path: string;
+  name: string;
+  children: WikiFolderChild[];
+}
+
+/**
+ * One search hit. `snippet` may carry `<em>` highlight markup only; everything
+ * else arrives escaped and is additionally sanitised client-side before render
+ * (see `sanitizeWikiSearchSnippet`).
+ */
+export interface WikiSearchResult {
+  relPath: string;
+  title: string;
+  kind: string;
+  snippet: string;
+  score: number;
+  updatedAt: string | null;
+}
+
+/** Response of `GET /api/projects/{p}/wiki/search?q=&semantic=&limit=`. */
+export interface WikiSearchResponse {
+  query: string;
+  semanticUsed: boolean;
+  expandedTerms: string[];
+  durationMs: number;
+  results: WikiSearchResult[];
+}
+
+/** One curated entry link; `exists=false` marks a dangling curated target. */
+export interface WikiHomeLink {
+  relPath: string;
+  label: string;
+  note: string | null;
+  exists: boolean;
+}
+
+/** One curated section ("Einstiege") of the wiki home surface. */
+export interface WikiHomeSection {
+  title: string;
+  links: WikiHomeLink[];
+}
+
+/** Response of `GET /api/projects/{p}/wiki/home` (curated landing links). */
+export interface WikiHome {
+  sections: WikiHomeSection[];
 }
 
 // ---- Wiki grading maintenance run (AGT-2051) ----
@@ -359,4 +508,44 @@ export interface ArchitectureOverview {
   exists: boolean;
   preamble: string;
   decisions: ArchitectureDecisionSummary[];
+}
+
+export interface ProjectStyleGuideAppliesTo {
+  projects: string[];
+  technologies: string[];
+  taskAreas: string[];
+}
+
+export interface ProjectTechnology {
+  key: string;
+  displayLabel: string;
+}
+
+export interface ProjectStyleGuideMatch {
+  projectWildcard: boolean;
+  projectSelector: string;
+  technologyWildcard: boolean;
+  technologies: ProjectTechnology[];
+}
+
+export interface ProjectStyleGuide {
+  id: string;
+  title: string;
+  relPath: string;
+  summary: string;
+  promptSummary: string;
+  version: string;
+  appliesTo: ProjectStyleGuideAppliesTo;
+  match: ProjectStyleGuideMatch;
+}
+
+export interface ProjectStyleGuideCatalogue {
+  projectKey: string;
+  projectDisplayName: string;
+  technologies: ProjectTechnology[];
+  guides: ProjectStyleGuide[];
+  warnings: { relPath: string; message: string }[];
+  snapshotId: string;
+  capturedAtUtc: string;
+  refreshAfterUtc: string;
 }

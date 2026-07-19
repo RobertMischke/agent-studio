@@ -35,13 +35,18 @@ public sealed class ProjectRegistry
 
     private readonly string? _taskRepositoryRoot;
     private readonly ILogger<ProjectRegistry> _logger;
+    private readonly IAtomicJsonFileWriter _fileWriter;
     private readonly object _gate = new();
     private ProjectsFile _state = new();
     private bool _loaded;
 
-    public ProjectRegistry(IConfiguration config, ILogger<ProjectRegistry> logger)
+    public ProjectRegistry(
+        IConfiguration config,
+        ILogger<ProjectRegistry> logger,
+        IAtomicJsonFileWriter? fileWriter = null)
     {
         _logger = logger;
+        _fileWriter = fileWriter ?? new AtomicJsonFileWriter();
         var raw = config["TaskRepository"];
         _taskRepositoryRoot = string.IsNullOrWhiteSpace(raw) ? null : raw;
     }
@@ -193,7 +198,7 @@ public sealed class ProjectRegistry
                 string.Equals(NormalisePath(p.StorageLocation), normalised, StringComparison.OrdinalIgnoreCase));
             if (existing != null) return existing;
 
-            var newId = AllocateNextIdLocked();
+            var (newId, allocatedState) = PlanNextIdLocked();
             var existingCodes = _state.Projects.Select(p => p.ShortCode);
             var shortCode = ShortCodeGenerator.Derive(initialDisplayName, existingCodes);
             var record = new ProjectRecord
@@ -207,8 +212,10 @@ public sealed class ProjectRegistry
                 StorageLocation = storageLocation,
                 CreatedAt = clock.GetUtcNow().UtcDateTime,
             };
-            _state = _state with { Projects = [.. _state.Projects, record] };
-            PersistLocked();
+            ReplaceStateAndPersistLocked(allocatedState with
+            {
+                Projects = [.. allocatedState.Projects, record],
+            });
             _logger.LogInformation(
                 "project-registry-auto-discovered id={Id} displayName={DisplayName} shortCode={ShortCode} storage={Storage}",
                 record.Id, record.DisplayName, record.ShortCode, record.StorageLocation);
@@ -237,8 +244,7 @@ public sealed class ProjectRegistry
             var updated = current with { NextTaskKeySeq = issued + 1 };
             var next = _state.Projects.ToList();
             next[idx] = updated;
-            _state = _state with { Projects = next };
-            PersistLocked();
+            ReplaceStateAndPersistLocked(_state with { Projects = next });
             return issued;
         }
     }
@@ -261,17 +267,20 @@ public sealed class ProjectRegistry
             if (current.NextTaskKeySeq >= floor) return;
             var next = _state.Projects.ToList();
             next[idx] = current with { NextTaskKeySeq = floor };
-            _state = _state with { Projects = next };
-            PersistLocked();
+            ReplaceStateAndPersistLocked(_state with { Projects = next });
         }
     }
 
     /// <summary>F45b — rename a project's display name. Id is immutable.</summary>
     public ProjectRecord Rename(string id, string newDisplayName)
     {
-        if (string.IsNullOrWhiteSpace(newDisplayName))
-            throw new ArgumentException("newDisplayName is required", nameof(newDisplayName));
-        return MutateLocked(id, p => p with { DisplayName = newDisplayName.Trim() }, "renamed");
+        var normalized = ValidateDisplayName(newDisplayName);
+        EnsureLoaded();
+        lock (_gate)
+        {
+            ThrowIfDisplayNameCollisionLocked(id, normalized);
+            return MutateLocked(id, p => p with { DisplayName = normalized }, "renamed");
+        }
     }
 
     /// <summary>
@@ -283,20 +292,163 @@ public sealed class ProjectRegistry
         if (string.IsNullOrWhiteSpace(newShortCode))
             throw new ArgumentException("newShortCode is required", nameof(newShortCode));
         var normalized = newShortCode.Trim().ToUpperInvariant();
-        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, "^[A-Z0-9]{2,6}$"))
+        if (!ShortCodeGenerator.ValidateFormat(normalized))
             throw new ArgumentException(
-                "shortCode must be 2-6 chars of A-Z and 0-9", nameof(newShortCode));
+                "shortCode must be 2-6 chars, start with A-Z, and use A-Z or 0-9", nameof(newShortCode));
         EnsureLoaded();
         lock (_gate)
         {
-            var collision = _state.Projects.FirstOrDefault(p =>
-                !string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(p.ShortCode, normalized, StringComparison.OrdinalIgnoreCase));
-            if (collision != null)
-                throw new InvalidOperationException(
-                    $"shortCode '{normalized}' is already used by {collision.Id}.");
+            ThrowIfShortCodeCollisionLocked(id, normalized);
+            return MutateLocked(id, p => p with { ShortCode = normalized }, "short-code-set");
         }
-        return MutateLocked(id, p => p with { ShortCode = normalized }, "short-code-set");
+    }
+
+    /// <summary>
+    /// Applies all editable project basics as one registry mutation. Every
+    /// supplied value is normalized and validated before the record is
+    /// replaced and <c>projects.json</c> is written once. Stable identity and
+    /// storage fields are deliberately absent from the request contract.
+    /// </summary>
+    public ProjectRecord Update(string id, UpdateProjectRequest update, WorkspaceRegistry workspaces)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        ArgumentNullException.ThrowIfNull(workspaces);
+
+        // Keep the not-found response deterministic even when the submitted
+        // patch also contains an invalid field.
+        if (FindById(id) == null)
+            throw new KeyNotFoundException($"Unknown projectId: {id}");
+
+        var updateDisplayName = update.DisplayName != null;
+        var displayName = updateDisplayName ? ValidateDisplayName(update.DisplayName) : null;
+
+        var updateShortCode = update.ShortCode != null;
+        var shortCode = updateShortCode ? update.ShortCode!.Trim().ToUpperInvariant() : null;
+        if (updateShortCode && !ShortCodeGenerator.ValidateFormat(shortCode))
+            throw new ArgumentException(
+                "shortCode must be 2-6 chars, start with A-Z, and use A-Z or 0-9",
+                nameof(update.ShortCode));
+
+        var updateColor = update.Color != null || update.ClearColor == true;
+        var color = update.ClearColor == true || string.IsNullOrWhiteSpace(update.Color)
+            ? null
+            : update.Color.Trim();
+
+        var updateWorkspace = update.WorkspaceId != null;
+        var workspaceId = updateWorkspace ? update.WorkspaceId!.Trim() : null;
+        if (updateWorkspace)
+        {
+            if (string.IsNullOrWhiteSpace(workspaceId))
+                throw new ArgumentException("workspaceId is required", nameof(update.WorkspaceId));
+            if (workspaces.Find(workspaceId) == null)
+                throw new KeyNotFoundException($"Unknown workspaceId: {workspaceId}");
+        }
+
+        var updateRepositoryPath = update.RepositoryPath != null || update.ClearRepositoryPath == true;
+        var repositoryPath = updateRepositoryPath
+            ? ValidateRepositoryPath(update.ClearRepositoryPath == true ? null : update.RepositoryPath)
+            : null;
+
+        var updateRootPath = update.RootPath != null || update.ClearRootPath == true;
+        var rootPath = updateRootPath
+            ? ValidateRootPath(update.ClearRootPath == true ? null : update.RootPath)
+            : null;
+
+        var updateRepositoryUrl = update.RepositoryUrl != null || update.ClearRepositoryUrl == true;
+        var repositoryUrl = updateRepositoryUrl
+            ? ValidateRepositoryUrl(update.ClearRepositoryUrl == true ? null : update.RepositoryUrl)
+            : null;
+
+        var updateCliDefault = update.CliDefault != null || update.ClearCliDefault == true;
+        var cliDefault = update.ClearCliDefault == true || string.IsNullOrWhiteSpace(update.CliDefault)
+            ? null
+            : update.CliDefault.Trim();
+
+        var updateModelDefault = update.ModelDefault != null || update.ClearModelDefault == true;
+        var modelDefault = update.ClearModelDefault == true || string.IsNullOrWhiteSpace(update.ModelDefault)
+            ? null
+            : update.ModelDefault.Trim();
+
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Projects.FindIndex(p =>
+                string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) throw new KeyNotFoundException($"Unknown projectId: {id}");
+
+            if (updateDisplayName) ThrowIfDisplayNameCollisionLocked(id, displayName!);
+            if (updateShortCode) ThrowIfShortCodeCollisionLocked(id, shortCode!);
+
+            var current = _state.Projects[idx];
+            var updated = current with
+            {
+                DisplayName = updateDisplayName ? displayName! : current.DisplayName,
+                ShortCode = updateShortCode ? shortCode! : current.ShortCode,
+                Color = updateColor ? color : current.Color,
+                WorkspaceId = updateWorkspace ? workspaceId! : current.WorkspaceId,
+                RepositoryPath = updateRepositoryPath ? repositoryPath : current.RepositoryPath,
+                RootPath = updateRootPath ? rootPath : current.RootPath,
+                Urls = updateRepositoryUrl
+                    ? ApplyRepositoryUrl(current.Urls, repositoryUrl)
+                    : current.Urls,
+                CliDefault = updateCliDefault ? cliDefault : current.CliDefault,
+                ModelDefault = updateModelDefault ? modelDefault : current.ModelDefault,
+                Archived = update.Archived ?? current.Archived,
+            };
+
+            var next = _state.Projects.ToList();
+            next[idx] = updated;
+            ReplaceStateAndPersistLocked(_state with { Projects = next });
+            _logger.LogInformation("project-registry-basics-updated id={Id}", id);
+            return updated;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort compensation used when the separate project-settings write
+    /// fails after a registry update committed. The expected record reference
+    /// prevents this request from overwriting a concurrent later mutation.
+    /// </summary>
+    internal void RollbackUpdate(ProjectRecord expected, ProjectRecord previous)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        ArgumentNullException.ThrowIfNull(previous);
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Projects.FindIndex(project =>
+                string.Equals(project.Id, expected.Id, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0 || !ReferenceEquals(_state.Projects[idx], expected))
+                throw new InvalidOperationException(
+                    $"Project '{expected.Id}' changed concurrently; rollback was refused.");
+
+            var next = _state.Projects.ToList();
+            next[idx] = previous;
+            ReplaceStateAndPersistLocked(_state with { Projects = next });
+            _logger.LogWarning("project-registry-basics-rolled-back id={Id}", expected.Id);
+        }
+    }
+
+    /// <summary>Compensates a just-appended onboarding record.</summary>
+    internal void RollbackAppend(ProjectRecord expected)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Projects.FindIndex(project =>
+                string.Equals(project.Id, expected.Id, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) return;
+            if (!ReferenceEquals(_state.Projects[idx], expected))
+                throw new InvalidOperationException(
+                    $"Project '{expected.Id}' changed concurrently; create rollback was refused.");
+
+            ReplaceStateAndPersistLocked(_state with
+            {
+                Projects = [.. _state.Projects.Where((_, index) => index != idx)],
+            });
+            _logger.LogWarning("project-registry-create-rolled-back id={Id}", expected.Id);
+        }
     }
 
     /// <summary>F45b — set the accent color (CSS hex). Pass null to clear.</summary>
@@ -320,17 +472,24 @@ public sealed class ProjectRegistry
     /// <summary>
     /// Set (or clear, with null) the project's repository checkout path.
     /// Lives on the registry record so the project↔repo association survives
-    /// configuration loss; the docs/wiki root is always
+    /// configuration loss; the wiki root is always
     /// <c>&lt;RepositoryPath&gt;/docs</c> by convention, never configured
     /// separately.
     /// </summary>
     public ProjectRecord SetRepositoryPath(string id, string? repositoryPath)
     {
+        var trimmed = ValidateRepositoryPath(repositoryPath);
+        return MutateLocked(id, p => p with { RepositoryPath = trimmed },
+            trimmed == null ? "repository-path-cleared" : "repository-path-set");
+    }
+
+    internal static string? ValidateRepositoryPath(string? repositoryPath)
+    {
         var trimmed = string.IsNullOrWhiteSpace(repositoryPath) ? null : repositoryPath.Trim();
         if (trimmed != null)
         {
             // Containment: the value becomes the authoritative base dir for
-            // docs/wiki reads AND writes, so reject anything that is not a
+            // wiki (docs/) reads AND writes, so reject anything that is not a
             // local, existing git checkout. The UNC check runs before any
             // filesystem probe so validation itself cannot be used to drive
             // SMB connections to attacker-chosen hosts.
@@ -351,8 +510,7 @@ public sealed class ProjectRegistry
                 throw new ArgumentException(
                     "repositoryPath must point at a git checkout (no .git found)", nameof(repositoryPath));
         }
-        return MutateLocked(id, p => p with { RepositoryPath = trimmed },
-            trimmed == null ? "repository-path-cleared" : "repository-path-set");
+        return trimmed;
     }
 
     /// <summary>
@@ -363,6 +521,13 @@ public sealed class ProjectRegistry
     /// <c>&lt;repo&gt;/App</c>) rather than the checkout root itself.
     /// </summary>
     public ProjectRecord SetRootPath(string id, string? rootPath)
+    {
+        var trimmed = ValidateRootPath(rootPath);
+        return MutateLocked(id, p => p with { RootPath = trimmed },
+            trimmed == null ? "root-path-cleared" : "root-path-set");
+    }
+
+    internal static string? ValidateRootPath(string? rootPath)
     {
         var trimmed = string.IsNullOrWhiteSpace(rootPath) ? null : rootPath.Trim();
         if (trimmed != null)
@@ -381,8 +546,51 @@ public sealed class ProjectRegistry
                 throw new ArgumentException(
                     $"rootPath does not exist: {trimmed}", nameof(rootPath));
         }
-        return MutateLocked(id, p => p with { RootPath = trimmed },
-            trimmed == null ? "root-path-cleared" : "root-path-set");
+        return trimmed;
+    }
+
+    internal static string ValidateDisplayName(string? displayName)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
+        if (trimmed == null)
+            throw new ArgumentException("displayName is required", nameof(displayName));
+        if (trimmed.Length > WorkspaceManagementService.MaxNameLength)
+            throw new ArgumentException(
+                $"displayName must be {WorkspaceManagementService.MaxNameLength} characters or fewer",
+                nameof(displayName));
+        return trimmed;
+    }
+
+    internal static string? ValidateRepositoryUrl(string? repositoryUrl)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(repositoryUrl) ? null : repositoryUrl.Trim();
+        if (trimmed == null) return null;
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed)
+            || (parsed.Scheme != Uri.UriSchemeHttps && parsed.Scheme != Uri.UriSchemeHttp))
+            throw new ArgumentException(
+                "repositoryUrl must be an absolute http or https URL", nameof(repositoryUrl));
+        return trimmed;
+    }
+
+    private static IReadOnlyList<ProjectUrlRecord> ApplyRepositoryUrl(
+        IReadOnlyList<ProjectUrlRecord> urls,
+        string? repositoryUrl)
+    {
+        var next = urls
+            .Where(url => !string.Equals(url.Id, "repo", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (repositoryUrl == null) return next;
+
+        var existing = urls.FirstOrDefault(url =>
+            string.Equals(url.Id, "repo", StringComparison.OrdinalIgnoreCase));
+        next.Add(new ProjectUrlRecord
+        {
+            Id = "repo",
+            Label = "Repository",
+            Url = repositoryUrl,
+            SortOrder = existing?.SortOrder ?? (next.Count == 0 ? 0 : next.Max(url => url.SortOrder) + 1),
+        });
+        return next.OrderBy(url => url.SortOrder).ToList();
     }
 
     // ------------------------------------------------------------------
@@ -490,10 +698,19 @@ public sealed class ProjectRegistry
         var command = (rule.Command ?? "").Trim();
         if (command.Length == 0) return null; // a rule with no command is no rule
         var source = string.IsNullOrWhiteSpace(rule.Source) ? "manual" : rule.Source.Trim();
+        var cwd = string.IsNullOrWhiteSpace(rule.Cwd) ? null : rule.Cwd.Trim();
+        if (cwd != null)
+        {
+            if (!Path.IsPathRooted(cwd))
+                throw new ArgumentException("startRule.cwd must be an absolute path", nameof(rule));
+            cwd = Path.TrimEndingDirectorySeparator(Path.GetFullPath(cwd));
+            if (!Directory.Exists(cwd))
+                throw new ArgumentException($"startRule.cwd does not exist: {cwd}", nameof(rule));
+        }
         return new ProjectUrlStartRule
         {
             Command = command,
-            Cwd = string.IsNullOrWhiteSpace(rule.Cwd) ? null : rule.Cwd.Trim(),
+            Cwd = cwd,
             Port = rule.Port,
             Source = source,
         };
@@ -537,16 +754,35 @@ public sealed class ProjectRegistry
                 string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
             if (idx < 0) throw new KeyNotFoundException($"Unknown projectId: {id}");
             var removed = _state.Projects[idx];
-            _state = _state with
+            ReplaceStateAndPersistLocked(_state with
             {
                 Projects = [.. _state.Projects.Where((_, i) => i != idx)],
-            };
-            PersistLocked();
+            });
             _logger.LogInformation(
                 "project-registry-deleted id={Id} displayName={DisplayName} storage={Storage}",
                 removed.Id, removed.DisplayName, removed.StorageLocation);
             return removed;
         }
+    }
+
+    private void ThrowIfDisplayNameCollisionLocked(string id, string displayName)
+    {
+        var collision = _state.Projects.FirstOrDefault(project =>
+            !string.Equals(project.Id, id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(project.DisplayName, displayName, StringComparison.OrdinalIgnoreCase));
+        if (collision != null)
+            throw new InvalidOperationException(
+                $"displayName '{displayName}' is already used by {collision.Id}.");
+    }
+
+    private void ThrowIfShortCodeCollisionLocked(string id, string shortCode)
+    {
+        var collision = _state.Projects.FirstOrDefault(project =>
+            !string.Equals(project.Id, id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(project.ShortCode, shortCode, StringComparison.OrdinalIgnoreCase));
+        if (collision != null)
+            throw new InvalidOperationException(
+                $"shortCode '{shortCode}' is already used by {collision.Id}.");
     }
 
     private ProjectRecord MutateLocked(string id, Func<ProjectRecord, ProjectRecord> update, string op)
@@ -560,8 +796,7 @@ public sealed class ProjectRegistry
             var updated = update(_state.Projects[idx]);
             var next = _state.Projects.ToList();
             next[idx] = updated;
-            _state = _state with { Projects = next };
-            PersistLocked();
+            ReplaceStateAndPersistLocked(_state with { Projects = next });
             _logger.LogInformation("project-registry-{Op} id={Id}", op, id);
             return updated;
         }
@@ -578,8 +813,11 @@ public sealed class ProjectRegistry
         {
             if (_state.Projects.Any(p => string.Equals(p.Id, record.Id, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException($"Project id already exists: {record.Id}");
-            _state = _state with { Projects = [.. _state.Projects, record] };
-            PersistLocked();
+            if (_state.Projects.Any(p => string.Equals(p.DisplayName, record.DisplayName, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"displayName '{record.DisplayName}' is already used.");
+            if (_state.Projects.Any(p => string.Equals(p.ShortCode, record.ShortCode, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"shortCode '{record.ShortCode}' is already used.");
+            ReplaceStateAndPersistLocked(_state with { Projects = [.. _state.Projects, record] });
             return record;
         }
     }
@@ -590,13 +828,13 @@ public sealed class ProjectRegistry
         EnsureLoaded();
         lock (_gate)
         {
-            var id = AllocateNextIdLocked();
-            PersistLocked();
+            var (id, next) = PlanNextIdLocked();
+            ReplaceStateAndPersistLocked(next);
             return id;
         }
     }
 
-    private string AllocateNextIdLocked()
+    private (string Id, ProjectsFile Next) PlanNextIdLocked()
     {
         var seq = _state.NextProjectIdSeq;
         // Defensive: in case the file was hand-edited and seq collides
@@ -606,27 +844,36 @@ public sealed class ProjectRegistry
             seq++;
         }
         var id = FormatId(seq);
-        _state = _state with { NextProjectIdSeq = seq + 1 };
-        return id;
+        return (id, _state with { NextProjectIdSeq = seq + 1 });
     }
 
     private static string FormatId(int seq) => $"PROJ-{seq:D3}";
+
+    private void ReplaceStateAndPersistLocked(ProjectsFile next)
+    {
+        var previous = _state;
+        _state = next;
+        try { PersistLocked(); }
+        catch
+        {
+            _state = previous;
+            throw;
+        }
+    }
 
     private void PersistLocked()
     {
         if (_taskRepositoryRoot == null) return;
         try
         {
-            Directory.CreateDirectory(RegistryPaths.MetadataDir(_taskRepositoryRoot));
             var path = RegistryPaths.ProjectsFilePath(_taskRepositoryRoot);
-            var tmp = path + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(_state, JsonOpts));
-            File.Move(tmp, path, overwrite: true);
+            _fileWriter.Write(path, JsonSerializer.Serialize(_state, JsonOpts));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "project-registry-persist-failed root={Root}", _taskRepositoryRoot);
-            throw;
+            throw new ProjectPersistenceException(
+                $"Could not persist the project registry at '{_taskRepositoryRoot}'.", ex);
         }
     }
 

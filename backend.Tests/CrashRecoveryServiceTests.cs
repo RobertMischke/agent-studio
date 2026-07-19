@@ -300,6 +300,35 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecoverAsync_ValidSteerPendingMarker_OwnsStaleLockRecovery()
+    {
+        WriteJob(TaskStates.Progress, "steer-wait");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "steer-wait");
+        SteerPendingMarker.Write(jobFolder, new SteerPendingRecord
+        {
+            WaitStartedAt = DateTime.UtcNow - TimeSpan.FromMinutes(5),
+            Kind = SteerPendingKinds.Steer,
+            Ask = "ist iframe schon implementiert?"
+        });
+        WriteRawLock(jobFolder, new PickupLockInfo
+        {
+            Pid = 0x7FFFFFFE,
+            Hostname = Environment.MachineName,
+            Role = RunnerRoles.Orchestrator,
+            BackendName = "stable",
+            AcquiredAt = DateTime.UtcNow.AddMinutes(-5)
+        });
+
+        var (recovery, _) = BuildRecovery();
+        var decisions = await recovery.RecoverAsync();
+
+        Assert.True(Directory.Exists(jobFolder));
+        Assert.True(SteerPendingMarker.Exists(jobFolder));
+        Assert.True(File.Exists(Path.Combine(jobFolder, PickupLockFile.LockFileName)));
+        Assert.DoesNotContain(decisions, d => d.Kind == RecoveryDecisionKinds.RunInterruptedRequeued);
+    }
+
+    [Fact]
     public async Task RecoverAsync_LiveForeignLock_LeavesRunInProgress()
     {
         // A live foreign owner (e.g. the other backend on the same workspace)

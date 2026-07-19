@@ -6,8 +6,9 @@ namespace AgentStudio.Runner;
 /// marks a too-big / cross-cutting task that must run alone (the rare
 /// exception); <see cref="PredictedScope"/> is the set of repo-relative path
 /// prefixes the task is expected to touch, used to prove two tasks are disjoint
-/// before admitting them concurrently. An empty scope is treated as "unknown",
-/// which the pick-gate handles conservatively (see <see cref="ParallelSlotPolicy"/>).
+/// before admitting them concurrently. An empty scope is treated as "unknown";
+/// worktree isolation lets the pick-gate admit it optimistically while still
+/// serializing two declared scopes that overlap.
 /// </summary>
 public sealed record TaskParallelism(bool Exclusive, IReadOnlyList<string> PredictedScope)
 {
@@ -58,9 +59,9 @@ public sealed record SlotAdmission(SlotDecision Decision, string Reason)
 /// running -&gt; serialize everyone; (3) the candidate is exclusive -&gt; run
 /// alone if the project is idle, else wait for it to drain; (4) scope overlap
 /// with any running task -&gt; serialize (no cross-talk); (5) otherwise admit as
-/// parallel-ok. Scope comparison is path-prefix based and conservative: an
-/// unknown (empty) scope cannot be proven disjoint, so it serializes rather than
-/// risk two agents writing the same files.
+/// parallel-ok. Scope comparison is path-prefix based. Unknown (empty) scopes
+/// are admitted optimistically because coding runs are worktree-isolated; only
+/// two declared, overlapping scopes conflict.
 /// </para>
 /// </summary>
 public static class ParallelSlotPolicy
@@ -111,8 +112,10 @@ public static class ParallelSlotPolicy
                     $"exclusive: waits for {running.Count} running task(s) to drain");
         }
 
+        var usedOptimisticUnknownScope = !HasDeclaredScope(candidate.PredictedScope);
         foreach (var r in running)
         {
+            usedOptimisticUnknownScope |= !HasDeclaredScope(r.Parallelism.PredictedScope);
             var conflict = FirstScopeConflict(candidate.PredictedScope, r.Parallelism.PredictedScope);
             if (conflict != null)
                 return new SlotAdmission(SlotDecision.Serialize,
@@ -122,21 +125,24 @@ public static class ParallelSlotPolicy
         return new SlotAdmission(SlotDecision.Admit,
             running.Count == 0
                 ? "parallel-ok: first slot"
-                : $"parallel-ok: disjoint from {running.Count} running task(s)");
+                : usedOptimisticUnknownScope
+                    ? "parallel-ok (optimistic: unknown scope, worktree-isolated)"
+                    : $"parallel-ok: disjoint from {running.Count} running task(s)");
     }
 
     /// <summary>
-    /// Returns the first overlapping path (or the sentinel <c>unknown-scope</c>)
-    /// when two predicted scopes cannot be proven disjoint, else null. An empty
-    /// scope on either side is unknown and conservatively conflicts.
+    /// Returns the first overlapping declared path, else null. Empty and blank
+    /// scopes are unknown and do not conflict because their runs are isolated in
+    /// separate worktrees.
     /// </summary>
     public static string? FirstScopeConflict(IReadOnlyList<string> a, IReadOnlyList<string> b)
     {
-        if (a == null || a.Count == 0 || b == null || b.Count == 0) return "unknown-scope";
+        if (!HasDeclaredScope(a) || !HasDeclaredScope(b)) return null;
         foreach (var pa in a)
         {
             foreach (var pb in b)
             {
+                if (string.IsNullOrWhiteSpace(pa) || string.IsNullOrWhiteSpace(pb)) continue;
                 if (PathsOverlap(pa, pb))
                     return NormalizePath(pa).Length <= NormalizePath(pb).Length ? NormalizePath(pa) : NormalizePath(pb);
             }
@@ -144,11 +150,14 @@ public static class ParallelSlotPolicy
         return null;
     }
 
+    private static bool HasDeclaredScope(IReadOnlyList<string>? scope)
+        => scope != null && scope.Any(path => !string.IsNullOrWhiteSpace(path));
+
     private static bool PathsOverlap(string x, string y)
     {
         var nx = NormalizePath(x);
         var ny = NormalizePath(y);
-        if (nx.Length == 0 || ny.Length == 0) return true; // an empty entry is unknown
+        if (nx.Length == 0 || ny.Length == 0) return false;
         return nx == ny
             || nx.StartsWith(ny + "/", StringComparison.Ordinal)
             || ny.StartsWith(nx + "/", StringComparison.Ordinal);

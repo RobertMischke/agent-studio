@@ -73,7 +73,7 @@ describe('TaskCardComponent (smoke)', () => {
     const files = [
       'backend/Services/Analysis/AnalysisReportContract.cs',
       'backend/Services/Analysis/AnalysisReportStore.cs',
-      'docs/reports/analysis-reports.md',
+      'docs/system/reports/analysis-reports.md',
     ];
     fixture.componentRef.setInput('job', makeJob({
       state: '5-human-review',
@@ -1107,6 +1107,29 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.textContent).toContain('⇥');
   });
 
+  it('treats a live remote lease as running when no local execution exists', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      execution: null,
+      runner: {
+        runnerId: 'agent-runner-01@linux-host',
+        runnerName: 'agent-runner-01',
+        hostname: 'linux-host',
+        backendName: 'remote',
+        isRemote: true,
+        leaseId: 'lease-live',
+        fencingToken: 9,
+        acquiredAt: '2026-07-11T13:45:00Z',
+      },
+    }));
+
+    const card = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(fixture.componentInstance.isRunning()).toBe(true);
+    expect(card?.classList.contains('task-card--running')).toBe(true);
+    expect(card?.getAttribute('data-running')).toBe('true');
+    expect(fixture.nativeElement.textContent).toContain('agent-runner-01');
+  });
+
   it('renders a quiet "lokal" runner chip for an in-process run with no remote lease', async () => {
     const fixture = await renderCard(makeJob({
       state: '3-progress',
@@ -1131,7 +1154,7 @@ describe('TaskCardComponent (smoke)', () => {
 });
 
 describe('buildEffectiveModelChip', () => {
-  it('shows the effective run thinking level and strengthens a configured mismatch', () => {
+  it('shows the effective run thinking level and strengthens a default mismatch', () => {
     const job = makeJob({
       cliType: 'codex',
       model: 'gpt-5.6-sol',
@@ -1143,13 +1166,14 @@ describe('buildEffectiveModelChip', () => {
       },
     });
 
-    const chip = buildEffectiveModelChip(job, makeOwner());
+    const chip = buildEffectiveModelChip(job, makeOwner({ defaultThinkingLevel: 'high' }));
 
     expect(chip.thinkingLevel).toMatchObject({
       short: 'm',
       effective: 'medium',
       configured: 'ultra',
       differsFromConfigured: true,
+      differsFromDefault: true,
     });
     expect(chip.tooltip.body).toContain('Thinking level:</b> medium');
     expect(chip.tooltip.body).toContain('Configured thinking level:</b> ultra');
@@ -1158,10 +1182,22 @@ describe('buildEffectiveModelChip', () => {
   it('keeps a configured/default thinking level quiet before the first run', () => {
     const chip = buildEffectiveModelChip(
       makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'high', execution: null }),
-      makeOwner(),
+      makeOwner({ defaultThinkingLevel: 'high' }),
     );
 
-    expect(chip.thinkingLevel).toMatchObject({ short: 'h', effective: 'high', differsFromConfigured: false });
+    expect(chip.thinkingLevel).toMatchObject({ short: 'h', effective: 'high', differsFromDefault: false });
+  });
+
+  it('strengthens a task override even when the run matches its configured level', () => {
+    const chip = buildEffectiveModelChip(
+      makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'ultra', execution: null }),
+      makeOwner({ defaultThinkingLevel: 'high' }),
+    );
+
+    expect(chip.thinkingLevel).toMatchObject({
+      short: 'u', effective: 'ultra', configured: 'ultra', defaultLevel: 'high',
+      differsFromConfigured: false, differsFromDefault: true,
+    });
   });
 
   it('shows a visible quota-fallback badge with model and reason', () => {
@@ -1574,12 +1610,20 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     const now = Date.parse(since) + 135_000; // 2m 15s later
     const pill = buildPhaseBadge('steer-pending', since, now);
     expect(pill?.tone).toBe('steer-pending');
-    expect(pill?.label).toBe('Waiting for answer 2:15');
+    expect(pill?.label).toBe('Waiting for answer · 2:15');
     expect(pill?.tooltip).toContain('will not hang');
   });
 
   it('shows the bare steer-pending label when no wait-start is known', () => {
     expect(buildPhaseBadge('steer-pending')?.label).toBe('Waiting for answer');
+  });
+
+  it('shows loop-waiting as a timed no-slot phase', () => {
+    const since = '2026-07-11T00:00:00.000Z';
+    const pill = buildPhaseBadge('loop-waiting', since, Date.parse(since) + 42_000);
+    expect(pill?.tone).toBe('loop-waiting');
+    expect(pill?.label).toBe('Waiting for loop continuation 0:42');
+    expect(pill?.tooltip).toContain('freed its execution slot');
   });
 });
 
@@ -1589,8 +1633,8 @@ describe('formatSteerWait', () => {
     expect(formatSteerWait(75_000)).toBe('1:15');
     expect(formatSteerWait(9_000)).toBe('0:09');
   });
-  it('formats hour-plus waits as h:mm - the 5-hour hang shape', () => {
-    expect(formatSteerWait(5 * 3600_000 + 7 * 60_000)).toBe('5:07h');
+  it('keeps hour-plus waits in total-minutes mm:ss form - the 5-hour hang shape', () => {
+    expect(formatSteerWait(5 * 3600_000 + 7 * 60_000 + 9_000)).toBe('307:09');
   });
   it('never goes negative on clock skew', () => {
     expect(formatSteerWait(-5000)).toBe('0:00');

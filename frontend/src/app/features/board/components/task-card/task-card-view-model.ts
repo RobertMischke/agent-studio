@@ -7,6 +7,7 @@ import type { AutoReviewStatusView } from '../../../../services/auto-review-stat
 import { cliTypeIcon, cliTypeLabel, shortModelName, taskModeIcon, taskModeLabel } from '../../../../services/format.util';
 import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
 import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
+import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
 
 export interface TaskTypeChip {
   kind: string;
@@ -364,7 +365,8 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
 
   const thinkingLevel = buildThinkingLevelIndicator(
     job.execution,
-    job.thinkingLevel ?? owner.defaultThinkingLevel,
+    job.thinkingLevel,
+    owner.defaultThinkingLevel,
     fullModel,
   );
   const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel, thinkingLevel);
@@ -1005,6 +1007,7 @@ export type PhaseBadgeTone =
   | 'intake-running'
   | 'intake-blocked'
   | 'intake-passed'
+  | 'loop-waiting'
   | 'steer-pending'
   | 'post-processing-running'
   | 'post-processing-blocked'
@@ -1012,63 +1015,72 @@ export type PhaseBadgeTone =
 export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: string; }
 
 /**
- * Format a steer wait as a compact "m:ss" / "h:mm" elapsed label. Refreshes on
- * the shared 30s card tick, so it reads as a live "waiting for answer since …"
- * without a dedicated per-second timer.
+ * Format a steer wait as compact total-minutes `mm:ss`. The card keeps this
+ * established long-wait representation while lifecycle labels elsewhere use
+ * the shared hour-aware formatter.
  */
 export function formatSteerWait(elapsedMs: number): string {
   const total = Math.max(0, Math.floor(elapsedMs / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}h`;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 /**
+ * Card-pill tone + tooltip per lifecycle phase. Only the card-specific
+ * presentation lives here; the visible label text comes from the shared
+ * PHASE_LABELS source of truth via {@link phaseStaticLabel} so the pill and the
+ * task-detail chip can never disagree on wording. Phases absent from this table
+ * (human-ready, execution-running, execution-stalled) render no pill on the
+ * card: the lane already says "Ready" and a live execution shows the
+ * "Running live" chip instead.
+ */
+const PHASE_PILL: Partial<Record<string, { tone: PhaseBadgeTone; tooltip: string }>> = {
+  'steer-pending': { tone: 'steer-pending',
+    tooltip: 'The run asked a question and is waiting for an answer. If it stays unanswered it is auto-answered from the task context or escalated - it will not hang (Run-Liveness Slice B).' },
+  'loop-waiting': { tone: 'loop-waiting',
+    tooltip: 'The coding CLI has exited and freed its execution slot. The orchestrator is preparing a continuation, which must acquire a new slot before the CLI resumes.' },
+  'intake-running': { tone: 'intake-running',
+    tooltip: 'Orchestrator intake is checking this card (separate runner from the coding CLI).' },
+  'intake-blocked': { tone: 'intake-blocked',
+    tooltip: 'Orchestrator intake flagged this card. Check the activity log for the reason and resolve before the coding runner can pick it up.' },
+  'intake-passed': { tone: 'intake-passed',
+    tooltip: 'Orchestrator intake approved this card. The coding runner is now allowed to pick it up.' },
+  'post-processing-running': { tone: 'post-processing-running',
+    tooltip: 'The coding CLI has finished. An orchestrator or supporting agent is running post-processing before review.' },
+  'post-processing-blocked': { tone: 'post-processing-blocked',
+    tooltip: 'Orchestrator post-processing needs a human decision or failed before it could pass this task to review.' },
+  'awaiting-review': { tone: 'awaiting-review',
+    tooltip: 'Post-processing finished and the task is waiting for the review transition.' },
+};
+
+/** The two intentional-wait phases whose pill carries a live "since m:ss" timer. */
+const TIMED_WAIT_PHASES = new Set(['loop-waiting', 'steer-pending']);
+
+/**
  * Lifecycle-phase chip. Surfaces the `phase` substate on cards that carry one.
- * Returns null when the job has no explicit phase, so cards that predate the
- * field render exactly like before. When the card is steer-pending, the optional
- * `steerPendingSince` + `nowMs` render the "waiting for answer since m:ss" timer
- * (Run-Liveness Slice B).
+ * Returns null when the job has no explicit phase (or a phase the card renders
+ * elsewhere), so cards that predate the field render exactly like before. For
+ * the two intentional-wait phases the optional `steerPendingSince` + `nowMs`
+ * append the "since m:ss" timer (Run-Liveness Slices B/C).
  */
 export function buildPhaseBadge(
   phase: TaskInfo['phase'],
   steerPendingSince?: string | null,
   nowMs?: number,
 ): PhaseBadge | null {
-  switch (phase ?? null) {
-    case 'human-ready':
-      return null;
-    case 'steer-pending': {
-      const since = steerPendingSince ? Date.parse(steerPendingSince) : NaN;
-      const suffix = Number.isFinite(since) && typeof nowMs === 'number'
-        ? ` ${formatSteerWait(nowMs - since)}`
-        : '';
-      return { label: `Waiting for answer${suffix}`, tone: 'steer-pending',
-               tooltip: 'The run asked a question and is waiting for an answer. If it stays unanswered it is auto-answered from the task context or escalated - it will not hang (Run-Liveness Slice B).' };
+  if (!phase) return null;
+  const pill = PHASE_PILL[phase];
+  if (!pill) return null;
+  let label = phaseStaticLabel(phase) ?? phase;
+  if (TIMED_WAIT_PHASES.has(phase)) {
+    const since = steerPendingSince ? Date.parse(steerPendingSince) : NaN;
+    if (Number.isFinite(since) && typeof nowMs === 'number') {
+      const separator = phase === 'steer-pending' ? ' · ' : ' ';
+      label = `${label}${separator}${formatSteerWait(nowMs - since)}`;
     }
-    case 'intake-running':
-      return { label: 'Intake running', tone: 'intake-running',
-               tooltip: 'Orchestrator intake is checking this card (separate runner from the coding CLI).' };
-    case 'intake-blocked':
-      return { label: 'Intake blocked', tone: 'intake-blocked',
-               tooltip: 'Orchestrator intake flagged this card. Check the activity log for the reason and resolve before the coding runner can pick it up.' };
-    case 'intake-passed':
-      return { label: 'Intake passed', tone: 'intake-passed',
-               tooltip: 'Orchestrator intake approved this card. The coding runner is now allowed to pick it up.' };
-    case 'post-processing-running':
-      return { label: 'Post processing', tone: 'post-processing-running',
-               tooltip: 'The coding CLI has finished. An orchestrator or supporting agent is running post-processing before review.' };
-    case 'post-processing-blocked':
-      return { label: 'Post processing blocked', tone: 'post-processing-blocked',
-               tooltip: 'Orchestrator post-processing needs a human decision or failed before it could pass this task to review.' };
-    case 'awaiting-review':
-      return { label: 'Awaiting review', tone: 'awaiting-review',
-               tooltip: 'Post-processing finished and the task is waiting for the review transition.' };
-    default:
-      return null;
   }
+  return { label, tone: pill.tone, tooltip: pill.tooltip };
 }
 
 export interface ExecutionBadge { label: string; tone: 'running' | 'failed' | 'cancelled'; }
@@ -1120,7 +1132,7 @@ export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
  * DtC drive-to-conclusion infra-retry budget: up to 3 total attempts per
  * run-chain (attempt 1 = original run + up to 2 infra retries). Mirrors the
  * backend `CompletionRetrigger` DefaultBudget; see the four-terminal model in
- * `docs/wiki/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
+ * `docs/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
  * CooldownRetry banner counts against this budget.
  */
 export const INFRA_RETRY_BUDGET = 3;
@@ -1306,14 +1318,14 @@ export interface RunnerBadge {
  */
 export function buildRunnerBadge(job: TaskInfo): RunnerBadge | null {
   const running = job.state === TaskState.Progress && job.execution?.status === 'running';
-  const runner = job.runner ?? null;
+  const runner = job.state === TaskState.Progress ? job.runner ?? null : null;
 
   if (runner && runner.isRemote) {
     const name = (runner.runnerName || runner.runnerId || 'remote runner').trim();
     const host = (runner.hostname || '').trim();
-    const parts = [`Executed by remote runner ${name}${host ? ` on ${host}` : ''}.`];
+    const parts = [`Running remotely on ${name}${host ? ` (${host})` : ''}.`];
     parts.push('This task is running on another host, not in-process (holds the run lease).');
-    return { kind: 'remote', glyph: '⇥', label: name, tooltip: parts.join('\n') };
+    return { kind: 'remote', glyph: '⇥', label: `remote · ${name}`, tooltip: parts.join('\n') };
   }
 
   // Local: only assert "lokal" while the card is genuinely running in-process

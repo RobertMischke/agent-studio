@@ -16,4 +16,7 @@ public interface IGitProbe
     string HeadShort();
     (string Origin, int BehindBy) FetchAndCompare();
     IReadOnlyList<CommitInfo> PendingCommits(int max = 50);
+    VersionTopology ReadVersionTopology(string runningCommit);
 }
+
+public sealed record VersionTopology(BranchVersion Main, BranchVersion Develop);

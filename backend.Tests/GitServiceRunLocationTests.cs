@@ -116,6 +116,26 @@ public class GitServiceRunLocationTests : IDisposable
         Assert.Contains(view.Files, f => f.Path == "main-dirty.txt");
     }
 
+    [Fact]
+    public void PreferRunLocation_StatusCache_IsExplicitlyInvalidatable()
+    {
+        var (repoRoot, jobId, watchPath) = SetupRepoAndJob();
+        WriteFile(repoRoot, "README.md", "seed");
+        RunGit(repoRoot, "add", "-A");
+        RunGit(repoRoot, "commit", "-q", "-m", "seed");
+        var git = BuildGitService(repoRoot, watchPath);
+
+        var initial = git.GetStatus(jobId, watchPath, preferRunLocation: true);
+        WriteFile(repoRoot, "after-cache.txt", "new work");
+
+        var cached = git.GetStatus(jobId, watchPath, preferRunLocation: true);
+        Assert.DoesNotContain(cached.Files, f => f.Path == "after-cache.txt");
+
+        git.InvalidateStatusCache();
+        var refreshed = git.GetStatus(jobId, watchPath, preferRunLocation: true);
+        Assert.Contains(refreshed.Files, f => f.Path == "after-cache.txt");
+    }
+
     private (string repoRoot, string jobId, string watchPath) SetupRepoAndJob()
     {
         var repoRoot = Path.Combine(_tempDir, "repo");

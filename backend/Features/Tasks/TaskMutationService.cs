@@ -82,6 +82,7 @@ public class TaskMutationService
         var previousModel = ModelMetadataRegistry.NormalizeForCli(info.CliType, info.Model);
         var normalizedModel = ModelMetadataRegistry.NormalizeForCli(info.CliType, model);
         TaskJsonFile.UpdateField(info.FolderPath, "model", normalizedModel ?? "", _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "modelExplicit", !string.IsNullOrWhiteSpace(model), _logger);
         TaskJsonFile.UpdateField(
             info.FolderPath,
             "thinkingLevel",
@@ -139,6 +140,7 @@ public class TaskMutationService
         if (info == null) return false;
         var normalized = CliThinkingLevels.Normalize(info.CliType, info.Model, thinkingLevel);
         TaskJsonFile.UpdateField(info.FolderPath, "thinkingLevel", normalized ?? "", _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "thinkingLevelExplicit", !string.IsNullOrWhiteSpace(thinkingLevel), _logger);
         return Updated();
     }
 
@@ -537,6 +539,8 @@ public class TaskMutationService
     {
         if (!Directory.Exists(folderPath)) return false;
         TaskJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
+        TaskJsonFile.UpdateField(folderPath, "phaseEnteredAt",
+            string.IsNullOrWhiteSpace(phase) ? "" : DateTime.UtcNow.ToString("o"), _logger);
         return Updated();
     }
 
@@ -708,8 +712,10 @@ public class TaskMutationService
         };
         if (!string.IsNullOrWhiteSpace(effectiveModel))
             jobJson["model"] = effectiveModel;
+        jobJson["modelExplicit"] = req.ModelExplicit ?? !string.IsNullOrWhiteSpace(req.Model);
         if (!string.IsNullOrWhiteSpace(effectiveThinkingLevel))
             jobJson["thinkingLevel"] = effectiveThinkingLevel;
+        jobJson["thinkingLevelExplicit"] = req.ThinkingLevelExplicit ?? !string.IsNullOrWhiteSpace(req.ThinkingLevel);
         if (!string.IsNullOrWhiteSpace(effectiveCliType))
             jobJson["cliType"] = effectiveCliType;
         // Epics: card kind (task|epic) + optional parent epic (assignment way 1,

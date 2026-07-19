@@ -4,7 +4,9 @@ export interface ThinkingLevelIndicator {
   short: string;
   effective: string;
   configured: string | null;
+  defaultLevel: string | null;
   differsFromConfigured: boolean;
+  differsFromDefault: boolean;
   tooltip: string;
 }
 
@@ -24,21 +26,27 @@ const SHORT_LEVELS: Record<string, string> = {
 export function buildThinkingLevelIndicator(
   execution: CliExecution | null | undefined,
   configuredLevel: string | null | undefined,
+  defaultLevel: string | null | undefined,
   model: string | null | undefined,
 ): ThinkingLevelIndicator | null {
   const configured = clean(configuredLevel);
-  const effective = clean(execution?.thinkingLevel) ?? configured;
+  const defaultValue = clean(defaultLevel);
+  const effective = clean(execution?.thinkingLevel) ?? configured ?? defaultValue;
   if (!effective) return null;
 
   const differsFromConfigured = configured !== null && effective !== configured;
+  const differsFromDefault = defaultValue !== null && effective !== defaultValue;
   const lines = [`Effective thinking level: ${effective}`, `Model: ${execution?.model || model || 'CLI default'}`];
   if (differsFromConfigured) lines.push(`Configured thinking level: ${configured}`);
+  if (differsFromDefault) lines.push(`Default thinking level: ${defaultValue}`);
 
   return {
     short: SHORT_LEVELS[effective] ?? effective.charAt(0),
     effective,
     configured,
+    defaultLevel: defaultValue,
     differsFromConfigured,
+    differsFromDefault,
     tooltip: lines.join('\n'),
   };
 }

@@ -964,7 +964,7 @@
     /* Run-Liveness Slice B: "Waiting for answer since m:ss". An attention/pending
        amber tint (like intake-running, but a different lane so they never
        co-occur) so a steered card stands out without a left accent bar (R1). */
-    .task-card__phase-pill--steer-pending {
+    :is(.task-card__phase-pill--steer-pending, .task-card__phase-pill--loop-waiting) {
       color: var(--studio-accent-warn-strong);
       background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-warn) 42%, transparent);

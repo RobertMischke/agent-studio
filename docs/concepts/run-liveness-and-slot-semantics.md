@@ -1,7 +1,7 @@
 # Run-Liveness and Slot Semantics
 
-Status: Concept. Slice A implemented (2026-07-10); Slice B implemented
-(2026-07-11); Slice C is a follow-up card.
+Status: Implemented. Slice A implemented (2026-07-10); Slices B and C
+implemented (2026-07-11).
 
 ## Problem
 
@@ -137,10 +137,25 @@ event. A short-cadence sweep then enforces a bounded wait over one pure policy
 
 | Situation | Action | Reason code |
 |---|---|---|
-| Attended (manual mode) | leave it - a human is answering | `attended-wait` |
 | Inside the timeout | keep waiting (card shows the wait pill) | `within-timeout` |
 | Timed out, answer derivable from context | auto-answer + resume the run | `auto-answered` |
-| Timed out, no confident answer | route to a blocked `5e-escalated` escalation | `blocked-ambiguous` |
+| Timed out, no confident answer | route to a blocked `5e-escalated` escalation | `steer-unanswered` |
+
+Once an auto-mode run has written a durable steer-pending marker, that marker
+remains bounded even if the project mode later changes to manual or paused.
+Project mode is not proof that a human is actively answering. Manual runs do not
+create these markers in the first place.
+
+AGT-2087 exposed two ways that contract could still be bypassed. First, the
+completion callback used the project's current mode instead of remembering that
+the run was auto-picked; an `auto-single` mode flip could therefore make an
+unattended `NeedsInput` look manual. Second, the monitor required the
+`steer-pending.json` sidecar even though the separately persisted
+`steer-pending` phase already made the board show "waiting for answer". The
+completion decision now treats the original auto-pick intent as authoritative
+and no longer depends on optional run-plan metadata. The monitor also
+reconstructs a missing marker from `phaseEnteredAt`, so every visibly pending
+wait remains bounded even after a torn sidecar write.
 
 The **auto-answer** is the named 2067 case: for an "is this already
 implemented?" question, the resolver checks the branch/develop state - if the
@@ -148,7 +163,7 @@ task's `task/<id>` branch is already an ancestor of the integration branch, it
 answers "already integrated, finalize" and hands the answer back as a Continue
 (via a queued pending intent + demote to `2-ready`). Every other question shape,
 and every uncertain/errored resolve, is ambiguous -> a normal blocked
-escalation. "When unsure, escalate; never wait forever."
+escalation with category `steer-unanswered`. "When unsure, escalate; never wait forever."
 
 ### Key code
 
@@ -174,10 +189,26 @@ to the card's timeline (`steer_timeout_resolved`).
 | `Runner:SteerTimeout:TimeoutSeconds` | `120` | Bounded wait before an unanswered steer times out. |
 | `Runner:SteerTimeout:IntervalSeconds` | `20` | Sweep cadence (clamped 5..55). |
 
-## Slice C (follow-up card)
+## Slice C (implemented)
 
-- **Slice C - Sub-states + slot accounting.** Make the `execution` /
-  `post-processing` sub-states first-class (the `steer-pending` phase Slice B
-  introduces is the first of these pulled forward) and reconcile the coding-slot
-  count against live run-heartbeats so a demoted/finished card frees its seat
-  exactly once.
+`execution-running`, `loop-waiting`, `steer-pending`, and
+`post-processing-running` are first-class lifecycle phases. The board and task
+detail show the phase; intentional waits include their elapsed time.
+
+For remotely executed cards, an unexpired fenced run lease is also a board
+running signal. The read overlay projects the lease holder onto the task, and a
+`3-progress` card renders the same blue running treatment as a local execution
+plus a `remote` runner chip. Local `activeExecution` is not required for that
+remote state.
+
+Execution-slot ownership follows the coding CLI process, not `3-progress`
+membership. `ActiveRuns` retains the run record for finalisation after process
+exit but releases its execution seat exactly once. Loop waits, steer waits, and
+post-processing therefore occupy no coding slot. A loop continuation goes back
+through normal admission; if another live CLI won the seat, its pending intent
+is persisted and remains visibly `loop-waiting` until pickup acquires a slot.
+
+The liveness policy pins the complementary invariant: after the grace window a
+`3-progress` card without a live run heartbeat is legal only when it carries an
+explicit `loop-waiting` or `steer-pending` phase. Otherwise it is recovered as a
+zombie within the existing 60 second budget.

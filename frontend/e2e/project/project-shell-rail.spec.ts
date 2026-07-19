@@ -39,6 +39,7 @@ const RAILS_WITH_CUSTOM_PANEL = new Set<string>([
   'visual-evidence',
   'architecture',
   'uxui',
+  'test-quality',
   'token-usage',
   'observability',
   'product-runtime',
@@ -130,7 +131,7 @@ test('opens the project shell from the kanban tab and lands on Overview', async 
   await expect(shell).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('project-shell-title')).toHaveText(projectName);
   await expect(page.getByTestId('project-shell-rail-overview')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('project-detail-overview')).toBeVisible();
+  await expect(page.getByTestId('project-overview-dashboard')).toBeVisible();
 
   // Hash reflects the selected project shell.
   expect(page.url()).toContain(`#/projects/${slugFor(projectName)}`);

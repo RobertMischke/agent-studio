@@ -101,6 +101,33 @@
 }
 .host__meta-sep { color: var(--studio-fg-muted); }
 
+.activity {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-3);
+}
+.activity > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg);
+}
+.activity span { color: var(--studio-fg-muted); font-size: 11px; }
+.activity strong { color: var(--studio-fg-strong); font-size: 12px; }
+.activity--stale { opacity: 0.62; }
+.host__stale {
+  margin: var(--studio-spacing-3) 0 0;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border-radius: 8px;
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-muted);
+  font-size: 12px;
+}
+
 // --- chips (capabilities + quota) --------------------------------------------
 .chips {
   list-style: none;
@@ -196,6 +223,27 @@
   font-style: italic;
 }
 
+.telemetry {
+  margin-top: var(--studio-spacing-4);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+}
+.telemetry__head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--studio-spacing-2); font-size: 11px; }
+.telemetry__context { color: var(--studio-fg-dim); flex: 1 1 auto; }
+.telemetry__windows { display: flex; gap: var(--studio-spacing-1); }
+.telemetry__windows button {
+  border: 1px solid var(--studio-border); border-radius: 4px; background: transparent; color: var(--studio-fg-dim);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2); cursor: pointer;
+}
+.telemetry__windows button[aria-pressed='true'] { background: var(--studio-bg-selected); color: var(--studio-fg-strong); border-color: var(--studio-accent); }
+.telemetry__findings { display: flex; flex-wrap: wrap; gap: var(--studio-spacing-2); margin-top: var(--studio-spacing-2); }
+.telemetry__charts { display: grid; gap: var(--studio-spacing-2); margin-top: var(--studio-spacing-3); }
+.telemetry__row { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: var(--studio-spacing-2); font-size: 10px; color: var(--studio-fg-dim); }
+.telemetry__row svg { width: 100%; height: 30px; background: var(--studio-bg-hover); border-radius: 4px; }
+.telemetry__row polyline { fill: none; stroke: var(--studio-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+
 // --- actions -----------------------------------------------------------------
 .host__actions {
   display: flex;
@@ -216,6 +264,13 @@
 .host__btn:hover:not(:disabled) { background: var(--studio-bg-selected); }
 .host__btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .host__btn:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+.host__btn--primary {
+  border-color: var(--studio-accent);
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+  font-weight: 700;
+}
+.host__btn--primary:hover:not(:disabled) { filter: brightness(1.08); }
 .host__btn--danger { color: var(--studio-accent-6-strong); }
 .host__btn--danger:hover:not(:disabled) {
   background: var(--notify-error-tint);

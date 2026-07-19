@@ -1,5 +1,7 @@
 using AgentStudio.Shared;
 
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -18,12 +20,15 @@ public static class TaskExternalCompletionEndpoints
     {
         group.MapPost("/{jobId}/external-completion", async (
             string jobId,
+            string? project,
             string? watchPath,
             ExternalCompletionRequest req,
             HttpContext ctx,
             ExternalCompletionService service,
+            AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             // Attribution: the operator who relayed the out-of-band result is
             // the caller in X-Client-Id (validated by the client middleware);
             // it drives the lane_changed ledger row. The completion *source*

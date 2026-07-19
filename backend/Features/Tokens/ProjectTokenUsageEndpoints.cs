@@ -9,7 +9,7 @@ namespace AgentStudio.Tokens;
 /// canonical token aggregation surface:
 ///
 /// <list type="bullet">
-///   <item>Summary: lifetime + last-24h totals plus the Job / Supporting
+///   <item>Summary: lifetime + rolling 24h / 7d totals plus the Job / Supporting
 ///   / Orchestrator category split (taxonomy.md vocabulary).</item>
 ///   <item>Heatmap: rows = jobs (most expensive first), columns = days.</item>
 ///   <item>Expensive jobs: top N jobs by total tokens.</item>

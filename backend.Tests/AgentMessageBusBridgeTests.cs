@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Locks the Phase A bridge contract (docs/architecture/bus/agent-message-bus.md section 9):
+/// Locks the Phase A bridge contract (docs/system/architecture/bus/agent-message-bus.md section 9):
 /// every existing structured signal we elected to project onto the bus produces
 /// a typed <see cref="AgentMessage"/> with the right kind, severity, and
 /// participant. The legacy raw streams (cli-output.log, observations.jsonl,
@@ -79,6 +79,7 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     [InlineData(OrchestratorMessageKind.InfraCrash, "High", "infra-crash")]
     [InlineData(OrchestratorMessageKind.OrchestratorInconclusive, "Warn", "orchestrator-inconclusive")]
     [InlineData(OrchestratorMessageKind.CliLaunchFailed, "Warn", "cli-launch-failed")]
+    [InlineData(OrchestratorMessageKind.AuthRefreshFailed, "High", "auth-refresh-failed")]
     [InlineData(OrchestratorMessageKind.GiveUp, "High", "giveup")]
     [InlineData(OrchestratorMessageKind.IntegrationConflict, "High", "integration-conflict")]
     [InlineData(OrchestratorMessageKind.IntegrationError, "High", "integration-error")]
