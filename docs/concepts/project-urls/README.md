@@ -93,9 +93,10 @@ five, rendered from a `@for` loop over the project's `Urls` (today those five
 rows are hand-written literals, not data-driven - see "Explorer tree" below).
 New URL rows use a new `link`/globe glyph, a small status dot
 (`running`/`offline`) instead of a count badge, and **clicking one opens the
-URL directly** (new browser tab) - it does not open Project Hub at all. A
-project with zero configured URLs shows zero extra rows (e.g. Agent Studio
-Marketing in the screenshot).
+URL as an embedded Studio preview tab** - it does not open Project Hub. A
+secondary external-browser icon remains available as a fallback. A project
+with zero configured URLs shows zero extra rows (e.g. Agent Studio Marketing
+in the screenshot).
 
 **2. Project Hub side-sheet** gets exactly **one** new rail entry, **"Project
 URLs"**, in the Insight group - a single flat page, no children, no
@@ -103,7 +104,8 @@ sub-navigation. This is where the actual *management* happens: the full list
 with status pills, the build/restart strip, and "Add URL". No per-URL detail
 subpage - editing happens inline or via a small dialog on this one page. The
 quick "jump to this URL" access lives in the Explorer tree (surface 1), not
-here; Project Hub is for configuring and rebuilding, not for daily navigation.
+here; Project Hub is primarily for configuring and rebuilding. Its URL rows
+may open the same embedded preview tab without introducing a detail subpage.
 
 **Add URL** (on the Project Hub page) offers the detected suggestions (from
 the service above) plus a manual fallback form; adding one immediately
@@ -126,11 +128,17 @@ even though Wiki was added later without updating it). There is no array/model
 today driving this list. Adding URL rows means: add `Urls` to whatever feeds
 `ProjectSidebarRow`/`buildProjectSidebarRows()` (`studio-shell.project-rows.ts`),
 then add a `@for` loop after the five literal rows. Click handling for the new
-rows should NOT go through `StudioTabStateService`/`@Output()` request
-emitters like the other five (those all open a tab) - it should just open the
-URL (`window.open(url, '_blank')`), since these are plain external links.
+rows goes through the same `StudioTabStateService` open-or-focus contract as
+other editor tabs, using `url-preview:<projectName>:<urlId>` as the stable key.
+Only the secondary fallback action uses `window.open(url, '_blank')`.
 
 ## Shipped direction: embedded live preview
+
+The focused split-view, sandbox, readiness, responsive, and later page-access
+decisions are maintained in
+[`../project-url-embed-split-view.md`](../project-url-embed-split-view.md), with
+the current static mockup in
+[`../mockups/project-url-embed-split-view.html`](../mockups/project-url-embed-split-view.html).
 
 Robert's own framing: *"das ist so ein bisschen perspektivischer Ausblick"* -
 a direction layered on top of Project URLs. The basic embedded preview,

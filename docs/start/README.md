@@ -68,6 +68,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | UX doctrine | [product/design-principles.md](../quality/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](../concepts/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](../concepts/orchestrator-in-app.md) |
+| Embedded Project URL preview with Orchestrator split view | [concept](../concepts/project-url-embed-split-view.md) · [interactive mockup](../concepts/mockups/project-url-embed-split-view.html) |
 | Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](../concepts/wiki-pulse-dashboard.md) |
 | Wiki grading run (global LLM grade per page; trigger + critical pages; GRADE-1) | [concepts/wiki-grading-run.md](../concepts/wiki-grading-run.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md) |

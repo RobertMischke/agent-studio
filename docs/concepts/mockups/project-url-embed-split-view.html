@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Embedded Project URL Split View Mockup</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-app: #11131a;
+      --bg-sidebar: #181b24;
+      --bg-editor: #1e222d;
+      --bg-elevated: #252a37;
+      --bg-hover: #2d3342;
+      --border: #373e50;
+      --border-strong: #4a5368;
+      --fg: #d9deea;
+      --fg-strong: #f2f4f9;
+      --fg-muted: #929bb0;
+      --accent: #a78bfa;
+      --success: #72d99b;
+      --warning: #efc56a;
+      --danger: #f1849e;
+      --on-accent: #17131f;
+      --shadow: 0 14px 42px rgb(0 0 0 / 0.28);
+      --sidebar-width: 224px;
+      --orch-width: 430px;
+    }
+
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg-app: #eef1f6;
+      --bg-sidebar: #f7f8fb;
+      --bg-editor: #ffffff;
+      --bg-elevated: #f3f5f9;
+      --bg-hover: #e9edf5;
+      --border: #d6dbe6;
+      --border-strong: #b8c0d0;
+      --fg: #313746;
+      --fg-strong: #171b25;
+      --fg-muted: #667086;
+      --accent: #7253cc;
+      --success: #247c4d;
+      --warning: #936713;
+      --danger: #b43b5b;
+      --on-accent: #ffffff;
+      --shadow: 0 14px 42px rgb(45 55 75 / 0.16);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      background: var(--bg-app);
+      color: var(--fg);
+      font: 13px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, select, textarea { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, select:focus-visible, textarea:focus-visible, [role="separator"]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: 38px minmax(0, 1fr) 26px;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg-app);
+    }
+    .topbar, .statusbar {
+      display: flex;
+      align-items: center;
+      border-color: var(--border);
+      background: var(--bg-sidebar);
+    }
+    .topbar {
+      gap: 12px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { color: var(--fg-strong); font-weight: 700; letter-spacing: 0.01em; }
+    .crumb { color: var(--fg-muted); }
+    .topbar__spacer, .statusbar__spacer { flex: 1 1 auto; }
+    .icon-btn, .quiet-btn, .primary-btn, .url-option, .mode-btn {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      cursor: pointer;
+    }
+    .icon-btn { display: grid; width: 28px; height: 28px; place-items: center; }
+    .icon-btn:hover, .quiet-btn:hover, .url-option:hover, .mode-btn:hover { background: var(--bg-hover); }
+    .quiet-btn, .primary-btn, .mode-btn { padding: 5px 9px; }
+    .quiet-btn { border-color: var(--border); background: var(--bg-elevated); }
+    .primary-btn { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 650; }
+    .topbar__hint { color: var(--fg-muted); font-size: 11px; }
+
+    .workspace {
+      display: flex;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .explorer {
+      flex: 0 0 var(--sidebar-width);
+      min-width: 0;
+      overflow: auto;
+      border-right: 1px solid var(--border);
+      background: var(--bg-sidebar);
+    }
+    .section-label {
+      padding: 12px 12px 7px;
+      color: var(--fg-muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+    .tree-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      width: 100%;
+      min-height: 30px;
+      padding: 0 10px;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .tree-row:hover { background: var(--bg-hover); }
+    .tree-row--child { padding-left: 34px; color: var(--fg-muted); }
+    .tree-row--active { background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated)); color: var(--fg-strong); }
+    .tree-row__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .explorer-note { padding: 0 12px; color: var(--fg-muted); font-size: 11px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-muted); }
+    .dot--live { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 12%, transparent); }
+    .dot--offline { background: var(--warning); }
+
+    .preview-shell {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      background: var(--bg-editor);
+    }
+    .tabs {
+      display: flex;
+      min-height: 34px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-sidebar);
+    }
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 150px;
+      padding: 0 11px;
+      border: 0;
+      border-right: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg-muted);
+      cursor: pointer;
+    }
+    .tab--active { background: var(--bg-editor); color: var(--fg-strong); }
+    .tab__close { margin-left: auto; opacity: 0.6; }
+    .preview-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-sidebar);
+    }
+    .url-switcher { position: relative; }
+    .url-switcher__trigger {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 118px;
+      padding: 6px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-elevated);
+      cursor: pointer;
+    }
+    .url-menu {
+      position: absolute;
+      z-index: 10;
+      top: calc(100% + 6px);
+      left: 0;
+      display: none;
+      width: 236px;
+      padding: 5px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--bg-elevated);
+      box-shadow: var(--shadow);
+    }
+    .url-menu[data-open="true"] { display: grid; gap: 3px; }
+    .url-option { display: grid; grid-template-columns: 1fr auto; gap: 8px; width: 100%; padding: 8px; text-align: left; }
+    .url-option small { grid-column: 1 / -1; overflow: hidden; color: var(--fg-muted); text-overflow: ellipsis; white-space: nowrap; }
+    .address {
+      display: flex;
+      flex: 1 1 auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      min-height: 30px;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg-editor);
+    }
+    .address__url { flex: 1; overflow: hidden; color: var(--fg-muted); font: 11px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .pill {
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--success) 14%, transparent);
+      color: var(--success);
+      font-size: 9px;
+      font-weight: 750;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .frame-wrap { position: relative; flex: 1 1 auto; min-height: 0; background: #f5f6f8; }
+    .frame-wrap iframe { display: block; width: 100%; height: 100%; border: 0; background: #f5f6f8; }
+    .frame-label {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      padding: 4px 8px;
+      border: 1px solid rgb(0 0 0 / 0.12);
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.88);
+      color: #596174;
+      font-size: 10px;
+      pointer-events: none;
+    }
+
+    .orchestrator {
+      position: relative;
+      display: flex;
+      flex: 0 0 var(--orch-width);
+      flex-direction: column;
+      min-width: 360px;
+      min-height: 0;
+      overflow: hidden;
+      border-left: 1px solid var(--border);
+      background: var(--bg-sidebar);
+      transition: flex-basis 180ms ease, min-width 180ms ease, border-color 180ms ease;
+    }
+    .orchestrator[data-open="false"] { flex-basis: 0; min-width: 0; border-color: transparent; }
+    .orchestrator[data-open="false"] > * { visibility: hidden; }
+    .resize {
+      position: absolute;
+      z-index: 5;
+      inset: 0 auto 0 0;
+      width: 7px;
+      border: 0;
+      background: transparent;
+      cursor: ew-resize;
+      touch-action: none;
+    }
+    .resize:hover, .resize[data-active="true"] { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+    .orch-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 50px;
+      padding: 8px 10px 8px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .orch-head__title { flex: 1; min-width: 0; }
+    .orch-head__title strong { display: block; color: var(--fg-strong); }
+    .orch-head__title small { display: block; overflow: hidden; color: var(--fg-muted); text-overflow: ellipsis; white-space: nowrap; }
+    .conversation { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px; }
+    .context-card {
+      display: grid;
+      gap: 7px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-elevated);
+    }
+    .context-card__top { display: flex; align-items: center; gap: 8px; }
+    .context-card__top strong { flex: 1; }
+    .context-card p { margin: 0; color: var(--fg-muted); font-size: 11px; }
+    .bubble {
+      width: fit-content;
+      max-width: 88%;
+      margin-top: 14px;
+      padding: 9px 11px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--bg-editor);
+    }
+    .bubble--user { margin-left: auto; background: color-mix(in srgb, var(--accent) 12%, var(--bg-editor)); }
+    .bubble small { display: block; margin-bottom: 3px; color: var(--fg-muted); }
+    .composer { padding: 10px; border-top: 1px solid var(--border); background: var(--bg-sidebar); }
+    .composer textarea {
+      display: block;
+      width: 100%;
+      min-height: 68px;
+      resize: none;
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg-editor);
+      color: var(--fg);
+    }
+    .composer__foot { display: flex; align-items: center; gap: 7px; margin-top: 7px; }
+    .composer__note { flex: 1; color: var(--fg-muted); font-size: 10px; }
+
+    .statusbar {
+      gap: 10px;
+      padding: 0 9px;
+      border-top: 1px solid var(--border);
+      color: var(--fg-muted);
+      font-size: 10.5px;
+    }
+    .status-action { border: 0; background: transparent; color: inherit; cursor: pointer; }
+    .status-action[aria-pressed="true"] { color: var(--fg-strong); }
+    .status-live-dot { display: inline-block; margin-right: 5px; }
+    .compact-modes { display: none; }
+
+    @media (max-width: 900px) {
+      :root { --sidebar-width: 176px; }
+      .topbar__hint { display: none; }
+      .orchestrator[data-open="true"] {
+        position: absolute;
+        z-index: 20;
+        inset: 38px 0 26px var(--sidebar-width);
+        width: auto;
+        min-width: 0;
+        border-left: 0;
+        box-shadow: var(--shadow);
+      }
+      .workspace[data-compact-mode="orchestrator"] .preview-shell { visibility: hidden; }
+      .resize { display: none; }
+      .compact-modes { display: flex; align-items: center; gap: 3px; padding: 2px; border: 1px solid var(--border); border-radius: 7px; }
+      .mode-btn { padding: 3px 7px; font-size: 10.5px; }
+      .mode-btn[aria-pressed="true"] { background: var(--bg-hover); color: var(--fg-strong); }
+    }
+
+    @media (max-width: 620px) {
+      :root { --sidebar-width: 0px; }
+      .explorer { display: none; }
+      .orchestrator[data-open="true"] { left: 0; }
+      .url-switcher__trigger { min-width: 100px; }
+      .address__url { display: none; }
+      .preview-toolbar { gap: 4px; padding-inline: 6px; }
+      .topbar .crumb { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <span class="brand">Agent Studio</span>
+      <span class="crumb">Coding Agent Chat / Embedded preview</span>
+      <span class="topbar__spacer"></span>
+      <span class="topbar__hint">Static concept mockup</span>
+      <div class="compact-modes" aria-label="Compact workspace mode">
+        <button class="mode-btn" id="previewMode" type="button" aria-pressed="true">Preview</button>
+        <button class="mode-btn" id="orchestratorMode" type="button" aria-pressed="false">Orchestrator</button>
+      </div>
+      <button class="quiet-btn" id="themeToggle" type="button" aria-label="Toggle color theme">Light theme</button>
+    </header>
+
+    <section class="workspace" id="workspace" data-compact-mode="preview">
+      <nav class="explorer" aria-label="Project Explorer">
+        <div class="section-label">Workspace</div>
+        <button class="tree-row" type="button"><span>⌄</span><strong class="tree-row__label">Coding Agent Chat</strong></button>
+        <button class="tree-row tree-row--child" type="button"><span>▦</span><span class="tree-row__label">Board</span></button>
+        <button class="tree-row tree-row--child" type="button"><span>⌂</span><span class="tree-row__label">Project Hub</span></button>
+        <button class="tree-row tree-row--child tree-row--active" type="button" data-page="lab"><span>↗</span><span class="tree-row__label">Lab :4201</span><span class="dot dot--live"></span></button>
+        <button class="tree-row tree-row--child" type="button" data-page="website"><span>↗</span><span class="tree-row__label">Website :4202</span><span class="dot dot--live"></span></button>
+
+        <div class="section-label">Preview contract</div>
+        <div class="explorer-note">
+          Primary clicks stay in Studio. External navigation remains a fallback.
+        </div>
+      </nav>
+
+      <section class="preview-shell" aria-label="Embedded Project URL preview">
+        <div class="tabs" role="tablist" aria-label="Open Studio tabs">
+          <button class="tab" type="button" role="tab" aria-selected="false"><span>▦</span><span>Board</span></button>
+          <button class="tab tab--active" type="button" role="tab" aria-selected="true"><span>↗</span><span id="tabLabel">Lab :4201</span><span class="tab__close">×</span></button>
+        </div>
+
+        <div class="preview-toolbar">
+          <button class="icon-btn" id="reload" type="button" aria-label="Reload embedded preview" title="Reload">↻</button>
+          <div class="url-switcher">
+            <button class="url-switcher__trigger" id="urlTrigger" type="button" aria-haspopup="menu" aria-expanded="false">
+              <span class="dot dot--live"></span><strong id="urlLabel">Lab :4201</strong><span>⌄</span>
+            </button>
+            <div class="url-menu" id="urlMenu" role="menu" data-open="false">
+              <button class="url-option" type="button" role="menuitem" data-page="lab"><strong>Lab</strong><span class="pill">Running</span><small>http://localhost:4201</small></button>
+              <button class="url-option" type="button" role="menuitem" data-page="website"><strong>Website</strong><span class="pill">Running</span><small>http://localhost:4202</small></button>
+            </div>
+          </div>
+          <div class="address">
+            <span>🔒</span><span class="address__url" id="address">http://localhost:4201</span><span class="pill">Running</span>
+          </div>
+          <button class="icon-btn" type="button" aria-label="Open externally" title="Fallback: open externally">↗</button>
+          <button class="icon-btn" type="button" aria-label="Preview settings" title="Preview settings">⚙</button>
+        </div>
+
+        <div class="frame-wrap">
+          <iframe id="previewFrame" title="Embedded preview placeholder" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups" referrerpolicy="no-referrer"></iframe>
+          <div class="frame-label">sandboxed iframe placeholder</div>
+        </div>
+      </section>
+
+      <aside class="orchestrator" id="orchestrator" data-open="true" aria-label="Orchestrator panel">
+        <div class="resize" id="resize" role="separator" aria-orientation="vertical" aria-label="Resize Orchestrator panel" tabindex="0"></div>
+        <header class="orch-head">
+          <div class="orch-head__title"><strong>Orchestrator</strong><small id="contextLabel">Coding Agent Chat · Lab :4201</small></div>
+          <button class="icon-btn" id="closeOrchestrator" type="button" aria-label="Close Orchestrator">×</button>
+        </header>
+        <div class="conversation">
+          <section class="context-card">
+            <div class="context-card__top"><span class="dot dot--live"></span><strong>Project context</strong><span class="pill">Live</span></div>
+            <p id="contextCopy">Embedded URL: Lab, http://localhost:4201. The page body is not visible to the Orchestrator in v1.</p>
+          </section>
+          <div class="bubble"><small>Orchestrator</small>I can work beside the preview and keep this project conversation in view.</div>
+          <div class="bubble bubble--user"><small>You</small>Check the spacing shown in the Lab preview.</div>
+          <div class="bubble"><small>Orchestrator</small>For v1, attach a snapshot or describe the element. A later bridge can capture the page directly.</div>
+        </div>
+        <form class="composer" onsubmit="return false">
+          <textarea aria-label="Message to Orchestrator" placeholder="Ask about this project and preview..."></textarea>
+          <div class="composer__foot"><span class="composer__note">Context: project + URL metadata</span><button class="primary-btn" type="submit">Send</button></div>
+        </form>
+      </aside>
+    </section>
+
+    <footer class="statusbar">
+      <span><span class="dot dot--live status-live-dot"></span>Preview live</span>
+      <span class="statusbar__spacer"></span>
+      <button class="status-action" id="orchToggle" type="button" aria-pressed="true">Orchestrator open</button>
+    </footer>
+  </main>
+
+  <script>
+    const pages = {
+      lab: {
+        label: 'Lab :4201', short: 'Lab', url: 'http://localhost:4201', accent: '#7253cc',
+        title: 'Conversation Lab', eyebrow: 'Component workbench',
+        copy: 'Review conversation states, tool bursts, and compact project context without leaving Agent Studio.'
+      },
+      website: {
+        label: 'Website :4202', short: 'Website', url: 'http://localhost:4202', accent: '#247c4d',
+        title: 'Coding Agent Chat', eyebrow: 'Presentation website',
+        copy: 'A second configured URL opens or focuses its own stable preview tab while the Orchestrator stays beside it.'
+      }
+    };
+
+    const root = document.documentElement;
+    const workspace = document.getElementById('workspace');
+    const frame = document.getElementById('previewFrame');
+    const orchestrator = document.getElementById('orchestrator');
+    const urlMenu = document.getElementById('urlMenu');
+    const urlTrigger = document.getElementById('urlTrigger');
+    const orchToggle = document.getElementById('orchToggle');
+    const previewMode = document.getElementById('previewMode');
+    const orchestratorMode = document.getElementById('orchestratorMode');
+    let currentPage = 'lab';
+
+    function frameMarkup(page) {
+      return `<!doctype html><html><head><meta charset="utf-8"><style>
+        *{box-sizing:border-box}body{margin:0;background:#f5f6f8;color:#242938;font:14px/1.5 system-ui,sans-serif}
+        header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid #dfe3eb}
+        .logo{width:28px;height:28px;border-radius:8px;background:${page.accent};display:grid;place-items:center;color:#fff;font-weight:800}
+        header strong{flex:1}.live{font-size:11px;color:#247c4d;background:#e3f4e9;padding:3px 8px;border-radius:999px}
+        main{padding:clamp(22px,5vw,54px)}.eyebrow{text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:#70798d;font-weight:750}
+        h1{font-size:clamp(26px,4vw,44px);line-height:1.1;margin:10px 0 12px;max-width:700px}p{max-width:650px;color:#5b6375}
+        .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:28px}.card{min-height:120px;padding:16px;border:1px solid #dfe3eb;border-radius:10px;background:#fff;box-shadow:0 8px 22px #28344a12}.card b{display:block;margin-bottom:7px}.bar{height:7px;border-radius:9px;background:#e7eaf0;margin-top:10px}.bar.short{width:66%}
+        @media(max-width:650px){.grid{grid-template-columns:1fr}}
+      </style></head><body><header><span class="logo">CA</span><strong>${page.title}</strong><span class="live">HMR connected</span></header><main><div class="eyebrow">${page.eyebrow}</div><h1>${page.title} embedded inside Agent Studio</h1><p>${page.copy}</p><div class="grid"><div class="card"><b>Preview state</b>Real app content fills the iframe area.<div class="bar"></div><div class="bar short"></div></div><div class="card"><b>Live reload</b>The dev server owns HMR and refresh behavior.<div class="bar"></div><div class="bar short"></div></div><div class="card"><b>Side-by-side chat</b>The existing Orchestrator panel remains available.<div class="bar"></div><div class="bar short"></div></div></div></main></body></html>`;
+    }
+
+    function selectPage(id) {
+      currentPage = id;
+      const page = pages[id];
+      document.getElementById('tabLabel').textContent = page.label;
+      document.getElementById('urlLabel').textContent = page.label;
+      document.getElementById('address').textContent = page.url;
+      document.getElementById('contextLabel').textContent = `Coding Agent Chat · ${page.label}`;
+      document.getElementById('contextCopy').textContent = `Embedded URL: ${page.short}, ${page.url}. The page body is not visible to the Orchestrator in v1.`;
+      document.querySelectorAll('[data-page]').forEach((element) => element.classList.toggle('tree-row--active', element.dataset.page === id && element.classList.contains('tree-row')));
+      frame.srcdoc = frameMarkup(page);
+      urlMenu.dataset.open = 'false';
+      urlTrigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function setOrchestrator(open) {
+      orchestrator.dataset.open = String(open);
+      orchToggle.setAttribute('aria-pressed', String(open));
+      orchToggle.textContent = open ? 'Orchestrator open' : 'Open Orchestrator';
+      workspace.dataset.compactMode = open && window.matchMedia('(max-width: 900px)').matches ? 'orchestrator' : 'preview';
+      previewMode.setAttribute('aria-pressed', String(!open));
+      orchestratorMode.setAttribute('aria-pressed', String(open));
+    }
+
+    document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => selectPage(button.dataset.page)));
+    urlTrigger.addEventListener('click', () => {
+      const open = urlMenu.dataset.open !== 'true';
+      urlMenu.dataset.open = String(open);
+      urlTrigger.setAttribute('aria-expanded', String(open));
+    });
+    document.getElementById('reload').addEventListener('click', () => {
+      frame.srcdoc = frameMarkup(pages[currentPage]);
+    });
+    document.getElementById('themeToggle').addEventListener('click', (event) => {
+      const light = root.dataset.theme !== 'light';
+      root.dataset.theme = light ? 'light' : 'dark';
+      event.currentTarget.textContent = light ? 'Dark theme' : 'Light theme';
+    });
+    document.getElementById('closeOrchestrator').addEventListener('click', () => setOrchestrator(false));
+    orchToggle.addEventListener('click', () => setOrchestrator(orchestrator.dataset.open !== 'true'));
+    previewMode.addEventListener('click', () => setOrchestrator(false));
+    orchestratorMode.addEventListener('click', () => setOrchestrator(true));
+
+    const resize = document.getElementById('resize');
+    let resizing = false;
+    resize.addEventListener('pointerdown', (event) => {
+      if (window.matchMedia('(max-width: 900px)').matches) return;
+      resizing = true;
+      resize.dataset.active = 'true';
+      resize.setPointerCapture(event.pointerId);
+    });
+    resize.addEventListener('pointermove', (event) => {
+      if (!resizing) return;
+      const width = Math.max(360, Math.min(720, window.innerWidth - event.clientX));
+      root.style.setProperty('--orch-width', `${width}px`);
+    });
+    resize.addEventListener('pointerup', (event) => {
+      resizing = false;
+      resize.dataset.active = 'false';
+      resize.releasePointerCapture(event.pointerId);
+    });
+    resize.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      const current = parseInt(getComputedStyle(root).getPropertyValue('--orch-width'), 10) || 430;
+      root.style.setProperty('--orch-width', `${Math.max(360, Math.min(720, current + (event.key === 'ArrowLeft' ? 16 : -16)))}px`);
+    });
+    window.addEventListener('resize', () => setOrchestrator(orchestrator.dataset.open === 'true'));
+    selectPage('lab');
+  </script>
+</body>
+</html>
