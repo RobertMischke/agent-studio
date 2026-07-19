@@ -98,7 +98,7 @@ public sealed class ClaudeSessionHeartbeat : IDisposable
             // silence on every clean run and kill the actively-working CLI
             // mid-run (exit=-1) -> InfraCrash -> escalate: the "runs never
             // complete / backlog never drains" incident
-            // (docs/wiki/concepts/process-termination-scenarios.html).
+            // (docs/concepts/process-termination-scenarios.html).
             root = configDir!;
         }
         else

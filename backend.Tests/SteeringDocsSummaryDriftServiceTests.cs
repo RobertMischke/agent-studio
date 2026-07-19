@@ -48,9 +48,9 @@ public class SteeringDocsSummaryDriftServiceTests : IDisposable
         // canonical surface should still be inventoried, just marked missing.
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "# README\n", Encoding.UTF8);
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "contracts"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "system", "contracts"));
         File.WriteAllText(
-            Path.Combine(_repoRoot, "docs", "contracts", "agent-task.md"), "# Task contract\n", Encoding.UTF8);
+            Path.Combine(_repoRoot, "docs", "system", "contracts", "agent-task.md"), "# Task contract\n", Encoding.UTF8);
 
         var svc = new SteeringDocsSummaryDriftService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
@@ -98,9 +98,9 @@ public class SteeringDocsSummaryDriftServiceTests : IDisposable
         // CLI compatibility shims over 1 KB trigger the warning.
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "# README\n", Encoding.UTF8);
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "contracts"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "system", "contracts"));
         File.WriteAllText(
-            Path.Combine(_repoRoot, "docs", "contracts", "agent-task.md"), "# Task contract\n", Encoding.UTF8);
+            Path.Combine(_repoRoot, "docs", "system", "contracts", "agent-task.md"), "# Task contract\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "CLAUDE.md"), new string('x', 4096), Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "GEMINI.md"), new string('x', 4096), Encoding.UTF8);
 
@@ -345,9 +345,9 @@ public class SteeringDocsSummaryDriftServiceTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "# README\n", Encoding.UTF8);
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "contracts"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "system", "contracts"));
         File.WriteAllText(
-            Path.Combine(_repoRoot, "docs", "contracts", "agent-task.md"), "# Contract\n", Encoding.UTF8);
+            Path.Combine(_repoRoot, "docs", "system", "contracts", "agent-task.md"), "# Contract\n", Encoding.UTF8);
         WriteJob("3-progress", "client-identity-and-task-attribution", "Client identity work");
 
         var svc = new SteeringDocsSummaryDriftService();

@@ -100,10 +100,10 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
         File.WriteAllText(Path.Combine(_repoRoot, "ROADMAP.md"), "# ROADMAP\n", Encoding.UTF8);
         // README intentionally absent for this run.
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        WriteRepoFile("docs/product/design-principles.md", "# DP\n");
+        WriteRepoFile("docs/quality/design-principles.md", "# DP\n");
         // Two mockup folders so the action picks them up by directory walk.
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "alpha-mockup"));
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "beta-mockup"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "alpha-mockup"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "beta-mockup"));
 
         var svc = new RoadmapAlignmentReviewService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
@@ -111,7 +111,7 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
         var paths = scope.Docs.Select(d => d.Path.Replace('\\', '/')).ToArray();
         Assert.Contains("AGENTS.md", paths);
         Assert.Contains("ROADMAP.md", paths);
-        Assert.Contains("docs/product/design-principles.md", paths);
+        Assert.Contains("docs/quality/design-principles.md", paths);
         Assert.DoesNotContain(paths, p => p.EndsWith("README.md", StringComparison.Ordinal));
         Assert.Contains(paths, p => p.EndsWith("alpha-mockup", StringComparison.Ordinal));
         Assert.Contains(paths, p => p.EndsWith("beta-mockup", StringComparison.Ordinal));

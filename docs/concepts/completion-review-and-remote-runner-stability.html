@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Completion, Review, and Remote Runner Stability</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f0f4fa;
+      --surface-strong: #e8eef7;
+      --text: #172033;
+      --muted: #5a6578;
+      --faint: #798397;
+      --line: #d7deea;
+      --line-strong: #bac5d5;
+      --link: #1559b7;
+      --blue: #1d66d2;
+      --blue-soft: #e8f1ff;
+      --green: #177245;
+      --green-soft: #e6f5ed;
+      --amber: #8a5200;
+      --amber-soft: #fff2d9;
+      --red: #a33131;
+      --red-soft: #fdecec;
+      --violet: #6551a6;
+      --violet-soft: #f0ecff;
+      --shadow: 0 18px 48px rgba(30, 49, 78, 0.09);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1420;
+        --surface: #141d2b;
+        --surface-soft: #192536;
+        --surface-strong: #213149;
+        --text: #e8edf5;
+        --muted: #a8b3c5;
+        --faint: #8290a6;
+        --line: #2b3a50;
+        --line-strong: #41536d;
+        --link: #8dbdff;
+        --blue: #76adfa;
+        --blue-soft: #172b47;
+        --green: #76d2a4;
+        --green-soft: #183529;
+        --amber: #f0bd66;
+        --amber-soft: #3c2d16;
+        --red: #f19a9a;
+        --red-soft: #402326;
+        --violet: #c1b3f5;
+        --violet-soft: #2b2547;
+        --shadow: 0 20px 56px rgba(0, 0, 0, 0.28);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.65 var(--sans);
+    }
+    a { color: var(--link); text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    a:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 3px; }
+    code {
+      padding: 0.08rem 0.32rem;
+      border-radius: 4px;
+      background: var(--surface-strong);
+      font: 0.88em/1.5 var(--mono);
+    }
+    pre {
+      margin: 1rem 0;
+      padding: 1rem;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-soft);
+      color: var(--text);
+      font: 12.5px/1.6 var(--mono);
+    }
+    pre code { padding: 0; background: transparent; font: inherit; }
+    strong { font-weight: 500; }
+    h1, h2, h3, h4 { line-height: 1.2; font-weight: 500; letter-spacing: -0.018em; }
+    h1 { max-width: 900px; margin: 0.4rem 0 0.8rem; font-size: clamp(2rem, 5vw, 3.7rem); }
+    h2 { margin: 0 0 1rem; font-size: clamp(1.45rem, 3vw, 2rem); }
+    h3 { margin: 0 0 0.55rem; font-size: 1.08rem; }
+    h4 { margin: 0 0 0.35rem; font-size: 0.98rem; }
+    p { margin: 0.55rem 0 0.95rem; }
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: 0.35rem; }
+
+    .page { width: min(100%, 1320px); margin: 0 auto; padding: 24px clamp(16px, 4vw, 52px) 88px; }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(26px, 6vw, 64px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--blue) 17%, transparent) 0, transparent 36%),
+        linear-gradient(145deg, var(--surface), var(--surface-soft));
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0;
+      color: var(--blue);
+      font: 500 0.76rem/1.2 var(--mono);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .lede { max-width: 880px; margin-bottom: 1.3rem; color: var(--muted); font-size: 1.08rem; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
+    .dot.green { background: var(--green); }
+    .dot.amber { background: var(--amber); }
+
+    .toc {
+      margin: 22px 0 0;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .toc strong { display: block; margin-bottom: 8px; }
+    .toc-links { display: flex; flex-wrap: wrap; gap: 7px 16px; }
+    .toc a { font-size: 0.88rem; text-decoration: none; }
+
+    main > section { padding: clamp(34px, 6vw, 68px) 0; border-bottom: 1px solid var(--line); }
+    .section-head { max-width: 900px; margin-bottom: 1.25rem; }
+    .section-head > p:last-child { color: var(--muted); }
+    .grid { display: grid; gap: 14px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .tint-blue { background: var(--blue-soft); }
+    .tint-green { background: var(--green-soft); }
+    .tint-amber { background: var(--amber-soft); }
+    .tint-red { background: var(--red-soft); }
+    .tint-violet { background: var(--violet-soft); }
+    .label {
+      display: inline-block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font: 500 0.72rem/1.2 var(--mono);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .big-number { display: block; margin: 0.12rem 0 0.3rem; font-size: 2.15rem; line-height: 1; font-weight: 500; }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.84rem; }
+    .principle {
+      margin: 18px 0;
+      padding: 18px 20px;
+      border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--line));
+      border-radius: 16px;
+      background: var(--blue-soft);
+    }
+    .principle p:last-child { margin-bottom: 0; }
+
+    .stacked {
+      display: grid;
+      grid-template-columns: 18fr 1fr 5fr;
+      min-height: 54px;
+      margin: 18px 0 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .stacked > div { display: grid; place-items: center; padding: 8px; text-align: center; font-size: 0.8rem; }
+    .stacked .build { background: var(--red-soft); }
+    .stacked .completion { background: var(--violet-soft); }
+    .stacked .other { background: var(--amber-soft); }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 0.82rem; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+    .flow-step {
+      position: relative;
+      min-height: 116px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 43%;
+      right: -16px;
+      z-index: 2;
+      width: 20px;
+      color: var(--faint);
+      text-align: center;
+    }
+    .flow-step b { display: block; margin-bottom: 5px; font-weight: 500; }
+    .flow-step span { color: var(--muted); font-size: 0.82rem; }
+
+    .topology {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.85fr) 76px minmax(430px, 1.8fr) 76px minmax(180px, 0.8fr);
+      align-items: stretch;
+      gap: 10px;
+      margin: 22px 0 12px;
+    }
+    .topology-node,
+    .remote-plane {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .topology-node p:last-child,
+    .topology-node ul:last-child,
+    .remote-plane p:last-child { margin-bottom: 0; }
+    .topology-node ul { margin: 0.65rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.82rem; }
+    .topology-node.tint-blue { background: var(--blue-soft); }
+    .topology-node.tint-green { background: var(--green-soft); }
+    .topology-arrow {
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      text-align: center;
+      font: 500 0.72rem/1.5 var(--mono);
+    }
+    .arrow-vertical { display: none; }
+    .remote-plane { background: var(--surface-soft); }
+    .remote-flow {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr);
+      align-items: stretch;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .remote-worker {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    .remote-worker strong { display: block; margin-bottom: 5px; }
+    .remote-worker span { color: var(--muted); font-size: 0.8rem; }
+    .result-envelope {
+      display: grid;
+      place-items: center;
+      padding: 8px;
+      border-radius: 10px;
+      background: var(--green-soft);
+      color: var(--green);
+      text-align: center;
+      font: 500 0.72rem/1.5 var(--mono);
+    }
+    .local-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      align-items: center;
+      margin: 10px 0 20px;
+      padding: 10px 14px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+    .local-strip strong { color: var(--text); }
+
+    .relay-track {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      margin: 20px 0 10px;
+      padding: 18px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--blue-soft) 45%, transparent), transparent 44%),
+        var(--surface-soft);
+    }
+    .relay-node {
+      flex: 1 0 132px;
+      min-height: 168px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      text-align: center;
+    }
+    .relay-node.baton { background: var(--green-soft); }
+    .relay-node.authority { background: var(--blue-soft); }
+    .relay-node.review { background: var(--violet-soft); }
+    .relay-icon { display: block; margin-bottom: 7px; font-size: 1.55rem; line-height: 1; }
+    .relay-node strong { display: block; margin-bottom: 5px; font-weight: 500; }
+    .relay-node small { display: block; color: var(--muted); font-size: 0.75rem; line-height: 1.45; }
+    .relay-arrow {
+      display: grid;
+      flex: 0 0 24px;
+      place-items: center;
+      color: var(--faint);
+      font-size: 1.15rem;
+    }
+    .relay-caption { margin: 0 0 18px; color: var(--muted); text-align: center; font-size: 0.84rem; }
+    .route-demo {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .route-stop {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.82rem;
+    }
+    .route-change { color: var(--faint); }
+    .route-summary { color: var(--muted); font: 0.78rem/1.5 var(--mono); }
+
+    .glossary dt { margin-bottom: 0.35rem; font-weight: 500; }
+    .glossary dd { margin: 0; color: var(--muted); }
+    .glossary .card { min-height: 170px; }
+
+    .layer {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr) 210px;
+      align-items: center;
+      gap: 18px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .layer:last-child { border-bottom: 0; }
+    .layer-name { font-weight: 500; }
+    .layer-copy { color: var(--muted); }
+    .layer-outcome { padding: 9px 11px; border-radius: 10px; background: var(--surface-soft); font-size: 0.82rem; }
+
+    table { width: 100%; margin: 16px 0; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { padding: 11px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--surface-strong); font-weight: 500; }
+    tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-soft) 55%, transparent); }
+    .table-wrap { overflow-x: auto; border-radius: 12px; }
+
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { position: relative; padding-left: 28px; }
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 0.02rem;
+      display: grid;
+      place-items: center;
+      width: 19px;
+      height: 19px;
+      border-radius: 50%;
+      background: var(--green-soft);
+      color: var(--green);
+      font-size: 0.72rem;
+    }
+    .anti li::before { content: "×"; background: var(--red-soft); color: var(--red); }
+
+    .timeline { display: grid; gap: 0; margin: 18px 0; }
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 90px minmax(0, 1fr) 160px;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .timeline-row:last-child { border-bottom: 0; }
+    .timeline-id { color: var(--blue); font: 500 0.8rem/1.5 var(--mono); }
+    .timeline-action { color: var(--muted); font-size: 0.82rem; }
+
+    .state-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+    .state {
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.82rem;
+    }
+    .arrow { color: var(--faint); }
+
+    .live {
+      border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
+      background: var(--amber-soft);
+    }
+    .source-list { columns: 2; column-gap: 32px; }
+    .source-list li { break-inside: avoid; }
+    footer { padding-top: 34px; color: var(--muted); font-size: 0.85rem; }
+
+    @media (max-width: 1040px) {
+      .grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .flow-step:nth-child(3)::after { display: none; }
+      .topology { grid-template-columns: 1fr; }
+      .topology-arrow { min-height: 36px; }
+      .arrow-horizontal { display: none; }
+      .arrow-vertical { display: inline; }
+    }
+    @media (max-width: 720px) {
+      .page { padding: 12px 14px 64px; }
+      .hero { padding: 24px 18px; border-radius: 18px; }
+      .grid.two, .grid.three, .grid.four { grid-template-columns: 1fr; }
+      .stacked { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .flow-step { min-height: auto; }
+      .flow-step:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -18px; }
+      .flow-step:nth-child(3)::after { display: block; }
+      .remote-flow { grid-template-columns: 1fr; }
+      .result-envelope { min-height: 52px; }
+      .relay-track { flex-direction: column; overflow-x: visible; }
+      .relay-node { flex-basis: auto; min-height: auto; text-align: left; }
+      .relay-icon { display: inline; margin-right: 7px; }
+      .relay-arrow { flex-basis: 24px; transform: rotate(90deg); }
+      .layer { grid-template-columns: 1fr; gap: 6px; }
+      .timeline-row { grid-template-columns: 1fr; gap: 5px; }
+      .source-list { columns: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      body { background: #fff; color: #111; }
+      .page { width: 100%; padding: 0; }
+      .hero, .card, .toc { box-shadow: none; break-inside: avoid; }
+      a { color: #111; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <p class="eyebrow">Working concept · 2026-07-13</p>
+    <h1>Completion, Review, and Remote Runner Stability</h1>
+    <p class="lede">A plain-language and implementation-grounded model for deciding whether agent work is complete, reviewing the exact submitted revision, preserving runner and host provenance across continuations, separating product defects from review infrastructure failures, and operating a parallel Remote Host without turning every fault into a full task rerun.</p>
+    <div class="chips" aria-label="Document status">
+      <span class="chip"><span class="dot green"></span>Analysis and proposal</span>
+      <span class="chip"><span class="dot amber"></span>Remote parallelism unchanged</span>
+      <span class="chip"><span class="dot green"></span>Fully remote review target</span>
+      <span class="chip"><span class="dot green"></span>Runner handoff policy recorded</span>
+      <span class="chip"><span class="dot"></span>Observation only</span>
+      <span class="chip">AGT-2129 program queued</span>
+      <span class="chip"><span class="dot amber"></span>Bootstrap blocked: AGT-2155 NO-GO</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <strong>Contents</strong>
+    <div class="toc-links">
+      <a href="#verdict">1. Executive verdict</a>
+      <a href="#incident">2. What happened</a>
+      <a href="#terms">3. Terms in plain language</a>
+      <a href="#authority">4. Facts versus judgment</a>
+      <a href="#semantic">5. Raw prose and semantic completion</a>
+      <a href="#gates">6. Build and visual-evidence gates</a>
+      <a href="#exact-review">7. Fully remote exact-revision review</a>
+      <a href="#retry">8. Retry budgets</a>
+      <a href="#abort">9. CLI aborts</a>
+      <a href="#host">10. Remote Host target</a>
+      <a href="#provenance">11. Runner provenance and host switching</a>
+      <a href="#monitoring">12. Live observation</a>
+      <a href="#delivery">13. Delivery map</a>
+      <a href="#decisions">14. Remaining policy decisions</a>
+      <a href="#knowledge">15. Living knowledge log</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="verdict">
+      <div class="section-head">
+        <p class="eyebrow">1 · Executive verdict</p>
+        <h2>The system already uses LLM review, but hard-coded gates can overrule it</h2>
+        <p>The operator concern is valid. The current pipeline asks semantic LLM aspects to judge requirement fit, code quality, and evidence. A later deterministic layer then turns broad categories and matching words into a reissue. This reverses the useful authority order.</p>
+      </div>
+
+      <div class="grid three">
+        <article class="card tint-red">
+          <span class="label">Current contradiction</span>
+          <h3>Semantic concern becomes mandatory rework</h3>
+          <p>The tests-and-evidence prompt says a concern is shippable and Human Review is final. <code>EvidenceGate</code> converts every such concern into a coding reissue.</p>
+        </article>
+        <article class="card tint-blue">
+          <span class="label">Recommended authority</span>
+          <h3>Facts constrain; the model interprets</h3>
+          <p>Git SHA, exit code, artifact existence, lease validity, and command result stay deterministic. Meaning, relevance, completion, and severity are judged semantically.</p>
+        </article>
+        <article class="card tint-green">
+          <span class="label">Human boundary</span>
+          <h3>Auto Review remains a recommendation</h3>
+          <p>A positive result advances to Human Review, not straight to Completed. The operator still makes the final product decision.</p>
+        </article>
+      </div>
+
+      <div class="principle">
+        <strong>Revised recommendation.</strong>
+        <p>Keep raw prose as meaningful evidence. Use keywords only to highlight potentially relevant passages. Give a small, inexpensive completion model the task, final status, the final roughly 300 logical events of the current attempt, and structured technical facts. Let that model interpret the whole ending. Never let the word <code>pending</code>, a quoted source line, or a historical error make a lane decision by itself.</p>
+      </div>
+    </section>
+
+    <section id="incident">
+      <div class="section-head">
+        <p class="eyebrow">2 · Incident evidence</p>
+        <h2>The Ready wave mixed three different failure families</h2>
+        <p>The visible symptom was the same, but the causal paths were not. That distinction is essential before changing any gate or retry policy.</p>
+      </div>
+
+      <div class="grid four">
+        <article class="card"><span class="label">Unique tasks</span><span class="big-number">24</span><span class="muted small">Manually reset in the incident window</span></article>
+        <article class="card tint-red"><span class="label">Build/test path</span><span class="big-number">18</span><span class="muted small">Preceded by double-fail escalation</span></article>
+        <article class="card tint-violet"><span class="label">Direct prose path</span><span class="big-number">1</span><span class="muted small">AGT-2168 as primary reset cause</span></article>
+        <article class="card tint-amber"><span class="label">Other incomplete paths</span><span class="big-number">5</span><span class="muted small">Pipeline, CLI, or handoff closure</span></article>
+      </div>
+
+      <div class="stacked" role="img" aria-label="Of 24 unique reset tasks, 18 followed build-test double-fail, one was a direct prose completion case, and five had other pipeline, CLI, or integration causes.">
+        <div class="build"><strong>18 build/test</strong></div>
+        <div class="completion"><strong>1</strong></div>
+        <div class="other"><strong>5 other</strong></div>
+      </div>
+      <div class="legend"><span>18 + 1 + 5 = 24 visible tasks</span><span>25 reset transitions because AGT-2160 moved twice</span></div>
+
+      <h3 style="margin-top: 2rem;">Observed amplification path</h3>
+      <div class="flow" aria-label="Observed task amplification flow">
+        <div class="flow-step tint-green"><b>Remote work finishes</b><span><code>TASK_DONE</code> and a salvage commit are reported.</span></div>
+        <div class="flow-step"><b>Auto Review starts</b><span>The server knows a branch and SHA, but does not review that snapshot directly.</span></div>
+        <div class="flow-step tint-amber"><b>Shared checkout chosen</b><span>No local <code>task/&lt;id&gt;</code> worktree exists, so the resolver falls back.</span></div>
+        <div class="flow-step tint-red"><b>Gate fails</b><span>File locks, foreign intermediate state, timeout, or a potentially real test failure.</span></div>
+        <div class="flow-step"><b>Whole task reruns</b><span>The coding model is invoked again even when only the verifier failed.</span></div>
+        <div class="flow-step tint-red"><b>Historical double-fail</b><span>An old reissue can make the next event count as “twice,” then escalate.</span></div>
+      </div>
+
+      <div class="principle">
+        <strong>This flow reconstructs the current failure, not the target architecture.</strong>
+        <p>Today, verifier work can fall back to the Task Server's shared checkout. In the target, the Task Server remains the control plane and all repository materialization, build, test, visual inspection, and semantic review work runs in a claimed Remote ReviewAttempt.</p>
+      </div>
+
+      <p><strong>Confidence boundary:</strong> this analysis does not claim that every red test was false. It says the verdict is not attributable to the submitted task while the tested revision and environment are not bound to that task.</p>
+    </section>
+
+    <section id="terms">
+      <div class="section-head">
+        <p class="eyebrow">3 · Terms in plain language</p>
+        <h2>SHA, materialization, claim, Progress, and capability drain</h2>
+        <p>These terms describe different kinds of truth. Keeping them separate makes the Remote Host behavior much easier to reason about.</p>
+      </div>
+
+      <dl class="grid two glossary">
+        <div class="card">
+          <dt>Reported SHA</dt>
+          <dd>A SHA is the unique address of one exact Git commit. When the runner says “my result is <code>d28e505b</code>,” it is naming the sealed version it wants reviewed.</dd>
+        </div>
+        <div class="card">
+          <dt>Materialize that SHA</dt>
+          <dd>An assigned Remote Review Executor fetches the commit or durable result bundle and creates an isolated workspace containing exactly that version. The Task Server records the expected identity, leases the review, and accepts the fenced result; it needs no repository checkout. “Not materializable” means no eligible review worker can reconstruct that exact submitted revision from its declared durable source.</dd>
+        </div>
+        <div class="card">
+          <dt>Claim</dt>
+          <dd>A claim is a technical reservation for one attempt. An execution claim grants a runner a time-limited lease and may move a Ready task to Progress. A separate review claim reserves one submitted result while the task is in Auto Review. Neither claim means its process has already started or will succeed.</dd>
+        </div>
+        <div class="card">
+          <dt>Progress</dt>
+          <dd>Progress is the user-visible lane. It can cover preparation, active CLI work, upload, and final handoff. Without a canonical RunAttempt it may also lie: a card can remain in Progress after the process has died, or the UI can show no runner while a valid remote lease exists.</dd>
+        </div>
+        <div class="card">
+          <dt>Drain</dt>
+          <dd>Drain means “accept no new matching work; let existing work finish or stop safely.” It is admission control, not an immediate kill switch.</dd>
+        </div>
+        <div class="card">
+          <dt>Capability-specific drain</dt>
+          <dd>Only the broken route is closed. A Codex 401 disables new Codex claims while healthy Claude, Git, or non-browser work can continue. Host-wide drain is reserved for shared foundations such as disk-full, lease uncertainty, or network loss.</dd>
+        </div>
+      </dl>
+
+      <div class="grid two" style="margin-top: 14px;">
+        <article class="card tint-blue">
+          <h3>Execution claim lifecycle below the Progress lane</h3>
+          <div class="state-strip" aria-label="Claim lifecycle">
+            <span class="state">claimed</span><span class="arrow">→</span>
+            <span class="state">preparing</span><span class="arrow">→</span>
+            <span class="state">running</span><span class="arrow">→</span>
+            <span class="state">finalizing</span><span class="arrow">→</span>
+            <span class="state">handed off</span>
+          </div>
+          <p class="small muted">Progress is the umbrella. These sub-states provide operational truth.</p>
+        </article>
+        <article class="card tint-violet">
+          <h3>Capability drain lifecycle</h3>
+          <div class="state-strip" aria-label="Capability drain lifecycle">
+            <span class="state">healthy</span><span class="arrow">→</span>
+            <span class="state">suspect</span><span class="arrow">→</span>
+            <span class="state">draining</span><span class="arrow">→</span>
+            <span class="state">half-open</span><span class="arrow">→</span>
+            <span class="state">healthy</span>
+          </div>
+          <p class="small muted">A cheap probe confirms recovery; one canary runs before full admission resumes.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="authority">
+      <div class="section-head">
+        <p class="eyebrow">4 · Authority model</p>
+        <h2>Hard facts, semantic interpretation, and human decision are three layers</h2>
+        <p>“Use an LLM” should not mean asking it to invent process facts. “Use deterministic code” should not mean asking regexes to understand language. Each layer should decide only what it is good at.</p>
+      </div>
+
+      <div class="card">
+        <div class="layer">
+          <div class="layer-name">Hard facts</div>
+          <div class="layer-copy">Commit availability, expected and tested SHA, command exit, signal, artifact hash, lease validity, runner identity, timestamps, and schema validity.</div>
+          <div class="layer-outcome">Machine-observed evidence</div>
+        </div>
+        <div class="layer">
+          <div class="layer-name">Semantic review</div>
+          <div class="layer-copy">Whether the task is fulfilled, whether “pending” is about deployment or implementation, whether a concern is blocking, and which evidence is appropriate for this specific change.</div>
+          <div class="layer-outcome">Cheap LLM with citations</div>
+        </div>
+        <div class="layer">
+          <div class="layer-name">Human decision</div>
+          <div class="layer-copy">Product acceptance, risk tolerance, waiver, priority, and whether an unusual concern is acceptable in the current context.</div>
+          <div class="layer-outcome">Final Human Review</div>
+        </div>
+      </div>
+
+      <div class="grid two" style="margin-top: 14px;">
+        <article class="card tint-red">
+          <span class="label">Current authority inversion</span>
+          <ul class="checklist anti">
+            <li>Completion regex can stop review before any semantic aspect runs.</li>
+            <li>A semantic <code>concerns</code> verdict becomes a deterministic reissue.</li>
+            <li>Every <code>bug</code> task requires an image, even for backend-only behavior.</li>
+            <li>Solution-quality prose is scanned again with blocking keyword regexes.</li>
+            <li>The high-quality A-D review grade is reporting-only and cannot correct the route.</li>
+          </ul>
+        </article>
+        <article class="card tint-green">
+          <span class="label">Target authority order</span>
+          <ul class="checklist">
+            <li>Deterministic preflight guarantees that the evidence belongs to this attempt and revision.</li>
+            <li>A semantic judge interprets raw prose in the context of the task and current ending.</li>
+            <li>Build and test results remain facts, with typed product-versus-infrastructure attribution.</li>
+            <li>Deterministic routing validates the model schema and applies bounded policy.</li>
+            <li>Human Review receives the evidence, reasoning, concerns, and uncertainty.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="semantic">
+      <div class="section-head">
+        <p class="eyebrow">5 · Semantic completion</p>
+        <h2>Raw prose should work, but it must be interpreted as a whole ending</h2>
+        <p>The proposal is not to eliminate prose. It is to stop pretending that a keyword matcher understands prose. The ending of the current attempt is usually the most relevant evidence, provided that hard technical facts sit beside it.</p>
+      </div>
+
+      <div class="grid two">
+        <article class="card">
+          <span class="label">Evidence bundle for one inexpensive call</span>
+          <ol>
+            <li>Task title, prompt, and acceptance criteria.</li>
+            <li>Current attempt ID, base SHA, result SHA, and tested SHA.</li>
+            <li>Final status report and final agent message.</li>
+            <li>Final approximately 300 logical events from the current attempt, retaining speaker and stream labels.</li>
+            <li>Changed-file and diff summary.</li>
+            <li>Artifact manifest with type, size, and hash.</li>
+            <li>Commands, exit codes, signals, and typed failure classes.</li>
+            <li>Earlier attempts only as clearly marked history, never blended into the current ending.</li>
+          </ol>
+        </article>
+        <article class="card tint-blue">
+          <span class="label">Why “300 lines plus facts”</span>
+          <p>Three hundred logical events are enough to preserve the arc of most finalization phases without paying to reread tens of thousands of lines. The model should see the final agent text, terminal event, and status even if a large tool result would otherwise push them out.</p>
+          <p>Structured command facts remain outside that window. A build failure cannot disappear merely because it occurred 301 lines ago, and a model cannot claim that a test ran when no command record exists.</p>
+          <p>Keywords may mark attention candidates such as <code>pending</code> or <code>failed</code>. They do not carry a verdict.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Semantic distinctions the model must make</h3>
+      <div class="grid three">
+        <article class="card"><h3>Current versus historical</h3><p>“The first build failed, the second passed” is a completed recovery, not an open failure.</p></article>
+        <article class="card"><h3>Implementation versus platform</h3><p>“Push pending” can mean the implementation is complete and only managed delivery remains.</p></article>
+        <article class="card"><h3>Agent prose versus source output</h3><p>A string such as <code>reconciliation-pending</code> inside test code is not a task state.</p></article>
+        <article class="card"><h3>Missing proof versus missing work</h3><p>No screenshot may mean evidence is weak. It does not prove that the behavior was not implemented.</p></article>
+        <article class="card"><h3>Product versus infrastructure</h3><p>A deterministic File-Lock is infrastructure. An unknown diagnostic may require semantic attribution.</p></article>
+        <article class="card"><h3>Blocking versus concern</h3><p>A concrete unmet core requirement blocks. A minor naming or documentation concern can advance to Human Review.</p></article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Schema-bound output</h3>
+      <pre><code>{
+  "verdict": "complete | incomplete | blocked_external | inconclusive",
+  "confidence": 0.93,
+  "dimensions": {
+    "implementation": "complete",
+    "verification": "passed",
+    "delivery": "pending_platform"
+  },
+  "requirements": [
+    {
+      "id": "AC-1",
+      "status": "satisfied",
+      "reason": "The final status and diff show the requested behavior.",
+      "evidenceRefs": ["status:L4-L8", "diff:file-2"]
+    }
+  ],
+  "failureAttribution": "none",
+  "recommendedAction": "advance_to_human_review",
+  "summary": "Implementation and verification are complete; managed delivery remains."
+}</code></pre>
+      <p>Every load-bearing statement needs an evidence reference. If the model cannot identify support, it must choose <code>inconclusive</code>. Low confidence can escalate to a stronger review model or Human Review, but never directly to a full coding rerun.</p>
+
+      <div class="grid two">
+        <article class="card tint-green">
+          <h3>Cost and stability controls</h3>
+          <ul>
+            <li>One cheap call per new evidence digest.</li>
+            <li>Cache by task requirements, attempt, result SHA, log tail, artifacts, and prompt version.</li>
+            <li>Low temperature and strict JSON validation.</li>
+            <li>Stronger model only for conflict, low confidence, or <code>inconclusive</code>.</li>
+            <li>Model timeout is review infrastructure failure, not task failure.</li>
+          </ul>
+        </article>
+        <article class="card tint-amber">
+          <h3>Failure controls</h3>
+          <ul>
+            <li>Treat log contents as untrusted data, not instructions.</li>
+            <li>Never accept hallucinated tests without command records.</li>
+            <li>Do not trust a confident final summary against contradictory hard facts.</li>
+            <li>Keep current-attempt and historical events visibly separated.</li>
+            <li>Record model, prompt version, evidence digest, and full verdict for replay.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="gates">
+      <div class="section-head">
+        <p class="eyebrow">6 · Gate reanalysis</p>
+        <h2>Build/test gates and image-evidence gates solve different problems</h2>
+        <p>Both currently contain useful facts and overly broad policy. They should not be treated as one generic “hard quality standard.”</p>
+      </div>
+
+      <div class="grid two">
+        <article class="card">
+          <span class="label">Build and test gate</span>
+          <h3>A factual verifier, not the whole success judge</h3>
+          <p>A compiler exit and a test result are valuable facts when they run on the exact submitted revision in an isolated environment. A semantic model should not explain away a real red compiler result.</p>
+          <p>But the model can determine whether the command applied to this task, whether the failure is product or infrastructure, whether a later run superseded an earlier failure, and whether the next action is verification-only or code rework.</p>
+        </article>
+        <article class="card tint-violet">
+          <span class="label">Visual or image-evidence gate</span>
+          <h3>Evidence modality must follow the change</h3>
+          <p>The current rule requires an image for every task whose type is <code>bug</code>, or whose title and tags match UI keywords. That makes a backend bug fail for lacking a screenshot and treats file existence as sufficient proof.</p>
+          <p>The semantic judge should decide the appropriate evidence modality: screenshot, video, API response, unit test, log, report, document, or no additional visual proof. Deterministic code should only confirm that referenced evidence exists and matches its manifest.</p>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Observation</th><th>What it actually proves</th><th>Recommended route</th></tr></thead>
+          <tbody>
+            <tr><td>Compiler fails on exact result SHA with a product diagnostic</td><td>The submitted code is not buildable under the declared command.</td><td>Concrete fix attempt using the diagnostic.</td></tr>
+            <tr><td>Build process times out, cannot start, or hits a file lock</td><td>The verifier did not produce a trustworthy product result.</td><td>Retry the gate on the same SHA in a clean environment.</td></tr>
+            <tr><td>UI layout changed and no visual artifact exists</td><td>Visual evidence is missing, not necessarily the implementation.</td><td>Evidence-only follow-up or Human Review concern, based on risk and policy.</td></tr>
+            <tr><td>Backend bug has passing regression tests but no screenshot</td><td>The evidence modality is non-visual and may be fully appropriate.</td><td>Do not block on image absence.</td></tr>
+            <tr><td>A PNG exists but is empty, stale, or unrelated</td><td>Only that a file exists.</td><td>Semantic or vision review of relevance if visual proof is load-bearing.</td></tr>
+            <tr><td>Low-risk docs or analysis task has an HTML report</td><td>The document itself is the deliverable.</td><td>Review the report, not an invented screenshot requirement.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="principle">
+        <strong>Remote parallelism is not changed by this proposal.</strong>
+        <p>The evidence shows a current post-processing location and revision-binding defect: verifier commands are launched from the Task Server's shared development checkout. The target keeps orchestration central but moves all repository execution to claimed Remote Review Executors. This does not yet prove that Remote Host coding concurrency itself is the root cause. Keep the configured parallelism, collect overlap and resource data, and distinguish coding concurrency from review concurrency.</p>
+      </div>
+    </section>
+
+    <section id="exact-review">
+      <div class="section-head">
+        <p class="eyebrow">7 · Exact-revision Auto Review</p>
+        <h2>The Task Server identifies the object; a Remote Review Executor opens it</h2>
+        <p>The target is fully remote. Exact-SHA binding is about evidence identity, not rigid quality rules: no source checkout, build, test, visual inspection, or semantic repository review is required on the local workstation or the Task Server.</p>
+      </div>
+
+      <div class="grid two">
+        <article class="card tint-blue">
+          <h3>Simple analogy</h3>
+          <p>A runner submits a sealed package with tracking number <code>d28e505b</code>. The reviewer must open that package. If the package cannot be retrieved, the honest result is “submission temporarily unavailable.” Reviewing whatever happens to be on a nearby desk is not a fallback.</p>
+        </article>
+        <article class="card">
+          <h3>Why it matters even with an intelligent model</h3>
+          <p>An excellent reviewer cannot compensate for seeing the wrong diff, wrong tests, or wrong artifacts. Semantic intelligence only becomes useful after the system proves that all evidence belongs to the same task attempt and revision.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Control plane and remote execution plane</h3>
+      <div class="topology" role="group" aria-label="The Task Server is a control plane. A remote coding worker publishes an immutable result. A separately claimed remote review worker materializes and reviews that exact result. The Task Server validates the report before Human Review.">
+        <article class="topology-node tint-blue">
+          <span class="label">Control plane</span>
+          <h3>Task Server</h3>
+          <p>Owns authority and coordination, not project execution.</p>
+          <ul>
+            <li>Task state and policy</li>
+            <li>RunAttempt and ReviewAttempt leases and fences</li>
+            <li>Result identity, report validation, and lane changes</li>
+            <li>No repository checkout, tool process, or review model call</li>
+          </ul>
+        </article>
+
+        <div class="topology-arrow" aria-hidden="true">
+          <span class="arrow-horizontal">claims →<br />← facts</span>
+          <span class="arrow-vertical">↓ claims · ↑ facts</span>
+        </div>
+
+        <section class="remote-plane" aria-label="Remote execution plane">
+          <span class="label">Remote execution plane</span>
+          <h3>All implementation and review work stays remote</h3>
+          <div class="remote-flow">
+            <div class="remote-worker">
+              <strong>Coding Executor</strong>
+              <span>Fresh coding worktree, agent CLI, commit, and durable publish.</span>
+            </div>
+            <div class="result-envelope">immutable result SHA<br />or bundle + manifest<br />→</div>
+            <div class="remote-worker">
+              <strong>Review Executor</strong>
+              <span>Fresh exact-SHA worktree, completion model, build/test, requirement, code, evidence, and vision aspects.</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="topology-arrow" aria-hidden="true">
+          <span class="arrow-horizontal">report via<br />server →</span>
+          <span class="arrow-vertical">↓ server validates</span>
+        </div>
+
+        <article class="topology-node tint-green">
+          <span class="label">Decision surface</span>
+          <h3>Human Review</h3>
+          <p>Receives the validated verdict, exact revision, evidence references, concerns, and uncertainty. The browser is a control and review surface, not an execution host.</p>
+        </article>
+      </div>
+
+      <div class="local-strip">
+        <strong>Local workstation:</strong>
+        <span>UI and operator controls only in the normal path. No local materialization is required.</span>
+      </div>
+
+      <div class="grid two">
+        <article class="card">
+          <span class="label">Valid first placement</span>
+          <h3>Same Remote Host, separate review role</h3>
+          <p>The Coding Executor and Review Executor may initially share one physical Remote Host. They still need separate attempts, leases, containment units, worktrees, output and cache namespaces, credentials, and resource quotas. A shared Git object cache is only an optimization after durable handoff has been confirmed.</p>
+          <p>This is fully remote, but both roles still share a host failure domain.</p>
+        </article>
+        <article class="card tint-green">
+          <span class="label">Stronger stability target</span>
+          <h3>Dedicated Remote Review pool</h3>
+          <p>Capability-routed review workers provide independent capacity, controlled toolchains, read-only credentials, and better isolation from coding load and cache failures. High-risk projects can require a different host; ordinary projects may use any eligible worker.</p>
+          <p>The topology changes placement, not the contract: both modes consume a ReviewAttempt and inspect the same immutable result.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Required fully remote Auto Review sequence</h3>
+      <div class="flow" aria-label="Target exact-revision review flow">
+        <div class="flow-step"><b>1. Publish</b><span>The Remote Coding Executor publishes an immutable result SHA or durable bundle plus manifest.</span></div>
+        <div class="flow-step"><b>2. Record and claim</b><span>The Task Server persists the result envelope and grants a fenced ReviewAttempt to an eligible remote worker.</span></div>
+        <div class="flow-step"><b>3. Materialize remotely</b><span>The Review Executor reconstructs a fresh workspace and proves repository, HEAD, and tree identity.</span></div>
+        <div class="flow-step"><b>4. Verify remotely</b><span>Build, test, visual checks, and artifact validation run there; expected SHA must equal tested SHA.</span></div>
+        <div class="flow-step"><b>5. Interpret remotely</b><span>The completion judge and all applicable aspects read task, ending prose, facts, diff, and artifacts.</span></div>
+        <div class="flow-step tint-green"><b>6. Report and route</b><span>The worker submits a fenced report; the Task Server validates it and advances to Human Review.</span></div>
+      </div>
+
+      <div class="grid two">
+        <article class="card tint-red">
+          <h3>If no Remote Review Executor can reconstruct the result</h3>
+          <ol>
+            <li>Retry the declared immutable ref or bundle with bounded backoff.</li>
+            <li>Ask the originating Coding Executor to republish the branch or durable bundle.</li>
+            <li>Reschedule a ReviewAttempt on the same SHA, potentially on another eligible worker.</li>
+            <li>Keep the task in Auto Review while submission recovery is pending.</li>
+            <li>Never materialize or run repository commands on the Task Server in the authoritative path. An operator-only diagnostic cannot publish a review verdict.</li>
+          </ol>
+        </article>
+        <article class="card tint-green">
+          <h3>What “no full rerun after gate infrastructure failure” means</h3>
+          <p>If commit A exists and the remote grading worker jams, run another ReviewAttempt on commit A. Do not ask the coding agent to rewrite the answer as commit B.</p>
+          <p>A coding rerun remains correct when the exact revision reproducibly fails, a requirement is genuinely missing, the original CLI died before durable output, or no recoverable commit or workspace exists.</p>
+        </article>
+      </div>
+
+      <p>The existence of many successful tasks does not contradict this distinction. It shows that implementation frequently succeeds. A coding slot can be released after durable handoff while the task remains in Auto Review and a separate remote review slot works. Reliability work protects that successful output from being discarded when a later verifier, network path, or review model fails.</p>
+    </section>
+
+    <section id="retry">
+      <div class="section-head">
+        <p class="eyebrow">8 · Retry identity</p>
+        <h2>A retry budget needs both revision identity and task-level protection</h2>
+        <p>The earlier shorthand “reset on every new SHA” is incomplete. A new commit changes the object under review, but trivial commits must not buy infinite fresh budgets. Two related budgets are needed.</p>
+      </div>
+
+      <div class="grid two">
+        <article class="card tint-blue">
+          <span class="label">Specific retry budget</span>
+          <h3>Revision + gate + failure fingerprint</h3>
+          <p>Answers: “Did this exact version reproducibly fail in the same way?” It prevents a timeout on version B from being combined with a product defect from version A.</p>
+          <p>Infrastructure retries do not consume coding budget.</p>
+        </article>
+        <article class="card tint-amber">
+          <span class="label">Task-level churn ceiling</span>
+          <h3>Unresolved requirement across revisions</h3>
+          <p>Answers: “Are we repeatedly failing to satisfy the same task requirement?” It follows a stable semantic issue fingerprint across revisions and stops empty commits from resetting the loop forever.</p>
+          <p>A separate overall ceiling remains as a final safety guard.</p>
+        </article>
+      </div>
+
+      <div class="timeline" aria-label="Revision-bound retry example">
+        <div class="timeline-row"><div class="timeline-id">Revision A</div><div>Test <code>Foo.ShouldBar</code> fails reproducibly. Semantic issue fingerprint: <code>AC-2-not-satisfied</code>.</div><div class="timeline-action">Coding fix attempt 1</div></div>
+        <div class="timeline-row"><div class="timeline-id">Revision B</div><div>The same test passes, but the review process hits a file lock.</div><div class="timeline-action">Gate retry on B; no coding budget</div></div>
+        <div class="timeline-row"><div class="timeline-id">Revision B</div><div>Gate rerun passes and semantic review confirms AC-2.</div><div class="timeline-action">Advance to Human Review</div></div>
+        <div class="timeline-row"><div class="timeline-id">Alternative B</div><div>AC-2 still fails despite a new commit.</div><div class="timeline-action">Coding fix attempt 2 for same issue</div></div>
+      </div>
+
+      <pre><code>incident identity =
+  task
+  + attempt chain
+  + revision SHA
+  + gate
+  + normalized failure class
+  + semantic issue fingerprint</code></pre>
+
+      <p>This model prevents historical pollution without offering unlimited retries. It also makes the operator-facing statement honest: “same revision, same product failure, twice” instead of “this task had two negative events at some point.”</p>
+    </section>
+
+    <section id="abort">
+      <div class="section-head">
+        <p class="eyebrow">9 · CLI abort behavior</p>
+        <h2>An abort describes an attempt, not automatically a defective task</h2>
+        <p>The runner should report raw process facts. One shared classifier then decides whether the cause belongs to the task, the CLI capability, the host, the transport, or an external dependency.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Observed ending</th><th>Classification</th><th>Next action</th><th>Task coding budget</th></tr></thead>
+          <tbody>
+            <tr><td>Explicit agent blocker or user input required</td><td>Task-level blocker</td><td>Human Review with exact question</td><td>Not a blind retry</td></tr>
+            <tr><td>Codex 401 or missing authentication</td><td>CLI capability failure</td><td>Drain Codex claims; probe; resume from salvage after repair</td><td>Not consumed</td></tr>
+            <tr><td>Quota, invalid model, or context overflow</td><td>Provider or configuration failure</td><td>Wait, change approved configuration, or escalate visibly</td><td>Not consumed</td></tr>
+            <tr><td>Timeout, OOM, signal, or process crash</td><td>Attempt infrastructure failure</td><td>Checkpoint; resume the same session once; then one fresh attempt from salvage if policy allows</td><td>Not consumed until a product defect exists</td></tr>
+            <tr><td>Operator drain or host shutdown</td><td>Controlled interruption</td><td>Persist state and resume later</td><td>Not consumed</td></tr>
+            <tr><td>Lease lost or authority uncertain</td><td>Execution ownership failure</td><td>Self-fence before expiry, stop the contained process, reject stale writes</td><td>Not consumed</td></tr>
+            <tr><td>Exit 0 without a valid terminal event</td><td>Protocol inconclusive</td><td>One cheap clarification or semantic review, then Human Review if still unclear</td><td>Not automatically consumed</td></tr>
+            <tr><td>Exact SHA reproduces a product test failure</td><td>Product failure</td><td>Continue or start a fix attempt with the concrete diagnostic</td><td>Consumed by semantic issue fingerprint</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="principle">
+        <strong>AGT-2168 is the clearest current example.</strong>
+        <p>The Completion Gate reopened a successful run based on prose. The Remote Host then encountered repeated Codex HTTP 401 responses and <code>Missing bearer or basic authentication</code>. Exit 1 became generic <code>Unknown</code>, which moved the task to Human Review. The correct response was a Codex capability drain and retry after host repair, not a task-quality verdict.</p>
+      </div>
+    </section>
+
+    <section id="host">
+      <div class="section-head">
+        <p class="eyebrow">10 · Remote Host stability target</p>
+        <h2>Parallel remote coding and remote review need durable, separate attempts</h2>
+        <p>The Task Server is the durable control plane. Remote Hosts are the repository and CLI execution plane. The server stores identities, leases, fences, facts, policies, and verdicts, but never needs a project checkout. The existing decoupled-lifecycle concept is the correct architectural base.</p>
+      </div>
+
+      <div class="grid three">
+        <article class="card">
+          <span class="label">Control-plane authority</span>
+          <h3>Persisted RunAttempt and ReviewAttempt</h3>
+          <p>Store separate coding and review attempt IDs, executor and instance IDs, leases, monotonic fences, lifecycle state, and terminal facts. RunAttempt binds base and result SHA; ReviewAttempt binds expected and tested SHA, policy, evidence digest, and verdict. Both survive a backend restart.</p>
+        </article>
+        <article class="card">
+          <span class="label">Host durability</span>
+          <h3>Local journal and outbox</h3>
+          <p>Spool logs, artifact manifests, Git facts, terminal state, and acknowledgements to disk. Replay unacknowledged events before claiming new work. Delete the worktree only after durable handoff.</p>
+        </article>
+        <article class="card">
+          <span class="label">Write safety</span>
+          <h3>Fence every mutation</h3>
+          <p>Logs, artifacts, timeline, completion, lane move, integration, and cleanup all carry attempt ID and the current fence. A stale holder receives a deterministic conflict.</p>
+        </article>
+        <article class="card">
+          <span class="label">Process safety</span>
+          <h3>Stop-before deadline</h3>
+          <p>Every successful renewal gives the runner a conservative local deadline. If it cannot renew before the safety margin, it cancels and reaps its contained process group.</p>
+        </article>
+        <article class="card">
+          <span class="label">Admission health</span>
+          <h3>Capability-aware claims</h3>
+          <p>Auth, model, Git, repository, disk, toolchain, browser, and server probes determine which work the host may claim. Healthy capabilities keep their parallelism.</p>
+        </article>
+        <article class="card">
+          <span class="label">Lifecycle isolation</span>
+          <h3>Separate host services</h3>
+          <p>Tunnel, coding control loop, review control loop, and per-attempt process holder need independent supervised lifecycles. A transient claim failure must not terminate healthy active slots.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Two canonical attempts linked by one immutable result</h3>
+      <article class="card">
+        <h4>RunAttempt: produces and durably hands off a revision</h4>
+        <div class="state-strip" aria-label="Target remote coding attempt states">
+          <span class="state">claimed</span><span class="arrow">→</span>
+          <span class="state">preparing</span><span class="arrow">→</span>
+          <span class="state">running</span><span class="arrow">→</span>
+          <span class="state">publishing</span><span class="arrow">→</span>
+          <span class="state">handed off</span><span class="arrow">→</span>
+          <span class="state">terminal</span>
+        </div>
+
+        <h4 style="margin-top: 1.5rem;">ReviewAttempt: inspects exactly that immutable revision</h4>
+        <div class="state-strip" aria-label="Target remote review attempt states">
+          <span class="state">claimed</span><span class="arrow">→</span>
+          <span class="state">materializing</span><span class="arrow">→</span>
+          <span class="state">verifying</span><span class="arrow">→</span>
+          <span class="state">interpreting</span><span class="arrow">→</span>
+          <span class="state">reporting</span><span class="arrow">→</span>
+          <span class="state">terminal</span>
+        </div>
+
+        <p class="muted small">The Task Server links both through the immutable result envelope. A review infrastructure retry creates another ReviewAttempt on the same SHA. Only a reproducible product finding or genuinely missing requirement creates a new coding RunAttempt.</p>
+      </article>
+
+      <p>Heartbeat loss alone means <code>process-unknown</code>, not “dead.” A replacement must not begin solely because time elapsed. Durable fence continuity protects server writes; a changed host boot ID, service-manager proof of an empty containment unit, or audited host fencing proves that external execution cannot overlap.</p>
+    </section>
+
+    <section id="provenance">
+      <div class="section-head">
+        <p class="eyebrow">11 · Runner provenance, host handoff, and continuation</p>
+        <h2>A task may use several runners, but a live process never teleports between hosts</h2>
+        <p>The visible card is long-lived. Its pre-work, core agent work, verification, and decision work can legitimately be executed by different actors over time. The product must therefore record an ordered execution route, not one mutable runner field on the task.</p>
+      </div>
+
+      <div class="principle">
+        <strong>Policy answer.</strong>
+        <p>Changing a project's runner assignment does not abort or migrate the active attempt. By default the change is pending and applies at the next admission boundary. An immediate switch is a controlled stop, durable handoff, and new fenced attempt. If the old process cannot be proven stopped, the task blocks as <code>process-unknown</code>; a second workspace-mutating runner does not start.</p>
+      </div>
+
+      <div class="grid four">
+        <article class="card tint-amber">
+          <span class="label">Current live view</span>
+          <h3>Runner is an active overlay</h3>
+          <p><code>TaskInfo.Runner</code> is projected from the current Remote lease only while the task is in Progress. It disappears after release or a lane move. A local run is inferred from the absence of that lease.</p>
+        </article>
+        <article class="card tint-amber">
+          <span class="label">Current pipeline view</span>
+          <h3>Steps have no placement</h3>
+          <p><code>pipeline-execution.json</code> keeps a pipeline counter and recent step results, but no canonical run ID, runner, host, lease, fence, or ordered handoff.</p>
+        </article>
+        <article class="card tint-amber">
+          <span class="label">Current event view</span>
+          <h3>One finish line is not history</h3>
+          <p>A Remote completion adds a free-form runner name to one timeline finish event. It does not bind a start, host, lease, pipeline cycle, or later decision work to the same attempt.</p>
+        </article>
+        <article class="card tint-blue">
+          <span class="label">Target distinction</span>
+          <h3>Assignment is policy; provenance is fact</h3>
+          <p><code>executionRunner</code> says where future work should be admitted. Immutable attempt records say where work actually ran. Renaming or reassigning a runner never rewrites history.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">The runner relay: pass durable state, not process memory</h3>
+      <div class="relay-track" role="img" aria-label="Host A performs pre and core work under fence 41, publishes a durable checkpoint, and stops. The Task Server records the handoff. Host B starts a new attempt under fence 42 and publishes an immutable result. Review Host C inspects that exact result. The Task Server validates the report and changes task state.">
+        <div class="relay-node">
+          <span class="relay-icon" aria-hidden="true">🏃</span>
+          <strong>Host A</strong>
+          <small>Workspace pre-steps and Core Agent Work<br /><code>RunAttempt A</code><br />fence 41</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node baton">
+          <span class="relay-icon" aria-hidden="true">📦</span>
+          <strong>Durable baton</strong>
+          <small>Checkpoint or immutable result<br />Git ref + artifacts + manifest<br />acknowledged</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node authority">
+          <span class="relay-icon" aria-hidden="true">🧠</span>
+          <strong>Task Server</strong>
+          <small>Closes A, persists route and pinned versions, proves no overlap, grants the next claim</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node">
+          <span class="relay-icon" aria-hidden="true">🏃</span>
+          <strong>Host B</strong>
+          <small>New process and attempt<br />fresh CLI session when needed<br />fence 42</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node baton">
+          <span class="relay-icon" aria-hidden="true">🔒</span>
+          <strong>Exact result</strong>
+          <small>Immutable result SHA or bundle<br />the review subject cannot drift</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node review">
+          <span class="relay-icon" aria-hidden="true">🔎</span>
+          <strong>Review Host C</strong>
+          <small><code>ReviewAttempt C</code><br />build, test, evidence, and semantic review of that result</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node authority">
+          <span class="relay-icon" aria-hidden="true">✓</span>
+          <strong>Task Server</strong>
+          <small>Validates the fenced report, records the route, and applies the lane decision</small>
+        </div>
+      </div>
+      <p class="relay-caption"><strong>No teleportation trick:</strong> the little box in the middle is the only baton. A provider session ID, RAM, open file handle, or host-local uncommitted change is not a cross-host checkpoint.</p>
+
+      <h3 style="margin-top: 2rem;">Identity hierarchy and vocabulary</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Level</th><th>Meaning</th><th>Identity and placement rule</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Task</strong></td><td>The long-lived card.</td><td>Has many processing cycles and attempts. It does not own one historical runner field.</td></tr>
+            <tr><td><strong>Pipeline cycle</strong></td><td>One full pre, core, post/review processing pass.</td><td>Gets a stable <code>runId</code>, a 1-based cycle number, and pinned pipeline/config revisions. A re-open starts a new cycle.</td></tr>
+            <tr><td><strong>Agent run</strong></td><td>One CLI invocation between user inputs.</td><td>Gets its own run record and immutable placement snapshot. A cross-host continuation starts a new agent run, even when it belongs to the same recoverable cycle.</td></tr>
+            <tr><td><strong>Execution attempt</strong></td><td>One fenced claim by a Coding or Review Executor.</td><td><code>RunAttempt</code> and <code>ReviewAttempt</code> each bind an executor instance, lease, fence, lifecycle, and source/result identity.</td></tr>
+            <tr><td><strong>Step execution</strong></td><td>One concrete pre/core/post step try.</td><td>References the owning attempt. A retry on another runner receives a new step-execution ID and retains <code>continuedFrom</code>.</td></tr>
+            <tr><td><strong>Runner, host, instance</strong></td><td>Runner is the logical registered service; host is the machine; instance is one daemon boot.</td><td>Persist <code>runnerId</code>, display name, <code>hostId</code>/hostname, instance or host-boot ID, backend and protocol version as a start-time snapshot.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted">Avoid a naked “Attempt N” label. The existing UI already uses that word for pipeline cycles, agent runs, and completion-loop budget. Name the scope: “Pipeline cycle 2,” “Agent run 3,” “Review attempt 1,” or “Completion attempt 2/4.”</p>
+
+      <div class="grid two" style="margin-top: 18px;">
+        <article class="card">
+          <span class="label">Placement rule</span>
+          <h3>Keep workspace-affine work sticky</h3>
+          <p>Pre-steps that touch the checkout, Core Agent Work, and any workspace-mutating post-step stay on the same coding executor and isolated worktree. A host change inside that bracket is an interrupted attempt followed by recovery, never a transparent move.</p>
+        </article>
+        <article class="card">
+          <span class="label">Planned phase boundary</span>
+          <h3>Review may use another runner by design</h3>
+          <p>After an immutable result is acknowledged, build, test, visual inspection, and semantic review run in a separately fenced ReviewAttempt. It may use the same host, another host, or a dedicated review pool. The final rule/lane mutation remains Task Server work.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">What happens when the runner or system changes?</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Situation</th><th>Default behavior</th><th>What the history records</th></tr></thead>
+          <tbody>
+            <tr><td>Assignment changes with no live attempt</td><td>The next eligible claim uses the new assignment after capability checks.</td><td>Assignment revision on the new attempt; old attempts remain unchanged.</td></tr>
+            <tr><td>Assignment changes while the current runner is healthy</td><td>Do not abort. Show “switch pending”; let the current attempt finish and apply the assignment at the next admission boundary.</td><td>No handoff yet. The active placement and pending assignment are shown separately.</td></tr>
+            <tr><td>Operator chooses “stop and switch now”</td><td>Drain the current attempt, cancel and reap its process group, publish and acknowledge a safe checkpoint, close the attempt, prove no overlap, then grant a new fenced attempt.</td><td><code>interrupted-by-switch</code>, checkpoint/result reference, old and new attempt IDs, reason, and ordered A → B transition.</td></tr>
+            <tr><td>Heartbeat disappears but the old process may still exist</td><td>Mark <code>process-unknown</code>. Do not start a second workspace-mutating attempt from TTL alone. Wait for cooperative release, changed boot identity plus containment proof, or audited host fencing.</td><td>Suspect time, last heartbeat, lease/fence, and the evidence that eventually allowed recovery or escalation.</td></tr>
+            <tr><td>Old owner is positively stopped and a durable checkpoint exists</td><td>Start a new attempt with a higher persisted fence. Reconstruct from server-owned task data and the durable Git/artifact checkpoint.</td><td><code>continuedFromAttemptId</code>, recovery reason, new executor snapshot, input checkpoint, and higher fence.</td></tr>
+            <tr><td>Core result is durable but review/decision work fails</td><td>Start a new ReviewAttempt on the same immutable result. Do not rerun coding work.</td><td>Same result SHA, new review attempt/runner, infrastructure outcome, and retry reason.</td></tr>
+            <tr><td>Pipeline, prompt, model policy, or runner software changes mid-cycle</td><td>Continue only with the pinned compatible definition and effective-config snapshot. If it cannot be honored, block or explicitly restart as a new pipeline cycle with current configuration.</td><td>Pinned versions on the old cycle plus the explicit restart decision and new versions on the next cycle.</td></tr>
+            <tr><td>No pushed ref, bundle, or acknowledged checkpoint exists</td><td>Do not claim continuity. Retain or salvage the old worktree when possible; otherwise restart from the last durable base or escalate potential work loss.</td><td><code>checkpoint-missing</code> or <code>worktree-blocked</code>; never a misleading “resumed” label.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="principle">
+        <strong>Does the task abort?</strong>
+        <p>Usually no. A runner change may end one execution attempt as interrupted, but the Task remains the durable unit and either continues through a new attempt or becomes visibly blocked. Only an explicit task cancellation or a terminal task policy ends the Task itself.</p>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Five data streams, one authority</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Stream</th><th>Direction</th><th>Required contract</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Admission and control</strong></td><td>Task Server → runner</td><td>Assignment revision, attempt ID, attempt kind, pinned config, lease ID, persisted fence, heartbeat deadline, cancellation/drain command.</td></tr>
+            <tr><td><strong>Recovery input</strong></td><td>Task Server → runner</td><td>Task snapshot, pipeline cycle/version, exact base or result ref, artifact manifest, completed-step facts, continuation reason, and allowed next action.</td></tr>
+            <tr><td><strong>Observability</strong></td><td>Runner → Task Server</td><td>Attempt ID, step-execution ID, stream ID, monotonic sequence number, runner instance, fence, timestamps, log/token/event payload. Replays are idempotent.</td></tr>
+            <tr><td><strong>Durable output</strong></td><td>Runner → Task Server / Git</td><td>Immutable commit or bundle, artifact hashes, result/checkpoint manifest, outbox event ID, and server acknowledgement before teardown.</td></tr>
+            <tr><td><strong>Terminal state</strong></td><td>Runner → Task Server</td><td>Fenced completion/verdict, outcome taxonomy, base/result/tested SHA, interruption or handoff reason. Only the current authority may affect task or pipeline state.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted">A stale runner's late state mutation is rejected deterministically. Late diagnostic bytes may be retained in a quarantined stale-attempt stream, but they cannot replace current logs, artifacts, results, or lane state.</p>
+
+      <h3 style="margin-top: 2rem;">Persistence and projections</h3>
+      <div class="grid three">
+        <article class="card tint-blue">
+          <span class="label">Canonical task-store truth</span>
+          <h3>Append an attempt ledger before spawn</h3>
+          <p>A file-backed, append-only execution-attempt ledger records start, placement snapshot, lease/fence, step links, checkpoint, handoff, terminal outcome, and continuation links. The first durable start event lands before the process starts.</p>
+        </article>
+        <article class="card">
+          <span class="label">Restart safety</span>
+          <h3>Persist authority, not only telemetry</h3>
+          <p>Active attempt rows, the authority epoch, and monotonic fencing counters survive Task Server restart. Restart does not forget a live owner or reset a fence to one. The runner's disk outbox replays unacknowledged events.</p>
+        </article>
+        <article class="card">
+          <span class="label">Read models</span>
+          <h3>Timeline and pipeline are projections</h3>
+          <p><code>pipeline-execution.json</code>, <code>timeline.jsonl</code>, run history, and Overview summaries project the attempt ledger. The planned step-run telemetry references attempt and step-execution IDs; none becomes a second ownership truth.</p>
+        </article>
+      </div>
+
+      <p>The ordered route is derived from actual step executions, not from the current project setting. Adjacent steps on the same executor instance collapse into one display stop, but a return is preserved:</p>
+      <div class="card" aria-label="Example task execution route">
+        <span class="label">Task Overview example</span>
+        <div class="route-demo">
+          <span class="route-stop">🏃 coding-a · host-a</span>
+          <span class="route-change">→</span>
+          <span class="route-stop">🔎 review-b · host-b</span>
+          <span class="route-change">→</span>
+          <span class="route-stop">🏃 coding-a · host-a</span>
+          <span class="route-summary">2 runners · 2 handoffs · A → B → A retained</span>
+        </div>
+        <p class="small muted">A current activity chip is separate from this historical route. “Assigned now: review-c” is configuration and must not replace “actually ran on: A → B → A.”</p>
+      </div>
+
+      <div class="grid three" style="margin-top: 14px;">
+        <article class="card">
+          <span class="label">Board and task lists</span>
+          <h3>Compact route summary</h3>
+          <p>While active, show the current runner and host. After execution, show the latest pipeline cycle's route. One stop renders as one runner; two or three render as A → B; longer or repeated routes render “3 runners · 4 handoffs” with a drill-down.</p>
+        </article>
+        <article class="card">
+          <span class="label">Task Overview and timeline</span>
+          <h3>Placement on every real run and step</h3>
+          <p>Group by pipeline cycle. Each agent run and executed pipeline step carries its runner/host snapshot, time, outcome, checkpoint, and handoff reason. Insert an explicit transition row when adjacent executions change placement.</p>
+        </article>
+        <article class="card">
+          <span class="label">Legacy truth</span>
+          <h3>Unknown is better than invented local</h3>
+          <p>Old records with no placement show “Runner not recorded.” A historical Remote finish line may be marked partial provenance. Never infer “Local” merely because no active lease exists now.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Stabilization acceptance</h3>
+      <div class="grid two">
+        <article class="card tint-green">
+          <span class="label">Must be true</span>
+          <ul class="checklist">
+            <li>Every local and Remote execution gets an immutable placement snapshot before spawn.</li>
+            <li>A → B → A remains ordered and queryable after all leases are released.</li>
+            <li>Task Server restart preserves active ownership, authority epoch, and fence monotonicity.</li>
+            <li>Every state-affecting log, artifact, result, verdict, and lane mutation is attempt-bound and fenced.</li>
+            <li>Cross-host continuation names a durable input checkpoint and creates a new process/attempt identity.</li>
+            <li>Core-finished plus review-failed retries review on the same result, not coding from scratch.</li>
+            <li>Overview, task detail, pipeline, and runner administration project the same attempt truth.</li>
+          </ul>
+        </article>
+        <article class="card tint-red">
+          <span class="label">Must never happen</span>
+          <ul class="checklist anti">
+            <li>Changing assignment kills a healthy attempt without an explicit immediate-switch action.</li>
+            <li>Lease expiry alone launches overlapping workspace mutation on another host.</li>
+            <li>A provider session ID is treated as a portable checkpoint across different worktrees or hosts.</li>
+            <li>Runner rename, retirement, or project reassignment rewrites historical attribution.</li>
+            <li>A single task-level runner field hides per-step placement or a return to an earlier runner.</li>
+            <li>Missing historical data is presented as proof that execution was local.</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Delivery slices</h3>
+      <div class="flow" aria-label="Recommended implementation sequence for runner provenance and host switching">
+        <div class="flow-step tint-blue"><b>1. Canonical attempts</b><span>Persist local and Remote runner snapshots, stable run/attempt IDs, leases, fences, and terminal outcomes.</span></div>
+        <div class="flow-step"><b>2. Correlate steps</b><span>Link agent runs and every executed pipeline step to the owning attempt and immutable source/result.</span></div>
+        <div class="flow-step tint-green"><b>3. Project the UI</b><span>Expose current placement, ordered route, completeness, handoff count, and detail history through one API truth.</span></div>
+        <div class="flow-step"><b>4. Restart authority</b><span>Persist leases, authority epoch, counters, idempotency keys, and host outbox acknowledgements.</span></div>
+        <div class="flow-step tint-amber"><b>5. Controlled switch</b><span>Add pending assignment, explicit stop-and-switch, positive no-overlap proof, and checkpoint validation.</span></div>
+        <div class="flow-step tint-violet"><b>6. Placement policy</b><span>Route workspace work, exact-result review, and server decisions by capability without creating a general workflow engine.</span></div>
+      </div>
+    </section>
+
+    <section id="monitoring">
+      <div class="section-head">
+        <p class="eyebrow">12 · Live observation at current parallelism</p>
+        <h2>Keep the Remote Host running and observe the causal signals</h2>
+        <p>The operator decision for this analysis is explicit: do not lower Remote Host parallelism and do not change gate configuration. The useful experiment is to correlate claims, attempts, resource load, exact revisions, overlapping reviews, and lane outcomes.</p>
+      </div>
+
+      <article class="card live">
+        <span class="label">Read-only live sample · 2026-07-13, 19:25-19:35 CEST</span>
+        <div class="grid three">
+          <div><strong>4 to 5 active slots</strong><p class="small muted">A freed slot was reused while its predecessor was still in the current Task-Server Auto Review implementation.</p></div>
+          <div><strong>CPU 16.3% to 98.2%</strong><p class="small muted">Load1 rose as high as 23.24 on 12 cores; swap stayed zero and I/O wait stayed low.</p></div>
+          <div><strong>Productive runs, failed handoffs</strong><p class="small muted">Remote execution reached <code>TASK_DONE</code> while post-review repeatedly reopened or escalated the cards.</p></div>
+        </div>
+        <p><strong>Remote execution stayed productive:</strong> AGT-2156 reported <code>TASK_DONE</code> and moved Progress to Auto Review; AGT-2160 later did the same. Freed slots were immediately reused by AGT-2162 and AGT-2163. This is evidence that parallel Remote execution itself continued to perform and hand off work.</p>
+        <p><strong>The review loop reproduced live:</strong> AGT-2155 reached Auto Review and escalated roughly 54 seconds later on a historical <code>build-test gate failed twice</code> path with <code>dotnet build exit 1</code>. AGT-2156 then escalated 61 seconds after its own successful Remote handoff for the same reason, while the event called it “twice” but recorded <code>attempt=1</code>. AGT-2160 reached Auto Review, failed <code>dotnet build</code> roughly 47 seconds later, and reopened to Ready. AGT-2168 was reopened again by the Completion Gate and immediately reclaimed.</p>
+        <p><strong>Host pressure:</strong> the host did not crash and continued renewing four leases, but a short saturation wave reached 98.2% CPU and load1 23.24. This is a correlation signal to retain, not proof that Remote parallelism caused the gate verdicts.</p>
+        <p><strong>Visibility gap:</strong> live leases remained for AGT-2168, AGT-2159, AGT-2162, and AGT-2163, while the ordinary task runner projection showed <code>runner=null</code>, <code>runId=null</code>, and <code>no-active-run</code>. The lease view was the actual ownership truth. AGT-2176 remained in Progress with neither lease nor active run. Slot counters briefly disagreed with the number of observable leases during handoff.</p>
+      </article>
+
+      <article class="card tint-amber" style="margin-top: 14px;">
+        <span class="label">Read-only follow-up · 2026-07-13, 19:56-20:06 CEST</span>
+        <p><strong>No new implementation was deployed:</strong> Stable remained on <code>18fd1f89</code> from 12 July. AGT-2159, AGT-2163, and AGT-2169 reached Remote <code>TASK_DONE</code> and Auto Review, but AGT-2159 and AGT-2163 still had no gate outcome after more than ten minutes. This is a post-processing backlog or hang signal, not fix evidence.</p>
+        <p><strong>Remote execution continued:</strong> AGT-2164 and AGT-2165 preserved salvage commits and moved to Human Review after <code>TASK_BLOCKED</code>. Slots were refilled by AGT-2171, AGT-2173, AGT-2174, and AGT-2178. Host pressure peaked at 92.6% CPU and load1 24.1 without swap.</p>
+        <p><strong>Truth gaps remained:</strong> live cards still projected <code>runner=null</code> and <code>no-active-run</code>; Remote timeline events still had no <code>runId</code>; AGT-2176 remained stale Progress without lease or runner. Planning issues AGT-2182 through AGT-2187 appeared during the sample, but issue creation is not code landing.</p>
+      </article>
+
+      <article class="card live" style="margin-top: 14px;">
+        <span class="label">Targeted program watch · 2026-07-13, 20:11-20:40 CEST</span>
+        <p><strong>The first stabilization root produced a Remote result, then hit the broken gate:</strong> AGT-2155 reported <code>TASK_DONE</code> at 20:31:33 with immutable salvage SHA <code>589c462f</code>. Auto Review tested local Wiki snapshot <code>61306343</code> instead, then escalated at 20:39:52 as <code>build-test gate failed twice</code> while recording <code>attempt=1</code>. AGT-2182 remains correctly blocked with <code>waitsOn AGT-2155</code> and <code>fulfilled=false</code>. Implementation code exists on the Remote branch, but it has not been reviewed, merged, or deployed.</p>
+        <p><strong>The semantic false reissue was captured exactly:</strong> AGT-2169's close-out said <code>4,049 passed, 30 skipped, 9 unrelated failures</code> and <code>No AGT-2169 test failed</code>. At 20:07:01 the Completion Gate nevertheless classified three unfinished items, reopened the task, and caused another coding claim at 20:11:44. This is direct evidence that isolated failure words were treated as stronger than the meaning of the final statement.</p>
+        <p><strong>Retry identity also leaked across a chain:</strong> AGT-2159 escalated at 20:06:57 as <code>build-test gate failed twice</code>, while the same event recorded <code>attempt=1</code>. AGT-2163 finally left Auto Review after 22 minutes and 56 seconds only by escalating on the same double-fail path, again with <code>attempt=1</code>. AGT-2174 did the same at 20:21:24, while AGT-2178 remained in Auto Review for more than 14 minutes. No Auto Review completed successfully during this window.</p>
+        <p><strong>The review subject itself drifted twice:</strong> AGT-2174 reported Remote <code>TASK_DONE</code> with salvage SHA <code>2fe0f07d</code>, but its Auto Review transition recorded shared development head <code>34c2df1f</code>. That head contained this Wiki update and unrelated cache tests, not the submitted Remote result. The same failure then reproduced on the stabilization root itself: AGT-2155 submitted <code>589c462f</code>, while the platform created local snapshot <code>61306343</code> containing only this page and recorded that snapshot as the Auto Review <code>workBranchHead</code>. The current review is therefore not inspecting AGT-2155's implementation. Both fixtures are mandatory in AGT-2187.</p>
+        <p><strong>Deployment and observability remained unchanged:</strong> Stable stayed on <code>2026.07.12-1055+18fd1f89</code>. Cards still showed <code>runner=null</code> and <code>no-active-run</code>, Remote events still had <code>runId=null</code>, and AGT-2155 had zero canonical run records. Earlier CPU had reached 91.7% with load1 19.94, but during most of AGT-2155's failing gate wait the Remote Host was completely idle at roughly 0% CPU and load1 0.25. That separates this wrong-subject post-processing failure from Remote execution pressure.</p>
+      </article>
+
+      <article class="card tint-red" style="margin-top: 14px;">
+        <span class="label">Admission truth audit · 2026-07-13, 21:37-21:53 CEST</span>
+        <p><strong>The Agent Studio backlog reached zero without bypassing dependency truth:</strong> AGT-2180 moved to Ready and was claimed, AGT-2170 moved to Ready but remained non-pickable behind CAR-6, CAC-8, and CAC-9, and the non-runnable AGT-2129 Epic moved to Human Review. This proves the lane can be drained safely when executable work, hard waits, and containers are classified separately.</p>
+        <p><strong>Remote admission then violated the configured project limit:</strong> Agent Studio reported <code>maxParallelism=2</code>, while <code>agent-runner-01</code> acquired four distinct, simultaneously held fenced leases for AGT-2180, AGT-2136, AGT-2138, and AGT-2188. All four leases renewed under fencing token 1. When AGT-2138 reached Auto Review, its freed host slot was immediately filled by AGT-2190 while three Agent Studio leases were still active. The host-wide cap of four was respected, but the project cap remained exceeded by two. This is a server-side admission defect, not a stale-card or telemetry inference.</p>
+        <p><strong>The ordinary status projection described a different system:</strong> <code>/api/runner/status</code> continued to report <code>occupiedSlots=0</code> because it counted only in-process local runs. Before later reissues, <code>queuedJobIds</code> contained 13 Ready cards, consisting of ten open-dependency tasks and three Epics, even though none was claim-eligible. Raw lane inventory and work that will start automatically must be separate fields backed by the same canonical attempt and eligibility snapshot used by admission.</p>
+        <p><strong>Host health did not explain the breach:</strong> with all four host slots occupied, the daemon remained healthy and Git-capable. The sample showed 12.1% CPU, load1 3.38 on 12 cores, 6.59 of 67.29 GB memory, zero swap, 0% steal, 0.02% I/O wait, and no telemetry findings. AGT-2189 now owns the quantitative project-capacity and truthful queue/slot fix. AGT-2173 retains the stable-key versus composite-key runner-badge defect.</p>
+      </article>
+
+      <article class="card tint-red" style="margin-top: 14px;">
+        <span class="label">Concurrent handoff attribution audit · 2026-07-13, 21:58-22:06 CEST</span>
+        <p><strong>Three successful Remote executions entered Auto Review on three wrong local revisions:</strong> AGT-2138 submitted Remote result <code>ef0efacb</code> but received review snapshot <code>0c604084</code>; AGT-2136 submitted <code>4ca0c5f2</code> but received <code>377fb137</code>; AGT-2180 submitted <code>9974651d</code> but received <code>32e68518</code>. Each Remote run ended with <code>TASK_DONE</code> and CLI exit 0 before releasing its fenced lease.</p>
+        <p><strong>The review revisions form one shared-checkout snapshot chain, not three task-result branches:</strong> <code>0c604084</code> captured seven pre-existing files from the local development checkout, including this Wiki and Overview work; its child <code>377fb137</code> captured another four shared-checkout files; its child <code>32e68518</code> changed only an unrelated Overview E2E test. None equals or materializes the corresponding Remote result SHA. Therefore no verdict produced from this chain can validate any of the three submitted implementations.</p>
+        <p><strong>This separates execution success from review correctness:</strong> the Remote Host was healthy, lease ownership and result preservation succeeded, and project concurrency later converged back to two. The failure starts at Task-Server completion handoff, where local shared-checkout state becomes the review subject. AGT-2184 already owns exact-SHA isolated Remote review; AGT-2183 owns immutable result handoff; AGT-2182 owns attempt identity and fencing. These three observed SHA pairs become mandatory parallel replay fixtures for AGT-2187. No duplicate issue is required.</p>
+        <p class="small muted">At the end of this sample all three cards were still in post-processing. A later reissue, escalation, or approval must be interpreted as a verdict about the wrong local subject until the tested SHA is proven equal to the Remote result SHA.</p>
+      </article>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>CEST</th><th>CPU</th><th>Load 1</th><th>Memory</th></tr></thead>
+          <tbody>
+            <tr><td>19:27:21</td><td>36.2%</td><td>5.52</td><td>7.0 GB</td></tr>
+            <tr><td>19:28:24</td><td>52.0%</td><td>4.14</td><td>8.3 GB</td></tr>
+            <tr><td>19:32:32</td><td>16.3%</td><td>2.85</td><td>7.6 GB</td></tr>
+            <tr><td>19:33:32</td><td>51.9%</td><td>10.50</td><td>18.3 GB</td></tr>
+            <tr><td>19:34:03</td><td>98.2%</td><td>19.52</td><td>23.5 GB</td></tr>
+            <tr><td>19:34:33</td><td>92.5%</td><td>23.24</td><td>11.4 GB</td></tr>
+            <tr><td>19:35:35</td><td>75.0%</td><td>21.59</td><td>13.1 GB</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Signals to capture for every parallel run</h3>
+      <div class="grid three">
+        <article class="card"><span class="label">M1</span><h3>Execution identity</h3><p>Task, run, attempt, runner instance, host slot, lease, base SHA, result SHA, and tested SHA.</p></article>
+        <article class="card"><span class="label">M2</span><h3>Overlap</h3><p>Concurrent CLI attempts, concurrent gates in the same repository, shared output paths, and active development services.</p></article>
+        <article class="card"><span class="label">M3</span><h3>Host pressure</h3><p>CPU, load, memory, disk, process count, queue wait, heartbeat lag, and capability probe state.</p></article>
+        <article class="card"><span class="label">M4</span><h3>Gate facts</h3><p>Worktree path, command, start/end, exit, signal, timeout, cancellation, lock signature, and normalized fingerprint.</p></article>
+        <article class="card"><span class="label">M5</span><h3>Semantic result</h3><p>Completion verdict, confidence, evidence references, failure attribution, and recommended route.</p></article>
+        <article class="card"><span class="label">M6</span><h3>Lane effect</h3><p>Every state transition, its actor, the decision input digest, and whether task or infrastructure budget changed.</p></article>
+      </div>
+
+      <p>The monitoring question is not simply “did a task fail while many slots were active?” It is: “for the exact submitted revision, did failures correlate with Remote CLI overlap, current Task-Server gate overlap, resource pressure, wrong checkout selection, or a reproducible product defect?”</p>
+    </section>
+
+    <section id="delivery">
+      <div class="section-head">
+        <p class="eyebrow">13 · Roadmap, live status, and delivery evidence</p>
+        <h2>One Remote epic, retained root-cause issues, and seven missing implementation slices</h2>
+        <p>The operator-approved program is grouped under AGT-2129. Existing issues retain their narrow ownership; new issues cover only the authority, project-capacity admission, durable handoff, Remote Review Executor, CLI recovery, capability drain, and final replay gaps that did not already exist.</p>
+      </div>
+
+      <div class="principle">
+        <strong>Source-of-truth rule</strong>
+        <p>This page owns target architecture, phase order, dependency intent, and exit criteria. The taskboard owns current lane, runner, attempt, merge reachability, review grade, and evidence. Do not copy volatile lane values into this page. Use the Wiki related-task rail, Epic Overview, and Task Detail for live status.</p>
+      </div>
+
+      <article class="card tint-red" style="margin-top: 14px;">
+        <span class="label">Bootstrap review · NO-GO</span>
+        <h3>Do not merge, deploy, or requeue Remote result <code>589c462f</code> as-is</h3>
+        <p>The current Auto Review selected local snapshot <code>61306343</code> instead of the Remote result, so it could not validate AGT-2155. A separate read-only review of the actual salvage commit then found independent blockers: Remote completion never passes its salvage SHA into the gate's authoritative <code>ExpectedSha</code>; the July replay fabricates local session events and a green fake gate; retry matching has no attempt-chain boundary; and the first-80-line output prefix can lose late lock, OOM, exit-137, or missing-tool evidence.</p>
+        <p><strong>Proposed dependency correction, not yet applied:</strong> canonical RunAttempt and Result-SHA authority in AGT-2182 becomes the foundation that AGT-2155 consumes, rather than AGT-2182 waiting on AGT-2155. Keep both from automatic pickup until the operator approves the bootstrap order. Then transplant corrected code onto fresh <code>develop</code>, preserve current architecture documents and constructor wiring, run a real Remote completion-to-isolated-gate replay, and make an exact-SHA merge decision.</p>
+        <p class="small muted">The bootstrap review and all gates remain Remote. The temporary exception is explicit operator authorization of the first exact-SHA integration, not local Task Server materialization.</p>
+      </article>
+
+      <h3>Evidence-driven phase sequence</h3>
+      <div class="state-strip" aria-label="Stabilization delivery phases">
+        <span class="state tint-amber"><strong>P0</strong> Contain and measure</span><span class="arrow">→</span>
+        <span class="state"><strong>P1</strong> Durable authority and recovery</span><span class="arrow">→</span>
+        <span class="state"><strong>P2</strong> Fully remote review and semantic decision</span><span class="arrow">→</span>
+        <span class="state"><strong>P3</strong> Capability and operator truth</span><span class="arrow">→</span>
+        <span class="state tint-green"><strong>P4</strong> Replay, canary, and handoff</span>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Where the operator looks now</h3>
+      <div class="grid four">
+        <article class="card tint-blue">
+          <span class="label">Program rollup</span>
+          <h3>Epic Overview · AGT-2129</h3>
+          <p>Shows the authoritative child count, lanes, waits-on relationships, and completed versus open work. The Epic itself is parked as a non-runnable container.</p>
+        </article>
+        <article class="card">
+          <span class="label">Live navigation</span>
+          <h3>Wiki related-task rail</h3>
+          <p>Hydrates the keys beside this page into live task microcards with lane, merge reachability, and review grade. Select one to open its Task Detail.</p>
+        </article>
+        <article class="card">
+          <span class="label">Acceptance evidence</span>
+          <h3>Task Detail</h3>
+          <p>Use Prompt, Timeline, Pipeline, Runs, Results, Files, and Git provenance. The roadmap does not duplicate that live evidence.</p>
+        </article>
+        <article class="card tint-violet">
+          <span class="label">Runtime truth</span>
+          <h3>Workspace Settings · Remote Hosts</h3>
+          <p>Use heartbeat, daemon, slots, capabilities, automatic or operator drain, CPU/load/memory, and telemetry findings to understand host health.</p>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Phase</th><th>Work package</th><th>Issue</th><th>Capability owner</th><th>Depends on</th><th>Exit evidence</th><th>Monitor</th></tr></thead>
+          <tbody>
+            <tr><td>P0</td><td>Gate-storm containment and revision-bound failure identity</td><td><strong>AGT-2155</strong> retained</td><td>Gate scheduler and classifier</td><td>None</td><td>A2, A5, A6</td><td>M2, M4, M6</td></tr>
+            <tr><td>P1</td><td>Persisted RunAttempt and ReviewAttempt authority</td><td><strong>AGT-2182</strong> new</td><td>Task Server control plane</td><td>AGT-2155</td><td>A3, A9</td><td>M1, M6</td></tr>
+            <tr><td>P1</td><td>Project-capacity admission and truthful eligible queue/slot projection</td><td><strong>AGT-2189</strong> new</td><td>Task Server admission and status</td><td>AGT-2182, AGT-2179</td><td>A10</td><td>M1, M3, M6</td></tr>
+            <tr><td>P1</td><td>Durable outbox and immutable result handoff</td><td><strong>AGT-2183</strong> new</td><td>Remote Coding Executor</td><td>AGT-2182</td><td>A4</td><td>M1, M6</td></tr>
+            <tr><td>P1</td><td>Typed CLI outcome and bounded recovery</td><td><strong>AGT-2185</strong> new</td><td>Runner adapters</td><td>AGT-2182</td><td>A5</td><td>M1, M5, M6</td></tr>
+            <tr><td>P2</td><td>Exact-SHA Remote Review Executor</td><td><strong>AGT-2184</strong> new</td><td>Remote review data plane</td><td>AGT-2182, AGT-2183</td><td>A1, A2, A6</td><td>M1-M4</td></tr>
+            <tr><td>P2</td><td>Full Remote completion-to-review integration</td><td><strong>AGT-2121</strong> retained</td><td>Review scheduler</td><td>AGT-2184</td><td>A1, A2, A4</td><td>M1, M5, M6</td></tr>
+            <tr><td>P2</td><td>Semantic final-attempt completion judge</td><td><strong>AGT-2168</strong> corrected</td><td>Semantic review</td><td>AGT-2184</td><td>A7</td><td>M5, M6</td></tr>
+            <tr><td>P3</td><td>Capability-specific drain and canary admission</td><td><strong>AGT-2186</strong> new</td><td>Host admission</td><td>AGT-2185</td><td>A8</td><td>M3, M6</td></tr>
+            <tr><td>P3</td><td>Host-to-task and operator truth</td><td><strong>AGT-2173</strong>, AGT-2170, AGT-2142</td><td>Projection and existing UI</td><td>AGT-2182 plus upstream events</td><td>A9</td><td>M1, M3, M6</td></tr>
+            <tr><td>P4</td><td>Incident replay, Remote canary, and operator handoff</td><td><strong>AGT-2187</strong> new</td><td>Integration and test harness</td><td>AGT-2184, AGT-2186, AGT-2189, AGT-2121, AGT-2168, AGT-2173</td><td>A1-A10</td><td>M1-M6</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Release evidence, not calendar optimism</h3>
+      <ul class="checklist">
+        <li><code>A1</code> Zero project checkout, materialization, build/test, visual inspection, or semantic repository review on the Task Server; 100% occur in fenced Remote ReviewAttempts.</li>
+        <li><code>A2</code> Expected result SHA equals tested SHA for every Git-backed gate; non-Git subjects use a verified content digest.</li>
+        <li><code>A3</code> RunAttempt and ReviewAttempt, monotonic fence, and authority epoch survive restart; stale writes are rejected.</li>
+        <li><code>A4</code> Lost response and restart replay the immutable result envelope exactly once; teardown follows acknowledged durable handoff.</li>
+        <li><code>A5</code> Review and CLI infrastructure failures consume zero coding-rework budget and do not start a new coding attempt.</li>
+        <li><code>A6</code> Three or more parallel Remote reviews show no cross-task output, cache, port, container, database, or evidence contamination.</li>
+        <li><code>A7</code> Keyword-only, prompt-echo, historical-failure, and deployment-pending fixtures produce zero false lane decisions.</li>
+        <li><code>A8</code> Codex 401 drains only Codex claims while healthy capabilities continue; common host failure drains all.</li>
+        <li><code>A9</code> Every active Remote coding and review attempt appears in canonical history and operator surfaces; no live lease projects <code>runner=null</code> or <code>no-active-run</code>.</li>
+        <li><code>A10</code> Concurrent Remote claims never exceed project <code>maxParallelism</code>; <code>occupiedSlots</code> and the claim-eligible queue come from the same canonical attempt and admission snapshot, while spare host capacity remains available to other projects.</li>
+      </ul>
+    </section>
+
+    <section id="decisions">
+      <div class="section-head">
+        <p class="eyebrow">14 · Remaining policy decisions</p>
+        <h2>Implementation is scheduled; unresolved policy stays visible</h2>
+      </div>
+
+      <div class="grid two">
+        <article class="card tint-green"><span class="label">Direction recorded</span><h3>Semantic authority</h3><p>One cheap synthesis judge owns the lane recommendation and treats existing aspect verdicts as evidence. Hard Git, process, command, artifact, lease, and schema facts constrain that judgment.</p></article>
+        <article class="card"><h3>Context budget</h3><p>Confirm the final 300 logical events as the default window. Should the judge be allowed one targeted request for earlier context when it detects a contradiction?</p></article>
+        <article class="card"><h3>Visual evidence</h3><p>Should a missing image for clearly visual work trigger an evidence-only follow-up, Human Review with concern, or a coding reissue only when the model also finds the implementation unverifiable?</p></article>
+        <article class="card"><h3>Accept with concerns</h3><p>Should a high-confidence complete verdict with non-blocking concerns always wait in Human Review, or can selected low-risk projects auto-accept under explicit policy?</p></article>
+        <article class="card"><h3>Retry ceilings</h3><p>Choose the specific per-fingerprint retry count and the task-level semantic churn ceiling. Infrastructure retries remain separately bounded.</p></article>
+        <article class="card tint-green"><span class="label">Policy default recorded</span><h3>Host change and restart resume</h3><p>Runner assignment changes are deferred by default and never hot-move a live process. Automatic cross-host resume stays project opt-in and globally off until durable checkpoints, positive no-overlap evidence, process containment, and persisted fencing probes are green. See <a href="#provenance">Runner provenance and host switching</a>.</p></article>
+        <article class="card tint-green"><span class="label">Rollout recorded</span><h3>Remote review placement</h3><p>The fully remote contract is fixed. Allow an isolated review role on existing Remote Hosts first, add a dedicated review pool, and let high-risk project policy require a different host failure domain.</p></article>
+      </div>
+    </section>
+
+    <section id="knowledge">
+      <div class="section-head">
+        <p class="eyebrow">15 · Living knowledge log</p>
+        <h2>New findings, newest first</h2>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Runner provenance and host-switching policy recorded.</strong> A Task may show an ordered A → B → A execution route across coding and review attempts. Assignment changes are deferred by default; there is no live process migration. Immediate switching requires controlled stop, durable checkpoint or immutable result, positive no-overlap evidence, and a new fenced attempt. Pipeline cycles pin configuration, and legacy placement remains explicitly unknown rather than inferred as local.</div><div class="timeline-action">Concept extended</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Concurrent Remote handoff collision reproduced three times.</strong> AGT-2138, AGT-2136, and AGT-2180 finished Remote execution successfully at result SHAs <code>ef0efacb</code>, <code>4ca0c5f2</code>, and <code>9974651d</code>, but Auto Review recorded the unrelated local snapshot chain <code>0c604084</code> → <code>377fb137</code> → <code>32e68518</code>. Review attribution is therefore cross-task contaminated before any gate verdict. Existing AGT-2182, AGT-2183, AGT-2184, and AGT-2187 own the fix and replay; no duplicate task was added.</div><div class="timeline-action">Reproduced and mapped</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Remote project capacity breached live.</strong> Agent Studio declared <code>maxParallelism=2</code>, but four distinct fenced leases ran concurrently on a healthy four-slot host while project status reported <code>occupiedSlots=0</code>. The Ready queue also mixed ten dependency-blocked tasks and three Epics into an apparently runnable list. AGT-2189 now owns atomic project-cap enforcement plus truthful eligible queue and slot projection; it is dependency-blocked in Ready behind AGT-2182 and AGT-2179.</div><div class="timeline-action">Reproduced and scheduled</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>AGT-2155 bootstrap review is NO-GO.</strong> Remote implementation SHA <code>589c462f</code> reached <code>TASK_DONE</code>, but Auto Review selected local Wiki snapshot <code>61306343</code> and escalated with <code>attempt=1</code>. Independent inspection of the actual result also found the Remote Result-SHA handoff, real replay, attempt-chain isolation, evidence retention, cleanup, and bounded queue behavior incomplete. AGT-2155 stays Escalated and AGT-2182 stays blocked until the operator approves a dependency correction and isolated Remote bootstrap sequence.</div><div class="timeline-action">Operator decision required</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Stabilization program queued.</strong> AGT-2129 now groups the retained AGT-2155, AGT-2121, AGT-2168, AGT-2173, and AGT-2170 work with seven missing slices: AGT-2182 attempt authority, AGT-2189 project-capacity admission, AGT-2183 durable outbox, AGT-2184 Remote Review Executor, AGT-2185 typed CLI recovery, AGT-2186 capability drain, and AGT-2187 final replay and canary. Hard <code>dependsOn</code> edges keep later work visible in Ready without allowing premature pickup.</div><div class="timeline-action">Queued via Task API</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>No deployed fix evidence yet.</strong> Stable remained on <code>18fd1f89</code>. AGT-2159, AGT-2163, and AGT-2169 reached Remote <code>TASK_DONE</code> and Auto Review, but two remained there without a gate outcome for more than ten minutes. Remote cards still lacked canonical runner and run identity, AGT-2176 remained stale Progress, and host load again peaked above twice the core count.</div><div class="timeline-action">Observed read-only</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Fully remote target clarified.</strong> Exact-SHA materialization and all completion, build/test, evidence, vision, and quality aspects run inside a fenced Remote ReviewAttempt. The Task Server remains the authority and scheduler but owns no project checkout. Coding and review may initially share a physical Remote Host only as isolated roles; a dedicated review pool is the stronger stability target.</div><div class="timeline-action">Target corrected</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Authority inversion confirmed.</strong> LLM aspect prompts describe concerns as non-blocking and Human Review as final, while deterministic evidence and solution-quality gates can turn concern wording and keyword matches into reissue.</div><div class="timeline-action">Open design decision</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Live parallel sample.</strong> Four to five active Remote slots produced <code>TASK_DONE</code> handoffs for AGT-2156 and AGT-2160 while AGT-2155, AGT-2156, and AGT-2160 repeated post-review gate failure paths and AGT-2168 repeated the prose-gate loop. A later host sample reached 98.2% CPU and load1 23.24 without losing its four leases. This supports measuring host pressure while still separating Remote execution concurrency from the current Task-Server review implementation.</div><div class="timeline-action">Observed read-only</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Incident inventory.</strong> Twenty-four unique manual resets split into 18 build/test double-fail cases, one direct prose case, and five other incomplete closure paths. Eighty-eight of 91 observed verify commands ran in the shared development checkout.</div><div class="timeline-action">Root causes separated</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Semantic target revised.</strong> Raw prose remains a supported evidence source. Keywords become retrieval signals only. A cheap model interprets the current attempt ending together with immutable process, Git, command, and artifact facts.</div><div class="timeline-action">Proposed</div></div>
+      </div>
+
+      <h3>Related system-of-record and evidence pages</h3>
+      <ul class="source-list">
+        <li><a href="../system/domains/runner.md">Runner domain map</a></li>
+        <li><a href="../system/domains/pipeline.md">Pipeline domain map</a></li>
+        <li><a href="../system/contracts/run-outcome.md">Run outcome contract</a></li>
+        <li><a href="../concepts/decoupled-lifecycles.md">Decoupled agent-session lifecycles</a></li>
+        <li><a href="../concepts/parallel-task-execution.md">Parallel task execution</a></li>
+        <li><a href="../operations/remote-hosts.md">Remote Hosts operations</a></li>
+        <li><a href="auto-review-evidence-gate-analysis.html">Auto-review evidence-gate audit</a></li>
+        <li><a href="orchestrator-drive-to-conclusion.html">Drive to conclusion</a></li>
+        <li><a href="../operations/haertung-verteilte-ausfuehrung/historie.html">Runner stability incident ledger (hardening chronicle)</a></li>
+        <li><a href="process-termination-scenarios.html">Process termination scenarios</a></li>
+        <li><a href="../system/architecture/decisions/proposed/adr-0060-fenced-run-lease-and-runner-identity.md">Proposed ADR-0060</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>This is a living Wiki concept page, not a deployed behavior claim. Update the observation record, authority model, issue links, and acceptance evidence as implementation changes. Keep incident-specific details in the runner incident ledger and durable behavioral contracts in the domain and contract documents linked above.</p>
+  </footer>
+</div>
+</body>
+</html>

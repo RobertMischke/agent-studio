@@ -306,6 +306,8 @@ public class AgentMessageBusStoreTests : IDisposable
     /// regardless of CPU speed; the absolute bound is generous for O(N) yet
     /// unreachable for O(N^2) at this volume.
     /// </summary>
+    // MachineBound 19.07.: 25K/50K-Cold-Load-Scaling-Messung (Stopwatch-Ratio) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void ColdLoad_ScalesLinearly_NotQuadratically()
     {

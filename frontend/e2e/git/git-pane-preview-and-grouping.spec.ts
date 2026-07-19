@@ -54,7 +54,7 @@ const STATUS_PAYLOAD = {
   totalRemoved: 2,
   files: [
     { path: 'README.md', status: ' M', added: 2, removed: 0 },
-    { path: 'docs/README.md', status: ' M', added: 3, removed: 1 },
+    { path: 'docs/start/README.md', status: ' M', added: 3, removed: 1 },
     { path: 'site/index.html', status: 'A ', added: 2, removed: 0 },
   ],
   error: null,

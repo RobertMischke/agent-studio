@@ -63,7 +63,7 @@
     /* Drag-over signal: outline ring only. We deliberately do NOT tint the
        column background because a transient overlay that snaps off on drop
        reads as a "flash" together with the drop-zone glow underneath the
-       landed card. Motion rule (docs/product/design-principles.md): drag-and-drop
+       landed card. Motion rule (docs/quality/design-principles.md): drag-and-drop
        never changes brightness; only opacity (drop-zone) and transform. */
     .column--dragover {
       outline: 2px solid rgba(99, 102, 241, 0.6);

@@ -616,7 +616,7 @@ public class TaskScannerService : ITaskScanner
 
     /// <summary>
     /// Builds the pre-filled coding-task draft for "promote a finished
-    /// planning task" (see docs/research/planning-research-task-kinds-2026-05.md).
+    /// planning task" (see docs/concepts/planning-research-task-kinds-2026-05.md).
     /// Returns null when the job is not found. Title + prompt body come from
     /// the planning report (<c>status.md</c>); every image under the job's
     /// <c>results/</c> and <c>attachments/</c> folders is listed (deduped by
@@ -743,7 +743,7 @@ public class TaskScannerService : ITaskScanner
     /// field stays null when absent on disk; the frontend's lane projection
     /// then falls back to <see cref="LifecyclePhases.DefaultFor"/>. This is
     /// the compatibility contract from
-    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>: existing
+    /// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>: existing
     /// job folders that predate the field continue to render in the default
     /// lane of their state without a one-shot migration that rewrites every
     /// <c>task.json</c>. Unknown phase strings, or phase strings that do not
@@ -1485,7 +1485,7 @@ public class TaskScannerService : ITaskScanner
     /// Read-only counterpart to <see cref="ResolveAttachment"/> for the
     /// <c>results/</c> folder where agents drop screenshots they want to keep
     /// in the protocol. Same path-traversal guards, same image content-type
-    /// mapping. See <c>docs/contracts/protocol-style.md</c> for the folder contract.
+    /// mapping. See <c>docs/system/contracts/protocol-style.md</c> for the folder contract.
     /// </summary>
     public (string? Path, string? ContentType) ResolveResult(string jobId, string fileName, string? watchPath = null)
         => ResolveJobBinaryFile(jobId, "results", fileName, watchPath);

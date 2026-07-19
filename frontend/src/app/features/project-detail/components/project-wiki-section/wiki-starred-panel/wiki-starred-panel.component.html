@@ -1,0 +1,29 @@
+@if (entries().length > 0) {
+  <section class="wstar" data-testid="project-wiki-starred" aria-label="Gestarrte Seiten">
+    <header class="wstar__head">
+      <span class="wstar__head-icon" aria-hidden="true">
+        <app-studio-icon name="starFilled" [size]="13"></app-studio-icon>
+      </span>
+      <h3 class="wstar__title">Gestarrt</h3>
+      <span class="wstar__count">{{ entries().length }}</span>
+    </header>
+    <ul class="wstar__list">
+      @for (entry of entries(); track entry.relPath) {
+        <li class="wstar__item">
+          <button class="wstar__open" type="button"
+                  [attr.data-testid]="'project-wiki-starred-open-' + entry.relPath"
+                  (click)="onEntryClick(entry)">
+            <span class="wstar__label">{{ entry.label }}</span>
+            <code class="wstar__path">{{ entry.relPath }}</code>
+          </button>
+          <button class="wstar__remove" type="button"
+                  [attr.data-testid]="'project-wiki-starred-remove-' + entry.relPath"
+                  cacTooltip="Stern entfernen"
+                  (click)="unstar($event, entry)">
+            <app-studio-icon name="starFilled" [size]="13"></app-studio-icon>
+          </button>
+        </li>
+      }
+    </ul>
+  </section>
+}

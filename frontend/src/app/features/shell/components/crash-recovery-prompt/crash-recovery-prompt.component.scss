@@ -8,6 +8,11 @@
   gap: var(--studio-spacing-3);
 }
 
+.crp__toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .crp__error {
   margin: 0;
   padding: var(--studio-spacing-2) var(--studio-spacing-3);

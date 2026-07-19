@@ -608,9 +608,9 @@ public sealed class IntakeRunner
             {
                 Id = "repo-instructions-source",
                 Title = "Use repository instructions and indexed docs",
-                Source = "AGENTS.md; docs/README.md",
+                Source = "AGENTS.md; docs/start/README.md",
                 Areas = ["general"],
-                Text = "Follow the active AGENTS.md rules first. When project documentation is needed, start at docs/README.md instead of scanning docs/ blindly. Repository artifacts, prompts, comments, and docs written by this project stay in English."
+                Text = "Follow the active AGENTS.md rules first. When project documentation is needed, start at docs/start/README.md instead of scanning docs/ blindly. Repository artifacts, prompts, comments, and docs written by this project stay in English."
             },
             _ => true),
         new(
@@ -618,7 +618,7 @@ public sealed class IntakeRunner
             {
                 Id = "git-handling-api-not-cli",
                 Title = "Keep git/workspace artifact handling in the backend",
-                Source = "AGENTS.md#stable-update-policy; docs/operations/git/commit-push-doctrine.md; docs/architecture/decisions/adr-archive.md#adr-0052",
+                Source = "AGENTS.md#stable-update-policy; docs/operations/git/commit-push-doctrine.md; docs/system/architecture/decisions/adr-archive.md#adr-0052",
                 Areas = ["git", "runner", "backend"],
                 Text = "Git handling for workspace artifacts belongs in API/backend orchestration and platform-owned pre/post pipeline steps, not in the CLI/agent layer. Worker CLIs do not commit, push, merge, or manage task worktrees on their own."
             },
@@ -628,7 +628,7 @@ public sealed class IntakeRunner
             {
                 Id = "task-state-api-first",
                 Title = "Use API/state-machine boundaries for task state",
-                Source = "AGENTS.md#task-organization-rule-api-first; docs/contracts/filesystem.md",
+                Source = "AGENTS.md#task-organization-rule-api-first; docs/system/contracts/filesystem.md",
                 Areas = ["filesystem", "runner"],
                 Text = "Task folders, lanes, pickup, stop, continue, and state transitions are application-owned. Code should route task mutations through the API/state-machine services instead of direct filesystem moves or job.json state edits."
             },
@@ -638,7 +638,7 @@ public sealed class IntakeRunner
             {
                 Id = "frontend-design-tokens-components",
                 Title = "Use central frontend design tokens and components",
-                Source = "frontend/AGENTS.md#spacing-tokens-never-raw-px; docs/product/design-principles.md",
+                Source = "frontend/AGENTS.md#spacing-tokens-never-raw-px; docs/quality/design-principles.md",
                 Areas = ["frontend"],
                 Text = "Frontend changes should use the central design-token scale and existing standard components. Avoid local hard-coded spacing, colors, badge geometry, or one-off UI primitives when shared tokens/components cover the case."
             },
@@ -658,7 +658,7 @@ public sealed class IntakeRunner
             {
                 Id = "orchestrator-state-machine-authority",
                 Title = "The orchestrator remains the state-machine authority",
-                Source = "AGENTS.md#orchestration-philosophy-deterministic-over-prompt-based; docs/contracts/agent-task.md",
+                Source = "AGENTS.md#orchestration-philosophy-deterministic-over-prompt-based; docs/system/contracts/agent-task.md",
                 Areas = ["runner", "backend"],
                 Text = "CLI output and sentinels are inputs, not authority. Runner and policy code own deterministic lifecycle decisions, escalation, retries, and lane movement."
             },

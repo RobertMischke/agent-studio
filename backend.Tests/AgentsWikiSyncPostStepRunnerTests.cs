@@ -9,7 +9,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
         Path.GetTempPath(), "agents-wiki-sync-tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Run_NoRegistry_SeedsTemplateAndIndex_AndProvisionsFrame()
+    public void Run_NoRegistry_SeedsTemplateAndIndex()
     {
         var projectRoot = NewProjectRoot();
         var runner = NewRunner();
@@ -19,11 +19,9 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
         Assert.Equal(AgentsWikiSyncVerdict.Created, result.Verdict);
         Assert.Contains("seeded", result.Reason);
 
-        var topicsDir = Path.Combine(projectRoot, "docs", "wiki", "concepts", "designated-topics");
+        var topicsDir = Path.Combine(projectRoot, "docs", "concepts", "designated-topics");
         Assert.True(File.Exists(Path.Combine(topicsDir, "registry.json")), "registry.json was not seeded");
         Assert.True(File.Exists(Path.Combine(topicsDir, "README.md")), "index README was not written");
-        // Self-provisioning: the Workstream frame is seeded like the sibling steps.
-        Assert.True(File.Exists(Path.Combine(projectRoot, "docs", "engineering-workstream", "00-overview.html")));
     }
 
     [Fact]
@@ -43,7 +41,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
     public void Run_TaskMatchesTopicByTag_WritesStatePageProgressRow_AndValidatesPointer()
     {
         var projectRoot = NewProjectRoot();
-        var page = "docs/wiki/concepts/orchestrator-drive-to-conclusion.html";
+        var page = "docs/concepts/orchestrator-drive-to-conclusion.html";
         WritePage(projectRoot, page, "<html><body>drive to conclusion</body></html>");
         WriteRegistry(projectRoot, Registry(
             Topic("drive-to-conclusion", "Orchestrator drive-to-conclusion", page,
@@ -63,7 +61,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
         Assert.Equal(1, result.MatchedTopics);
         Assert.Equal(0, result.MissingPages);
 
-        var topicsDir = Path.Combine(projectRoot, "docs", "wiki", "concepts", "designated-topics");
+        var topicsDir = Path.Combine(projectRoot, "docs", "concepts", "designated-topics");
         var statePage = File.ReadAllText(Path.Combine(topicsDir, "drive-to-conclusion.md"));
         Assert.Contains("## Current State / Progress", statePage);
         Assert.Contains("entry-count: 1", statePage);
@@ -82,7 +80,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
     public void Run_TaskMatchesByChangedFilePath_RecordsPathMatch()
     {
         var projectRoot = NewProjectRoot();
-        var page = "docs/wiki/concepts/orchestrator-supervision-loop.html";
+        var page = "docs/concepts/orchestrator-supervision-loop.html";
         WritePage(projectRoot, page, "<html><body>supervision loop</body></html>");
         WriteRegistry(projectRoot, Registry(
             Topic("supervision-loop", "Supervision loop", page,
@@ -97,7 +95,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
 
         Assert.Equal(1, result.MatchedTopics);
         var statePage = File.ReadAllText(Path.Combine(
-            projectRoot, "docs", "wiki", "concepts", "designated-topics", "supervision-loop.md"));
+            projectRoot, "docs", "concepts", "designated-topics", "supervision-loop.md"));
         Assert.Contains("| path |", statePage);
     }
 
@@ -105,7 +103,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
     public void Run_UnmatchedTask_StillSyncsPointer_WithoutProgressRow()
     {
         var projectRoot = NewProjectRoot();
-        var page = "docs/wiki/concepts/orchestrator-drive-to-conclusion.html";
+        var page = "docs/concepts/orchestrator-drive-to-conclusion.html";
         WritePage(projectRoot, page, "<html><body>x</body></html>");
         WriteRegistry(projectRoot, Registry(
             Topic("drive-to-conclusion", "Drive to conclusion", page,
@@ -117,7 +115,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
 
         Assert.Equal(0, result.MatchedTopics);
         var statePage = File.ReadAllText(Path.Combine(
-            projectRoot, "docs", "wiki", "concepts", "designated-topics", "drive-to-conclusion.md"));
+            projectRoot, "docs", "concepts", "designated-topics", "drive-to-conclusion.md"));
         Assert.Contains("No task activity recorded yet.", statePage);
         Assert.Contains("entry-count: 0", statePage);
         Assert.DoesNotContain("`AGT-1`", statePage);
@@ -128,7 +126,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
     {
         var projectRoot = NewProjectRoot();
         WriteRegistry(projectRoot, Registry(
-            Topic("evidence-gate", "Evidence gate", "docs/wiki/concepts/does-not-exist.html",
+            Topic("evidence-gate", "Evidence gate", "docs/concepts/does-not-exist.html",
                 tags: ["evidence-gate"], pathPrefixes: [])));
         var runner = NewRunner();
 
@@ -138,7 +136,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
         Assert.Equal(1, result.MissingPages);
         Assert.Contains(result.Findings!, f => f.Contains("missing wiki page"));
         var index = File.ReadAllText(Path.Combine(
-            projectRoot, "docs", "wiki", "concepts", "designated-topics", "README.md"));
+            projectRoot, "docs", "concepts", "designated-topics", "README.md"));
         Assert.Contains("Pointer health", index);
         Assert.Contains("missing", index);
         Assert.Contains("does-not-exist.html", index);
@@ -148,7 +146,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
     public void Run_RepeatedSameTask_DoesNotDuplicateProgressRow()
     {
         var projectRoot = NewProjectRoot();
-        var page = "docs/wiki/concepts/orchestrator-drive-to-conclusion.html";
+        var page = "docs/concepts/orchestrator-drive-to-conclusion.html";
         WritePage(projectRoot, page, "<html><body>x</body></html>");
         WriteRegistry(projectRoot, Registry(
             Topic("drive-to-conclusion", "Drive to conclusion", page, tags: ["drive-to-conclusion"], pathPrefixes: [])));
@@ -161,7 +159,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
 
         Assert.Equal(AgentsWikiSyncVerdict.Updated, second.Verdict);
         var statePage = File.ReadAllText(Path.Combine(
-            projectRoot, "docs", "wiki", "concepts", "designated-topics", "drive-to-conclusion.md"));
+            projectRoot, "docs", "concepts", "designated-topics", "drive-to-conclusion.md"));
         Assert.Equal(1, CountOccurrences(statePage, "`AGT-1`"));
         Assert.Contains("entry-count: 1", statePage);
         // The validation timestamp still refreshes even on the idempotent re-run.
@@ -172,7 +170,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
     public void Run_AgentsPointerMissing_HealsByAppendingManagedBlock()
     {
         var projectRoot = NewProjectRoot();
-        var page = "docs/wiki/concepts/orchestrator-drive-to-conclusion.html";
+        var page = "docs/concepts/orchestrator-drive-to-conclusion.html";
         WritePage(projectRoot, page, "<html></html>");
         WriteRegistry(projectRoot, Registry(
             Topic("drive-to-conclusion", "Drive to conclusion", page, tags: ["drive-to-conclusion"], pathPrefixes: [])));
@@ -185,18 +183,18 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
         Assert.Equal("healed", result.AgentsPointer);
         var agents = File.ReadAllText(Path.Combine(projectRoot, "AGENTS.md"));
         Assert.Contains("designated-topics:begin", agents);
-        Assert.Contains("docs/wiki/concepts/designated-topics/README.md", agents);
+        Assert.Contains("docs/concepts/designated-topics/README.md", agents);
     }
 
     [Fact]
     public void Run_AgentsPointerAlreadyPresent_IsOk_AndLeavesFileUntouched()
     {
         var projectRoot = NewProjectRoot();
-        var page = "docs/wiki/concepts/orchestrator-drive-to-conclusion.html";
+        var page = "docs/concepts/orchestrator-drive-to-conclusion.html";
         WritePage(projectRoot, page, "<html></html>");
         WriteRegistry(projectRoot, Registry(
             Topic("drive-to-conclusion", "Drive to conclusion", page, tags: ["drive-to-conclusion"], pathPrefixes: [])));
-        var agentsBody = "# AGENTS\n\nSee docs/wiki/concepts/designated-topics/README.md for topic state.\n";
+        var agentsBody = "# AGENTS\n\nSee docs/concepts/designated-topics/README.md for topic state.\n";
         var agentsPath = Path.Combine(projectRoot, "AGENTS.md");
         File.WriteAllText(agentsPath, agentsBody);
         var runner = NewRunner();
@@ -212,7 +210,7 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
     public void Run_AgentsMissingEntirely_RecordsAbsentFinding()
     {
         var projectRoot = NewProjectRoot();
-        var page = "docs/wiki/concepts/orchestrator-drive-to-conclusion.html";
+        var page = "docs/concepts/orchestrator-drive-to-conclusion.html";
         WritePage(projectRoot, page, "<html></html>");
         WriteRegistry(projectRoot, Registry(
             Topic("drive-to-conclusion", "Drive to conclusion", page, tags: ["drive-to-conclusion"], pathPrefixes: [])));
@@ -236,13 +234,13 @@ public sealed class AgentsWikiSyncPostStepRunnerTests : IDisposable
     {
         var projectRoot = Directory.CreateDirectory(
             Path.Combine(_root, Guid.NewGuid().ToString("N"))).FullName;
-        Directory.CreateDirectory(Path.Combine(projectRoot, "docs", "wiki", "concepts"));
+        Directory.CreateDirectory(Path.Combine(projectRoot, "docs", "concepts"));
         return projectRoot;
     }
 
     private static void WriteRegistry(string projectRoot, string json)
     {
-        var dir = Path.Combine(projectRoot, "docs", "wiki", "concepts", "designated-topics");
+        var dir = Path.Combine(projectRoot, "docs", "concepts", "designated-topics");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "registry.json"), json);
     }

@@ -1,10 +1,10 @@
-<article class="wbinbox" data-testid="project-wiki-pulse-workbenches">
-  <header class="wbinbox__head">
-    <app-studio-icon name="eye" [size]="13" />
-    <div><h4>Open Workbench topics</h4><span>Started questions that still need understanding or work</span></div>
-    <strong>{{ catalogue()?.count ?? 0 }}</strong>
-  </header>
-  @if (catalogue(); as list) {
+@if (catalogue(); as list) {
+  <article class="wbinbox" data-testid="project-wiki-pulse-workbenches">
+    <header class="wbinbox__head">
+      <span class="wbinbox__icon" aria-hidden="true"><app-studio-icon name="eye" [size]="13" /></span>
+      <h4>Workbenches</h4>
+      <strong>{{ list.count }}</strong>
+    </header>
     @if (list.items.length > 0) {
       <ul>
         @for (workbench of list.items; track workbench.id) {
@@ -17,5 +17,5 @@
         }
       </ul>
     } @else { <p><app-studio-icon name="check" [size]="16" /> No open Workbench topics.</p> }
-  }
-</article>
+  </article>
+}

@@ -1,7 +1,7 @@
 using AgentStudio.Runner;
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public sealed class ReviewDecisionCliRoutingTests
 {

@@ -199,6 +199,10 @@ internal static class PromptUsageCatalog
         {
             new PromptUsageRef("ProjectRunner", "BuildOrchestratorPrompt", "Attachments sub-block of the one-shot decision."),
         },
+        ["wiki-search-expand.md"] = new[]
+        {
+            new PromptUsageRef("WikiSearchService", "TryExpandAsync", "Semantic query expansion for the wiki search (fail-open layer)."),
+        },
     };
 
     public static IReadOnlyList<PromptUsageRef> For(string name) =>
