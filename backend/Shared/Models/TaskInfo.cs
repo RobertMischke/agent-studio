@@ -77,7 +77,7 @@ public record TaskInfo
     /// <summary>
     /// Whether the agent may use web search / fetch for this run. Default off for
     /// coding/planning, on for research (set at create time). See decision 2 in
-    /// docs/research/planning-research-task-kinds-2026-05.md.
+    /// docs/concepts/planning-research-task-kinds-2026-05.md.
     /// </summary>
     public bool AllowWebAccess { get; init; }
     /// <summary>
@@ -217,7 +217,7 @@ public record TaskInfo
     /// Optional lifecycle substate, read from the <c>"phase"</c> field in
     /// <c>job.json</c>. Drives the kanban board's lane projection in the
     /// expanded-lifecycle-lanes model (see
-    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>).
+    /// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>).
     /// Application-owned: agents must not write to this field. Values come
     /// from <see cref="LifecyclePhases"/> and are constrained per state by
     /// <see cref="LifecyclePhases.AllowedByState"/>. Null means "no explicit

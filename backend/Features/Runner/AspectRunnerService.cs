@@ -153,7 +153,7 @@ public sealed class AspectRunnerService
                 ConcernNamespace: "docs",
                 PromptTemplate: "review-aspect-documentation-impact.md",
                 Title: "Documentation impact",
-                FallbackSystem: "Does the change require an update to AGENTS.md / ROADMAP / ADRs / cli-skills / docs/README.md? Are those updated?"),
+                FallbackSystem: "Does the change require an update to AGENTS.md / ROADMAP / ADRs / cli-skills / docs/start/README.md? Are those updated?"),
             ["tests-and-evidence"] = new AspectDefinition(
                 Id: "tests-and-evidence",
                 ConcernNamespace: "quality",

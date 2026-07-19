@@ -3,7 +3,7 @@
 ## Style-guide hard rules (prompt-known)
 
 The non-negotiable design rules live in
-[docs/design/style-guide-hard-rules.md](../docs/design/style-guide-hard-rules.md).
+[docs/quality/design/style-guide-hard-rules.md](../docs/quality/design/style-guide-hard-rules.md).
 The technology-aware navigation entry and prompt applicability contract live in
 [docs/quality/](../docs/quality/README.md); UI work uses its
 [Angular component guide](../docs/quality/angular-components.md).

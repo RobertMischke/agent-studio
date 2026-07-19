@@ -10,16 +10,16 @@ appliesTo: {"projects":["*"],"technologies":["angular"],"taskAreas":["frontend"]
 # Angular component guide
 
 Use this page for Angular component and SCSS changes. The product-wide
-[style-guide hard rules](../design/style-guide-hard-rules.md) are mandatory and
+[style-guide hard rules](./design/style-guide-hard-rules.md) are mandatory and
 win over a local component convention. The detailed component inventory remains
-in the [frontend style guide](../frontend/style-guide/README.md).
+in the [frontend style guide](./frontend/style-guide/README.md).
 
 ## Required component shape
 
 | Concern | Rule | Evidence in this repository |
 |---|---|---|
-| Change detection | New components use `ChangeDetectionStrategy.OnPush`. Shared mutable state reaches the template through signals. | [Frontend performance playbook](../frontend/performance.md#state-and-rendering) and existing standalone components under `frontend/src/app/features/` |
-| Repeated rows | Track by stable identity. Prefer `@for (...; track item.id)`; legacy `*ngFor` code supplies a `trackBy` function. Never track a mutable display label or list index when a durable id exists. | The board's recurring snapshots make untracked list replacement a measured rendering cost in the [performance playbook](../frontend/performance.md#state-and-rendering). |
+| Change detection | New components use `ChangeDetectionStrategy.OnPush`. Shared mutable state reaches the template through signals. | [Frontend performance playbook](./frontend/performance.md#state-and-rendering) and existing standalone components under `frontend/src/app/features/` |
+| Repeated rows | Track by stable identity. Prefer `@for (...; track item.id)`; legacy `*ngFor` code supplies a `trackBy` function. Never track a mutable display label or list index when a durable id exists. | The board's recurring snapshots make untracked list replacement a measured rendering cost in the [performance playbook](./frontend/performance.md#state-and-rendering). |
 | Component boundaries | Components are standalone, live one component per folder, and expose cross-feature symbols through the feature barrel. | [frontend/AGENTS.md](../../frontend/AGENTS.md) |
 
 ## Required visual shape
@@ -38,9 +38,9 @@ in the [frontend style guide](../frontend/style-guide/README.md).
    place. Text that only happens to contain a number does not need it.
 
 The first three items are anchored by the
-[hard-rule page](../design/style-guide-hard-rules.md),
-[token guide](../frontend/style-guide/tokens.md), and
-[canonical component index](../frontend/style-guide/README.md). The tabular
+[hard-rule page](./design/style-guide-hard-rules.md),
+[token guide](./frontend/style-guide/tokens.md), and
+[canonical component index](./frontend/style-guide/README.md). The tabular
 number pattern is already used by project, task, and usage metrics throughout
 the shell and prevents digits from making live rows jitter.
 
