@@ -57,7 +57,7 @@ easy instead of heroic:
 
 **Loop 3 — Integrated watch (after merge, human-owned).**
 The operator withdrew the automatic deploy smoke — respected. The light
-variant that remains: after deploy, the **Pulse/Workstream** gets a
+variant that remains: after deploy, the **wiki Pulse** gets a
 "fresh deploy" entry listing UI-touching cards since last deploy, each
 with its evidence pair — a 60-second human flip-through instead of a bot
 gate. The bot prepares the review; the human keeps the taste authority.
@@ -75,8 +75,7 @@ expectations. Start set:
 | `layout-primitives` | the blessed flex/grid/chip/header patterns (copy-paste-able), so new UI reuses instead of reinvents — attacks "Kraut und Rüben" at the source |
 | `component-map` | which component owns which surface (stops parallel cards building second truths) |
 
-The collector/curator keep these pages honest (Workstream mechanics);
-the grading run (AGT-2051) grades them like any page.
+The grading run (AGT-2051) grades these pages like any page.
 
 ## 3. Slices (proposal for the operator's return)
 

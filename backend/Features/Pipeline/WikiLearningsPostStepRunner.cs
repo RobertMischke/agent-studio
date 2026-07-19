@@ -65,21 +65,16 @@ public sealed class WikiLearningsPostStepRunner
         TaskInfo task,
         WatchPathEntry entry,
         WikiLearningsRun run,
-        DateTime? nowUtc = null,
-        EngineeringWorkstreamFrameLanguage? frameLanguage = null)
+        DateTime? nowUtc = null)
     {
         var now = nowUtc ?? DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(entry.RootPath))
             return new WikiLearningsResult(WikiLearningsVerdict.Skipped, "project root is not configured");
 
-        // Self-provisioning (AGT-2024): ensure the Workstream frame exists before
-        // this step writes. Activating the step for a project is what creates the
-        // structure - the old "skip when the wiki folder is missing" gate is gone, since
-        // an enabled step now bootstraps its own home under docs/. Idempotent and
-        // never overwriting.
+        // Self-provisioning (AGT-2024): the old "skip when the wiki folder is
+        // missing" gate is gone - an enabled step bootstraps its own home under
+        // docs/. Idempotent and never overwriting.
         var docsRoot = Path.Combine(entry.RootPath, "docs");
-        var language = frameLanguage ?? WorkstreamFrameLanguageResolver.Resolve(entry.Name, isPublicOverride: null);
-        EnsureWorkstreamFrame(docsRoot, language, task, entry);
 
         var slug = PageSlug(task);
         if (string.IsNullOrWhiteSpace(slug))
@@ -110,23 +105,6 @@ public sealed class WikiLearningsPostStepRunner
                 "Wiki learnings failed for {Project}/{JobId} slug={Slug}",
                 entry.Name, task.Id, slug);
             return new WikiLearningsResult(WikiLearningsVerdict.Error, ex.Message, slug);
-        }
-    }
-
-    /// <summary>
-    /// Runs the shared ensure-frame primitive and logs only when it actually
-    /// materialized (or failed to materialize) frame shells, so a warm project
-    /// where the frame already exists stays quiet.
-    /// </summary>
-    private void EnsureWorkstreamFrame(
-        string docsRoot, EngineeringWorkstreamFrameLanguage language, TaskInfo task, WatchPathEntry entry)
-    {
-        var result = EngineeringWorkstreamFrameSeeder.EnsureFrame(docsRoot, language);
-        if (result.CreatedAnything || result.Failed.Count > 0)
-        {
-            _logger.LogInformation(
-                "Workstream frame ensured for {Project}/{JobId} lang={Language} {Summary} created=[{Created}]",
-                entry.Name, task.Id, language, result.Summary, string.Join(", ", result.Created));
         }
     }
 

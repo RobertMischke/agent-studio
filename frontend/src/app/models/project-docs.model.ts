@@ -149,13 +149,6 @@ export interface WikiTreeNode {
   metadata?: WikiTreeMetadata | null;
   /** Curated classification (pages only; null for folders and unclassified pages). */
   classification?: WikiClassification | null;
-  /**
-   * True for a fixed Engineering Workstream frame node (a frame folder or a
-   * landing shell). The tree marks such nodes with a lock affordance and the
-   * context menu suppresses rename/delete/move so the frame's shape stays
-   * stable. Mirrors backend `WikiTreeNode.Immutable`.
-   */
-  immutable?: boolean;
 }
 
 /** The physical docs/ folder tree backing the wiki navigation. */
@@ -224,7 +217,7 @@ export interface WorkbenchDocument {
 
 // ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
 
-/** One change-feed row: a recently-edited page + frame-area badge + task key. */
+/** One change-feed row: a recently-edited page + top-folder badge + task key. */
 export interface WikiPulseFeedItem {
   relPath: string;
   title: string;
@@ -233,8 +226,8 @@ export interface WikiPulseFeedItem {
   sha: string;
   shortSha: string;
   subject: string;
-  frameAreaSlug: string | null;
-  frameAreaTitle: string | null;
+  areaSlug: string | null;
+  areaTitle: string | null;
   taskKey: string | null;
 }
 
@@ -261,7 +254,7 @@ export interface WikiPulseInbox {
   items: WikiPulseInboxItem[];
 }
 
-/** One frame area's drift grade (worst page band + code-commit counts). */
+/** One top-level docs folder's drift grade (worst page band + code-commit counts). */
 export interface WikiPulseDriftArea {
   slug: string;
   title: string;
@@ -282,7 +275,7 @@ export interface WikiPulseDriftCounts {
   graded: number;
 }
 
-/** Drift-grading section (the per-area grade bar + roll-up counts). */
+/** Drift-grading section (the per-top-folder grade bar + roll-up counts). */
 export interface WikiPulseDrift {
   available: boolean;
   reason: string | null;
@@ -300,7 +293,7 @@ export interface WikiPulseCriticalItem {
   gradedAt: string | null;
   model: string | null;
   reportPath: string | null;
-  frameAreaTitle: string | null;
+  areaTitle: string | null;
 }
 
 /**
@@ -318,7 +311,7 @@ export interface WikiPulseCritical {
 }
 
 export interface WikiPulseWarningItem {
-  kind: 'human-action' | 'frame' | 'dead-link' | 'page-budget';
+  kind: 'human-action' | 'dead-link';
   title: string;
   detail: string;
   humanAction: string;
@@ -340,20 +333,10 @@ export interface WikiPulseLiveRun {
   docsFilesChanged: number;
 }
 
-export interface WikiPulseRunSummary {
-  ranAtUtc: string;
-  status: string;
-  error: string | null;
-  merges: number;
-  condensations: number;
-}
-
 export interface WikiPulseActivity {
   available: boolean;
   reason: string | null;
   runs: WikiPulseLiveRun[];
-  collector: WikiPulseRunSummary | null;
-  curator: WikiPulseRunSummary | null;
 }
 
 /**

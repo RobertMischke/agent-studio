@@ -141,7 +141,7 @@
                  [attr.aria-selected]="openedRel() === row.node.relPath ? 'true' : null"
                  [attr.data-testid]="'project-wiki-node-' + nodeId(row.node)"
                  [attr.data-wiki-row-id]="nodeId(row.node)"
-                 [draggable]="!row.node.immutable"
+                 [draggable]="true"
                  (focusin)="focusTreeRow(row.node)"
                  (click)="focusTreeRowElement($event, row.node)"
                  (keydown)="onTreeKeydown($event)"
@@ -239,14 +239,6 @@
                 </div>
               }
 
-              @if (row.node.immutable) {
-                <span class="pwiki__lock"
-                      aria-label="Fixed frame page"
-                      [attr.data-testid]="'project-wiki-lock-' + nodeId(row.node)"
-                      cacTooltip="Fixed Workstream frame page. It cannot be renamed, moved, or deleted. Add subpages under it instead.">
-                  <app-studio-icon name="pin" [size]="11"></app-studio-icon>
-                </span>
-              }
             </div>
           }
           @if (rows().length === 0) {

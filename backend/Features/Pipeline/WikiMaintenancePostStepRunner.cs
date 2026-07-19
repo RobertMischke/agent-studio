@@ -40,20 +40,15 @@ public sealed partial class WikiMaintenancePostStepRunner
     public WikiMaintenanceResult Run(
         TaskInfo task,
         WatchPathEntry entry,
-        DateTime? nowUtc = null,
-        EngineeringWorkstreamFrameLanguage? frameLanguage = null)
+        DateTime? nowUtc = null)
     {
         var now = nowUtc ?? DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(entry.RootPath))
             return new WikiMaintenanceResult(WikiMaintenanceVerdict.Skipped, "project root is not configured");
 
-        // Self-provisioning (AGT-2024): ensure the Workstream frame exists before
-        // this step writes. Activating the step for a project is what creates the
-        // frame - there is no separate onboarding gate. Idempotent and never
-        // overwriting, so it is safe to call on every run.
+        // Self-provisioning (AGT-2024): the step bootstraps its own home under
+        // docs/ - there is no separate onboarding gate.
         var docsRoot = Path.Combine(entry.RootPath, "docs");
-        var language = frameLanguage ?? WorkstreamFrameLanguageResolver.Resolve(entry.Name, isPublicOverride: null);
-        EnsureWorkstreamFrame(docsRoot, language, task, entry);
 
         var signal = DetectSignal(task);
         if (signal == null)
@@ -85,23 +80,6 @@ public sealed partial class WikiMaintenancePostStepRunner
                 "Wiki maintenance failed for {Project}/{JobId} slug={Slug}",
                 entry.Name, task.Id, signal.Slug);
             return new WikiMaintenanceResult(WikiMaintenanceVerdict.Error, ex.Message, signal.Slug);
-        }
-    }
-
-    /// <summary>
-    /// Runs the shared ensure-frame primitive and logs only when it actually
-    /// materialized (or failed to materialize) frame shells, so a warm project
-    /// where the frame already exists stays quiet.
-    /// </summary>
-    private void EnsureWorkstreamFrame(
-        string docsRoot, EngineeringWorkstreamFrameLanguage language, TaskInfo task, WatchPathEntry entry)
-    {
-        var result = EngineeringWorkstreamFrameSeeder.EnsureFrame(docsRoot, language);
-        if (result.CreatedAnything || result.Failed.Count > 0)
-        {
-            _logger.LogInformation(
-                "Workstream frame ensured for {Project}/{JobId} lang={Language} {Summary} created=[{Created}]",
-                entry.Name, task.Id, language, result.Summary, string.Join(", ", result.Created));
         }
     }
 

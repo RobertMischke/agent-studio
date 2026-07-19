@@ -243,8 +243,6 @@ public class ProjectDocsService
 
     public WikiSaveResult WriteWikiFile(string projectName, string relPath, string content)
     {
-        if (EngineeringWorkstreamFrame.IsContentLocked(relPath))
-            return WikiSaveResult.Fail(FrameLockMessage(relPath, "overwritten"));
         var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
         if (full == null) return WikiSaveResult.Fail("Invalid path.");
         if (!File.Exists(full)) return WikiSaveResult.Fail("File not found.");
@@ -472,7 +470,7 @@ public class ProjectDocsService
             var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
             var ext = Path.GetExtension(full);
             if (!WikiDocExtensions.Contains(ext)) continue;
-            if (IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
+            if (IsHiddenWikiPath(docsRel) || IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
             if (!File.Exists(full)) continue; // a deletion in the log
 
             var title = ExtractDocTitle(full, ext)
@@ -523,15 +521,14 @@ public class ProjectDocsService
     /// multiplies the slow per-doc git calls (two <c>git log</c> spawns total):
     /// <list type="number">
     ///   <item><b>Change feed</b> - the recently-edited pages (git author + when),
-    ///   each enriched with its Workstream frame-area badge and a task key parsed
+    ///   each enriched with its top-level docs-folder badge and a task key parsed
     ///   from the page frontmatter or the commit subject.</item>
     ///   <item><b>Inbox</b> - loose / unfiled knowledge pages that sit at the wiki
-    ///   root or inside the frame but under no area; an empty inbox is the healthy
-    ///   state.</item>
-    ///   <item><b>Drift grading v1</b> - per frame area, how many commits landed
-    ///   under the code roots since each page was last updated, banded
-    ///   Fresh (0-9) / Aging (10-49) / Stale (50+); the area grade is its worst
-    ///   page.</item>
+    ///   root; an empty inbox is the healthy state.</item>
+    ///   <item><b>Drift grading v1</b> - per top-level docs folder with pages, how
+    ///   many commits landed under the code roots since each page was last
+    ///   updated, banded Fresh (0-9) / Aging (10-49) / Stale (50+); the folder
+    ///   grade is its worst page.</item>
     /// </list>
     /// Each section degrades to an "unavailable" state carrying a reason rather
     /// than failing, so a missing docs folder or repository never blank-screens
@@ -566,7 +563,7 @@ public class ProjectDocsService
         var inbox = BuildPulseInbox(allDocs);
         var critical = BuildPulseCritical(allDocs, LoadWikiMetadataIndex(wikiDir));
         var warnings = BuildPulseWarnings(wikiDir, allDocs);
-        var activity = BuildPulseActivity(projectName, wikiDir, git);
+        var activity = BuildPulseActivity(projectName, git);
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
@@ -597,7 +594,7 @@ public class ProjectDocsService
             var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
             var ext = Path.GetExtension(full);
             if (!WikiDocExtensions.Contains(ext)) continue;
-            if (IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
+            if (IsHiddenWikiPath(docsRel) || IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
             if (!File.Exists(full)) continue; // a deletion in the log
 
             lastUpdateByRel[docsRel] = e.AuthorDateUtc;
@@ -606,7 +603,7 @@ public class ProjectDocsService
             {
                 var title = ExtractDocTitle(full, ext)
                     ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
-                var area = EngineeringWorkstreamFrame.AreaForPath(docsRel);
+                var areaSlug = TopFolderForPath(docsRel);
                 feedItems.Add(new WikiPulseFeedItem(
                     RelPath: docsRel,
                     Title: title,
@@ -615,8 +612,8 @@ public class ProjectDocsService
                     Sha: e.Sha,
                     ShortSha: e.ShortSha,
                     Subject: e.Subject,
-                    FrameAreaSlug: area?.Slug,
-                    FrameAreaTitle: area?.Title,
+                    AreaSlug: areaSlug,
+                    AreaTitle: areaSlug == null ? null : StripOrderPrefix(areaSlug),
                     TaskKey: ExtractPulseTaskKey(full, ext, e.Subject)));
             }
         }
@@ -624,7 +621,9 @@ public class ProjectDocsService
         var feed = new WikiPulseFeed(true, feedItems.Count == 0 ? "No recent edits in git history." : null, feedItems);
 
         var codeRoots = ResolveCodeRoots(repoRoot);
-        var drift = BuildPulseDrift(allDocs, lastUpdateByRel, repoRoot, codeRoots, git);
+        var drift = BuildPulseDrift(
+            allDocs, lastUpdateByRel, repoRoot, codeRoots, git,
+            BuildFolderOrderIndex(LoadWikiFolderOrder(wikiDir), parentRel: string.Empty));
 
         return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity);
     }
@@ -634,7 +633,13 @@ public class ProjectDocsService
     private static readonly Regex HtmlLinkRegex =
         new(@"(?:href|src)\s*=\s*[""'](?<target>[^""']+)[""']", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    /// <summary>PULSE-2 warnings from collector signals and deterministic docs integrity checks.</summary>
+    /// <summary>
+    /// PULSE-2 warnings from deterministic docs integrity checks. The
+    /// <c>human-action</c> signal is a folder-independent frontmatter convention
+    /// (see <c>docs/contracts/wiki-tree.md</c>): any page carrying a
+    /// <c>human-action</c> value whose <c>status</c> is <c>observed</c> or
+    /// <c>active</c> raises a Pulse warning, wherever it lives.
+    /// </summary>
     private static WikiPulseWarnings BuildPulseWarnings(string wikiDir, IReadOnlyList<WikiFileEntry> docs)
     {
         var items = new List<WikiPulseWarningItem>();
@@ -645,19 +650,15 @@ public class ProjectDocsService
             try { text = File.ReadAllText(full); }
             catch { continue; }
 
-            var area = EngineeringWorkstreamFrame.AreaForPath(doc.RelPath);
-            if (string.Equals(area?.Slug, "20-development-signals", StringComparison.OrdinalIgnoreCase))
+            var action = FrontmatterScalar(text, "human-action");
+            var status = FrontmatterScalar(text, "status");
+            if (!string.IsNullOrWhiteSpace(action)
+                && status is not null
+                && (status.Equals("observed", StringComparison.OrdinalIgnoreCase)
+                    || status.Equals("active", StringComparison.OrdinalIgnoreCase)))
             {
-                var action = FrontmatterScalar(text, "human-action");
-                var status = FrontmatterScalar(text, "status");
-                if (!string.IsNullOrWhiteSpace(action)
-                    && status is not null
-                    && (status.Equals("observed", StringComparison.OrdinalIgnoreCase)
-                        || status.Equals("active", StringComparison.OrdinalIgnoreCase)))
-                {
-                    items.Add(new("human-action", doc.Title,
-                        $"Development signal is {status.ToLowerInvariant()}.", action, doc.RelPath, status.ToLowerInvariant()));
-                }
+                items.Add(new("human-action", doc.Title,
+                    $"Development signal is {status.ToLowerInvariant()}.", action, doc.RelPath, status.ToLowerInvariant()));
             }
 
             foreach (Match match in (Path.GetExtension(full).Equals(".md", StringComparison.OrdinalIgnoreCase)
@@ -671,36 +672,10 @@ public class ProjectDocsService
             }
         }
 
-        var frameElements = new[] { EngineeringWorkstreamFrame.FrameRootRel, EngineeringWorkstreamFrame.OverviewShellRel }
-            .Concat(EngineeringWorkstreamFrame.Areas.SelectMany(a => new[] { a.FolderRel, a.IndexShellRel }));
-        foreach (var shell in frameElements)
-        {
-            var full = Path.Combine(wikiDir, shell.Replace('/', Path.DirectorySeparatorChar));
-            if (!File.Exists(full) && !Directory.Exists(full))
-                items.Add(new("frame", "Workstream frame is incomplete", shell,
-                    "Restore the missing immutable frame element.", shell, null));
-        }
-
-        foreach (var stray in docs.Where(d => EngineeringWorkstreamFrame.IsWithinFrame(d.RelPath)
-                     && !EngineeringWorkstreamFrame.IsFrameShell(d.RelPath)
-                     && EngineeringWorkstreamFrame.AreaForPath(d.RelPath) == null))
-            items.Add(new("frame", "Page violates the Workstream frame", stray.RelPath,
-                "Move this page into one of the five fixed areas.", stray.RelPath, null));
-
-        foreach (var area in EngineeringWorkstreamFrame.Areas)
-        {
-            var count = docs.Count(d => !EngineeringWorkstreamFrame.IsFrameShell(d.RelPath)
-                && EngineeringWorkstreamFrame.AreaForPath(d.RelPath)?.Slug == area.Slug
-                && Path.GetExtension(d.RelPath).Equals(".md", StringComparison.OrdinalIgnoreCase));
-            if (count > WorkstreamCurationService.MaxManagedPagesPerArea)
-                items.Add(new("page-budget", $"{area.Title} is over budget", $"{count} / {WorkstreamCurationService.MaxManagedPagesPerArea} Markdown pages",
-                    "Merge or archive low-value pages before adding more.", area.Slug, null));
-        }
-
         return new(true, items.Count == 0 ? "No warnings need human attention." : null, items.Count, items);
     }
 
-    private WikiPulseActivity BuildPulseActivity(string projectName, string wikiDir, GitService git)
+    private WikiPulseActivity BuildPulseActivity(string projectName, GitService git)
     {
         var runs = new List<WikiPulseLiveRun>();
         foreach (var task in _scanner.ScanAllJobs().Where(t =>
@@ -715,74 +690,7 @@ public class ProjectDocsService
                 status.Files.Count(f => f.Path.Replace('\\', '/').StartsWith("docs/", StringComparison.OrdinalIgnoreCase))));
         }
 
-        var collector = LatestCollectorRun(projectName);
-        var curator = ReadCuratorRun(Path.Combine(wikiDir, EngineeringWorkstreamFrame.FrameRootRel, ".curator", "context.json"));
-        return new(true, runs.Count == 0 ? "No live run currently touches docs/." : null, runs, collector, curator);
-    }
-
-    private WikiPulseRunSummary? LatestCollectorRun(string projectName)
-    {
-        WikiPulseRunSummary? latest = null;
-        foreach (var task in _scanner.ScanAllJobsWithArchive().Where(t => string.Equals(t.ProjectName, projectName, StringComparison.OrdinalIgnoreCase)))
-        {
-            var path = Path.Combine(task.FolderPath, AgentStudio.Pipeline.PipelineExecutionLog.FileName);
-            try
-            {
-                if (!File.Exists(path)) continue;
-                using var json = JsonDocument.Parse(File.ReadAllText(path));
-                foreach (var attempt in PipelineAttempts(json.RootElement))
-                {
-                    if (!attempt.TryGetProperty("steps", out var steps)) continue;
-                    foreach (var step in steps.EnumerateArray())
-                    {
-                        if (!step.TryGetProperty("stepId", out var id)
-                            || !string.Equals(id.GetString(), AgentStudio.Pipeline.PipelineCatalogue.WorkstreamCollectorStepId, StringComparison.OrdinalIgnoreCase)
-                            || !step.TryGetProperty("completedAt", out var completed)
-                            || !completed.TryGetDateTime(out var at)) continue;
-                        var status = step.TryGetProperty("status", out var s) ? PulseStepStatus(s) : "unknown";
-                        var candidate = new WikiPulseRunSummary(at, status == "passed" ? "ok" : status,
-                            step.TryGetProperty("reason", out var reason) ? reason.GetString() : null, 0, 0);
-                        if (latest == null || candidate.RanAtUtc > latest.RanAtUtc) latest = candidate;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                SilentCatch.Note(ex, "ProjectDocsService: malformed collector run data; omitting Pulse summary.");
-            }
-        }
-        return latest;
-    }
-
-    private static string PulseStepStatus(JsonElement status)
-    {
-        if (status.ValueKind == JsonValueKind.String) return status.GetString()?.ToLowerInvariant() ?? "unknown";
-        if (status.ValueKind != JsonValueKind.Number || !status.TryGetInt32(out var value)) return "unknown";
-        return value switch { 0 => "pending", 1 => "running", 2 => "passed", 3 => "failed", 4 => "skipped", 5 => "planned", _ => "unknown" };
-    }
-
-    private static IEnumerable<JsonElement> PipelineAttempts(JsonElement root)
-    {
-        yield return root;
-        if (root.TryGetProperty("previousAttempts", out var previous))
-            foreach (var attempt in previous.EnumerateArray()) yield return attempt;
-    }
-
-    private static WikiPulseRunSummary? ReadCuratorRun(string path)
-    {
-        try
-        {
-            if (!File.Exists(path)) return null;
-            using var json = JsonDocument.Parse(File.ReadAllText(path));
-            var root = json.RootElement;
-            if (!root.TryGetProperty("lastRunAt", out var ran) || !ran.TryGetDateTime(out var at)) return null;
-            return new(at,
-                root.TryGetProperty("lastStatus", out var status) ? status.GetString() ?? "ok" : "ok",
-                root.TryGetProperty("lastError", out var error) ? error.GetString() : null,
-                root.TryGetProperty("merged", out var merged) ? merged.GetInt32() : 0,
-                root.TryGetProperty("condensed", out var condensed) ? condensed.GetInt32() : 0);
-        }
-        catch { return null; }
+        return new(true, runs.Count == 0 ? "No live run currently touches docs/." : null, runs);
     }
 
     private static string? FrontmatterScalar(string text, string key)
@@ -840,7 +748,7 @@ public class ProjectDocsService
                     GradedAt: meta.GradedAt,
                     Model: meta.GradingModel,
                     ReportPath: meta.ReportPath,
-                    FrameAreaTitle: EngineeringWorkstreamFrame.AreaForPath(doc.RelPath)?.Title));
+                    AreaTitle: TopFolderForPath(doc.RelPath) is { } top ? StripOrderPrefix(top) : null));
             }
         }
 
@@ -900,9 +808,8 @@ public class ProjectDocsService
 
     /// <summary>
     /// Loose / unfiled knowledge pages for the Pulse inbox: a knowledge doc that
-    /// sits directly at the wiki root (and is not a conventional landing file), or
-    /// one dropped inside the Workstream frame root but under no area. Both are
-    /// "needs sorting" signals; an empty list is the healthy state.
+    /// sits directly at the wiki root and is not a conventional landing file.
+    /// That is a "needs sorting" signal; an empty list is the healthy state.
     /// </summary>
     private static WikiPulseInbox BuildPulseInbox(IReadOnlyList<WikiFileEntry> docs)
     {
@@ -910,38 +817,45 @@ public class ProjectDocsService
         foreach (var doc in docs)
         {
             var rel = doc.RelPath;
-            string? reason = null;
-            if (!rel.Contains('/', StringComparison.Ordinal) && !RootIndexNames.Contains(rel))
-            {
-                reason = "Loose page at the wiki root - not filed under a category.";
-            }
-            else if (EngineeringWorkstreamFrame.IsWithinFrame(rel)
-                     && !EngineeringWorkstreamFrame.IsFrameShell(rel)
-                     && EngineeringWorkstreamFrame.AreaForPath(rel) == null)
-            {
-                reason = "Inside the Workstream frame but not filed under one of the five areas.";
-            }
-            if (reason == null) continue;
-            items.Add(new WikiPulseInboxItem(rel, doc.Title, TypeFromExtension(rel), reason));
+            if (rel.Contains('/', StringComparison.Ordinal) || RootIndexNames.Contains(rel)) continue;
+            items.Add(new WikiPulseInboxItem(rel, doc.Title, TypeFromExtension(rel),
+                "Loose page at the wiki root - not filed under a category."));
         }
         items.Sort((a, b) => string.Compare(a.RelPath, b.RelPath, StringComparison.OrdinalIgnoreCase));
         return new WikiPulseInbox(true, null, items.Count, items);
     }
 
     /// <summary>
-    /// Deterministic drift grade bar (PULSE-1, no LLM): for each Workstream frame
-    /// area, count how many commits under the code roots landed after each page's
-    /// last update, band each page Fresh / Aging / Stale, and grade the area by
-    /// its worst page. Areas with no filed pages report <c>Empty</c>. A page whose
-    /// last-update timestamp is unknown (outside the git scan window) is left
-    /// Unknown and excluded from the counts.
+    /// The top-level docs folder a page lives under (the first path segment), or
+    /// <c>null</c> for a page directly at the wiki root. Backs the Pulse
+    /// change-feed area badge and the per-folder drift grade bar.
+    /// </summary>
+    internal static string? TopFolderForPath(string? relPath)
+    {
+        if (string.IsNullOrWhiteSpace(relPath)) return null;
+        var rel = relPath.Replace('\\', '/').Trim().Trim('/');
+        var idx = rel.IndexOf('/', StringComparison.Ordinal);
+        return idx <= 0 ? null : rel[..idx];
+    }
+
+    /// <summary>
+    /// Deterministic drift grade bar (PULSE-1, no LLM): for each top-level docs
+    /// folder that actually holds pages, count how many commits under the code
+    /// roots landed after each page's last update, band each page Fresh / Aging /
+    /// Stale, and grade the folder by its worst page. Folders without pages do
+    /// not appear; ordering follows the saved wiki folder order
+    /// (<c>docs/.wiki-order.json</c>), unlisted folders behind in the tree's
+    /// default order (numeric <c>NN-</c> prefix, then name). A
+    /// page whose last-update timestamp is unknown (outside the git scan window)
+    /// is left Unknown and excluded from the counts.
     /// </summary>
     private static WikiPulseDrift BuildPulseDrift(
         IReadOnlyList<WikiFileEntry> docs,
         IReadOnlyDictionary<string, DateTime> lastUpdateByRel,
         string repoRoot,
         IReadOnlyList<string> codeRoots,
-        GitService git)
+        GitService git,
+        IReadOnlyDictionary<string, int> rootFolderOrderIndex)
     {
         if (codeRoots.Count == 0)
             return WikiPulseDrift.Unavailable("No code roots found to grade drift against.");
@@ -950,17 +864,23 @@ public class ProjectDocsService
         // newer than a page's last update is the deterministic drift score.
         var codeTimes = git.GetCommitAuthorDatesUnderPaths(repoRoot, codeRoots, maxCommits: 500);
 
+        // Drift groups are the real top-level docs folders that hold pages.
+        var folders = docs
+            .GroupBy(d => TopFolderForPath(d.RelPath), StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Key != null)
+            .OrderBy(g => rootFolderOrderIndex.TryGetValue(g.Key!, out var pos) ? pos : int.MaxValue)
+            .ThenBy(g => OrderPrefixValue(g.Key!))
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var areas = new List<WikiPulseDriftArea>();
         int totalFresh = 0, totalAging = 0, totalStale = 0, totalGraded = 0;
         var worstOverall = DriftGradeRank("Empty");
         string overall = "Empty";
 
-        foreach (var area in EngineeringWorkstreamFrame.Areas)
+        foreach (var folder in folders)
         {
-            var pages = docs.Where(d =>
-                    !EngineeringWorkstreamFrame.IsFrameShell(d.RelPath)
-                    && EngineeringWorkstreamFrame.AreaForPath(d.RelPath)?.Slug == area.Slug)
-                .ToList();
+            var pages = folder.ToList();
 
             int fresh = 0, aging = 0, stale = 0, worstCount = 0;
             var areaWorst = DriftGradeRank("Empty");
@@ -993,8 +913,8 @@ public class ProjectDocsService
             }
 
             areas.Add(new WikiPulseDriftArea(
-                Slug: area.Slug,
-                Title: area.Title,
+                Slug: folder.Key!,
+                Title: StripOrderPrefix(folder.Key!),
                 Grade: areaGrade,
                 PageCount: pages.Count,
                 GradedPageCount: graded,
@@ -1005,7 +925,9 @@ public class ProjectDocsService
         }
 
         var reason = totalGraded == 0
-            ? "No knowledge pages filed under the Workstream frame yet."
+            ? (areas.Count == 0
+                ? "No knowledge pages in any top-level docs folder yet."
+                : "No page has an update inside the recent git scan window to grade drift against.")
             : null;
         return new WikiPulseDrift(true, reason, overall, areas,
             new WikiPulseDriftCounts(totalFresh, totalAging, totalStale, totalGraded));
@@ -1167,9 +1089,8 @@ public class ProjectDocsService
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
             nodes.Add(new WikiTreeNode(
                 sub.Name,
-                EngineeringWorkstreamFrame.DisplayTitle(rel) ?? StripOrderPrefix(sub.Name),
-                rel, "folder", children, null,
-                EngineeringWorkstreamFrame.IsStructural(rel)));
+                StripOrderPrefix(sub.Name),
+                rel, "folder", children, null));
         }
 
         foreach (var file in dir.GetFiles())
@@ -1188,7 +1109,6 @@ public class ProjectDocsService
             metadataByRelPath.TryGetValue(rel, out var metadata);
             nodes.Add(new WikiTreeNode(
                 file.Name, title, rel, type, [], metadata,
-                EngineeringWorkstreamFrame.IsStructural(rel),
                 BuildClassification(
                     rel,
                     metadata?.ClassificationStatus,
@@ -1294,6 +1214,20 @@ public class ProjectDocsService
         }
 
         return index;
+    }
+
+    /// <summary>
+    /// Hidden wiki paths - any dot-prefixed path segment (e.g. <c>.curator/…</c>,
+    /// <c>.obsidian/…</c>, <c>.gitkeep</c>) - are config/tooling sidecars, not
+    /// pages. The tree builder skips them, so every other doc-listing surface
+    /// (pulse, feed, grading input) must skip them too or Pulse would count
+    /// pages the tree never shows.
+    /// </summary>
+    private static bool IsHiddenWikiPath(string relPath)
+    {
+        foreach (var segment in relPath.Split('/'))
+            if (segment.StartsWith('.')) return true;
+        return false;
     }
 
     private static bool IsWikiCompanionFile(string relPath) =>
@@ -1512,20 +1446,13 @@ public class ProjectDocsService
     }
 
     /// <summary>
-    /// Workstream frame root first (pinned as the top wiki element); then folders
-    /// before files; folders in the saved drag-order when one is stored for this
-    /// sibling group (unknown folders behind); then by numeric order prefix;
-    /// then name.
+    /// Folders before files; folders in the saved drag-order when one is stored
+    /// for this sibling group (unknown folders behind); then by numeric order
+    /// prefix; then name.
     /// </summary>
     private static int CompareTreeNodes(
         WikiTreeNode a, WikiTreeNode b, IReadOnlyDictionary<string, int> folderOrderIndex)
     {
-        // The Workstream frame is pinned to the top of the tree. Only the frame
-        // root matches (a top-level node), so nested siblings keep normal order.
-        var aPin = EngineeringWorkstreamFrame.IsFrameRoot(a.RelPath) ? 0 : 1;
-        var bPin = EngineeringWorkstreamFrame.IsFrameRoot(b.RelPath) ? 0 : 1;
-        if (aPin != bPin) return aPin - bPin;
-
         var aFolder = a.Type == "folder";
         var bFolder = b.Type == "folder";
         if (aFolder != bFolder) return aFolder ? -1 : 1;
@@ -1701,15 +1628,6 @@ public class ProjectDocsService
         ResolveWikiPath(projectName, relPath, requireDoc: false);
 
     /// <summary>
-    /// Rejection message for a blocked structural or content mutation of a fixed
-    /// Engineering Workstream frame node. Kept in one place so the service and the
-    /// endpoints phrase the immutability rule identically.
-    /// </summary>
-    public static string FrameLockMessage(string relPath, string verb) =>
-        $"'{relPath}' is part of the fixed Workstream frame and cannot be {verb}. "
-        + "Create or edit subpages under an area folder instead.";
-
-    /// <summary>
     /// Creates a new wiki document on disk (seed content optional). Returns the
     /// absolute path so the endpoint can commit it; fails when the path is
     /// unsafe, the extension is not a wiki document type, or the file exists.
@@ -1816,7 +1734,7 @@ public class ProjectDocsService
             if (!WikiDocExtensions.Contains(ext)) continue;
             var fi = new FileInfo(f);
             var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
-            if (IsWikiCompanionFile(rel) || IsWikiConfigFile(rel)) continue;
+            if (IsHiddenWikiPath(rel) || IsWikiCompanionFile(rel) || IsWikiConfigFile(rel)) continue;
             results.Add(new WikiFileEntry(
                 Name: Path.GetFileName(f),
                 RelPath: rel,
@@ -1975,7 +1893,7 @@ public class ProjectDocsService
                 RelPath: subRel,
                 Kind: "folder",
                 FileType: null,
-                Title: EngineeringWorkstreamFrame.DisplayTitle(subRel) ?? StripOrderPrefix(sub.Name),
+                Title: StripOrderPrefix(sub.Name),
                 Summary: null,
                 UpdatedAt: sub.LastWriteTimeUtc,
                 Size: null,
@@ -2425,7 +2343,6 @@ public record WikiTreeNode(
     string Type,
     List<WikiTreeNode> Children,
     WikiTreeMetadata? Metadata,
-    bool Immutable = false,
     // Page nodes only: the curated classification (sidecar first, folder-default
     // type as fallback); null for folders and unclassified pages.
     WikiClassification? Classification = null);
@@ -2515,15 +2432,12 @@ public record WikiPulseWarningItem(string Kind, string Title, string Detail, str
 public record WikiPulseActivity(
     bool Available,
     string? Reason,
-    List<WikiPulseLiveRun> Runs,
-    WikiPulseRunSummary? Collector,
-    WikiPulseRunSummary? Curator)
+    List<WikiPulseLiveRun> Runs)
 {
-    public static WikiPulseActivity Unavailable(string reason) => new(false, reason, [], null, null);
+    public static WikiPulseActivity Unavailable(string reason) => new(false, reason, []);
 }
 
 public record WikiPulseLiveRun(string TaskKey, string Lane, DateTime StartedAtUtc, int DocsFilesChanged);
-public record WikiPulseRunSummary(DateTime RanAtUtc, string Status, string? Error, int Merges, int Condensations);
 
 /// <summary>
 /// Critical-pages section (AGT-2051): pages a wiki-grading run scored C or D,
@@ -2552,14 +2466,15 @@ public record WikiPulseCriticalItem(
     string? GradedAt,
     string? Model,
     string? ReportPath,
-    string? FrameAreaTitle);
+    string? AreaTitle);
 
 /// <summary>Change-feed section: recently-edited pages, newest first.</summary>
 public record WikiPulseFeed(bool Available, string? Reason, List<WikiPulseFeedItem> Items);
 
 /// <summary>
-/// One change-feed row: a recently-edited page plus its owning Workstream frame
-/// area (the badge) and a task key parsed from frontmatter or the commit subject.
+/// One change-feed row: a recently-edited page plus its owning top-level docs
+/// folder (the badge) and a task key parsed from frontmatter or the commit
+/// subject.
 /// </summary>
 public record WikiPulseFeedItem(
     string RelPath,
@@ -2569,8 +2484,8 @@ public record WikiPulseFeedItem(
     string Sha,
     string ShortSha,
     string Subject,
-    string? FrameAreaSlug,
-    string? FrameAreaTitle,
+    string? AreaSlug,
+    string? AreaTitle,
     string? TaskKey);
 
 /// <summary>Inbox section: loose / unfiled pages that need sorting.</summary>
@@ -2580,8 +2495,8 @@ public record WikiPulseInbox(bool Available, string? Reason, int Count, List<Wik
 public record WikiPulseInboxItem(string RelPath, string Title, string Type, string Reason);
 
 /// <summary>
-/// Drift-grading section: the per-frame-area grade bar plus roll-up counts.
-/// <see cref="OverallGrade"/> is the worst area grade (Fresh / Aging / Stale /
+/// Drift-grading section: the per-top-folder grade bar plus roll-up counts.
+/// <see cref="OverallGrade"/> is the worst folder grade (Fresh / Aging / Stale /
 /// Empty).
 /// </summary>
 public record WikiPulseDrift(
@@ -2596,8 +2511,9 @@ public record WikiPulseDrift(
 }
 
 /// <summary>
-/// One frame area's drift grade. <see cref="Grade"/> is the worst page's band;
-/// <see cref="WorstCommitCount"/> is that page's code-commits-since-update count.
+/// One top-level docs folder's drift grade. <see cref="Grade"/> is the worst
+/// page's band; <see cref="WorstCommitCount"/> is that page's
+/// code-commits-since-update count.
 /// </summary>
 public record WikiPulseDriftArea(
     string Slug,

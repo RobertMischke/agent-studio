@@ -7,9 +7,8 @@ linked docs, not here.
 
 This page is **prompt-known**: it is referenced from [AGENTS.md](../../AGENTS.md)
 and [frontend/AGENTS.md](../../frontend/AGENTS.md) so every coding card that
-touches the UI sees it, the same way the workstream-frame pages are known. When
-you add or change a load-bearing visual rule, add it here first, then let the
-component follow.
+touches the UI sees it. When you add or change a load-bearing visual rule, add
+it here first, then let the component follow.
 
 For the navigable style-guide family, technology applicability, and the process
 for changing a rule, start at [docs/quality/](../quality/README.md). This page

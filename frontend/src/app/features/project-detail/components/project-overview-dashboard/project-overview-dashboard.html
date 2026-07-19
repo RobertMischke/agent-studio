@@ -70,7 +70,7 @@
                 <li>
                   <button type="button" (click)="openRail.emit('wiki')">
                     <strong>{{ item.title }}</strong>
-                    <span>{{ item.frameAreaTitle || 'Wiki' }} · {{ formatAgo(item.authorDateUtc) }}</span>
+                    <span>{{ item.areaTitle || 'Wiki' }} · {{ formatAgo(item.authorDateUtc) }}</span>
                   </button>
                 </li>
               }

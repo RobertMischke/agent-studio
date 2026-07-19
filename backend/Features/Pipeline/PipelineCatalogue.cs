@@ -111,7 +111,6 @@ public static class PipelineCatalogue
     /// is a correctness signal, not an opt-in pass.
     /// </summary>
     public const string PreReissueOpenItemsStepId = "pre-reissue-open-items";
-    public const string PreWorkstreamOnboardingStepId = "pre-workstream-onboarding";
 
     /// <summary>
     /// The five drift dimensions ship as opt-in <see cref="StepKind.Drift"/>
@@ -252,14 +251,6 @@ public static class PipelineCatalogue
     /// self-provisions an empty designated-topics registry the operator fills in.
     /// </summary>
     public const string AgentsWikiSyncStepId = "post-agents-wiki-sync";
-
-    /// <summary>
-    /// Opt-in EW-2 collector. It gives a model the fixed frame map, known pages,
-    /// and settled task evidence, then applies the returned proposal through
-    /// server-owned identity merge, provenance, depth, and growth budgets.
-    /// Reporting-only and non-gating.
-    /// </summary>
-    public const string WorkstreamCollectorStepId = "post-workstream-collector";
 
     /// <summary>
     /// Post-core completeness check that runs immediately after the core agent
@@ -526,15 +517,6 @@ public static class PipelineCatalogue
                     // correctness signal the orchestrator should not skip.
                     DefaultEnabled = true,
                 },
-                new PipelineStep
-                {
-                    Id = PreWorkstreamOnboardingStepId,
-                    DisplayName = "Workstream onboarding",
-                    Kind = StepKind.Module,
-                    RunMode = StepRunMode.Sequential,
-                    Idempotent = true,
-                    DefaultEnabled = false,
-                },
             ],
             Core =
             [
@@ -699,17 +681,6 @@ public static class PipelineCatalogue
                     // Opt-in per project: an operator turns on the designated-topic
                     // sync (and fills in the seeded registry), same as the sibling
                     // wiki steps.
-                    DefaultEnabled = false,
-                },
-                new PipelineStep
-                {
-                    Id = WorkstreamCollectorStepId,
-                    DisplayName = "Workstream collector",
-                    Kind = StepKind.Orchestrator,
-                    RunMode = StepRunMode.Sequential,
-                    DependsOn = [.. AspectStepIds],
-                    Idempotent = true,
-                    PromptTemplate = "workstream-collector.md",
                     DefaultEnabled = false,
                 },
                 new PipelineStep

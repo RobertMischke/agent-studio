@@ -1,5 +1,10 @@
 # Konsolidierungsanalyse Agent-Studio-Wiki — 2026-07-18
 
+> Hinweis 19.07.: Der Workstream-Frame (`engineering-workstream/`, unten noch als
+> „aktuell, Infrastruktur — nicht anfassen" inventarisiert) wurde einen Tag nach
+> diesem Snapshot zurückgebaut (Operator-Entscheid „nicht bewährt, umbauen", siehe
+> `concepts/engineering-workstream.md`). Die Zeile bleibt als datierte Evidenz stehen.
+>
 > Hinweis 18.07.: Der `docs/wiki/`-Unterordner wurde noch am selben Tag aufgelöst
 > (Inhalt eine Ebene hochgehoben: `concepts/`, `common-problems/`, `learnings/`,
 > `home.json` liegen jetzt direkt unter `docs/`). Seitenbezogene Pfade in dieser
