@@ -19,6 +19,13 @@
                 (click)="openFolder.emit(crumb.relPath)">{{ crumb.label }}</button>
       }
     }
+    <button class="wfolder__crumb wfolder__crumb-copy" type="button"
+            data-testid="wiki-folder-copy-link"
+            cacTooltip="Link zu diesem Ordner kopieren"
+            aria-label="Link zu diesem Ordner kopieren"
+            (click)="copyLink.emit(relPath())">
+      <app-studio-icon name="link" [size]="12"></app-studio-icon>
+    </button>
   </nav>
 
   <header class="wfolder__head">

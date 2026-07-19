@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  OnDestroy,
   computed,
   effect,
   inject,
@@ -16,6 +17,7 @@ import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { DriftService } from '../../../../services/drift.service';
 import { TaskService } from '../../../../services/task.service';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -51,6 +53,14 @@ import {
   nodeId,
 } from './wiki-tree';
 import { WikiStarsService } from './wiki-stars.service';
+import {
+  WikiDeepLinkTarget,
+  buildWikiRouteHash,
+  buildWikiRouteUrl,
+  isWikiRouteHash,
+  parseWikiRouteHash,
+  toProjectSlug,
+} from './wiki-deep-link';
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
 import { WikiClassMeta, classificationBadges, classificationMeta } from './wiki-classification';
 
@@ -136,7 +146,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
   templateUrl: './project-wiki-section.html',
   styleUrl: './project-wiki-section.scss',
 })
-export class ProjectWikiSectionComponent {
+export class ProjectWikiSectionComponent implements OnDestroy {
   readonly projectName = input.required<string>();
   readonly openWorkbench = output<WorkbenchListItem>();
 
@@ -147,6 +157,7 @@ export class ProjectWikiSectionComponent {
   private readonly catalog = inject(CliCatalogStore);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly notifications = inject(NotificationService);
 
   readonly cliTypes = CLI_TYPES;
 
@@ -257,6 +268,27 @@ export class ProjectWikiSectionComponent {
   private loadedReportPath: string | null = null;
   private resizeState: WikiResizeState | null = null;
 
+  /** Kebab slug used in the wiki rail hash (`#/projects/<slug>/wiki`). */
+  private readonly slug = computed(() => toProjectSlug(this.projectName()));
+  /**
+   * Deep-link target captured from the URL when the project is (re)bound, held
+   * until the tree finishes loading so it can open the exact page/folder. A URL
+   * param wins over the persisted localStorage open; absence falls back to it.
+   */
+  private pendingUrlTarget: WikiDeepLinkTarget | null = null;
+  /**
+   * True while a page/folder is being opened as a restore (URL deep-link,
+   * localStorage, or browser back/forward). Suppresses the extra history push a
+   * user-initiated open makes, so an auto-restore never litters the back stack.
+   */
+  private restoringOpen = false;
+  /**
+   * Subtle hint shown when a deep-linked path is not found in the tree. Carries
+   * the target kind so the wording matches a missing page vs. a missing folder.
+   */
+  readonly deepLinkMissing = signal<{ relPath: string; kind: 'page' | 'folder' } | null>(null);
+  private readonly onHashChange = (): void => this.applyHashTarget();
+
   protected readonly nodeId = nodeId;
   protected readonly documentMetricChips = documentMetricChips;
   protected readonly classificationBadges = classificationBadges;
@@ -265,6 +297,9 @@ export class ProjectWikiSectionComponent {
     effect(() => {
       const p = this.projectName();
       if (p) {
+        // Capture the shareable URL target (if any) before the tree loads so
+        // restorePendingOpen can prefer it over the persisted localStorage open.
+        this.pendingUrlTarget = this.captureUrlRestoreTarget();
         this.restorePersistedState(p);
         this.refresh();
         // Seed the grading trigger (maintenance-model default + current run
@@ -273,6 +308,15 @@ export class ProjectWikiSectionComponent {
         this.loadGradingContext();
       }
     });
+    if (typeof window !== 'undefined') {
+      window.addEventListener('hashchange', this.onHashChange);
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('hashchange', this.onHashChange);
+    }
   }
 
   readonly roots = computed<WikiTreeNode[]>(() => this.tree()?.root ?? []);
@@ -305,12 +349,14 @@ export class ProjectWikiSectionComponent {
       return [
         { kind: 'row', id: 'new-page', label: 'New page' },
         { kind: 'row', id: 'new-folder', label: 'New category' },
+        { kind: 'row', id: 'copy-link', label: 'Link kopieren' },
         { kind: 'row', id: 'rename', label: 'Rename' },
         { kind: 'separator' },
         { kind: 'row', id: 'delete', label: 'Delete category', danger: true },
       ];
     }
     return [
+      { kind: 'row', id: 'copy-link', label: 'Link kopieren' },
       { kind: 'row', id: 'rename', label: 'Rename' },
       { kind: 'row', id: 'history', label: 'View history' },
       { kind: 'separator' },
@@ -459,20 +505,27 @@ export class ProjectWikiSectionComponent {
    */
   openFolderOverview(relPath: string): void {
     this.resetSearchState();
+    this.deepLinkMissing.set(null);
     if (this.openedRel()) this.closeFile();
     if (!relPath) {
       this.selectedFolderRel.set(null);
+      this.syncDeepLinkUrl('replace');
       return;
     }
     this.expandAncestors(relPath);
     this.expand(relPath);
     this.focusedRowId.set(relPath);
     this.selectedFolderRel.set(relPath);
+    // Folder navigation is pure state-sync (reachable by tree clicks), so it
+    // replaces rather than growing the history stack per click.
+    this.syncDeepLinkUrl('replace');
   }
 
   /** Root breadcrumb of the folder overview: back to the Pulse landing. */
   showWikiLanding(): void {
     this.selectedFolderRel.set(null);
+    this.deepLinkMissing.set(null);
+    this.syncDeepLinkUrl('replace');
   }
 
   // ---- Overview node (pinned tree entry for the dashboard landing) ----
@@ -488,8 +541,10 @@ export class ProjectWikiSectionComponent {
    */
   openOverview(): void {
     this.resetSearchState();
+    this.deepLinkMissing.set(null);
     if (this.openedRel()) this.closeFile();
     this.selectedFolderRel.set(null);
+    this.syncDeepLinkUrl('replace');
   }
 
   // ---- wiki search (debounced lexical, semantic expansion on demand) ----
@@ -733,6 +788,7 @@ export class ProjectWikiSectionComponent {
 
   openFile(rel: string, type: WikiNodeType = 'md', tab: WikiViewerTab = 'doc', reportAnchor: string | null = null): void {
     this.resetSearchState();
+    this.deepLinkMissing.set(null);
     this.selectedFolderRel.set(null);
     this.expandAncestors(rel);
     this.focusedRowId.set(rel);
@@ -771,6 +827,9 @@ export class ProjectWikiSectionComponent {
       error: () => this.loadingHistory.set(false),
     });
     if (tab === 'report') this.loadReport();
+    // A user-driven page open is a history entry; a restore (URL / storage /
+    // back-forward) only syncs state and must not push a new entry.
+    this.syncDeepLinkUrl(this.restoringOpen ? 'replace' : 'push');
     this.persistState();
   }
 
@@ -789,6 +848,8 @@ export class ProjectWikiSectionComponent {
     this.revisionSha.set(null);
     this.revisionContent.set('');
     this.pendingOpenRestore = null;
+    this.deepLinkMissing.set(null);
+    this.syncDeepLinkUrl('replace');
     this.persistState();
   }
 
@@ -1231,6 +1292,9 @@ export class ProjectWikiSectionComponent {
       case 'new-folder':
         this.promptNewFolder(t.relPath ?? '');
         break;
+      case 'copy-link':
+        this.copyWikiLinkForNode(t);
+        break;
       case 'delete':
         this.deleteNode(t);
         break;
@@ -1449,6 +1513,14 @@ export class ProjectWikiSectionComponent {
   }
 
   private restorePendingOpen(tree: WikiTree): void {
+    // A shareable URL param wins over the persisted localStorage open.
+    const urlTarget = this.pendingUrlTarget;
+    this.pendingUrlTarget = null;
+    if (urlTarget) {
+      this.pendingOpenRestore = null;
+      this.applyDeepLinkTarget(tree, urlTarget);
+      return;
+    }
     const pending = this.pendingOpenRestore;
     if (!pending) return;
     this.pendingOpenRestore = null;
@@ -1457,7 +1529,145 @@ export class ProjectWikiSectionComponent {
       this.persistState();
       return;
     }
-    this.openFile(node.relPath, node.type, pending.tab);
+    this.restoringOpen = true;
+    try {
+      this.openFile(node.relPath, node.type, pending.tab);
+    } finally {
+      this.restoringOpen = false;
+    }
+  }
+
+  // ---- shareable deep links (URL <-> open page/folder) ----
+
+  /**
+   * Reconcile the wiki view with the URL hash on a browser back/forward (or an
+   * external hash edit). Off-route hashes (e.g. a studio Hub tab) return null
+   * and are ignored; a wiki route with no tree yet defers to restorePendingOpen.
+   */
+  private applyHashTarget(): void {
+    const slug = this.slug();
+    if (!slug) return;
+    const target = parseWikiRouteHash(window.location.hash, slug);
+    if (!target) return;
+    const tree = this.tree();
+    if (!tree) {
+      this.pendingUrlTarget = target;
+      return;
+    }
+    this.applyDeepLinkTarget(tree, target);
+  }
+
+  /** Open the page/folder named by a deep-link target, tolerating stale paths. */
+  private applyDeepLinkTarget(tree: WikiTree, target: WikiDeepLinkTarget): void {
+    this.restoringOpen = true;
+    try {
+      if (target.kind === 'page') {
+        const node = this.findNode(tree.root, target.relPath);
+        if (!node || node.type === 'folder' || !node.relPath) {
+          this.noteMissingDeepLink(target.relPath, 'page');
+          return;
+        }
+        if (this.openedRel() === node.relPath) return;
+        this.openFile(node.relPath, node.type);
+      } else if (target.kind === 'folder') {
+        const node = this.findNode(tree.root, target.relPath);
+        if (!node || node.type !== 'folder' || !node.relPath) {
+          this.noteMissingDeepLink(target.relPath, 'folder');
+          return;
+        }
+        if (this.selectedFolderRel() === node.relPath && !this.openedRel()) return;
+        this.openFolderOverview(node.relPath);
+      } else {
+        // Overview / landing: drop any open page or folder selection.
+        this.deepLinkMissing.set(null);
+        if (this.openedRel()) this.closeFile();
+        else this.selectedFolderRel.set(null);
+      }
+    } finally {
+      this.restoringOpen = false;
+    }
+  }
+
+  /** Read the shareable target from the URL, ignoring the paramless landing. */
+  private captureUrlRestoreTarget(): WikiDeepLinkTarget | null {
+    if (typeof window === 'undefined') return null;
+    const slug = this.slug();
+    if (!slug) return null;
+    const target = parseWikiRouteHash(window.location.hash, slug);
+    // No param (bare wiki route) leaves localStorage as the fallback.
+    return target && target.kind !== 'overview' ? target : null;
+  }
+
+  /** The wiki target the URL should currently reflect. */
+  private currentDeepLinkTarget(): WikiDeepLinkTarget {
+    const page = this.openedRel();
+    if (page) return { kind: 'page', relPath: page };
+    const folder = this.selectedFolderRel();
+    if (folder) return { kind: 'folder', relPath: folder };
+    return { kind: 'overview' };
+  }
+
+  /**
+   * Write the open page/folder into the wiki rail hash. Only rewrites the URL
+   * when the wiki rail route is the active hash (its deep-link surface) so the
+   * component never hijacks the URL when mounted off-route (studio Hub tab).
+   */
+  private syncDeepLinkUrl(mode: 'push' | 'replace'): void {
+    if (typeof window === 'undefined') return;
+    const slug = this.slug();
+    if (!slug) return;
+    if (!isWikiRouteHash(window.location.hash, slug)) return;
+    const nextHash = buildWikiRouteHash(slug, this.currentDeepLinkTarget());
+    if (window.location.hash === nextHash) return;
+    const url = `${window.location.pathname}${window.location.search}${nextHash}`;
+    try {
+      window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', url);
+    } catch {
+      /* history writes are best-effort; the view still works without them */
+    }
+  }
+
+  /** Land on the wiki landing + a dezent hint, and drop the bad param. */
+  private noteMissingDeepLink(relPath: string, kind: 'page' | 'folder'): void {
+    this.deepLinkMissing.set({ relPath, kind });
+    if (this.openedRel()) this.closeFile();
+    else this.selectedFolderRel.set(null);
+    this.syncDeepLinkUrl('replace');
+  }
+
+  /** Dismiss the "linked page not found" hint. */
+  dismissDeepLinkHint(): void {
+    this.deepLinkMissing.set(null);
+  }
+
+  /** Context-menu "Link kopieren" for a tree node (page or folder). */
+  copyWikiLinkForNode(node: WikiTreeNode): void {
+    if (!node.relPath) return;
+    this.copyWikiLink(node.type === 'folder'
+      ? { kind: 'folder', relPath: node.relPath }
+      : { kind: 'page', relPath: node.relPath });
+  }
+
+  /** Viewer-header copy icon: link to the currently open page. */
+  copyOpenedPageLink(): void {
+    const rel = this.openedRel();
+    if (rel) this.copyWikiLink({ kind: 'page', relPath: rel });
+  }
+
+  /** Folder-overview breadcrumb copy icon: link to the shown folder. */
+  copyFolderLink(relPath: string): void {
+    if (relPath) this.copyWikiLink({ kind: 'folder', relPath });
+  }
+
+  private copyWikiLink(target: WikiDeepLinkTarget): void {
+    if (typeof window === 'undefined') return;
+    const slug = this.slug();
+    if (!slug) return;
+    const url = buildWikiRouteUrl(window.location, slug, target);
+    void copyTextToClipboard(url).then(ok => {
+      if (ok) this.notifications.success('Link kopiert', 'Wiki');
+      else this.notifications.info('Link konnte nicht kopiert werden', 'Wiki');
+    });
   }
 
   private persistState(): void {

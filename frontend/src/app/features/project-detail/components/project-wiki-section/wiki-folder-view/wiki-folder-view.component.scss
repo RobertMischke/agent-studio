@@ -47,6 +47,8 @@ button.wfolder__crumb:focus-visible {
   cursor: default;
 }
 .wfolder__crumb-sep { opacity: 0.55; }
+.wfolder__crumb-copy { margin-left: auto; }
+button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: none; }
 
 /* ---- header ---- */
 .wfolder__head {
