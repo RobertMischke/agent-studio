@@ -2,7 +2,7 @@
   "relatedTasks": [
     {
       "key": "AGT-2129",
-      "title": "EPIC: Remote & Verteilte Orchestrierung (die Reise: alles auf den Runner)",
+      "title": "EPIC: Remote \u0026 Verteilte Orchestrierung (die Reise: alles auf den Runner)",
       "linkedAt": "2026-07-13T18:07:00Z",
       "source": "manual"
     },
@@ -95,6 +95,12 @@
       "title": "P0 Remote project admission: enforce maxParallelism and truthful eligible queue/slot projection",
       "linkedAt": "2026-07-13T19:53:10Z",
       "source": "manual"
+    },
+    {
+      "key": "AGT-2188",
+      "title": "Task chat: remove mode and configuration chrome and keep only transcript, input, and send",
+      "linkedAt": "2026-07-19T20:47:14.3516359Z",
+      "source": "auto"
     }
   ],
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
