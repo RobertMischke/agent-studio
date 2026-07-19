@@ -45,6 +45,8 @@ namespace AgentStudio.Tests;
 /// every case is skipped rather than exercised. Also skipped when bash or git
 /// aren't reachable on PATH; the fake stable checkout needs both.
 /// </summary>
+// MachineBound 19.07.: gesamte Suite treibt echte Prozesse/Healthz-Polling, flakt unter Parallellast im Karten-Gate.
+[Trait("Category", "MachineBound")]
 public class UpdateServiceIntegrationTests
 {
     private const int TriggerTimeoutMs = 90_000;
