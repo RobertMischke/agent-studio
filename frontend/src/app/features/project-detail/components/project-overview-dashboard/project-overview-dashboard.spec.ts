@@ -29,10 +29,7 @@ describe('ProjectOverviewDashboardComponent', () => {
     fixture.detectChanges();
 
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/projects/Demo%20Project/throughput').flush({
-      project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z',
-      completedLast24h: 7, completedLast7d: 31, recentCompletions: [],
-    });
+    http.expectNone('/api/projects/Demo%20Project/throughput');
     http.expectOne('/api/projects/Demo%20Project/token-usage/summary').flush(tokenSummary());
     http.expectOne('/api/projects/Demo%20Project/deployment/summary').flush({
       project: 'Demo Project', available: true, reason: null,
@@ -60,16 +57,22 @@ describe('ProjectOverviewDashboardComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('[data-testid="project-overview-throughput-24h"]')?.textContent).toContain('7');
-    expect(host.querySelector('[data-testid="project-overview-throughput-7d"]')?.textContent).toContain('31');
+    expect(host.querySelector('[data-testid="project-overview-throughput"]')).toBeNull();
+    expect(host.textContent).not.toContain('Delivered tasks');
     expect(host.querySelector('[data-testid="project-overview-tokens-24h"]')?.textContent).toContain('124K');
     expect(host.querySelector('[data-testid="project-overview-tokens-7d"]')?.textContent).toContain('831K');
     expect(host.querySelector('[data-testid="project-overview-deployment"]')?.textContent).toContain('3 changes ready to deploy');
     expect(host.querySelector('[data-testid="project-overview-last-deployment-details"]')?.textContent).toContain('Previously deployed change');
     expect(host.querySelector('[data-testid="project-overview-wiki"]')?.textContent).toContain('Operator dashboard concept');
     expect(host.querySelector('[data-testid="project-overview-planning-agt-2200"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="project-overview-evidence-count"]')?.textContent).toContain('1 unseen');
-    expect(host.querySelector('[data-testid="project-overview-remote-truth"]')?.textContent).toContain('2 unpushed');
+    expect(host.querySelector('[data-testid="project-overview-evidence-count"]')?.textContent).toContain('4 unseen');
+    expect(host.querySelectorAll('[data-testid^="project-overview-evidence-visual-screenshot-demo-"]')).toHaveLength(4);
+    expect(host.querySelector('[data-testid="project-overview-evidence-visual-screenshot-demo-5"]')).toBeNull();
+    const branchState = host.querySelector('[data-testid="project-overview-remote-truth"]')?.textContent ?? '';
+    expect(branchState).toContain('2 to push');
+    expect(branchState).toContain('3 to pull');
+    expect(branchState).toContain('No upstream · local-only, remote comparison unavailable');
+    expect(host.querySelector('[data-testid="project-overview-branch-task-agt-2200"]')).toBeTruthy();
     host.querySelector<HTMLButtonElement>('[data-testid="project-overview-planning-agt-2200"]')!.click();
     expect(openedTasks).toEqual([{ jobId: 'agt-2200', watchPath: 'C:/tasks/demo' }]);
 
@@ -133,7 +136,7 @@ function wikiPulse() {
     feed: { available: true, reason: null, items: [{
       relPath: 'concepts/operator-dashboard.md', title: 'Operator dashboard concept', author: 'Robert',
       authorDateUtc: '2026-07-11T10:30:00Z', sha: 'abc', shortSha: 'abc', subject: 'Add concept',
-      frameAreaSlug: 'concepts', frameAreaTitle: 'Concepts', taskKey: 'AGT-2105',
+      areaSlug: 'concepts', areaTitle: 'Concepts', taskKey: 'AGT-2105',
     }] },
     inbox: { available: true, reason: null, count: 0, items: [] },
     drift: { available: true, reason: null, overallGrade: 'Fresh', areas: [], counts: { fresh: 1, aging: 0, stale: 0, graded: 1 } },
@@ -153,9 +156,7 @@ function snapshot() {
 }
 
 function flushEmpty(http: HttpTestingController): void {
-  http.expectOne('/api/projects/Demo%20Project/throughput').flush({
-    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', completedLast24h: 0, completedLast7d: 0, recentCompletions: [],
-  });
+  http.expectNone('/api/projects/Demo%20Project/throughput');
   http.expectOne('/api/projects/Demo%20Project/token-usage/summary').flush(tokenSummary());
   http.expectOne('/api/projects/Demo%20Project/deployment/summary').flush({
     project: 'Demo Project', available: false, reason: 'No history.', source: 'logs/stable-restarts.jsonl',
@@ -177,17 +178,20 @@ function gitInventory() {
     branches: [
       { name: 'main', category: 'main', tipSha: 'a'.repeat(40), tipShortSha: 'aaaaaaa', isCurrent: false, upstream: 'origin/main', ahead: 0, behind: 0, lastCommitSubject: 'released', lastCommitAtUtc: '2026-07-11T08:00:00Z', worktreePath: null },
       { name: 'develop', category: 'develop', tipSha: 'b'.repeat(40), tipShortSha: 'bbbbbbb', isCurrent: true, upstream: 'origin/develop', ahead: 2, behind: 0, lastCommitSubject: 'integrated', lastCommitAtUtc: '2026-07-11T11:00:00Z', worktreePath: 'C:/repo' },
+      { name: 'task/AGT-2200-plan-deployment-history', category: 'task', tipSha: 'c'.repeat(40), tipShortSha: 'ccccccc', isCurrent: false, upstream: 'origin/task/AGT-2200-plan-deployment-history', ahead: 0, behind: 3, lastCommitSubject: 'planning', lastCommitAtUtc: '2026-07-11T10:00:00Z', worktreePath: null },
+      { name: 'task/LOCAL-1', category: 'task', tipSha: 'd'.repeat(40), tipShortSha: 'ddddddd', isCurrent: false, upstream: null, ahead: 0, behind: 0, lastCommitSubject: 'local only', lastCommitAtUtc: '2026-07-11T09:00:00Z', worktreePath: null },
     ],
   };
 }
 
 function evidenceQueue() {
   return {
-    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', unseenCount: 1,
-    items: [{
-      id: 'visual-screenshot-demo', jobId: 'agt-2199', jobTitle: 'Delivered UI', watchPath: 'C:/tasks/demo',
-      fileName: 'overview--real.png', relativePath: 'results/overview--real.png', url: '/shot.png',
-      caption: 'Delivered overview', testStatus: 'passed', source: 'real', capturedAt: '2026-07-11T11:00:00Z', reviewStatus: 'unseen',
-    }],
+    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', unseenCount: 5,
+    items: Array.from({ length: 5 }, (_, index) => ({
+      id: `visual-screenshot-demo-${index + 1}`, jobId: 'agt-2199', jobTitle: 'Delivered UI', watchPath: 'C:/tasks/demo',
+      fileName: `overview-${index + 1}--real.png`, relativePath: `results/overview-${index + 1}--real.png`, url: '/shot.png',
+      caption: `Delivered overview ${index + 1}`, testStatus: 'passed', source: 'real',
+      capturedAt: `2026-07-11T${String(11 - index).padStart(2, '0')}:00:00Z`, reviewStatus: 'unseen',
+    })),
   };
 }

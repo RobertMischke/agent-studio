@@ -513,7 +513,7 @@ describe('GitPaneComponent', () => {
 
   it('offers a Preview toggle only for md/html files and renders the markdown preview (AGT-2008)', async () => {
     const git = makeGitPaneMock({
-      selectedDiffPath: 'docs/README.md',
+      selectedDiffPath: 'docs/start/README.md',
       previewOnLoad: { content: '# Hello preview' },
     });
     await mountGit(git);
@@ -540,7 +540,7 @@ describe('GitPaneComponent', () => {
     expect(root.querySelector('[data-testid="git-diff-mode-toggle"]')).toBeNull();
   });
 
-  it('renders the html preview in a scripts-disabled sandboxed iframe (AGT-2008)', async () => {
+  it('renders the html preview in a script-enabled opaque-origin sandbox (AGT-2008)', async () => {
     const git = makeGitPaneMock({
       selectedDiffPath: 'site/index.html',
       previewOnLoad: { content: '<h1>Hi</h1>' },
@@ -557,8 +557,8 @@ describe('GitPaneComponent', () => {
 
     const frame = root.querySelector<HTMLIFrameElement>('[data-testid="git-preview-html"]');
     expect(frame).not.toBeNull();
-    // sandbox="" => no allow-scripts / allow-same-origin, so the document is inert.
-    expect(frame?.getAttribute('sandbox')).toBe('');
+    expect(frame?.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame?.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(frame?.getAttribute('srcdoc') ?? '').toContain('<h1>Hi</h1>');
   });
 

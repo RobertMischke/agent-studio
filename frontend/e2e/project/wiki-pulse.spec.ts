@@ -35,19 +35,19 @@ const PULSE_FIXTURE = {
     reason: null,
     items: [
       {
-        relPath: 'engineering-workstream/10-current-development-state/pulse.md',
+        relPath: 'concepts/pulse.md',
         title: 'Pulse landing view', author: 'Robert Mischke',
         authorDateUtc: new Date(Date.now() - 2 * 3600_000).toISOString(),
         sha: 'aaaaaaa', shortSha: 'aaaaaaa', subject: 'AGT-2014 land pulse',
-        frameAreaSlug: '10-current-development-state', frameAreaTitle: 'Current Development State',
+        areaSlug: 'concepts', areaTitle: 'concepts',
         taskKey: 'AGT-2014',
       },
       {
-        relPath: 'engineering-workstream/30-system-knowledge/relocation.md',
+        relPath: 'architecture/relocation.md',
         title: 'Wiki checkout relocation', author: 'Claude Opus 4.8',
         authorDateUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
         sha: 'bbbbbbb', shortSha: 'bbbbbbb', subject: 'AGT-1984 relocate wiki',
-        frameAreaSlug: '30-system-knowledge', frameAreaTitle: 'System Knowledge',
+        areaSlug: 'architecture', areaTitle: 'architecture',
         taskKey: 'AGT-1984',
       },
     ],
@@ -55,10 +55,9 @@ const PULSE_FIXTURE = {
   inbox: {
     available: true,
     reason: null,
-    count: 2,
+    count: 1,
     items: [
       { relPath: 'scratch-idea.md', title: 'Scratch idea', type: 'md', reason: 'Loose page at the wiki root - not filed under a category.' },
-      { relPath: 'engineering-workstream/migration-jots.md', title: 'Migration jots', type: 'md', reason: 'Inside the Workstream frame but not filed under one of the five areas.' },
     ],
   },
   drift: {
@@ -66,11 +65,9 @@ const PULSE_FIXTURE = {
     reason: null,
     overallGrade: 'Stale',
     areas: [
-      { slug: '10-current-development-state', title: 'Current Development State', grade: 'Aging', pageCount: 2, gradedPageCount: 2, worstCommitCount: 12, freshCount: 1, agingCount: 1, staleCount: 0 },
-      { slug: '20-development-signals', title: 'Development Signals', grade: 'Fresh', pageCount: 1, gradedPageCount: 1, worstCommitCount: 2, freshCount: 1, agingCount: 0, staleCount: 0 },
-      { slug: '30-system-knowledge', title: 'System Knowledge', grade: 'Stale', pageCount: 1, gradedPageCount: 1, worstCommitCount: 73, freshCount: 0, agingCount: 0, staleCount: 1 },
-      { slug: '40-decision-log', title: 'Decision Log', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
-      { slug: '50-workstream-log', title: 'Workstream Log', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+      { slug: 'concepts', title: 'concepts', grade: 'Aging', pageCount: 2, gradedPageCount: 2, worstCommitCount: 12, freshCount: 1, agingCount: 1, staleCount: 0 },
+      { slug: 'operations', title: 'operations', grade: 'Fresh', pageCount: 1, gradedPageCount: 1, worstCommitCount: 2, freshCount: 1, agingCount: 0, staleCount: 0 },
+      { slug: 'architecture', title: 'architecture', grade: 'Stale', pageCount: 1, gradedPageCount: 1, worstCommitCount: 73, freshCount: 0, agingCount: 0, staleCount: 1 },
     ],
     counts: { fresh: 2, aging: 1, stale: 1, graded: 4 },
   },
@@ -80,8 +77,8 @@ const PULSE_FIXTURE = {
     count: 2,
     overallGrade: 'D',
     items: [
-      { relPath: 'engineering-workstream/30-system-knowledge/relocation.md', title: 'Wiki checkout relocation', grade: 'D', assessment: 'Describes an old checkout layout; likely outdated.', gradedAt: '2026-07-10T09:00:00Z', model: 'claude-sonnet-5', reportPath: 'engineering-workstream/30-system-knowledge/relocation.md.report.html', frameAreaTitle: 'System Knowledge' },
-      { relPath: 'scratch-idea.md', title: 'Scratch idea', grade: 'C', assessment: 'Thin, unfiled scratch note with gaps.', gradedAt: '2026-07-10T09:00:00Z', model: 'claude-sonnet-5', reportPath: 'scratch-idea.md.report.html', frameAreaTitle: null },
+      { relPath: 'architecture/relocation.md', title: 'Wiki checkout relocation', grade: 'D', assessment: 'Describes an old checkout layout; likely outdated.', gradedAt: '2026-07-10T09:00:00Z', model: 'claude-sonnet-5', reportPath: 'architecture/relocation.md.report.html', areaTitle: 'architecture' },
+      { relPath: 'scratch-idea.md', title: 'Scratch idea', grade: 'C', assessment: 'Thin, unfiled scratch note with gaps.', gradedAt: '2026-07-10T09:00:00Z', model: 'claude-sonnet-5', reportPath: 'scratch-idea.md.report.html', areaTitle: null },
     ],
   },
   warnings: {
@@ -89,7 +86,7 @@ const PULSE_FIXTURE = {
     reason: null,
     count: 2,
     items: [
-      { kind: 'human-action', title: 'Runner restart loop', detail: 'Development signal is active.', humanAction: 'Inspect the latest failed resume before reissuing.', relPath: 'engineering-workstream/20-development-signals/restart.md', status: 'active' },
+      { kind: 'human-action', title: 'Runner restart loop', detail: 'Development signal is active.', humanAction: 'Inspect the latest failed resume before reissuing.', relPath: 'operations/signals/restart.md', status: 'active' },
       { kind: 'dead-link', title: 'Dead link in operator guide', detail: '../missing-runbook.md', humanAction: 'Repair or remove this internal link.', relPath: 'operations/operator-guide.md', status: null },
     ],
   },
@@ -97,8 +94,6 @@ const PULSE_FIXTURE = {
     available: true,
     reason: null,
     runs: [{ taskKey: 'AGT-2015', lane: '3-progress', startedAtUtc: new Date(Date.now() - 43 * 60_000).toISOString(), docsFilesChanged: 3 }],
-    collector: { ranAtUtc: new Date(Date.now() - 3 * 3600_000).toISOString(), status: 'ok', error: null, merges: 0, condensations: 0 },
-    curator: { ranAtUtc: new Date(Date.now() - 6 * 3600_000).toISOString(), status: 'ok', error: null, merges: 2, condensations: 1 },
   },
 };
 
@@ -111,6 +106,40 @@ const GRADING_STATUS_DONE = {
     error: null, recent: [],
   },
 };
+const STYLE_GUIDES_FIXTURE = {
+  projectKey: 'PROJ-0042',
+  projectDisplayName: 'Demo',
+  technologies: [
+    { key: 'angular', displayLabel: 'Angular' },
+    { key: 'dotnet', displayLabel: '.NET' },
+  ],
+  guides: [
+    {
+      id: 'angular-components', title: 'Angular component guide', relPath: 'quality/angular-components.md',
+      summary: 'Rendering, identity, and token rules for Angular UI work.',
+      promptSummary: 'Use standalone OnPush components and semantic tokens.', version: '1',
+      appliesTo: { projects: ['*'], technologies: ['angular'], taskAreas: ['frontend'] },
+      match: {
+        projectWildcard: true, projectSelector: '*', technologyWildcard: false,
+        technologies: [{ key: 'angular', displayLabel: 'Angular' }],
+      },
+    },
+    {
+      id: 'dotnet-backend', title: '.NET backend guide', relPath: 'quality/dotnet-backend.md',
+      summary: 'Feature ownership, pure policy, and side-effect ordering for .NET work.',
+      promptSummary: 'Keep feature flow explicit and policy pure.', version: '1',
+      appliesTo: { projects: ['*'], technologies: ['dotnet'], taskAreas: ['backend'] },
+      match: {
+        projectWildcard: true, projectSelector: '*', technologyWildcard: false,
+        technologies: [{ key: 'dotnet', displayLabel: '.NET' }],
+      },
+    },
+  ],
+  warnings: [],
+  snapshotId: '0123456789abcdef',
+  capturedAtUtc: '2026-07-14T08:00:00Z',
+  refreshAfterUtc: '2026-07-14T08:05:00Z',
+};
 
 /** Mocks the grading trigger's seed endpoints so the surface is deterministic. */
 async function mockGradingContext(page: import('@playwright/test').Page): Promise<void> {
@@ -122,6 +151,11 @@ async function mockGradingContext(page: import('@playwright/test').Page): Promis
 
 /** Keeps the spec independent of the host's configured real projects. */
 async function mockProjectContext(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/api/crash-recovery/pending', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ pending: [] }),
+  }));
   await page.route('**/api/watch-paths', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -131,6 +165,11 @@ async function mockProjectContext(page: import('@playwright/test').Page): Promis
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ exists: true, root: [{ type: 'md', name: 'README.md', relPath: 'README.md' }] }),
+  }));
+  await page.route('**/api/projects/demo/style-guides', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(STYLE_GUIDES_FIXTURE),
   }));
 }
 
@@ -203,31 +242,59 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     const pulse = page.getByTestId('project-wiki-pulse');
     await expect(pulse).toBeVisible({ timeout: 10_000 });
 
-    // Drift grade bar: five areas, worst grade elevated to the overall chip.
+    // Drift grade bar: real top-level docs folders, worst grade elevated to the overall chip.
     await expect(page.getByTestId('project-wiki-pulse-overall')).toContainText('Stale');
-    await expect(page.getByTestId('project-wiki-pulse-area-30-system-knowledge')).toContainText('Stale');
-    await expect(page.getByTestId('project-wiki-pulse-area-40-decision-log')).toContainText('Empty');
+    await expect(page.getByTestId('project-wiki-pulse-area-architecture')).toContainText('Stale');
+    await expect(page.getByTestId('project-wiki-pulse-area-operations')).toContainText('Fresh');
 
-    // Change feed: frame-area badge + task key on a row.
-    await expect(page.getByTestId('project-wiki-pulse-task-engineering-workstream/10-current-development-state/pulse.md'))
+    // Change feed: top-folder badge + task key on a row.
+    await expect(page.getByTestId('project-wiki-pulse-task-concepts/pulse.md'))
       .toContainText('AGT-2014');
-    await expect(page.getByTestId('project-wiki-pulse-area-badge-engineering-workstream/10-current-development-state/pulse.md'))
-      .toContainText('Current Development State');
+    await expect(page.getByTestId('project-wiki-pulse-area-badge-concepts/pulse.md'))
+      .toContainText('concepts');
 
-    // Inbox: two unfiled pages needing sorting.
+    // Inbox: an unfiled root page needing sorting.
     await expect(page.getByTestId('project-wiki-pulse-inbox-open-scratch-idea.md')).toBeVisible();
     await expect(page.getByTestId('project-wiki-pulse-inbox')).toContainText('Needs sorting');
 
     await expect(page.getByTestId('project-wiki-pulse-warnings')).toContainText('Inspect the latest failed resume');
     await expect(page.getByTestId('project-wiki-pulse-live-AGT-2015')).toContainText('3 docs files changed');
-    await expect(page.getByTestId('project-wiki-pulse-collector-run')).toContainText('ok');
-    await expect(page.getByTestId('project-wiki-pulse-curator-run')).toContainText('2 merges · 1 condensations');
 
     // No horizontal overflow on the landing surface.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(overflow).toBe(false);
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-pulse-warnings-in-progress--mocked.png'), fullPage: true });
+  });
+
+  test('shows applicable style guides in both themes', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
+    await proxyBackend(page);
+    await mockProjectContext(page);
+    await page.route('**/wiki/pulse**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
+    await mockGradingContext(page);
+    await page.addInitScript(() => {
+      if (!localStorage.getItem('atp.studio.theme')) localStorage.setItem('atp.studio.theme', 'light');
+    });
+
+    await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
+
+    const panel = page.getByTestId('project-wiki-style-guides');
+    await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(panel).toContainText('Angular component guide');
+    await expect(panel).toContainText('.NET backend guide');
+    await expect(panel).toContainText('Prompt context · v1');
+    await expect(panel).toContainText('Snapshot 01234567');
+    await expect(panel).toContainText('Matches all projects');
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'light');
+    await panel.screenshot({ path: path.join(SCREENSHOT_DIR, 'style-guides-light--mocked.png') });
+
+    await page.evaluate(() => localStorage.setItem('atp.studio.theme', 'dark'));
+    await page.reload();
+    await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+    await panel.screenshot({ path: path.join(SCREENSHOT_DIR, 'style-guides-dark--mocked.png') });
   });
 
   test('degrades to labelled empty states when a source is unavailable', async ({ page, devBackend }) => {
@@ -240,7 +307,7 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
         ...PULSE_FIXTURE,
         feed: { available: true, reason: 'No recent edits in git history.', items: [] },
         inbox: { available: true, reason: null, count: 0, items: [] },
-        drift: { available: true, reason: 'No knowledge pages filed under the Workstream frame yet.', overallGrade: 'Empty',
+        drift: { available: true, reason: 'No knowledge pages in any top-level docs folder yet.', overallGrade: 'Empty',
           areas: PULSE_FIXTURE.drift.areas.map(a => ({ ...a, grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 })),
           counts: { fresh: 0, aging: 0, stale: 0, graded: 0 } },
       }),
@@ -250,8 +317,11 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
     await expect(page.getByTestId('project-wiki-pulse')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('project-wiki-pulse-feed-empty')).toContainText('No recent edits');
-    await expect(page.getByTestId('project-wiki-pulse-inbox-empty')).toContainText('Inbox clear');
-    await expect(page.getByTestId('project-wiki-pulse-drift-empty')).toContainText('No knowledge pages filed');
+    // A clear inbox contributes no sub-list to the merged Aufmerksamkeit card;
+    // the card itself stays because the fixture's warnings remain active.
+    await expect(page.getByTestId('project-wiki-pulse-attention')).toBeVisible();
+    await expect(page.getByTestId('project-wiki-pulse-inbox')).toHaveCount(0);
+    await expect(page.getByTestId('project-wiki-pulse-drift-empty')).toContainText('No knowledge pages in any top-level docs folder');
   });
 
   test('shows the grading trigger and critical pages (AGT-2051)', async ({ page, devBackend }) => {
@@ -275,7 +345,7 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     // Critical pages: worst-first (D before C), click-through targets present.
     const critical = page.getByTestId('project-wiki-pulse-critical');
     await expect(critical).toContainText('Critical pages');
-    await expect(page.getByTestId('project-wiki-pulse-critical-open-engineering-workstream/30-system-knowledge/relocation.md')).toBeVisible();
+    await expect(page.getByTestId('project-wiki-pulse-critical-open-architecture/relocation.md')).toBeVisible();
     await expect(page.getByTestId('project-wiki-pulse-critical-open-scratch-idea.md')).toBeVisible();
 
     // No horizontal overflow with the new sections.

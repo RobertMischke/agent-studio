@@ -27,7 +27,7 @@ public record ProjectUrlStartRule
 {
     /// <summary>Command to run, e.g. <c>npm run website</c>.</summary>
     public string Command { get; init; } = "";
-    /// <summary>Working directory; defaults to the project's RepositoryPath when null.</summary>
+    /// <summary>Working directory; falls back to a valid project repository/root path.</summary>
     public string? Cwd { get; init; }
     /// <summary>Port the server listens on, when known.</summary>
     public int? Port { get; init; }
@@ -73,7 +73,10 @@ public record WorkspaceRecord
 /// </summary>
 public record ProjectRecord
 {
-    /// <summary>Extensible project origin. Existing records default to local-folder.</summary>
+    /// <summary>
+    /// Backward-compatible storage discriminator. Product onboarding currently
+    /// supports local folders only; existing records default to local-folder.
+    /// </summary>
     public string SourceType { get; init; } = "local-folder";
     /// <summary>Stable identifier in the form <c>PROJ-001</c>. Immutable.</summary>
     public string Id { get; init; } = "";
@@ -99,7 +102,7 @@ public record ProjectRecord
     /// <summary>
     /// Absolute path of the project's repository checkout, when the project
     /// has one. Durable registry data (API-mutable), NOT an appsettings
-    /// override: the docs/wiki surface derives its root from
+    /// override: the docs-backed wiki surface derives its root from
     /// <c>&lt;RepositoryPath&gt;/docs</c> by convention. Null for task-only
     /// projects and for repos where the path is derivable from the storage
     /// layout (<c>&lt;repo&gt;/.orchestrator/jobs</c>).

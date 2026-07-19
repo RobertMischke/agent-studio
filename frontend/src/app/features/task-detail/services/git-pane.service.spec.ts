@@ -196,13 +196,13 @@ describe('GitPaneService.loadPreview', () => {
       http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/code-review/list')).flush({ entries: [] });
     });
 
-    service.selectDiffPath('docs/README.md');
-    http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/git/diff') && r.params.get('path') === 'docs/README.md')
+    service.selectDiffPath('docs/start/README.md');
+    http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/git/diff') && r.params.get('path') === 'docs/start/README.md')
       .flush(utf8Buffer('DIFF'));
 
-    service.loadPreview('docs/README.md');
+    service.loadPreview('docs/start/README.md');
     const fileReq = http.expectOne(
-      (r) => r.url.endsWith('/api/tasks/job-x/git/file') && r.params.get('path') === 'docs/README.md',
+      (r) => r.url.endsWith('/api/tasks/job-x/git/file') && r.params.get('path') === 'docs/start/README.md',
     );
     fileReq.flush({ content: '# Hello', isBinary: false });
     expect(service.previewContent()).toBe('# Hello');
@@ -210,7 +210,7 @@ describe('GitPaneService.loadPreview', () => {
     expect(service.previewLoading()).toBe(false);
 
     // Second call is served from cache — no new round-trip.
-    service.loadPreview('docs/README.md');
+    service.loadPreview('docs/start/README.md');
     http.expectNone((r) => r.url.endsWith('/api/tasks/job-x/git/file'));
     expect(service.previewContent()).toBe('# Hello');
   });

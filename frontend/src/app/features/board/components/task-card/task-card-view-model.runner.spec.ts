@@ -70,10 +70,11 @@ describe('buildRunnerBadge (AGT-2003)', () => {
     const badge = buildRunnerBadge(makeJob({ runner: remoteRunner() }));
     expect(badge).not.toBeNull();
     expect(badge!.kind).toBe('remote');
-    expect(badge!.label).toBe('agent-runner-01');
+    expect(badge!.label).toBe('remote · agent-runner-01');
     expect(badge!.glyph).toBe('⇥');
     expect(badge!.tooltip).toContain('agent-runner-01');
     expect(badge!.tooltip).toContain('linux-host');
+    expect(badge!.tooltip).toContain('Running remotely on agent-runner-01');
   });
 
   it('falls back to the runner id when the remote lease carries no name', () => {
@@ -81,7 +82,7 @@ describe('buildRunnerBadge (AGT-2003)', () => {
       makeJob({ runner: remoteRunner({ runnerName: '' }) }),
     );
     expect(badge!.kind).toBe('remote');
-    expect(badge!.label).toBe('agent-runner-01@linux-host');
+    expect(badge!.label).toBe('remote · agent-runner-01@linux-host');
   });
 
   it('shows a quiet "lokal" chip for an in-process run with no remote lease', () => {
@@ -112,7 +113,7 @@ describe('buildRunnerBadge (AGT-2003)', () => {
     // must not light up on a review/completed card if a payload ever carries one
     // without a live run.
     expect(
-      buildRunnerBadge(makeJob({ state: TaskState.AutoReview, execution: null, runner: null })),
+      buildRunnerBadge(makeJob({ state: TaskState.AutoReview, execution: null, runner: remoteRunner() })),
     ).toBeNull();
   });
 });

@@ -1,9 +1,9 @@
 # Remote runner: persistent connection
 
 Status: interim operations runbook for unattended remote operation
-("Dauerbetrieb"), until the Phase 2 central URL lands
-([remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
-Phase 2). It is the companion to the host provisioning runbook
+("Dauerbetrieb"), until the central URL lands
+([distributed-agent-studio-target-architecture.md](../../concepts/distributed-agent-studio-target-architecture.md),
+Task Server / central-URL phase). It is the companion to the host provisioning runbook
 [linux-runner-host.md](./linux-runner-host.md); read that first.
 
 The standalone runner reaches the Task Server **only over an SSH tunnel** during

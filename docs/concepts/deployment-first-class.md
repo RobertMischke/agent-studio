@@ -8,6 +8,11 @@ commands with declared typed slots into a human-reviewed run form. Package
 release targets remain delegated to Publishing. The richer shared live-progress
 presentation and broader natural-language compiler remain future refinements.
 
+Promotion of the complete integration stream and the separate stable freeze use
+the decided [release-semantics contract](release-semantics.md). Deployment owns
+the project-specific executable steps; it does not redefine acceptance or hide
+unreviewed work from a release manifest.
+
 Mockup:
 [mockups/deployment-first-class.html](mockups/deployment-first-class.html).
 
@@ -224,7 +229,7 @@ governed, visible work.
 
 A project's deploy configuration is repository content, consistent with how
 [workbenches](experimentier-workbench.md) and the
-[wiki tree](../contracts/wiki-tree.md) store their objects as physical folders
+[wiki tree](../system/contracts/wiki-tree.md) store their objects as physical folders
 rather than a virtual registry:
 
 ```text
@@ -315,7 +320,7 @@ persist a second last-deploy truth, or gain a separate run action.
 
 - **Targets** lists derived + templated + prompt targets, each with a quiet
   status (dot or tint, never a colored left bar -
-  [style-guide R1](../design/style-guide-hard-rules.md)).
+  [style-guide R1](../quality/design/style-guide-hard-rules.md)).
 - **History** shows recent runs for the selected target. For `deploy-stable`
   this is read straight from `stable-restarts.jsonl` and the git range; no run
   action is required.
@@ -353,7 +358,7 @@ access, reduced motion (R5). The page never centers itself in a narrow column
 | Object | Primary question | Owns | Relationship to deployment |
 |---|---|---|---|
 | Publishing workflows | Is something publishable, and ship it? | Package + workflow-published site target derivation + guarded release actions (PUB-1/2). | The release template is a launcher over it; host/SSH sites are deployment's, workflow/Pages sites stay publishing's. |
-| [Project URLs / iframe](project-relationship-model.md) | Where does the running result live? | Configured per-project URLs and previews (AGT-2095). | A deploy target may point at a Project URL to preview the deployed result. |
+| [Project URLs / iframe](distributed-agent-studio-target-architecture.md) | Where does the running result live? | Configured per-project URLs and previews (AGT-2095). | A deploy target may point at a Project URL to preview the deployed result. |
 | Workbenches | What should we see and decide? | Repository HTML experiments + decision-to-task (AGT-2084). | A deploy prompt is a decision that spawns a run, not an experiment. |
 | Remote Hosts onboarding | Provision a runner host. | Visible-CLI-task provisioning over SSH (AGT-2094). | Same CLI-task substrate and same remote-command pattern as a Caddy deploy. |
 | CLI-task substrate | Run and see one command. | Lightweight visible CLI tasks (AGT-2093). | The execution layer for every deploy run. |

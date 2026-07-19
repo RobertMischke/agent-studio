@@ -34,7 +34,9 @@ namespace AgentStudio.Drift;
 public sealed class DriftPostStepRunner
 {
     /// <summary>Model used when neither the step nor the project sets one.</summary>
-    public const string DefaultModel = ModelIds.ClaudeHaiku45;
+    public const string DefaultCli = CliTypes.Codex;
+    public const string DefaultModel = ModelIds.Gpt54Mini;
+    public const string DefaultThinkingLevel = "high";
 
     private static readonly TimeSpan PerDimensionTimeout = TimeSpan.FromMinutes(5);
 
@@ -54,13 +56,13 @@ public sealed class DriftPostStepRunner
 
     /// <summary>
     /// CLI invocation seam. Production wires it onto the shared
-    /// <see cref="ICliOneShot"/> ("claude") so prompts travel via stdin and
+    /// <see cref="ICliOneShot"/> selected by the resolved step CLI so prompts travel via stdin and
     /// usage is recorded centrally. Tests substitute a deterministic stub so
     /// the dispatch / gating / telemetry can be asserted without a subprocess.
     /// </summary>
-    public Func<string, string, string?, string?, TimeSpan, CancellationToken, Task<DriftCliResult>> CliRunner { get; set; }
-        = (_, _, _, _, _, _) => Task.FromResult(new DriftCliResult(false, string.Empty, null));
-    private Func<string, string, string?, string?, string?, TimeSpan, CancellationToken, Task<DriftCliResult>>? _thinkingAwareCliRunner;
+    public Func<string, string, string, string?, string?, TimeSpan, CancellationToken, Task<DriftCliResult>> CliRunner { get; set; }
+        = (_, _, _, _, _, _, _) => Task.FromResult(new DriftCliResult(false, string.Empty, null));
+    private Func<string, string, string, string?, string?, string?, TimeSpan, CancellationToken, Task<DriftCliResult>>? _thinkingAwareCliRunner;
 
     public DriftPostStepRunner(
         RuntimePromptService prompts,
@@ -100,13 +102,13 @@ public sealed class DriftPostStepRunner
     }
 
     private async Task<DriftCliResult> RunViaOneShotAsync(
-        string model, string prompt, string? project, string? jobId, string? thinkingLevel, TimeSpan timeout, CancellationToken ct)
+        string cliType, string model, string prompt, string? project, string? jobId, string? thinkingLevel, TimeSpan timeout, CancellationToken ct)
     {
-        var oneShot = _oneShotRegistry?.Get("claude");
+        var oneShot = _oneShotRegistry?.Get(cliType);
         if (oneShot == null) return new DriftCliResult(false, string.Empty, null);
 
         var result = await oneShot.RunAsync(new CliOneShotRequest(
-            CliType: "claude",
+            CliType: cliType,
             Model: model,
             Prompt: prompt)
         {
@@ -172,12 +174,14 @@ public sealed class DriftPostStepRunner
         foreach (var step in enabled)
         {
             ct.ThrowIfCancellationRequested();
+            var cliType = PipelineStepConfigResolver.ResolveCliType(settings, step) ?? DefaultCli;
             var model = PipelineStepConfigResolver.ResolveModel(settings, step, DefaultModel);
-            var thinkingLevel = PipelineStepConfigResolver.ResolveThinkingLevel(settings, step, CliTypes.Claude, model);
+            var thinkingLevel = PipelineStepConfigResolver.ResolveThinkingLevel(
+                settings, step, cliType, model, DefaultThinkingLevel);
             try
             {
                 var promptOverride = PipelineStepConfigResolver.ResolvePrompt(settings, step);
-                await RunDimensionAsync(step, model, thinkingLevel, promptOverride, project, jobId, jobFolderPath, projectRoot, repoRoot, workspace!, ct)
+                await RunDimensionAsync(step, cliType, model, thinkingLevel, promptOverride, project, jobId, jobFolderPath, projectRoot, repoRoot, workspace!, ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -190,6 +194,7 @@ public sealed class DriftPostStepRunner
 
     private async Task RunDimensionAsync(
         PipelineStep step,
+        string cliType,
         string model,
         string? thinkingLevel,
         string? promptOverride,
@@ -229,8 +234,8 @@ public sealed class DriftPostStepRunner
         var prompt = string.IsNullOrWhiteSpace(promptOverride) ? defaultPrompt : promptOverride!;
 
         var cli = _thinkingAwareCliRunner is null
-            ? await CliRunner(model, prompt, project, jobId, PerDimensionTimeout, ct).ConfigureAwait(false)
-            : await _thinkingAwareCliRunner(model, prompt, project, jobId, thinkingLevel, PerDimensionTimeout, ct).ConfigureAwait(false);
+            ? await CliRunner(cliType, model, prompt, project, jobId, PerDimensionTimeout, ct).ConfigureAwait(false)
+            : await _thinkingAwareCliRunner(cliType, model, prompt, project, jobId, thinkingLevel, PerDimensionTimeout, ct).ConfigureAwait(false);
         var agentText = cli.Text ?? string.Empty;
         var reportId = NewReportId();
         var markdownBody = !string.IsNullOrWhiteSpace(agentText)
@@ -245,7 +250,7 @@ public sealed class DriftPostStepRunner
             jobFolderPath, step.Id, usage?.Model ?? model,
             cli.Ok ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
             usage, cli.Ok ? null : "drift-cli-failed", startedAt, endedAt);
-        RegisterGenerated(jobFolderPath, step.Id, usage?.Model ?? model, usage, "claude", startedAt, endedAt, reportId);
+        RegisterGenerated(jobFolderPath, step.Id, usage?.Model ?? model, usage, cliType, startedAt, endedAt, reportId);
     }
 
     private void RegisterGenerated(

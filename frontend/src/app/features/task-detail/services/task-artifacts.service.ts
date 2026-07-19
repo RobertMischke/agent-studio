@@ -5,7 +5,7 @@ import type { TaskArtifact, TaskArtifactsResponse } from '../../../models/task.m
 import { TaskBackgroundPoller } from '../../polling/services/task-background-poller';
 
 /**
- * Job-root `.md` files that are orchestrator/runner machinery rather than
+ * Job-root Markdown files that are orchestrator/runner machinery rather than
  * user-facing artifacts. They live in the job (or state) folder root next
  * to the real artifacts, so the backend `/artifacts` listing includes
  * them, but they must not count toward — or clutter — the Files tab. Names
@@ -39,15 +39,16 @@ function isUserRelevantArtifact(artifact: TaskArtifact): boolean {
 }
 
 /**
- * Per-detail Files-tab manifest. Owns the list of user-relevant `.md`
- * artifacts in the job root (prompt + aspect verdicts + code-review +
- * notes) that the Files tab renders and the Files-tab count badge sums.
+ * Per-detail Files-tab manifest. Owns the list of user-relevant document
+ * artifacts in the job root (prompt + aspect verdicts + code-review + notes +
+ * isolated interactive HTML) that the Files tab renders and the Files-tab
+ * count badge sums.
  *
  * Internal machinery is kept out of the manifest so the badge counts what
  * an operator would call a "file": subfolders (`logs/`, `results/`,
  * `attachments/`) and non-`.md` state (`lifecycle.json`,
  * `pipeline-execution.json`, `*.jsonl`) are already excluded by the
- * backend `/artifacts` endpoint (top-level `*.md` + `aspect-*.json` only,
+ * backend `/artifacts` endpoint (top-level Markdown, HTML, and aspect JSON,
  * minus `status.md`); the remaining machinery `.md` files that DO sit in
  * the job/state-folder root — {@link MACHINERY_ARTIFACT_NAMES} — are
  * stripped here in {@link applyResponse}. Without this the badge

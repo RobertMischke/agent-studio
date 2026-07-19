@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { CliUsageStore } from '../../../tokens';
 import type { CliUsageQuotaRow, TokenSummaryByModel } from '../../../tokens';
 import type { OrchestratorLogEntry } from '../../models/orchestrator.model';
+import { TaskService } from '../../../../services/task.service';
+import { taskNavigationHref } from '../../../task-detail/state/task-url';
 
 type Period = '1h' | '24h' | '7d';
 interface UsageEvent { ts: number; tokens: number; }
@@ -24,6 +26,7 @@ interface ModelRow {
 export class LoadDistributionComponent implements OnInit, OnDestroy {
   readonly entries = input<OrchestratorLogEntry[]>([]);
   readonly store = inject(CliUsageStore);
+  private readonly tasks = inject(TaskService);
   readonly period = signal<Period>('24h');
   readonly decisionFilter = signal('all');
   readonly periods: { id: Period; label: string; hours: number }[] = [
@@ -102,7 +105,13 @@ export class LoadDistributionComponent implements OnInit, OnDestroy {
     return this.decisionKinds.slice(1).find(kind => value.includes(kind)) ?? null;
   }
   openTask(entry: OrchestratorLogEntry): void {
-    if (entry.jobId && entry.watchPath) window.location.assign(`?job=${encodeURIComponent(entry.jobId)}&watchPath=${encodeURIComponent(entry.watchPath)}`);
+    if (!entry.jobId || !entry.watchPath) return;
+    this.tasks.getDetail(entry.jobId, entry.watchPath).subscribe({
+      next: (detail) => {
+        const href = taskNavigationHref(detail.info);
+        if (href) window.location.assign(href);
+      },
+    });
   }
   formatTokens(value: number): string {
     if (value < 1_000) return value.toLocaleString();

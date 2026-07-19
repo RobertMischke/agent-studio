@@ -1,0 +1,21 @@
+@if (catalogue(); as list) {
+  <article class="wbinbox" data-testid="project-wiki-pulse-workbenches">
+    <header class="wbinbox__head">
+      <span class="wbinbox__icon" aria-hidden="true"><app-studio-icon name="eye" [size]="13" /></span>
+      <h4>Workbenches</h4>
+      <strong>{{ list.count }}</strong>
+    </header>
+    @if (list.items.length > 0) {
+      <ul>
+        @for (workbench of list.items; track workbench.id) {
+          <li><button type="button" [disabled]="!workbench.valid"
+              [attr.data-testid]="'project-wiki-pulse-workbench-' + workbench.id"
+              (click)="openWorkbench.emit(workbench)">
+            <span class="wbinbox__meta"><i [attr.data-status]="workbench.status"></i>{{ workbench.phase || workbench.status }}<time>{{ relativeTime(workbench.updatedAtUtc) }}</time></span>
+            <b>{{ workbench.title }}</b><small>{{ workbench.error || workbench.summary }}</small>
+          </button></li>
+        }
+      </ul>
+    } @else { <p><app-studio-icon name="check" [size]="16" /> No open Workbench topics.</p> }
+  </article>
+}

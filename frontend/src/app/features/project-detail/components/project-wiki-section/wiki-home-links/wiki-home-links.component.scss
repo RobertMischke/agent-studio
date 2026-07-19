@@ -1,0 +1,100 @@
+@use '../../../../../../styles/mixins' as m;
+
+// Every curated section is its own card in the wiki dashboard grid: both the
+// host and the wrapper contribute no box, the section cards are grid items.
+:host { display: contents; }
+
+.whome { display: contents; }
+
+.whome__card {
+  @include m.knowledge-card;
+}
+
+.whome__head {
+  @include m.knowledge-card-head;
+
+  align-items: flex-start;
+}
+
+.whome__head-icon {
+  @include m.knowledge-card-icon;
+}
+
+.whome__head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.whome__kicker {
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.whome__count {
+  margin-left: auto;
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.whome__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.whome__link {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pwiki-paper-fg, var(--studio-fg));
+  font: inherit;
+  text-align: left;
+}
+
+button.whome__link { cursor: pointer; }
+
+button.whome__link:hover {
+  border-color: var(--pwiki-paper-border, var(--studio-border));
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
+}
+
+button.whome__link:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+
+.whome__link--missing {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.whome__label {
+  overflow: hidden;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whome__note {
+  overflow: hidden;
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

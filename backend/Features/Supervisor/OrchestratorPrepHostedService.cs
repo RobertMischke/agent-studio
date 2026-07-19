@@ -45,12 +45,14 @@ namespace AgentStudio.Supervisor;
 public sealed class OrchestratorPrepHostedService : BackgroundService
 {
     /// <summary>
-    /// Last-resort model when neither the per-step override nor the project
-    /// <see cref="ProjectSettings.OrchestratorModel"/> sets one. Prep is a
-    /// cheap pass, so this fallback is a small model; the project's selection
-    /// still wins via <see cref="PipelineStepConfigResolver.ResolveModel(ProjectSettings?, PipelineStep, string)"/>.
+    /// Last-resort model recorded when neither the per-step override nor the
+    /// project <see cref="ProjectSettings.OrchestratorModel"/> sets one. Prep
+    /// is currently heuristic-only, but its pipeline telemetry follows the
+    /// same bounded Codex support-model default as the other review steps.
+    /// The project's selection still wins via
+    /// <see cref="PipelineStepConfigResolver.ResolveModel(ProjectSettings?, PipelineStep, string)"/>.
     /// </summary>
-    public const string PrepFallbackModel = ModelIds.ClaudeHaiku45;
+    public const string PrepFallbackModel = PipelineStepModelDefaults.SupportModel;
 
     /// <summary>The catalogue prep step, resolved once for config + recording.</summary>
     private static readonly PipelineStep PrepStep =

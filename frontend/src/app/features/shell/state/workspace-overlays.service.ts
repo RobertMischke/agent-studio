@@ -29,7 +29,6 @@ export type WorkspaceSettingsSection =
   | 'workspaces'
   | 'task-server'
   | 'remote-hosts'
-  | 'project-sources'
   | 'orchestrator'
   | 'caps'
   | 'cli-sessions'
@@ -80,7 +79,7 @@ export class WorkspaceOverlaysService {
    * (CLI usage) section has its own dedicated "Usage" status-bar pill, so the
    * "Settings" pill must not also light up while Usage is showing — otherwise
    * both pills carry the single `--studio-accent` active fill at once (see
-   * docs/frontend/design-system.md, "one accent per rail").
+   * docs/quality/frontend/design-system.md, "one accent per rail").
    */
   readonly anyOpenExceptUsage = computed(() => this.settingsOpen() && this.section() !== 'caps');
 
@@ -168,12 +167,16 @@ export class WorkspaceOverlaysService {
    * the view; dropping a hash that opened the view closes it.
    */
   syncFromHash(): void {
-    const section = this.sectionForHash(window.location.hash);
+    const hash = window.location.hash;
+    const section = this.sectionForHash(hash);
     if (section) {
-      this.tokenUsagePage.set(this.tokenUsagePageForHash(window.location.hash));
+      this.tokenUsagePage.set(this.tokenUsagePageForHash(hash));
       if (this.section() !== section) this.section.set(section);
       if (!this.settingsOpen()) this.settingsOpen.set(true);
       this.openedViaHash = true;
+      if (hash === '#/workspace/settings/project-sources') {
+        this.writeHash('#/workspace/settings');
+      }
     } else if (this.settingsOpen() && this.openedViaHash) {
       this.settingsOpen.set(false);
       this.openedViaHash = false;
@@ -197,7 +200,8 @@ export class WorkspaceOverlaysService {
       case '#/workspace/settings/workspaces': return 'workspaces';
       case '#/workspace/settings/task-server': return 'task-server';
       case '#/workspace/settings/remote-hosts': return 'remote-hosts';
-      case '#/workspace/settings/project-sources': return 'project-sources';
+      // Retired project-source catalogue: old bookmarks land safely on Overview.
+      case '#/workspace/settings/project-sources': return 'overview';
       case '#/workspace/settings/orchestrator': return 'orchestrator';
       case '#/workspace/settings/working-memory': return 'working-memory';
       // Retired 'summary' aliases resolve to the overview (migration: no crash).
@@ -227,7 +231,6 @@ export class WorkspaceOverlaysService {
       case 'workspaces': return '#/workspace/settings/workspaces';
       case 'task-server': return '#/workspace/settings/task-server';
       case 'remote-hosts': return '#/workspace/settings/remote-hosts';
-      case 'project-sources': return '#/workspace/settings/project-sources';
       case 'orchestrator': return '#/workspace/settings/orchestrator';
       case 'working-memory': return '#/workspace/settings/working-memory';
       case 'overview': return '#/workspace/settings';

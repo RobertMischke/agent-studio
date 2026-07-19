@@ -6,11 +6,11 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Locks in the Files-tab contract (F48): every `.md` directly in the job
-/// root is surfaced with a kind classification (prompt / aspect / note /
-/// other), status.md is excluded (it has its own Protocol tab), and the
-/// sort order is prompt-first, then aspects alphabetical, then notes,
-/// then everything else. Subfolder files are ignored.
+/// Locks in the Files-tab contract (F48): supported Markdown and HTML files
+/// directly in the job root are surfaced with a kind classification (prompt /
+/// aspect / note / other), status.md is excluded (it has its own Protocol
+/// tab), and the sort order is prompt-first, then aspects alphabetical, then
+/// notes, then everything else. Subfolder files are ignored.
 /// </summary>
 public class TaskScannerArtifactsTests : IDisposable
 {
@@ -92,6 +92,7 @@ public class TaskScannerArtifactsTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "REVIEW_NOTE.md"), "rn");
         File.WriteAllText(Path.Combine(dir, "ANOTHER_NOTES.md"), "an");
         File.WriteAllText(Path.Combine(dir, "follow-up-plan.md"), "fu");
+        File.WriteAllText(Path.Combine(dir, "interactive-report.HTML"), "<button>switch</button>");
 
         var response = BuildScanner().ListArtifacts("multi-file", _watchPath);
 
@@ -106,6 +107,7 @@ public class TaskScannerArtifactsTests : IDisposable
             "ANOTHER_NOTES.md",
             "REVIEW_NOTE.md",
             "follow-up-plan.md",
+            "interactive-report.HTML",
         }, names);
 
         var aspect = response.Files.First(f => f.Name == "aspect-code-quality.md");
@@ -120,6 +122,9 @@ public class TaskScannerArtifactsTests : IDisposable
 
         var other = response.Files.First(f => f.Name == "follow-up-plan.md");
         Assert.Equal(TaskArtifactKind.Other, other.Kind);
+
+        var html = response.Files.First(f => f.Name == "interactive-report.HTML");
+        Assert.Equal(TaskArtifactKind.Other, html.Kind);
     }
 
     [Fact]
@@ -151,14 +156,16 @@ public class TaskScannerArtifactsTests : IDisposable
     }
 
     [Fact]
-    public void ReadJobFile_AllowsArbitraryMarkdownInJobRoot_ButRejectsPathTraversal()
+    public void ReadJobFile_AllowsSupportedDocumentsInJobRoot_ButRejectsPathTraversal()
     {
         var dir = WriteJobRoot("read-aspect");
         File.WriteAllText(Path.Combine(dir, "aspect-code-quality.md"), "verdict: ok");
+        File.WriteAllText(Path.Combine(dir, "exploration.htm"), "<button>switch</button>");
 
         var scanner = BuildScanner();
 
         Assert.Equal("verdict: ok", scanner.ReadJobFile("read-aspect", "aspect-code-quality.md", _watchPath));
+        Assert.Equal("<button>switch</button>", scanner.ReadJobFile("read-aspect", "exploration.htm", _watchPath));
         Assert.Null(scanner.ReadJobFile("read-aspect", "../escape.md", _watchPath));
         Assert.Null(scanner.ReadJobFile("read-aspect", "logs/inner.md", _watchPath));
         Assert.Null(scanner.ReadJobFile("read-aspect", "not-markdown.txt", _watchPath));

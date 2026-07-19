@@ -210,14 +210,14 @@ public class ProjectSteeringDocsService
         {
             var content = TryReadText(Path.Combine(baseDir, s.RelPath));
             if (content == null) continue;
-            var wikiLinks = CountOccurrences(content, "docs/wiki/");
+            var wikiLinks = CountOccurrences(content, "docs/");
             if (wikiLinks >= 2) continue;
             warnings.Add(new SteeringDocsWarning(
                 Severity: SteeringDocsWarningSeverity.Warn,
                 Kind: SteeringDocsWarningKind.GatewayTooHeavy,
                 Message: $"{s.RelPath} carries {s.Size:N0} bytes of local instructions but links to only {wikiLinks} wiki page(s). Agent docs should stay gateway-style and route durable detail into the project wiki.",
                 SourceId: s.Id,
-                EvidenceRefs: new List<string> { s.RelPath, "docs/wiki/" }));
+                EvidenceRefs: new List<string> { s.RelPath, "docs/" }));
         }
         return warnings;
     }

@@ -3,7 +3,7 @@
 > Catalog of every code path that attributes a git commit to a task, and proof
 > that they all converge on one schema and one write surface. Companion to the
 > ADR "Commit-Attribution-Regel" and the `card-commit-source-not-repo-head`
-> rule in [code-patterns.md](../../contracts/code-patterns.md).
+> rule in [code-patterns.md](../../system/contracts/code-patterns.md).
 
 ## Why this audit exists
 
@@ -96,5 +96,5 @@ entry by construction.
 `GitSummaryService` is the only render-side path that reflects repo HEAD; it is
 legitimate solely for the `3-progress` working-tree pill and is gated behind
 `LANES_WITH_GIT`. The drift rule `card-commit-source-not-repo-head`
-([code-patterns.md](../../contracts/code-patterns.md)) statically flags any future board surface
+([code-patterns.md](../../system/contracts/code-patterns.md)) statically flags any future board surface
 that references it without that guard.

@@ -60,7 +60,6 @@ public static class AdHocUsageSources
     public const string DriftAnalysis     = "drift-analysis";
     public const string WikiGrading       = "wiki-grading";
     public const string TaskSpawner       = "task-spawner";
-    public const string WorkstreamCollector = "workstream-collector";
     public const string Unknown           = "unknown";
 }
 

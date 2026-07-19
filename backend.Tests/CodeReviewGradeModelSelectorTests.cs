@@ -6,32 +6,32 @@ namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the load-bearing model invariant of the automatic quality-grade
-/// code-review step (ASS-1657): the grade pass defaults to Claude Opus 4.8 —
-/// NOT the cheap Haiku model the four aspect reviews run on — while staying
-/// configurable. This is the concrete resolution of the ASS-855 (Haiku) vs
-/// ASS-916 (Opus) tension, so the regression assertion below exists to stop a
-/// future cost cut from silently dragging the grade back onto a weak model.
+/// code-review step (ASS-1657): the grade pass defaults to the live Codex
+/// flagship, not the bounded gpt-5.4-mini model the four aspect reviews run on,
+/// while staying configurable.
 /// </summary>
 public class CodeReviewGradeModelSelectorTests
 {
     [Fact]
-    public void Resolve_EmptyConfig_DefaultsToOpus48()
+    public void Resolve_EmptyConfig_DefaultsToLiveCodexFlagship()
     {
         var (model, cli) = CodeReviewGradeModelSelector.Resolve(null, null);
 
-        Assert.Equal(GenericCliExecutionService.DefaultOpusModel, model);
-        Assert.Equal("claude-opus-4-8", model);
-        Assert.Equal("claude", cli);
+        Assert.Equal(ModelMetadataRegistry.DefaultForCli(CliTypes.Codex), model);
+        Assert.Equal(CliTypes.Codex, cli);
+        Assert.Equal(
+            ModelMetadataRegistry.DefaultThinkingLevelForCli(cli, model),
+            CodeReviewGradeModelSelector.DefaultThinkingLevel);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void Resolve_BlankModel_FallsBackToOpus_NotEmpty(string blank)
+    public void Resolve_BlankModel_FallsBackToFlagship_NotEmpty(string blank)
     {
         var (model, _) = CodeReviewGradeModelSelector.Resolve(blank, null);
 
-        Assert.Equal("claude-opus-4-8", model);
+        Assert.Equal(ModelMetadataRegistry.DefaultForCli(CliTypes.Codex), model);
     }
 
     [Fact]
@@ -55,10 +55,10 @@ public class CodeReviewGradeModelSelectorTests
     [Fact]
     public void GradeDefault_IsNotTheCheapAspectDefault()
     {
-        // The whole point of ASS-1657: cheap aspect verdicts stay on Haiku, the
+        // The whole point of ASS-1657: bounded aspect verdicts use the mini model, the
         // operator-facing quality grade runs on the strong model. If these two
         // ever converge, the grade has been quietly downgraded — fail loudly.
-        Assert.NotEqual(OrchestratorRunner.DefaultModel, CodeReviewGradeModelSelector.DefaultModel);
-        Assert.Equal("claude-opus-4-8", CodeReviewGradeModelSelector.DefaultModel);
+        Assert.NotEqual(PipelineStepModelDefaults.SupportModel, CodeReviewGradeModelSelector.DefaultModel);
+        Assert.Equal(ModelMetadataRegistry.DefaultForCli(CliTypes.Codex), CodeReviewGradeModelSelector.DefaultModel);
     }
 }

@@ -420,9 +420,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return verdict ? verdict.replace(/-/g, ' ') : null;
   }
 
-  readonly isRunning = computed(() =>
-    this.job().state === TaskState.Progress && this.job().execution?.status === 'running'
-  );
+  readonly isRunning = computed(() => this.job().state === TaskState.Progress
+    && (this.job().execution?.status === 'running' || this.job().runner != null));
 
   /**
    * DtC step 6 CooldownRetry banner. Non-null only while a 3-progress card is

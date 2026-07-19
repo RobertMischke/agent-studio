@@ -48,6 +48,13 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     private readonly ConcurrentDictionary<string, byte> _warnedMissingWatchPaths = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Invalid phase metadata is persisted until a mutation repairs the task.
+    /// A full index refresh may inspect that same task many times per second,
+    /// so warn once per task/state/value tuple instead of once per scan.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _warnedInvalidPhases = new(StringComparer.OrdinalIgnoreCase);
+
     public TaskScannerService(
         IConfiguration config,
         ILogger<TaskScannerService> logger,
@@ -250,8 +257,7 @@ public class TaskScannerService : ITaskScanner
     {
         if (_indexCache != null)
         {
-            var live = _indexCache.GetSnapshot();
-            var archived = _indexCache.GetArchiveSnapshot();
+            var (live, archived) = _indexCache.GetSnapshotPartitions();
             var combined = new List<TaskInfo>(live.Count + archived.Count);
             combined.AddRange(live);
             combined.AddRange(archived);
@@ -610,7 +616,7 @@ public class TaskScannerService : ITaskScanner
 
     /// <summary>
     /// Builds the pre-filled coding-task draft for "promote a finished
-    /// planning task" (see docs/research/planning-research-task-kinds-2026-05.md).
+    /// planning task" (see docs/concepts/planning-research-task-kinds-2026-05.md).
     /// Returns null when the job is not found. Title + prompt body come from
     /// the planning report (<c>status.md</c>); every image under the job's
     /// <c>results/</c> and <c>attachments/</c> folders is listed (deduped by
@@ -737,7 +743,7 @@ public class TaskScannerService : ITaskScanner
     /// field stays null when absent on disk; the frontend's lane projection
     /// then falls back to <see cref="LifecyclePhases.DefaultFor"/>. This is
     /// the compatibility contract from
-    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>: existing
+    /// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>: existing
     /// job folders that predate the field continue to render in the default
     /// lane of their state without a one-shot migration that rewrites every
     /// <c>task.json</c>. Unknown phase strings, or phase strings that do not
@@ -752,12 +758,16 @@ public class TaskScannerService : ITaskScanner
         if (string.IsNullOrWhiteSpace(value)) return null;
         if (!LifecyclePhases.All.Contains(value))
         {
-            _logger.LogWarning("Unknown phase '{Phase}' in {Dir}; ignoring", value, jobDir);
+            var warningKey = $"unknown\n{jobDir}\n{state}\n{value}";
+            if (_warnedInvalidPhases.TryAdd(warningKey, 0))
+                _logger.LogWarning("Unknown phase '{Phase}' in {Dir}; ignoring", value, jobDir);
             return null;
         }
         if (!LifecyclePhases.IsAllowed(state, value))
         {
-            _logger.LogWarning("Phase '{Phase}' is not allowed for state '{State}' in {Dir}; ignoring", value, state, jobDir);
+            var warningKey = $"state\n{jobDir}\n{state}\n{value}";
+            if (_warnedInvalidPhases.TryAdd(warningKey, 0))
+                _logger.LogWarning("Phase '{Phase}' is not allowed for state '{State}' in {Dir}; ignoring", value, state, jobDir);
             return null;
         }
         return value;
@@ -1311,24 +1321,29 @@ public class TaskScannerService : ITaskScanner
         if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
             return null;
 
-        // Editable / always-known files plus any *.md file the agents / operators
-        // drop in the job root (surfaced by the Files tab). Structured aspect
-        // verdicts also ship as `aspect-*.json`; those are served too so the
-        // Files tab can fetch and render them structurally.
+        // Editable / always-known files plus any supported document the agents
+        // or operators drop in the job root (surfaced by the Files tab).
+        // Structured aspect verdicts also ship as `aspect-*.json`; those are
+        // served too so the Files tab can fetch and render them structurally.
+        // HTML is interactive only inside the frontend's allow-scripts sandbox;
+        // allow-same-origin stays deliberately omitted there.
         var allowed = new[] { "prompt.md", "status.md", "task.json" };
         var isMarkdown = fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
+        var isHtml = fileName.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".htm", StringComparison.OrdinalIgnoreCase);
         var isAspectJson = fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase)
             && fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-        if (!allowed.Contains(fileName) && !isMarkdown && !isAspectJson) return null;
+        if (!allowed.Contains(fileName) && !isMarkdown && !isHtml && !isAspectJson) return null;
 
         return ReadFileOrNull(Path.Combine(info.FolderPath, fileName));
     }
 
     /// <summary>
-    /// Lists every <c>.md</c> file directly in the job root, sorted for the
+    /// Lists every supported document directly in the job root, sorted for the
     /// Files tab (prompt first, then aspect-* alphabetical, then *_NOTE / *_NOTES
-    /// alphabetical, then everything else alphabetical). <c>status.md</c> is
-    /// excluded because it has its own Protocol tab. Subfolders
+    /// alphabetical, then everything else). Supported documents are Markdown,
+    /// HTML, and structured aspect JSON. <c>status.md</c> is excluded because it
+    /// has its own Protocol tab. Subfolders
     /// (<c>logs/</c>, <c>results/</c>, <c>attachments/</c>) are out of scope.
     /// </summary>
     public TaskArtifactsResponse? ListArtifacts(string jobId, string? watchPath = null)
@@ -1362,6 +1377,20 @@ public class TaskScannerService : ITaskScanner
             var name = Path.GetFileName(path);
             if (string.Equals(name, "status.md", StringComparison.OrdinalIgnoreCase)) continue;
             if (suppressedMdTwins.Contains(name)) continue;
+
+            var artifact = BuildArtifact(path, name, generated);
+            if (artifact is null) continue;
+            artifacts.Add(artifact);
+        }
+
+        // Self-contained HTML artifacts use the same Files-tab card contract as
+        // Markdown. The frontend renders them with scripts enabled in an opaque
+        // origin, so they can be interactive without Studio DOM or state access.
+        foreach (var path in Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(path);
+            if (!name.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+                && !name.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)) continue;
 
             var artifact = BuildArtifact(path, name, generated);
             if (artifact is null) continue;
@@ -1456,7 +1485,7 @@ public class TaskScannerService : ITaskScanner
     /// Read-only counterpart to <see cref="ResolveAttachment"/> for the
     /// <c>results/</c> folder where agents drop screenshots they want to keep
     /// in the protocol. Same path-traversal guards, same image content-type
-    /// mapping. See <c>docs/contracts/protocol-style.md</c> for the folder contract.
+    /// mapping. See <c>docs/system/contracts/protocol-style.md</c> for the folder contract.
     /// </summary>
     public (string? Path, string? ContentType) ResolveResult(string jobId, string fileName, string? watchPath = null)
         => ResolveJobBinaryFile(jobId, "results", fileName, watchPath);

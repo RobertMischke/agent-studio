@@ -97,6 +97,16 @@ const UNKNOWN_FUTURE_FRAMES: readonly { name: string; raw: string }[] = [
   },
 ];
 
+describe('sanitizeProjectionLines - ANSI output', () => {
+  it('strips terminal colours from ordinary CLI snippets before rendering', () => {
+    expect(sanitizeProjectionLines([
+      line('\u001b[33m[39m Building...\u001b[0m', 'stderr'),
+    ])).toEqual([
+      line(' Building...', 'stderr'),
+    ]);
+  });
+});
+
 describe('isNonRenderableRawLine — stream-json catalog', () => {
   for (const { name, raw } of STREAM_JSON_CATALOG) {
     it(`flags a ${name}`, () => {

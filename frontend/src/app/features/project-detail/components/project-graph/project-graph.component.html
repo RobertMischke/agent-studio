@@ -1,0 +1,142 @@
+<section class="project-graph" data-testid="project-graph">
+  <header class="project-graph__header">
+    <div>
+      <span class="project-graph__eyebrow">Repository facts</span>
+      <h2>Project Graph</h2>
+      <p>Components, technologies, manifest dependencies, and rough size. No code-call graph.</p>
+    </div>
+    @if (snapshot()) {
+      <div class="project-graph__captured">
+        <span>{{ snapshot()!.generatorVersion }} · schema {{ snapshot()!.schemaVersion }} · {{ snapshot()!.captureMode }}</span>
+        <code>{{ snapshot()!.snapshotId }}</code>
+        <time [attr.datetime]="snapshot()!.capturedAtUtc">{{ formatCapturedAt(snapshot()!.capturedAtUtc) }}</time>
+      </div>
+    }
+  </header>
+
+  @if (loading()) {
+    <app-loading-surface kind="list" label="Discovering repository manifests…" />
+  } @else if (error()) {
+    <div class="project-graph__error" role="alert" data-testid="project-graph-error">{{ error() }}</div>
+  } @else if (snapshot(); as graph) {
+    @if (focusProject(); as project) {
+      <section class="project-graph__summary" aria-label="Project graph summary">
+        <div><strong data-testid="project-graph-component-count">{{ focusComponents().length }}</strong><span>components</span></div>
+        <div><strong>{{ resolvedDependencyCount() }}</strong><span>internal edges</span></div>
+        <div><strong>{{ unresolvedDependencyCount() }}</strong><span>unresolved local</span></div>
+        <div><strong>{{ crossProjectDependencyCount() }}</strong><span>cross-project</span></div>
+        <div><strong>{{ formatCount(project.size.files) }}</strong><span>files</span></div>
+        <div><strong>{{ formatCount(project.size.lines) }}</strong><span>rough LoC</span></div>
+      </section>
+
+      <div class="project-graph__meta">
+        <div class="project-graph__badges" aria-label="Detected technologies">
+          @for (technology of project.technologies; track technology.slug) {
+            <span class="project-graph__badge" [attr.data-technology-slug]="technology.slug">{{ technology.label }}</span>
+          }
+        </div>
+        <div class="project-graph__manifest-note">
+          {{ project.solutions.length }} solution {{ project.solutions.length === 1 ? 'manifest' : 'manifests' }} ·
+          {{ project.workflows.length }} workflow {{ project.workflows.length === 1 ? 'manifest' : 'manifests' }} (presence only) ·
+          <span data-testid="project-graph-source-provenance">
+            {{ project.sourceRevision ? project.sourceRevision.slice(0, 12) : 'revision unavailable' }} · {{ project.sourceState }}
+          </span>
+        </div>
+      </div>
+
+      @if (project.warnings.length > 0) {
+        <div class="project-graph__warnings" data-testid="project-graph-warnings">
+          <strong>Partial discovery</strong>
+          @for (warning of project.warnings; track warning) { <span>{{ warning }}</span> }
+        </div>
+      }
+
+      <div class="project-graph__toolbar" role="group" aria-label="Project graph view">
+        <button type="button" [class.is-active]="view() === 'graph'" [attr.aria-pressed]="view() === 'graph'"
+                data-testid="project-graph-view-graph" (click)="setView('graph')">Graph</button>
+        <button type="button" [class.is-active]="view() === 'list'" [attr.aria-pressed]="view() === 'list'"
+                data-testid="project-graph-view-list" (click)="setView('list')">Components</button>
+      </div>
+
+      @if (view() === 'graph') {
+        <section class="project-graph__canvas" data-testid="project-graph-canvas" aria-label="Component dependency graph">
+          @if (graphNodes().length > 0) {
+            <svg [attr.viewBox]="'0 0 ' + graphWidth() + ' ' + graphHeight()" role="img"
+                 [attr.aria-label]="project.displayName + ' component dependency graph'">
+              <defs>
+                <marker id="project-graph-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z"></path>
+                </marker>
+              </defs>
+              @for (edge of graphEdges(); track edge.fromComponentId + edge.toComponentId + edge.kind) {
+                <line class="project-graph__edge" [class.project-graph__edge--project]="edge.kind === 'project-reference'"
+                      [attr.x1]="edge.x1" [attr.y1]="edge.y1" [attr.x2]="edge.x2" [attr.y2]="edge.y2"
+                      marker-end="url(#project-graph-arrow)"><title>{{ edge.evidence }}</title></line>
+              }
+              @for (node of graphNodes(); track node.component.id) {
+                <g class="project-graph__node" [class.project-graph__node--external]="node.external"
+                   tabindex="0" role="group" [attr.aria-label]="node.ariaLabel"
+                   [attr.transform]="'translate(' + node.x + ' ' + node.y + ')'">
+                  <title>{{ node.component.projectKey }} · {{ node.component.name }} · {{ node.component.relativePath }}</title>
+                  <rect [attr.width]="220" [attr.height]="94" rx="9"></rect>
+                  <text class="project-graph__node-project" x="14" y="20">{{ node.component.projectKey }} · {{ node.component.kind }}</text>
+                  <text class="project-graph__node-name" x="14" y="43">{{ node.shortName }}</text>
+                  <text class="project-graph__node-size" x="14" y="62">{{ formatCount(node.component.size.files) }} files · {{ formatCount(node.component.size.lines) }} LoC</text>
+                  <text class="project-graph__node-source" x="14" y="80">{{ node.sourceLine }}</text>
+                </g>
+              }
+            </svg>
+            <div class="project-graph__legend">
+              <span><i></i> {{ project.key }}</span>
+              <span><i class="is-external"></i> linked project</span>
+              <span><i class="is-edge"></i> package / project reference</span>
+            </div>
+            @if (graphTruncated()) { <p class="project-graph__truncated">Graph capped at 36 components. The list remains complete.</p> }
+          } @else {
+            <p class="project-graph__empty">No supported component manifests were found.</p>
+          }
+        </section>
+      } @else {
+        <div class="project-graph__table-wrap" data-testid="project-graph-component-list">
+          <table>
+            <thead><tr><th>Component</th><th>Type</th><th>Technology</th><th>Size</th><th>Manifest</th><th>Relations</th></tr></thead>
+            <tbody>
+              @for (component of focusComponents(); track component.id) {
+                <tr>
+                  <td><strong>{{ component.name }}</strong></td>
+                  <td><span class="project-graph__kind">{{ component.kind }}</span></td>
+                  <td><div class="project-graph__badges">
+                    @for (technology of component.technologies; track technology.slug) {
+                      <span class="project-graph__badge" [attr.data-technology-slug]="technology.slug">{{ technology.label }}</span>
+                    }
+                  </div></td>
+                  <td class="project-graph__size">{{ formatCount(component.size.files) }} files<br>{{ formatCount(component.size.lines) }} LoC</td>
+                  <td><code>{{ component.relativePath }}</code></td>
+                  <td>
+                    @if (componentRelations(component.id); as relations) {
+                      @if (relations.length > 0) {
+                        <details class="project-graph__relations">
+                          <summary>{{ relations.length }} {{ relations.length === 1 ? 'relation' : 'relations' }}</summary>
+                          <ul>
+                            @for (relation of relations; track relation.id) {
+                              <li [class.is-unresolved]="relation.resolution === 'unresolved'">
+                                <strong>{{ relation.direction === 'outgoing' ? '→' : '←' }} {{ relation.label }}</strong>
+                                <span>{{ relation.resolution }} · {{ relation.evidence }}</span>
+                              </li>
+                            }
+                          </ul>
+                        </details>
+                      } @else { <span class="project-graph__empty-relation">None</span> }
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="project-graph__empty">No supported component manifests were found.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</section>

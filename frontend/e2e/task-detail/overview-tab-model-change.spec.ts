@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { api } from '../helpers/api';
-import { createJob, getJob } from '../helpers/jobs';
+import { createJob, getJob, moveJob } from '../helpers/jobs';
 
 /**
  * Regression spec for the operator complaint:
@@ -40,7 +40,7 @@ async function activateActivityTab(page: Page): Promise<void> {
 }
 
 test.describe('Overview tab — model picker', () => {
-  test('clicking a model in the Overview picker persists immediately', async ({ page }) => {
+  test('clicking a model in the Overview picker persists immediately', async ({ page }, testInfo) => {
     // Operator expectation, per the bug report: "Klick anderes Modell ->
     // Overview zeigt neuen Wert + reload bestaetigt". The picker must
     // auto-commit on model click when no CLI change is pending - no Done
@@ -57,6 +57,11 @@ test.describe('Overview tab — model picker', () => {
     });
 
     try {
+      // Reproduce the short viewport from the clipping report. The picker is
+      // taller than the space above the Overview trigger and must stay inside
+      // the viewport by flipping or constraining its height.
+      await page.setViewportSize({ width: 1280, height: 420 });
+
       // Wait for the response (not just the request) so the backend has
       // actually written the new model before we poll for it.
       const modelPutResponsePromise = page.waitForResponse((res) =>
@@ -77,6 +82,25 @@ test.describe('Overview tab — model picker', () => {
 
       const picker = page.getByTestId('overview-agent').getByTestId('chat-model-picker');
       await expect(picker).toBeVisible({ timeout: 5_000 });
+
+      const triggerBox = await overviewBadge.boundingBox();
+      const pickerBox = await picker.boundingBox();
+      expect(triggerBox).not.toBeNull();
+      expect(pickerBox).not.toBeNull();
+      const naturalPickerHeight = await picker.evaluate((element) => element.scrollHeight);
+      expect(naturalPickerHeight, 'fixture must not fit above the trigger').toBeGreaterThan(
+        triggerBox!.y - 14,
+      );
+      expect(pickerBox!.y, 'picker top stays inside the viewport').toBeGreaterThanOrEqual(7);
+      expect(
+        pickerBox!.y + pickerBox!.height,
+        'picker bottom stays inside the viewport',
+      ).toBeLessThanOrEqual(page.viewportSize()!.height - 7);
+
+      await testInfo.attach('overview-model-picker-short-viewport.png', {
+        body: await page.screenshot({ fullPage: false }),
+        contentType: 'image/png',
+      });
 
       // Click a different model. Auto-commit fires; picker closes.
       const sonnetPill = page
@@ -100,6 +124,51 @@ test.describe('Overview tab — model picker', () => {
       // And the backend actually persisted it.
       const persisted = await getJob(job.id, watchPath);
       expect(persisted.model).toBe('claude-sonnet-4-6');
+    } finally {
+      await deleteJob(job.id, watchPath);
+    }
+  });
+
+  test('Delivered tasks show the recorded agent selection without reopening the picker', async ({ page }, testInfo) => {
+    const watchPath = await pickWatchPath();
+    const job = await createJob({
+      title: `overview-model-readonly-${Date.now()}`,
+      watchPath,
+      cliType: 'codex',
+      agent: 'codex',
+      model: 'gpt-5.6-sol',
+      promptMarkdown: '# delivered model is read-only',
+      targetState: '2-ready',
+    });
+
+    try {
+      await moveJob(job.id, watchPath, '6-completed');
+      const configWrites: string[] = [];
+      page.on('request', (request) => {
+        if (
+          request.method() === 'PUT'
+          && /\/api\/(?:jobs|tasks)\/.+\/(?:cli-type|model|thinking-level)(\?|$)/.test(request.url())
+        ) {
+          configWrites.push(request.url());
+        }
+      });
+
+      await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+      const overviewBadge = page.getByTestId('overview-agent').getByTestId('chat-compose-model');
+      await expect(overviewBadge).toBeVisible({ timeout: 10_000 });
+      await expect(overviewBadge).toContainText(/5\.6-sol/i);
+      await expect(overviewBadge).toBeDisabled();
+
+      // Native click() on a disabled button is a no-op. This mirrors the
+      // operator interaction while still allowing the negative assertion.
+      await overviewBadge.evaluate((button: HTMLButtonElement) => button.click());
+      await expect(page.getByTestId('overview-agent').getByTestId('chat-model-picker')).toHaveCount(0);
+      expect(configWrites).toEqual([]);
+
+      await testInfo.attach('overview-delivered-agent-readonly.png', {
+        body: await page.screenshot({ fullPage: false }),
+        contentType: 'image/png',
+      });
     } finally {
       await deleteJob(job.id, watchPath);
     }

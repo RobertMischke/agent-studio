@@ -116,6 +116,11 @@ Use **Drain** before maintenance. Drain blocks new leases immediately. Running
 tasks keep their leases and finish normally. The host remains visible and
 drained afterward. The equivalent API call is:
 
+Drain is deliberately not a live migration command. Runner assignment changes,
+immediate stop-and-switch, cross-host continuation, and the historical A → B → A
+route follow the
+[runner provenance and host handoff contract](../concepts/completion-review-and-remote-runner-stability.html#provenance).
+
 ```bash
 curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/drain \
   -H 'X-Client-Id: local-default'

@@ -7,8 +7,14 @@
 > product-thesis framing is superseded, and this document must be rewritten
 > with a real threat model (auth on the central URL, SSH-provisioned runner
 > hosts, per-runner identities) **before** any port is exposed beyond SSH.
-> Plan of record: [remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
-> (phase 2 gates on it, see D4).
+> Plan of record: [concepts/distributed-agent-studio-target-architecture.md](../../concepts/distributed-agent-studio-target-architecture.md)
+> (the central-URL auth boundary and runner split gate the remote phases).
+>
+> **Target clarification (2026-07-13).** The required human login, Runner
+> service identity, HTTPS boundary, audit, and management model is now defined
+> in [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md#8-security-baseline-for-an-internet-reachable-server).
+> The local-only text below is current-state documentation, not the networked
+> target.
 
 ## Situation
 
@@ -22,7 +28,10 @@ The product thesis is "a workbench that keeps one project moving, scaled across 
 
 ## Open considerations
 
-- **Job folders are external.** The app reads/writes job folders inside watched targets. Those watched paths are configured by the user; a hostile config could point at unintended directories.
+- **Task folders are external to the product checkout.** The app reads and
+  writes task folders below the configured central `TaskRepository`. Legacy
+  watch-path configuration can still point at another directory, so a hostile
+  or mistaken configuration could expose unintended paths.
 - **CLI quota credentials.** Agents read their own auth state from disk (Claude session files, Copilot tokens). The app never reads or stores those secrets, but bugs in CLI drivers could conceivably leak prompts or session IDs into logs.
 - **Markdown rendering.** Frontend renders Markdown for status, prompts, and now these security/architecture docs. The renderer is hand-written and avoids `innerHTML` for user input outside the dedicated editor; review it whenever you touch the markdown utility.
 

@@ -1132,7 +1132,7 @@ export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
  * DtC drive-to-conclusion infra-retry budget: up to 3 total attempts per
  * run-chain (attempt 1 = original run + up to 2 infra retries). Mirrors the
  * backend `CompletionRetrigger` DefaultBudget; see the four-terminal model in
- * `docs/wiki/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
+ * `docs/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
  * CooldownRetry banner counts against this budget.
  */
 export const INFRA_RETRY_BUDGET = 3;
@@ -1318,14 +1318,14 @@ export interface RunnerBadge {
  */
 export function buildRunnerBadge(job: TaskInfo): RunnerBadge | null {
   const running = job.state === TaskState.Progress && job.execution?.status === 'running';
-  const runner = job.runner ?? null;
+  const runner = job.state === TaskState.Progress ? job.runner ?? null : null;
 
   if (runner && runner.isRemote) {
     const name = (runner.runnerName || runner.runnerId || 'remote runner').trim();
     const host = (runner.hostname || '').trim();
-    const parts = [`Executed by remote runner ${name}${host ? ` on ${host}` : ''}.`];
+    const parts = [`Running remotely on ${name}${host ? ` (${host})` : ''}.`];
     parts.push('This task is running on another host, not in-process (holds the run lease).');
-    return { kind: 'remote', glyph: '⇥', label: name, tooltip: parts.join('\n') };
+    return { kind: 'remote', glyph: '⇥', label: `remote · ${name}`, tooltip: parts.join('\n') };
   }
 
   // Local: only assert "lokal" while the card is genuinely running in-process

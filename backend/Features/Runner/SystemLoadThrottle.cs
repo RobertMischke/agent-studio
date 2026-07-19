@@ -50,12 +50,12 @@ public sealed class SystemLoadThrottle : BackgroundService, ILoadThrottleGate
             if (!announced)
             {
                 announced = true;
-                _logger.LogWarning("support_one_shot_queued reason=environmental-load operation={Operation} cpuPercent={CpuPercent:0.#}", reason, Current.CurrentPercent);
+                _logger.LogWarning("load_throttled_operation_queued reason=environmental-load operation={Operation} cpuPercent={CpuPercent:0.#}", reason, Current.CurrentPercent);
             }
             await Task.Delay(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
         }
         if (announced)
-            _logger.LogInformation("support_one_shot_released reason=environmental-load operation={Operation}", reason);
+            _logger.LogInformation("load_throttled_operation_released reason=environmental-load operation={Operation}", reason);
     }
 
     private void Sample()

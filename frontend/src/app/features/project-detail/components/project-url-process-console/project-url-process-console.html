@@ -1,0 +1,37 @@
+@if (open() && session(); as process) {
+  <section class="process-console" data-testid="url-preview-process-console" aria-label="Live server output">
+    <header class="process-console__header">
+      <div class="process-console__identity">
+        <span class="process-console__status" [attr.data-state]="process.state"
+              data-testid="url-preview-process-status">
+          <span aria-hidden="true"></span>{{ statusLabel(process.state) }}
+        </span>
+        <strong>{{ label() }}</strong>
+        <span class="process-console__guidance">Owned by Studio until stopped or the backend shuts down</span>
+      </div>
+      <div class="process-console__actions">
+        @if (canStop()) {
+          <button type="button" class="process-console__button process-console__button--danger"
+                  data-testid="url-preview-process-stop"
+                  [appPendingButton]="stopping()"
+                  pendingLabel="Stopping server..."
+                  (click)="stopRequest.emit()">Stop server</button>
+        }
+        <button type="button" class="process-console__button"
+                data-testid="url-preview-process-hide"
+                (click)="closeRequest.emit()">Hide console</button>
+      </div>
+    </header>
+
+    <dl class="process-console__facts">
+      <div><dt>Command</dt><dd><code>{{ process.command }}</code></dd></div>
+      <div><dt>Working directory</dt><dd><code>{{ process.cwd || 'Project repository or root path' }}</code></dd></div>
+      @if (process.exitCode !== null) {
+        <div><dt>Exit code</dt><dd><code>{{ process.exitCode }}</code></dd></div>
+      }
+    </dl>
+
+    <pre data-testid="url-preview-process-output" aria-live="polite">@if (process.output.length) {@for (line of process.output; track $index) {{{ line }}
+}} @else {Waiting for process output…}</pre>
+  </section>
+}

@@ -45,7 +45,7 @@ public sealed class ProjectVisualEvidenceServiceTests : IDisposable
         Assert.Equal(unseen.Id, Assert.Single(ReviewEvidenceLog.ReadLatestPerId(jobFolder)).Id);
 
         File.Delete(screenshot);
-        var unavailable = Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo"));
+        var unavailable = Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo", refresh: true));
         var retained = Assert.Single(unavailable.Items);
         Assert.Equal(unseen.Id, retained.Id);
         Assert.Equal("unavailable", retained.ReviewStatus);
@@ -71,6 +71,44 @@ public sealed class ProjectVisualEvidenceServiceTests : IDisposable
         Assert.Single(queue.Items);
         Assert.Equal("delivered-task", queue.Items[0].JobId);
         Assert.Null(service.Build("Unknown"));
+    }
+
+    [Fact]
+    public void Build_CachesFilesystemProjection_UntilExplicitRefresh()
+    {
+        var (service, jobFolder, _) = BuildStack();
+
+        var initial = Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo"));
+        Assert.Single(initial.Items);
+
+        File.WriteAllBytes(Path.Combine(jobFolder, "results", "second--real.png"), [4, 5, 6]);
+
+        Assert.Single(Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo")).Items);
+        Assert.Equal(2, Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo", refresh: true)).Items.Count);
+    }
+
+    [Fact]
+    public void Build_ReturnsOnlyTheFourNewestOverviewItems()
+    {
+        var (service, jobFolder, originalScreenshot) = BuildStack();
+        var results = Path.Combine(jobFolder, "results");
+        var baseline = new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(originalScreenshot, baseline);
+
+        for (var index = 1; index <= 5; index++)
+        {
+            var path = Path.Combine(results, $"evidence-{index}--real.png");
+            File.WriteAllBytes(path, [(byte)index]);
+            File.SetLastWriteTimeUtc(path, baseline.AddMinutes(index));
+        }
+
+        var queue = Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo", refresh: true));
+
+        Assert.Equal(ProjectVisualEvidenceService.OverviewItemLimit, queue.Items.Count);
+        Assert.Equal(4, queue.UnseenCount);
+        Assert.Equal(
+            ["evidence-5--real.png", "evidence-4--real.png", "evidence-3--real.png", "evidence-2--real.png"],
+            queue.Items.Select(item => item.FileName));
     }
 
     private (ProjectVisualEvidenceService Service, string JobFolder, string Screenshot) BuildStack()
