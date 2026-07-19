@@ -23,8 +23,8 @@
 | Bridge: SupervisorInterventions | `SupervisorInterventionService` | ✅ Interventions mirrored |
 | Bridge: Supporting agents | `AgentMessageBusBridge.EmitSupportingAgentReportAsync` | ✅ Roadmap-alignment wired; others planned |
 | Token-usage messages | `kind:token-usage` via bridge on orchestrator turns | ✅ `tokens.{input,output,cacheRead,cacheWrite,model}` fields present |
-| Storage schema | `docs/system/schemas/agent-message.schema.json` | ✅ |
-| Participant schema | `docs/system/schemas/agent-participant.schema.json` | ✅ |
+| Storage schema | `docs/app/schemas/agent-message.schema.json` | ✅ |
+| Participant schema | `docs/app/schemas/agent-participant.schema.json` | ✅ |
 
 ---
 

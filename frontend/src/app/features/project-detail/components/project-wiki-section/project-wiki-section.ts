@@ -121,7 +121,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
  * context menu offers New page / New category / Rename / Delete, and dragging a
  * file onto a folder moves it (git mv). Dragging a folder onto a sibling
  * folder reorders the categories; the order persists server-side
- * (docs/.wiki-order.json) through the same commit-backed mutation channel. The
+ * (docs/app/config/wiki-order.json) through the same commit-backed mutation channel. The
  * tree re-reads from disk after every mutation, so what you see is the
  * committed state. A pinned "Overview" node above the categories reopens the
  * dashboard landing (the initial no-selection state).
@@ -1446,7 +1446,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   // ---- drag and drop ----
   // Files dragged onto a folder move into it (git mv, the original mechanism);
   // folders dragged onto a *sibling* folder reorder the category list, which is
-  // persisted through the docs/.wiki-order.json channel.
+  // persisted through the docs/app/config/wiki-order.json channel.
 
   onNodeDragStart(ev: DragEvent, node: WikiTreeNode): void {
     if (!node.relPath || !ev.dataTransfer) return;

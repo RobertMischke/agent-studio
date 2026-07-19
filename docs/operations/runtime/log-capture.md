@@ -4,7 +4,7 @@ Storage layout, capture paths, and retention rules for the build-time slice
 of [Product Runtime Observability](../../../ROADMAP.md#product-runtime-observability).
 
 The schema for one event is
-[`docs/system/schemas/product-runtime-event.schema.json`](../../system/schemas/product-runtime-event.schema.json).
+[`docs/app/schemas/product-runtime-event.schema.json`](../../app/schemas/product-runtime-event.schema.json).
 This document covers **where captured events live on disk and how long they
 stay there**. The contract document
 (`docs/operations/runtime/observability.md`, queued in
@@ -20,8 +20,8 @@ The product produces two append-only streams. They share file conventions
 
 | Stream | Source | Layout root | Schema |
 |--------|--------|-------------|--------|
-| Agent Message Bus | Orchestrator, supervisor, agents, skills | `<workspace>/logs/bus/` | [agent-message.schema.json](../../system/schemas/agent-message.schema.json) |
-| Product Runtime Events | The software the agents are building | `<job>/logs/runtime/` and `<workspace>/logs/runtime/` | [product-runtime-event.schema.json](../../system/schemas/product-runtime-event.schema.json) |
+| Agent Message Bus | Orchestrator, supervisor, agents, skills | `<workspace>/logs/bus/` | [agent-message.schema.json](../../app/schemas/agent-message.schema.json) |
+| Product Runtime Events | The software the agents are building | `<job>/logs/runtime/` and `<workspace>/logs/runtime/` | [product-runtime-event.schema.json](../../app/schemas/product-runtime-event.schema.json) |
 
 The Agent Message Bus may carry an artifact reference of kind `runtime-event`
 that points at one of these records, but it never embeds them. Cross-stream

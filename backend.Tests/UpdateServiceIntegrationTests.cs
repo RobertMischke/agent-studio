@@ -154,7 +154,7 @@ public class UpdateServiceIntegrationTests
         Assert.All(rows, r => Assert.True(r.RootElement.GetProperty("ok").GetBoolean()));
 
         // Pre/post snapshots round-trip into the wire shape declared by
-        // docs/system/schemas/update-run-snapshot.schema.json.
+        // docs/app/schemas/update-run-snapshot.schema.json.
         var pre = JsonSerializer.Deserialize<UpdateRunSnapshot>(File.ReadAllText(Path.Combine(runFolder, "pre-snapshot.json")),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
         Assert.Equal("pre", pre.Kind);

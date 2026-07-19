@@ -1,5 +1,19 @@
 # Concept and Knowledge Pages
 
+## Zweck & Abgrenzung
+
+Hand-gepflegte, lebende Erklär- und Wissens-Seiten: das *Warum*, *Was* und *Wie*
+eines Bereichs, plus laufendes Wissenslog, dazu datierte Deep-Dives, Mockups und
+Proposals.
+
+**Gehört hierher:** Architektur-Konzepte vor der ADR-/Domänen-Reife, lebende
+Wissens-Seiten, Mockups (`mockups/`), Proposals (`proposals/`) und die
+generierten Designated-Topic-Seiten (`designated-topics/`).
+
+**Gehört nicht hierher:** verbindliche Systemverträge und Domänenkarten (→
+`system/`), Betriebs-/Setup-Wissen (→ `operations/`), Qualitäts- und Style-Guides
+(→ `quality/`). Code-Verträge (Schemas, Config, In-App-Hilfe) liegen unter `app/`.
+
 > Since 2026-07-18 this folder also holds the architecture concept pages that
 > previously sat directly in `docs/concepts/` while the living knowledge pages
 > lived in `docs/wiki/concepts/`; the two sets were merged when the `docs/wiki/`

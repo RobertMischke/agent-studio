@@ -20,7 +20,7 @@ source.md.report.html
 ```
 
 The `.meta.json` companion follows
-[`docs/system/schemas/wiki-document-companion.schema.json`](../system/schemas/wiki-document-companion.schema.json).
+[`docs/app/schemas/wiki-document-companion.schema.json`](../app/schemas/wiki-document-companion.schema.json).
 It stores the drift grade, direction, findings, duplicate hints, and the source
 fingerprint used during review. The `.report.html` file is generated from that
 JSON and is loaded by the Wiki Report tab. Companion files are physical files,

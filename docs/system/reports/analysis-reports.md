@@ -4,7 +4,7 @@ Single source of truth for the contract that turns manual and scheduled meta-ana
 
 > **Language:** English. See [AGENTS.md](../../../AGENTS.md#documentation-language).
 >
-> **Schema home:** field-level rules live in [`docs/system/schemas/analysis-report.schema.json`](../schemas/analysis-report.schema.json). The contract here is the prose; the schema is the validator.
+> **Schema home:** field-level rules live in [`docs/app/schemas/analysis-report.schema.json`](../schemas/analysis-report.schema.json). The contract here is the prose; the schema is the validator.
 >
 > **Related:** the design rationale lives in [ROADMAP.md](../../../ROADMAP.md#analysis-reports-and-meta-actions), [docs/quality/design-principles.md](../../quality/design-principles.md#analysis-reports-are-first-class-product-memory), and [docs/system/architecture/decisions/adr-archive.md](../architecture/decisions/adr-archive.md) ADR-0022 (the meta-cycle is one producer of analysis reports) and ADR-0023 (storage pattern).
 
@@ -75,10 +75,10 @@ logs/analysis/<project>/<reportId>.json        # structured sidecar (optional)
 
 ### 4.2 JSON is the app contract
 
-- The schema is [`docs/system/schemas/analysis-report.schema.json`](../schemas/analysis-report.schema.json).
+- The schema is [`docs/app/schemas/analysis-report.schema.json`](../schemas/analysis-report.schema.json).
 - Required fields lock the surface the UI, the bus, and the system-review monitor read against: `reportId`, `scope`, `producer`, `trigger`, `topic`, `createdAt`, `summary`, `severity`, `parseStatus`, `references`, `followUpTaskSuggestions`, `schemaVersion`.
 - Field names are camelCase to match `JsonSerializerDefaults.Web` and the existing schema policy.
-- Enums spell PascalCase to match the C# records (consistent with [`docs/system/schemas/README.md`](../schemas/README.md)).
+- Enums spell PascalCase to match the C# records (consistent with [`docs/app/schemas/README.md`](../schemas/README.md)).
 
 ### 4.3 Parse-failure behavior
 
@@ -171,8 +171,8 @@ The Task Access Layer (ADR-0024) is in phase 1 (contract only) at the time of wr
 
 ## 9. Implementation pointers
 
-- Schema: [`docs/system/schemas/analysis-report.schema.json`](../schemas/analysis-report.schema.json).
-- Schema index: [`docs/system/schemas/README.md`](../schemas/README.md).
+- Schema: [`docs/app/schemas/analysis-report.schema.json`](../schemas/analysis-report.schema.json).
+- Schema index: [`docs/app/schemas/README.md`](../schemas/README.md).
 - Backend record: `AgentStudio.Analysis.AnalysisReport`.
 - Backend validator: `AgentStudio.Analysis.AnalysisReportValidator`.
 - Backend store: `AgentStudio.Analysis.AnalysisReportStore` (extends `InMemoryStore<AnalysisReportRecord>`).

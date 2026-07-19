@@ -1220,7 +1220,7 @@ describe('ProjectWikiSectionComponent', () => {
     const put = http.expectOne(req =>
       req.method === 'PUT' && req.url === '/api/projects/Demo/wiki/folder-order');
     expect(put.request.body).toEqual({ parentRelPath: '', orderedNames: ['beta', 'gamma', 'alpha'] });
-    put.flush({ relPath: '.wiki-order.json', sha: 'abc1234' });
+    put.flush({ relPath: 'app/config/wiki-order.json', sha: 'abc1234' });
 
     // The mutation triggers a refresh; the tree comes back in the saved order.
     http.expectOne('/api/projects/Demo/wiki/tree').flush({

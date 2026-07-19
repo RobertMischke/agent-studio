@@ -8,7 +8,7 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// Covers the saved category drag-order
 /// (<see cref="ProjectDocsService.SetWikiFolderOrder"/> +
-/// <c>docs/.wiki-order.json</c>): persistence, the wiki tree and the folder
+/// <c>docs/app/config/wiki-order.json</c>): persistence, the wiki tree and the folder
 /// overview following the stored order (unknown folders behind,
 /// alphabetically), the alphabetical fallback when no order is stored,
 /// input validation, and the order file staying invisible as a page.
@@ -62,7 +62,7 @@ public class WikiFolderOrderTests : IDisposable
         var result = docs.SetWikiFolderOrder(ProjectName, "", new[] { "gamma", "alpha" });
 
         Assert.True(result.Success, result.Error);
-        Assert.True(File.Exists(Path.Combine(_docsDir, ".wiki-order.json")));
+        Assert.True(File.Exists(Path.Combine(_docsDir, "app", "config", "wiki-order.json")));
 
         var tree = docs.GetWikiTree(ProjectName);
         Assert.NotNull(tree);
@@ -153,11 +153,14 @@ public class WikiFolderOrderTests : IDisposable
         var docs = BuildDocsService();
         Assert.True(docs.SetWikiFolderOrder(ProjectName, "", new[] { "alpha" }).Success);
 
+        // The order file lives under docs/app/config/, so the whole docs/app/
+        // code-contract subtree must stay hidden from tree and overview.
         var tree = docs.GetWikiTree(ProjectName);
-        Assert.DoesNotContain(tree!.Root, n => n.Name == ".wiki-order.json");
+        Assert.DoesNotContain(tree!.Root, n => n.Name == "app");
 
         var overview = docs.GetWikiOverview(ProjectName);
-        Assert.DoesNotContain(overview!.Files, f => f.Name == ".wiki-order.json");
+        Assert.DoesNotContain(overview!.Files, f => f.RelPath.StartsWith("app/", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(overview!.Files, f => f.Name == "wiki-order.json");
     }
 
     // ---- Corrupt order file fails open ----
@@ -167,7 +170,9 @@ public class WikiFolderOrderTests : IDisposable
     {
         WritePage("beta/page.md", "# B\n");
         WritePage("alpha/page.md", "# A\n");
-        File.WriteAllText(Path.Combine(_docsDir, ".wiki-order.json"), "{ not json");
+        var orderFile = Path.Combine(_docsDir, "app", "config", "wiki-order.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(orderFile)!);
+        File.WriteAllText(orderFile, "{ not json");
 
         var tree = BuildDocsService().GetWikiTree(ProjectName);
 

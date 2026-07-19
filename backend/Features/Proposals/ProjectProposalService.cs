@@ -30,7 +30,7 @@ public sealed record ProposalDecisionResult(ProjectProposal Proposal, string? Sp
 /// </summary>
 public sealed class ProjectProposalService
 {
-    private const string ProposalsRel = "docs/concepts/proposals";
+    private const string ProposalsRel = "docs/" + WikiProducerTargets.ProposalsFolder;
     private static readonly string[] AllowedStatuses = ["proposed", "approved", "rejected", "spawned"];
     private readonly TaskScannerService _scanner;
     private readonly ProjectRegistry _registry;

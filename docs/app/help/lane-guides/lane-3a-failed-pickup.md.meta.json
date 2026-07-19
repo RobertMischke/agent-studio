@@ -3,7 +3,7 @@
   "schemaVersion": "wiki-document-companion/v1",
   "title": "Failed Pickup (retired)",
   "source": {
-    "path": "docs/in-app-help/lane-guides/lane-3a-failed-pickup.md",
+    "path": "docs/app/help/lane-guides/lane-3a-failed-pickup.md",
     "type": "markdown",
     "fingerprint": {
       "algorithm": "sha256",

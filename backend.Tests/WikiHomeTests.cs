@@ -8,7 +8,7 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// Covers the curated wiki home surface
 /// (<see cref="ProjectDocsService.GetWikiHome"/>): parsing
-/// <c>docs/home.json</c> with per-link <c>exists</c> flags (dead links are
+/// <c>docs/app/config/home.json</c> with per-link <c>exists</c> flags (dead links are
 /// kept and flagged, not dropped), the empty-sections degradation for a missing
 /// or malformed file, and the traversal guard on link targets. Also proves the
 /// shipped seed in this repository parses and only references existing pages.
@@ -37,7 +37,7 @@ public class WikiHomeTests : IDisposable
     public void GetWikiHome_ParsesSectionsAndAnnotatesExistsFlags()
     {
         WriteDoc("guides/setup.md", "# Setup\n");
-        WriteDoc("home.json", """
+        WriteDoc("app/config/home.json", """
             {
               "sections": [
                 {
@@ -92,7 +92,7 @@ public class WikiHomeTests : IDisposable
     [Fact]
     public void GetWikiHome_MalformedJson_ReturnsEmptySections()
     {
-        WriteDoc("home.json", "{ this is not json ");
+        WriteDoc("app/config/home.json", "{ this is not json ");
 
         var home = BuildDocsService().GetWikiHome(ProjectName);
 
@@ -105,7 +105,7 @@ public class WikiHomeTests : IDisposable
     {
         // The file exists OUTSIDE docs/ - the traversal guard must refuse to see it.
         File.WriteAllText(Path.Combine(_tempDir, "outside.md"), "# Outside\n");
-        WriteDoc("home.json", """
+        WriteDoc("app/config/home.json", """
             {
               "sections": [
                 { "title": "Boese", "links": [ { "relPath": "../outside.md", "label": "Escape" } ] }
@@ -126,7 +126,7 @@ public class WikiHomeTests : IDisposable
     }
 
     /// <summary>
-    /// The shipped seed (<c>docs/home.json</c> in this repository) must
+    /// The shipped seed (<c>docs/app/config/home.json</c> in this repository) must
     /// parse into curated sections whose links all point at pages that exist.
     /// </summary>
     [Fact]

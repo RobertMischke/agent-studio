@@ -17,9 +17,9 @@ pipeline view.
   defines how a pipeline cycle, agent run, execution attempt, and step execution
   retain ordered runner/host placement across planned review handoffs and
   recovery. A single task- or pipeline-level runner field is not sufficient.
-- [docs/system/schemas/pipeline-definition.schema.json](../schemas/pipeline-definition.schema.json)
+- [docs/app/schemas/pipeline-definition.schema.json](../schemas/pipeline-definition.schema.json)
   pins versioned pipeline definitions.
-- [docs/system/schemas/step-run.schema.json](../schemas/step-run.schema.json) pins
+- [docs/app/schemas/step-run.schema.json](../schemas/step-run.schema.json) pins
   per-step telemetry rows.
 - [docs/system/domains/token-pricing.md](./token-pricing.md) is the single source for pipeline
   cost derivation.

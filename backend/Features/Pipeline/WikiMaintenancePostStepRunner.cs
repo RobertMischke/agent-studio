@@ -60,15 +60,22 @@ public sealed partial class WikiMaintenancePostStepRunner
             return new WikiMaintenanceResult(WikiMaintenanceVerdict.Skipped, "no recurring-problem signal found");
 
         var theme = ThemeFor(signal);
-        var wikiRoot = Path.Combine(docsRoot, theme, "common-problems");
-        var relPath = $"{theme}/common-problems/{signal.Slug}/README.md";
+        var wikiRoot = Path.Combine(docsRoot, theme, WikiProducerTargets.CommonProblemsSegment);
+        var relPath = $"{theme}/{WikiProducerTargets.CommonProblemsSegment}/{signal.Slug}/README.md";
         try
         {
             var problemDir = Path.Combine(wikiRoot, signal.Slug);
             var existed = Directory.Exists(problemDir);
             Directory.CreateDirectory(problemDir);
             EnsureProblemFiles(problemDir, signal, task, now);
-            UpsertReadme(Path.Combine(problemDir, "README.md"), signal, task, now, existed);
+            var readmePath = Path.Combine(problemDir, "README.md");
+            UpsertReadme(readmePath, signal, task, now, existed);
+            if (!existed)
+                // Metadata convention (2026-07): stamp the folder-default classification
+                // (common-problems => "generiert") so the page is born classified.
+                new WikiCompanionStore().WriteCreationClassification(
+                    docsRoot, relPath, signal.Slug, File.ReadAllText(readmePath, Encoding.UTF8),
+                    ProjectDocsService.DefaultClassificationType(relPath), now);
             AppendOccurrence(Path.Combine(problemDir, "occurrences.md"), signal, task, entry, now);
             RegenerateIndex(wikiRoot, now);
 

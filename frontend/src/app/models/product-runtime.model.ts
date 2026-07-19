@@ -2,7 +2,7 @@
  * Wire shape for {@code GET /api/runtime/{project}/events}. Mirrors
  * {@code RuntimeEventListResponse} on the backend; the JSON serialiser uses
  * web defaults (camelCase) so field names below match the on-disk schema in
- * {@code docs/system/schemas/product-runtime-event.schema.json}.
+ * {@code docs/app/schemas/product-runtime-event.schema.json}.
  */
 
 /** Severity levels accepted by the schema. */

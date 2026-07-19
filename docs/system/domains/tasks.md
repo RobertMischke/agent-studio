@@ -17,8 +17,8 @@ or commit attribution.
   markers, `attachments/`, `results/`, and image retention.
 - [docs/system/architecture/runner-lanes/progress-lane-writers.md](../architecture/runner-lanes/progress-lane-writers.md)
   lists every writer for the `3-progress` lane.
-- [docs/system/schemas/task-mutation-request.schema.json](../schemas/task-mutation-request.schema.json)
-  and [docs/system/schemas/task-find-result.schema.json](../schemas/task-find-result.schema.json)
+- [docs/app/schemas/task-mutation-request.schema.json](../schemas/task-mutation-request.schema.json)
+  and [docs/app/schemas/task-find-result.schema.json](../schemas/task-find-result.schema.json)
   pin task API shapes.
 
 ## Project onboarding contract

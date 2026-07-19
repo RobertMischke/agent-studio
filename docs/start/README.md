@@ -21,13 +21,27 @@ Use this page as the first stop when you need the right document quickly.
 | [operations/](../operations/README.md) | Setup, onboarding, security docs, runtime observability, git doctrine, and test workspaces. |
 | [reports/](../system/reports/README.md) | Report contracts, HTML visual reports, and screenshot-backed visual documentation. |
 | [concepts/](../concepts/README.md) | Architecture concepts that have not become a domain or ADR yet, plus hand-maintained living concept/knowledge pages with running knowledge logs, dated deep dives, mockups, and proposals. |
-| [in-app-help/](../in-app-help/README.md) | Short Markdown help pages served by the app next to non-obvious UI surfaces. |
 | [common-problems/](../operations/common-problems/README.md) | Known recurring problems with root-cause analysis, occurrence logs, and workarounds. Search here first on a familiar symptom. |
 | [learnings/](../operations/learnings/README.md) | Per-task run learnings auto-distilled by the opt-in `post-wiki-learnings` pipeline step. Do not edit by hand. |
-| [schemas/](../system/schemas/README.md) | JSON schemas for wire and disk shapes. |
 | [mockups/](../concepts/mockups/) | Locked design references and click-dummies (under `concepts/`). |
 | [assets/](../assets) | Image assets referenced by documentation pages. |
 | [proposals/](../concepts/proposals/README.md) | Dated improvement proposals with durable approval status and implementation-card references. |
+
+## Code-Vertrag (`app/`)
+
+`docs/app/` is **not** knowledge content and is deliberately hidden from the Wiki
+tree, folder view, search, pulse, and grading. It is the code-contract area:
+its path and format only change together with the code that reads it.
+
+| Folder | Contents |
+|---|---|
+| [`app/schemas/`](../app/schemas/README.md) | JSON schemas for wire and disk shapes (validated by the backend). |
+| `app/help/` | Short Markdown help bodies served by the app next to non-obvious UI surfaces (`GET /api/concept-docs/{topic}`). |
+| `app/config/` | Wiki configuration: the curated home (`home.json`) and the saved category order (`wiki-order.json`). |
+
+**Rule:** `app/` = Code-Vertrag — Pfad und Format nur zusammen mit Code ändern.
+A guard test (`WikiPathCentralizationGuardTests`) keeps every hardcoded `docs/`
+path either under `app/` or registered in `WikiProducerTargets`.
 
 ## Load-Bearing Entry Points
 
@@ -69,8 +83,8 @@ Use this page as the first stop when you need the right document quickly.
 | Project Overview operator dashboard (metrics, Visual Evidence Queue, Project URLs, deployment summary, Wiki entry) | [mockup contract](../concepts/project-overview-dashboard/README.md) · [interactive mockup](../concepts/project-overview-dashboard/ui.html) |
 | Wiki classification | [product/wiki-document-classification.md](./wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](./wiki-editing-and-branch-flow.md) |
-| Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../system/schemas/wiki-document-companion.schema.json) |
-| Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](../system/schemas/model-qualification-event.schema.json) |
+| Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../app/schemas/wiki-document-companion.schema.json) |
+| Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](../app/schemas/model-qualification-event.schema.json) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |
@@ -107,7 +121,10 @@ Use this page as the first stop when you need the right document quickly.
   `system/cli/audits/`; dated deep dives live under `concepts/`.
 - Keep explanatory and evolving notes in `concepts/`, recurring incident
   patterns in `common-problems/`, and auto-distilled run learnings in
-  `learnings/` (wiki conventions: [README-aus-wiki.md](README-aus-wiki.md)).
+  `learnings/` (wiki conventions: [wiki-conventions.md](wiki-conventions.md)).
+- Treat `app/` as a code contract, not knowledge: its path and format change only
+  together with code. Never file a knowledge page under `app/`, and never move a
+  schema, help body, or config out of it without the matching code change.
 - Use Markdown by default.
 - Use HTML only for visual or spatial pages that need layout, such as maps or
   reports. HTML pages must be self-contained and readable in the Wiki iframe.

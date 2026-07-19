@@ -25,11 +25,11 @@ slightly older codebase than the one on disk.
 ## What still matches (healthy)
 
 - **Participant model** — the eight kinds in §2 match the
-  `enum` in `docs/system/schemas/agent-participant.schema.json` exactly
+  `enum` in `docs/app/schemas/agent-participant.schema.json` exactly
   (`User, Orchestrator, Supervisor, CodingAgent, SupportingAgent,
   SystemReview, Runtime, External`).
 - **Message kinds** — the ten kinds in §3.1 / schema match
-  `docs/system/schemas/agent-message.schema.json` `kind.enum`.
+  `docs/app/schemas/agent-message.schema.json` `kind.enum`.
 - **Storage layout** — §4 matches `backend/Features/Bus/AgentMessageBusPaths.cs`
   and `implementation-state.md` §4 (`{workspace}/logs/bus/{project|_workspace}/{date}.jsonl`,
   participant `:` → `-` on disk).
@@ -70,7 +70,7 @@ The sibling living doc `docs/system/architecture/bus/implementation-state.md` is
 
 ### D2 — Contract prose lags schema (Warn)
 
-`docs/system/schemas/agent-message.schema.json` carries two fields the contract
+`docs/app/schemas/agent-message.schema.json` carries two fields the contract
 never documents:
 
 - `latency` envelope object (schema lines 150-161).
@@ -105,7 +105,7 @@ so this is a wording/expectation note, not a contract violation. Soften to
   and found no model instance, so per-element scoring against an
   `architecture-model.schema.json` instance is not possible. The contract
   for such a model exists (`docs/system/architecture/model.md`,
-  `docs/system/schemas/architecture-model.schema.json`) but no instance has been
+  `docs/app/schemas/architecture-model.schema.json`) but no instance has been
   authored. This is the producer's mandated high-severity Architecture
   finding; it is independent of this page's accuracy.
 

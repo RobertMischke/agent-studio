@@ -73,7 +73,7 @@ Failing closed is the default. The agent can only steer toward outcomes the code
 
 ## Input contract
 
-The Pre-Guard builds the input contract before any LLM call. The schema lives next to the consumer in [`docs/system/schemas/`](../schemas) and is loaded into the test matrix.
+The Pre-Guard builds the input contract before any LLM call. The schema lives next to the consumer in [`docs/app/schemas/`](../schemas) and is loaded into the test matrix.
 
 A typical input contract carries:
 

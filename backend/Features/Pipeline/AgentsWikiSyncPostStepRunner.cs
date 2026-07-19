@@ -57,10 +57,10 @@ public sealed record AgentsWikiSyncResult(
 public sealed class AgentsWikiSyncPostStepRunner
 {
     /// <summary>Wiki-root-relative folder that holds the registry + generated pages.</summary>
-    public const string TopicsFolderRel = "concepts/designated-topics";
+    public const string TopicsFolderRel = WikiProducerTargets.DesignatedTopicsFolder;
 
     /// <summary>Repo-relative index the AGENTS.md pointer targets.</summary>
-    public const string IndexRepoRel = "docs/concepts/designated-topics/README.md";
+    public const string IndexRepoRel = "docs/" + WikiProducerTargets.DesignatedTopicsFolder + "/README.md";
 
     private const string AgentsBeginMarker = "<!-- designated-topics:begin (managed by post-agents-wiki-sync) -->";
     private const string AgentsEndMarker = "<!-- designated-topics:end -->";
@@ -146,9 +146,15 @@ public sealed class AgentsWikiSyncPostStepRunner
                 if (isMatch) matched++;
 
                 var statePath = Path.Combine(topicsFolder, topic.Slug + ".md");
-                UpsertStatePage(statePath, topicsFolder, entry.RootPath, topic, task, isMatch, matchedBy, pageExists, now);
+                var created = UpsertStatePage(statePath, topicsFolder, entry.RootPath, topic, task, isMatch, matchedBy, pageExists, now);
 
                 var stateText = File.ReadAllText(statePath, Utf8NoBom);
+                if (created)
+                    // Metadata convention (2026-07): born classified so a generated
+                    // designated-topic page never reads as "unclassified" on the pulse.
+                    new WikiCompanionStore().WriteCreationClassification(
+                        Path.Combine(entry.RootPath, "docs"), $"{TopicsFolderRel}/{topic.Slug}.md",
+                        topic.Slug, stateText, ProjectDocsService.DefaultClassificationType($"{TopicsFolderRel}/{topic.Slug}.md"), now);
                 rows.Add(new IndexRow(
                     topic,
                     pageExists,
@@ -306,7 +312,8 @@ public sealed class AgentsWikiSyncPostStepRunner
     /// a re-run on the same task, or an unmatched task, only refreshes the
     /// validation scalars (concept-page-exists / last-synced) so nothing is lost.
     /// </summary>
-    private static void UpsertStatePage(
+    /// <returns>True when the page was freshly created (no file existed yet).</returns>
+    private static bool UpsertStatePage(
         string statePath,
         string topicsFolder,
         string repoRoot,
@@ -325,7 +332,7 @@ public sealed class AgentsWikiSyncPostStepRunner
             File.WriteAllText(statePath,
                 RenderNewStatePage(topicsFolder, repoRoot, topic, task, matched, matchedBy, pageExists, now),
                 Utf8NoBom);
-            return;
+            return true;
         }
 
         var text = File.ReadAllText(statePath, Utf8NoBom);
@@ -346,6 +353,7 @@ public sealed class AgentsWikiSyncPostStepRunner
         }
 
         File.WriteAllText(statePath, text, Utf8NoBom);
+        return false;
     }
 
     private static string RenderNewStatePage(

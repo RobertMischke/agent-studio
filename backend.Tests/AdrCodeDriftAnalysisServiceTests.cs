@@ -99,7 +99,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
     [Fact]
     public void SelectScope_ListsSchemasFromDocsSchemasInSortedOrder()
     {
-        var schemas = Path.Combine(_repoRoot, "docs", "schemas");
+        var schemas = Path.Combine(_repoRoot, "docs", "app", "schemas");
         Directory.CreateDirectory(schemas);
         File.WriteAllText(Path.Combine(schemas, "drift-report.schema.json"), "{}", Encoding.UTF8);
         File.WriteAllText(Path.Combine(schemas, "analysis-report.schema.json"), "{}", Encoding.UTF8);
@@ -111,9 +111,9 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
 
         var paths = scope.Schemas.Select(s => s.Path.Replace('\\', '/')).ToArray();
-        Assert.Contains("docs/system/schemas/drift-report.schema.json", paths);
-        Assert.Contains("docs/system/schemas/analysis-report.schema.json", paths);
-        Assert.Contains("docs/system/schemas/agent-message.schema.json", paths);
+        Assert.Contains("docs/app/schemas/drift-report.schema.json", paths);
+        Assert.Contains("docs/app/schemas/analysis-report.schema.json", paths);
+        Assert.Contains("docs/app/schemas/agent-message.schema.json", paths);
         Assert.DoesNotContain(paths, p => p.EndsWith("README.md", StringComparison.Ordinal));
         // Sorted ordinally so prompts diff cleanly across runs.
         Assert.Equal(paths.OrderBy(p => p, StringComparer.Ordinal).ToArray(), paths);
@@ -150,9 +150,9 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
         WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend", "Services", "Drift"));
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "schemas"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "app", "schemas"));
         File.WriteAllText(
-            Path.Combine(_repoRoot, "docs", "schemas", "drift-report.schema.json"), "{}", Encoding.UTF8);
+            Path.Combine(_repoRoot, "docs", "app", "schemas", "drift-report.schema.json"), "{}", Encoding.UTF8);
         WriteJob("6-completed", "shipped-task", "Shipped");
 
         var svc = new AdrCodeDriftAnalysisService();
@@ -195,7 +195,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
         Assert.Contains("2026-05-05T12:00:00Z", rendered);
         Assert.Contains("docs/system/architecture/decisions/adr-archive.md", rendered);
         Assert.Contains("backend/Services/Drift/", rendered);
-        Assert.Contains("docs/system/schemas/drift-report.schema.json", rendered);
+        Assert.Contains("docs/app/schemas/drift-report.schema.json", rendered);
         Assert.Contains("6-completed/shipped-task", rendered);
         // Hard-constraint wording from the template is preserved verbatim.
         Assert.Contains("do not modify any source file", rendered);
@@ -240,7 +240,7 @@ public class AdrCodeDriftAnalysisServiceTests : IDisposable
                   "sourceCoverage": 0.9,
                   "status": "New",
                   "summary": "Schema additions match producer code.",
-                  "evidenceRefs": ["docs/system/schemas/drift-report.schema.json"],
+                  "evidenceRefs": ["docs/app/schemas/drift-report.schema.json"],
                   "recommendedActions": []
                 }
               ],

@@ -19,7 +19,7 @@ opt-in, operator-triggered pass whose verdict *supplements* that heuristic.
 
 Each wiki page gets a machine-generated assessment stored in the **existing
 companion sidecar** (`<source>.meta.json`, the
-[wiki document companion schema](../system/schemas/wiki-document-companion.schema.json)),
+[wiki document companion schema](../app/schemas/wiki-document-companion.schema.json)),
 **not** as a new wiki page. The verdict lands in a new, optional `grading`
 block, kept deliberately separate from the deterministic `drift` block:
 

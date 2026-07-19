@@ -221,7 +221,7 @@ export class ProjectDocsService {
   /**
    * Persist the display order of the category folders under one parent
    * ("" = docs root). Stored server-side beside the other wiki metadata
-   * (docs/.wiki-order.json) and committed like every other wiki mutation.
+   * (docs/app/config/wiki-order.json) and committed like every other wiki mutation.
    */
   setWikiFolderOrder(projectName: string, parentRelPath: string, orderedNames: string[]) {
     return this.http.put<{ relPath: string; sha: string }>(

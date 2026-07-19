@@ -3,8 +3,8 @@ namespace AgentStudio.State;
 
 /// <summary>
 /// In-code validator that mirrors the value sets and required-field rules in
-/// <c>docs/system/schemas/supervisor-advisory.schema.json</c> and
-/// <c>docs/system/schemas/supervisor-intervention.schema.json</c>. Validation lives
+/// <c>docs/app/schemas/supervisor-advisory.schema.json</c> and
+/// <c>docs/app/schemas/supervisor-intervention.schema.json</c>. Validation lives
 /// here, alongside the in-memory store, so every consumer that goes through
 /// the store gets the same rejection set.
 /// </summary>

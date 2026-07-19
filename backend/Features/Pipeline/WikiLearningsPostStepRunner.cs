@@ -81,15 +81,21 @@ public sealed class WikiLearningsPostStepRunner
         if (string.IsNullOrWhiteSpace(slug))
             return new WikiLearningsResult(WikiLearningsVerdict.Skipped, "task has no usable id for a page slug");
 
-        var relPath = $"operations/learnings/{slug}.md";
+        var relPath = $"{WikiProducerTargets.LearningsFolder}/{slug}.md";
         try
         {
-            var learningsRoot = Path.Combine(docsRoot, "operations", "learnings");
+            var learningsRoot = Path.Combine(docsRoot, WikiProducerTargets.LearningsFolder.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(learningsRoot);
 
             var pagePath = Path.Combine(learningsRoot, slug + ".md");
             var signature = RunSignature(task, run);
             var verdict = UpsertPage(pagePath, task, run, signature, now);
+            if (verdict == WikiLearningsVerdict.Created)
+                // Metadata convention (2026-07): a generated page is born classified
+                // so it never surfaces as an "unclassified page" on the wiki pulse.
+                new WikiCompanionStore().WriteCreationClassification(
+                    docsRoot, relPath, slug, File.ReadAllText(pagePath, Encoding.UTF8),
+                    ProjectDocsService.DefaultClassificationType(relPath), now);
             RegenerateIndex(learningsRoot, now);
 
             _logger.LogInformation(

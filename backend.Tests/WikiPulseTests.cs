@@ -184,7 +184,9 @@ public class WikiPulseTests : IDisposable
         // Saved category drag-order for the docs root: zulu first, then bravo;
         // the unlisted rest sorts behind in the tree's default order (numeric
         // NN- prefix, then name), so 2-early precedes 10-later precedes alpha.
-        File.WriteAllText(Path.Combine(docsDir, ".wiki-order.json"),
+        var orderFile = Path.Combine(docsDir, "app", "config", "wiki-order.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(orderFile)!);
+        File.WriteAllText(orderFile,
             """{ "schemaVersion": "wiki-folder-order/v1", "folderOrder": { "": ["zulu", "bravo"] } }""");
         // Hidden entries (dot-prefixed folders/files) are config sidecars the
         // tree never shows: neither a drift group nor a page count may include

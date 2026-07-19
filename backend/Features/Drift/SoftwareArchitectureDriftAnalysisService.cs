@@ -15,7 +15,7 @@ namespace AgentStudio.Drift;
 /// Mirrors <see cref="AdrCodeDriftAnalysisService"/> in shape: scope ->
 /// prompt -> parse -> report. Adds a small architecture-model frontmatter
 /// reader so the action is the first in-process consumer of
-/// <c>docs/system/schemas/architecture-model.schema.json</c> (per
+/// <c>docs/app/schemas/architecture-model.schema.json</c> (per
 /// <c>docs/system/architecture/model.md</c> Section 8 "Implementation status and
 /// parser ownership"). The model file lives with project evidence; the
 /// reader looks under the watched project's
@@ -714,14 +714,14 @@ public sealed class SoftwareArchitectureDriftAnalysisService
 
     private static IReadOnlyList<DriftRef> BuildSchemaList(string repoRoot)
     {
-        var schemaDir = Path.Combine(repoRoot, "docs", "schemas");
+        var schemaDir = Path.Combine(repoRoot, "docs", "app", "schemas");
         if (!Directory.Exists(schemaDir)) return Array.Empty<DriftRef>();
         var entries = new List<DriftRef>();
         foreach (var file in Directory.EnumerateFiles(schemaDir, "*.json").OrderBy(f => f, StringComparer.Ordinal))
         {
             var name = Path.GetFileName(file);
             entries.Add(new DriftRef(
-                Path: $"docs/system/schemas/{name}",
+                Path: $"docs/app/schemas/{name}",
                 Label: name));
         }
         return entries;
@@ -1167,7 +1167,7 @@ public sealed record ArchitectureModelLookup(
 /// <summary>
 /// In-memory projection of one architecture-model Markdown file's
 /// frontmatter. Mirrors the load-bearing fields in
-/// <c>docs/system/schemas/architecture-model.schema.json</c>; per-element scoring
+/// <c>docs/app/schemas/architecture-model.schema.json</c>; per-element scoring
 /// fields are added by the drift report, not the source model.
 /// </summary>
 public sealed record ArchitectureModelDocument(

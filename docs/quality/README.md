@@ -1,5 +1,19 @@
 # Engineering style guides
 
+## Zweck & Abgrenzung
+
+Qualitäts- und Designwissen: technologie-bewusste Style-Guides, verbindliche
+Design-Hartregeln und der Regel-Autoren-Workflow, die in Prompts und Reviews
+einfließen.
+
+**Gehört hierher:** Angular-/.NET-Style-Guides, `design/`-Hartregeln,
+Frontend-Designsystem und Audits, Architektur-/Qualitäts-Layer, Prinzipien.
+
+**Gehört nicht hierher:** verbindliche Systemverträge und Domänenkarten (→
+`system/`), erklärende Konzepte (→ `concepts/`), Betriebswissen (→
+`operations/`). Code-Verträge (Schemas, Config, In-App-Hilfe) liegen unter
+`app/`.
+
 This folder is the single navigation entry for repository coding guidance that
 depends on a project's technology stack. The Project Hub reads the frontmatter
 from this family, shows only applicable guides in Wiki Pulse, and the existing

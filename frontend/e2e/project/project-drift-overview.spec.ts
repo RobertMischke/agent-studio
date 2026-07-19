@@ -243,13 +243,13 @@ test('follow-up task creation: clicking a finding follow-up queues a 1-preparati
     dimensions: [
       dimension('Schema', 45, 'High', 0.85, 'New',
         'Three schemas include unused fields not present in the DTOs.', {
-          evidence: ['docs/system/schemas/agent-message.schema.json'],
+          evidence: ['docs/app/schemas/agent-message.schema.json'],
           recommendedActions: [],
           findings: [
             finding('finding-schema-001', 'High',
               'agent-message.schema.json carries fields removed from AgentMessage.cs',
               'New',
-              ['docs/system/schemas/agent-message.schema.json', 'backend/Services/Bus/AgentMessage.cs']),
+              ['docs/app/schemas/agent-message.schema.json', 'backend/Services/Bus/AgentMessage.cs']),
           ],
         }),
     ],
