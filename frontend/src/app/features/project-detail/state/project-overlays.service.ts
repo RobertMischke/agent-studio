@@ -172,13 +172,25 @@ export class ProjectOverlaysService {
     const slug = toProjectSlug(name);
     if (!slug) return;
     const rail = this.projectShellRail();
+    // A rename only swaps the slug; the rail and any rail-owned deep-link query
+    // (e.g. the Wiki's `?page=`/`?folder=`) are unaffected, so carry the current
+    // hash's query suffix over verbatim rather than dropping it from the URL.
     const target = `${this.shellHashPrefix}${slug}`
-      + (rail !== DEFAULT_PROJECT_RAIL_KEY ? `/${rail}` : '');
+      + (rail !== DEFAULT_PROJECT_RAIL_KEY ? `/${rail}` : '')
+      + this.currentShellHashQuery();
     if (window.location.hash !== target) {
       try {
         history.replaceState(null, '', window.location.pathname + window.location.search + target);
       } catch { /* ignore */ }
     }
+  }
+
+  /** The `?…` deep-link query on the current shell hash, or '' when none/off-route. */
+  private currentShellHashQuery(): string {
+    const hash = window.location.hash;
+    if (!hash.startsWith(this.shellHashPrefix)) return '';
+    const q = hash.indexOf('?');
+    return q >= 0 ? hash.slice(q) : '';
   }
 
   /**
@@ -225,7 +237,13 @@ export class ProjectOverlaysService {
       }
       return;
     }
-    const tail = hash.slice(this.shellHashPrefix.length);
+    // Tolerate a deep-link query suffix on the rail segment: the Wiki rail
+    // carries its open page/folder as `#/projects/<slug>/wiki?page=<relPath>`
+    // (see wiki-deep-link.ts). Strip everything from the first `?` before the
+    // slug/rail split so the rail still resolves to `wiki` (not a bogus key).
+    const rawTail = hash.slice(this.shellHashPrefix.length);
+    const queryIndex = rawTail.indexOf('?');
+    const tail = queryIndex >= 0 ? rawTail.slice(0, queryIndex) : rawTail;
     const [slugRaw, railRaw] = tail.split('/', 2);
     const slug = decodeURIComponent(slugRaw || '').toLowerCase();
     if (!slug) return;

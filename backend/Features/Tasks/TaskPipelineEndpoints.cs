@@ -126,7 +126,8 @@ public static class TaskPipelineEndpoints
             OnDemandPostStepService onDemand,
             CancellationToken ct) =>
         {
-            watchPath = ResolveWatchPath(projects, project, body?.WatchPath ?? watchPath);
+            watchPath = body?.WatchPath ?? watchPath;
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             if (!OnDemandPostStepService.IsSupported(stepId))

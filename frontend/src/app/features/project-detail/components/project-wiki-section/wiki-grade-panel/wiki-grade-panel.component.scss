@@ -1,13 +1,17 @@
-:host { display: block; }
+@use '../../../../../../styles/mixins' as m;
 
-.wgrade {
+// Full-width card in the wiki dashboard grid (the dashboard spans this host
+// across all columns); ink reads from the paper tokens of the wiki surface.
+:host {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 9px;
-  border: 1px solid color-mix(in srgb, var(--studio-fg) 10%, transparent);
-  background: color-mix(in srgb, var(--studio-fg) 3%, transparent);
+  min-width: 0;
+}
+
+.wgrade {
+  @include m.knowledge-card;
+
+  flex: 1 1 auto;
 }
 
 .wgrade__head {
@@ -21,12 +25,12 @@
   margin: 0;
   font-size: 0.84rem;
   font-weight: 700;
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
 }
 .wgrade__copy p {
   margin: 2px 0 0;
   font-size: 0.72rem;
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
 }
 
 .wgrade__controls {
@@ -40,7 +44,7 @@
   flex-direction: column;
   gap: 3px;
   font-size: 0.64rem;
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
   min-width: 0;
 }
 .wgrade__select {
@@ -48,9 +52,9 @@
   font-size: 0.76rem;
   padding: 5px 8px;
   border-radius: 6px;
-  color: var(--studio-fg);
-  background: var(--studio-bg-elevated, var(--studio-bg));
-  border: 1px solid color-mix(in srgb, var(--studio-fg) 16%, transparent);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
+  background: var(--pwiki-paper-bg, var(--studio-bg));
+  border: 1px solid var(--pwiki-paper-border, var(--studio-border));
   max-width: 15rem;
 }
 .wgrade__select:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -90,13 +94,13 @@
 }
 .wgrade__progress[data-state='completed'] { --wgrade-tone: var(--studio-success); }
 .wgrade__progress[data-state='failed'] { --wgrade-tone: var(--studio-error); }
-.wgrade__progress[data-state='aborted'] { --wgrade-tone: var(--studio-fg-muted); }
+.wgrade__progress[data-state='aborted'] { --wgrade-tone: var(--pwiki-paper-muted, var(--studio-fg-muted)); }
 .wgrade__track {
   flex: 1 1 160px;
   height: 6px;
   border-radius: 999px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--studio-fg) 10%, transparent);
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
 }
 .wgrade__fill {
   display: block;
@@ -108,13 +112,13 @@
 .wgrade__state {
   font-size: 0.72rem;
   font-weight: 600;
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
   font-variant-numeric: tabular-nums;
 }
 .wgrade__current {
   font-size: 0.68rem;
   font-family: var(--font-mono, monospace);
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -130,7 +134,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
 }
 .wgrade__critical-head h4 {
   margin: 0;
@@ -138,7 +142,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
 }
 .wgrade__badge {
   margin-left: auto;
@@ -146,16 +150,16 @@
   font-variant-numeric: tabular-nums;
   padding: 1px 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--studio-fg) 8%, transparent);
-  color: var(--studio-fg-muted);
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
 }
 .wgrade__badge[data-tone='bad'] {
   background: color-mix(in srgb, var(--studio-error) 22%, transparent);
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
 }
 .wgrade__badge[data-tone='good'] {
   background: color-mix(in srgb, var(--studio-success) 20%, transparent);
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
 }
 
 .wgrade__list {
@@ -176,14 +180,14 @@
   border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
   cursor: pointer;
   font: inherit;
   min-width: 0;
 }
 .wgrade__row:hover {
-  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
-  border-color: color-mix(in srgb, var(--studio-fg) 12%, transparent);
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
+  border-color: var(--pwiki-paper-border, var(--studio-border));
 }
 .wgrade__row:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
@@ -217,13 +221,13 @@
   padding: 1px 6px 1px 4px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
 }
 .wgrade__model {
   margin-left: auto;
   font-size: 0.62rem;
   font-family: var(--font-mono, monospace);
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
 }
 .wgrade__row-title {
   font-size: 0.84rem;
@@ -234,12 +238,12 @@
 }
 .wgrade__reason {
   font-size: 0.72rem;
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
 }
 .wgrade__path {
   font-size: 0.68rem;
   font-family: var(--font-mono, monospace);
-  color: var(--studio-fg-muted);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -256,7 +260,7 @@
 .wgrade__healthy p {
   margin: 0;
   font-size: 0.78rem;
-  color: var(--studio-fg);
+  color: var(--pwiki-paper-fg, var(--studio-fg));
 }
 
 /* ---- tones ---- */
@@ -264,4 +268,4 @@
 [data-tone='info'] { --wgrade-tone: var(--studio-accent-3); }
 [data-tone='warn'] { --wgrade-tone: var(--studio-warn); }
 [data-tone='bad']  { --wgrade-tone: var(--studio-error); }
-[data-tone='muted'] { --wgrade-tone: var(--studio-fg-muted); }
+[data-tone='muted'] { --wgrade-tone: var(--pwiki-paper-muted, var(--studio-fg-muted)); }

@@ -5,7 +5,7 @@ namespace AgentStudio.Tokens;
 /// <summary>
 /// Phase-4 implementation of <see cref="ITokenAggregator"/>. Every per-project
 /// surface reads through a bus-backed reader so the workspace bus is the
-/// single source of truth (see <c>docs/domains/tokens.md</c>). The
+/// single source of truth (see <c>docs/system/domains/tokens.md</c>). The
 /// pure-function folds still live on the legacy services
 /// (<see cref="TokenSummaryService"/>, <see cref="WorkspaceTokensTimelineService"/>,
 /// <see cref="ProjectTokenUsageService"/>) so the math is identical to the

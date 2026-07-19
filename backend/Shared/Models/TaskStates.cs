@@ -3,7 +3,7 @@ namespace AgentStudio.Shared;
 /// <summary>
 /// String constants and helpers for the optional <c>phase</c> substate on
 /// <see cref="TaskInfo"/>. The hybrid V1 model picked in
-/// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c> keeps the
+/// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c> keeps the
 /// existing six folder-level states as the durable skeleton and adds this
 /// optional substate so the orchestrator-driven lanes (Intake, Post
 /// Processing) can be projected by the UI without a filesystem-state
@@ -78,7 +78,7 @@ public static class LifecyclePhases
     /// <summary>
     /// Pure default-derivation for jobs whose <c>phase</c> is null on disk.
     /// Implements the compatibility contract from
-    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>
+    /// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>
     /// section 10: a job with no <c>phase</c> renders in the default lane of
     /// its state. Returns null for states that carry no phase (preparation,
     /// the orchestrator-prep lane, the review lanes,

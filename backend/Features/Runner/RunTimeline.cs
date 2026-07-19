@@ -7,7 +7,7 @@ namespace AgentStudio.Runner;
 /// <summary>
 /// One CLI invocation between two user inputs - the unit of conversation
 /// in the runs/sessions model documented in
-/// <c>docs/product/design-principles.md</c>. Produced by
+/// <c>docs/quality/design-principles.md</c>. Produced by
 /// <see cref="RunTimelineBuilder.Build"/> from <c>session-events.jsonl</c>
 /// + <c>cli-output.log</c>; consumed by the
 /// <c>/api/tasks/{id}/runs</c> endpoint and the protocol-pane run

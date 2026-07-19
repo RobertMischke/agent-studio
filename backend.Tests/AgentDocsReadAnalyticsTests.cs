@@ -144,7 +144,7 @@ public class AgentDocsReadAnalyticsTests : IDisposable
     [Fact]
     public void GetAnalytics_CountsClaudeAndCodexReads_PerFileAndPerCli()
     {
-        File.WriteAllText(Path.Combine(_repo, "AGENTS.md"), "# Agents\nSee docs/wiki/\n");
+        File.WriteAllText(Path.Combine(_repo, "AGENTS.md"), "# Agents\nSee docs/\n");
         File.WriteAllText(Path.Combine(_repo, "CLAUDE.md"), "See AGENTS.md\n");
         File.WriteAllText(Path.Combine(_repo, "frontend", "AGENTS.md"), "# Frontend\n");
 

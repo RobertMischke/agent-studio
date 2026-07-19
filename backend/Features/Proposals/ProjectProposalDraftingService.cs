@@ -14,42 +14,38 @@ public class ProjectProposalDraftingService
 {
     private readonly CliOneShotRegistry _oneShots;
     private readonly IConfiguration _configuration;
+    private readonly AgentStudio.Prompts.RuntimePromptService _prompts;
 
-    public ProjectProposalDraftingService(CliOneShotRegistry oneShots, IConfiguration configuration)
+    public ProjectProposalDraftingService(
+        CliOneShotRegistry oneShots,
+        IConfiguration configuration,
+        AgentStudio.Prompts.RuntimePromptService prompts)
     {
         _oneShots = oneShots;
         _configuration = configuration;
+        _prompts = prompts;
     }
 
     public virtual async Task<string> RefineFeedbackAsync(string feedback, CancellationToken ct)
     {
         var input = feedback.Trim();
         if (input.Length == 0) return "";
-        var prompt = $$"""
-            Translate the following project-proposal rejection feedback to concise, professional English.
-            Preserve every concrete observation and requested correction. Remove filler and repetition.
-            Return only the refined feedback as plain text, without a heading or commentary.
-
-            FEEDBACK:
-            {{input}}
-            """;
+        var prompt = _prompts.Render(
+            AgentStudio.Prompts.RuntimePromptService.ProposalFeedbackRefine,
+            new Dictionary<string, string?> { ["feedback"] = input });
         return (await RunAsync(prompt, null, ct)).Trim();
     }
 
     public virtual async Task<GeneratedProposalDraft> GenerateAsync(
         string projectRoot, string topic, string guidance, CancellationToken ct)
     {
-        var prompt = $$"""
-            You are preparing one implementation-ready project proposal for the repository in your current working directory.
-            Work read-only. Inspect only the files needed to ground the requested topic. Do not edit files or run mutating commands.
-
-            TOPIC: {{topic}}
-            OPERATOR GUIDANCE: {{(string.IsNullOrWhiteSpace(guidance) ? "None" : guidance.Trim())}}
-
-            Return JSON only with this exact shape:
-            {"finding":"measured or code-grounded current-state observation","proposal":"specific implementation decision","estimatedEffort":"small|medium|large","severity":"critical|medium|low","categories":["short-category"]}
-            The topic must be explicit in both finding and proposal. Do not invent measured evidence.
-            """;
+        var prompt = _prompts.Render(
+            AgentStudio.Prompts.RuntimePromptService.ProposalDraftGenerate,
+            new Dictionary<string, string?>
+            {
+                ["topic"] = topic,
+                ["guidance"] = string.IsNullOrWhiteSpace(guidance) ? "None" : guidance.Trim(),
+            });
         var raw = await RunAsync(prompt, projectRoot, ct);
         return ParseDraft(raw);
     }

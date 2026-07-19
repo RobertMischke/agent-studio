@@ -5,7 +5,7 @@ only the deterministic ADR-0056 workspace. Never capture the production
 workspace, even for a quick rehearsal.
 
 The source of truth for the ordered outputs is the
-[MVP presentation storyboard](../../product/mvp-presentation-storyboard.md).
+[MVP presentation storyboard](../../concepts/mvp-presentation-storyboard.md).
 
 ## Safety gate and demo reset
 

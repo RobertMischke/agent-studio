@@ -136,7 +136,7 @@ function wikiPulse() {
     feed: { available: true, reason: null, items: [{
       relPath: 'concepts/operator-dashboard.md', title: 'Operator dashboard concept', author: 'Robert',
       authorDateUtc: '2026-07-11T10:30:00Z', sha: 'abc', shortSha: 'abc', subject: 'Add concept',
-      frameAreaSlug: 'concepts', frameAreaTitle: 'Concepts', taskKey: 'AGT-2105',
+      areaSlug: 'concepts', areaTitle: 'Concepts', taskKey: 'AGT-2105',
     }] },
     inbox: { available: true, reason: null, count: 0, items: [] },
     drift: { available: true, reason: null, overallGrade: 'Fresh', areas: [], counts: { fresh: 1, aging: 0, stale: 0, graded: 1 } },
