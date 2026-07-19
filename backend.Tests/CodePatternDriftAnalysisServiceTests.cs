@@ -169,7 +169,7 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         // 2026-05-11 race where the auto-review reissue path moved a job
         // straight into 3-progress while the runner picked another in
         // the same window). Inject the rule directly so the fixture
-        // doesn't depend on docs/contracts/code-patterns.md being loaded.
+        // doesn't depend on docs/system/contracts/code-patterns.md being loaded.
         WriteFile("backend/Services/Runner/SomeOtherService.cs", """
             public class SomeOtherService {
               private readonly object _states = null!;
@@ -247,7 +247,7 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         // the task's own commits — "main: 20 files"). A board surface that pulls
         // in GitSummaryService / gitSummary without the LANES_WITH_GIT
         // (3-progress-only) guard is the drift. Inject the rule directly so the
-        // fixture does not depend on docs/contracts/code-patterns.md being loaded.
+        // fixture does not depend on docs/system/contracts/code-patterns.md being loaded.
         WriteFile("frontend/src/app/features/board/components/leaky-card/leaky-card.component.ts", """
             export class LeakyCard {
               private readonly gitSummary = inject(GitSummaryService);
@@ -298,7 +298,7 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
     public void Analyze_AgainstLiveDevCheckout_ReportsZeroCommitSourceDriftAfterFix()
     {
         // Post-fix invariant: every board surface that touches GitSummaryService
-        // gates it behind LANES_WITH_GIT. The docs/contracts/code-patterns.md rule is
+        // gates it behind LANES_WITH_GIT. The docs/system/contracts/code-patterns.md rule is
         // merged into the default rule set by Analyze, so this also proves the
         // docs block parses. Skipped when the repo marker is not reachable.
         var repo = LocateRepoRoot();

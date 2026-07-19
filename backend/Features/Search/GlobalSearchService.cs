@@ -141,7 +141,9 @@ public sealed class GlobalSearchService(
             .Select(path => path.TrimEnd('\r').Replace('\\', '/'))
             .Where(path => Contains(path, query))
             .Select(path => new GlobalSearchItem("files", project, color, Path.GetFileName(path), path,
-                Path: path, IsWiki: path.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)))
+                Path: path, IsWiki: path.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)
+                    // docs/app/ is a code contract, not a wiki page: never route it into the wiki viewer.
+                    && !path.StartsWith("docs/app/", StringComparison.OrdinalIgnoreCase)))
             .ToList();
     }
 

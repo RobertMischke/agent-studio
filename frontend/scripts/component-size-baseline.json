@@ -73,10 +73,10 @@
       "total": 1548
     },
     "src/app/features/project-detail/components/project-wiki-section/project-wiki-section.ts": {
-      "typeScript": 1769,
-      "template": 845,
-      "styles": 1910,
-      "total": 4524
+      "typeScript": 1773,
+      "template": 892,
+      "styles": 1937,
+      "total": 4602
     },
     "src/app/features/project-detail/components/project-observability/project-observability-panel.component.ts": {
       "typeScript": 508,

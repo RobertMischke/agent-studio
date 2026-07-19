@@ -3,7 +3,7 @@ using AgentStudio.Pipeline;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public sealed class OnDemandPostStepServiceTests : IDisposable
 {

@@ -7,14 +7,14 @@ const args = Object.fromEntries(process.argv.slice(2).map(value => {
   return [key, rest.join('=')];
 }));
 const input = args.input;
-const output = args.output ?? 'docs/proposals';
+const output = args.output ?? 'docs/concepts/proposals';
 const generation = args.generation ?? new Date().toISOString().slice(0, 10);
 const severities = new Set((args.severities ?? 'critical,medium').split(',').map(v => v.trim().toLowerCase()));
 const limits = Object.fromEntries((args.limits ?? '').split(',').filter(Boolean).map(part => {
   const [severity, limit] = part.split(':');
   return [severity.trim().toLowerCase(), Number(limit)];
 }));
-if (!input) throw new Error('Usage: --input=<survey.html> [--output=docs/proposals] [--generation=YYYY-MM-DD]');
+if (!input) throw new Error('Usage: --input=<survey.html> [--output=docs/concepts/proposals] [--generation=YYYY-MM-DD]');
 
 const html = fs.readFileSync(input, 'utf8');
 const articles = [...html.matchAll(/<article class="shot"[\s\S]*?<\/article>/g)].map(match => match[0]);

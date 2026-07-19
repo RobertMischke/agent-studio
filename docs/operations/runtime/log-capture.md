@@ -4,7 +4,7 @@ Storage layout, capture paths, and retention rules for the build-time slice
 of [Product Runtime Observability](../../../ROADMAP.md#product-runtime-observability).
 
 The schema for one event is
-[`docs/schemas/product-runtime-event.schema.json`](../../schemas/product-runtime-event.schema.json).
+[`docs/app/schemas/product-runtime-event.schema.json`](../../app/schemas/product-runtime-event.schema.json).
 This document covers **where captured events live on disk and how long they
 stay there**. The contract document
 (`docs/operations/runtime/observability.md`, queued in
@@ -20,8 +20,8 @@ The product produces two append-only streams. They share file conventions
 
 | Stream | Source | Layout root | Schema |
 |--------|--------|-------------|--------|
-| Agent Message Bus | Orchestrator, supervisor, agents, skills | `<workspace>/logs/bus/` | [agent-message.schema.json](../../schemas/agent-message.schema.json) |
-| Product Runtime Events | The software the agents are building | `<job>/logs/runtime/` and `<workspace>/logs/runtime/` | [product-runtime-event.schema.json](../../schemas/product-runtime-event.schema.json) |
+| Agent Message Bus | Orchestrator, supervisor, agents, skills | `<workspace>/logs/bus/` | [agent-message.schema.json](../../app/schemas/agent-message.schema.json) |
+| Product Runtime Events | The software the agents are building | `<job>/logs/runtime/` and `<workspace>/logs/runtime/` | [product-runtime-event.schema.json](../../app/schemas/product-runtime-event.schema.json) |
 
 The Agent Message Bus may carry an artifact reference of kind `runtime-event`
 that points at one of these records, but it never embeds them. Cross-stream
@@ -157,7 +157,7 @@ parser at all.
 |----------|----------|-----|
 | `<job>/logs/runtime/*.jsonl` | Persists with the job folder | Same retention as `cli-output.log`: kept for review until the workspace's own retention policy archives the job. |
 | `<job>/logs/runtime/*.warnings.jsonl` | Persists with the job folder | Same. Producers fix on the next pass; the warning record is the diagnostic input. |
-| `<job>/results/runtime/*.jsonl` | Harvested into the job folder when `JOB_RESULTS_DIR` is set | Test-derived evidence behaves like screenshots. See [docs/contracts/protocol-style.md §4](../../contracts/protocol-style.md#image-flow). |
+| `<job>/results/runtime/*.jsonl` | Harvested into the job folder when `JOB_RESULTS_DIR` is set | Test-derived evidence behaves like screenshots. See [docs/system/contracts/protocol-style.md §4](../../system/contracts/protocol-style.md#image-flow). |
 | `<workspace>/logs/runtime/<project>/*.jsonl` | Project-level audit trail | Lives next to `<workspace>/logs/bus/<project>/*.jsonl`; trimmed by the workspace's own log-rotation tooling, not by this repository. |
 | `frontend/e2e/test-results/runtime/*.jsonl` | Wiped on the next Playwright run | Local dev scratch only. The path is gitignored under `test-results/` (see this repository's `.gitignore`). |
 | `<source-repo>/logs/runtime/...` | Never created | The source repository's `logs/` folder is gitignored, but production runtime events do not flow into it. The source repo holds the app, not its runtime evidence. |
@@ -169,12 +169,12 @@ source commits. Three layers protect this:
 
 1. **Task folders live in the central `TaskRepository`**, not in this app's
    source repository or the product checkout
-   (`docs/contracts/filesystem.md`). Anything under
+   (`docs/system/contracts/filesystem.md`). Anything under
    `<job>/logs/runtime/` or `<job>/results/runtime/` is therefore outside
    product-source Git history by default.
 2. **The task-store evidence checkout owns its ignore policy.** The recommended
    `.gitignore` excludes task `results/` folders (see
-   `docs/contracts/protocol-style.md §4.3`) and can be extended with task
+   `docs/system/contracts/protocol-style.md §4.3`) and can be extended with task
    `logs/runtime/` paths if an operator decides to keep the bus log committed
    but the runtime log local. The current default keeps both `logs/bus/` and
    `logs/runtime/` tracked because they are textual JSONL and useful for

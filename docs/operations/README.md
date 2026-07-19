@@ -2,6 +2,20 @@
 
 Operator-facing setup, runtime, security, and git workflow docs.
 
+## Zweck & Abgrenzung
+
+Betriebswissen für Operatoren: wie das System aufgesetzt, betrieben, abgesichert
+und per Git bewegt wird.
+
+**Gehört hierher:** Setup/Onboarding, Runtime- und Observability-Verträge,
+Sicherheitsarchiv, Git-Doktrin, Test-Workspaces, Remote-Host-Lebenszyklus sowie
+die generierten Betriebs-Seiten (`common-problems/`, `learnings/`).
+
+**Gehört nicht hierher:** erklärende Konzepte und Designentscheidungen (→
+`concepts/`), Systemverträge und Domänenkarten (→ `system/`), Qualitäts- und
+Style-Guides (→ `quality/`). Code-Verträge (Schemas, Config, In-App-Hilfe) liegen
+unter `app/` und werden nur zusammen mit Code geändert.
+
 | Area | Contents |
 |---|---|
 | [setup/](setup/README.md) | Project onboarding, CLI onboarding, first task, troubleshooting, and worktree stack. |

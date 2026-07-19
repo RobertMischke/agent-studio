@@ -10,7 +10,7 @@ appliesTo: {"projects":["*"],"technologies":["dotnet","csharp"],"taskAreas":["ba
 # .NET backend guide
 
 Use this page for C# and HTTP backend changes. It condenses the current
-[backend feature-folder guide](../architecture/backend-structure/styleguide.md)
+[backend feature-folder guide](../system/architecture/backend-structure/styleguide.md)
 and the pure-policy seams already used by runner, transition, and Git behavior.
 
 ## Feature ownership

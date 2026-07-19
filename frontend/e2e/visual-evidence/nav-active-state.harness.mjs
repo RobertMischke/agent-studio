@@ -21,7 +21,7 @@
  *   are the ones the app actually ships, the render is representative of the
  *   running app for this CSS-only change.
  *
- * Evidence labelling (docs/contracts/protocol-style.md §4.1 / §4.4): the output
+ * Evidence labelling (docs/system/contracts/protocol-style.md §4.1 / §4.4): the output
  * PNGs carry `--mocked` (no live backend; synthetic DOM + real compiled CSS).
  *
  * Run:

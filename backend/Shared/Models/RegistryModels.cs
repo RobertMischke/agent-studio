@@ -106,7 +106,7 @@ public record ProjectRecord
     /// <summary>
     /// Absolute path of the project's repository checkout, when the project
     /// has one. Durable registry data (API-mutable), NOT an appsettings
-    /// override: the docs/wiki surface derives its root from
+    /// override: the docs-backed wiki surface derives its root from
     /// <c>&lt;RepositoryPath&gt;/docs</c> by convention. Null for task-only
     /// projects and for repos where the path is derivable from the storage
     /// layout (<c>&lt;repo&gt;/.orchestrator/jobs</c>).

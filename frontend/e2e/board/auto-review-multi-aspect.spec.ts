@@ -244,7 +244,7 @@ test.describe('Auto-review multi-aspect surface', () => {
 
     // Info button next to the lane title opens the centered lane-info
     // modal with the rendered concept doc fetched from /api/concept-docs/.
-    // The body text comes from docs/in-app-help/lane-guides/lane-4-auto-review.md.
+    // The body text comes from docs/app/help/lane-guides/lane-4-auto-review.md.
     const infoBtn = page.getByTestId('info-button-lane-4-auto-review');
     await expect(infoBtn).toBeVisible();
     await infoBtn.click();
