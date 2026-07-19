@@ -175,6 +175,12 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private gradingPollTimer: ReturnType<typeof setTimeout> | null = null;
   readonly loading = signal(false);
   readonly busy = signal(false);
+  // Bumped after every tree re-read so a *mounted* folder-overview re-fetches
+  // its own contents in place. The folder view self-fetches on projectName /
+  // relPath only, so without this an in-place edit/delete/create under the
+  // shown folder would leave its overview table stale (a soft refresh no longer
+  // remounts it via the loading placeholder).
+  readonly folderReloadNonce = signal(0);
   readonly filter = signal('');
   readonly filterOpen = signal(false);
 
@@ -756,17 +762,32 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   // ---- loading ----
 
-  refresh(): void {
+  refresh(options: { soft?: boolean; onLoaded?: (tree: WikiTree | null) => void } = {}): void {
     const p = this.projectName();
     if (!p) return;
-    this.loading.set(true);
+    // A soft refresh (post-mutation re-read) swaps the tree data in place: the
+    // rendered rows stay on screen, expand/selection/scroll state is untouched
+    // (it lives in component signals, not in the fetched tree), and folders that
+    // no longer exist simply drop out. The full-flush `loading` placeholder is
+    // reserved for the initial project load, so an edit/delete/rename never
+    // flashes the whole section back to "Loading...". The busy() header chip is
+    // the only movement the user sees.
+    if (options.soft !== true) this.loading.set(true);
     this.docs.getWikiTree(p).subscribe({
       next: t => {
         this.tree.set(t);
         this.restorePendingOpen(t);
         this.loading.set(false);
+        // Nudge a mounted folder-overview to re-read its own contents in place,
+        // then let the caller reconcile the shown surface against the fresh tree
+        // (e.g. steer away from a page/folder the mutation removed or pruned).
+        this.folderReloadNonce.update(n => n + 1);
+        options.onLoaded?.(t);
       },
-      error: () => this.loading.set(false),
+      error: () => {
+        this.loading.set(false);
+        options.onLoaded?.(null);
+      },
     });
     // The Pulse landing view is git-backed and only shown when no page is open,
     // so it loads independently and never blocks the tree render. One composed
@@ -1365,8 +1386,61 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     if (!node.relPath) return;
     const ok = this.confirm(`Delete "${node.name}"? This is committed to the repository.`);
     if (!ok) return;
-    if (this.openedRel() === node.relPath) this.closeFile();
-    this.runMutation(this.docs.deleteWikiNode(this.projectName(), node.relPath));
+    const rel = node.relPath;
+    this.runMutation(this.docs.deleteWikiNode(this.projectName(), rel), tree => {
+      // Drop the now-dead path (and, for a folder, its descendants) from the
+      // favourites store so the landing never renders a star for a gone page.
+      this.stars.removeUnder(this.projectName(), rel);
+      // Reconcile the shown surface against the freshly re-read tree.
+      this.reconcileViewAfterDelete(tree);
+      // The tree context menu (and its Delete) stays reachable while the
+      // search-results pane is showing. When the reconcile did not already
+      // clear the search by steering, re-run the active query so a deleted page
+      // does not linger as a dead, clickable hit.
+      if (this.searchActive()) this.runWikiSearch(this.searchQuery().trim(), this.semanticRequested());
+    });
+  }
+
+  /**
+   * Keep the content pane on a surface that still exists after a delete + soft
+   * re-read. When the open page or the shown folder overview is gone from the
+   * fresh tree - a direct delete, or a parent folder the backend pruned because
+   * the delete emptied it - fall back to the nearest surviving ancestor folder
+   * overview (rewriting the deep-link to ?folder=<ancestor>), or the dashboard
+   * landing when none survives. A delete of some other, unviewed node matches
+   * neither branch and leaves the current view exactly where it is; the folder
+   * reload nonce refreshes a shown overview in place for that case.
+   */
+  private reconcileViewAfterDelete(tree: WikiTree | null): void {
+    if (!tree) return;
+    const roots = tree.root;
+    const openRel = this.openedRel();
+    if (openRel) {
+      const node = this.findNode(roots, openRel);
+      if (node && node.type !== 'folder') return; // open page still present
+      this.steerToNearestFolder(roots, this.parentDir(openRel));
+      return;
+    }
+    const folderRel = this.selectedFolderRel();
+    if (folderRel) {
+      const node = this.findNode(roots, folderRel);
+      if (node && node.type === 'folder') return; // shown folder still present
+      this.steerToNearestFolder(roots, this.parentDir(folderRel));
+    }
+  }
+
+  /** Open the nearest ancestor folder that still exists, else the landing. */
+  private steerToNearestFolder(roots: readonly WikiTreeNode[], startRel: string): void {
+    let cur = startRel;
+    while (cur) {
+      const node = this.findNode(roots, cur);
+      if (node && node.type === 'folder') {
+        this.openFolderOverview(cur);
+        return;
+      }
+      cur = this.parentDir(cur);
+    }
+    this.openOverview();
   }
 
   // ---- drag and drop ----
@@ -1461,16 +1535,23 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   // ---- mutation plumbing ----
 
-  private runMutation(obs: { subscribe: (o: { next: () => void; error: () => void }) => unknown }): void {
+  private runMutation(
+    obs: { subscribe: (o: { next: () => void; error: () => void }) => unknown },
+    onSuccess?: (tree: WikiTree | null) => void,
+  ): void {
     this.busy.set(true);
     obs.subscribe({
       next: () => {
         this.busy.set(false);
-        this.refresh();
+        // Reconcile *after* the soft re-read so the callback sees the fresh tree:
+        // it can then steer away from a page/folder the mutation removed (or a
+        // parent the backend pruned because the delete emptied it) instead of
+        // landing on a stale or now-missing target.
+        this.refresh({ soft: true, onLoaded: onSuccess });
       },
       error: () => {
         this.busy.set(false);
-        this.refresh();
+        this.refresh({ soft: true });
       },
     });
   }

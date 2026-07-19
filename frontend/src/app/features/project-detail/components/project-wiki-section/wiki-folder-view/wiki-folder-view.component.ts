@@ -39,6 +39,13 @@ interface WikiFolderCrumb {
 export class WikiFolderViewComponent {
   readonly projectName = input.required<string>();
   readonly relPath = input.required<string>();
+  /**
+   * Monotonic re-read signal from the parent. Bumping it (after a wiki mutation)
+   * re-fetches this overview in place - the current rows stay on screen and are
+   * swapped only when the fresh data arrives - so an edit/delete/create under
+   * the shown folder is reflected without navigating away and back.
+   */
+  readonly reloadNonce = input<number>(0);
 
   /** Drill into a subfolder's overview. */
   readonly openFolder = output<string>();
@@ -56,16 +63,29 @@ export class WikiFolderViewComponent {
   private readonly docs = inject(ProjectDocsService);
   private readonly stars = inject(WikiStarsService);
 
+  /** The folder currently reflected on screen; distinguishes navigation from an in-place re-read. */
+  private loadedKey: string | null = null;
+
   constructor() {
     effect(onCleanup => {
       const project = this.projectName();
       const rel = this.relPath();
-      this.overview.set(null);
+      this.reloadNonce(); // track: a parent bump re-reads the overview in place
+      const key = `${project}::${rel}`;
+      const navigated = key !== this.loadedKey;
+      this.loadedKey = key;
       this.error.set(null);
-      this.loading.set(true);
       if (!project || !rel) {
+        this.overview.set(null);
         this.loading.set(false);
         return;
+      }
+      // Navigating to a different folder resets to the loading placeholder; an
+      // in-place re-read (same folder, bumped nonce) keeps the current rows on
+      // screen and swaps them only once the fresh overview arrives.
+      if (navigated) {
+        this.overview.set(null);
+        this.loading.set(true);
       }
       const subscription = this.docs.getWikiFolder(project, rel).subscribe({
         next: overview => {
@@ -74,6 +94,7 @@ export class WikiFolderViewComponent {
         },
         error: () => {
           this.error.set('Ordner-Übersicht konnte nicht geladen werden.');
+          this.overview.set(null);
           this.loading.set(false);
         },
       });

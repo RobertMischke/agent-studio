@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { vi } from 'vitest';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
+import { WikiStarsService } from './wiki-stars.service';
 import type {
   ProjectStyleGuideCatalogue,
   WikiFileHistory,
@@ -963,6 +964,131 @@ describe('ProjectWikiSectionComponent', () => {
     expect(document.querySelector('[data-testid="wiki-ctx-item-copy-link"]')!.textContent).toContain('Link kopieren');
     expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]')!.textContent).toContain('Delete');
     assertTextOnly(panel!);
+    http.verify();
+  });
+
+  /** Right-click a tree row and invoke its Delete action, confirming the dialog. */
+  function deleteViaContextMenu(
+    fixture: { detectChanges: () => void },
+    root: HTMLElement,
+    id: string,
+  ): void {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const row = root.querySelector<HTMLElement>(`[data-testid="project-wiki-node-${id}"]`);
+    expect(row, `row ${id}`).toBeTruthy();
+    row!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+    fixture.detectChanges();
+    document.querySelector<HTMLButtonElement>('[data-testid="wiki-ctx-item-delete"]')!.click();
+    fixture.detectChanges();
+    confirmSpy.mockRestore();
+  }
+
+  it('deleting the open page steers to the parent folder overview in place and drops its star', async () => {
+    setWikiHash();
+    const { fixture, http } = await setup();
+    const stars = TestBed.inject(WikiStarsService);
+    const root = el(fixture);
+    expandConcepts(fixture);
+
+    // Open the page and star it.
+    root.querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    flushDoc(http, 'concepts/overview.md');
+    fixture.detectChanges();
+    stars.star('Demo', 'concepts/overview.md', 'Concept overview');
+    expect(stars.isStarred('Demo', 'concepts/overview.md')).toBe(true);
+    expect(window.location.hash).toBe(`${WIKI_BASE_HASH}?page=concepts%2Foverview.md`);
+
+    deleteViaContextMenu(fixture, root, 'concepts/overview.md');
+
+    // The delete resolves; the re-read is soft (no full-flush placeholder).
+    http.expectOne(req => req.method === 'DELETE'
+      && req.url === '/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', sha: 'dead' });
+    expect(fixture.componentInstance.loading()).toBe(false);
+    // The tree stayed on screen throughout (never swapped for "Loading...").
+    expect(root.querySelector('[data-testid="project-wiki-tree"]')).toBeTruthy();
+
+    // Soft tree re-read (page gone) + the parent folder overview it steered to.
+    http.expectOne('/api/projects/Demo/wiki/tree').flush({
+      ...TREE,
+      root: [
+        { ...TREE.root[0], children: TREE.root[0].children.filter(c => c.relPath !== 'concepts/overview.md') },
+        TREE.root[1],
+      ],
+    });
+    flushWikiPulse(http);
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts')
+      .flush({ path: 'concepts', name: 'concepts', children: [] });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedRel()).toBeNull();
+    expect(fixture.componentInstance.selectedFolderRel()).toBe('concepts');
+    expect(root.querySelector('[data-testid="wiki-folder-view"]')).toBeTruthy();
+    expect(window.location.hash).toBe(`${WIKI_BASE_HASH}?folder=concepts`);
+    // The dead star is gone so the landing never renders it again.
+    expect(stars.isStarred('Demo', 'concepts/overview.md')).toBe(false);
+    http.verify();
+  });
+
+  it('deleting a different, unopened page leaves the current view untouched', async () => {
+    setWikiHash();
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+    expandConcepts(fixture);
+
+    root.querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    flushDoc(http, 'concepts/overview.md');
+    fixture.detectChanges();
+
+    // Delete README.md while overview.md is the open page.
+    deleteViaContextMenu(fixture, root, 'README.md');
+    http.expectOne(req => req.method === 'DELETE'
+      && req.url === '/api/projects/Demo/wiki/files/README.md')
+      .flush({ relPath: 'README.md', sha: 'dead' });
+    http.expectOne('/api/projects/Demo/wiki/tree')
+      .flush({ ...TREE, root: [TREE.root[0]] });
+    flushWikiPulse(http);
+    fixture.detectChanges();
+
+    // The open page and its deep-link are untouched; no navigation happened.
+    expect(fixture.componentInstance.openedRel()).toBe('concepts/overview.md');
+    expect(fixture.componentInstance.selectedFolderRel()).toBeNull();
+    expect(window.location.hash).toBe(`${WIKI_BASE_HASH}?page=concepts%2Foverview.md`);
+    http.verify();
+  });
+
+  it('deleting the open root page falls back to the landing with the deep-link cleared', async () => {
+    setWikiHash();
+    const { fixture, http } = await setup();
+    const stars = TestBed.inject(WikiStarsService);
+    const root = el(fixture);
+
+    root.querySelector<HTMLElement>('[data-testid="project-wiki-file-README.md"]')!.click();
+    fixture.detectChanges();
+    flushDoc(http, 'README.md');
+    fixture.detectChanges();
+    stars.star('Demo', 'README.md', 'Docs index');
+
+    deleteViaContextMenu(fixture, root, 'README.md');
+    http.expectOne(req => req.method === 'DELETE'
+      && req.url === '/api/projects/Demo/wiki/files/README.md')
+      .flush({ relPath: 'README.md', sha: 'dead' });
+    http.expectOne('/api/projects/Demo/wiki/tree')
+      .flush({ ...TREE, root: [TREE.root[0]] });
+    flushWikiPulse(http);
+    fixture.detectChanges();
+    // Root page -> landing, which self-fetches its own panels.
+    http.match('/api/projects/Demo/style-guides').forEach(r => r.flush(STYLE_GUIDES));
+    http.match('/api/projects/Demo/wiki/home').forEach(r => r.flush(HOME));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedRel()).toBeNull();
+    expect(fixture.componentInstance.selectedFolderRel()).toBeNull();
+    expect(window.location.hash).toBe(WIKI_BASE_HASH);
+    expect(stars.isStarred('Demo', 'README.md')).toBe(false);
     http.verify();
   });
 
