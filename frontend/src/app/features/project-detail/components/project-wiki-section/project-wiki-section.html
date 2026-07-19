@@ -669,6 +669,7 @@
           <app-wiki-folder-view
               [projectName]="projectName()"
               [relPath]="folderRel"
+              [reloadNonce]="folderReloadNonce()"
               (openFolder)="openFolderOverview($event)"
               (openPage)="openFile($event.relPath, $event.type)"
               (copyLink)="copyFolderLink($event)"

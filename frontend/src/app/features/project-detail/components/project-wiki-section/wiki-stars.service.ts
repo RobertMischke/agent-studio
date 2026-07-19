@@ -54,6 +54,22 @@ export class WikiStarsService {
     this.write(projectName, next);
   }
 
+  /**
+   * Drop the star for a path and, when it is a folder, every star beneath it.
+   * Called when a page or category is deleted so the favourites list never
+   * points at a path that no longer exists (a "dead" star on the landing).
+   */
+  removeUnder(projectName: string, relPath: string): void {
+    if (!projectName || !relPath) return;
+    const prefix = `${relPath}/`;
+    const current = this.entries(projectName);
+    const next = current.filter(
+      entry => entry.relPath !== relPath && !entry.relPath.startsWith(prefix),
+    );
+    if (next.length === current.length) return;
+    this.write(projectName, next);
+  }
+
   private write(projectName: string, entries: readonly WikiStarEntry[]): void {
     this.state.update(map => ({ ...map, [projectName]: entries }));
     try {

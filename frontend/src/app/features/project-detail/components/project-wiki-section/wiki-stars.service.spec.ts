@@ -47,6 +47,30 @@ describe('WikiStarsService', () => {
     expect(service.entries('Demo').map(entry => entry.relPath)).toEqual(['three.md', 'two.md', 'one.md']);
   });
 
+  it('removeUnder drops the exact path and every descendant, leaving siblings', () => {
+    const service = new WikiStarsService();
+    service.star('Demo', 'concepts/overview.md', 'Overview');
+    service.star('Demo', 'concepts/deep/detail.md', 'Detail');
+    service.star('Demo', 'concepts-notes.md', 'Sibling with shared prefix');
+    service.star('Demo', 'guide.md', 'Guide');
+
+    // Deleting the "concepts" folder removes it and its subtree, but not the
+    // sibling whose relPath merely starts with the same characters.
+    service.removeUnder('Demo', 'concepts');
+    // Newest-first order is preserved among the survivors.
+    expect(service.entries('Demo').map(entry => entry.relPath))
+      .toEqual(['guide.md', 'concepts-notes.md']);
+
+    // A no-op removal (nothing matches) leaves the list and storage untouched.
+    const before = localStorage.getItem(DEMO_KEY);
+    service.removeUnder('Demo', 'concepts');
+    expect(localStorage.getItem(DEMO_KEY)).toBe(before);
+
+    // Removing a single page path drops just that entry.
+    service.removeUnder('Demo', 'guide.md');
+    expect(service.entries('Demo').map(entry => entry.relPath)).toEqual(['concepts-notes.md']);
+  });
+
   it('hydrates stored stars newest-first and ignores corrupt payloads', () => {
     localStorage.setItem(DEMO_KEY, JSON.stringify([
       { relPath: 'old.md', label: 'Alt', starredAt: '2026-07-01T08:00:00.000Z' },
