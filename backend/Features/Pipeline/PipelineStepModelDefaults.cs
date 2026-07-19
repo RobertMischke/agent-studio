@@ -59,9 +59,6 @@ public static class PipelineStepModelDefaults
         StepKind.Orchestrator when string.Equals(
             step.Id, PipelineCatalogue.TaskSpawnerStepId, StringComparison.OrdinalIgnoreCase)
             => QualityModel,
-        StepKind.Orchestrator when string.Equals(
-            step.Id, PipelineCatalogue.WorkstreamCollectorStepId, StringComparison.OrdinalIgnoreCase)
-            => SupportModel,
         _ => null,
     };
 

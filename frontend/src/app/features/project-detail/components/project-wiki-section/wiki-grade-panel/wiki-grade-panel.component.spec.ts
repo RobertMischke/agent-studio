@@ -10,8 +10,8 @@ const CRITICAL: WikiPulseCritical = {
   count: 2,
   overallGrade: 'D',
   items: [
-    { relPath: 'poor.md', title: 'Poor page', grade: 'D', assessment: 'Needs a rewrite.', gradedAt: null, model: 'claude-sonnet-5', reportPath: 'poor.md.report.html', frameAreaTitle: null },
-    { relPath: 'weak.md', title: 'Weak page', grade: 'C', assessment: 'Needs a refresh.', gradedAt: null, model: 'claude-sonnet-5', reportPath: 'weak.md.report.html', frameAreaTitle: null },
+    { relPath: 'poor.md', title: 'Poor page', grade: 'D', assessment: 'Needs a rewrite.', gradedAt: null, model: 'claude-sonnet-5', reportPath: 'poor.md.report.html', areaTitle: null },
+    { relPath: 'weak.md', title: 'Weak page', grade: 'C', assessment: 'Needs a refresh.', gradedAt: null, model: 'claude-sonnet-5', reportPath: 'weak.md.report.html', areaTitle: null },
   ],
 };
 

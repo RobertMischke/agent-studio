@@ -1,0 +1,114 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Drift reports contract metadata",
+  "source": {
+    "path": "docs/system/reports/drift-reports.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "d25be0ec7a1cde15fd66eaa77c060bd7a3477c502420724effd1de14e249015f",
+      "sizeBytes": 22340,
+      "lineCount": 251,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/system/reports/drift-reports.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "reports",
+    "documentMode": "documentation",
+    "temporalState": "mixed",
+    "implementationState": "partially implemented"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "sample metadata pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "d25be0ec7a1cde15fd66eaa77c060bd7a3477c502420724effd1de14e249015f",
+      "sizeBytes": 22340,
+      "lineCount": 251,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "C",
+    "hasDrift": true,
+    "score": 0.42,
+    "summary": "Report contracts exist, but document-level metadata and Wiki-side drift controls are becoming a distinct concept.",
+    "rationale": [
+      "Project-level drift reports are implemented and useful.",
+      "Document-level metadata adds a new granularity that is not yet fully specified.",
+      "The contract should decide whether JSON metadata becomes a formal first-class artifact."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "medium",
+    "implementationAlignment": "medium",
+    "freshness": "low",
+    "operatorUsefulness": "medium"
+  },
+  "duplicates": {
+    "suspected": true,
+    "groupSize": 2,
+    "similarTo": [
+      "docs/app/schemas/drift-report.schema.json"
+    ]
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Report contracts exist, but document-level metadata and Wiki-side drift controls are becoming a distinct concept.",
+      "rationale": [
+        "Project-level drift reports are implemented and useful.",
+        "Document-level metadata adds a new granularity that is not yet fully specified.",
+        "The contract should decide whether JSON metadata becomes a formal first-class artifact."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Project-level drift reports are implemented and useful.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Document-level metadata adds a new granularity that is not yet fully specified.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The contract should decide whether JSON metadata becomes a formal first-class artifact.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "duplicate-candidate",
+      "severity": "warn",
+      "axis": "duplicate",
+      "summary": "This document has possible duplicate ownership candidates.",
+      "rationale": [
+        "docs/app/schemas/drift-report.schema.json"
+      ],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Promote document metadata to a contract if the prototype proves useful."
+}

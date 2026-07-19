@@ -113,7 +113,7 @@ public static class OrchestratorPrepRules
         // Positive signals.
         if (lower.Contains("read first") || lower.Contains("read-first")) score += 0.15;
         if (lower.Contains("done when") || lower.Contains("acceptance criteria") || lower.Contains("definition of done")) score += 0.20;
-        if (lower.Contains("mockup") || lower.Contains("docs/mockups") || lower.Contains("/spec/") || lower.Contains("adr-")) score += 0.10;
+        if (lower.Contains("mockup") || MentionsPromotedMockupFamily(lower) || lower.Contains("/spec/") || lower.Contains("adr-")) score += 0.10;
         if (wordCount >= 80 && wordCount <= 1500) score += 0.10;
         if (System.Text.RegularExpressions.Regex.IsMatch(text, @"`[^`]+\.[a-zA-Z0-9]+`") || System.Text.RegularExpressions.Regex.IsMatch(text, @"\b[a-zA-Z0-9_./-]+\.(cs|ts|tsx|md|json|sh|html|py)\b")) score += 0.10;
 
@@ -125,6 +125,18 @@ public static class OrchestratorPrepRules
 
         return System.Math.Clamp(score, 0.0, 1.0);
     }
+
+    // The 2026-07 docs migration promoted the active mockup families out of
+    // docs/mockups/ to top-level docs/concepts/<family>/ folders. A task that
+    // references one of them by path (without the word "mockup") still points
+    // at a concrete design artifact, so it should keep the clarity boost the
+    // former "docs/mockups" substring gave. Standalone mockups moved to
+    // docs/concepts/mockups/ and are already caught by the "mockup" check.
+    private static bool MentionsPromotedMockupFamily(string lower) =>
+        lower.Contains("docs/concepts/project-urls")
+        || lower.Contains("docs/concepts/project-overview-dashboard")
+        || lower.Contains("docs/concepts/task-processing-pipeline")
+        || lower.Contains("docs/concepts/task-detail-header-state-actions");
 
     private static bool HasOutOfScopeToken(string lower)
     {

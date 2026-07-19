@@ -103,7 +103,7 @@
       }
     },
     {
-      "comment": "Legacy SCSS files pending Tier-1/Tier-2 migration. Each removed entry below is a migration win. New SCSS files are NOT added here; they conform from day one. Track progress under `docs/frontend/audits/scss-quality.md` Wave A.",
+      "comment": "Legacy SCSS files pending Tier-1/Tier-2 migration. Each removed entry below is a migration win. New SCSS files are NOT added here; they conform from day one. Track progress under `docs/quality/frontend/audits/scss-quality.md` Wave A.",
       "files": [
         "src/styles.scss",
         "src/app/app.scss",
@@ -197,6 +197,12 @@
         "src/app/features/project-detail/components/project-overview-urls/project-overview-urls.scss",
         "src/app/features/project-detail/components/project-style-guides-panel/project-style-guides-panel.scss",
         "src/app/features/project-detail/components/project-graph/project-graph.component.scss",
+        "src/app/features/project-detail/components/project-wiki-section/wiki-dashboard/wiki-dashboard.component.scss",
+        "src/app/features/project-detail/components/project-wiki-section/wiki-folder-view/wiki-folder-view.component.scss",
+        "src/app/features/project-detail/components/project-wiki-section/wiki-home-links/wiki-home-links.component.scss",
+        "src/app/features/project-detail/components/project-wiki-section/wiki-search-results/wiki-search-results.component.scss",
+        "src/app/features/project-detail/components/project-wiki-section/wiki-starred-panel/wiki-starred-panel.component.scss",
+        "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/wiki-pulse.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/workbench-inbox/workbench-inbox.component.scss",
         "src/app/features/project-detail/components/workbench-viewer/workbench-viewer.component.scss",
         "src/app/features/remote-hosts/components/runner-setup-dialog/runner-setup-dialog.scss",

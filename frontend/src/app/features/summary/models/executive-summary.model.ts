@@ -1,7 +1,7 @@
 /**
  * Executive-summary feature models. Mirror the backend
  * `ExecutiveSummary` record graph (backend/Services/Runner/
- * ExecutiveSummary.cs) and `docs/schemas/executive-summary.schema.json`.
+ * ExecutiveSummary.cs) and `docs/app/schemas/executive-summary.schema.json`.
  *
  * Returned by `GET /api/workspace/summary?windowHours=N`. The summary is
  * read-only: every row references a record on disk (a job id, a commit

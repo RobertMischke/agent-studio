@@ -39,11 +39,14 @@ decisions, tasks, and chats are all topics too.
 
 ## 2. Object and storage contract
 
-Each Workbench is one physical folder below the project's existing docs root:
+Each Workbench is one physical folder that sits with its own documentation
+theme below the project's docs root (a Workbench is any folder carrying a
+`workbench.json`; discovery scans `docs/**/workbench.json` recursively, skipping
+dot-directories and node_modules-like folders):
 
 ```text
-docs/workbenches/
-  project-state-at-a-glance/
+docs/operations/                     # or docs/quality/, docs/system/, ...
+  haertung-verteilte-ausfuehrung/
     index.html
     workbench.json
     brief.md                         # optional, prompt-friendly context
@@ -106,10 +109,11 @@ descriptor, entrypoint, or Workbench folder cannot redirect discovery outside
 the checkout. HTML is capped at 20 MiB before it is read; oversized entries are
 reported as invalid rather than loaded into the API or browser.
 
-There is no `docs/workbenches/registry.json`. The physical folders are the
-organization model, consistent with the
-[Wiki tree contract](../contracts/wiki-tree.md). The descriptor adds properties
-to one physical object, not a virtual tree.
+There is no workbench registry file. The physical folders (each with a
+`workbench.json`, discovered recursively under docs/) are the organization
+model, consistent with the
+[Wiki tree contract](../system/contracts/wiki-tree.md). The descriptor adds
+properties to one physical object, not a virtual tree.
 
 ## 3. Lifecycle
 
@@ -146,8 +150,9 @@ Git.
 ## 4. Explorer integration
 
 Under each expanded project, **Workbenches** is a first-class row immediately
-after **Wiki**. It is a sibling surface backed by `docs/workbenches/`, not a
-special folder injected into the ordinary Wiki tree.
+after **Wiki**. It is a sibling surface backed by the `workbench.json`
+descriptors distributed across the docs themes, not a special folder injected
+into the ordinary Wiki tree.
 
 ```text
 Agent Studio
@@ -174,7 +179,7 @@ one Workbench request for every registered project.
 
 Selecting an item opens a Workbench tab and preserves project, path, viewed
 branch, and revision in the header. This uses the shared Branch Context Control
-from the [project relationship model](project-relationship-model.md). The list
+from the [Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md). The list
 and viewer must never imply that content from one branch represents another.
 When the descriptor or entrypoint has uncommitted working-tree changes, the
 viewer says so explicitly and withholds the HEAD revision instead of attaching
@@ -247,7 +252,7 @@ iframe policy.
 
 Opening a Workbench does not create a new chatbot, model owner, or peer project
 session. The right column is the existing resizable project Orchestrator Chat
-described in [Persistent Orchestrator Chat](../product/orchestrator-chat.md) and
+described in [Persistent Orchestrator Chat](./orchestrator-chat.md) and
 [Orchestrator in-app](orchestrator-in-app.md).
 
 The canonical context stays `project:<PROJ-ID>`. The Workbench is a pinned
@@ -336,7 +341,7 @@ finding -> approve/reject -> one card. A Workbench is broader and longer lived:
 it can start from a proposal, host several iterations, and close only after the
 operator has enough visual evidence.
 
-Existing mockups under `docs/design/` and `docs/concepts/mockups/` are not
+Existing mockups under `docs/quality/design/` and `docs/concepts/mockups/` are not
 automatically moved. A promoted Workbench should preserve the original path as a
 source link or copy its self-contained HTML once with provenance. There must not
 be two files both claiming to be the live Workbench.
@@ -366,7 +371,7 @@ The first useful read-only cut is medium.
 
 | Slice | Honest size | Scope | Acceptance boundary |
 |---|---|---|---|
-| **WB-1: Folder contract and current Explorer list** | M | Validate `docs/workbenches/<id>/index.html + workbench.json`, expose a bounded lazy list, and add the collapsible project row. | Current count reconciles to visible children; invalid entries are explicit; decided/archive history is reachable; no viewer or mutation. |
+| **WB-1: Folder contract and current Explorer list** | M | Validate `docs/<theme>/<id>/index.html + workbench.json`, expose a bounded lazy list, and add the collapsible project row. | Current count reconciles to visible children; invalid entries are explicit; decided/archive history is reachable; no viewer or mutation. |
 | **WB-2: Workbench viewer and isolation** | L | Open a tab with branch/revision provenance, a script-capable opaque-origin sandbox, strict CSP, static Wiki fallback, and the tiny presentation event bridge. | Static and interactive fixtures work in both themes and at narrow width; malicious bridge/network/navigation fixtures fail; no chat or task creation. |
 | **WB-3: Canonical orchestrator attachment** | M/L | Reuse the project chat side sheet and attach the bounded Workbench digest plus current selection. Add compact open/close anchors. | The context inspector shows path and revision; no cross-project leakage; no new canonical session key; source editing remains out of scope. |
 | **WB-4: Host-owned task editor, decision spawn, and receipt** | L | Add the user-driven task draft editor and Build/Archive previews in trusted host chrome, including field validation, explicit confirmation, shared validated task creation, idempotent operation handling, manifest transition, planning-ledger recording, and AGT-2050 receipts. | Generated and chat-prepared values remain editable; neither chat nor iframe can confirm; retry cannot duplicate a card; failed partial completion is visible and repairable; a source planning task receives both `relatedTo` and a `SpawnedTaskLedger` record. |
