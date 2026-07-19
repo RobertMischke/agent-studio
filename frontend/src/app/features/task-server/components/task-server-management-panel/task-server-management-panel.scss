@@ -1,0 +1,103 @@
+// Task-Server management functions (AGT-1924). Results render quietly as
+// settled history (R4) - no accent bar, no acute tint. Colours read --studio-*
+// tokens for both themes (R5); spacing reads the --studio-spacing-* scale.
+
+:host { display: block; }
+
+.mgmt__actions {
+  display: grid;
+  gap: var(--studio-spacing-2);
+}
+.mgmt__action {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-hover);
+}
+.mgmt__action-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.mgmt__action-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--studio-fg-strong);
+}
+.mgmt__action-desc {
+  font-size: 11px;
+  color: var(--studio-fg-dim);
+  line-height: 1.4;
+}
+
+.mgmt__btn {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: var(--studio-spacing-1) var(--studio-spacing-4);
+  border-radius: 6px;
+  border: 1px solid var(--studio-border-strong);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  cursor: pointer;
+  min-width: 72px;
+}
+.mgmt__btn:hover:not(:disabled) { background: var(--studio-bg-selected); }
+.mgmt__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mgmt__btn:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+.mgmt__btn--danger { color: var(--studio-accent-6-strong); }
+.mgmt__btn--danger:hover:not(:disabled) {
+  background: var(--notify-error-tint);
+  border-color: var(--notify-error-border);
+}
+
+.mgmt__results {
+  list-style: none;
+  margin: var(--studio-spacing-4) 0 0;
+  padding: var(--studio-spacing-3) 0 0;
+  border-top: 1px dashed var(--studio-border);
+  display: grid;
+  gap: var(--studio-spacing-2);
+}
+.mgmt__result {
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  font-size: 11px;
+}
+.mgmt__result-kind {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--studio-fg-strong);
+  min-width: 96px;
+}
+.mgmt__result-summary {
+  flex: 1 1 auto;
+  color: var(--studio-fg-dim);
+  min-width: 0;
+}
+.mgmt__result-count {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  color: var(--studio-fg);
+  background: var(--studio-bg-selected);
+  border-radius: 999px;
+  // stylelint-disable-next-line declaration-property-unit-disallowed-list -- 1px pill inset is sub-scale
+  padding: 1px var(--studio-spacing-2);
+}
+.mgmt__result-count--none { color: var(--studio-fg-muted); }
+
+.mgmt__empty {
+  margin: var(--studio-spacing-4) 0 0;
+  padding: var(--studio-spacing-3) 0 0;
+  border-top: 1px dashed var(--studio-border);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--studio-fg-muted);
+}

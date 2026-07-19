@@ -12,6 +12,7 @@ export type {
   PipelineModelTokenUsage,
   PipelineRunTokenUsage,
   PipelineModelUsageSummary,
+  PostStepActivation,
   PipelineStepConfig,
   PipelineCatalogueStep,
   PipelineCatalogue,
@@ -19,6 +20,7 @@ export type {
   PipelineStepCondition,
   PipelineStepConditionToken,
   TaskPipelineResponse,
+  OnDemandPostStepAttempt,
   StepPromptEntry,
   StepPromptsResponse,
 } from './models/task-pipeline.model';

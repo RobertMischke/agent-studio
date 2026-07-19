@@ -1,47 +1,12 @@
+using CarPricing = CodingAgentRunner.Pricing;
 
 namespace AgentStudio.Runner;
 
 /// <summary>
-/// Per-model API price (USD per million tokens). Used to compute the
-/// **theoretical** cost of orchestrator activity for transparency, not
-/// the user's actual bill: Agent Software Studio runs everything through
-/// CLI subscriptions (Pro / Max / Team / Enterprise plans), so real
-/// dollar cost is zero on top of those plans. The estimate exists so
-/// the user can sanity-check whether the orchestrator is burning a
-/// reasonable amount of capacity, and to compare models.
-///
-/// <para>
-/// Sources, current as of May 2026 from anthropic.com:
-/// </para>
-/// <list type="bullet">
-///   <item>Opus 4.5 / 4.6 / 4.7: <c>$5</c> / <c>$25</c> per million input / output tokens.</item>
-///   <item>Sonnet 4.5 / 4.6: <c>$3</c> / <c>$15</c>.</item>
-///   <item>Haiku 4.5: <c>$1</c> / <c>$5</c>.</item>
-/// </list>
-/// <para>
-/// Cache pricing follows Anthropic's published policy: prompt-cache reads
-/// run at 10% of base input, 5-minute cache writes at 125% of base input.
-/// (1-hour cache writes at 2x are not exposed by the orchestrator's
-/// short-lived single-turn calls; we assume 5-minute writes.)
-/// </para>
-/// </summary>
-public sealed record ModelPrice(
-    string ModelId,
-    decimal InputPerMillion,
-    decimal OutputPerMillion,
-    decimal? CacheReadPerMillionOverride = null,
-    decimal? CacheWritePerMillionOverride = null)
-{
-    /// <summary>Defaults to 10% of base input rate per Anthropic's published policy.</summary>
-    public decimal CacheReadPerMillion => CacheReadPerMillionOverride ?? InputPerMillion * 0.10m;
-    /// <summary>Defaults to 125% of base input rate for Anthropic 5-minute cache writes.</summary>
-    public decimal CacheWritePerMillion => CacheWritePerMillionOverride ?? InputPerMillion * 1.25m;
-}
-
-/// <summary>
-/// Estimated cost breakdown for a single token-usage record. All amounts
-/// are USD. <see cref="Total"/> is informational; the per-bucket fields
-/// let the UI explain which part of the spend came from where.
+/// Studio-facing projection of CodingAgentRunner's historical pricing result.
+/// Decimal fields remain non-null for wire compatibility; <see cref="ModelKnown"/>
+/// is the mandatory guard and is false for both unknown models and dates for
+/// which the catalog has no price. Consumers must then render "unknown".
 /// </summary>
 public sealed record TokenCostEstimate(
     decimal InputUsd,
@@ -50,59 +15,89 @@ public sealed record TokenCostEstimate(
     decimal CacheWriteUsd,
     decimal Total,
     string ModelId,
-    bool ModelKnown);
+    bool ModelKnown,
+    CarPricing.PriceStatus Status,
+    TokenPriceBasis? PriceBasis);
 
+/// <summary>The exact historical CAR catalog entry used for a calculation.</summary>
+public sealed record TokenPriceBasis(
+    decimal InputPerMillion,
+    decimal OutputPerMillion,
+    decimal CacheReadPerMillion,
+    decimal CacheWritePerMillion,
+    string Currency,
+    DateTime ValidFrom,
+    string? Source,
+    string? Note,
+    bool Unconfirmed);
+
+/// <summary>
+/// Pricing seam owned by Studio. The CAR-backed implementation can be replaced
+/// by TokenEconomy without changing aggregators or API consumers.
+/// </summary>
+public interface ITokenPriceProvider
+{
+    TokenCostEstimate Estimate(string? modelId, long inputTokens, long outputTokens,
+        long cacheReadTokens, long cacheCreationTokens, DateTime? recordedAt = null);
+}
+
+public sealed class CarTokenPriceProvider : ITokenPriceProvider
+{
+    private static readonly CarPricing.ModelPriceCatalog Source = CarPricing.ModelPriceCatalog.Default;
+
+    public TokenCostEstimate Estimate(string? modelId, long inputTokens, long outputTokens,
+        long cacheReadTokens, long cacheCreationTokens, DateTime? recordedAt = null)
+    {
+        var key = modelId?.Trim() ?? "";
+        var atUtc = (recordedAt ?? DateTime.UtcNow).ToUniversalTime();
+        var cost = Source.ComputeCost(key,
+            new CarPricing.TokenUsage(inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens),
+            atUtc);
+
+        if (!cost.HasPrice || cost.Total is null || cost.Price is null)
+            return new TokenCostEstimate(0m, 0m, 0m, 0m, 0m,
+                cost.ModelId ?? key, ModelKnown: false, cost.Status, PriceBasis: null);
+
+        var price = cost.Price;
+        var basis = new TokenPriceBasis(
+            price.InputPerMTok,
+            price.OutputPerMTok,
+            price.CacheReadPerMTok ?? price.InputPerMTok,
+            price.CacheWritePerMTok ?? price.InputPerMTok,
+            price.Currency,
+            price.ValidFrom,
+            price.Source,
+            price.Note,
+            price.Unconfirmed);
+
+        return new TokenCostEstimate(cost.InputCost, cost.OutputCost, cost.CacheReadCost,
+            cost.CacheWriteCost, cost.Total.Value, cost.ModelId ?? key,
+            ModelKnown: true, cost.Status, basis);
+    }
+}
+
+/// <summary>
+/// The only Studio pricing entry point. Model catalog, aliases, rates, cache
+/// policy, and price history all come from CodingAgentRunner (CAR-3).
+/// </summary>
 public static class TokenPricing
 {
-    /// <summary>
-    /// Price view derived from <see cref="ModelMetadataRegistry"/>. Models
-    /// without price metadata return null prices; callers render token amounts
-    /// but suppress the cost line.
-    /// </summary>
-    public static IReadOnlyDictionary<string, ModelPrice> Catalog { get; } =
-        ModelMetadataRegistry.All
-            .Where(m => m.InputPricePerMillion is not null && m.OutputPricePerMillion is not null)
-            .ToDictionary(
-                m => m.Id,
-                m => new ModelPrice(
-                    m.Id,
-                    m.InputPricePerMillion!.Value,
-                    m.OutputPricePerMillion!.Value,
-                    m.CacheReadPerMillionOverride,
-                    m.CacheWritePerMillionOverride),
-                StringComparer.OrdinalIgnoreCase);
+    private static readonly CarPricing.ModelPriceCatalog Source = CarPricing.ModelPriceCatalog.Default;
+    private static readonly ITokenPriceProvider Provider = new CarTokenPriceProvider();
 
-    /// <summary>
-    /// Compute the theoretical API cost for one usage record. When the
-    /// model is not in <see cref="Catalog"/>, returns a zero-cost
-    /// estimate with <see cref="TokenCostEstimate.ModelKnown"/> false so
-    /// the UI can render "API cost: n/a" instead of misleading zeros.
-    /// </summary>
+    /// <summary>Read-only CAR catalog projection retained for catalog consumers.</summary>
+    public static IReadOnlyDictionary<string, CarPricing.ModelListing> Catalog { get; } =
+        Source.Listings.ToDictionary(x => x.ModelId, StringComparer.OrdinalIgnoreCase);
+
     public static TokenCostEstimate Estimate(
         string? modelId,
         long inputTokens,
         long outputTokens,
         long cacheReadTokens,
-        long cacheCreationTokens)
+        long cacheCreationTokens,
+        DateTime? recordedAt = null)
     {
-        var key = ModelMetadataRegistry.NormalizeId(modelId);
-        if (string.IsNullOrWhiteSpace(key) || !Catalog.TryGetValue(key, out var price))
-        {
-            return new TokenCostEstimate(0, 0, 0, 0, 0, key, ModelKnown: false);
-        }
-
-        decimal Mil(long n) => n / 1_000_000m;
-        var inputUsd      = Mil(inputTokens)         * price.InputPerMillion;
-        var outputUsd     = Mil(outputTokens)        * price.OutputPerMillion;
-        var cacheReadUsd  = Mil(cacheReadTokens)     * price.CacheReadPerMillion;
-        var cacheWriteUsd = Mil(cacheCreationTokens) * price.CacheWritePerMillion;
-        return new TokenCostEstimate(
-            InputUsd: inputUsd,
-            OutputUsd: outputUsd,
-            CacheReadUsd: cacheReadUsd,
-            CacheWriteUsd: cacheWriteUsd,
-            Total: inputUsd + outputUsd + cacheReadUsd + cacheWriteUsd,
-            ModelId: key,
-            ModelKnown: true);
+        return Provider.Estimate(modelId, inputTokens, outputTokens, cacheReadTokens,
+            cacheCreationTokens, recordedAt);
     }
 }

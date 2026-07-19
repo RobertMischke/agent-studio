@@ -230,11 +230,26 @@ export function mergeAcceptViewFor(
   info: TaskInfo,
   landedStateHint: LandedState | null = null,
 ): MergeAcceptView {
+  // Match the card merge-signal contract: only an attributed task commit is a
+  // mergeable deliverable. A branch/base without one is a planning, docs,
+  // results-only, or no-op outcome, even when its base is in the git graph.
+  const hasTaskCommits = (info.commits?.length ?? 0) > 0 || !!info.commit;
   const mergeSha = shortMergeSha(info.provenance?.merge?.mergeCommit);
   const landedByMerge = mergeSha !== null;
+  const landedByMergeSignal = info.mergeSignal?.inIntegration === true;
   const hintLanded =
     landedStateHint === 'merged-to-develop' || landedStateHint === 'released-to-main';
-  const landed = landedByMerge || hintLanded;
+  const landed = landedByMerge || landedByMergeSignal || hintLanded;
+
+  if (!hasTaskCommits) {
+    return {
+      landed: false,
+      landedState: 'on-branch-only',
+      acceptLabel: 'Accept',
+      statusLabel: null,
+      statusTooltip: 'This task has no code changes to merge. Accept moves the card to Delivered.',
+    };
+  }
 
   if (!landed) {
     return {
@@ -246,9 +261,8 @@ export function mergeAcceptViewFor(
     };
   }
 
-  let landedState: LandedState =
-    landedStateHint ?? (landedByMerge ? 'merged-to-develop' : 'on-branch-only');
-  if (landedState === 'on-branch-only' && landedByMerge) landedState = 'merged-to-develop';
+  let landedState: LandedState = landedStateHint ?? (landed ? 'merged-to-develop' : 'on-branch-only');
+  if (landedState === 'on-branch-only' && landed) landedState = 'merged-to-develop';
 
   if (landedState === 'released-to-main') {
     return {

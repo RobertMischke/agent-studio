@@ -45,14 +45,13 @@
     outline-offset: -2px;
   }
 
-  // Unified active side-menu item (AGT-2010): a clearly accent-tinted band
-  // with a bright accent side bar, driven by the shared --studio-nav-active-*
-  // tokens so every rail using <app-tree-row> reads identically in both themes.
+  // Active side-menu item: tint and foreground contrast carry the state.
+  // Style-guide R1 forbids an accent bar on rows.
   &--active {
     background: var(--studio-nav-active-bg);
     color: var(--studio-nav-active-fg);
     font-weight: 600;
-    box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
+    box-shadow: none;
   }
 
   &--active:hover {

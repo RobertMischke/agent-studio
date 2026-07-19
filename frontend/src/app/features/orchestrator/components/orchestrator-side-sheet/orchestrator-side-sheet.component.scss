@@ -1,53 +1,33 @@
-/* The host participates in flex layout (same as kanban-filter-sidesheet). When
-   closed it collapses to zero width so the main board reclaims the space
-   and stays fully visible; when open it animates to its open width
-   driven entirely from `:host(.is-open)` below. The inner panel chrome
-   (background, border, header / body / footer grid) is owned by
-   `<app-sidesheet>` — it inherits 100 % width from the host so it fills
-   the open animation rather than sitting at a fixed 360 px default
-   that leaves a transparent gap on the right.
-
-   `overflow: hidden` ensures content is clipped to the host's animating
-   width; previously `overflow: visible` let the inner sheet float past
-   the collapsed 0 px host and overlay the workspace. */
 :host {
   display: block;
-  // Width is closed (0) by default; the open-state width is bound from
-  // the component via [style.width.px]="open() ? panelWidth() : null"
-  // so the user-resizable + persisted width takes over once the user
-  // has dragged the splitter. The `:host(.is-open)` rule keeps a CSS
-  // fallback only if the inline binding is ever null while is-open is
-  // true (defensive — should not happen in practice).
-  width: 0;
-  transition: width 0.22s ease;
-  // `position: relative` so the .orch-resize splitter (position:
-  // absolute, left: 0) anchors to the host's box. `overflow: hidden`
-  // is preserved so the closed-state animation still clips inner
-  // content during the transition.
   position: relative;
+  width: 0;
   overflow: hidden;
   flex: 0 0 auto;
+  transition: width 0.22s ease;
 }
 
 :host(.is-open) {
-  // Defensive fallback only — see :host comment above. Real width
-  // is driven by [style.width.px]="panelWidth()" from the component.
   width: min(640px, 96vw);
 }
 
-// Left-edge resize handle. 6 px wide hit-zone is wider than the visual
-// indicator so dragging stays comfortable; the indicator only paints
-// on hover / active so the splitter doesn't clutter the default look.
+/* The orchestrator owns its internal spacing. Removing the shared body inset
+   lets the expanded context menu reach both panel edges with no pale frame. */
+:host ::ng-deep .sidesheet {
+  border-left: 0;
+}
+
+:host ::ng-deep .sidesheet__body {
+  overflow: hidden;
+  padding: 0;
+}
+
 .orch-resize {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0 auto 0 0;
   width: 6px;
   cursor: ew-resize;
   z-index: 5;
-  // Subtle hairline that lights up on hover — mirrors the sidebar's
-  // resize indicator in studio-shell.component.scss (`&__resize`).
   background: transparent;
   transition: background 0.12s ease;
 
@@ -57,281 +37,298 @@
   }
 }
 
-.sidesheet {
-  // Local accent aliases — derived from the studio brand orange so they
-  // flip cleanly with the theme. The fixed RGB shorthand on the soft/line
-  // tints comes from the dark-mode reading of --studio-accent; on light
-  // theme the lower alphas still read as a soft tint over the white shell.
-  --orch-accent: var(--studio-accent);
-  --orch-soft: color-mix(in srgb, var(--studio-accent) 12%, transparent);
-  --orch-line: color-mix(in srgb, var(--studio-accent) 24%, transparent);
-}
-
-// Header BEM (`sheet__header`, `sheet__title-block`, `sheet__eyebrow`,
-// `sheet__title`, `sheet__close`) was deleted: the header + close
-// button are rendered by `<app-sidesheet>`'s own template now, so the
-// classes targeted nothing in the live DOM. The header-actions slot,
-// header-extras and the `sheet__btn` rules below are still live —
-// they style the buttons the orchestrator projects into the sidesheet
-// header.
-.sheet__header-actions {
+.sheet__header-extras {
   display: flex;
-  justify-content: flex-end;
-  gap: 6px;
   align-items: center;
-}
-
-.sheet__btn {
-  background: var(--studio-bg-hover);
-  border: 1px solid var(--studio-border);
-  color: var(--studio-fg);
-  min-height: 26px;
-  border-radius: 6px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  padding: 3px 10px;
-}
-.sheet__btn:hover:not(:disabled) {
-  background: var(--studio-bg-elevated);
-  color: var(--studio-fg-strong);
-}
-.sheet__btn:disabled { opacity: 0.5; cursor: progress; }
-
-/* MC-2: the pin toggle. Default reads like any header action; the pinned
-   state lights up with the studio accent so "I froze the context" is
-   legible at a glance and matches the header's pinned chip. Uses the
-   global --studio-accent (not the inner-sheet --orch-* aliases) so the
-   tint resolves for the header-projected button. */
-.sheet__btn--pin { white-space: nowrap; }
-.sheet__btn--pinned {
-  background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
-  border-color: color-mix(in srgb, var(--studio-accent) 42%, transparent);
-  color: var(--studio-fg-strong);
-}
-.sheet__btn--pinned:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--studio-accent) 20%, transparent);
-}
-
-.sheet__project-picker {
-  position: relative;
+  gap: var(--studio-spacing-2);
   min-width: 0;
+}
+
+.sheet__context-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px 5px 11px;
-  background: var(--studio-bg-hover);
+  gap: var(--studio-spacing-1);
+  min-height: 28px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border: 1px solid var(--studio-border);
-  border-radius: 6px;
-  color: var(--studio-fg);
-  font-weight: 600;
-  font-size: 12px;
-}
-.sheet__combo-wrap--active {
-  border-color: color-mix(in srgb, var(--studio-accent-3) 42%, transparent);
-  background: color-mix(in srgb, var(--studio-accent-3) 10%, transparent);
-}
-.sheet__combo-wrap--open {
-  border-color: color-mix(in srgb, var(--studio-accent-4) 72%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--studio-accent-4) 25%, transparent);
-}
-.sheet__select-icon,
-.sheet__select-caret { flex: 0 0 auto; opacity: 0.85; }
-.sheet__combo-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  padding: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.sheet__combo-input::placeholder { color: inherit; opacity: 0.85; }
-.sheet__combo-input:focus { outline: none; }
-.sheet__combo-list {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  max-height: 280px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
+  border-radius: 999px;
   background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.30);
-  z-index: 30;
-}
-.sheet__combo-option {
-  padding: 6px 10px;
-  border-radius: 6px;
   color: var(--studio-fg);
-  font-weight: 500;
+  font: inherit;
+  font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.sheet__combo-option:hover,
-.sheet__combo-option--active { background: var(--studio-bg-selected); color: var(--studio-fg-strong); }
-.sheet__combo-option--current { color: var(--studio-accent); font-weight: 650; }
+
+.sheet__context-badge strong {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0 var(--studio-spacing-1);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-bg-editor));
+  color: var(--studio-accent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet__context-badge:hover,
+.sheet__context-badge--open {
+  border-color: color-mix(in srgb, var(--studio-accent) 48%, var(--studio-border));
+  background: var(--studio-bg-hover);
+}
+
+.sheet__context-badge:focus-visible,
+.sheet__context-actions button:focus-visible,
+.sheet__draft-btn:focus-visible,
+.sheet__event-action:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+
+.sheet__context-caret {
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+}
+
+.sheet__workspace {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--studio-bg-editor);
+}
+
+.sheet__context-menu {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--studio-bg-editor);
+}
+
+.sheet__context-menu-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3) var(--studio-spacing-4);
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-bg-sidebar);
+}
+
+.sheet__context-menu-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sheet__context-menu-title h3,
+.sheet__context-menu-title p {
+  margin: 0;
+}
+
+.sheet__context-menu-title h3 {
+  color: var(--studio-fg-strong);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sheet__context-menu-title p {
+  margin-top: var(--studio-spacing-1);
+  overflow: hidden;
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet__context-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-1);
+}
+
+.sheet__context-actions button,
+.sheet__event-action {
+  min-height: 28px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sheet__context-actions button:hover:not(:disabled),
+.sheet__event-action:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
+}
+
+.sheet__context-actions button:disabled {
+  cursor: progress;
+  opacity: 0.5;
+}
+
+.sheet__context-actions .sheet__context-action--active {
+  border-color: color-mix(in srgb, var(--studio-accent) 45%, var(--studio-border));
+  background: color-mix(in srgb, var(--studio-accent) 12%, var(--studio-bg-elevated));
+}
+
+.sheet__context-summary {
+  padding: var(--studio-spacing-3) var(--studio-spacing-4) 0;
+}
+
+.sheet__scope-row {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-height: 32px;
+  margin: 0 0 var(--studio-spacing-2);
+}
+
+.sheet__scope {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font-size: 12px;
+}
+
+.sheet__scope--active {
+  border-color: color-mix(in srgb, var(--studio-accent) 24%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+  color: var(--studio-fg-strong);
+}
+
+.sheet__memory {
+  margin-left: auto;
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
 
 .sheet__content {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 10px 18px 14px;
-  background: var(--studio-bg-editor);
+  padding: var(--studio-spacing-2) var(--studio-spacing-4) var(--studio-spacing-3);
   display: flex;
   flex-direction: column;
 }
-.sheet__scope-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 -2px 10px;
-  min-height: 32px;
-}
-.sheet__scope {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 5px 10px;
-  background: transparent;
-  color: var(--studio-fg-muted);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.sheet__scope--active {
-  border-color: var(--orch-line);
-  background: var(--orch-soft);
-  color: var(--studio-fg-strong);
-}
-.sheet__scope:disabled {
-  cursor: default;
-  opacity: 0.78;
-}
-.sheet__memory {
-  margin-left: auto;
-  color: var(--studio-fg-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-.sheet__memory::first-letter {
-  color: var(--studio-accent-success);
-}
+
 .sheet__error {
-  margin: 0 0 10px;
-  padding: 7px 10px;
-  background: color-mix(in srgb, var(--severity-high) 12%, transparent);
+  margin: 0 0 var(--studio-spacing-2);
+  padding: var(--studio-spacing-2);
   border: 1px solid color-mix(in srgb, var(--severity-high) 26%, transparent);
-  color: var(--severity-high);
   border-radius: 7px;
+  background: color-mix(in srgb, var(--severity-high) 12%, transparent);
+  color: var(--severity-high);
   font-size: 12px;
 }
+
 .sheet__chat {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--studio-spacing-2);
 }
-// `.sheet__placeholder` was a never-rendered sibling; only the
-// `.sheet__no-project` empty-state block stays.
+
+.sheet__conversation {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet__conversation cac-conversation-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
 .sheet__no-project {
-  padding: 22px 16px;
-  color: var(--studio-fg-dim);
+  padding: var(--studio-spacing-5) var(--studio-spacing-4);
   border: 1px dashed var(--studio-border);
   border-radius: 8px;
   background: var(--studio-bg-hover);
+  color: var(--studio-fg-dim);
+  text-align: center;
 }
-/* F14: subtle context indicator rendered directly above the composer
-   via the chat surface's `[chat-above-composer]` projection slot. Tiny
-   11px muted text so the operator can read which (project · view/task)
-   the next send will carry without the indicator stealing attention
-   from the conversation. No pulse, no blink — content updates via
-   signal on picker change. */
-.sheet__context-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 4px 4px;
-  color: var(--studio-fg-muted);
-  font-size: 11px;
-  line-height: 1.3;
-  min-width: 0;
-}
-.sheet__context-chip-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sheet__context-chip-close {
+
+.sheet__composer {
   flex: 0 0 auto;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  padding: 0 4px;
-  font-size: 13px;
-  line-height: 1;
-  border-radius: 4px;
-  opacity: 0.7;
+  min-height: 0;
 }
-.sheet__context-chip-close:hover {
-  background: var(--studio-bg-hover);
-  color: var(--studio-fg);
-  opacity: 1;
+
+.sheet__event-action {
+  align-self: flex-start;
 }
 
 .sheet__draft-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--studio-spacing-1);
 }
+
 .sheet__draft-btn {
-  background: var(--studio-bg-hover);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border: 1px solid var(--studio-border);
-  color: var(--studio-fg);
-  padding: 5px 10px;
   border-radius: 6px;
-  cursor: pointer;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
   font: inherit;
   font-size: 11px;
   font-weight: 500;
+  cursor: pointer;
 }
+
 .sheet__draft-btn:hover:not(:disabled) {
   background: var(--studio-bg-elevated);
   color: var(--studio-fg-strong);
 }
-.sheet__draft-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.sheet__draft-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
 .sheet__draft-btn--primary {
-  background: var(--studio-accent);
   border-color: var(--studio-accent);
+  background: var(--studio-accent);
   color: var(--studio-on-accent);
 }
 
-/* Narrow-viewport collapse: keep the tab strip horizontal but let the
-   project picker reflow under the title so the chat keeps full reading
-   width on phones. */
 @media (max-width: 720px) {
-  :host(.is-open) { width: min(100vw, 460px); }
-  // `.sheet__header` from the legacy BEM was removed (the header is
-  // owned by `<app-sidesheet>`); the picker still gets a mobile
-  // reflow so it doesn't crowd the title.
-  .sheet__project-picker {
-    width: 100%;
-    margin-top: 4px;
+  :host(.is-open) {
+    width: min(100vw, 460px);
+  }
+
+  .sheet__context-menu-head {
+    flex-direction: column;
+  }
+
+  .sheet__context-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host,
+  .orch-resize {
+    transition-duration: 0s;
   }
 }

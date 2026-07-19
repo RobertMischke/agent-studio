@@ -139,6 +139,8 @@ export class EscalationSummaryComponent {
       codeReviews: this.codeReviews(),
       followUpMarkdown: this.followUpMarkdown(),
       steering: this.steering(),
+      statusMarkdown: this.detail().statusMarkdown,
+      timeline: this.timelinePoll.events(),
     }),
   );
 
@@ -162,14 +164,13 @@ export class EscalationSummaryComponent {
   );
 
   /**
-   * One-line reason essence for the collapsed header: the machine cause label
-   * (e.g. `completion-gate`) when the gate recorded one, else the human reason
-   * headline. Null when neither exists, so the essence slot stays empty.
+   * DtC step 6 — header title. A GaveUpToHuman escalation says so plainly
+   * ("Orchestrator gave up"), reading distinctly from a logical / quality
+   * escalation ("Escalation") a human judges on its merits.
    */
-  readonly essenceReason = computed<string | null>(() => {
-    const v = this.view();
-    return v.cause?.trim() || v.reason?.trim() || null;
-  });
+  readonly headTitle = computed<string>(() =>
+    this.view().escalation?.kind === 'gave-up' ? 'Orchestrator gave up' : 'Escalation',
+  );
 
   /** Toggle the panel open/closed and persist the choice for this task. */
   toggleCollapsed(): void {

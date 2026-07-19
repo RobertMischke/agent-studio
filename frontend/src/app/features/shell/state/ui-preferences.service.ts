@@ -34,6 +34,10 @@ const STORAGE_KEY_TASK_NAV = 'taskNavCollapsed';
 const STORAGE_KEY_COMPACT_CARDS = 'compactCards';
 const STORAGE_KEY_SIDE_SHEET_WIDTH = 'sideSheetWidth';
 const STORAGE_KEY_GROUP_BY_EPIC = 'boardGroupByEpic';
+// AGT-1812: the standalone Orchestrator-settings modal was retired into the
+// consolidated Settings view (Global → Orchestrator, deep-linkable by URL hash),
+// so its bespoke localStorage open-flag is no longer a live preference; the key
+// is proactively cleared on boot (see constructor).
 const STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN = 'orchestratorSettingsOpen';
 const STORAGE_KEY_TREE_METRICS = 'atp.studio.explorer.metrics';
 
@@ -54,25 +58,17 @@ export class UiPreferencesService {
    */
   readonly groupByEpic = signal<boolean>(localStorage.getItem(STORAGE_KEY_GROUP_BY_EPIC) === '1');
 
-  /**
-   * Orchestrator Settings modal open state. Persisted so an F5 reload (or a
-   * bookmark-less browser restore) reopens the modal instead of silently
-   * discarding it - the modal has no URL of its own, so localStorage is the
-   * only durable channel. Deliberately excluded from the cross-tab `storage`
-   * listener below: unlike layout prefs, popping this modal open in an
-   * already-open sibling tab just because another tab opened it would
-   * surprise the user (same rationale as `userOverridesCompactWhileRail`).
-   */
-  readonly orchestratorSettingsOpen = signal<boolean>(
-    localStorage.getItem(STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN) === '1',
-  );
-
   private resizing = false;
 
   constructor() {
     // AGT-2035 migration: drop the abolished card-density preference so a stale
     // value can never resurrect compact rendering.
     try { localStorage.removeItem(STORAGE_KEY_COMPACT_CARDS); } catch { /* ignore */ }
+    // AGT-1812 migration: the Orchestrator-settings modal was retired into the
+    // consolidated Settings view (Global → Orchestrator), which owns its own URL
+    // hash. Drop the modal's stale open-flag so a saved '1' can never try to
+    // reopen a component that no longer exists.
+    try { localStorage.removeItem(STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN); } catch { /* ignore */ }
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', this.onStorageEvent);
     }
@@ -123,10 +119,6 @@ export class UiPreferencesService {
     localStorage.setItem(STORAGE_KEY_GROUP_BY_EPIC, value ? '1' : '0');
   }
 
-  setOrchestratorSettingsOpen(open: boolean): void {
-    this.orchestratorSettingsOpen.set(open);
-    localStorage.setItem(STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN, open ? '1' : '0');
-  }
 
   /**
    * Side-sheet drag handler. Adds a `body.resizing` class while drag

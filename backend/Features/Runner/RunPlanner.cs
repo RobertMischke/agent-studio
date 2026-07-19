@@ -63,6 +63,34 @@ public sealed record RunPlan(
 public static class RunPlanner
 {
     /// <summary>
+    /// Replace a planned resume with the same full-context recovery plan used
+    /// when a stored session is absent. Callers use this when an execution-time
+    /// precondition (for example a missing Codex rollout in the effective
+    /// CODEX_HOME) proves that the otherwise valid session id cannot be opened.
+    /// </summary>
+    public static RunPlan FallBackToRecovery(
+        RunPlan plan,
+        string promptPath,
+        string jobFolder,
+        string? followupPrompt,
+        string reason)
+        => plan with
+        {
+            PromptTemplate = RuntimePromptService.RunnerRecoveryContinuation,
+            PromptVariables = PromptVariables(promptPath, jobFolder, followupPrompt ?? string.Empty),
+            PromptOverride = null,
+            SessionToResume = null,
+            ResumeFlag = false,
+            EventKind = "recovery",
+            EventReason = reason,
+            EventInputSessionId = null,
+            MarkSessionChainRecovery = true,
+            WriteCutMarker = true,
+            CutMarkerReason = reason,
+            PersistSessionName = null,
+        };
+
+    /// <summary>
     /// Maps a trigger + observed state to a fully-described <see cref="RunPlan"/>.
     /// Called from <see cref="ProjectRunner.RunCliAsync"/>; never throws, never
     /// returns null - the contract is "always produces a runnable plan", which

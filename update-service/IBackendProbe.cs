@@ -14,6 +14,7 @@ public interface IBackendProbe
     string BaseUrl { get; }
     Task<HealthzResult> ProbeHealthzAsync(CancellationToken ct = default);
     Task<bool> IsHealthyAsync(CancellationToken ct = default);
+    Task<RuntimeVersion?> ReadRuntimeVersionAsync(CancellationToken ct = default);
     Task<bool> WaitForHealthyAsync(TimeSpan timeout, CancellationToken ct = default);
     Task<Dictionary<string, string>?> ReadProjectModesAsync(CancellationToken ct = default);
     Task<bool> SetModeAsync(string projectName, string mode, string? reason = null, CancellationToken ct = default);

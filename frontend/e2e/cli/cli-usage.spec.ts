@@ -13,11 +13,13 @@ import { getCliUsage } from '../helpers/quota';
  *  - the backend `/api/cli/usage` report is sane (Copilot / Claude / Codex)
  *  - clicking `status-bar-usage` opens the home at the CLI-Management
  *    ("caps") section (`cli-admin-overlay`)
- *  - the embedded `cli-admin-sessions` section renders the
- *    `cli-sessions-panel` with the available CLI labels and no error
+ *  - the encapsulated `CLI sessions` settings page (split out of the
+ *    CLI-Management hub in AGT-2101) renders the `cli-sessions-panel` with
+ *    the available CLI labels and no error
  *
- * The session list is the preserved feature — it must still render from
- * inside the home, reachable via the (now non-parallel) Usage trigger.
+ * The session list is the preserved feature — it must still render, now from
+ * its own `cli-sessions` rail page reachable from the same Settings home the
+ * Usage trigger opens.
  */
 
 const SCREENSHOT_DIR = (() => {
@@ -43,7 +45,7 @@ test.describe('CLI usage hub (status-bar → settings home)', () => {
     }
   });
 
-  test('status-bar Usage opens the home CLI-Management with the sessions panel', async ({ page }) => {
+  test('status-bar Usage opens the home CLI-Management; the CLI sessions page renders the inventory', async ({ page }) => {
     await page.goto('/');
 
     // The Usage button is the only CLI-usage entry point now; it opens the
@@ -54,33 +56,35 @@ test.describe('CLI usage hub (status-bar → settings home)', () => {
     await expect(overlay).toBeVisible();
     await expect(page.getByTestId('cli-admin-panel')).toBeVisible();
 
-    // The preserved per-CLI per-project session inventory is embedded here.
-    const sessionsSection = page.getByTestId('cli-admin-sessions');
+    // Evidence of the CLI-Management hub landing (catalog + caps + contracts).
+    await overlay.screenshot({ path: path.join(SCREENSHOT_DIR, '01-cli-management-top.png') });
+
+    // The per-CLI per-project session inventory now lives on its own
+    // encapsulated "CLI sessions" rail page (AGT-2101).
+    await page.getByTestId('workspace-settings-rail-cli-sessions').click();
+    const sessionsSection = page.getByTestId('workspace-cli-sessions');
     await expect(sessionsSection).toBeVisible();
     const sessions = page.getByTestId('cli-sessions-panel');
     await expect(sessions).toBeVisible();
 
-    // The panel lazy-loads `/api/cli/usage`; wait out the loading state.
-    await expect(sessions.getByText('Loading native CLI session stores...')).toHaveCount(0, {
-      timeout: 15_000,
-    });
+    // The panel lazy-loads `/api/cli/usage`; wait out the loading state, then
+    // the revamped tool renders its search + filter toolbar and a summary.
+    await expect(sessions.getByTestId('cli-sessions-toolbar')).toBeVisible({ timeout: 15_000 });
+    await expect(sessions.getByTestId('cli-sessions-summary')).toBeVisible();
+    await expect(sessions.getByTestId('cli-sessions-search')).toBeVisible();
+    await expect(sessions.getByTestId('cli-filter-all')).toBeVisible();
 
-    // Available CLI section headers render even with zero sessions.
-    for (const label of ['Copilot', 'Claude Code', 'Codex']) {
-      await expect(sessions.getByText(label, { exact: true }).first()).toBeVisible();
-    }
+    // The virtualised list renders at least one session row (real machine has
+    // thousands of transcripts on disk).
+    await expect(sessions.getByTestId('cli-session-row').first()).toBeVisible();
 
     // No error surfaced from the session load.
     await expect(sessions.locator('.sessions__error')).toHaveCount(0);
 
-    await page.getByTestId('cli-admin-overlay').screenshot({
-      path: path.join(SCREENSHOT_DIR, '01-cli-management-top.png'),
-    });
-
     // Scroll the preserved session inventory's header into view and capture
     // the viewport for visual evidence that the feature still renders from
-    // inside the home. (A full-element shot would be tens of thousands of px
-    // tall on a machine with many real sessions.)
+    // its own encapsulated page. (A full-element shot would be tens of
+    // thousands of px tall on a machine with many real sessions.)
     await sessionsSection.scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-cli-sessions-panel.png') });
   });

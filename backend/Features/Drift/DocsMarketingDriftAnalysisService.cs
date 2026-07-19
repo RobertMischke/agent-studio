@@ -370,29 +370,57 @@ public sealed class DocsMarketingDriftAnalysisService
         AddIfExists(docs, repoRoot, "README.md", "README");
         AddIfExists(docs, repoRoot, "ROADMAP.md", "ROADMAP");
         AddIfExists(docs, repoRoot, "AGENTS.md", "AGENTS");
-        AddIfExists(docs, repoRoot, "docs/architecture/decisions/adr-archive.md", "Architecture decisions (ADR archive)");
-        AddIfExists(docs, repoRoot, "docs/product/design-principles.md", "Design principles");
-        AddIfExists(docs, repoRoot, "docs/contracts/agent-task.md", "Agent task contract");
-        AddIfExists(docs, repoRoot, "docs/product/skills-architecture.md", "Skills architecture");
+        AddIfExists(docs, repoRoot, "docs/system/architecture/decisions/adr-archive.md", "Architecture decisions (ADR archive)");
+        AddIfExists(docs, repoRoot, "docs/quality/design-principles.md", "Design principles");
+        AddIfExists(docs, repoRoot, "docs/system/contracts/agent-task.md", "Agent task contract");
+        AddIfExists(docs, repoRoot, "docs/concepts/skills-architecture.md", "Skills architecture");
         return docs;
     }
+
+    // Active mockup families promoted to top-level concept folders during the
+    // 2026-07 docs migration (former docs/mockups/<family>/ -> docs/concepts/<family>/).
+    private static readonly string[] PromotedMockupFamilies =
+    {
+        "project-urls",
+        "project-overview-dashboard",
+        "task-processing-pipeline",
+        "task-detail-header-state-actions",
+    };
 
     private static IReadOnlyList<DriftRef> BuildMockupDocList(string repoRoot)
     {
         var entries = new List<DriftRef>();
-        var mockupsDir = Path.Combine(repoRoot, "docs", "mockups");
-        if (!Directory.Exists(mockupsDir)) return entries;
 
-        foreach (var dir in Directory.EnumerateDirectories(mockupsDir).OrderBy(d => d, StringComparer.Ordinal))
+        // Standalone mockups now live directly under docs/concepts/mockups/ as
+        // loose HTML pages (or, for future families, as nested subfolders).
+        var mockupsDir = Path.Combine(repoRoot, "docs", "concepts", "mockups");
+        if (Directory.Exists(mockupsDir))
         {
-            var name = Path.GetFileName(dir);
-            // List one entry per direct subfolder. README and taxonomy of the
-            // quality-system mockup are explicitly named in the task; the
-            // generic listing covers them and any future mockup folder.
-            entries.Add(new DriftRef(
-                Path: $"docs/mockups/{name}/",
-                Label: $"Mockup: {name}"));
+            foreach (var file in Directory.EnumerateFiles(mockupsDir, "*.html").OrderBy(f => f, StringComparer.Ordinal))
+            {
+                var name = Path.GetFileName(file);
+                entries.Add(new DriftRef(
+                    Path: $"docs/concepts/mockups/{name}",
+                    Label: $"Mockup: {Path.GetFileNameWithoutExtension(file)}"));
+            }
+            foreach (var dir in Directory.EnumerateDirectories(mockupsDir).OrderBy(d => d, StringComparer.Ordinal))
+            {
+                var name = Path.GetFileName(dir);
+                entries.Add(new DriftRef(
+                    Path: $"docs/concepts/mockups/{name}/",
+                    Label: $"Mockup: {name}"));
+            }
         }
+
+        // Promoted mockup families sit directly under docs/concepts/.
+        foreach (var family in PromotedMockupFamilies)
+        {
+            if (Directory.Exists(Path.Combine(repoRoot, "docs", "concepts", family)))
+                entries.Add(new DriftRef(
+                    Path: $"docs/concepts/{family}/",
+                    Label: $"Mockup: {family}"));
+        }
+
         return entries;
     }
 

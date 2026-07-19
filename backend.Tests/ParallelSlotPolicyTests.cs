@@ -90,16 +90,63 @@ public sealed class ParallelSlotPolicyTests
         Assert.Contains("exclusive task 'big' is running", admission.Reason);
     }
 
-    [Fact]
-    public void UnknownScope_IsConservative_Serializes()
+    public static TheoryData<string, string, string[]> NightUnknownScopeFixtures => new()
     {
-        // Candidate with no predicted scope cannot be proven disjoint from a
-        // running task, so the gate holds it rather than risk a collision.
-        var running = new[] { Running("a", "frontend/") };
-        var admission = ParallelSlotPolicy.Decide("b", TaskParallelism.Default, running, maxParallelism: 2);
+        {
+            "memory---dev-wiki-migrieren",
+            "docs/wiki/",
+            new[] { "pulse-1", "pulse-2", "remote-hosts", "orch-1", "task-server", "screen-tooling", "cli-probes", "runner-health" }
+        },
+        {
+            "run-liveness-c-subzustaende",
+            "backend/Features/Runner/",
+            new[] { "pulse-2", "remote-hosts", "orch-1", "task-server", "screen-tooling" }
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(NightUnknownScopeFixtures))]
+    public void NightRegression_UnknownScopeCandidates_AdmitAlongsideScopedRun(
+        string runningId,
+        string runningScope,
+        string[] candidateIds)
+    {
+        var running = new[] { Running(runningId, runningScope) };
+
+        foreach (var candidateId in candidateIds)
+        {
+            var admission = ParallelSlotPolicy.Decide(
+                candidateId, TaskParallelism.Default, running, maxParallelism: 6);
+
+            Assert.Equal(SlotDecision.Admit, admission.Decision);
+            Assert.Contains("optimistic: unknown scope, worktree-isolated", admission.Reason);
+        }
+    }
+
+    [Fact]
+    public void UnknownRunningScope_AdmitsScopedCandidate_Symmetrically()
+    {
+        var running = new[] { Running("unknown-running") };
+        var admission = ParallelSlotPolicy.Decide(
+            "scoped-candidate", Scope("frontend/"), running, maxParallelism: 2);
+
+        Assert.Equal(SlotDecision.Admit, admission.Decision);
+        Assert.Contains("optimistic: unknown scope, worktree-isolated", admission.Reason);
+    }
+
+    [Fact]
+    public void UnknownRunningScope_DoesNotHideLaterDeclaredConflict()
+    {
+        var running = new[]
+        {
+            Running("unknown-running"),
+            Running("declared-running", "backend/Services/"),
+        };
+        var admission = ParallelSlotPolicy.Decide(
+            "candidate", Scope("backend/Services/Runner/"), running, maxParallelism: 4);
 
         Assert.Equal(SlotDecision.Serialize, admission.Decision);
-        Assert.Contains("unknown-scope", admission.Reason);
+        Assert.Contains("scope conflict with 'declared-running'", admission.Reason);
     }
 
     [Theory]
@@ -139,9 +186,8 @@ public sealed class ParallelSlotPolicyTests
     [Fact]
     public void ReadOnlyCandidate_WithUnknownScope_StillAdmits()
     {
-        // The conservative unknown-scope serialize rule does not apply to a
-        // read-only candidate: it never writes, so an empty predicted scope is
-        // not a risk, and the short-circuit admits it.
+        // A read-only candidate still uses its stronger short-circuit rationale:
+        // it never writes, so no worktree-based scope fallback is needed.
         var running = new[] { Running("a", "frontend/") };
         var admission = ParallelSlotPolicy.Decide(
             "ro", TaskParallelism.ReadOnlyTask, running, maxParallelism: 2);

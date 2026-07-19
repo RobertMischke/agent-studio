@@ -38,11 +38,10 @@ namespace AgentStudio.Runner;
 /// </para>
 ///
 /// <para>
-/// The lock is best-effort. Acquire failures (disk read/write errors, the
-/// folder vanishing mid-call) return <see cref="LockAcquireOutcome.Acquired"/>
-/// rather than blocking the pickup, with a warning log; the in-memory
-/// <c>_activeJobId</c> latch in <see cref="ProjectRunner"/> still gives us
-/// single-process exclusivity, and a logged disk failure beats a wedged queue.
+/// Acquisition fails closed. A lock that cannot be opened exclusively is
+/// treated as foreign-held, because allowing a launch on an unreadable or
+/// contended ownership record can create the duplicate run this file exists to
+/// prevent. The scheduler retries on a later bounded tick.
 /// </para>
 /// </summary>
 public sealed class PickupLockFile
@@ -87,37 +86,56 @@ public sealed class PickupLockFile
         }
 
         var path = Path.Combine(jobFolder, LockFileName);
-        var current = Read(path);
-        if (current != null)
-        {
-            existing = current;
-            if (IsSameOwner(current, owner))
-            {
-                return LockAcquireOutcome.AlreadyOwn;
-            }
-            if (IsForeignLeaseLive(current))
-            {
-                _logger.LogInformation(
-                    "PickupLockFile: foreign lock held on '{Folder}' by {Backend} (pid={Pid} host={Host} role={Role}); skipping pickup",
-                    jobFolder, current.BackendName, current.Pid, current.Hostname, current.Role);
-                return LockAcquireOutcome.ForeignHeld;
-            }
-            _logger.LogInformation(
-                "PickupLockFile: stale lock on '{Folder}' (previous owner {Backend} pid={Pid} host={Host} role={Role}); reclaiming",
-                jobFolder, current.BackendName, current.Pid, current.Hostname, current.Role);
-        }
-
         try
         {
-            Write(path, BuildInfo(owner));
+            // FileShare.None makes read-classify-write one cross-process critical
+            // section. The previous read/delete/move sequence allowed two
+            // backends that observed an empty folder together to both return
+            // Acquired before either ownership record became authoritative.
+            using var fs = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            PickupLockInfo? current = null;
+            if (fs.Length > 0)
+            {
+                try
+                {
+                    current = JsonSerializer.Deserialize<PickupLockInfo>(fs, JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "PickupLockFile: unreadable ownership record at '{Path}'; refusing pickup", path);
+                    return LockAcquireOutcome.ForeignHeld;
+                }
+            }
+
+            if (current != null)
+            {
+                existing = current;
+                if (IsSameOwner(current, owner))
+                    return LockAcquireOutcome.AlreadyOwn;
+                if (IsForeignLeaseLive(current))
+                {
+                    _logger.LogInformation(
+                        "PickupLockFile: foreign lock held on '{Folder}' by {Backend} (pid={Pid} host={Host} role={Role}); skipping pickup",
+                        jobFolder, current.BackendName, current.Pid, current.Hostname, current.Role);
+                    return LockAcquireOutcome.ForeignHeld;
+                }
+                _logger.LogInformation(
+                    "PickupLockFile: stale lock on '{Folder}' (previous owner {Backend} pid={Pid} host={Host} role={Role}); reclaiming",
+                    jobFolder, current.BackendName, current.Pid, current.Hostname, current.Role);
+            }
+
+            fs.Position = 0;
+            fs.SetLength(0);
+            JsonSerializer.Serialize(fs, BuildInfo(owner), JsonOptions);
+            fs.Flush(flushToDisk: true);
             return current == null ? LockAcquireOutcome.Acquired : LockAcquireOutcome.Stale;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "PickupLockFile: failed to write lock at '{Path}'; proceeding without on-disk lock (in-memory latch still applies)",
+                "PickupLockFile: could not acquire exclusive ownership at '{Path}'; refusing pickup until a later scheduler tick",
                 path);
-            return LockAcquireOutcome.Acquired;
+            return LockAcquireOutcome.ForeignHeld;
         }
     }
 
@@ -269,7 +287,20 @@ public sealed class PickupLockFile
         try
         {
             using var p = Process.GetProcessById(info.Pid);
-            return !p.HasExited;
+            if (p.HasExited) return false;
+
+            // A PID is not an identity. After a backend crash the OS may reuse
+            // the recorded number for an unrelated process, which must not keep
+            // a Progress card looking live forever. When the lock carries an
+            // acquisition time, the owning process must have started no later
+            // than that instant. Legacy records without a timestamp retain the
+            // conservative pid-only behavior.
+            if (info.AcquiredAt != default)
+            {
+                var processStartedAt = p.StartTime.ToUniversalTime();
+                if (processStartedAt > info.AcquiredAt.AddSeconds(1)) return false;
+            }
+            return true;
         }
         catch (ArgumentException) { return false; }
         catch (InvalidOperationException) { return false; }

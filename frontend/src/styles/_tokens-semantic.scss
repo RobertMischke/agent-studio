@@ -173,6 +173,10 @@
   // Text to use ON an accent fill (a brand-orange button etc.). Tuned for dark
   // text on the saturated accent in both themes.
   --studio-on-accent: var(--color-grey-950);
+  // Tab counters use a deliberately darker brand fill so white numerals clear
+  // WCAG AA in both themes. This is separate from button on-accent contrast.
+  --studio-tab-count-active-bg: var(--color-orange-700);
+  --studio-tab-count-active-fg: var(--color-grey-50);
 
   // ---------------------------------------------------------------------------
   // Navigation: the ONE active side-menu-item treatment (AGT-2010)

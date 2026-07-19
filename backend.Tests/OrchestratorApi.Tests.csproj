@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +22,7 @@
 
   <ItemGroup>
     <None Include="Fixtures\cli\claude\outcome-classifier\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\cli\codex\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -77,7 +79,6 @@
     <Using Include="AgentStudio.Design" />
     <Using Include="AgentStudio.Diagnostics" />
     <Using Include="AgentStudio.Docs" />
-    <Using Include="AgentStudio.Docs.Grading" />
     <Using Include="AgentStudio.Drift" />
     <Using Include="AgentStudio.GeneratedFiles" />
     <Using Include="AgentStudio.Git" />

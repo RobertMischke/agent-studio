@@ -1,0 +1,222 @@
+@use '../../../../../styles/mixins' as m;
+
+:host {
+  display: block;
+}
+
+// Card in the wiki landing dashboard grid (shared knowledge-card recipe).
+.style-guides {
+  @include m.knowledge-card;
+
+  flex: 1 1 auto;
+  color: var(--pwiki-paper-fg);
+}
+
+.style-guides__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--studio-spacing-4);
+}
+
+.style-guides__head > div:first-child {
+  min-width: 0;
+}
+
+.style-guides__kicker {
+  color: var(--pwiki-paper-muted);
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.style-guides__head h3 {
+  margin: var(--studio-spacing-1) 0 0;
+  color: var(--pwiki-paper-fg);
+  font-size: 0.96rem;
+}
+
+.style-guides__head p {
+  margin: var(--studio-spacing-1) 0 0;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.style-guides__catalogue-meta {
+  display: grid;
+  justify-items: end;
+  gap: var(--studio-spacing-2);
+}
+
+.style-guides__snapshot {
+  color: var(--pwiki-paper-muted);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.style-guides__technologies {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--studio-spacing-1);
+}
+
+.style-guides__technologies code {
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--pwiki-paper-border);
+  border-radius: 999px;
+  background: var(--pwiki-paper-bg);
+  color: var(--pwiki-paper-muted);
+  font-size: 0.66rem;
+}
+
+.style-guides__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--studio-spacing-2);
+}
+
+.style-guides__card {
+  min-width: 0;
+  display: grid;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--pwiki-paper-border);
+  border-radius: 7px;
+  background: var(--pwiki-paper-bg);
+  color: var(--pwiki-paper-fg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.style-guides__card:hover,
+.style-guides__card:focus-visible {
+  border-color: color-mix(in srgb, var(--studio-accent) 40%, var(--pwiki-paper-border));
+  background: color-mix(in srgb, var(--studio-accent) 4%, var(--pwiki-paper-bg));
+}
+
+.style-guides__card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--studio-accent) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.style-guides__copy {
+  display: grid;
+  gap: var(--studio-spacing-1);
+}
+
+.style-guides__copy strong {
+  color: var(--pwiki-paper-fg);
+  font-size: 0.84rem;
+}
+
+.style-guides__copy > span {
+  color: var(--pwiki-paper-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.style-guides__matches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-1);
+  color: var(--pwiki-paper-muted);
+  font-size: 0.66rem;
+}
+
+.style-guides__matches > span {
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent-3) 8%, var(--pwiki-paper-bg));
+}
+
+.style-guides__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.style-guides__meta code {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  background: transparent;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-guides__meta > span {
+  flex: 0 0 auto;
+}
+
+.style-guides__empty {
+  margin: 0;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.78rem;
+}
+
+.style-guides__state {
+  margin: 0;
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--pwiki-paper-border);
+  border-radius: 6px;
+  background: var(--pwiki-paper-bg);
+  color: var(--pwiki-paper-muted);
+  font-size: 0.78rem;
+}
+
+.style-guides__state--error {
+  border-color: color-mix(in srgb, var(--studio-error) 38%, var(--pwiki-paper-border));
+  background: color-mix(in srgb, var(--studio-error) 7%, var(--pwiki-paper-bg));
+  color: var(--studio-error);
+}
+
+.style-guides__warnings {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 36%, var(--pwiki-paper-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--studio-accent-warn) 7%, var(--pwiki-paper-bg));
+  color: var(--pwiki-paper-muted);
+  font-size: 0.7rem;
+}
+
+.style-guides__warnings p {
+  margin: 0;
+}
+
+.style-guides__warnings code {
+  color: inherit;
+  background: transparent;
+}
+
+@media (max-width: 720px) {
+  .style-guides__head {
+    flex-direction: column;
+  }
+
+  .style-guides__technologies {
+    justify-content: flex-start;
+  }
+
+  .style-guides__catalogue-meta {
+    justify-items: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .style-guides__card {
+    transition-duration: 0ms;
+  }
+}

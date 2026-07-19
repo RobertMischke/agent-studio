@@ -134,6 +134,90 @@ public sealed class RunnerSlotWiringTests : IDisposable
     }
 
     [Fact]
+    public void DeferredManual_FlipsOnlyAfterLastTaskFromActiveSnapshotFinishes()
+    {
+        var (runner, settings) = BuildRunner();
+        settings.SetMaxParallelism(ProjectName, 3);
+        runner.SetMode("auto-continuous");
+        runner.SetActiveJobForTest("task-a");
+        runner.SetActiveJobForTest("task-b");
+
+        var request = runner.RequestModeChange("manual", "api-toggle");
+
+        Assert.Equal(ModeChangeOutcome.Deferred, request.Outcome);
+        Assert.Equal(2, runner.GetStatus().PendingModeActiveTaskCount);
+        Assert.Null(runner.GetStatus().PendingModeWillApplyAfter);
+
+        Assert.True(runner.CompleteActiveJobForTest("task-a"));
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.Equal("manual", runner.GetStatus().PendingMode);
+        Assert.Equal(1, runner.GetStatus().PendingModeActiveTaskCount);
+        Assert.Equal("task-b", runner.GetStatus().PendingModeWillApplyAfter);
+
+        Assert.True(runner.CompleteActiveJobForTest("task-b"));
+        Assert.Equal("manual", runner.GetStatus().Mode);
+        Assert.Null(runner.GetStatus().PendingMode);
+        Assert.Equal(0, runner.GetStatus().PendingModeActiveTaskCount);
+    }
+
+    [Fact]
+    public async Task DeferredManual_WithFreeSlotAndReadyCandidate_DoesNotPick()
+    {
+        var (runner, settings) = BuildRunner();
+        settings.SetMaxParallelism(ProjectName, 2);
+        runner.SetMode("auto-continuous");
+        var activeFolder = Path.Combine(_watchPath, TaskStates.Progress, "task-active");
+        Directory.CreateDirectory(activeFolder);
+        File.WriteAllText(Path.Combine(activeFolder, "task.json"),
+            "{\"id\":\"task-active\",\"title\":\"Active task\",\"state\":\"3-progress\",\"agent\":\"codex\",\"cliType\":\"codex\"}");
+        runner.SetActiveJobForTest("task-active");
+        var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, "task-ready");
+        Directory.CreateDirectory(readyFolder);
+        File.WriteAllText(Path.Combine(readyFolder, "task.json"),
+            "{\"id\":\"task-ready\",\"title\":\"Ready candidate\",\"state\":\"2-ready\",\"agent\":\"codex\",\"cliType\":\"codex\"}");
+
+        runner.RequestModeChange("manual", "api-toggle");
+        await runner.TickAsync(CancellationToken.None);
+
+        Assert.Equal(1, runner.GetStatus().OccupiedSlots);
+        Assert.Equal("manual", runner.GetStatus().PendingMode);
+        Assert.True(Directory.Exists(readyFolder));
+    }
+
+    [Fact]
+    public void ActiveRunRecord_DoesNotOccupySlot_AfterCliProcessExits()
+    {
+        var runs = new ActiveRuns();
+        Assert.True(runs.TryClaim(new ActiveRun { JobId = "live", Intent = RunIntent.AutoPickup }));
+        Assert.Equal(1, runs.Count);
+
+        Assert.True(runs.ReleaseExecutionSlot("live"));
+
+        Assert.Equal(0, runs.Count);
+        Assert.True(runs.Contains("live"));
+        Assert.False(runs.HoldsExecutionSlot("live"));
+        Assert.Null(runs.SingleJobId);
+        Assert.Empty(runs.RunningTasks());
+        Assert.True(runs.HasFreeSlot(1));
+        Assert.False(runs.ReleaseExecutionSlot("live"));
+    }
+
+    [Fact]
+    public async Task ExecutionSlotRelease_IsObservedExactlyOnce_WhenFinishSignalsRace()
+    {
+        var runs = new ActiveRuns();
+        Assert.True(runs.TryClaim(new ActiveRun { JobId = "live", Intent = RunIntent.AutoPickup }));
+
+        var releases = await Task.WhenAll(
+            Enumerable.Range(0, 16)
+                .Select(_ => Task.Run(() => runs.ReleaseExecutionSlot("live"))));
+
+        Assert.Single(releases, released => released);
+        Assert.Equal(0, runs.Count);
+        Assert.True(runs.Contains("live"));
+    }
+
+    [Fact]
     public void RenderPrompt_ForWorktreeRun_RewritesMainCheckoutPathsAndAddsContainmentNotice()
     {
         var (runner, _) = BuildRunner();

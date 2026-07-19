@@ -322,6 +322,21 @@ public class GitService
     /// </summary>
     internal static void InvalidateToplevelCache() => _toplevelCache.Clear();
 
+    // Task-detail status is polled and is commonly requested again while the
+    // user switches panes. A one-second cache removes every git spawn from that
+    // burst. Unlike commit history, working-tree status cannot be keyed only by
+    // HEAD because unstaged files do not move HEAD, so expiry is deliberately
+    // short and is the correctness boundary for external filesystem changes.
+    private readonly object _statusCacheLock = new();
+    private readonly Dictionary<string, (DateTime At, GitStatusResult Value)> _statusCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan StatusTtl = TimeSpan.FromSeconds(1);
+
+    internal void InvalidateStatusCache()
+    {
+        lock (_statusCacheLock) _statusCache.Clear();
+    }
+
     private readonly object _summaryLock = new();
     private DateTime _summaryAt = DateTime.MinValue;
     private List<GitProjectSummary> _summaryCache = [];
@@ -883,8 +898,11 @@ public class GitService
         string root, string? currentBranch, IReadOnlyDictionary<string, string> worktreeByBranch)
     {
         // One for-each-ref pass gives tip SHA, upstream, ahead/behind track, the
-        // last-commit date and subject per branch. Fields are separated by the
-        // Unit Separator (0x1f) so a commit subject with spaces round-trips.
+        // last-commit date and subject per branch. The explicit refs/heads
+        // pattern is intentional: refs/backups/* is an operational safety net,
+        // not user-visible branch inventory, and large backup namespaces must
+        // not add scan or response cost. Fields are separated by the Unit
+        // Separator (0x1f) so a commit subject with spaces round-trips.
         const char US = '';
         var fmt = string.Join(US.ToString(), new[]
         {
@@ -1172,12 +1190,23 @@ public class GitService
             // callers pass preferRunLocation=false and stay unmeasured to keep
             // the rollup logs scoped to user-facing git-info requests.
             using var _t = GitProcessTelemetry.BeginRequest("tasks/git/status", _logger);
+            var cacheKey = $"{watchPath}\n{jobId}";
+            lock (_statusCacheLock)
+            {
+                if (_statusCache.TryGetValue(cacheKey, out var cached) &&
+                    DateTime.UtcNow - cached.At < StatusTtl)
+                {
+                    return cached.Value;
+                }
+            }
             var loc = ResolveRunLocation(jobId, watchPath);
             if (loc == null)
                 return new GitStatusResult(false, null, 0, 0, 0, [], "Job not found or project has no RootPath configured.");
             if (loc.Root == null)
                 return new GitStatusResult(false, null, 0, 0, 0, [], $"Not a git repository: {loc.Configured}");
-            return ReadStatusAtRoot(loc.Root, loc.IsWorktree);
+            var fresh = ReadStatusAtRoot(loc.Root, loc.IsWorktree);
+            lock (_statusCacheLock) _statusCache[cacheKey] = (DateTime.UtcNow, fresh);
+            return fresh;
         }
 
         var configured = ResolveRepoRoot(jobId, watchPath);
@@ -2379,6 +2408,43 @@ public class GitService
         }
 
         return configured;
+    }
+
+    /// <summary>
+    /// Resolves the integration revision for read-only projections. Unlike
+    /// worktree mutation paths, these readers can consume a remote-tracking ref
+    /// when a clone has no corresponding local branch yet.
+    /// </summary>
+    internal string ResolveIntegrationReadRef(string repoRoot, string? configuredBranch)
+    {
+        var configured = string.IsNullOrWhiteSpace(configuredBranch)
+            ? new ProjectSettings().IntegrationBranch
+            : configuredBranch.Trim();
+
+        if (BranchExists(repoRoot, configured)) return configured;
+        if (RemoteBranchExists(repoRoot, configured)) return "origin/" + configured;
+
+        var fallback = ResolveRepositoryDefaultBranch(repoRoot);
+        if (!string.IsNullOrWhiteSpace(fallback))
+        {
+            if (BranchExists(repoRoot, fallback)) return fallback;
+            if (RemoteBranchExists(repoRoot, fallback)) return "origin/" + fallback;
+        }
+
+        return configured;
+    }
+
+    private bool RemoteBranchExists(string repoRoot, string branch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+        if (!IsLikelyBranchName(branch)) return false;
+        var (_, _, code) = RunGitArgs(
+            repoRoot,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            $"refs/remotes/origin/{branch}");
+        return code == 0;
     }
 
     private string? ResolveRepositoryDefaultBranch(string repoRoot)
@@ -3731,6 +3797,43 @@ public class GitService
     }
 
     /// <summary>
+    /// Restores a bounded set of repository-relative paths to HEAD and removes
+    /// only untracked files below those exact pathspecs. This is the rollback
+    /// half of the managed on-demand artifact boundary: its caller first proves
+    /// the checkout was clean, so every supplied path belongs to the failed
+    /// platform write rather than to an operator or another task.
+    /// </summary>
+    public GitWorktreeResult RestorePathsToHead(
+        string repoRoot,
+        IReadOnlyCollection<string> repoRelPaths)
+    {
+        var root = ResolveGitToplevel(repoRoot);
+        if (root == null) return new GitWorktreeResult(false, null, $"Not a git repository: {repoRoot}");
+        var paths = NormalizePaths(repoRelPaths);
+        if (paths.Count == 0) return new GitWorktreeResult(true, null, null);
+
+        var failures = new List<string>();
+        foreach (var path in paths)
+        {
+            var (_, _, trackedCode) = RunGitArgs(root, "ls-files", "--error-unmatch", "--", path);
+            if (trackedCode == 0)
+            {
+                var (_, restoreError, restoreCode) = RunGitArgs(
+                    root, "restore", "--source=HEAD", "--staged", "--worktree", "--", path);
+                if (restoreCode != 0) failures.Add($"{path}: {restoreError.Trim()}");
+                continue;
+            }
+
+            var (_, cleanError, cleanCode) = RunGitArgs(root, "clean", "-fd", "--", path);
+            if (cleanCode != 0) failures.Add($"{path}: {cleanError.Trim()}");
+        }
+
+        return failures.Count == 0
+            ? new GitWorktreeResult(true, null, null)
+            : new GitWorktreeResult(false, null, string.Join("; ", failures));
+    }
+
+    /// <summary>
     /// Moves/renames a wiki node via <c>git mv</c> and commits it. Tracked files
     /// move through git; an untracked source falls back to a filesystem move plus
     /// <c>git add</c> so a never-committed page can still be renamed. Refuses to
@@ -4203,18 +4306,45 @@ public class GitService
     /// "unknown -&gt; not contained" behaviour elsewhere.
     /// </summary>
     public HashSet<string> GetAncestorShaSet(string repoRoot, string tipRef)
+        => GetAncestorShaSet(repoRoot, (IReadOnlyCollection<string>)[tipRef]);
+
+    /// <summary>
+    /// Union of the commits reachable from several refs in one
+    /// <c>git rev-list --ignore-missing</c> process. Missing local/origin mirrors
+    /// do not discard the refs that do exist.
+    /// </summary>
+    public HashSet<string> GetAncestorShaSet(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs)
     {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return set;
-        if (!IsLikelyBranchName(tipRef)) return set;
-        var (output, _, code) = RunGitArgs(repoRoot, "rev-list", tipRef);
-        if (code != 0 || string.IsNullOrWhiteSpace(output)) return set;
+        TryGetAncestorShaSet(repoRoot, tipRefs, out var set);
+        return set;
+    }
+
+    internal bool TryGetAncestorShaSet(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs,
+        out HashSet<string> set)
+    {
+        set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+        var refs = tipRefs
+            .Where(IsLikelyBranchName)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (refs.Length == 0) return false;
+
+        var args = new List<string> { "rev-list", "--ignore-missing" };
+        args.AddRange(refs);
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0) return false;
+        if (string.IsNullOrWhiteSpace(output)) return true;
         foreach (var line in output.Split('\n'))
         {
             var sha = line.Trim();
             if (sha.Length > 0) set.Add(sha);
         }
-        return set;
+        return true;
     }
 
     // ----- PUB-1: publish-target derivation primitives (read-only) -----
@@ -4228,15 +4358,27 @@ public class GitService
     /// </summary>
     public string? GetLatestVersionTag(string repoRoot)
     {
-        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        TryGetLatestVersionTag(repoRoot, out var tag);
+        return tag;
+    }
+
+    internal bool TryGetLatestVersionTag(string repoRoot, out string? tag)
+    {
+        tag = null;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
         var (output, _, code) = RunGitArgs(repoRoot, "tag", "--list", "v[0-9]*", "--sort=-v:refname");
-        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+        if (code != 0) return false;
+        if (string.IsNullOrWhiteSpace(output)) return true;
         foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
         {
-            var tag = line.Trim();
-            if (tag.Length > 0) return tag;
+            var candidate = line.Trim();
+            if (candidate.Length > 0)
+            {
+                tag = candidate;
+                return true;
+            }
         }
-        return null;
+        return true;
     }
 
     /// <summary>
@@ -4247,15 +4389,35 @@ public class GitService
     /// </summary>
     public DateTime? GetTipCommitDateUtc(string repoRoot, string tipRef)
     {
-        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
-        if (!IsLikelyBranchName(tipRef)) return null;
-        var (output, _, code) = RunGitArgs(repoRoot, "log", "-1", "--pretty=format:%aI", tipRef);
-        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+        TryGetTipCommitDateUtc(repoRoot, tipRef, out var value);
+        return value;
+    }
+
+    internal bool TryGetTipCommitDateUtc(
+        string repoRoot,
+        string tipRef,
+        out DateTime? value)
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+        if (!IsLikelyBranchName(tipRef)) return false;
+        var (output, _, code) = RunGitArgs(
+            repoRoot,
+            "log",
+            "--ignore-missing",
+            "-1",
+            "--pretty=format:%aI",
+            tipRef);
+        if (code != 0) return false;
+        if (string.IsNullOrWhiteSpace(output)) return true;
         if (DateTime.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
                 out var ts))
-            return DateTime.SpecifyKind(ts, DateTimeKind.Utc);
-        return null;
+        {
+            value = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -4281,9 +4443,30 @@ public class GitService
         string? sinceRef = null,
         string? sinceDateIso = null)
     {
-        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return [];
-        if (!IsLikelyBranchName(branch)) return [];
-        if (!string.IsNullOrWhiteSpace(sinceRef) && !IsLikelyShaOrRef(sinceRef!)) return [];
+        TryGetMainlineCommitsForScope(
+            repoRoot,
+            branch,
+            includePrefixes,
+            excludePrefixes,
+            out var commits,
+            sinceRef,
+            sinceDateIso);
+        return commits;
+    }
+
+    internal bool TryGetMainlineCommitsForScope(
+        string repoRoot,
+        string branch,
+        IReadOnlyList<string> includePrefixes,
+        IReadOnlyList<string> excludePrefixes,
+        out List<GitCommitInfo> commits,
+        string? sinceRef = null,
+        string? sinceDateIso = null)
+    {
+        commits = [];
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+        if (!IsLikelyBranchName(branch)) return false;
+        if (!string.IsNullOrWhiteSpace(sinceRef) && !IsLikelyShaOrRef(sinceRef!)) return false;
 
         const string fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
         var args = new List<string> { "log", "--first-parent", "--shortstat", $"--pretty=format:{fmt}" };
@@ -4308,8 +4491,10 @@ public class GitService
         }
 
         var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
-        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
-        return ParseLogBlocks(output);
+        if (code != 0) return false;
+        if (string.IsNullOrWhiteSpace(output)) return true;
+        commits = ParseLogBlocks(output);
+        return true;
     }
 
     /// <summary>

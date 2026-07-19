@@ -29,6 +29,7 @@ export class WorkspaceManagerService {
   readonly onboardWorkspaceId = signal<string | null>(null);
   readonly knownNames = signal<readonly string[]>([]);
   readonly registryChanged = signal(0);
+  readonly projectRenamed = signal<{ previousName: string; currentName: string; revision: number } | null>(null);
 
   /** Loads the current registry workspace names into `knownNames`.
    *  Safe to call repeatedly; failures are silent so a transient
@@ -84,6 +85,16 @@ export class WorkspaceManagerService {
    *  must be reflected in the sidebar tree without a page reload. */
   notifyRegistryChanged(): void {
     this.registryChanged.update(n => n + 1);
+  }
+
+  /** Broadcast a registry rename so project-keyed Studio tabs can retarget before stale-tab cleanup runs. */
+  notifyProjectRenamed(previousName: string, currentName: string): void {
+    this.projectRenamed.update((event) => ({
+      previousName,
+      currentName,
+      revision: (event?.revision ?? 0) + 1,
+    }));
+    this.notifyRegistryChanged();
   }
 
   /** Mirrors `refreshAndClose` for the delete path: refresh the

@@ -58,6 +58,7 @@ neighbor task endpoints.
 | `deliverables[]` | no | What was delivered and where — each has `path` (repo-relative, optional `@sha`), `url`, and/or `note`. |
 | `source` | no | Who / which channel did the work (operator name, agent id, `"chat"`, …). Defaults to `external`. |
 | `targetState` | no | Destination lane. Defaults to `5-human-review` (the card still gets a quick operator confirmation). Must be a valid lane. |
+| `gateItems[]` | no | Open operator checklist items written to `orchestrator-follow-up.md`, for example a remote `worktree-blocked` salvage failure. |
 
 Attribution is split deliberately: the **caller** (`X-Client-Id`) is the operator
 who *relayed* the result and drives the `lane_changed` ledger row; the completion
@@ -75,26 +76,29 @@ evidence lands together before the folder is renamed:
    which never clobbers a real summary): a `- Result: Completed out-of-band
    (<source>)` line, the summary, the date, and a pointer to `deliverables.md`.
    Retiring the *"escalated / no summary"* corpse is the whole point.
-3. **`task.json` provenance** — `ExternalCompletionInfo { source, summary,
+3. **Optional gate checklist** - non-empty `gateItems[]` rows are appended as
+   open items in `orchestrator-follow-up.md`, which makes remote recovery work
+   visible in the card's escalation summary.
+4. **`task.json` provenance** - `ExternalCompletionInfo { source, summary,
    completedAt }` is recorded on the card, mirrored to the frontend
    `TaskInfo.externalCompletion` and driving the badge (§4).
-4. **`lifecycle.json` terminalized** — the phase is set to `awaiting-review` and
+5. **`lifecycle.json` terminalized** - the phase is set to `awaiting-review` and
    every still-`running`/`pending` intake or post-processing check is flipped to
    `skipped` with a *"Superseded by out-of-band completion"* note, so the card
    stops spamming the `post-processing-running` scanner warning. The mirrored
    `task.json` phase is cleared to match.
-5. **`external_completion` timeline row** — actor `external`, summary *"Completed
+6. **`external_completion` timeline row** - actor `external`, summary *"Completed
    externally by <source>"*, `payloadRef` → `results/deliverables.md`, details
    carry `source` and `targetState`. Appended *before* the move so it lands in
    the same folder as the rest of the evidence; the `lane_changed` row is emitted
    by the state machine.
-6. **Lane move** — `MoveAsync` to `targetState` (default `5-human-review`). A move
+7. **Lane move** - `MoveAsync` to `targetState` (default `5-human-review`). A move
    out of `3-progress` runs `EnterPostProcessingPhase`, which would otherwise
    reset `lifecycle.json` back to `post-processing-running` — the exact stuck
    state this endpoint exists to retire — so the terminal lifecycle is
    *re-asserted* into the moved folder afterwards (idempotent for every other
    source lane).
-7. **Evidence commit** — `WorkspaceArtifactCommitService.TryCommitExternalCompletion`
+8. **Evidence commit** - `WorkspaceArtifactCommitService.TryCommitExternalCompletion`
    commits the workspace snapshot (before + after folder) so the reconciliation
    is durable, not just local. A failed commit is logged, not fatal.
 

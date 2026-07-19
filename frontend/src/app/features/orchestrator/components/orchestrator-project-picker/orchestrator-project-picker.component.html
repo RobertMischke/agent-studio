@@ -1,0 +1,24 @@
+<div class="picker" [class.picker--open]="open()" data-testid="orch-side-sheet-project-combo-wrap">
+  <span aria-hidden="true">💬</span>
+  <input type="text" class="picker__input" data-testid="orch-side-sheet-project-combo"
+         [value]="query()" [placeholder]="activeProject() ?? 'Pick a project...'" [disabled]="disabled()"
+         (input)="onInput($event)" (focus)="open.set(true); highlight.set(0)" (blur)="onBlur()" (keydown)="onKeydown($event)" />
+  <span aria-hidden="true">▾</span>
+  @if (open() && filtered().length > 0) {
+    <ul class="picker__list" role="listbox" data-testid="orch-side-sheet-project-combo-list">
+      @for (project of filtered(); track project; let i = $index) {
+        <li class="picker__option" role="option" tabindex="0"
+            [class.picker__option--active]="i === highlight()"
+            [class.picker__option--current]="project === activeProject()"
+            [attr.aria-selected]="project === activeProject()"
+            [attr.data-testid]="'orch-side-sheet-project-combo-option-' + project"
+            (mousedown)="$event.preventDefault()" (click)="select(project)"
+            (keydown.enter)="select(project)" (keydown.space)="select(project); $event.preventDefault()">{{ project }}</li>
+      }
+    </ul>
+  }
+</div>
+<select hidden data-testid="orch-side-sheet-project-select" [value]="activeProject() ?? ''"
+        (change)="select($any($event.target).value)">
+  @for (project of projects(); track project) { <option [value]="project">{{ project }}</option> }
+</select>

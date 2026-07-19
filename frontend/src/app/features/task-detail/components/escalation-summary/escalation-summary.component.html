@@ -3,6 +3,8 @@
     class="escalation"
     data-testid="escalation-summary"
     [class.escalation--collapsed]="collapsed()"
+    [class.escalation--gave-up]="v.escalation?.kind === 'gave-up'"
+    [attr.data-escalation-kind]="v.escalation?.kind ?? null"
     aria-label="Escalation summary">
     <!-- Whole header row is the collapse toggle (pattern: pipeline-UI headers). -->
     <button
@@ -12,15 +14,12 @@
       [attr.aria-expanded]="!collapsed()"
       aria-controls="escalation-body"
       (click)="toggleCollapsed()">
-      <span class="escalation__eyebrow" aria-hidden="true">⚠</span>
+      <span class="escalation__eyebrow" aria-hidden="true">{{ v.escalation?.kind === 'gave-up' ? '⚙' : '⚠' }}</span>
 
       <span class="escalation__headline">
-        <span class="escalation__title">Escalation</span>
-        <!-- Single-line essence: reason category · review grade · merge status. -->
-        <span class="escalation__essence" data-testid="escalation-essence">
-          @if (essenceReason(); as reason) {
-            <span class="escalation__essence-reason" data-testid="escalation-essence-reason">{{ reason }}</span>
-          }
+        <span class="escalation__title" data-testid="escalation-title">{{ headTitle() }}</span>
+        <span class="escalation__state" data-testid="escalation-state-sentence">{{ v.stateSentence }}</span>
+        <span class="escalation__essence" data-testid="escalation-essence" aria-label="Supporting status">
           @if (v.review; as r) {
             @if (r.grade; as grade) {
               <span
@@ -58,6 +57,23 @@
 
     @if (!collapsed()) {
       <div class="escalation__body" id="escalation-body" data-testid="escalation-body">
+        @if (v.escalation?.kind === 'gave-up') {
+          <div class="escalation__giveup" data-testid="escalation-gave-up">
+            <div class="escalation__giveup-head">
+              <span class="escalation__giveup-label">Handed to a human — the orchestrator could not conclude</span>
+              @if (v.escalation?.categoryLabel; as cat) {
+                <span class="escalation__giveup-cat" data-testid="escalation-gave-up-category">{{ cat }}</span>
+              }
+            </div>
+            @if (v.escalation?.reason; as r) {
+              <p class="escalation__giveup-reason" data-testid="escalation-gave-up-reason">{{ r }}</p>
+            }
+            <p class="escalation__giveup-note">
+              An infra / orchestrator fault kept the task from a clean verdict, not a rejection of the work.
+              The drive-to-conclusion loop was preserved and the task handed to you — no automated quality review ran.
+            </p>
+          </div>
+        }
         @if (v.reason) {
           <p class="escalation__reason" data-testid="escalation-reason">
             {{ v.reason }}
@@ -65,6 +81,26 @@
               <span class="escalation__cause">· {{ v.cause }}</span>
             }
           </p>
+        }
+
+        @if (v.reissues.length > 0) {
+          <details class="escalation__reissues" data-testid="escalation-reissues">
+            <summary>
+              Reissue history
+              <span class="escalation__history-count">{{ v.reissues.length }}</span>
+            </summary>
+            <ol class="escalation__reissue-list">
+              @for (reissue of v.reissues; track reissue.index) {
+                <li [attr.data-testid]="'escalation-reissue-' + reissue.index">
+                  <span class="escalation__reissue-head">
+                    <strong>Reissue {{ reissue.index }}</strong>
+                    <time [attr.datetime]="reissue.at">{{ formatRunAt(reissue.at) }}</time>
+                  </span>
+                  <span class="escalation__reissue-trigger">{{ reissue.trigger }}</span>
+                </li>
+              }
+            </ol>
+          </details>
         }
 
         <div class="escalation__grid">
@@ -125,18 +161,6 @@
             <section class="escalation__block escalation__block--delivery">
               <h4 class="escalation__block-title">Delivery context</h4>
               <div class="escalation__delivery" data-testid="escalation-delivery">
-                @if (v.delivery.merge; as m) {
-                  <span class="escalation__merge" [cacTooltip]="m.tooltip" [attr.aria-label]="m.ariaLabel">
-                    <span class="escalation__seg" [class.escalation__seg--in]="m.develop.merged">
-                      {{ m.develop.label }} {{ m.develop.merged ? '✓' : '—' }}
-                    </span>
-                    <span class="escalation__seg" [class.escalation__seg--in]="m.main.merged">
-                      {{ m.main.label }} {{ m.main.merged ? '✓' : '—' }}
-                    </span>
-                  </span>
-                } @else {
-                  <span class="escalation__merge escalation__merge--none">No committed work yet</span>
-                }
                 <span class="escalation__counts" data-testid="escalation-delivery-counts">
                   {{ v.delivery.commitCount }} {{ v.delivery.commitCount === 1 ? 'commit' : 'commits' }}
                   @if (v.delivery.filesChanged > 0) {

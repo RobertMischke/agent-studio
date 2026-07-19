@@ -46,6 +46,11 @@ export interface PipelineStepExecution {
   stepId: string;
   kind: StepKind;
   model?: string | null;
+  thinkingLevel?: string | null;
+  recommendedModel?: string | null;
+  recommendedThinkingLevel?: string | null;
+  selectionSource?: string | null;
+  estimatedSavingsPercent?: number | null;
   status: PipelineStepStatus;
   startedAt?: string | null;
   completedAt?: string | null;
@@ -173,6 +178,13 @@ export interface PipelineModelUsageSummary {
 }
 
 /** Per-project override resolved for one step (from project-settings.json). */
+export interface PostStepActivation {
+  state: 'active' | 'inactive' | 'skipped';
+  source: 'global' | 'project' | 'condition';
+  /** Backend-owned explanation of the exact effective source / condition. */
+  reason: string;
+}
+
 export interface PipelineStepConfig {
   enabled: boolean;
   /** Whether this catalogue step is optional and may be toggled by an operator. */
@@ -199,6 +211,21 @@ export interface PipelineStepConfig {
    * operator can see the hierarchy at a glance. Null when no model resolves.
    */
   modelSource?: string | null;
+  /** Whether enabled state comes from an explicit project override or the catalogue default. */
+  enabledSource?: 'project' | 'catalogue';
+  /** Effective post-step state and provenance. The frontend renders this verbatim. */
+  activation?: PostStepActivation | null;
+}
+
+export interface OnDemandPostStepAttempt {
+  stepId: string;
+  attempt: number;
+  status: string;
+  summary: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  artifactRef?: string | null;
 }
 
 /**
@@ -223,6 +250,7 @@ export interface PipelineCatalogueStep {
   resolvedThinkingLevel?: string | null;
   thinkingLevelSource?: string | null;
   usesModel: boolean;
+  supportsEconomyModel?: boolean;
   usesPrompt: boolean;
   supportsMode: boolean;
   cliType?: string | null;
@@ -275,6 +303,7 @@ export interface PipelineCatalogue {
  */
 export interface PipelineStepSetting {
   enabled?: boolean | null;
+  economyModel?: boolean | null;
   mode?: string | null;
   cliType?: string | null;
   model?: string | null;
@@ -331,4 +360,9 @@ export interface TaskPipelineResponse {
    * from a step kind or terminal status.
    */
   resultFiles?: Record<string, string>;
+  /** Card-owned additions and append-only attempts from individual post-step runs. */
+  onDemand?: {
+    plannedStepIds: string[];
+    attempts: OnDemandPostStepAttempt[];
+  };
 }

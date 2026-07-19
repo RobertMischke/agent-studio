@@ -1,4 +1,4 @@
-
+using static AgentStudio.Tasks.TaskEndpointHelpers;
 
 namespace AgentStudio.Tasks;
 
@@ -18,11 +18,14 @@ public static class TaskClaudeEndpoints
         // or interrupting the running process.
         group.MapGet("/{jobId}/claude/session-info", (
             string jobId,
+            string? project,
             string? watchPath,
             TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
             ClaudeSessionInspector inspector,
             [Microsoft.Extensions.DependencyInjection.FromKeyedServices(CliTypes.Claude)] GenericCliExecutionService claude) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 

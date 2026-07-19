@@ -6,20 +6,46 @@
   display: flex;
   flex-direction: column;
   gap: var(--studio-spacing-3);
-  padding: var(--studio-spacing-4);
-  // No left accent line (operator hard-rule): the panel reads as escalation
-  // through its tinted all-round border + background wash, not a side stripe.
-  border: 1px solid color-mix(in srgb, var(--severity-high) 45%, var(--studio-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--severity-high) 6%, var(--studio-bg-raised, var(--studio-bg)));
+  padding: var(--studio-spacing-3) var(--studio-spacing-4);
+  // Workspace-level decision strip, not another inset card. The open inline
+  // edges let it flow into the editor chrome without introducing a status rail.
+  border-block: 1px solid color-mix(in srgb, var(--severity-high) 52%, var(--studio-border));
+  border-inline: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--severity-high) 10%, var(--studio-bg-raised, var(--studio-bg))) 0%,
+    color-mix(in srgb, var(--severity-high) 4%, var(--studio-bg-raised, var(--studio-bg))) 48%,
+    var(--studio-bg-raised, var(--studio-bg)) 100%
+  );
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--severity-high) 8%, transparent);
 
   // Collapsed: just the header strip, tightened up so it stops dominating.
-  &--collapsed { padding: var(--studio-spacing-3); }
+  &--collapsed { padding-block: var(--studio-spacing-2); }
+
+  // DtC step 6 — a GaveUpToHuman escalation (infra crash / inconclusive / quota /
+  // …) wears a distinct amber "system fault" wash instead of the red
+  // decision-needed wash, so it reads apart from a logical / quality escalation
+  // at a glance. R1: the state is carried by the all-round tint, never a left
+  // bar; R5: both themes read the same severity tokens.
+  &--gave-up {
+    border-block-color: color-mix(in srgb, var(--severity-warn) 52%, var(--studio-border));
+    background: linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--severity-warn) 11%, var(--studio-bg-raised, var(--studio-bg))) 0%,
+      color-mix(in srgb, var(--severity-warn) 4%, var(--studio-bg-raised, var(--studio-bg))) 48%,
+      var(--studio-bg-raised, var(--studio-bg)) 100%
+    );
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--severity-warn) 8%, transparent);
+
+    .escalation__eyebrow,
+    .escalation__count { color: var(--severity-warn); }
+  }
 
   // The whole header row is the collapse toggle.
   &__head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--studio-spacing-2);
     width: 100%;
     margin: 0;
@@ -30,6 +56,7 @@
     font: inherit;
     text-align: left;
     cursor: pointer;
+    border-radius: 6px;
 
     &:focus-visible {
       outline: 2px solid var(--studio-accent);
@@ -37,19 +64,31 @@
       border-radius: 6px;
     }
 
-    &:hover .escalation__chevron { color: var(--studio-fg); }
+    &:hover {
+      .escalation__chevron { color: var(--studio-fg); }
+      .escalation__title { color: var(--severity-high); }
+    }
   }
 
   &__eyebrow {
     flex: 0 0 auto;
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    font-size: 12px;
     color: var(--severity-high);
+    background: color-mix(in srgb, var(--severity-high) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--severity-high) 28%, transparent);
   }
 
   &__headline {
     display: flex;
-    align-items: center;
-    gap: var(--studio-spacing-2);
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
     flex: 1 1 auto;
     min-width: 0;
   }
@@ -60,24 +99,69 @@
     font-weight: 700;
     letter-spacing: 0.01em;
     color: var(--studio-fg-strong);
+    transition: color 0.15s ease;
   }
 
-  // One-line essence carried by the header at all times (category · grade · merge).
+  &__state {
+    color: var(--studio-fg);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  // Supporting grade and merge signals carried by the header at all times.
   &__essence {
     display: flex;
     align-items: center;
     gap: var(--studio-spacing-2);
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-width: 0;
     font-size: 12px;
   }
 
-  &__essence-reason {
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+  &__reissues {
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--studio-fg) 3%, transparent);
+    padding: var(--studio-spacing-2) var(--studio-spacing-3);
+
+    summary {
+      cursor: pointer;
+      color: var(--studio-fg-strong);
+      font-size: 11px;
+      font-weight: 700;
+    }
+  }
+
+  &__history-count {
+    margin-inline-start: var(--studio-spacing-1);
     color: var(--studio-fg-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__reissue-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-2);
+    margin: var(--studio-spacing-2) 0 0;
+    padding-inline-start: var(--studio-spacing-4);
+
+    li { color: var(--studio-fg); }
+  }
+
+  &__reissue-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--studio-spacing-2);
+    font-size: 11px;
+
+    time { color: var(--studio-fg-dim); }
+  }
+
+  &__reissue-trigger {
+    display: block;
+    margin-top: var(--studio-spacing-1);
+    color: var(--studio-fg-dim);
+    font-size: 11px;
+    line-height: 1.45;
   }
 
   &__essence-merge {
@@ -133,6 +217,59 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     @include m.thin-scroll;
+  }
+
+  // Prominent GaveUpToHuman banner at the top of the body: names the terminal
+  // ("handed to a human"), the escalation category, and the honest reason.
+  &__giveup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
+    padding: var(--studio-spacing-2) var(--studio-spacing-3);
+    border-radius: 6px;
+    border: 1px solid color-mix(in srgb, var(--severity-warn) 45%, transparent);
+    background: color-mix(in srgb, var(--severity-warn) 12%, transparent);
+  }
+
+  &__giveup-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--studio-spacing-2);
+  }
+
+  &__giveup-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--studio-fg-strong);
+  }
+
+  &__giveup-cat {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: var(--severity-warn);
+    background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--severity-warn) 45%, transparent);
+  }
+
+  &__giveup-reason {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--studio-fg);
+  }
+
+  &__giveup-note {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--studio-fg-dim);
   }
 
   &__reason {
@@ -345,5 +482,10 @@
   &__counts {
     font-size: 11px;
     color: var(--studio-fg-dim);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &__title,
+    &__chevron { transition-duration: 0s; }
   }
 }

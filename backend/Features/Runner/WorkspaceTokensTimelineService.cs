@@ -122,7 +122,7 @@ public class WorkspaceTokensTimelineService
                 bucket.CacheWrite += u.CacheCreationTokens;
                 bucket.AddCategory(category, entryTotal);
 
-                var cost = TokenPricing.Estimate(u.Model, u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheCreationTokens);
+                var cost = TokenPricing.Estimate(u.Model, u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheCreationTokens, ts);
                 if (cost.ModelKnown)
                 {
                     bucket.Dollars = (bucket.Dollars ?? 0m) + cost.Total;

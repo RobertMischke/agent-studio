@@ -156,7 +156,7 @@
           } @else if (archiveIsEmpty()) {
             <div class="column__empty" data-testid="archive-empty">
               @if (archiveSearch().trim()) { No archived tasks match the filter }
-              @else { No archived tasks }
+              @else { No archived ticket in this project }
             </div>
           } @else if (archiveRemaining() > 0) {
             <button type="button"

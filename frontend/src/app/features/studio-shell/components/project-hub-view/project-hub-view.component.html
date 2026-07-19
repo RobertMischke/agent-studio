@@ -7,11 +7,11 @@
   (closeShell)="closeShell()">
   @defer (when activeRail() === 'overview') {
     @if (activeRail() === 'overview') {
-      <app-project-detail
+      <app-project-overview-dashboard
         [projectName]="projectName()"
-        view="overview"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
+        (openRail)="setRail($event)"
+        (openTask)="openTask.emit($event)"
+        (openUrlPreview)="openUrlPreview($event)" />
     }
   }
   @defer (when activeRail() === 'project-urls') {
@@ -19,6 +19,11 @@
       <app-project-urls-panel
         [projectName]="projectName()"
         (openEmbeddedPreview)="openUrlPreview($event)" />
+    }
+  }
+  @defer (when activeRail() === 'deployment') {
+    @if (activeRail() === 'deployment') {
+      <app-project-deployment-panel [projectName]="projectName()" />
     }
   }
   @defer (when activeRail() === 'git') {
@@ -33,6 +38,11 @@
         (createFollowUp)="onSecurityFollowUp($event)"
         (openEvidence)="onSecurityOpenEvidence($event)"
         (auditQueuedEvent)="onSecurityAuditQueued($event)" />
+    }
+  }
+  @defer (when activeRail() === 'proposals') {
+    @if (activeRail() === 'proposals') {
+      <app-project-proposals-panel [projectName]="projectName()" />
     }
   }
   @defer (when activeRail() === 'visual-evidence') {
@@ -51,6 +61,9 @@
         (openReport)="openReport($event)" />
     }
   }
+  @if (activeRail() === 'project-graph') {
+    <app-project-graph [projectName]="projectName()" />
+  }
   @defer (when activeRail() === 'drift') {
     @if (activeRail() === 'drift') {
       <app-project-detail
@@ -66,6 +79,11 @@
         [projectName]="projectName()"
         (createFollowUp)="onUxuiFollowUp($event)"
         (actionQueuedEvent)="onUxuiActionQueued($event)" />
+    }
+  }
+  @defer (when activeRail() === 'test-quality') {
+    @if (activeRail() === 'test-quality') {
+      <app-regression-radar scope="project" [projectName]="projectName()" />
     }
   }
   @defer (when activeRail() === 'token-usage') {
@@ -89,13 +107,14 @@
   }
   @defer (when activeRail() === 'wiki') {
     @if (activeRail() === 'wiki') {
-      <app-project-wiki-section [projectName]="projectName()" />
+      <app-project-wiki-section [projectName]="projectName()" (openWorkbench)="openWorkbench($event)" />
     }
   }
   @defer (when activeRail() === 'pipeline') {
     @if (activeRail() === 'pipeline') {
       <app-project-pipeline-panel
         [projectName]="projectName()"
+        [focusStepId]="pipelineStepId()"
         (openPrompts)="setRail('prompts')" />
     }
   }

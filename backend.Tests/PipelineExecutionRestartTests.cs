@@ -82,6 +82,103 @@ public class PipelineExecutionRestartTests : IDisposable
     }
 
     [Fact]
+    public void Complete_TerminalizesUnreachedSteps_ButPreservesDeferredAndPlannedSlots()
+    {
+        var runningAt = new DateTime(2026, 7, 13, 10, 0, 0, DateTimeKind.Utc);
+        var completedAt = runningAt.AddSeconds(5);
+        _log.Begin(_jobFolder, PipelineCatalogue.Standard, project: "demo", jobId: "job-1");
+        _log.RecordStep(_jobFolder, new PipelineStepExecution
+        {
+            StepId = "aspect-code-quality",
+            Kind = StepKind.Aspect,
+            Status = PipelineStepStatus.Running,
+            StartedAt = runningAt,
+        });
+
+        const string stopReason = "Not run because the build/test gate failed: dotnet test exit 1.";
+        _log.Complete(_jobFolder, nowUtc: completedAt, pendingStepReason: stopReason);
+
+        var completed = _log.Read(_jobFolder);
+        Assert.NotNull(completed);
+        Assert.True(completed!.IsComplete);
+
+        var grade = completed.Steps.Single(s => s.StepId == PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepStatus.Skipped, grade.Status);
+        Assert.Equal(stopReason, grade.Reason);
+        Assert.NotNull(grade.CompletedAt);
+
+        var interrupted = completed.Steps.Single(s => s.StepId == "aspect-code-quality");
+        Assert.Equal(PipelineStepStatus.Failed, interrupted.Status);
+        Assert.Equal("Pipeline attempt ended while this step was still running.", interrupted.Reason);
+        Assert.NotNull(interrupted.CompletedAt);
+        Assert.Equal(5000, interrupted.DurationMs);
+
+        // Deferred operator-triggered delivery steps deliberately remain
+        // pending after the automatic pipeline bracket ends.
+        Assert.Equal(PipelineStepStatus.Pending,
+            completed.Steps.Single(s => s.StepId == PipelineCatalogue.MergeIntoDevelopStepId).Status);
+        Assert.Equal(PipelineStepStatus.Pending,
+            completed.Steps.Single(s => s.StepId == PipelineCatalogue.MergeIntoDevelopPushStepId).Status);
+
+        // Catalogue stubs remain planned rather than being rewritten as if
+        // their unimplemented work had executed.
+        Assert.Equal(PipelineStepStatus.Planned,
+            completed.Steps.Single(s => s.StepId == PipelineCatalogue.GitCommitAttributionStepId).Status);
+    }
+
+    [Fact]
+    public void Read_NormalizesLegacyCompletedRecord_WithPendingGrade()
+    {
+        var pending = _log.Begin(
+            _jobFolder,
+            PipelineCatalogue.Standard,
+            project: "demo",
+            jobId: "job-1");
+        var completedAt = DateTime.UtcNow;
+        pending = pending with
+        {
+            Steps = pending.Steps.Select(step => step.StepId == "aspect-code-quality"
+                ? step with
+                {
+                    Status = PipelineStepStatus.Running,
+                    StartedAt = completedAt.AddSeconds(-3),
+                }
+                : step).ToList(),
+        };
+
+        // Reproduce an on-disk record written before completion terminalized
+        // unreached rows: CompletedAt is present while the grade is Pending.
+        // Write it directly so this test exercises the read-time compatibility
+        // projection instead of the new Complete() path.
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            pending with { CompletedAt = completedAt },
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+            {
+                WriteIndented = true,
+            });
+        File.WriteAllText(Path.Combine(_jobFolder, PipelineExecutionLog.FileName), json);
+
+        var normalized = _log.Read(_jobFolder);
+        Assert.NotNull(normalized);
+
+        var grade = normalized!.Steps.Single(s => s.StepId == PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepStatus.Skipped, grade.Status);
+        Assert.Contains("pipeline attempt ended", grade.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(completedAt, grade.CompletedAt);
+
+        var interrupted = normalized.Steps.Single(s => s.StepId == "aspect-code-quality");
+        Assert.Equal(PipelineStepStatus.Failed, interrupted.Status);
+        Assert.Equal("Pipeline attempt ended while this step was still running.", interrupted.Reason);
+        Assert.Equal(completedAt, interrupted.CompletedAt);
+        Assert.Equal(3000, interrupted.DurationMs);
+
+        Assert.Equal(PipelineStepStatus.Pending,
+            normalized.Steps.Single(s => s.StepId == PipelineCatalogue.MergeIntoDevelopStepId).Status);
+        Assert.Equal(PipelineStepStatus.Planned,
+            normalized.Steps.Single(s => s.StepId == PipelineCatalogue.GitCommitAttributionStepId).Status);
+    }
+
+    [Fact]
     public void Begin_OnExistingSameJobRun_ArchivesAndIncrementsAttempt()
     {
         _log.Begin(_jobFolder, PipelineCatalogue.Standard, project: "demo", jobId: "job-1");

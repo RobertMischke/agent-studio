@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import * as path from 'node:path';
 
 /**
  * MC-2 (Concept §4): the orchestrator side sheet follows the operator's
@@ -68,6 +69,43 @@ async function stubWorkspace(page: Page) {
     });
   });
 
+  await page.route(/\/api\/orchestrator\/sessions$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ sessions: [
+        {
+          contextKey: `project:${PROJECT}`, kind: 'project', projectId: PROJECT, taskKey: null,
+          updatedAt: '2026-07-11T10:00:00Z', model: 'codex', cumulativeInputTokens: 800,
+          cumulativeOutputTokens: 200, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
+          runtimeStatus: 'active', queuePosition: 0,
+        },
+        {
+          contextKey: `task:${PROJECT}/AGT-1933`, kind: 'task', projectId: PROJECT, taskKey: 'AGT-1933',
+          updatedAt: '2026-07-11T10:01:00Z', model: 'codex', cumulativeInputTokens: 12_000,
+          cumulativeOutputTokens: 3_000, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
+          runtimeStatus: 'parked', queuePosition: 0,
+        },
+      ] }),
+    });
+  });
+
+  await page.route(new RegExp(`/api/orchestrator/context/project:${PROJECT}(?:/refresh)?$`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        contextKey: `project:${PROJECT}`,
+        capturedAt: new Date().toISOString(),
+        digest: 'lanes: ready=0 | runs: active=0 | health: ok',
+        sources: [
+          { name: 'lanes', status: 'empty', capturedAt: new Date().toISOString(), detail: null },
+          { name: 'health', status: 'ok', capturedAt: new Date().toISOString(), detail: null },
+        ],
+      }),
+    });
+  });
+
   await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
     const projectMatch = /\/api\/runner\/([^/]+)\/orchestrator-chat/.exec(route.request().url());
     const project = projectMatch ? decodeURIComponent(projectMatch[1]) : '';
@@ -95,6 +133,7 @@ async function dismissErrorDialogs(page: Page) {
 
 async function openSideSheet(page: Page) {
   await page.goto('/');
+  if (process.env.PW_BASE_URL) await expect(page).toHaveURL(new RegExp(process.env.PW_BASE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   await page.waitForLoadState('domcontentloaded');
   await dismissErrorDialogs(page);
   const toggle = page.getByTestId('orch-side-sheet-toggle');
@@ -108,16 +147,56 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await stubWorkspace(page);
     await openSideSheet(page);
 
+    const badge = page.getByTestId('orch-context-badge');
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('orch-context-count')).toHaveText('3');
+    await expect(page.getByTestId('orch-context-menu')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-pin')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-settings')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-refresh')).toHaveCount(0);
+
+    const resultsDir = process.env.JOB_RESULTS_DIR;
+    if (resultsDir) {
+      await page.screenshot({ path: path.join(resultsDir, 'orchestrator-context-collapsed--mocked.png'), fullPage: false });
+    }
+
+    await badge.click();
+    await expect(badge).toHaveAttribute('aria-expanded', 'true');
+    const contextMenu = page.getByTestId('orch-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await expect(page.getByTestId('chat-context-groups')).toBeVisible();
+
+    const sheetBox = await page.getByTestId('orch-side-sheet').boundingBox();
+    const menuBox = await contextMenu.boundingBox();
+    expect(sheetBox).not.toBeNull();
+    expect(menuBox).not.toBeNull();
+    expect(Math.abs(menuBox!.x - sheetBox!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(menuBox!.width - sheetBox!.width)).toBeLessThanOrEqual(2);
+
     const header = page.getByTestId('orch-context-header');
     await expect(header).toBeVisible();
     await expect(header).toHaveAttribute('data-scope', 'board');
     await expect(header).toHaveAttribute('data-context-key', `project:${PROJECT}`);
-    // Not pinned yet.
-    await expect(header).not.toHaveAttribute('data-pinned', 'true');
-    await expect(page.getByTestId('orch-context-pin')).toHaveCount(0);
+    await expect(page.getByTestId('orch-context-scope')).toHaveText('Project context');
+    await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
+    await expect(page.getByTestId(`chat-switcher-row-project:${PROJECT}`)).toContainText('running');
+    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('parked');
+    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('15k');
+
+    if (resultsDir) {
+      await page.screenshot({ path: path.join(resultsDir, 'orchestrator-context-expanded--mocked.png'), fullPage: false });
+    }
+
+    const forcedRefresh = page.waitForRequest((request) =>
+      request.method() === 'POST'
+      && new URL(request.url()).pathname === `/api/orchestrator/context/project:${PROJECT}/refresh`);
+    await page.getByTestId('orch-side-sheet-refresh').click();
+    await forcedRefresh;
+    await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
 
     const pinBtn = page.getByTestId('orch-side-sheet-pin');
-    await expect(pinBtn).toContainText('Pin');
+    await expect(pinBtn).toContainText('Pin context');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeEnabled();
 
@@ -131,7 +210,7 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(header).toHaveAttribute('data-pinned', 'true');
     await expect(page.getByTestId('orch-context-pin')).toContainText('Pinned');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'true');
-    await expect(pinBtn).toContainText('Pinned');
+    await expect(pinBtn).toContainText('Follow navigation');
     await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeDisabled();
 
     await page.screenshot({

@@ -9,7 +9,7 @@
 // `[data-studio-theme='light']` overrides). Both files are loaded globally
 // via `styles.scss` so EVERY component reads from `var(--studio-*)` directly.
 //
-// See `docs/frontend/audits/scss-quality.md` for the Tier-1 / Tier-2 contract and
+// See `docs/quality/frontend/audits/scss-quality.md` for the Tier-1 / Tier-2 contract and
 // the enforced stylelint rules.
 // =========================================================================
 
@@ -1201,6 +1201,12 @@
     padding-top: 0;
   }
 
+  // Escalation is a workspace decision strip, so it spans the editor instead
+  // of floating inside the detail view's horizontal content inset.
+  app-escalation-summary {
+    margin-inline: calc(-1 * var(--studio-spacing-3));
+  }
+
   .detail__header {
     background: transparent;
     border-bottom: 1px solid var(--studio-border);
@@ -1900,9 +1906,24 @@
   }
 
   &__num {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
     font-family: var(--font-mono);
     font-size: 10px;
+    line-height: 1;
     color: var(--studio-fg-muted);
+  }
+
+  // Angular component hosts participate in the flex row themselves. Making
+  // the host a centred flex item keeps the SVG glyph on the same optical axis
+  // as the project/task abbreviation and title.
+  app-studio-icon {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    flex: 0 0 auto;
+    line-height: 1;
   }
 
   &__title {

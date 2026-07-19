@@ -66,6 +66,12 @@ public static class PipelineCatalogue
     /// verdict when the circuit-breaker fires.
     /// </summary>
     public const string LoopGuardStepId = "pre-loop-guard";
+    /// <summary>
+    /// Deterministic, zero-token task qualification performed immediately
+    /// before execution. It maps the task profile onto the selected CLI's live
+    /// model and reasoning ladders. Explicit card pins remain authoritative.
+    /// </summary>
+    public const string ModelQualificationStepId = "pre-model-qualification";
 
     /// <summary>
     /// Optional, parallelisable pre-coding step that surfaces the ADR-0026
@@ -203,7 +209,7 @@ public static class PipelineCatalogue
 
     /// <summary>
     /// Opt-in deterministic post-step that keeps a watched project's local
-    /// <c>docs/wiki/common-problems</c> library current from task outcome
+    /// <c>docs/common-problems</c> library current from task outcome
     /// signals. It dedupes by slug, increments occurrence evidence, updates
     /// <c>last-seen</c>, and regenerates the common-problems index without an
     /// LLM call. Implemented by <c>WikiMaintenancePostStepRunner</c>.
@@ -215,7 +221,7 @@ public static class PipelineCatalogue
     /// derived review verdict, the per-aspect orchestrator-review findings, the
     /// agent's own close-out notes, and any typed outcome stumbling block - into
     /// a per-task page under the watched project's
-    /// <c>docs/wiki/learnings/&lt;task&gt;.md</c> tree, then regenerates the
+    /// <c>docs/operations/learnings/&lt;task&gt;.md</c> tree, then regenerates the
     /// learnings index. It is CLI-agnostic (no model call - it reads structured
     /// run evidence the orchestrator already has) and idempotent: a re-run dedupes
     /// by run signature so it merges/augments the page rather than overwriting it,
@@ -227,6 +233,24 @@ public static class PipelineCatalogue
     /// drift steps use).
     /// </summary>
     public const string WikiLearningsStepId = "post-wiki-learnings";
+
+    /// <summary>
+    /// Opt-in deterministic post-step that keeps the AGENTS.md -&gt; wiki pointers
+    /// for a set of designated topics consistent (no dead / missing link) and
+    /// maintains a machine-owned "Current State / Progress" page per designated
+    /// topic under <c>docs/concepts/designated-topics/</c>, so agents read the
+    /// current state of a topic instead of re-discovering it every run ("gegen im
+    /// Kreis drehen"). It is CLI-agnostic (no model call - it derives the per-topic
+    /// current-state line from the task's own title / newest commit / typed outcome,
+    /// and matches a task to a topic by shared tags or changed-file path prefixes)
+    /// and idempotent (re-running on the same task refreshes timestamps without
+    /// duplicating a progress row). Reporting-only - it never changes the lane
+    /// decision. Implemented by <c>AgentsWikiSyncPostStepRunner</c>; defaults
+    /// <c>DefaultEnabled = false</c> because it is a per-project opt-in pass (same
+    /// switch the wiki-maintenance / wiki-learnings / drift steps use) that also
+    /// self-provisions an empty designated-topics registry the operator fills in.
+    /// </summary>
+    public const string AgentsWikiSyncStepId = "post-agents-wiki-sync";
 
     /// <summary>
     /// Post-core completeness check that runs immediately after the core agent
@@ -274,8 +298,8 @@ public static class PipelineCatalogue
     /// <see cref="AgentStudio.Review.CodeReviewStepService"/> (a
     /// grade mode), runs after the parallel aspect verdicts and before the final
     /// orchestrator decision, and uses a quality-first model
-    /// (<c>CodeReviewStep:DefaultModel</c>, Claude Opus by default) rather than
-    /// the cheap aspect model. Default-on; the recording lives in
+    /// (<c>CodeReviewStep:DefaultModel</c>, the live Codex flagship by default)
+    /// rather than the bounded aspect model. Default-on; the recording lives in
     /// <c>ReviewDecisionOrchestrator</c>. Reporting only - the grade never gates
     /// the lane decision, so a low grade surfaces for the human without forcing a
     /// reissue.
@@ -288,8 +312,8 @@ public static class PipelineCatalogue
     /// (a new feature, a removed capability, ...) and, on a conservative yes,
     /// SPAWNS a follow-up card there with a generated prompt and a
     /// <c>relatedTo</c> reference back to the source task. The relevance +
-    /// prompt-generation model is quality-first (defaults to the catalogue's best
-    /// Claude, currently Opus 4.8, at <c>max</c> effort); the spawned card is
+    /// prompt-generation model is quality-first (defaults to the live Codex
+    /// flagship at its top advertised reasoning level); the spawned card is
     /// worked by the target project's default model. Generic, not
     /// website-hardwired: the target project, relevance question, and spawn lane
     /// come from <c>ProjectSettings.TaskSpawner</c>. Reporting-only - it never
@@ -456,6 +480,15 @@ public static class PipelineCatalogue
                     Kind = StepKind.Module,
                     RunMode = StepRunMode.Sequential,
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = ModelQualificationStepId,
+                    DisplayName = "Model qualification",
+                    Kind = StepKind.Module,
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                    DefaultEnabled = true,
                 },
                 new PipelineStep
                 {
@@ -631,6 +664,23 @@ public static class PipelineCatalogue
                     // it distills, so it must schedule after the aspects.
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
+                    DefaultEnabled = false,
+                },
+                new PipelineStep
+                {
+                    Id = AgentsWikiSyncStepId,
+                    DisplayName = "Agent skills / AGENTS wiki sync",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    // Deterministic wiki upkeep keyed off the task's own evidence
+                    // (tags / changed files / commit), independent of the aspect
+                    // verdicts, so it only needs the core run to have produced the
+                    // change set - mirrors the wiki-maintenance dependency.
+                    DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                    // Opt-in per project: an operator turns on the designated-topic
+                    // sync (and fills in the seeded registry), same as the sibling
+                    // wiki steps.
                     DefaultEnabled = false,
                 },
                 new PipelineStep

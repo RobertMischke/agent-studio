@@ -45,9 +45,9 @@ describe('TreeRowComponent (smoke)', () => {
   });
 
   it('marks the active row with the unified modifier + aria-current', () => {
-    // Guards the shared active side-menu contract (AGT-2010): the `active`
-    // input drives the `.tree-row--active` class (which the SCSS paints as the
-    // accent band + side bar) and the caller-supplied `aria-current` lands on
+    // Guards the shared active side-menu contract: the `active` input drives
+    // the `.tree-row--active` class (painted with tint and contrast only) and
+    // the caller-supplied `aria-current` lands on
     // the row button so assistive tech announces the current destination.
     TestBed.configureTestingModule({
       imports: [TreeRowComponent],

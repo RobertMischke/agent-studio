@@ -986,7 +986,26 @@ internal static class BuiltInCliBehaviors
             CodexTryCaptureCommandExecution(info, line);
         }
 
-        return CodexEventAdapter.Map(line.Text, jobKey);
+        return MapCodexFrame(line.Text, jobKey);
+    }
+
+    /// <summary>
+    /// Map one raw Codex frame and preserve the command outcome carried by
+    /// <c>item.completed.command_execution.exit_code</c>. CodingAgentRunner
+    /// 0.5 classifies the item as a completed tool but does not project that
+    /// field onto <see cref="CliRunEvent.ToolCompleted.IsError"/>. Normalizing
+    /// it here keeps the typed event contract aligned with the renderer and
+    /// prevents a real exit 1 from looking like a successful or missing result.
+    /// </summary>
+    internal static IEnumerable<CliRunEvent> MapCodexFrame(string text, string jobKey)
+    {
+        var events = CodexEventAdapter.Map(text, jobKey).ToList();
+        var command = TryExtractCommandExecution(text);
+        if (command?.ExitCode is not int exitCode || exitCode == 0) return events;
+
+        return events.Select(evt => evt is CliRunEvent.ToolCompleted completed
+            ? new CliRunEvent.ToolCompleted(completed.ToolName, IsError: true, completed.FirstLine)
+            : evt);
     }
 
     /// <summary>

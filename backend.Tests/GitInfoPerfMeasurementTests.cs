@@ -62,9 +62,46 @@ public sealed class GitInfoPerfMeasurementTests : IDisposable
 
         _out.WriteLine($"host cores={Environment.ProcessorCount} os={Environment.OSVersion}");
         _out.WriteLine("");
+        var referenceRepo = Environment.GetEnvironmentVariable("GIT_INFO_PERF_REPO");
+        if (!string.IsNullOrWhiteSpace(referenceRepo))
+        {
+            MeasureReferenceStatus(Path.GetFullPath(referenceRepo));
+            _out.WriteLine("");
+            if (Environment.GetEnvironmentVariable("GIT_INFO_PERF_REFERENCE_ONLY") == "1")
+                return;
+        }
         MeasureStatus();
         _out.WriteLine("");
         foreach (var n in new[] { 1, 5, 10 }) MeasureProvenance(n);
+    }
+
+    private void MeasureReferenceStatus(string repoRoot)
+    {
+        if (!Directory.Exists(repoRoot))
+            throw new DirectoryNotFoundException($"GIT_INFO_PERF_REPO does not exist: {repoRoot}");
+
+        // Point a disposable task record at the supplied repository. The status
+        // endpoint is read-only; all fixture files remain under _tempDir.
+        var watchPath = Path.Combine(_tempDir, "reference-jobs");
+        Directory.CreateDirectory(watchPath);
+        const string jobId = "perf-reference";
+        WriteJob(watchPath, jobId);
+        var git = BuildGitService(repoRoot, watchPath);
+
+        git.GetStatus(jobId, watchPath, preferRunLocation: true);
+        var warm = Measure(15, () => git.GetStatus(jobId, watchPath, preferRunLocation: true));
+        var cold = Measure(15, () =>
+        {
+            GitService.InvalidateToplevelCache();
+            git.InvalidateStatusCache();
+            git.GetStatus(jobId, watchPath, preferRunLocation: true);
+        });
+        var before = Measure(15, () => OldStatusSerial(repoRoot));
+
+        _out.WriteLine($"== reference tasks/git/status repo={repoRoot} ==");
+        _out.WriteLine($"  BEFORE (6 serial spawns)       p50={before.P50:F0}ms  min={before.Min:F0}ms");
+        _out.WriteLine($"  AFTER  cold (2 serial + 4 par) p50={cold.P50:F0}ms  min={cold.Min:F0}ms");
+        _out.WriteLine($"  AFTER  warm (toplevel cached)  p50={warm.P50:F0}ms  min={warm.Min:F0}ms");
     }
 
     private void MeasureStatus()
@@ -79,6 +116,7 @@ public sealed class GitInfoPerfMeasurementTests : IDisposable
         var newCold = Measure(15, () =>
         {
             GitService.InvalidateToplevelCache();
+            git.InvalidateStatusCache();
             git.GetStatus(jobId, watchPath, preferRunLocation: true);
         });
         var old = Measure(15, () => OldStatusSerial(repoRoot));

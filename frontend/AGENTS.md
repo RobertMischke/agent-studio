@@ -3,7 +3,10 @@
 ## Style-guide hard rules (prompt-known)
 
 The non-negotiable design rules live in
-[docs/design/style-guide-hard-rules.md](../docs/design/style-guide-hard-rules.md).
+[docs/quality/design/style-guide-hard-rules.md](../docs/quality/design/style-guide-hard-rules.md).
+The technology-aware navigation entry and prompt applicability contract live in
+[docs/quality/](../docs/quality/README.md); UI work uses its
+[Angular component guide](../docs/quality/angular-components.md).
 Read them before any visual change; they override local convention. In short:
 
 - **R1 - No left accent lines or bars.** No coloured `border-left`,
@@ -210,6 +213,25 @@ Host wiring (all in `src/app/app.config.ts`):
 - `provideCodingAgentChat({ taskReferences: TaskReferenceNavigationService, mediaLightbox: MediaLightboxService })` — markdown task-key auto-linking + click-to-enlarge images.
 - `PROJECT_CHAT_DATA_SOURCE` → `ProjectChatDataSourceAdapter` (`services/project-chat-data-source.adapter.ts`) over `TaskService`'s `/api/projects/{p}/chat/*` endpoints.
 - `CHAT_HISTORY_CONFIRM` → `ConfirmDialogService` (structural match).
+
+### Task reference microcards
+
+`<app-task-reference-microcard>` in
+`src/app/components/task-reference-microcard/` is the shared live-or-ghost task
+reference control. Reuse it for structured task-reference lists instead of
+reimplementing lane, merge, project-colour, review-grade, tooltip, or task-tab
+navigation semantics. Its required `status` input is the compact projection
+returned by `POST /api/tasks/reference-status`.
+
+Rendered prose is upgraded by
+`TaskReferenceMicrocardHydratorService`: it scans `<cac-markdown>` and rendered
+wiki HTML, batches uncached keys into one endpoint request, and mounts the same
+component. `app.config.ts` starts the hydrator and registers
+`TaskReferenceNavigationService` at the `coding-agent-chat` CAC-3
+`taskReferences` host seam. Keep the library responsible for identifying and
+linking reference candidates; keep Studio responsible for registry validation,
+status hydration, the visual control, and task-tab navigation. Do not add
+per-reference API calls.
 
 Live turns still flow through the host: the orchestrator side sheet holds a `viewChild` of `<cac-project-chat-list>` and calls `resetAndLoad()` / `appendLive(turn)` when SignalR delivers new turns.
 

@@ -7,9 +7,9 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// Tests for <see cref="PipelineStepModelDefaults"/>: the pre-run effective
 /// model the Overview pipeline shows for each step. It must mirror the runtime
-/// default each call site already passes to the resolver (aspect -> orchestrator
-/// default, drift -> drift default, grade -> code-review default, prep -> prep
-/// fallback) and layer the per-project + per-step overrides over it via
+/// default each call site already passes to the resolver (bounded support steps
+/// -> gpt-5.4-mini, quality judgments -> live Codex flagship) and layer the
+/// per-project + per-step overrides over it via
 /// <see cref="PipelineStepConfigResolver"/>, so what the operator sees before a
 /// run is what the run would actually use.
 /// </summary>
@@ -29,11 +29,11 @@ public class PipelineStepModelDefaultsTests
     }
 
     [Fact]
-    public void AspectStep_FallsBackToOrchestratorDefault_WhenNoOverride()
+    public void AspectStep_FallsBackToSupportModel_WhenNoOverride()
     {
         var r = PipelineStepModelDefaults.Resolve(null, Step("aspect-code-quality"));
         Assert.NotNull(r);
-        Assert.Equal(OrchestratorRunner.DefaultModel, r!.Model);
+        Assert.Equal(PipelineStepModelDefaults.SupportModel, r!.Model);
         Assert.Equal(PipelineStepConfigResolver.ModelSourceRuntime, r.Source);
     }
 
@@ -50,7 +50,8 @@ public class PipelineStepModelDefaultsTests
     {
         var r = PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.PreOrchestratorPrepStepId));
         Assert.NotNull(r);
-        Assert.Equal(OrchestratorPrepHostedService.PrepFallbackModel, r!.Model);
+        Assert.Equal(PipelineStepModelDefaults.SupportModel, r!.Model);
+        Assert.Equal(PipelineStepModelDefaults.SupportModel, OrchestratorPrepHostedService.PrepFallbackModel);
     }
 
     [Fact]
@@ -62,14 +63,40 @@ public class PipelineStepModelDefaultsTests
     }
 
     [Fact]
-    public void OrchestratorDecisionSteps_FallBackToOrchestratorDefault_WhenNoOverride()
+    public void SupportingOrchestratorSteps_FallBackToMini_WhenNoOverride()
     {
-        Assert.Equal(OrchestratorRunner.DefaultModel,
+        Assert.Equal(PipelineStepModelDefaults.SupportModel,
             PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.OrchestratorDecisionStepId))!.Model);
-        Assert.Equal(OrchestratorRunner.DefaultModel,
+        Assert.Equal(PipelineStepModelDefaults.SupportModel,
             PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.ConflictResolutionStepId))!.Model);
-        Assert.Equal(OrchestratorRunner.DefaultModel,
+        Assert.Equal(PipelineStepModelDefaults.SupportModel,
             PipelineStepModelDefaults.Resolve(null, PipelineCatalogue.AbortReviewStep)!.Model);
+    }
+
+    [Fact]
+    public void QualitySteps_UseLiveCodexFlagship_AndTopReasoning()
+    {
+        foreach (var step in new[]
+                 {
+                     Step(PipelineCatalogue.CodeReviewGradeStepId),
+                     Step(PipelineCatalogue.TaskSpawnerStepId),
+                 })
+        {
+            Assert.Equal(PipelineStepModelDefaults.QualityModel,
+                PipelineStepModelDefaults.Resolve(null, step)!.Model);
+            Assert.Equal(CliTypes.Codex, PipelineStepModelDefaults.RuntimeDefaultCliFor(step));
+            Assert.Equal(PipelineStepModelDefaults.QualityThinkingLevel,
+                PipelineStepModelDefaults.RuntimeDefaultThinkingLevelFor(step));
+        }
+    }
+
+    [Fact]
+    public void SupportingSteps_ProjectCodexMiniHighRoute()
+    {
+        var step = Step("aspect-code-quality");
+        Assert.Equal(CliTypes.Codex, PipelineStepModelDefaults.RuntimeDefaultCliFor(step));
+        Assert.Equal(ModelIds.Gpt54Mini, PipelineStepModelDefaults.RuntimeDefaultFor(step));
+        Assert.Equal("high", PipelineStepModelDefaults.RuntimeDefaultThinkingLevelFor(step));
     }
 
     [Fact]

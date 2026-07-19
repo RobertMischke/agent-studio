@@ -48,11 +48,47 @@ public class RunnerOptionsTests
         Assert.Equal(9, options.PollSeconds);
     }
 
+    [Fact]
+    public void Existing_client_identity_can_be_pinned_from_the_cli()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse(["--client-id", "  agent-runner-01  "]);
+
+        Assert.Equal("agent-runner-01", options.ClientId);
+    }
+
+    [Fact]
+    public void Fetch_and_push_remotes_can_be_configured_separately()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse([
+            "--git-remote", "https://github.com/acme/repo.git",
+            "--git-push-remote", "git@github.com:acme/repo.git"]);
+
+        Assert.Equal("https://github.com/acme/repo.git", options.GitRemote);
+        Assert.Equal("git@github.com:acme/repo.git", options.GitPushRemote);
+    }
+
     [Theory]
     [InlineData("AGT-20", "AGT-20")]
     [InlineData("project/task 20", "project-task-20")]
     public void Worktree_segment_is_filesystem_safe(string input, string expected)
         => Assert.Equal(expected, GitWorkspace.SafeSegment(input));
+
+    [Fact]
+    public void Project_id_maps_to_an_isolated_shared_clone_cache()
+    {
+        var root = Path.Combine("runner", "work");
+
+        Assert.Equal(
+            Path.Combine(root, "PROJ-042"),
+            GitWorkspace.CachePathForProject(root, "PROJ-042"));
+        Assert.NotEqual(
+            GitWorkspace.CachePathForProject(root, "PROJ-042"),
+            GitWorkspace.CachePathForProject(root, "PROJ-043"));
+    }
+
+    [Fact]
+    public void Missing_project_id_keeps_the_legacy_single_repo_cache_path()
+        => Assert.Equal("runner-work", GitWorkspace.CachePathForProject("runner-work", null));
 
     [Fact]
     public void Health_check_flag_sets_health_check_only_and_needs_no_task_key()

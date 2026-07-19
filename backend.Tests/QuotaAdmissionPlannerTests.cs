@@ -116,6 +116,27 @@ public sealed class QuotaAdmissionPlannerTests : IDisposable
         Assert.True(plan.Projection!.BreachesBeforeReset);
     }
 
+    [Fact]
+    public void AgT2107_SuspiciousFiveXProjection_DoesNotSwitchToFallback()
+    {
+        var fallback = Routing(new CliModelRouteProfile
+        {
+            CliType = "codex", PrimaryModel = "gpt-5.3-codex",
+            FallbackCliType = "claude", FallbackModel = "claude-opus",
+        });
+        Snapshot("codex", ("5-hour", 19, Now.AddHours(4)));
+        Snapshot("claude", ("5-hour", 10, Now.AddHours(2.5)));
+
+        var plan = Plan("codex", fallback, occupiedSlots: 0);
+
+        Assert.Equal(QuotaAdmissionOutcome.LaunchPrimary, plan.Outcome);
+        Assert.False(plan.IsFallback);
+        Assert.Null(plan.Projection);
+        Assert.NotNull(plan.ProjectionWarning);
+        Assert.Contains("projection ignored", plan.Reason);
+        Assert.Contains("elapsed fraction", QuotaAdmissionPlanner.DescribeLoadNumbers(plan));
+    }
+
     // ── req 6: projected breach, no fallback, a slot already busy -> throttle ──
     [Fact]
     public void ProjectedBreach_NoFallback_SlotBusy_Throttles()

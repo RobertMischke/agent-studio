@@ -92,6 +92,7 @@ public sealed class ExternalCompletionService
         // caller is not told a half-reconciled card is done.
         WriteDeliverables(beforeFolder, summary, source, now, request.Deliverables);
         WriteStatus(beforeFolder, summary, source, now);
+        WriteGateItems(beforeFolder, request.GateItems);
         _mutations.SetExternalCompletionOnFolder(beforeFolder, new ExternalCompletionInfo
         {
             Source = source,
@@ -161,6 +162,40 @@ public sealed class ExternalCompletionService
             EvidenceCommitSha: commit.DidCommit ? commit.Sha : null);
     }
 
+    private void WriteGateItems(string folderPath, IReadOnlyList<string>? gateItems)
+    {
+        var items = (gateItems ?? Array.Empty<string>())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Replace('\r', ' ').Replace('\n', ' ').Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (items.Count == 0) return;
+
+        var path = Path.Combine(folderPath, "orchestrator-follow-up.md");
+        try
+        {
+            var existing = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+            var sb = new StringBuilder(existing);
+            if (sb.Length == 0)
+                sb.Append("# Orchestrator follow-up\n\n");
+            else if (!existing.EndsWith("\n\n", StringComparison.Ordinal))
+                sb.Append(existing.EndsWith('\n') ? "\n" : "\n\n");
+
+            foreach (var item in items)
+            {
+                var row = $"- [ ] {item}";
+                if (!existing.Contains(row, StringComparison.Ordinal))
+                    sb.Append(row).Append('\n');
+            }
+            File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "external-completion: failed to write gate items for {Folder}", folderPath);
+        }
+    }
+
     /// <summary>
     /// Writes <c>results/deliverables.md</c>: what was delivered and where, by
     /// whom / which channel. This is the canonical narrative the timeline entry
@@ -193,8 +228,12 @@ public sealed class ExternalCompletionService
                 sb.Append("## What was delivered\n\n");
                 foreach (var d in items)
                 {
-                    var target = !string.IsNullOrWhiteSpace(d.Path) ? d.Path!.Trim() : d.Url!.Trim();
-                    sb.Append("- `").Append(target).Append('`');
+                    var hasPath = !string.IsNullOrWhiteSpace(d.Path);
+                    var target = hasPath ? d.Path!.Trim() : d.Url!.Trim();
+                    if (hasPath)
+                        sb.Append("- `").Append(target).Append('`');
+                    else
+                        sb.Append("- [").Append(target).Append("](").Append(target).Append(')');
                     if (!string.IsNullOrWhiteSpace(d.Note))
                         sb.Append(" - ").Append(d.Note!.Trim());
                     sb.Append('\n');

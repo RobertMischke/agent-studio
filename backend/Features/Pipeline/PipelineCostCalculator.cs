@@ -128,7 +128,8 @@ public static class PipelineCostCalculator
         foreach (var s in record.Steps)
         {
             var est = TokenPricing.Estimate(
-                s.Model, s.InputTokens, s.OutputTokens, s.CacheReadTokens, s.CacheCreationTokens);
+                s.Model, s.InputTokens, s.OutputTokens, s.CacheReadTokens, s.CacheCreationTokens,
+                record.StartedAt);
             var stepTokens = s.InputTokens + s.OutputTokens + s.CacheReadTokens + s.CacheCreationTokens;
             // Only a step that actually consumed tokens but has an unknown
             // model should flag "n/a"; a tool step with 0 tokens is not a
@@ -207,10 +208,22 @@ public static class PipelineCostCalculator
         }
         runs.Add(BuildRun(record, current: true));
 
-        var allSteps = record.PreviousAttempts
-            .SelectMany(p => p.Steps)
-            .Concat(record.Steps);
-        var totalByModel = GroupByModel(allSteps);
+        var totalByModel = runs
+            .SelectMany(r => r.Models)
+            .GroupBy(m => m.Model, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new PipelineModelTokenUsage(
+                g.Key,
+                g.All(m => m.ModelKnown),
+                g.Sum(m => m.Steps),
+                g.Sum(m => m.InputTokens),
+                g.Sum(m => m.OutputTokens),
+                g.Sum(m => m.CacheReadTokens),
+                g.Sum(m => m.CacheCreationTokens),
+                g.Sum(m => m.TotalTokens),
+                Round(g.Sum(m => m.CostUsd))))
+            .OrderByDescending(m => m.TotalTokens)
+            .ThenBy(m => m.Model, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         long totalTokens = totalByModel.Sum(m => m.TotalTokens);
         decimal totalCost = Round(totalByModel.Sum(m => m.CostUsd));
@@ -221,7 +234,7 @@ public static class PipelineCostCalculator
 
     private static PipelineRunTokenUsage BuildRun(PipelineExecutionRecord run, bool current)
     {
-        var models = GroupByModel(run.Steps);
+        var models = GroupByModel(run.Steps, run.StartedAt);
         return new PipelineRunTokenUsage(
             Attempt: run.Attempt,
             Current: current,
@@ -235,7 +248,8 @@ public static class PipelineCostCalculator
 
     // Sum a flat list of steps into per-model rows, busiest model first.
     private static IReadOnlyList<PipelineModelTokenUsage> GroupByModel(
-        IEnumerable<PipelineStepExecution> steps)
+        IEnumerable<PipelineStepExecution> steps,
+        DateTime recordedAt)
     {
         var byModel = new List<PipelineModelTokenUsage>();
         var groups = steps
@@ -249,7 +263,7 @@ public static class PipelineCostCalculator
             long output = g.Sum(s => s.OutputTokens);
             long cacheRead = g.Sum(s => s.CacheReadTokens);
             long cacheCreation = g.Sum(s => s.CacheCreationTokens);
-            var est = TokenPricing.Estimate(g.Key, input, output, cacheRead, cacheCreation);
+            var est = TokenPricing.Estimate(g.Key, input, output, cacheRead, cacheCreation, recordedAt);
 
             byModel.Add(new PipelineModelTokenUsage(
                 Model: g.Key,

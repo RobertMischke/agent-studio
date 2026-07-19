@@ -19,13 +19,16 @@ using RAcquire = Runner::AgentRunner.RunLeaseAcquireRequest;
 using RHeartbeat = Runner::AgentRunner.RunLeaseHeartbeatRequest;
 using RRelease = Runner::AgentRunner.RunLeaseReleaseRequest;
 using RClaim = Runner::AgentRunner.RunnerClaimRequest;
+using RTelemetry = Runner::AgentRunner.HostTelemetrySample;
 using RClaimStatus = Runner::AgentRunner.RunnerClaimStatus;
+using RGitCapability = Runner::AgentRunner.RunnerGitCapabilityRequest;
 using RLogIngest = Runner::AgentRunner.LogIngestRequest;
 using RCliLine = Runner::AgentRunner.CliOutputLine;
 using RArtifactIngest = Runner::AgentRunner.ArtifactIngestRequest;
 using RArtifact = Runner::AgentRunner.RunnerArtifactUpload;
 using RComplete = Runner::AgentRunner.ExternalCompletionRequest;
 using RDeliverable = Runner::AgentRunner.ExternalDeliverable;
+using RRemoteComplete = Runner::AgentRunner.RemoteRunCompletionRequest;
 
 namespace AgentStudio.Tests;
 
@@ -176,6 +179,49 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Recognized_remote_task_done_uses_regular_runner_completion_not_external_completion()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote done", "Make a trivial change.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        await client.IngestLogsAsync(new RLogIngest(TaskKey,
+        [
+            new RCliLine(DateTime.UtcNow, "stdout", "Implemented and verified."),
+            new RCliLine(DateTime.UtcNow, "stdout", "[[TASK_DONE]]"),
+        ]), ct);
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease!.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            ExitCode: 0), ct);
+
+        Assert.NotNull(completion);
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
+        Assert.True(Directory.Exists(moved));
+
+        var taskJson = File.ReadAllText(Path.Combine(moved, "task.json"));
+        Assert.DoesNotContain("externalCompletion", taskJson, StringComparison.OrdinalIgnoreCase);
+        var timeline = File.ReadAllText(Path.Combine(moved, "logs", "timeline.jsonl"));
+        Assert.Contains("agent_run_finished", timeline);
+        Assert.DoesNotContain("external_completion", timeline);
+    }
+
+    [Fact]
     public async Task Second_runner_is_refused_while_the_lease_is_held()
     {
         SeedTask(TaskStates.Progress, TaskKey, "Contended", "Prompt.");
@@ -216,6 +262,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             $"/api/projects/{ProjectName}/execution-runner",
             new { executionRunner = ProjectName, remoteExecutionEnabled = true });
         assignment.EnsureSuccessStatusCode();
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
 
         var wrongRunner = await client.ClaimAsync(new RClaim(
             "runner-other", "runner-other", "other-host", 1, "remote-runner"), CancellationToken.None);
@@ -223,15 +270,86 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
 
         var claim = await client.ClaimAsync(new RClaim(
-            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner", Telemetry: new RTelemetry(
+                DateTime.UtcNow, 54, 6.4, 6, 5, 34_000_000_000, 64_000_000_000,
+                0, 0, 6.2, 2.1, 12, 6)), CancellationToken.None);
 
         Assert.Equal(RClaimStatus.Claimed, claim.Status);
         Assert.False(string.IsNullOrWhiteSpace(claim.TaskKey));
         Assert.Equal(TaskKey, claim.JobId);
         Assert.Equal(ProjectName, claim.ProjectName);
         Assert.NotNull(claim.Lease);
+        Assert.Equal("PROJ-001", claim.ProjectId);
+        Assert.Equal("https://github.com/agent-orc/agent-studio.git", claim.RepositoryUrl);
+        Assert.Equal("develop", claim.DefaultBranch);
         Assert.Equal("Prompt.", await client.ReadTaskFileAsync(claim.TaskKey!, "prompt.md", CancellationToken.None));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+        var telemetry = await http.GetFromJsonAsync<HostTelemetryResponse>(
+            $"/api/clients/{Uri.EscapeDataString(client.ClientId)}/telemetry?window=1h");
+        Assert.NotNull(telemetry);
+        Assert.Single(telemetry!.Points);
+        Assert.Equal(6.4, telemetry.Points[0].Load1);
+        Assert.Equal(6, telemetry.Points[0].ActiveSlots);
+    }
+
+    [Fact]
+    public async Task Daemon_claim_is_refused_until_the_runner_reports_push_ready()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "Push-gated pickup", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var clientId = await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+
+        var assignment = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/execution-runner",
+            new { executionRunner = ProjectName, remoteExecutionEnabled = true });
+        assignment.EnsureSuccessStatusCode();
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+
+        await client.ReportGitCapabilityAsync(clientId, new RGitCapability(
+            "read-only", "push-dry-run failed (128): permission denied", DateTime.UtcNow), CancellationToken.None);
+
+        var refused = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, refused.Status);
+        Assert.Contains("read-only", refused.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+
+        await client.ReportGitCapabilityAsync(clientId, new RGitCapability(
+            "ready", "dry-run succeeded", DateTime.UtcNow), CancellationToken.None);
+
+        var admitted = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Claimed, admitted.Status);
+        Assert.Equal(TaskKey, admitted.JobId);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+    }
+
+    [Fact]
+    public async Task Daemon_claim_skips_assigned_project_without_repository_url()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "No remote repository", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+
+        var assignment = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/execution-runner",
+            new { executionRunner = ProjectName, remoteExecutionEnabled = true });
+        assignment.EnsureSuccessStatusCode();
+
+        var claim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, claim.Status);
+        Assert.Null(claim.RepositoryUrl);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
     }
 
     [Fact]
@@ -272,6 +390,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                     });
                 });
             });
+
+    private static async Task AddRepositoryUrlAsync(HttpClient http, string repositoryUrl)
+    {
+        var response = await http.PostAsJsonAsync(
+            "/api/projects/PROJ-001/urls",
+            new { label = "repo", url = repositoryUrl });
+        response.EnsureSuccessStatusCode();
+    }
 
     private void SeedTask(string state, string key, string title, string promptBody)
     {

@@ -59,7 +59,10 @@ function step(id: string, displayName: string, kind: string, runMode: string) {
   return { id, displayName, kind, runMode, dependsOn: [], idempotent: true, stub: false };
 }
 
-const pre = [step('pre-loop-guard', 'Loop guard', 'module', 'sequential')];
+const pre = [
+  step('pre-loop-guard', 'Loop guard', 'module', 'sequential'),
+  step('pre-model-qualification', 'Model qualification', 'module', 'sequential'),
+];
 const core = [step('core-agent-run', 'Agent execution', 'core', 'sequential')];
 const post = [
   step('aspect-code-quality', 'Code quality', 'aspect', 'parallel'),
@@ -125,6 +128,31 @@ function prerunPipeline(config: Record<string, unknown>) {
       anyModelUnknown: false,
     },
     config,
+  };
+}
+
+function qualificationPipeline(
+  selectedModel: string,
+  thinkingLevel: string,
+  verdict: 'selected' | 'override',
+  summary: string,
+) {
+  const result = prerunPipeline({});
+  return {
+    ...result,
+    execution: {
+      pipelineId: 'standard-task-pipeline', pipelineVersion: 1,
+      jobId: JOB_ID, project: PROJECT, startedAt: '2026-07-11T18:00:00Z', completedAt: null,
+      steps: [{
+        stepId: 'pre-model-qualification', kind: 'module', model: selectedModel, thinkingLevel,
+        recommendedModel: verdict === 'override' ? 'catalogue-economy' : selectedModel,
+        recommendedThinkingLevel: verdict === 'override' ? 'low' : thinkingLevel,
+        selectionSource: verdict === 'override' ? 'task-override' : 'qualification',
+        estimatedSavingsPercent: verdict === 'selected' ? 55 : 0,
+        status: 'passed', durationMs: 3, inputTokens: 0, outputTokens: 0,
+        cacheReadTokens: 0, cacheCreationTokens: 0, verdict, verdictSummary: summary,
+      }],
+    },
   };
 }
 
@@ -366,5 +394,55 @@ test.describe('Pipeline: pre-run resolved model', () => {
         fullPage: true,
       });
     }
+  });
+
+  test('qualification visibly distinguishes polish, architecture, and an explicit override', async ({ page }) => {
+    await installRoutes(page, '3-progress', makeMockState());
+    const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let response = qualificationPipeline(
+      'catalogue-economy', 'low', 'selected',
+      'chore/small/frontend polish; selected recommendation; expected saving about 55% vs top rung',
+    );
+    await page.route(new RegExp(`/api/tasks/${idEsc}/pipeline(\\?|$)`), route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(response) }),
+    );
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+    await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+
+    const row = page.locator('[data-step-id="pre-model-qualification"]');
+    await expect(row.getByTestId('overview-pipeline-step-model')).toContainText('catalogue-economy');
+    await expect(row.getByTestId('overview-pipeline-step-model')).toContainText('low');
+    await expect(row.getByTestId('overview-pipeline-step-verdict')).toHaveText('selected');
+    await row.getByTestId('overview-pipeline-step-verdict').hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('frontend polish');
+    if (RESULTS_DIR) await page.screenshot({ path: path.join(RESULTS_DIR, 'model-qualification-small--mocked.png'), fullPage: true });
+
+    response = qualificationPipeline(
+      'catalogue-top', 'max', 'selected',
+      'feature/large/cross-cutting architecture; selected recommendation; expected saving about 0% vs top rung',
+    );
+    await page.reload();
+    await dismissErrorDialog(page);
+    await expandAllPipelineSections(page);
+    await expect(row.getByTestId('overview-pipeline-step-model')).toContainText('catalogue-top');
+    await expect(row.getByTestId('overview-pipeline-step-model')).toContainText('max');
+    await row.getByTestId('overview-pipeline-step-verdict').hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('cross-cutting architecture');
+    if (RESULTS_DIR) await page.screenshot({ path: path.join(RESULTS_DIR, 'model-qualification-architecture--mocked.png'), fullPage: true });
+
+    response = qualificationPipeline(
+      'operator-pinned', 'high', 'override',
+      'chore/small/frontend polish; recommend catalogue-economy at low; card override wins, selected operator-pinned at high',
+    );
+    await page.reload();
+    await dismissErrorDialog(page);
+    await expandAllPipelineSections(page);
+    await expect(row.getByTestId('overview-pipeline-step-model')).toContainText('operator-pinned');
+    await expect(row.getByTestId('overview-pipeline-step-verdict')).toHaveText('override');
+    await row.getByTestId('overview-pipeline-step-verdict').hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('card override wins');
+    if (RESULTS_DIR) await page.screenshot({ path: path.join(RESULTS_DIR, 'model-qualification-override--mocked.png'), fullPage: true });
   });
 });

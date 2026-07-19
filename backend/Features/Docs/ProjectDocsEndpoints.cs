@@ -66,6 +66,38 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(ov);
         });
 
+        // Repository-owned style-guide family. The same applicability result
+        // is consumed by intake prompt enrichment, so the Wiki never advertises
+        // a guide that the coding run cannot discover.
+        app.MapGet("/api/projects/{projectName}/style-guides", (string projectName, ProjectStyleGuideService guides, bool refresh = false) =>
+        {
+            var catalogue = guides.GetCatalogue(projectName, refresh);
+            return catalogue == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(catalogue);
+        });
+
+        // Repository-owned experiment Workbenches. The catalogue is discovered by
+        // scanning docs/ recursively for workbench.json descriptors (post-2026-07
+        // migration the workbench folders are theme-distributed, e.g. under
+        // operations/ and quality/); HTML is returned as data and is never
+        // executed by the backend origin.
+        app.MapGet("/api/projects/{projectName}/workbenches", (string projectName, bool? history, WorkbenchCatalogueService workbenches) =>
+        {
+            var catalogue = workbenches.List(projectName, history == true);
+            return catalogue == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(catalogue);
+        });
+
+        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, WorkbenchCatalogueService workbenches) =>
+        {
+            var document = workbenches.Read(projectName, id);
+            return document == null
+                ? Results.NotFound(new { error = "Workbench not found, invalid, or path rejected" })
+                : Results.Ok(document);
+        });
+
         // The physical docs/ folder hierarchy (folders + .md/.html/.json files)
         // that backs the wiki navigation tree. No git is touched here, and a warm
         // cache serves it without opening a file (AGT-2013); the ETag lets a
@@ -93,16 +125,56 @@ public static class ProjectDocsEndpoints
                 : ConditionalOk(http, res.ETag, res.Edits);
         });
 
-        // The generated wiki Pulse landing view (PULSE-1): change feed + inbox +
-        // deterministic drift grade bar, composed server-side so the landing
+        // The generated wiki Pulse landing view: change feed + inbox + drift,
+        // PULSE-2 warnings/live docs work, and maintenance-run summaries. It is
+        // composed server-side so the landing
         // surface costs two git walks instead of the tree + recent + per-doc
         // history fan-out. Sits before the /files catch-all for path precedence.
-        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, int? feedLimit) =>
+        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, WorkbenchCatalogueService workbenches, int? feedLimit) =>
         {
             var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
             return pulse == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(pulse);
+                : Results.Ok(pulse with { Workbenches = workbenches.List(projectName) });
+        });
+
+        // One directory level of the wiki for the folder-overview surface:
+        // direct children (folders first, then pages, each alphabetical) with
+        // sniffed titles, plain-text summaries, and folder child counts. An
+        // empty relPath lists the wiki root. Sits before the /files catch-all
+        // for path precedence, like its sibling routes.
+        app.MapGet("/api/projects/{projectName}/wiki/folder/{**relPath}", (string projectName, string? relPath, ProjectDocsService docs) =>
+        {
+            var folder = docs.GetWikiFolder(projectName, relPath);
+            return folder == null
+                ? Results.NotFound(new { error = "Folder not found or path rejected" })
+                : Results.Ok(folder);
+        });
+
+        // Lexical wiki search (BM25 over title/headings/body) with an optional
+        // fail-open semantic query-expansion layer (semantic=true). The limit
+        // is clamped server-side; a blank query is a 400, an unknown project a
+        // 404. Sits before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/search", async (string projectName, string? q, bool? semantic, int? limit, WikiSearchService search, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return Results.BadRequest(new { error = "q is required" });
+            var res = await search.SearchAsync(projectName, q.Trim(), semantic == true, Math.Clamp(limit ?? 20, 1, 50), ct);
+            return res == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(res);
+        });
+
+        // Curated wiki home sections from docs/app/config/home.json. Missing or
+        // malformed file degrades to empty sections; configured links are kept
+        // and annotated with an exists flag instead of being dropped. Sits
+        // before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/home", (string projectName, ProjectDocsService docs) =>
+        {
+            var home = docs.GetWikiHome(projectName);
+            return home == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(home);
         });
 
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
@@ -185,7 +257,7 @@ public static class ProjectDocsEndpoints
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
             var result = docs.CreateWikiPage(projectName, rel, body.Content);
             if (!result.Success) return Results.BadRequest(new { error = result.Error });
-            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create {rel}");
+            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create {rel}", result.ExtraPaths);
         });
 
         app.MapPost("/api/projects/{projectName}/wiki/folders", (string projectName, WikiCreateFolderRequest body, ProjectDocsService docs, GitService git) =>
@@ -204,13 +276,6 @@ public static class ProjectDocsEndpoints
             var to = Normalize(body.ToRelPath);
             if (from == null || to == null) return Results.BadRequest(new { error = "fromRelPath and toRelPath are required" });
 
-            // The fixed frame's shape is immutable: its folders and landing shells
-            // cannot be moved/renamed, nor can a move clobber a frame path.
-            if (EngineeringWorkstreamFrame.IsStructural(from))
-                return Results.Conflict(new { error = ProjectDocsService.FrameLockMessage(from, "moved or renamed") });
-            if (EngineeringWorkstreamFrame.IsStructural(to))
-                return Results.Conflict(new { error = ProjectDocsService.FrameLockMessage(to, "used as a move target") });
-
             var fromFull = docs.ResolveWikiNodeFullPath(projectName, from);
             var toFull = docs.ResolveWikiNodeFullPath(projectName, to);
             var repoRoot = git.ResolveRepoRootForProject(projectName);
@@ -225,14 +290,26 @@ public static class ProjectDocsEndpoints
                 : Results.BadRequest(new { error = commit.Error });
         });
 
+        // Persist the sibling display order of category folders (consumed by the
+        // wiki tree and the folder overview). Stored beside the other wiki
+        // metadata in docs/app/config/wiki-order.json and committed like every other wiki
+        // mutation; folders missing from the list sort behind alphabetically.
+        app.MapPut("/api/projects/{projectName}/wiki/folder-order", (string projectName, WikiFolderOrderRequest body, ProjectDocsService docs, GitService git) =>
+        {
+            if (body.OrderedNames == null)
+                return Results.BadRequest(new { error = "orderedNames field required" });
+            var parent = Normalize(body.ParentRelPath) ?? string.Empty;
+            var result = docs.SetWikiFolderOrder(projectName, parent, body.OrderedNames);
+            if (!result.Success) return Results.BadRequest(new { error = result.Error });
+            return CommitWikiChange(git, projectName, result.FullPath!,
+                $"wiki: reorder categories under {(parent.Length == 0 ? "root" : parent)}");
+        });
+
         // Delete a wiki node (file or folder) via git rm + commit.
         app.MapDelete("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
         {
             var rel = Normalize(relPath);
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
-            // Frame folders and landing shells cannot be deleted, even by agents.
-            if (EngineeringWorkstreamFrame.IsStructural(rel))
-                return Results.Conflict(new { error = ProjectDocsService.FrameLockMessage(rel, "deleted") });
             var full = docs.ResolveWikiNodeFullPath(projectName, rel);
             var repoRoot = git.ResolveRepoRootForProject(projectName);
             if (full == null || string.IsNullOrWhiteSpace(repoRoot))
@@ -296,14 +373,19 @@ public static class ProjectDocsEndpoints
     /// the git outcome to an HTTP result. Resolving the repo root or a failed
     /// commit both surface as a 400 so the UI can show the reason.
     /// </summary>
-    private static IResult CommitWikiChange(GitService git, string projectName, string fullPath, string message)
+    private static IResult CommitWikiChange(
+        GitService git, string projectName, string fullPath, string message, IReadOnlyList<string>? extraPaths = null)
     {
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
             return Results.BadRequest(new { error = "Repository not found" });
 
         var repoRel = Path.GetRelativePath(repoRoot, fullPath).Replace('\\', '/');
-        var commit = git.CommitPaths(repoRoot, message, new[] { repoRel });
+        var paths = new List<string> { repoRel };
+        if (extraPaths != null)
+            foreach (var extra in extraPaths)
+                paths.Add(Path.GetRelativePath(repoRoot, extra).Replace('\\', '/'));
+        var commit = git.CommitPaths(repoRoot, message, paths);
         return commit.Success
             ? Results.Ok(new { relPath = repoRel, sha = commit.Sha })
             : Results.BadRequest(new { error = commit.Error });
@@ -313,4 +395,5 @@ public static class ProjectDocsEndpoints
 public record WikiCreatePageRequest(string RelPath, string? Content);
 public record WikiCreateFolderRequest(string RelPath);
 public record WikiMoveRequest(string FromRelPath, string ToRelPath);
+public record WikiFolderOrderRequest(string? ParentRelPath, List<string>? OrderedNames);
 public record WikiSaveRequest(string? Content);

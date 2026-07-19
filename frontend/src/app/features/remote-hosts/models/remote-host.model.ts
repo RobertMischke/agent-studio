@@ -6,9 +6,9 @@ import type { CliType } from '../../../models/task.model';
  * The "Remote Hosts" settings page shows every execution location - the
  * operator's local machine and each remote runner host - in one list, so the
  * whole fleet reads as a single picture (see
- * docs/research/remote-ready-kickoff-2026-07.md). The registry is served
- * statically from configuration for now (UI first); the same shapes are what a
- * runner heartbeat / lease payload will later fill in.
+ * docs/research/remote-ready-kickoff-2026-07.md). Host definitions are seeded
+ * from configuration and their liveness is hydrated from the Task Server client
+ * registry, whose LastSeen timestamp is refreshed by real runner requests.
  */
 
 /** Where a host sits relative to the operator. */
@@ -32,7 +32,7 @@ export type HostHeartbeatStatus =
   | 'retired';
 
 /** Operator actions offered per host row. */
-export type HostActionKind = 'reprobe' | 'drain' | 'retire';
+export type HostActionKind = 'reprobe' | 'drain' | 'retire' | 'revive' | 'delete';
 
 /**
  * Per-CLI quota window lifted from the runner's quota probe. One row per CLI
@@ -64,6 +64,36 @@ export interface HostSystemStats {
   diskFreeGb: number;
 }
 
+export interface HostTelemetryPoint {
+  timestamp: string;
+  cpuPercent: number | null;
+  load1: number | null;
+  load5: number | null;
+  load15: number | null;
+  memoryUsedBytes: number | null;
+  memoryTotalBytes: number | null;
+  swapInBytesPerSecond: number | null;
+  swapOutBytesPerSecond: number | null;
+  cpuStealPercent: number | null;
+  ioWaitPercent: number | null;
+  cpuCores: number;
+  activeSlots: number;
+}
+
+export interface HostTelemetryFinding {
+  kind: 'vm-throttled' | 'oversubscribed' | 'memory-pressure';
+  label: string;
+  since: string;
+  until: string;
+}
+
+export interface HostTelemetrySeries {
+  clientId: string;
+  window: string;
+  points: readonly HostTelemetryPoint[];
+  findings: readonly HostTelemetryFinding[];
+}
+
 /** A single execution location in the registry. */
 export interface RemoteHost {
   id: string;
@@ -72,6 +102,8 @@ export interface RemoteHost {
   role: HostRole;
   /** SSH target for remote hosts; null for the local machine. */
   address: string | null;
+  /** Task-server client identity used as X-Client-Id by this host. */
+  clientId: string;
   status: HostHeartbeatStatus;
   os: string;
   /** ISO timestamp of the last heartbeat, or null if never seen. */
@@ -84,6 +116,16 @@ export interface RemoteHost {
   cliQuotas: readonly HostCliQuota[];
   /** Live system stats, or null when the host reports none (e.g. retired). */
   stats: HostSystemStats | null;
+  telemetry?: HostTelemetrySeries | null;
+  /** Latest daemon startup proof of origin write access. */
+  gitPushStatus?: 'ready' | 'read-only' | null;
+  gitPushDetail?: string | null;
+  gitPushCheckedAt?: string | null;
+  daemonState?: 'running' | 'read-only' | 'stopped';
+  lastClaimAt?: string | null;
+  activeTaskCount?: number;
+  availableSlots?: number;
+  retireRequestedAt?: string | null;
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }
@@ -184,4 +226,11 @@ export function relativeHeartbeat(iso: string | null | undefined, nowMs: number)
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.round(hrs / 24);
   return `${days}d ago`;
+}
+
+/** Metrics older than the liveness window are history, never live values. */
+export function hostIsStale(iso: string | null | undefined, nowMs: number, thresholdMs = 5 * 60_000): boolean {
+  if (!iso) return true;
+  const seen = Date.parse(iso);
+  return Number.isNaN(seen) || nowMs - seen > thresholdMs;
 }

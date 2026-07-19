@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, from, switchMap } from 'rxjs';
 import { NotificationService } from './notification.service';
 import { TaskService } from './task.service';
 import { ErrorDialogService } from './error-dialog.service';
@@ -11,8 +11,8 @@ import { ErrorDialogService } from './error-dialog.service';
  *
  * Contract:
  *  - Callers capture whatever they need to reverse the action BEFORE
- *    firing the mutation, then call `offer(...)` AFTER the backend
- *    confirms. The supplied `revert` returns the HTTP observable for
+ *    firing the mutation, then call `offer(...)` as soon as the optimistic
+ *    paint lands. The supplied `revert` returns the HTTP observable for
  *    the reverse API call; UndoController subscribes and paints the
  *    "Restored" toast on success.
  *  - One pending undo at a time. Offering a new one supersedes the
@@ -55,7 +55,7 @@ export class UndoController {
     targetLaneLabel: string;
     revert: () => Observable<unknown>;
   }): void {
-    this.dismissActive();
+    this.cancelActive();
 
     const { jobId, jobLabel, actionLabel, targetLaneLabel, revert } = params;
     const message = `${actionLabel} "${jobLabel}" → ${targetLaneLabel}`;
@@ -108,6 +108,7 @@ export class UndoController {
     targetLaneLabel: string;
     prevState: string;
     prevIndex: number;
+    persisted?: Promise<void>;
   }): void {
     this.offer({
       jobId: params.jobId,
@@ -126,9 +127,9 @@ export class UndoController {
           params.prevIndex,
         );
         this.jobService.beginOptimisticPersist();
-        return new Observable<unknown>((subscriber) => {
-          this.jobService
-            .moveJob(params.jobId, params.prevState, params.watchPath, params.prevIndex)
+        return from(params.persisted ?? Promise.resolve()).pipe(
+          switchMap(() => new Observable<unknown>((subscriber) => {
+            this.jobService.moveJob(params.jobId, params.prevState, params.watchPath, params.prevIndex)
             .subscribe({
               next: (v) => {
                 this.jobService.endOptimisticPersist();
@@ -142,7 +143,8 @@ export class UndoController {
                 subscriber.error(err);
               },
             });
-        });
+          })),
+        );
       },
     });
   }
@@ -210,7 +212,7 @@ export class UndoController {
   }
 
   /** Drop the active undo toast (e.g. when a fresh undoable action takes its place). */
-  private dismissActive(): void {
+  cancelActive(): void {
     if (this.activeTimer !== null) {
       clearTimeout(this.activeTimer);
       this.activeTimer = null;

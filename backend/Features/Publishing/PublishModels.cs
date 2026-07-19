@@ -47,6 +47,53 @@ public static class PublishReferenceKinds
     public const string None = "none";
 }
 
+public static class PublishAutomationModes
+{
+    public const string Manual = "manual";
+    public const string Suggest = "suggest";
+    public const string Auto = "auto";
+    public static readonly string[] All = [Manual, Suggest, Auto];
+
+    public static string Normalize(string targetId, string? mode)
+    {
+        var requested = All.FirstOrDefault(x => string.Equals(x, mode, StringComparison.OrdinalIgnoreCase)) ?? Manual;
+        return targetId.StartsWith("package:", StringComparison.OrdinalIgnoreCase) && requested == Auto
+            ? Suggest
+            : requested;
+    }
+}
+
+public record PublishPendingTask(string TaskId, string TaskKey, string Title, string TaskType);
+
+public record PublishActionPanel
+{
+    public string Project { get; init; } = "";
+    public PublishTarget? Target { get; init; }
+    public string AutomationMode { get; init; } = PublishAutomationModes.Manual;
+    public List<PublishPendingTask> PendingTasks { get; init; } = [];
+    public string? SuggestedVersion { get; init; }
+    public string? Notice { get; init; }
+    public PublishWorkflowRun? LastRun { get; init; }
+}
+
+public record PublishWorkflowRun
+{
+    public string Project { get; init; } = "";
+    public string TargetId { get; init; } = "";
+    public string Workflow { get; init; } = "";
+    public long? RunId { get; init; }
+    public string Status { get; init; } = "queued";
+    public string? Conclusion { get; init; }
+    public string? Version { get; init; }
+    public string? Url { get; init; }
+    public DateTime TriggeredAt { get; init; }
+    public string? Error { get; init; }
+}
+
+public record PublishPackageRequest(string TargetId, string Version);
+public record DeployWebsiteRequest(string TargetId = "website");
+public record SetPublishAutomationRequest(string TargetId, string Mode);
+
 /// <summary>
 /// One derived publish target for a project, as rendered by the Project Hub
 /// badge. Read-only and repo-fact-derived: nothing here is an operator setting.

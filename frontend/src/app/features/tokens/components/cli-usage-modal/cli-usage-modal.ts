@@ -1,14 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import type { CliType } from '../../../../models/task.model';
 import type { QuotaWindow } from '../../../../features/quota';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../models/tokens.model';
+import { CostBreakdownService } from '../../services/cost-breakdown.service';
 
 interface ModelUsageRow {
   model: string;
   source: string;
+  /** OpenAI reports cached input as a subset of input, while Anthropic
+   *  reports cache-read tokens as a separate category. */
+  cacheIncludedInInput: boolean;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -30,6 +34,7 @@ interface WindowView {
   label: string;
   pct: number | null;
   pctLabel: string;
+  remainingLabel: string | null;
   barPct: number;
   tone: WindowTone;
   /** Implied cap, or null when the window reports no usable limit. */
@@ -43,6 +48,7 @@ interface UsageTotals {
   tokens: number;
   models: number;
   anyPriced: boolean;
+  allPriced: boolean;
 }
 
 /**
@@ -67,6 +73,7 @@ interface UsageTotals {
   styleUrl: './cli-usage-modal.scss',
 })
 export class CliUsageModalComponent {
+  private readonly costBreakdown = inject(CostBreakdownService);
   readonly cliType = input.required<CliType>();
   readonly row = input<CliUsageQuotaRow | null>(null);
   readonly tokens = input<TokenSummaryAggregate | null>(null);
@@ -100,7 +107,8 @@ export class CliUsageModalComponent {
       return {
         label: w.label,
         pct,
-        pctLabel: pct === null ? '—' : `${pct}%`,
+        pctLabel: pct === null ? '—' : `${pct}% used`,
+        remainingLabel: pct === null ? null : `${Math.max(0, 100 - pct)}% left`,
         barPct,
         tone: this.toneForPct(pct),
         limit: limit === 'n/a' ? null : limit,
@@ -123,7 +131,7 @@ export class CliUsageModalComponent {
         anyPriced = true;
       }
     }
-    return { costUsd, tokens, models: rows.length, anyPriced };
+    return { costUsd, tokens, models: rows.length, anyPriced, allPriced: rows.length > 0 && rows.every(r => r.modelPriced) };
   });
 
   readonly modelRows = computed<ModelUsageRow[]>(() => {
@@ -131,11 +139,13 @@ export class CliUsageModalComponent {
     const rows: ModelUsageRow[] = [];
     for (const m of this.tokens()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cli)) continue;
-      rows.push({ ...m, source: 'orchestrator' });
+      const row = { ...m, source: 'project runtime', cacheIncludedInInput: cli === 'codex' };
+      if (this.totalTokens(row) > 0) rows.push(row);
     }
     for (const m of this.adhoc()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cli)) continue;
-      rows.push({ ...m, source: 'ad-hoc' });
+      const row = { ...m, source: 'ad-hoc', cacheIncludedInInput: cli === 'codex' };
+      if (this.totalTokens(row) > 0) rows.push(row);
     }
     return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
   });
@@ -155,16 +165,39 @@ export class CliUsageModalComponent {
   }
 
   costLabel(value: number, priced: boolean): string {
-    return priced ? this.formatUsd(value) : 'n/a';
+    return priced ? this.formatUsd(value) : 'Unknown';
   }
 
   totalTokens(row: ModelUsageRow): number {
-    return row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens;
+    return row.inputTokens
+      + row.outputTokens
+      + row.cacheCreationTokens
+      + (row.cacheIncludedInInput ? 0 : row.cacheReadTokens);
   }
 
   /** Read + creation cache tokens folded into one "Cache" column value. */
   cacheTokens(row: ModelUsageRow): number {
     return row.cacheReadTokens + row.cacheCreationTokens;
+  }
+
+  showTotalCalculation(): void {
+    this.costBreakdown.show(this.modelRows().map(row => this.priceItem(row)),
+      `${this.title()} recorded usage cost`);
+  }
+
+  showModelCalculation(row: ModelUsageRow): void {
+    this.costBreakdown.show([this.priceItem(row)], `${row.model} cost calculation`);
+  }
+
+  private priceItem(row: ModelUsageRow) {
+    return {
+      model: row.model,
+      label: row.source,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheReadTokens: row.cacheReadTokens,
+      cacheWriteTokens: row.cacheCreationTokens,
+    };
   }
 
   private toneForPct(pct: number | null): WindowTone {

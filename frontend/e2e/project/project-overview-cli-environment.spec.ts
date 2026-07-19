@@ -17,7 +17,7 @@ function slugFor(name: string): string {
 async function openHub(page: Page) {
   await page.goto(`/#/projects/${slugFor(projectName)}/overview`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId('project-detail-overview')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('project-overview-dashboard')).toBeVisible({ timeout: 15_000 });
 }
 
 test.beforeAll(async () => {
@@ -100,26 +100,26 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('overview shows onboarding tiles and settings shows CLI environment details', async ({ page }) => {
+test('overview is operator-only and settings owns CLI environment details', async ({ page }) => {
   await openHub(page);
 
   await expect(page.getByRole('heading', { name: 'Pipeline snapshot' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Queue health' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Lane counts' })).toHaveCount(0);
 
-  const onboarding = page.getByTestId('project-cli-onboarding-status');
-  await expect(onboarding).toBeVisible();
-  await expect(onboarding).toContainText('Onboarding status');
+  const overview = page.getByTestId('project-overview-dashboard');
+  await expect(overview).toContainText('Key numbers');
+  await expect(overview).toContainText('Project URLs');
+  await expect(overview).toContainText('Deployment');
+  await expect(overview).toContainText('Wiki & planning');
+  await expect(page.getByTestId('project-cli-onboarding-status')).toHaveCount(0);
   await expect(page.getByTestId('project-detail-cli-environment')).toHaveCount(0);
-
-  await expect(page.getByTestId('project-cli-onboarding-tile-cli-ready')).toContainText('2 / 4');
-  await expect(page.getByTestId('project-cli-onboarding-tile-cli-ready')).toContainText('2 need attention');
-  await expect(page.getByTestId('project-cli-onboarding-tile-clean-context')).toContainText('2 / 2');
-  await expect(page.getByTestId('project-cli-onboarding-tile-project-sessions')).toContainText('project handoff');
-  await expect(page.getByTestId('project-cli-onboarding-tile-overrides')).toContainText('none');
+  await expect(overview).not.toContainText('Watch path');
+  await expect(overview).not.toContainText('Working directory');
+  await expect(overview).not.toContainText('Project sessions');
 
   await page.screenshot({
-    path: path.join(SCREENSHOT_DIR, '00-overview-onboarding-status.png'),
+    path: path.join(SCREENSHOT_DIR, '00-overview-operator-dashboard--real.png'),
     fullPage: true,
   });
 
@@ -141,7 +141,7 @@ test('overview shows onboarding tiles and settings shows CLI environment details
   await expect(claude).toContainText('platform default');
 
   await page.screenshot({
-    path: path.join(SCREENSHOT_DIR, '01-settings-cli-environment.png'),
+    path: path.join(SCREENSHOT_DIR, '01-settings-cli-environment--real.png'),
     fullPage: true,
   });
 });

@@ -32,7 +32,7 @@ export interface ReadyLaneSplit {
 /**
  * Splits the existing 2-ready bucket into the two lanes we render under
  * the Backlog group. Compatibility rule (see
- * docs/research/expanded-lifecycle-lanes-plan-2026-05.md section 10):
+ * docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md section 10):
  * a job with no `phase` defaults to Human Ready, so existing job folders
  * that predate the field continue to render correctly.
  *

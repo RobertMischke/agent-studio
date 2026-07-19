@@ -1,6 +1,6 @@
 import { Directive, OnDestroy } from '@angular/core';
-import { Observable } from 'rxjs';
-import type { TaskInfo } from '../../../models/task.model';
+import { Observable, Subscription } from 'rxjs';
+import { TaskState, type TaskInfo } from '../../../models/task.model';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 
 /**
@@ -44,9 +44,26 @@ export abstract class TaskBackgroundPoller<TResponse> implements OnDestroy {
     return true;
   }
 
+  /**
+   * Inactive task data is immutable until a push event delivers a new task
+   * snapshot, so one fetch on selection is sufficient. Keep recurring HTTP
+   * polling only while a task is in an orchestrator-owned processing state or
+   * explicitly reports a running execution.
+   */
+  protected shouldRepeat(info: TaskInfo): boolean {
+    return info.execution?.status === 'running'
+      || info.state === TaskState.Preparation
+      || info.state === TaskState.OrchestratorPrep
+      || info.state === TaskState.Progress
+      || info.state === TaskState.AutoReview;
+  }
+
   private timer: VisibleIntervalHandle | null = null;
   private currentJob: { id: string; watchPath: string } | null = null;
   private currentKey = '';
+  private activeRequest: Subscription | null = null;
+  private requestInFlight = false;
+  private requestGeneration = 0;
 
   /**
    * Sync polling state to a job. Pass `null` (or a job that fails
@@ -55,10 +72,11 @@ export abstract class TaskBackgroundPoller<TResponse> implements OnDestroy {
    */
   syncTo(info: TaskInfo | null | undefined): void {
     const willPoll = info != null && this.shouldPoll(info);
-    const key = willPoll ? `${info!.watchPath}::${info!.id}` : '';
+    const willRepeat = willPoll && this.shouldRepeat(info!);
+    const key = willPoll ? `${info!.watchPath}::${info!.id}::${willRepeat ? 'live' : 'snapshot'}` : '';
     if (key === this.currentKey) return;
     this.currentKey = key;
-    this.stop();
+    this.stopTransport();
     if (!willPoll) {
       this.currentJob = null;
       this.clearValue();
@@ -66,7 +84,9 @@ export abstract class TaskBackgroundPoller<TResponse> implements OnDestroy {
     }
     this.currentJob = { id: info!.id, watchPath: info!.watchPath };
     this.refresh();
-    this.timer = setVisibleInterval(() => this.refresh(), this.intervalMs);
+    if (willRepeat) {
+      this.timer = setVisibleInterval(() => this.refresh(), this.intervalMs);
+    }
   }
 
   /**
@@ -80,17 +100,47 @@ export abstract class TaskBackgroundPoller<TResponse> implements OnDestroy {
       this.clearValue();
       return;
     }
-    this.fetch(job.id, job.watchPath).subscribe({
-      next: (res) => this.applyResponse(res),
-      error: () => { /* non-fatal: keep previous snapshot */ },
-    });
+    if (this.requestInFlight) return;
+
+    const generation = ++this.requestGeneration;
+    this.requestInFlight = true;
+    try {
+      const request = this.fetch(job.id, job.watchPath).subscribe({
+        next: (res) => {
+          if (generation === this.requestGeneration) this.applyResponse(res);
+        },
+        error: () => this.finishRequest(generation),
+        complete: () => this.finishRequest(generation),
+      });
+      if (!request.closed && generation === this.requestGeneration) {
+        this.activeRequest = request;
+      }
+    } catch {
+      this.finishRequest(generation);
+    }
   }
 
   stop(): void {
+    this.currentKey = '';
+    this.currentJob = null;
+    this.stopTransport();
+  }
+
+  private finishRequest(generation: number): void {
+    if (generation !== this.requestGeneration) return;
+    this.requestInFlight = false;
+    this.activeRequest = null;
+  }
+
+  private stopTransport(): void {
     if (this.timer) {
       clearVisibleInterval(this.timer);
       this.timer = null;
     }
+    this.requestGeneration++;
+    this.activeRequest?.unsubscribe();
+    this.activeRequest = null;
+    this.requestInFlight = false;
   }
 
   ngOnDestroy(): void {

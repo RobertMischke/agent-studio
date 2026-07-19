@@ -53,4 +53,17 @@ describe('CountBadgeComponent', () => {
     expect(badge?.classList.contains('count-badge--pane-tab')).toBe(true);
     expect(badge?.classList.contains('count-badge--active')).toBe(true);
   });
+
+  it.each([4, 12])('centres the %i pane-tab count with tabular numerals', async (value) => {
+    const fixture = await mount();
+    fixture.componentRef.setInput('value', value);
+    fixture.componentRef.setInput('variant', 'pane-tab');
+    fixture.detectChanges();
+    const badge = fixture.nativeElement.querySelector('.count-badge') as HTMLElement;
+    const style = getComputedStyle(badge);
+    expect(style.display).toBe('inline-flex');
+    expect(style.alignItems).toBe('center');
+    expect(style.justifyContent).toBe('center');
+    expect(style.fontVariantNumeric).toContain('tabular-nums');
+  });
 });

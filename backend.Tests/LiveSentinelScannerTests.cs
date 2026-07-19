@@ -8,7 +8,7 @@ namespace AgentStudio.Tests;
 /// sentinel scanner must NOT fire on a [[TASK_DONE]] that appears in file
 /// content the agent read (the backend code/AGENTS.md are full of sentinel
 /// literals) or in agent prose - only on the agent's OWN standalone terminal
-/// sentinel line. See docs/wiki/concepts/runner-stability-incidents.html.
+/// sentinel line. See docs/concepts/runner-stability-incidents.html.
 /// </summary>
 public class LiveSentinelScannerTests
 {

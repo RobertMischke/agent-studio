@@ -29,6 +29,8 @@ export interface OrchestratorLogEntry {
 
 export interface OrchestratorTokenUsage {
   model?: string | null;
+  /** Optional AGT-2055 attribution; older event writers omit it. */
+  thinkingLevel?: string | null;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -62,6 +64,55 @@ export interface OrchestratorSession {
 export interface OrchestratorSessionResponse {
   project: string;
   session: OrchestratorSession | null;
+}
+
+export interface OrchestratorContextSession {
+  contextKey: string;
+  kind: 'global' | 'project' | 'task';
+  projectId: string | null;
+  taskKey: string | null;
+  updatedAt: string;
+  model: string | null;
+  cumulativeInputTokens: number;
+  cumulativeOutputTokens: number;
+  cumulativeCacheReadTokens: number;
+  cumulativeCacheCreationTokens: number;
+  runtimeStatus: 'idle' | 'active' | 'queued' | 'parked';
+  queuePosition: number;
+}
+
+export interface OrchestratorContextSessionsResponse {
+  sessions: OrchestratorContextSession[];
+}
+
+export type OrchestratorContextDigestSourceName =
+  | 'lanes'
+  | 'transitions'
+  | 'runs'
+  | 'quota'
+  | 'publishTargets'
+  | 'health'
+  | 'decisionJournal';
+
+/** One source used to assemble the compact ORCH-1 read-context digest. */
+export interface OrchestratorContextDigestSource {
+  name: OrchestratorContextDigestSourceName;
+  status: 'ok' | 'empty' | 'degraded' | 'unavailable';
+  capturedAt: string | null;
+  detail: string | null;
+}
+
+/**
+ * Compact, context-keyed application snapshot supplied to the orchestrator.
+ * The backend assembles this from canonical board, run, quota, publishing,
+ * health, and decision-journal sources so the frontend never has to merge a
+ * potentially inconsistent prompt from its local stores.
+ */
+export interface OrchestratorContextDigest {
+  contextKey: string;
+  capturedAt: string;
+  digest: string;
+  sources: OrchestratorContextDigestSource[];
 }
 
 /**

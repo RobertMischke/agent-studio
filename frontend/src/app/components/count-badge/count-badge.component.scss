@@ -5,8 +5,10 @@
  * optically centred (no lopsided "9" vs "127").
  */
 .count-badge {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   min-width: 18px;
   height: 14px;
   padding: 0 6px;
@@ -16,6 +18,7 @@
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
   text-transform: none;
   letter-spacing: 0;
   flex-shrink: 0;
@@ -42,10 +45,10 @@
     font-weight: 600;
   }
 
-  // Active tab: a soft accent wash instead of a solid accent block, so the
-  // selected tab's count reads warmer without turning into a red brick.
+  // Active tab: use the shared tab-count contrast pair. The solid fill keeps
+  // the count legible on every theme's tab surface.
   &--pane-tab.count-badge--active {
-    background: color-mix(in srgb, var(--studio-accent) 20%, transparent);
-    color: var(--studio-fg-strong);
+    background: var(--studio-tab-count-active-bg);
+    color: var(--studio-tab-count-active-fg);
   }
 }

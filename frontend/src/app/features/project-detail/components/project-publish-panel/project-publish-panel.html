@@ -1,0 +1,77 @@
+@if (badges().length > 0) {
+  <section class="publish" data-testid="project-publish-badges">
+    <h3>Publishable</h3>
+    <div class="publish__badges">
+      @for (badge of badges(); track badge.target.id) {
+        <button type="button"
+                class="publish__badge"
+                [class.publish__badge--website]="badge.target.kind === 'website'"
+                [class.publish__badge--first]="badge.target.firstPublishPending"
+                [attr.data-testid]="'publish-badge-' + badge.target.id"
+                [cacTooltip]="badge.tooltip"
+                [disabled]="busy()"
+                (click)="open(badge.target)">
+          {{ badge.text }}@if (badge.target.firstPublishPending) { <span>(manual, operator)</span> }
+        </button>
+      }
+    </div>
+
+    @if (selected(); as panel) {
+      <div class="publish__flow" data-testid="publish-action-panel">
+        <div class="publish__head">
+          <div>
+            <strong>{{ panel.target.kind === 'package' ? 'Package release' : 'Website deploy' }}</strong>
+            <small>{{ panel.target.label }} · {{ panel.pendingTasks.length }} pending task{{ panel.pendingTasks.length === 1 ? '' : 's' }}</small>
+          </div>
+          <button type="button" class="publish__quiet" (click)="close()">Close</button>
+        </div>
+
+        @if (panel.pendingTasks.length > 0) {
+          <ul class="publish__tasks" data-testid="publish-pending-tasks">
+            @for (task of panel.pendingTasks; track task.taskKey) {
+              <li><code>{{ task.taskKey }}</code><span>{{ task.title }}</span><small>{{ task.taskType }}</small></li>
+            }
+          </ul>
+        }
+
+        <label class="publish__automation">
+          <span>Automation</span>
+          <select [(ngModel)]="automationDraft" data-testid="publish-automation-mode">
+            <option value="manual">Manual</option>
+            <option value="suggest">Suggest after accept</option>
+            @if (panel.target.kind === 'website') { <option value="auto">Auto deploy</option> }
+          </select>
+          <button type="button" [disabled]="busy()" (click)="saveAutomation()">Save</button>
+        </label>
+
+        @if (panel.notice) {
+          <p class="publish__notice" data-testid="publish-first-notice">{{ panel.notice }}</p>
+        } @else if (panel.target.kind === 'package') {
+          <label class="publish__version">
+            <span>Next version</span>
+            <input [(ngModel)]="versionDraft" inputmode="numeric" data-testid="publish-version" />
+            <small>Suggested from the pending task mix. Features bump minor; bugs and chores bump patch.</small>
+          </label>
+          <button type="button" class="publish__primary" data-testid="publish-confirm"
+                  [disabled]="busy() || !versionDraft.trim()" (click)="trigger()">
+            Confirm, commit and push v{{ versionDraft }}
+          </button>
+        } @else {
+          <button type="button" class="publish__primary" data-testid="deploy-confirm"
+                  [disabled]="busy()" (click)="trigger()">Deploy website now</button>
+        }
+
+        @if (run(); as currentRun) {
+          <div class="publish__run" data-testid="publish-workflow-status">
+            <div><strong>{{ currentRun.status }}</strong>@if (currentRun.conclusion) { <span> · {{ currentRun.conclusion }}</span> }</div>
+            <small>{{ currentRun.workflow }}@if (currentRun.version) { · v{{ currentRun.version }} }</small>
+            @if (currentRun.error) { <p>{{ currentRun.error }}</p> }
+            <button type="button" class="publish__quiet" [disabled]="busy()" (click)="refreshRun()">Refresh workflow</button>
+            @if (currentRun.url) { <a [href]="currentRun.url" target="_blank" rel="noopener">Open on GitHub</a> }
+          </div>
+        }
+        @if (message()) { <p class="publish__message" role="status">{{ message() }}</p> }
+      </div>
+    }
+  </section>
+}

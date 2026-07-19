@@ -43,9 +43,9 @@ requests do not need the header but it is harmless to include.
 
 **Use `/api/tasks`.** The route is canonical; the former `/api/jobs`
 compatibility alias has been removed (see
-[ADR-0057](../../../docs/architecture/decisions/adr-archive.md#adr-0057---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)).
+[ADR-0057](../../../docs/system/architecture/decisions/adr-archive.md#adr-0057---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)).
 The raw `watchPath` key and the path-versus-shortCode direction are explained in
-[../../../docs/wiki/concepts/api-project-identity-and-watchpath.md](../../../docs/wiki/concepts/api-project-identity-and-watchpath.md).
+[../../../docs/concepts/api-project-identity-and-watchpath.md](../../../docs/concepts/api-project-identity-and-watchpath.md).
 
 ## Common pitfall: the watchPath quirk
 
@@ -127,10 +127,15 @@ an array of `JobInfo`-shaped objects with `id`, `title`, `projectName`,
 
 ## Process: creating one task
 
+**Prefer `project` over `watchPath`.** Create accepts a path-free `project`
+handle — a `shortCode` / Kürzel (`ASS`) or a `PROJ-NNN` id (from
+`GET /api/projects`) — which the server resolves to the project's storage
+location. This is the forward-looking contract (watchPath encapsulation, Phase
+2a); `watchPath` still works but is deprecated and, when both are sent, `project`
+wins. Using `project` also sidesteps the 409 watchPath-mismatch trap below.
+
 ```js
 const http = require('http');
-
-const watchPath = 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard';
 
 const task = {
   id: 'my-stable-slug',
@@ -140,7 +145,8 @@ const task = {
   taskType: 'bug',             // or feature/refactor/analysis/chore
   agent: 'codex',              // claude | codex | copilot | gemini
   cliType: 'codex',            // keep in lockstep with agent
-  watchPath,
+  project: 'ASS',              // preferred: shortCode/Kürzel or PROJ-NNN id
+  // watchPath: '...',         // deprecated fallback; see /api/watch-paths
   promptMarkdown: [
     '## Context',
     '',

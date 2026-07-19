@@ -34,6 +34,7 @@ namespace AgentStudio.Tests;
 /// <code>RUN_PERF_BASELINE=1 dotnet test backend.Tests --filter "FullyQualifiedName~BackendBaselineTests"</code>
 /// </para>
 /// </summary>
+[Trait("Category", "MachineBound")]
 public class BackendBaselineTests
 {
     private readonly ITestOutputHelper _out;

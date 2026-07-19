@@ -119,6 +119,7 @@ export class TaskTimelinePaneComponent {
     switch (kind) {
       case TIMELINE_KIND.orchestratorVerdictAccepted:    return 'ok';
       case TIMELINE_KIND.externalCompletion:             return 'ok';
+      case TIMELINE_KIND.steerTimeoutResolved:           return 'neutral';
       case TIMELINE_KIND.qualityLoopReopened:            return 'warn';
       case TIMELINE_KIND.orchestratorEscalated:          return 'danger';
       case TIMELINE_KIND.readOnlyContainmentViolation:   return 'danger';
@@ -151,6 +152,7 @@ export class TaskTimelinePaneComponent {
       case TIMELINE_KIND.postStepFinished:            return 'Post-step finished';
       case TIMELINE_KIND.orchestratorEscalated:       return 'Escalated to human';
       case TIMELINE_KIND.orchestratorSteered:         return 'Steered';
+      case TIMELINE_KIND.steerTimeoutResolved:        return 'Steer timeout resolved';
       case TIMELINE_KIND.orchestratorVerdictAccepted: return 'Verdict: accepted';
       case TIMELINE_KIND.qualityLoopReopened:         return 'Re-opened (go again)';
       case TIMELINE_KIND.humanReviewDecided:          return 'Human review decided';

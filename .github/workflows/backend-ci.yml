@@ -6,12 +6,20 @@ on:
     paths:
       - 'backend/**'
       - 'backend.Tests/**'
+      - 'runner/**'
+      - 'runner.Tests/**'
+      - 'deploy/systemd/**'
+      - 'scripts/remote-runner-onboard.sh'
       - 'agent-taskboard.sln'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     paths:
       - 'backend/**'
       - 'backend.Tests/**'
+      - 'runner/**'
+      - 'runner.Tests/**'
+      - 'deploy/systemd/**'
+      - 'scripts/remote-runner-onboard.sh'
       - 'agent-taskboard.sln'
       - '.github/workflows/backend-ci.yml'
 
@@ -32,6 +40,9 @@ jobs:
 
       - name: Build
         run: dotnet build agent-taskboard.sln --no-restore -warnaserror:false
+
+      - name: Validate remote-host onboarding controller
+        run: bash -n scripts/remote-runner-onboard.sh
 
       # Linux is the future runner platform (ADR-0059 / remote-ready kickoff).
       # This job is the canary for path/PTY/process assumptions that only

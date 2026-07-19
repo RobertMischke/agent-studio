@@ -1,0 +1,34 @@
+<section class="context-list" data-testid="chat-context-list">
+  <div id="chat-context-groups" class="context-list__groups" data-testid="chat-context-groups">
+    @for (group of [{ label: 'Global', rows: globalRows() }, { label: 'Projects', rows: projectRows() }, { label: 'Tasks', rows: taskRows() }]; track group.label) {
+      @if (group.rows.length > 0) {
+        <section class="context-list__group">
+          <h3>{{ group.label }}</h3>
+          @for (row of group.rows; track row.contextKey) {
+            <div class="context-list__row"
+                 [class.context-list__row--active]="row.contextKey === activeContextKey()"
+                 [attr.data-testid]="'chat-switcher-row-' + row.contextKey">
+              <button type="button" class="context-list__name" (click)="select(row.contextKey)">
+                <span class="context-list__presence"
+                      [class.context-list__presence--live]="row.runtimeStatus === 'active'"
+                      aria-hidden="true"></span>
+                <span class="context-list__label">{{ row.label }}</span>
+                <span class="context-list__badges">
+                  @if (row.runtimeStatus === 'active') { <span class="context-list__badge context-list__badge--live">running</span> }
+                  @if (row.runtimeStatus === 'queued') { <span class="context-list__badge">queued {{ row.queuePosition }}</span> }
+                  @if (row.runtimeStatus === 'parked') { <span class="context-list__badge">parked</span> }
+                  @if (unreadContextKeys().has(row.contextKey)) { <span class="context-list__badge context-list__badge--unread">new</span> }
+                  @if (tokenLabel(row); as tokens) { <span class="context-list__badge">{{ tokens }}</span> }
+                </span>
+              </button>
+              <button type="button" class="context-list__navigate"
+                      [attr.aria-label]="'Navigate to ' + row.label"
+                      [attr.data-testid]="'chat-switcher-navigate-' + row.contextKey"
+                      (click)="navigate(row.contextKey, $event)">&rarr;</button>
+            </div>
+          }
+        </section>
+      }
+    }
+  </div>
+</section>

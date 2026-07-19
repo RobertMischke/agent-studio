@@ -67,6 +67,20 @@ describe('StudioTabStateService', () => {
     expect(svc.activeTab()).toEqual(tab);
   });
 
+  it('retargets open project tabs and preserves the active settings tab after rename', () => {
+    svc.open({ kind: 'board', projectName: 'Old Name' });
+    svc.open({ kind: 'hub', projectName: 'Old Name', section: 'settings' });
+    svc.open({ kind: 'url-preview', projectName: 'Old Name', urlId: 'dev' });
+    svc.select('hub:Old Name');
+
+    svc.renameProject('Old Name', 'New Name');
+
+    expect(svc.tabs()).toContainEqual({ kind: 'board', projectName: 'New Name' });
+    expect(svc.tabs()).toContainEqual({ kind: 'hub', projectName: 'New Name', section: 'settings' });
+    expect(svc.tabs()).toContainEqual({ kind: 'url-preview', projectName: 'New Name', urlId: 'dev' });
+    expect(svc.activeKey()).toBe('hub:New Name');
+  });
+
   it('opens workspace settings as a persistent editor tab', () => {
     const tab: StudioTab = { kind: 'workspace-settings' };
     svc.open(tab);
@@ -107,6 +121,23 @@ describe('StudioTabStateService', () => {
 
       expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A')).toHaveLength(1);
       expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'drift' });
+    });
+
+    it('preserves an exact pipeline-row deep link when adopting the Hub tab', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+      svc.open({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'pipeline',
+        pipelineStepId: 'post-wiki-learnings',
+      });
+
+      expect(svc.activeTab()).toEqual({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'pipeline',
+        pipelineStepId: 'post-wiki-learnings',
+      });
     });
 
     it('keeps the tab in its original slot when adopting a new section', () => {

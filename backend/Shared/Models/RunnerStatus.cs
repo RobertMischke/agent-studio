@@ -228,18 +228,18 @@ public record ProjectRunnerStatus
     /// <summary>
     /// Mode the operator asked for while a job was still running. Non-null only
     /// when a <c>PUT /api/runner/{project}/mode</c> with <c>manual</c> /
-    /// <c>paused</c> arrived while <see cref="ActiveJobId"/> was set. The
-    /// runner applies the value the moment the active job clears; the frontend
-    /// renders the lane pill as "MANUAL (after current)" while this field is
-    /// populated.
+    /// <c>paused</c> arrived while tasks were active. Auto admission closes at
+    /// once; the runner applies the value after the request-time active set drains.
     /// </summary>
     public string? PendingMode { get; init; }
     /// <summary>
-    /// Job id the deferred mode change is waiting on. Mirrors
-    /// <see cref="ActiveJobId"/> at the moment the deferred change was recorded
-    /// so the UI can render "after &lt;slug&gt;" in the tooltip.
+    /// Job id of the sole remaining snapshot task. Null while multiple tasks remain.
     /// </summary>
     public string? PendingModeWillApplyAfter { get; init; }
+    /// <summary>Remaining tasks from the active snapshot captured by the deferred request.</summary>
+    public int PendingModeActiveTaskCount { get; init; }
+    /// <summary>Title of the sole remaining snapshot task, when exactly one remains.</summary>
+    public string? PendingModeActiveTaskTitle { get; init; }
     /// <summary>
     /// ADR-0052: the project's configured concurrency cap (clamped to
     /// <c>&gt;= 1</c>). <c>1</c> is the sequential default. Surfaced so the

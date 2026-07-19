@@ -80,6 +80,7 @@ import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
+import { taskNavigationHref, taskUrl } from '../../../state/task-url';
 export type InspectorTab = 'protocol' | 'activity';
 
 /**
@@ -189,7 +190,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
   /** Emitted after a follow-up task was created from a review-evidence finding so the parent can refetch the detail and (optionally) navigate to the new job. */
-  readonly followupCreatedFromEvidence = output<{ jobId: string; targetState: string }>();
+  readonly followupCreatedFromEvidence = output<{ jobId: string; taskKey?: string; targetState: string }>();
   /** Emitted after a finding was acknowledged so the parent can refetch the detail. */
   readonly evidenceMutated = output<void>();
 
@@ -279,7 +280,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   }
 
   /** Set after "Create follow-up" returns; used to render the success banner. */
-  readonly followupCreated = signal<{ jobId: string; targetState: string } | null>(null);
+  readonly followupCreated = signal<{ jobId: string; taskKey?: string; targetState: string } | null>(null);
 
   // --- Composer footer: context ring -------------------------------------
   /** Snapshot returned by an explicit refresh; wins over the detail's copy
@@ -681,6 +682,10 @@ export class ProtocolPaneComponent implements OnDestroy {
     buildInspectorTabs({
       summaryStatus: this.summaryStatus(),
       hasStatusMarkdown: !!this.detail().statusMarkdown,
+      hasCliActivity: this.cliOutput().length > 0,
+      isHumanReview:
+        this.detail().info.state === TaskState.HumanReview ||
+        this.detail().info.state === TaskState.Escalated,
       isRunning: this.isRunning(),
     }),
   );
@@ -692,15 +697,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     }
   }
 
-  // The button is meaningful only after the task has produced a cli-output.log.
-  // We can't see the disk from here, so use "summary has been touched" as a
-  // proxy: any non-`none` status means the runner already attempted to summarize
-  // (which only happens after a successful CLI run wrote logs/cli-output.log).
   readonly canRegenerate = computed(() => {
     const status = this.summaryStatus();
     if (status === 'generating') return false;
     if (this.regenerating()) return false;
-    return status !== 'none' || !!this.detail().statusMarkdown;
+    return status !== 'none' || !!this.detail().statusMarkdown || this.cliOutput().length > 0;
   });
 
   /**
@@ -1360,7 +1361,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     this.jobs.createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath).subscribe({
       next: (resp) => {
         panel.clearBusy();
-        this.followupCreated.set({ jobId: resp.jobId, targetState: resp.targetState });
+        this.followupCreated.set(resp);
         this.followupCreatedFromEvidence.emit(resp);
         this.evidenceMutated.emit();
       },
@@ -1372,15 +1373,14 @@ export class ProtocolPaneComponent implements OnDestroy {
     this.followupCreated.set(null);
   }
 
-  onOpenFollowup(jobId: string): void {
-    const watch = this.detail().info.watchPath;
-    const url = `/?job=${encodeURIComponent(jobId)}&watchPath=${encodeURIComponent(watch)}`;
-    // Use full navigation: the protocol pane is mounted inside a job-detail
-    // view that owns its own routing state, and a follow-up task is in a
-    // different `?job=` slot. A full navigation re-mounts cleanly.
-    if (typeof window !== 'undefined') {
-      window.location.href = url;
-    }
+  onOpenFollowup(followup: string | { jobId: string; taskKey?: string }): void {
+    if (typeof window === 'undefined') return;
+    const reference = typeof followup === 'string' ? { jobId: followup } : followup;
+    const navigate = (href: string | null): void => { if (href) window.location.href = href; };
+    if (reference.taskKey) return navigate(taskUrl(reference.taskKey, new URL(window.location.href)));
+    this.jobs.getDetail(reference.jobId, this.detail().info.watchPath).subscribe(
+      (detail) => navigate(taskNavigationHref(detail.info))
+    );
   }
 
   rateLimitTooltip(): string {

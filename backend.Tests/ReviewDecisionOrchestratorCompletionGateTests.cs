@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
 
 using Xunit;
 
@@ -165,6 +166,39 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskDone_SharedCheckoutBuildIsLocked_BuildGateUsesTaskWorktree()
+    {
+        const string slug = "build-worktree-job";
+        SeedReviewJobWithDone(slug,
+            status: "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n");
+        SeedGitRepository();
+        var worktree = Path.Combine(_workspace, "worktrees", slug);
+        Directory.CreateDirectory(Path.GetDirectoryName(worktree)!);
+        RunGit(_watchPath, "branch", WorktreeTaskLifecycle.BranchFor(slug));
+        RunGit(_watchPath, "worktree", "add", worktree, WorktreeTaskLifecycle.BranchFor(slug));
+
+        // Model the observed Windows failure deterministically: the shared
+        // checkout is red because its running backend holds OrchestratorApi.exe,
+        // while the task worktree is green. The gate must never invoke the red
+        // shared-checkout branch for a worktree run.
+        var buildGate = new FakeBuildTestGateRunner(repositoryPath =>
+            string.Equals(Path.GetFullPath(repositoryPath), Path.GetFullPath(worktree), StringComparison.OrdinalIgnoreCase)
+                ? new BuildTestGateResult(BuildTestGateVerdict.Ok, 0, 10, "build passed", "build gate passed", true, false)
+                : new BuildTestGateResult(BuildTestGateVerdict.Fail, 1, 10,
+                    "error MSB3026: Could not copy OrchestratorApi.exe because it is being used by another process",
+                    "dotnet build exit 1", true, false));
+        var aspect = new CountingAspect();
+        var orchestrator = BuildOrchestrator(aspect.Cli, maxReissues: 3, buildGate);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(Path.GetFullPath(worktree), Path.GetFullPath(buildGate.LastRepositoryPath!));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, slug)),
+            "a lock in the shared checkout must not make the task-worktree gate red");
+        Assert.True(aspect.Invocations > 0);
+    }
+
+    [Fact]
     public void BuildTestGate_DocOnlyDiff_IsSkippedByDiffClassifier()
     {
         Assert.False(BuildTestGateRunner.HasCodeDiff([
@@ -198,12 +232,16 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
 
     private sealed class FakeBuildTestGateRunner : IBuildTestGateRunner
     {
-        private readonly BuildTestGateResult _result;
+        private readonly Func<string, BuildTestGateResult> _result;
+
+        public string? LastRepositoryPath { get; private set; }
 
         public FakeBuildTestGateRunner(BuildTestGateResult result)
         {
-            _result = result;
+            _result = _ => result;
         }
+
+        public FakeBuildTestGateRunner(Func<string, BuildTestGateResult> result) => _result = result;
 
         public Task<BuildTestGateResult> RunAsync(
             string repositoryPath,
@@ -211,7 +249,38 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
             BuildProfile? profile,
             PostStepMode mode,
             TimeSpan timeout,
-            CancellationToken ct) => Task.FromResult(_result);
+            CancellationToken ct)
+        {
+            LastRepositoryPath = repositoryPath;
+            return Task.FromResult(_result(repositoryPath));
+        }
+    }
+
+    private void SeedGitRepository()
+    {
+        RunGit(_watchPath, "init", "-q", "-b", "main");
+        RunGit(_watchPath, "config", "user.email", "test@example.com");
+        RunGit(_watchPath, "config", "user.name", "test");
+        File.WriteAllText(Path.Combine(_watchPath, "seed.txt"), "seed");
+        RunGit(_watchPath, "add", "seed.txt");
+        RunGit(_watchPath, "commit", "-q", "-m", "seed");
+    }
+
+    private static void RunGit(string workingDirectory, params string[] args)
+    {
+        var psi = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("git did not start");
+        process.WaitForExit();
+        var error = process.StandardError.ReadToEnd();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)} failed: {error}");
     }
 
     private void SeedReviewJobWithDone(string slug, string status)
@@ -278,7 +347,7 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
             usage: null,
             oneShotRegistry: null,
             sessions: null,
-            git: null,
+            git: git,
             pipelineLog: pipelineLog,
             lintScssRunner: null,
             buildTestGateRunner: buildGate);

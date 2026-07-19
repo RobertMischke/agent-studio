@@ -1,0 +1,10 @@
+@if (related().length > 0) {
+  <div class="wrt" data-testid="wiki-related-tasks">
+    <div class="wrt__label">Related tasks</div>
+    <div class="wrt__cards">
+      @for (status of statuses(); track status.key) {
+        <app-task-reference-microcard [status]="status" />
+      }
+    </div>
+  </div>
+}

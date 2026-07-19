@@ -12,9 +12,10 @@ function workspacesWith(urls: RegistryWorkspaceListItem['projects'][number]['url
     id: 'ws-1', displayName: 'WS', sortOrder: 0, isDefault: true, color: null,
     createdAt: '2026-01-01T00:00:00Z',
     projects: [{
-      id: 'PROJ-001', displayName: 'Demo', shortCode: 'DEM', workspaceId: 'ws-1',
+      sourceType: 'local-folder', id: 'PROJ-001', displayName: 'Demo', shortCode: 'DEM', workspaceId: 'ws-1',
       color: null, cliDefault: null, modelDefault: null, sortOrder: 0,
-      storageLocation: 'c:/demo', urls, archived: false, createdAt: '2026-01-01T00:00:00Z',
+      storageLocation: 'c:/demo', repositoryPath: null, rootPath: null, repositoryUrl: null,
+      urls, archived: false, createdAt: '2026-01-01T00:00:00Z',
     }],
   }];
 }

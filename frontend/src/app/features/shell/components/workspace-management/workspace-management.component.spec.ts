@@ -59,6 +59,7 @@ describe('WorkspaceManagementComponent workspace-delete gating', () => {
 
   function project(id: string): RegistryProjectSummary {
     return {
+      sourceType: 'local-folder',
       id,
       displayName: id,
       shortCode: id,
@@ -68,6 +69,9 @@ describe('WorkspaceManagementComponent workspace-delete gating', () => {
       modelDefault: null,
       sortOrder: 0,
       storageLocation: `C:/proj/${id}`,
+      repositoryPath: null,
+      rootPath: null,
+      repositoryUrl: null,
       urls: [],
       archived: false,
       createdAt: '2026-01-01T00:00:00Z',

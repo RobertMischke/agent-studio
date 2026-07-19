@@ -1,9 +1,4 @@
-<!-- Resize splitter pinned to the panel's left edge. The orchestrator
-     sits on the right of the viewport, so dragging the handle left
-     widens the panel. The handle's width / hover affordance is set in
-     .scss; the cursor on body is toggled by startResize() so the
-     ew-resize cursor doesn't flicker off when the pointer briefly
-     leaves the 6 px hit-zone during a drag. -->
+<!-- Resize splitter pinned to the panel's left edge. -->
 @if (open()) {
   <div class="orch-resize"
        role="separator"
@@ -12,179 +7,175 @@
        data-testid="orch-side-sheet-resize"
        (mousedown)="startResize($event)"></div>
 }
+
 <app-sidesheet title="Orchestrator"
-               [subtitle]="subtitleText()"
                testid="orch-side-sheet"
                (closeRequest)="hide()">
   <div header-actions class="sheet__header-extras">
-    <div class="sheet__project-picker sheet__combo-wrap--active"
-         [class.sheet__combo-wrap--open]="comboOpen()"
-         data-testid="orch-side-sheet-project-combo-wrap">
-      <span class="sheet__select-icon">💬</span>
-      <input #comboInput
-             type="text"
-             class="sheet__combo-input"
-             data-testid="orch-side-sheet-project-combo"
-             [value]="comboQuery()"
-             [placeholder]="effectiveProject() ?? 'Pick a project...'"
-             [disabled]="pinned()"
-             (input)="onComboInput($event)"
-             (focus)="onComboFocus()"
-             (blur)="onComboBlur()"
-             (keydown)="onComboKeydown($event)" />
-      <span class="sheet__select-caret">▾</span>
-      @if (comboOpen() && filteredProjects().length > 0) {
-        <ul class="sheet__combo-list"
-            role="listbox"
-            data-testid="orch-side-sheet-project-combo-list">
-          @for (proj of filteredProjects(); track proj; let i = $index) {
-            <li class="sheet__combo-option"
-                role="option"
-                tabindex="0"
-                [attr.aria-selected]="proj === activeProject()"
-                [class.sheet__combo-option--active]="i === comboHighlight()"
-                [class.sheet__combo-option--current]="proj === activeProject()"
-                [attr.data-testid]="'orch-side-sheet-project-combo-option-' + proj"
-                (mousedown)="onComboOptionMousedown($event)"
-                (click)="selectComboOption(proj, $event)" (keydown.enter)="selectComboOption(proj, $event)" (keydown.space)="selectComboOption(proj, $event); $event.preventDefault()">
-              {{ proj }}
-            </li>
-          }
-        </ul>
-      }
-    </div>
+    <app-orchestrator-project-picker
+      [projects]="projects()"
+      [activeProject]="effectiveProject()"
+      [disabled]="pinned()"
+      (projectSelected)="selectProjectTab($event)" />
 
-    <div class="sheet__header-actions">
-      <button class="sheet__btn sheet__btn--pin"
-              type="button"
-              [class.sheet__btn--pinned]="pinned()"
-              [attr.aria-pressed]="pinned()"
-              (click)="togglePin()"
-              [cacTooltip]="pinned() ? 'Unpin — follow navigation again' : 'Pin this context — stop following navigation'"
-              data-testid="orch-side-sheet-pin">{{ pinned() ? '📌 Pinned' : '📌 Pin' }}</button>
-      @if (effectiveJobId() && effectiveWatchPath()) {
-        <button class="sheet__btn"
-                type="button"
-                (click)="onOpenVerboseDebug()"
-                [cacTooltip]="'Open the read-only Verbose Debug view for ' + (activeJobTitle() ?? 'the active task')"
-                data-testid="orch-side-sheet-verbose-debug">Debug</button>
-      }
-      <button class="sheet__btn"
-              type="button"
-              (click)="onOpenSettings()"
-              [cacTooltip]="'Open orchestrator settings'"
-              data-testid="orch-side-sheet-settings">⚙</button>
-      <button class="sheet__btn"
-              (click)="refresh()"
-              [disabled]="loading()"
-              [cacTooltip]="'Reload active project chat'"
-              data-testid="orch-side-sheet-refresh">
-        {{ loading() ? '...' : 'Refresh' }}
-      </button>
-    </div>
+    <button class="sheet__context-badge"
+            type="button"
+            aria-controls="orch-context-menu"
+            [attr.aria-expanded]="contextMenuOpen()"
+            [class.sheet__context-badge--open]="contextMenuOpen()"
+            (click)="toggleContextMenu()"
+            data-testid="orch-context-badge">
+      <span>Contexts</span>
+      <strong data-testid="orch-context-count">{{ contextCount() }}</strong>
+      <span class="sheet__context-caret" aria-hidden="true">{{ contextMenuOpen() ? '▴' : '▾' }}</span>
+    </button>
   </div>
 
-  <select hidden
-          data-testid="orch-side-sheet-project-select"
-          [value]="activeProject() ?? ''"
-          (change)="onProjectSelectChange($event)">
-    @for (proj of projects(); track proj) {
-      <option [value]="proj">{{ proj }}</option>
-    }
-  </select>
-
-  <main class="sheet__content">
-    <!-- "Where am I right now" locator: project · task · lane · live run.
-         Reusable per task-context so the task-focused orchestrator surface
-         (separate planning task) can drop it in unchanged. -->
-    <app-orchestrator-context-header
-      [project]="effectiveProject()"
-      [taskTitle]="effectiveJobTitle()"
-      [taskKey]="effectiveJobKey()"
-      [taskState]="effectiveJobState()"
-      [pinned]="pinned()"
-      [contextKey]="contextKey()"
-      [runActive]="activeRun() !== null"
-      [runModel]="activeRun()?.model ?? null"
-      [runStartedAt]="activeRun()?.startedAt ?? null" />
-
-    <nav class="sheet__scope-row" aria-label="Orchestrator scope">
-      <button type="button" class="sheet__scope sheet__scope--active">
-        <span aria-hidden="true">▱</span>
-        <span>Project</span>
-      </button>
-      <button type="button" class="sheet__scope" disabled>
-        <span aria-hidden="true">⌘</span>
-        <span>Global</span>
-      </button>
-      <span class="sheet__memory">● memory v9 · fresh 12m</span>
-    </nav>
-
-    @if (errorMsg(); as err) {
-      <div class="sheet__error">{{ err }}</div>
-    }
-
-    @if (effectiveProject()) {
-      <section class="sheet__chat">
-        <!-- Single Composer-owned chat surface. Project-chat's former
-             app-local virtual history list deliberately gives way here;
-             the library owns chat rendering while this host owns only
-             project selection, context, and endpoint wiring. -->
-          <cac-chat
-            variant="embedded"
-            [messages]="messages()"
-            [events]="events()"
-            [pending]="sending()"
-            [disabled]="sending()"
-            [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
-            [emptyState]="emptyStateText()"
-            [toolbarStart]="composerToolbarStart"
-            [toolbarEnd]="composerToolbarEnd"
-            [routingLabel]="composerRoutingLabel()"
-            (submitMessage)="onSubmit($event)"
-            (eventAction)="onChatEventAction($event)"
-            (toolbarAction)="onChatToolbarAction($event)">
-            <!-- F14: subtle one-line context indicator projected
-                 directly above the composer. Stays hidden when the
-                 operator has dismissed it for the current picker
-                 state, and re-appears on the next picker move. -->
-            @if (contextChipVisible()) {
-              <div chat-above-composer
-                   class="sheet__context-chip"
-                   data-testid="orch-side-sheet-context-chip">
-                <span class="sheet__context-chip-text"
-                      data-testid="orch-side-sheet-context-chip-text">{{ contextChipText() }}</span>
-                <button type="button"
-                        class="sheet__context-chip-close"
-                        (click)="dismissContextChip()"
-                        [cacTooltip]="'Hide the context block for the next send'"
-                        aria-label="Hide context"
-                        data-testid="orch-side-sheet-context-chip-close">×</button>
-              </div>
+  <main class="sheet__workspace">
+    @if (contextMenuOpen()) {
+      <section id="orch-context-menu"
+               class="sheet__context-menu"
+               aria-label="Chat contexts"
+               data-testid="orch-context-menu">
+        <header class="sheet__context-menu-head">
+          <div class="sheet__context-menu-title">
+            <h3>Chat contexts</h3>
+            @if (contextChipText(); as contextLabel) {
+              <p data-testid="orch-context-current">{{ contextLabel }}</p>
             }
-          </cac-chat>
+          </div>
+          <div class="sheet__context-actions" role="group" aria-label="Context actions">
+            <button type="button"
+                    [class.sheet__context-action--active]="pinned()"
+                    [attr.aria-pressed]="pinned()"
+                    (click)="togglePin()"
+                    data-testid="orch-side-sheet-pin">{{ pinned() ? 'Follow navigation' : 'Pin context' }}</button>
+            @if (effectiveJobId() && effectiveWatchPath()) {
+              <button type="button"
+                      (click)="onOpenVerboseDebug()"
+                      data-testid="orch-side-sheet-verbose-debug">Debug</button>
+            }
+            <button type="button"
+                    (click)="onOpenSettings()"
+                    data-testid="orch-side-sheet-settings">Settings</button>
+            <button type="button"
+                    (click)="refreshCurrentContext()"
+                    [disabled]="loading() || contextDigestState.refreshing()"
+                    data-testid="orch-side-sheet-refresh">
+              {{ contextDigestState.refreshing() ? 'Refreshing...' : (loading() ? 'Loading...' : 'Refresh') }}
+            </button>
+            <button type="button"
+                    [attr.aria-pressed]="!contextDismissed()"
+                    (click)="toggleNextMessageContext()"
+                    data-testid="orch-context-send-toggle">
+              {{ contextDismissed() ? 'Include context next' : 'Exclude context once' }}
+            </button>
+          </div>
+        </header>
 
-        <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
-          <button class="sheet__draft-btn sheet__draft-btn--primary"
-                  type="button"
-                  (click)="onCreateTaskFromYourMessage()"
-                  [disabled]="!canCreateTaskFromUserMessage()"
-                  [cacTooltip]="'Open Add Task pre-filled with the text you typed'"
-                  data-testid="orch-side-sheet-make-task-from-yours">
-            Make a task from your message
-          </button>
-          <button class="sheet__draft-btn"
-                  type="button"
-                  (click)="onCreateTaskFromLastReply()"
-                  [disabled]="!canCreateTaskFromReply()"
-                  [cacTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
-                  data-testid="orch-side-sheet-make-task">
-            Make a task from this reply
-          </button>
+        <div class="sheet__context-summary">
+          <app-orchestrator-context-header
+            [project]="effectiveProject()"
+            [taskTitle]="effectiveJobTitle()"
+            [taskKey]="effectiveJobKey()"
+            [taskState]="effectiveJobState()"
+            [pinned]="pinned()"
+            [contextKey]="contextKey()"
+            [runActive]="activeRun() !== null"
+            [runModel]="activeRun()?.model ?? null"
+            [runStartedAt]="activeRun()?.startedAt ?? null" />
+          <nav class="sheet__scope-row" aria-label="Orchestrator scope">
+            <span class="sheet__scope sheet__scope--active"
+                  aria-current="true"
+                  data-testid="orch-context-scope">{{ contextDigestState.scopeLabel() }}</span>
+            <span class="sheet__memory"
+                  [attr.title]="contextDigestState.statusTitle()"
+                  data-testid="orch-context-freshness">{{ contextDigestState.statusText() }}</span>
+          </nav>
         </div>
+
+        <app-chat-switcher-rail
+          [sessions]="contextSessions()"
+          [projects]="projects()"
+          [tasks]="jobService.jobs()"
+          [activeContextKey]="contextKey()"
+          [unreadContextKeys]="unreadContextKeys()"
+          (contextSelected)="selectChatContext($event)"
+          (locationRequested)="onNavigateToContext($event)" />
       </section>
     } @else {
-      <div class="sheet__no-project">No watched projects yet.</div>
+      <div class="sheet__content">
+        @if (errorMsg(); as err) {
+          <div class="sheet__error">{{ err }}</div>
+        }
+
+        @if (selectedContextKey() === 'global') {
+          <section class="sheet__no-project" data-testid="orchestrator-global-chat-empty">
+            Global orchestrator selected. This workspace has no global transcript yet.
+          </section>
+        } @else if (effectiveProject()) {
+          <section class="sheet__chat">
+            <div class="sheet__conversation" data-testid="orchestrator-conversation">
+              <cac-conversation-view
+                variant="embedded"
+                [events]="conversationEvents()"
+                [isRunning]="sending() || loading()"
+                [showHeader]="false"
+                [virtualised]="true"
+                bodyMaxHeight="100%"
+                (openVerboseDebug)="onOpenVerboseDebug()" />
+            </div>
+
+            @for (event of events(); track event.id) {
+              @if (event.actionLabel && hasChatEventAction(event.id)) {
+                <button type="button"
+                        class="sheet__event-action"
+                        (click)="onChatEventAction({ eventId: event.id })"
+                        [attr.data-testid]="'orch-conversation-event-action-' + event.id">
+                  {{ event.actionLabel }}
+                </button>
+              }
+            }
+
+            <!-- `cac-chat` is deliberately composer-only here. With no
+                 messages/events and an empty state, the library suppresses
+                 its legacy transcript body while retaining its composer. -->
+            <cac-chat
+              class="sheet__composer"
+              variant="embedded"
+              emptyState=""
+              [pending]="sending()"
+              [disabled]="sending()"
+              [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
+              [toolbarStart]="composerToolbarStart"
+              [toolbarEnd]="composerToolbarEnd"
+              [routingLabel]="composerRoutingLabel()"
+              (submitMessage)="onSubmit($event)"
+              (toolbarAction)="onChatToolbarAction($event)" />
+
+            <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
+              <button class="sheet__draft-btn sheet__draft-btn--primary"
+                      type="button"
+                      (click)="onCreateTaskFromYourMessage()"
+                      [disabled]="!canCreateTaskFromUserMessage()"
+                      [cacTooltip]="'Open Add Task pre-filled with the text you typed'"
+                      data-testid="orch-side-sheet-make-task-from-yours">
+                Make a task from your message
+              </button>
+              <button class="sheet__draft-btn"
+                      type="button"
+                      (click)="onCreateTaskFromLastReply()"
+                      [disabled]="!canCreateTaskFromReply()"
+                      [cacTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
+                      data-testid="orch-side-sheet-make-task">
+                Make a task from this reply
+              </button>
+            </div>
+          </section>
+        } @else {
+          <div class="sheet__no-project">No watched projects yet.</div>
+        }
+      </div>
     }
   </main>
 </app-sidesheet>

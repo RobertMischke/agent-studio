@@ -2,7 +2,10 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import type { OrchestratorLogEntry } from '../../../../features/orchestrator';
 import { TaskService } from '../../../../services/task.service';
+import { projectIdentity } from '../../../../services/project-identity.util';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
+import { LoadDistributionComponent } from '../load-distribution/load-distribution.component';
+import { taskNavigationHref } from '../../../task-detail/state/task-url';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
@@ -21,7 +24,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
-  imports: [FormsModule, GlobalOrchestratorCardComponent, TooltipDirective],
+  imports: [FormsModule, GlobalOrchestratorCardComponent, LoadDistributionComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-feed.html',
   styleUrl: './orchestrator-feed.scss'
@@ -36,6 +39,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   readonly kindFilter = signal<string>('signal');
   readonly projectFilter = signal<string>('all');
   readonly selectedEntry = signal<OrchestratorLogEntry | null>(null);
+  readonly activeView = signal<'activity' | 'load'>('activity');
   /** Timestamp of the entry currently being overridden (one at a time). */
   readonly overridingTs = signal<string | null>(null);
   /** Submit-in-flight flag so the user cannot double-send. */
@@ -149,7 +153,12 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
 
   navigateToTask(entry: OrchestratorLogEntry): void {
     if (!entry.jobId || !entry.watchPath) return;
-    window.location.assign(`?job=${encodeURIComponent(entry.jobId)}&watchPath=${encodeURIComponent(entry.watchPath)}`);
+    this.jobService.getDetail(entry.jobId, entry.watchPath).subscribe({
+      next: (detail) => {
+        const href = taskNavigationHref(detail.info);
+        if (href) window.location.assign(href);
+      },
+    });
   }
 
   isSelected(entry: OrchestratorLogEntry): boolean {
@@ -176,10 +185,15 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
+  /**
+   * Project colour-dot hue. Delegates to the shared project-identity util
+   * (the AGT-2034 convention, an 11-hue curated palette) so a project's dot
+   * in the feed matches the exact same hue it gets on board cards, studio
+   * tabs, and task micro-cards. The former local hash produced an
+   * off-palette hue that drifted from the rest of the app.
+   */
   projectHue(project: string): number {
-    let hash = 0;
-    for (const char of project) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
-    return Math.abs(hash) % 360;
+    return projectIdentity(project).hue;
   }
 
   startOverride(entry: OrchestratorLogEntry): void {

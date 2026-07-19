@@ -64,6 +64,8 @@ test('verbose debug overlay has Phases tab populated from chat events', async ({
   const rail = page.locator('app-orchestrator-side-sheet');
   await expect(rail).toHaveClass(/is-open/, { timeout: 5_000 });
   await page.waitForTimeout(500);
+  await rail.getByTestId('orch-context-badge').click();
+  await expect(rail.getByTestId('orch-context-menu')).toBeVisible();
 
   const debugBtn = rail.getByTestId('orch-side-sheet-verbose-debug');
   if (!(await debugBtn.isVisible())) {

@@ -35,7 +35,9 @@
                 <span class="cum__gauge-fill" [style.width.%]="w.barPct"></span>
               </div>
               <div class="cum__win-foot">
-                @if (w.limit) {
+                @if (w.remainingLabel) {
+                  <span class="cum__win-limit">{{ w.remainingLabel }}</span>
+                } @else if (w.limit) {
                   <span class="cum__win-limit">of {{ w.limit }}</span>
                 } @else {
                   <span class="cum__win-limit">used</span>
@@ -54,18 +56,20 @@
 
     <section class="cum__panel">
       <div class="cum__panel-head">
-        <h5 class="cum__panel-title">Top models</h5>
+        <h5 class="cum__panel-title">Recorded model usage</h5>
         <div class="cum__totals">
           <span class="cum__total">
             <span class="cum__total-label">Tokens</span>
             <span class="cum__total-value">{{ formatTokens(totals().tokens) }}</span>
           </span>
-          <span class="cum__total cum__total--cost">
+          <button type="button" class="cum__total cum__total--cost cum__cost-button"
+                  (click)="showTotalCalculation()">
             <span class="cum__total-label">Est. cost</span>
             <span class="cum__total-value">{{ totals().anyPriced ? formatUsd(totals().costUsd) : 'n/a' }}</span>
-          </span>
+          </button>
         </div>
       </div>
+      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {
@@ -88,8 +92,15 @@
                 </td>
                 <td class="cum__num">{{ formatTokens(m.inputTokens) }}</td>
                 <td class="cum__num">{{ formatTokens(m.outputTokens) }}</td>
-                <td class="cum__num cum__num--muted">{{ formatTokens(cacheTokens(m)) }}</td>
-                <td class="cum__num cum__num--cost">{{ costLabel(m.estimatedApiCostUsd, m.modelPriced) }}</td>
+                <td class="cum__num cum__num--muted"
+                    [cacTooltip]="m.cacheIncludedInInput ? 'Cached input is already included in the Input column for Codex' : 'Cache tokens are separate from the Input column'">
+                  {{ formatTokens(cacheTokens(m)) }}
+                </td>
+                <td class="cum__num cum__num--cost">
+                  @if (m.modelPriced) {
+                    <button type="button" class="cum__inline-cost" (click)="showModelCalculation(m)">{{ costLabel(m.estimatedApiCostUsd, true) }}</button>
+                  } @else { Unknown }
+                </td>
               </tr>
             }
           </tbody>
@@ -98,7 +109,9 @@
               <tr>
                 <td>Total · {{ totals().models }} models</td>
                 <td class="cum__num" colspan="3">{{ formatTokens(totals().tokens) }}</td>
-                <td class="cum__num cum__num--cost">{{ totals().anyPriced ? formatUsd(totals().costUsd) : 'n/a' }}</td>
+                <td class="cum__num cum__num--cost">
+                  <button type="button" class="cum__inline-cost" (click)="showTotalCalculation()">{{ totals().allPriced ? formatUsd(totals().costUsd) : 'Unknown' }}</button>
+                </td>
               </tr>
             </tfoot>
           }

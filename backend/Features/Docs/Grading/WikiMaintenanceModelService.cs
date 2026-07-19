@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace AgentStudio.Docs.Grading;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// The workspace-wide default model + level for wiki-grading maintenance runs

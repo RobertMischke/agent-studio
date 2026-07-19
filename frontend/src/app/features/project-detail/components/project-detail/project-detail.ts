@@ -2,18 +2,16 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import type { ProjectQueueHealth, PublishTarget, RunnerStatus } from '../../../../models/task.model';
+import type { ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
-import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { TokenSummaryBlockComponent } from '../../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
 import { ProjectDriftSectionComponent } from '../project-drift-section/project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from '../project-drift-overview-section/project-drift-overview-section';
-import { RegressionRadarComponent } from '../../../../features/regression-radar';
 import { ProjectSupervisorSectionComponent } from '../project-supervisor-section/project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from '../project-meta-cycle-section/project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from '../project-analysis-reports-section/project-analysis-reports-section';
@@ -69,7 +67,6 @@ export type ProjectDetailView =
     ProjectArchitectureSectionComponent,
     ProjectDriftSectionComponent,
     ProjectDriftOverviewSectionComponent,
-    RegressionRadarComponent,
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
@@ -90,7 +87,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   private readonly jobService = inject(TaskService);
   private readonly cliCatalog = inject(CliCatalogStore);
-  private readonly projectLookup = inject(ProjectLookupService);
 
   readonly settings = signal<ProjectSettingsRow | null>(null);
   readonly runnerStatus = signal<RunnerStatus | null>(null);
@@ -99,8 +95,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly projectPaths = signal<{ path: string; rootPath: string | null; repositoryPath: string | null } | null>(null);
   readonly pendingDecisions = signal<readonly { jobId: string; title: string; reason: string | null }[]>([]);
   readonly queueHealth = signal<ProjectQueueHealth | null>(null);
-  /** PUB-1: derived publish targets from the snapshot; rendered as Hub badges. */
-  readonly publishTargets = signal<readonly PublishTarget[]>([]);
   readonly queueRepairBusy = signal(false);
   readonly queueRepairMessage = signal<string | null>(null);
 
@@ -111,17 +105,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   autoCommitDraft = false;
   crashRecoveryDraft = true;
-  autoPushStrategyDraft: AutoPushStrategy = 'on-completed';
+  autoPushStrategyDraft: AutoPushStrategy = 'always-immediate';
   orchModelDraft = '';
-
-  // Working directory / repository path (Settings). Seeded once from the
-  // first snapshot, then left alone on later polls so an in-progress edit
-  // isn't clobbered every 5s - only a successful save re-syncs them.
-  rootPathDraft = '';
-  repositoryPathDraft = '';
-  private pathsSeeded = false;
-  readonly pathsSaveBusy = signal(false);
-  readonly pathsSaveMessage = signal<string | null>(null);
 
   // Per-CLI permission/sandbox mode (YOLO default). One row per CLI shows the
   // effective mode + where it came from (project override / global config /
@@ -249,13 +234,13 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     {
       id: 'on-completed',
       label: 'On completed',
-      tooltip: 'Default. Push only after the job commit reaches 6-completed, after review.',
-      isDefault: true
+      tooltip: 'Push only after the job commit reaches 6-completed, after review.'
     },
     {
       id: 'always-immediate',
       label: 'Immediate',
-      tooltip: 'Push right after auto-commit too. Higher rebase risk if review findings require rewriting local history.'
+      tooltip: 'Default. Push every platform-owned commit immediately; failures retry in the background.',
+      isDefault: true
     }
   ];
 
@@ -288,41 +273,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   });
 
   readonly activeRunner = computed(() => this.runnerStatus()?.projects?.[this.projectName()] ?? null);
-
-  /**
-   * PUB-1: badge-worthy publish targets only. Operator intent is "Ruhe" when
-   * nothing is publishable: a target with zero pending and no first-publish
-   * state produces no badge. First-publish-pending always shows (the operator
-   * has to publish it manually). Each entry carries pre-rendered text + tone.
-   */
-  readonly publishBadges = computed(() => {
-    return this.publishTargets()
-      .filter(t => t.firstPublishPending || (t.pendingCount != null && t.pendingCount > 0))
-      .map(t => ({
-        id: t.id,
-        kind: t.kind,
-        firstPublish: t.firstPublishPending,
-        text: this.publishBadgeText(t),
-        tooltip: this.publishBadgeTooltip(t),
-      }));
-  });
-
-  private publishBadgeText(t: PublishTarget): string {
-    if (t.firstPublishPending) return `${t.label} first publish pending`;
-    const head = t.currentVersion ? `${t.label} ${t.currentVersion}` : t.label;
-    const n = t.pendingCount ?? 0;
-    return `${head} → ${n} task${n === 1 ? '' : 's'} pending`;
-  }
-
-  private publishBadgeTooltip(t: PublishTarget): string {
-    if (t.firstPublishPending) {
-      const name = t.packageName ? ` (${t.packageName})` : '';
-      return `${t.label} package${name} has never been published. First publish is a manual, operator action.`;
-    }
-    const scope = t.kind === 'website' ? 'the website folder' : 'the package source';
-    const since = t.reference ? ` since ${t.reference}` : '';
-    return `${t.pendingCount} merged task${t.pendingCount === 1 ? '' : 's'} touching ${scope}${since} not yet published.`;
-  }
 
   queueHealthLabel(health: ProjectQueueHealth, emptyLabel: string, noun: string): string {
     if (health.issueCount === 0) return emptyLabel;
@@ -395,14 +345,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         this.recentEntries.set(snap.orchestratorLogTail ?? []);
         this.orchSession.set(snap.orchestratorSession ?? null);
         this.projectPaths.set(snap.paths ?? null);
-        if (!this.pathsSeeded && snap.paths) {
-          this.rootPathDraft = snap.paths.rootPath ?? '';
-          this.repositoryPathDraft = snap.paths.repositoryPath ?? '';
-          this.pathsSeeded = true;
-        }
         this.pendingDecisions.set(snap.reviewDecisionsPending ?? []);
         this.livePendingDecisions.set(snap.runnerPendingDecisions ?? []);
-        this.publishTargets.set(snap.publishTargets ?? []);
         this.queueHealth.set(snap.queueHealth ?? null);
       },
       error: () => { /* silent; keep last snapshot */ }
@@ -465,42 +409,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.jobService.setProjectAutoPushStrategy(this.projectName(), strategy).subscribe({
       next: () => this.refreshAll(true),
       error: () => this.refreshAll(true)
-    });
-  }
-
-  /**
-   * Persist the working directory / repository path via the registry PUT
-   * (PROJ-NNN id, resolved through ProjectLookupService since this panel
-   * only knows the display name). RootPath is what actually gates whether
-   * TaskRunnerService has a runner for this project - see the 2026-07-05
-   * "Agent Studio" mode-toggle 404 incident this UI exists to prevent from
-   * recurring silently.
-   */
-  savePaths(): void {
-    const id = this.projectLookup.getProjectDisplay(this.projectName()).id;
-    if (!id) {
-      this.pathsSaveMessage.set('Could not resolve this project\'s registry id.');
-      return;
-    }
-    this.pathsSaveBusy.set(true);
-    this.pathsSaveMessage.set(null);
-    const rootPath = this.rootPathDraft.trim();
-    const repositoryPath = this.repositoryPathDraft.trim();
-    this.jobService.updateRegistryProject(id, {
-      rootPath: rootPath || undefined,
-      clearRootPath: rootPath.length === 0,
-      repositoryPath: repositoryPath || undefined,
-      clearRepositoryPath: repositoryPath.length === 0,
-    }).subscribe({
-      next: () => {
-        this.pathsSaveBusy.set(false);
-        this.pathsSaveMessage.set('Saved. Takes effect for auto-pickup after the next backend restart.');
-        this.refreshAll(true);
-      },
-      error: (err) => {
-        this.pathsSaveBusy.set(false);
-        this.pathsSaveMessage.set(err?.error?.error || err?.message || 'Save failed.');
-      }
     });
   }
 

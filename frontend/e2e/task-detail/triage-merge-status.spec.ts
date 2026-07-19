@@ -1,4 +1,6 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Branch task: make the Human Review primary ("Merge into Develop")
@@ -23,6 +25,7 @@ const PROJECT = 'fixture';
 const WATCH_PATH = 'C:/fixtures/triage-merge-status';
 const JOB_ID = 'triage-merge-status-test';
 const MERGE_SHA = 'ddddddd9abc1234ef5678901234567890abcdef0';
+const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
 
 function json(route: Route, body: unknown): Promise<void> {
   return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
@@ -30,7 +33,7 @@ function json(route: Route, body: unknown): Promise<void> {
 
 interface MergeFact { mergeCommit: string | null }
 
-function detail(merge: MergeFact | null) {
+function detail(merge: MergeFact | null, hasDeliverable = true) {
   return {
     info: {
       id: JOB_ID,
@@ -48,7 +51,10 @@ function detail(merge: MergeFact | null) {
       execution: null,
       order: 1,
       commit: null,
-      commits: [],
+      commits: hasDeliverable ? [{
+        sha: 'abc1234abc1234abc1234abc1234abc1234abc1', shortSha: 'abc1234',
+        message: 'feat: task deliverable', filesChanged: 1, files: ['src/task.ts'], at: '2026-06-09T12:20:00Z',
+      }] : [],
       ownerClientId: 'local-default',
       createdAt: '2026-06-09T12:00:00Z',
       sessionChain: [],
@@ -130,12 +136,18 @@ async function installBaseRoutes(page: Page): Promise<void> {
  */
 async function installJobRoutes(
   page: Page,
-  opts: { detailMerge: MergeFact | null; landedState: 'on-branch-only' | 'merged-to-develop' | 'released-to-main'; viewMerge?: MergeFact | null },
+  opts: { detailMerge: MergeFact | null; landedState: 'on-branch-only' | 'merged-to-develop' | 'released-to-main'; viewMerge?: MergeFact | null; hasDeliverable?: boolean },
 ): Promise<void> {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   await page.route(new RegExp(`/api/tasks/${idEsc}/provenance(\\?|$)`), (route) =>
     json(route, provenanceView(opts.landedState, opts.viewMerge ?? opts.detailMerge)));
-  await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) => json(route, detail(opts.detailMerge)));
+  await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) => json(route, detail(opts.detailMerge, opts.hasDeliverable ?? true)));
+}
+
+async function saveEvidence(page: Page, fileName: string): Promise<void> {
+  if (!RESULTS_DIR) return;
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  await page.getByTestId('studio-triage-panel').screenshot({ path: path.join(RESULTS_DIR, fileName) });
 }
 
 async function openJob(page: Page): Promise<void> {
@@ -153,6 +165,18 @@ test.describe('Human Review acceptance primary is landed-state aware', () => {
     await expect(primary).toBeVisible();
     await expect(primary).toHaveText(/Merge into Develop/);
     await expect(page.getByTestId('studio-triage-merge-status')).toHaveCount(0);
+    await saveEvidence(page, 'merge-action-with-deliverable.png');
+  });
+
+  test('no task diff: offers Accept instead of Merge into Develop', async ({ page }) => {
+    await installBaseRoutes(page);
+    await installJobRoutes(page, { detailMerge: null, landedState: 'on-branch-only', hasDeliverable: false });
+    await openJob(page);
+
+    const primary = page.getByTestId('studio-triage-action-mark-done');
+    await expect(primary).toContainText('Accept');
+    await expect(primary).not.toContainText('Merge');
+    await saveEvidence(page, 'accept-action-without-deliverable.png');
   });
 
   test('merged to develop: relabels the primary to "Accept" without a redundant pill', async ({ page }) => {
@@ -167,6 +191,7 @@ test.describe('Human Review acceptance primary is landed-state aware', () => {
     // The former "Merged to develop" pill is gone; the on-develop state lives
     // once at the task commit (git pane landed ladder), not in this cluster.
     await expect(page.getByTestId('studio-triage-merge-status')).toHaveCount(0);
+    await saveEvidence(page, 'accept-action-already-merged.png');
   });
 
   test('released to main: still relabels the primary to "Accept" without a pill', async ({ page }) => {

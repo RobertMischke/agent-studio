@@ -1,0 +1,100 @@
+// Task-Server client registry (AGT-1924). Rows encode status with a kind badge
+// and calm styling for retired identities - never a left accent bar (R1). All
+// colours read --studio-* tokens (R5); spacing reads the --studio-spacing-* scale.
+
+:host { display: block; }
+
+.clients {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--studio-spacing-2);
+}
+
+.client {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-hover);
+  font-size: 11px;
+}
+.client--retired { opacity: 0.62; }
+
+.client__emoji {
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1;
+  width: 20px;
+  text-align: center;
+}
+
+.client__name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.client__display {
+  font-weight: 700;
+  color: var(--studio-fg-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.client__id {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--studio-fg-muted);
+}
+
+.client__kind {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  // stylelint-disable-next-line declaration-property-unit-disallowed-list -- 1px pill inset is sub-scale
+  padding: 1px var(--studio-spacing-2);
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-dim);
+}
+.client__kind[data-kind='human'] {
+  background: color-mix(in srgb, var(--studio-accent-3) 22%, transparent);
+  color: var(--studio-accent-3-strong);
+}
+.client__kind[data-kind='service'],
+.client__kind[data-kind='agent-instance'] {
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+}
+.client__kind[data-kind='retired'] { color: var(--studio-fg-muted); }
+
+.client__seen {
+  flex: 0 0 auto;
+  color: var(--studio-fg-dim);
+  min-width: 84px;
+}
+
+.client__owned {
+  flex: 0 0 auto;
+  color: var(--studio-fg-dim);
+  min-width: 60px;
+  text-align: right;
+}
+.client__owned strong { color: var(--studio-fg-strong); font-weight: 700; }
+
+.clients__empty {
+  margin: 0;
+  font-size: 11px;
+  color: var(--studio-fg-muted);
+  font-style: italic;
+}
+
+@media (max-width: 560px) {
+  .client { flex-wrap: wrap; }
+}

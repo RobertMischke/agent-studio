@@ -6,15 +6,42 @@ public static class OrchestratorSessionEndpoints
     {
         var group = app.MapGroup("/api/orchestrator/sessions");
 
-        group.MapGet("", (OrchestratorSessionRegistry registry) =>
+        group.MapGet("", (OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
         {
             if (registry.SessionsRoot == null)
                 return Results.Problem("TaskRepository is not configured.", statusCode: StatusCodes.Status500InternalServerError);
 
+            var statuses = turns.SnapshotStatuses()
+                .GroupBy(item => item.ContextKey, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.OrderBy(item => item.Status == OrchestratorTurnService.StatusActive ? 0 : 1).First(),
+                    StringComparer.Ordinal);
+            var sessions = registry.List().Select(session => new
+            {
+                session.ContextKey,
+                session.EncodedKey,
+                session.Kind,
+                session.ProjectId,
+                session.TaskKey,
+                session.CreatedAt,
+                session.UpdatedAt,
+                session.SessionId,
+                session.Model,
+                session.CumulativeInputTokens,
+                session.CumulativeOutputTokens,
+                session.CumulativeCacheReadTokens,
+                session.CumulativeCacheCreationTokens,
+                session.Calls,
+                session.LastUsedAt,
+                session.LastError,
+                RuntimeStatus = statuses.GetValueOrDefault(session.ContextKey)?.Status ?? "idle",
+                QueuePosition = statuses.GetValueOrDefault(session.ContextKey)?.QueuePosition ?? 0
+            });
             return Results.Ok(new
             {
                 root = registry.SessionsRoot,
-                sessions = registry.List()
+                sessions
             });
         });
 

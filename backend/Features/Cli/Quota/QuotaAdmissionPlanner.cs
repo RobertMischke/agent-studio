@@ -28,7 +28,8 @@ public sealed record QuotaAdmissionPlan(
     bool IsFallback,
     string Reason,
     DateTime? NextResetAt,
-    QuotaProjection? Projection)
+    QuotaProjection? Projection,
+    QuotaProjectionWarning? ProjectionWarning = null)
 {
     /// <summary>True when the runner should proceed to a launch (primary or fallback).</summary>
     public bool ShouldLaunch => Outcome is QuotaAdmissionOutcome.LaunchPrimary or QuotaAdmissionOutcome.LaunchFallback;
@@ -69,6 +70,8 @@ public static class QuotaAdmissionPlanner
         var cli = string.IsNullOrWhiteSpace(requestedCli)
             ? CliTypes.Claude
             : requestedCli!.Trim().ToLowerInvariant();
+        var primarySnapshot = snapshotFor(cli);
+        var projectionWarning = QuotaWindowProjection.FindWarning(primarySnapshot, nowUtc);
 
         // Strict = already over the configured cap. Admission = strict OR
         // projected-to-breach-before-reset. The router is fed the admission
@@ -96,7 +99,8 @@ public static class QuotaAdmissionPlanner
                 IsFallback: true,
                 Reason: BuildSwitchReason(cli, route),
                 NextResetAt: EarliestReset(snapshotFor(cli), nowUtc, caps, blockedOnly: false)?.ResetAt,
-                Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc));
+                Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc),
+                ProjectionWarning: projectionWarning);
         }
 
         // Primary path (no fallback taken): resolve the concrete primary model
@@ -119,7 +123,8 @@ public static class QuotaAdmissionPlanner
             return new QuotaAdmissionPlan(
                 QuotaAdmissionOutcome.Wait, cli, model, thinking,
                 IsFallback: false, Reason: reason, NextResetAt: blockedReset?.ResetAt,
-                Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc));
+                Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc),
+                ProjectionWarning: projectionWarning);
         }
 
         // 3) Primary is only PROJECTED to breach and there is no usable fallback.
@@ -135,14 +140,17 @@ public static class QuotaAdmissionPlanner
                 throttle ? QuotaAdmissionOutcome.Throttle : QuotaAdmissionOutcome.LaunchPrimary,
                 cli, model, thinking, IsFallback: false,
                 Reason: AppendReset($"{verb}: {admissionPrimary.DescribeReason()}", reset),
-                NextResetAt: reset?.ResetAt, Projection: proj);
+                NextResetAt: reset?.ResetAt, Projection: proj, ProjectionWarning: projectionWarning);
         }
 
         // 4) Healthy: launch on primary.
         return new QuotaAdmissionPlan(
             QuotaAdmissionOutcome.LaunchPrimary, cli, model, thinking,
-            IsFallback: false, Reason: "launch: quota ok", NextResetAt: null,
-            Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc));
+            IsFallback: false,
+            Reason: projectionWarning is null ? "launch: quota ok" : $"launch: quota projection ignored ({projectionWarning.Reason})",
+            NextResetAt: null,
+            Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc),
+            ProjectionWarning: projectionWarning);
     }
 
     /// <summary>
@@ -155,6 +163,10 @@ public static class QuotaAdmissionPlanner
     public static string DescribeLoadNumbers(QuotaAdmissionPlan plan)
     {
         var p = plan?.Projection;
+        var warning = plan?.ProjectionWarning;
+        if (warning is not null)
+            return $"projection ignored: {warning.Reason}; used {warning.CurrentUsedPct:0.#}% -> suspect {warning.ProjectedUsedPct:0.#}%; " +
+                   $"resetAt {warning.ResetAt:o}, assumed start {warning.AssumedStartAt:o}, elapsed fraction {warning.ElapsedFraction:0.###}";
         if (p is null)
         {
             var outcome = plan?.Outcome.ToString() ?? "unknown";

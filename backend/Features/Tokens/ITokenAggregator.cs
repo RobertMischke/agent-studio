@@ -16,7 +16,7 @@ namespace AgentStudio.Tokens;
 /// (<see cref="ProjectTokenUsageService"/>, <see cref="TokenSummaryService"/>,
 /// <see cref="WorkspaceTokensTimelineService"/>, <see cref="AdHocUsageService"/>)
 /// still hold pure fold helpers and parity fixtures, but new consumers use
-/// this interface. See <c>docs/domains/tokens.md</c> for the full plan.
+/// this interface. See <c>docs/system/domains/tokens.md</c> for the full plan.
 /// </para>
 /// </summary>
 public interface ITokenAggregator

@@ -26,9 +26,26 @@ export interface UpdateStatus {
   backendReachable: boolean;
   serviceVersion: string;
   productVersion: string;
+  runningVersion: RuntimeVersion | null;
+  mainVersion: BranchVersion | null;
+  developVersion: BranchVersion | null;
   mode: 'manual' | 'scheduled';
   verificationFailures: VerificationFailure[] | null;
   autoRollbackEnabled: boolean;
+}
+
+export interface RuntimeVersion {
+  version: string;
+  commit: string;
+  deployedAt: string;
+}
+
+export interface BranchVersion {
+  branch: 'main' | 'develop' | string;
+  commit: string;
+  commitAt: string | null;
+  aheadBy: number;
+  behindBy: number;
 }
 
 export interface CommitInfo {

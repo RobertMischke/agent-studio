@@ -23,6 +23,8 @@ namespace AgentStudio.Tests;
 ///   <item>A card with a live pickup-lock owner keeps its heartbeat and is left
 ///   alone (a healthy foreign/own run is not stolen).</item>
 ///   <item>Uptime: a just-moved card inside the grace window is left alone.</item>
+///   <item>Cross-monitor ownership: a valid steer-pending wait is left to the
+///   Slice B timeout instead of being mistaken for a dead process.</item>
 ///   <item>No work lost: the demotion never tears down a worktree; the task
 ///   returns to 2-ready under its slug with its evidence intact.</item>
 ///   <item>Idempotency + the active-job defensive guard.</item>
@@ -178,6 +180,51 @@ public sealed class RunLivenessMonitorTests : IDisposable
 
         Assert.True(Directory.Exists(folder), "a fresh card inside the grace must not be demoted");
         Assert.Empty(outcomes);
+    }
+
+    [Fact]
+    public async Task SteerPendingWait_IsExcludedFromBootAndUptimeRecovery()
+    {
+        // A steer wait deliberately has no live CLI heartbeat. Slice A must not
+        // demote it at its 30s grace (or immediately on boot), because Slice B
+        // owns the T=120s auto-answer/blocked decision.
+        const string slug = "bounded-steer-wait";
+        WriteJobWithSession(TaskStates.Progress, slug, sessionName: "s", chain: new[] { "s" });
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        WriteCliLog(folder, "agent emitted [[TASK_NEEDS_INPUT: ist iframe schon implementiert?]]");
+        SetMtimeOld(Path.Combine(folder, "logs", "cli-output.log"));
+        SteerPendingMarker.Write(folder, new SteerPendingRecord
+        {
+            WaitStartedAt = DateTime.UtcNow - TimeSpan.FromMinutes(5),
+            Kind = SteerPendingKinds.Steer,
+            Ask = "ist iframe schon implementiert?",
+        });
+
+        var (monitor, _) = Build();
+        Assert.Empty(await monitor.SweepAsync());
+        Assert.Empty(await monitor.AdoptOnBootAsync());
+
+        Assert.True(Directory.Exists(folder), "Slice A must leave valid steer-pending markers to Slice B");
+        Assert.True(SteerPendingMarker.Exists(folder));
+        Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "run-liveness.jsonl")));
+    }
+
+    [Fact]
+    public async Task MalformedSteerMarker_DoesNotBypassRunLivenessRecovery()
+    {
+        const string slug = "torn-steer-marker";
+        WriteJobWithSession(TaskStates.Progress, slug, sessionName: "s", chain: new[] { "s" });
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        WriteCliLog(folder, "dead run with a torn steer marker");
+        File.WriteAllText(Path.Combine(folder, SteerPendingMarker.FileName), "{not-json");
+
+        var (monitor, _) = Build();
+        var outcomes = await monitor.AdoptOnBootAsync();
+
+        Assert.Single(outcomes);
+        Assert.False(Directory.Exists(folder));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)),
+            "an unreadable marker must fall through to Slice A instead of waiting forever");
     }
 
     [Fact]

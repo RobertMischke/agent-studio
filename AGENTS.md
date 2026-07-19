@@ -13,17 +13,23 @@ apply only under `frontend/`.
 
 - Product overview: [README.md](README.md).
 - Future-only product direction: [ROADMAP.md](ROADMAP.md).
-- Documentation index: [docs/README.md](docs/README.md). Start there when you
+- Documentation index: [docs/start/README.md](docs/start/README.md). Start there when you
   do not already know the right document.
 - Operator setup and troubleshooting: [docs/operations/setup/](./docs/operations/setup/README.md).
 - Familiar runtime, CLI, permission, filesystem, runner, or state-machine
-  failure: search [docs/wiki/common-problems/](docs/wiki/common-problems/)
+  failure: search the thematic common-problems libraries
+  ([docs/operations/common-problems/](docs/operations/common-problems/) and
+  [docs/system/common-problems/](docs/system/common-problems/))
   before debugging from scratch.
+- Current state of a designated topic (so we do not re-discover the same ground):
+  [docs/concepts/designated-topics/](docs/concepts/designated-topics/README.md).
+  The opt-in `post-agents-wiki-sync` step keeps these pointers consistent and the
+  per-topic Current State pages fresh.
 
 ## Non-Negotiable Rules
 
 - UI work obeys the style-guide hard rules in
-  [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md).
+  [docs/quality/design/style-guide-hard-rules.md](./docs/quality/design/style-guide-hard-rules.md).
   Most-cited: no coloured left accent line or bar on cards, panels, rows,
   banners, or pill groups (encode status via background tint, badge, or dot).
 - Work only in the active dev checkout or assigned task worktree. Never edit
@@ -38,16 +44,24 @@ apply only under `frontend/`.
 - Do not commit, push, amend, or mutate remotes unless this exact interactive
   task asks for it. Managed task runs leave git ownership to the platform; see
   [docs/operations/git/commit-push-doctrine.md](./docs/operations/git/commit-push-doctrine.md).
+- Platform-owned commits are remote-durability boundaries: push them
+  immediately by default in every managed repository. Keep network work off
+  the run path, retry failures with bounded backoff, and surface final failures
+  as typed operator-feed events rather than treating a local commit as durable.
 - Written repo artifacts are English. Do not introduce em dashes. User-facing UI
   strings, backend errors shown to the UI, prompts, comments, docs, commits, and
   PR text are English.
 - When adding a document under `docs/`, add one row to
-  [docs/README.md](docs/README.md) in the same change.
+  [docs/start/README.md](docs/start/README.md) in the same change.
 - CLI crashes, run-outcome classification, retries, or orchestrator
   drive-to-conclusion: read
-  [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](docs/wiki/concepts/orchestrator-drive-to-conclusion.html)
+  [docs/concepts/orchestrator-drive-to-conclusion.html](docs/concepts/orchestrator-drive-to-conclusion.html)
   before changing that logic, and maintain it after. Append each incident to
   its case log (date, slug, what crashed, which terminal it reached).
+- A repeatedly busy orphan worktree is a bounded drive-to-conclusion failure:
+  after five preparation attempts, escalate it with a visible
+  `worktree-blocked` gate item containing the busy path, and pause retries.
+  Repeated `pick-reverted-no-run` notices remain rate-limited per task.
 - Agent shell policy: default to bash/sh, prefer existing `.sh` scripts, and
   avoid PowerShell-specific file creation.
 
@@ -55,13 +69,14 @@ apply only under `frontend/`.
 
 | Area | Read first | Owns |
 |---|---|---|
-| Runner | [docs/domains/runner.md](./docs/domains/runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops, and the standalone remote runner (`runner/`, [runbook](./docs/operations/setup/linux-runner-host.md)). |
-| Pipeline | [docs/domains/pipeline.md](./docs/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts, and the review/aspect evidence contract (branch diff + `results/` inventory + card mode; when "deliverables missing" is legitimate). |
-| Tasks | [docs/domains/tasks.md](./docs/domains/tasks.md) | Job folders, lane states, API mutations, task access. |
-| Frontend | [docs/domains/frontend.md](./docs/domains/frontend.md) | Angular surfaces, design system, Playwright proof. |
-| Design rules | [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md) | Hard, non-negotiable design rules (no left accent bars, full-bleed views, aggregate = sum of visible children, acute-only signals, both themes). |
-| CLI | [docs/domains/cli.md](./docs/domains/cli.md) | Claude, Codex, Copilot, Gemini drivers and quota probes. |
-| ADRs | [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) | Load-bearing decisions and deliberate non-goals. |
+| Runner | [docs/system/domains/runner.md](./docs/system/domains/runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops, and the standalone remote runner (`runner/`, [runbook](./docs/operations/setup/linux-runner-host.md)). |
+| Pipeline | [docs/system/domains/pipeline.md](./docs/system/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts, and the review/aspect evidence contract (branch diff + `results/` inventory + card mode; when "deliverables missing" is legitimate). |
+| Tasks | [docs/system/domains/tasks.md](./docs/system/domains/tasks.md) | Job folders, lane states, API mutations, task access, Epic lifecycle and archive-inclusive history, and the project onboarding and central-store contract. |
+| Frontend | [docs/system/domains/frontend.md](./docs/system/domains/frontend.md) | Angular surfaces, design system, Playwright proof. |
+| Style guides | [docs/quality/README.md](./docs/quality/README.md) | Technology-aware Angular and .NET guidance selected into coding prompts; incorporates the hard design baseline. |
+| Design rules | [docs/quality/design/style-guide-hard-rules.md](./docs/quality/design/style-guide-hard-rules.md) | Hard, non-negotiable design rules (no left accent bars, full-bleed views, aggregate = sum of visible children, acute-only signals, both themes). |
+| CLI | [docs/system/domains/cli.md](./docs/system/domains/cli.md) | Claude, Codex, Copilot, Gemini drivers and quota probes. |
+| ADRs | [docs/system/architecture/decisions/adr-archive.md](./docs/system/architecture/decisions/adr-archive.md) | Load-bearing decisions and deliberate non-goals. |
 | Skills | [.agents/skills/README.md](.agents/skills/README.md) | Portable specialist workflows. |
 
 ## Product Boundaries

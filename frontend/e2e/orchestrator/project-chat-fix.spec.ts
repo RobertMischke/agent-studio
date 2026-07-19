@@ -145,16 +145,15 @@ test.describe('Project chat fix - silent drop, sluggishness, parallel use', () =
     await composer.fill(taskText);
     await page.getByTestId('chat-send').click();
 
-    // The error turn should land as an orchestrator chat message rendering
-    // the errorMessage in its footer. Chat bubbles use data-testid
-    // `chat-msg-{role}`; the error element is `.chat__msg-error`.
+    // The error turn lands in the canonical orchestrator message group.
     await expect(
-      page.locator('[data-testid="chat-msg-orchestrator"]').filter({ hasText: 'orchestrator session has not booted' }).first()
+      page.locator('[data-testid="conversation-message-message.orchestrator"]')
+        .filter({ hasText: 'orchestrator session has not booted' }).first()
     ).toBeVisible({ timeout: 5_000 });
 
     // The user's typed message must remain visible (not silently dropped).
     await expect(
-      page.locator('[data-testid="chat-msg-user"]').filter({ hasText: 'Ready-Lane' }).first()
+      page.locator('[data-testid="conversation-message-message.user"]').filter({ hasText: 'Ready-Lane' }).first()
     ).toBeVisible();
 
     // CONTRACT: the side-sheet exposes a "Make a task from your message"

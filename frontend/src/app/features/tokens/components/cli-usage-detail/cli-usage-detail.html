@@ -1,4 +1,5 @@
 <section class="cud" data-testid="cli-usage-detail">
+  @if (!workspaceOnly()) {
   <header class="cud__head">
     <div>
       <h3 class="cud__title">
@@ -46,6 +47,7 @@
       }
     </div>
   </section>
+  }
 
   <section class="cud__trend" data-testid="cli-usage-detail-trend">
     <div class="cud__trend-head">
@@ -98,6 +100,7 @@
     </section>
   }
 
+  @if (!workspaceOnly()) {
   <div class="cud__sections">
     @for (row of quotaRows(); track row.cliType) {
       <section class="cud__cli" [attr.data-testid]="'cli-usage-detail-cli-' + row.cliType">
@@ -208,6 +211,8 @@
       </section>
     }
   </div>
+
+  }
 
   <section class="cud__jobs" data-testid="cli-usage-detail-top-jobs">
     <h4>Top tasks</h4>

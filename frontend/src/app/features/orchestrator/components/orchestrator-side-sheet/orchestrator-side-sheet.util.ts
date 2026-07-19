@@ -1,4 +1,5 @@
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
+import type { ChatEvent, ConversationEvent, RawLineRange } from 'coding-agent-chat/core';
 
 /**
  * Pure helpers for the orchestrator side sheet. Extracted from the
@@ -7,6 +8,121 @@ import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
  * belongs. These functions carry no Angular dependency and are unit-tested
  * directly.
  */
+
+/**
+ * Build the sample inline event cards seeded by the `?demoEvents=1` URL
+ * flag. Pure data factory extracted from the component so the controller
+ * stays within its size budget; `baseTs` is the epoch-ms anchor the caller
+ * passes in (typically `Date.now()`) and every card is offset from it so
+ * the demo timeline renders in a stable order. Covers the six event kinds
+ * (tool-call, watchdog, rate-limit, session-recovered, memory-refreshed,
+ * decision) plus the four decision sub-types the chat head row glyphs.
+ */
+export function buildDemoEvents(baseTs: number): ChatEvent[] {
+  const iso = (offsetMs: number) => new Date(baseTs + offsetMs).toISOString();
+  return [
+    {
+      id: 'demo-tool-call-1',
+      kind: 'tool-call',
+      timestamp: iso(0),
+      summary: 'Read backend/Services/Runner/PhaseAwareWatchdog.cs',
+      detail:
+        '```\n'
+        + '/* Result: 412 lines, last modified 2026-05-04 */\n'
+        + 'PhaseAwareWatchdog observes per-phase silence budgets;\n'
+        + 'FormatBudgetReason emits a one-line summary plus the\n'
+        + 'previous CLI event that preceded the silence so the\n'
+        + 'operator can see what the agent was doing.\n'
+        + '```'
+    },
+    {
+      id: 'demo-watchdog-1',
+      kind: 'watchdog',
+      timestamp: iso(45_000),
+      severity: 'warn',
+      summary: 'Tool burst phase silent for 90s (budget: 60s)',
+      detail:
+        '**Phase:** tool-burst\n\n**Silence:** 90s\n\n**Budget:** 60s\n\n'
+        + 'Last event before the silence:\n\n'
+        + '```\n'
+        + '● Read frontend/src/app/components/chat/chat.component.ts\n'
+        + '  L1-100\n'
+        + '```'
+    },
+    {
+      id: 'demo-rate-limit-1',
+      kind: 'rate-limit',
+      timestamp: iso(90_000),
+      severity: 'warn',
+      summary: 'Anthropic 5h window: 78% used, resets in 1h 12m',
+      detail:
+        '```\n'
+        + '{\n'
+        + '  "type": "rate_limit_event",\n'
+        + '  "window": "5h",\n'
+        + '  "used_pct": 78,\n'
+        + '  "reset_at": "2026-05-06T13:12:00Z"\n'
+        + '}\n'
+        + '```'
+    },
+    {
+      id: 'demo-session-recovered-1',
+      kind: 'session-recovered',
+      timestamp: iso(120_000),
+      summary: '1 turn lost, retry succeeded',
+      detail:
+        'The model session dropped between the user steer and the\n'
+        + 'agent reply (network blip, ~7s). Retry succeeded against\n'
+        + 'the same session id; the lost turn was re-issued and the\n'
+        + 'agent picked up at the same instruction.'
+    },
+    {
+      id: 'demo-memory-refreshed-1',
+      kind: 'memory-refreshed',
+      timestamp: iso(150_000),
+      summary: 'sourced from 6 status files + roadmap',
+      detail:
+        '**Sources refreshed:**\n\n'
+        + '- `.orchestrator/status/*.md` (6 files)\n'
+        + '- `ROADMAP.md`\n\n'
+        + 'Working memory updated; the next agent reply will reflect\n'
+        + 'the latest project state.'
+    },
+    // F15: decision-event seeds. Each `decisionType` picks a distinct
+    // glyph in the chat head row; covers the four orchestrator-side
+    // verdict kinds (decision, reissue, heuristic, giveup).
+    {
+      id: 'demo-decision-1',
+      kind: 'decision',
+      decisionType: 'decision',
+      timestamp: iso(180_000),
+      summary: 'accept-as-done after 1 reissue',
+    },
+    {
+      id: 'demo-decision-2',
+      kind: 'decision',
+      decisionType: 'reissue',
+      timestamp: iso(210_000),
+      summary: 'fast NoOp on UserContinue with follow-up; re-issuing once',
+    },
+    {
+      id: 'demo-decision-3',
+      kind: 'decision',
+      decisionType: 'heuristic',
+      timestamp: iso(240_000),
+      summary: 'no sentinel matched; falling back to heuristic verdict',
+      severity: 'warn',
+    },
+    {
+      id: 'demo-decision-4',
+      kind: 'decision',
+      decisionType: 'giveup',
+      timestamp: iso(270_000),
+      summary: 'second reissue produced no progress; asking user',
+      severity: 'warn',
+    }
+  ];
+}
 
 /**
  * Hide any server user turn that an in-flight local turn already represents.
@@ -26,12 +142,12 @@ import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
  * local turn.
  */
 export function suppressLocalDuplicates(
-  server: OrchestratorChatTurn[],
-  local: (OrchestratorChatTurn & { localAttachments?: { alt: string; previewUrl: string }[] })[]
+  server: readonly OrchestratorChatTurn[],
+  local: readonly (OrchestratorChatTurn & { localAttachments?: { alt: string; previewUrl: string }[] })[]
 ): OrchestratorChatTurn[] {
-  if (local.length === 0) return server;
+  if (local.length === 0) return [...server];
   const localUsers = local.filter((t) => t.role === 'user');
-  if (localUsers.length === 0) return server;
+  if (localUsers.length === 0) return [...server];
   const suppress = new Set<string>();
   for (const lt of localUsers) {
     const ltAttCount = lt.localAttachments?.length ?? lt.attachments?.length ?? 0;
@@ -46,7 +162,182 @@ export function suppressLocalDuplicates(
       break;
     }
   }
-  return suppress.size === 0 ? server : server.filter((s) => !suppress.has(s.id));
+  return suppress.size === 0 ? [...server] : server.filter((s) => !suppress.has(s.id));
+}
+
+export type OptimisticOrchestratorChatTurn = OrchestratorChatTurn & {
+  pending?: boolean;
+  localAttachments?: { alt: string; previewUrl: string }[];
+};
+
+/**
+ * Project the side sheet's transport-specific transcript into the canonical
+ * `coding-agent-chat` conversation grammar.
+ *
+ * The orchestrator endpoint returns simple user/orchestrator turns while the
+ * optimistic path temporarily holds a second, local representation of the
+ * newest user turn. The next-gen conversation view must receive one ordered
+ * event stream, so this adapter suppresses that overlap, resolves both local
+ * and persisted attachment URLs, and translates the legacy inline event-card
+ * contract into the closest semantic `ConversationEvent` kind.
+ */
+export function buildOrchestratorConversationEvents(
+  serverTurns: readonly OrchestratorChatTurn[],
+  localTurns: readonly OptimisticOrchestratorChatTurn[],
+  inlineEvents: readonly ChatEvent[],
+  projectName: string | null,
+  source: string,
+): ConversationEvent[] {
+  const persisted = suppressLocalDuplicates(serverTurns, localTurns);
+  const turns: readonly OptimisticOrchestratorChatTurn[] = [...persisted, ...localTurns];
+  const projected: { event: ConversationEvent; inputIndex: number }[] = [];
+
+  turns.forEach((turn, index) => {
+    const localAttachments = turn.localAttachments?.map(attachment => ({
+      alt: attachment.alt,
+      url: attachment.previewUrl,
+    })) ?? [];
+    const persistedAttachments = (turn.attachments ?? []).map(attachment => ({
+      alt: attachment.alt,
+      url: resolveAttachmentUrl(projectName, attachment.relativePath),
+    }));
+    const attachments = localAttachments.length > 0 ? localAttachments : persistedAttachments;
+    const error = turn.errorMessage?.trim();
+    const body = error
+      ? `${turn.text ? `${turn.text}\n\n` : ''}**Error:** ${error}`
+      : turn.text;
+
+    projected.push({
+      inputIndex: index,
+      event: {
+        id: turn.id,
+        kind: turn.role === 'user' ? 'message.user' : 'message.orchestrator',
+        timestamp: turn.ts,
+        severity: error ? 'error' : undefined,
+        model: turn.model ?? turn.tokenUsage?.model ?? null,
+        thinkingLevel: turn.tokenUsage?.thinkingLevel ?? null,
+        rawRange: rangeFor(source, index),
+        body,
+        actor: turn.role === 'user' ? 'You' : 'Orchestrator',
+      },
+    });
+
+    attachments.forEach((attachment, attachmentIndex) => {
+      projected.push({
+        inputIndex: index + (attachmentIndex + 1) / (attachments.length + 1),
+        event: {
+          id: `${turn.id}:attachment:${attachmentIndex}`,
+          kind: 'artifact.image',
+          timestamp: turn.ts,
+          rawRange: rangeFor(source, index),
+          caption: attachment.alt,
+          url: attachment.url,
+          sourcePath: attachment.url,
+          durablePath: null,
+          sourceTool: 'orchestrator-chat',
+        },
+      });
+    });
+  });
+
+  inlineEvents.forEach((event, index) => {
+    const inputIndex = turns.length + index;
+    projected.push({
+      inputIndex,
+      event: projectInlineEvent(event, rangeFor(source, inputIndex)),
+    });
+  });
+
+  return projected
+    .sort((left, right) => compareTimestamp(left.event.timestamp, right.event.timestamp)
+      || left.inputIndex - right.inputIndex)
+    .map(item => item.event);
+}
+
+function projectInlineEvent(event: ChatEvent, rawRange: RawLineRange): ConversationEvent {
+  const base = {
+    id: event.id,
+    timestamp: event.timestamp,
+    severity: event.severity,
+    rawRange,
+  } as const;
+
+  switch (event.kind) {
+    case 'tool-call':
+      return {
+        ...base,
+        kind: 'toolBurst',
+        count: 1,
+        families: { other: 1 },
+        failures: event.severity === 'error' ? 1 : 0,
+        durationMs: 0,
+        samples: { other: event.summary },
+        collapsedByDefault: true,
+      };
+    case 'watchdog':
+      return {
+        ...base,
+        kind: 'supervisor.wait',
+        state: event.severity === 'error' || /\bkill(?:ed)?\b/i.test(event.summary) ? 'killed' : 'quiet',
+        quietSeconds: secondsFrom(event.summary),
+        reason: event.detail ? `${event.summary}\n\n${event.detail}` : event.summary,
+      };
+    case 'session-recovered':
+      return {
+        ...base,
+        kind: 'supervisor.wait',
+        state: 'resumed',
+        quietSeconds: 0,
+        reason: event.detail ? `${event.summary}\n\n${event.detail}` : event.summary,
+      };
+    case 'decision':
+      return {
+        ...base,
+        kind: 'decision.orchestrator',
+        decisionType: event.decisionType ?? 'decision',
+        reason: event.summary,
+        evidence: event.detail,
+        action: event.actionLabel,
+      };
+    case 'rate-limit':
+    case 'update':
+    case 'task':
+    case 'memory-refreshed':
+      return {
+        ...base,
+        kind: 'system.status',
+        category: event.kind,
+        label: inlineEventLabel(event.kind),
+        explanation: event.detail ? `${event.summary}\n\n${event.detail}` : event.summary,
+        nextStep: event.actionLabel,
+      };
+  }
+}
+
+function rangeFor(source: string, index: number): RawLineRange {
+  const line = index + 1;
+  return { source, start: line, end: line };
+}
+
+function compareTimestamp(left: string, right: string): number {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  if (!Number.isFinite(leftMs) || !Number.isFinite(rightMs)) return 0;
+  return leftMs - rightMs;
+}
+
+function secondsFrom(summary: string): number {
+  const match = /\b(\d+)\s*s(?:ec(?:ond)?s?)?\b/i.exec(summary);
+  return match ? Number(match[1]) : 0;
+}
+
+function inlineEventLabel(kind: Extract<ChatEvent['kind'], 'rate-limit' | 'update' | 'task' | 'memory-refreshed'>): string {
+  switch (kind) {
+    case 'rate-limit': return 'Rate limit';
+    case 'update': return 'Update';
+    case 'task': return 'Task';
+    case 'memory-refreshed': return 'Memory refreshed';
+  }
 }
 
 /**
