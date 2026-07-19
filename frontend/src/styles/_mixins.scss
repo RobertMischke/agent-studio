@@ -9,7 +9,7 @@
  * inside the rule that needs it. The mixins read studio-shell tokens
  * so theming flips for free.
  *
- * See docs/frontend/audits/scss-quality.md "Wave E" for the rationale.
+ * See docs/quality/frontend/audits/scss-quality.md "Wave E" for the rationale.
  */
 
 /* ---------------------------------------------------------------------
@@ -124,4 +124,60 @@
     transition: background 0.15s ease;
   }
   &:hover::-webkit-scrollbar-thumb { background: $thumb; }
+}
+
+/* ---------------------------------------------------------------------
+ * knowledge-card / knowledge-card-head / knowledge-card-icon
+ *
+ * The uniform card shape of the wiki landing dashboard (project-wiki-
+ * section): 1px border + radius on the paper reading surface, plus the
+ * shared card head (icon chip + uppercase title + trailing meta). Used
+ * by wiki-starred-panel, wiki-home-links, wiki-pulse, workbench-inbox,
+ * wiki-grade-panel, and project-style-guides-panel so every landing
+ * card reads as one family. The tokens fall back to studio-shell
+ * surfaces when a card is mounted outside the wiki paper pane.
+ * ------------------------------------------------------------------- */
+@mixin knowledge-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-3);
+  min-width: 0;
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--pwiki-paper-border, var(--studio-border));
+  border-radius: 9px;
+  background: var(--pwiki-paper-bg, var(--studio-bg-editor));
+}
+
+@mixin knowledge-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+  min-height: 22px;
+  color: var(--pwiki-paper-fg, var(--studio-fg-strong));
+
+  h3,
+  h4 {
+    margin: 0;
+    overflow: hidden;
+    color: inherit;
+    font-size: 0.76rem;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+}
+
+@mixin knowledge-card-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--studio-accent-3);
+  background: color-mix(in srgb, var(--studio-accent-3) 12%, transparent);
 }

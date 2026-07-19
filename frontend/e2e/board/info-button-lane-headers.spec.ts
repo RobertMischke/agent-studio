@@ -7,7 +7,7 @@ import { api, BACKEND } from '../helpers/api';
  * Lane-info on lane headers.
  *
  * Every lane carries an `<app-info-button>`: each maps to a committed
- * concept doc (`docs/in-app-help/lane-guides/lane-*.md`, the single source of
+ * concept doc (`docs/app/help/lane-guides/lane-*.md`, the single source of
  * truth) fetched from `GET /api/concept-docs/{topic}` and shown in the
  * centered lane-info modal (the app-wide `<app-dialog>` surface, so it
  * flips light/dark from studio tokens).

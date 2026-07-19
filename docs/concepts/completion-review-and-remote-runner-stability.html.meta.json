@@ -1,0 +1,124 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2129",
+      "title": "EPIC: Remote & Verteilte Orchestrierung (die Reise: alles auf den Runner)",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2155",
+      "title": "AGT-2155: KRITISCH Verify-/Build-Gates kollidieren bei Parallelbetrieb",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2182",
+      "title": "P0 Remote attempt authority: persisted RunAttempt and ReviewAttempt with restart-safe fencing",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2183",
+      "title": "P0 Remote runner outbox: immutable Result-SHA handoff and idempotent evidence replay",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2184",
+      "title": "P0 Remote Review Executor: exact-SHA materialization and all review aspects in isolation",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2185",
+      "title": "P0 Remote CLI outcomes: typed abort causes, bounded recovery, and honest budgets",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2186",
+      "title": "P1 Remote capability health: targeted drain, half-open canary, and healthy-slot preservation",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2187",
+      "title": "P0 release gate: completion-review incident replay, Remote canary, and operator handoff",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2121",
+      "title": "KRITISCH Remote-Reise: external_completion muss die volle Review-Pipeline durchlaufen",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2168",
+      "title": "Completion judge: semantically interpret final-attempt prose with typed evidence",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2173",
+      "title": "BUG: Remote in-progress cards hide the runner and show shared develop instead of the task worktree",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2174",
+      "title": "Pre-commit gate: suspicious artifacts and secrets must be reported before platform snapshot",
+      "linkedAt": "2026-07-13T18:24:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2142",
+      "title": "AGT-2142: Host-Telemetrie historisch - CPU/Memory/Load/Throttling-Aufzeichnung je Remote-Host, Verlauf in der Host-Ansicht",
+      "linkedAt": "2026-07-13T18:45:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2170",
+      "title": "Integrate typed Runner events and replay into Agent Studio",
+      "linkedAt": "2026-07-13T18:07:00Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2179",
+      "title": "Remote runner claim must respect paused project mode",
+      "linkedAt": "2026-07-13T19:53:10Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2189",
+      "title": "P0 Remote project admission: enforce maxParallelism and truthful eligible queue/slot projection",
+      "linkedAt": "2026-07-13T19:53:10Z",
+      "source": "manual"
+    }
+  ],
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Completion, Review, and Remote Runner Stability",
+  "source": {
+    "path": "docs/concepts/completion-review-and-remote-runner-stability.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "91dabbb2a5ddb2817e8a01534a42a2113b358a2b65d0ed9c4bedaec2e96c8823",
+      "sizeBytes": 112322,
+      "lineCount": 1525,
+      "capturedAt": "2026-07-18T18:45:50.382Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

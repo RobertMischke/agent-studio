@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Härtung der verteilten Ausführung — Konzept-Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;      /* Branch-Identität: develop */
+    --taskbr: #4a3aa7;       /* Branch-Identität: task/<slug> */
+    --salvage: #eb6834;      /* Branch-Identität: runner/<id>/<key> (Salvage) */
+    --rescue: #b58500;       /* Branch-Identität: rescue/WIP */
+    --ok: #008300;           /* Status gut (immer mit Icon+Text) */
+    --bad: #c93736;          /* Status Problem (immer mit Icon+Text) */
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  /* SVG-Rollen */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-commit { stroke-width: 2.5; fill: var(--surface-1); }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Konzept-Workbench · Agent Studio</p>
+  <h1>Härtung der verteilten Ausführung</h1>
+  <p class="lede">Warum Arbeit verloren ging, warum Reviews leere Diffs sahen, und wie das System so
+  umgebaut wird, dass beides strukturell unmöglich wird: Ergebnis als Vertrag, gefencte Schreiber,
+  hermetische Verifikation.</p>
+  <div class="meta">
+    <span><b>Stand:</b> 18.07.2026</span>
+    <span><b>Anlass:</b> Grade-D-Welle 17.07. (Spätfolge der Phantom-Welle 11.07.)</span>
+    <span><b>Historie:</b> <code>historie.html</code> (diese Workbench, Datei historie.html)</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#tldr">TL;DR — die fünf Kernaussagen</a></li>
+    <li><a href="#system">§1 Systembild: wer schreibt, wer urteilt</a></li>
+    <li><a href="#git">§2 Das Git-Problem, visuell</a></li>
+    <li><a href="#zeit">§3 Zeitachsen: Vorfall &amp; Run-Lebenslauf</a></li>
+    <li><a href="#schreiber">§4 Schreibmodell &amp; Fencing (und: was, wenn Agenten trotzdem schreiben)</a></li>
+    <li><a href="#hermetik">§5 Hermetische Verifikation, ausgebaut</a></li>
+    <li><a href="#grade">§6 Der Grade-Step bleibt — und wird ehrlich gefüttert</a></li>
+    <li><a href="#programm">§7 Härtungsprogramm &amp; Roadmap</a></li>
+    <li><a href="#historie">§8 Historie: Summary-Block</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>TL;DR — die fünf Kernaussagen</h4>
+  <ul>
+    <li><b>Evidenz ist heute Konvention, kein Vertrag.</b> Es gibt keine einzige, unveränderliche Antwort auf
+        „Welchen Code hat dieser Run produziert?“ — Reviews raten (Run-SHAs, sonst Branch-Fallback). Ziel:
+        ein <b>Attempt-Record mit Result-SHA</b>, den Grade-Step, Gate, Merge und UI <i>ausschließlich</i> konsumieren.</li>
+    <li><b>Der Remote-Runner schreibt in eine andere Branch-Welt</b> (<code>runner/&lt;id&gt;/&lt;key&gt;</code>) als die,
+        die reviewt wird (<code>task/&lt;slug&gt;</code>). Ohne automatische Integration entstehen Phantome — Grade D war jeweils <i>korrekt</i>.</li>
+    <li><b>Mehrdeutigkeit wird fail-closed,</b> nie optimistisch: unbekanntes Ergebnis → Quarantäne mit konservierter Evidenz, niemals „vermutlich fertig“.</li>
+    <li><b>Verifikation wird hermetisch:</b> Gates laufen auf der exakten Result-SHA in einem isolierten Worktree,
+        Timing läuft auf virtueller Zeit — Testurteile hängen am Code, nicht am Maschinenzustand.</li>
+    <li><b>Der Grade-Step bleibt.</b> Er ist die Nutzer-Wahrheitsanzeige („war der Code da?“). Die Härtung ändert nur,
+        <i>welchen</i> Diff er garantiert bekommt.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<h2 id="system"><span class="no">§1</span>Systembild: wer schreibt, wer urteilt</h2>
+<p class="dim">Vier Akteursgruppen mutieren Zustand; zwei Instanzen urteilen. Jede Härtungsmaßnahme
+setzt an einer der gestrichelten Grenzen an.</p>
+
+<figure>
+<svg viewBox="0 0 1040 470" role="img" aria-label="Systemdiagramm: Task-Server, Pipeline, Runner, Git, Reviews">
+  <!-- Task-Server -->
+  <rect class="s-node" x="20" y="30" width="300" height="180" rx="10"/>
+  <text class="s-label" x="40" y="58">Task-Server / Board</text>
+  <rect class="s-node2" x="40" y="76" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="52" y="96">Lanes: backlog → ready → progress → review …</text>
+  <rect class="s-node2" x="40" y="114" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="52" y="134">TaskStateMachine + LaneMutex (Moves, Deletes)</text>
+  <rect class="s-node2" x="40" y="152" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="52" y="172">API-Mutationen: X-Client-Id, künftig Attempt-Fence</text>
+
+  <!-- Pipeline -->
+  <rect class="s-node" x="370" y="30" width="300" height="180" rx="10"/>
+  <text class="s-label" x="390" y="58">Pipeline (pro Karte)</text>
+  <rect class="s-node2" x="390" y="76" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="402" y="96">Pre-Steps → Agent-Run → Post-Steps</text>
+  <rect class="s-node2" x="390" y="114" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="402" y="134">post: commit-attribution · orchestrator-review</text>
+  <rect class="s-node2" x="390" y="152" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="402" y="172">post: code-review-grade · build-test-gate</text>
+
+  <!-- Runner -->
+  <rect class="s-node" x="720" y="30" width="300" height="180" rx="10"/>
+  <text class="s-label" x="740" y="58">Runner</text>
+  <rect class="s-node2" x="740" y="76" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="752" y="96">lokal: Slots + Worktrees (Temp/ass-worktrees)</text>
+  <rect class="s-node2" x="740" y="114" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="752" y="134">remote: Daemon agent-runner-01 (Lease/Claim)</text>
+  <rect class="s-node2" x="740" y="152" width="260" height="30" rx="6"/>
+  <text class="s-sub" x="752" y="172">CLI-Agenten: codex · claude · … (schreiben Code!)</text>
+
+  <!-- Git -->
+  <rect class="s-node" x="200" y="270" width="640" height="90" rx="10"/>
+  <text class="s-label" x="220" y="298">Git (origin)</text>
+  <text class="s-sub" x="220" y="322">Namensräume:
+    <tspan fill="var(--develop)" font-weight="600"> develop</tspan> ·
+    <tspan fill="var(--taskbr)" font-weight="600"> task/&lt;slug&gt;</tspan> ·
+    <tspan fill="var(--salvage)" font-weight="600"> runner/&lt;id&gt;/&lt;key&gt;</tspan> ·
+    <tspan fill="var(--rescue)" font-weight="600"> rescue/*</tspan></text>
+  <text class="s-tiny" x="220" y="344">Zwei Welten-Problem: reviewt wird task/*, geschrieben wird runner/* → §2</text>
+
+  <!-- Urteiler -->
+  <rect class="s-node" x="200" y="395" width="300" height="55" rx="10"/>
+  <text class="s-label" x="220" y="418">Code-Review-Grade</text>
+  <text class="s-tiny" x="220" y="438">urteilt über einen Diff — welchen? (§2.2, §6)</text>
+  <rect class="s-node" x="540" y="395" width="300" height="55" rx="10"/>
+  <text class="s-label" x="560" y="418">Build-Test-Gate</text>
+  <text class="s-tiny" x="560" y="438">testet heute den geteilten Checkout (§5)</text>
+
+  <!-- Flüsse -->
+  <path class="s-flow" d="M320 120 H370" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M670 120 H720" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M870 210 C870 245 700 250 620 268" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M520 210 V270" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M350 360 V395" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M690 360 V395" marker-end="url(#arr)"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+  </defs>
+</svg>
+<figcaption><b>Abb. 1 — Systembild.</b> Board/State-Machine, Pipeline und Runner mutieren Zustand
+(Ordner, Branches, Registry); Grade-Step und Gate urteilen. Die Härtung zieht zwischen „schreiben“
+und „urteilen“ einen Vertrag ein: den Attempt-Record (§2.5).</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="git"><span class="no">§2</span>Das Git-Problem, visuell</h2>
+
+<h3>§2.1 Zwei Branch-Welten — warum der Review nichts sah</h3>
+<p>Der Remote-Runner arbeitet und pusht <i>ausschließlich</i> auf
+<code>runner/&lt;runnerId&gt;/&lt;taskKey&gt;</code>. Die Review-Diffs entstehen aber gegen
+<code>task/&lt;slug&gt;</code> bzw. <code>develop</code>. Zwischen beiden Welten gibt es keinen
+automatischen Übergang — die Arbeit „existiert“, aber am falschen Ort:</p>
+
+<figure>
+<svg viewBox="0 0 1040 360" role="img" aria-label="Commit-Graph: develop läuft weiter, Salvage-Branch trägt die Arbeit, task-Branch ist leer">
+  <!-- Zeitachse -->
+  <line x1="60" y1="320" x2="1000" y2="320" class="s-flow"/>
+  <text class="s-tiny" x="60" y="345">11.07.</text>
+  <text class="s-tiny" x="380" y="345">12.07.</text>
+  <text class="s-tiny" x="700" y="345">17.07.</text>
+  <text class="s-tiny" x="945" y="345">Zeit →</text>
+
+  <!-- develop -->
+  <text class="s-label" x="60" y="80" fill="var(--develop)">develop</text>
+  <line x1="140" y1="75" x2="960" y2="75" stroke="var(--develop)" stroke-width="2.5"/>
+  <g stroke="var(--develop)">
+    <circle class="s-commit" cx="180" cy="75" r="6"/>
+    <circle class="s-commit" cx="300" cy="75" r="6"/>
+    <circle class="s-commit" cx="420" cy="75" r="6"/>
+    <circle class="s-commit" cx="540" cy="75" r="6"/>
+    <circle class="s-commit" cx="660" cy="75" r="6"/>
+    <circle class="s-commit" cx="780" cy="75" r="6"/>
+    <circle class="s-commit" cx="900" cy="75" r="6"/>
+  </g>
+  <text class="s-tiny" x="285" y="58">a70af026 (12.07.)</text>
+  <text class="s-tiny" x="855" y="58">7b200ecb (17.07.)</text>
+  <text class="s-sub" x="500" y="45">+67 Commits in 5 Tagen — die Basis läuft davon</text>
+
+  <!-- salvage -->
+  <text class="s-label" x="60" y="160" fill="var(--salvage)">runner/agent-runner-01/AGT-2190</text>
+  <path d="M300 75 C340 75 340 155 380 155" stroke="var(--salvage)" stroke-width="2.5" fill="none"/>
+  <line x1="380" y1="155" x2="620" y2="155" stroke="var(--salvage)" stroke-width="2.5"/>
+  <g stroke="var(--salvage)">
+    <circle class="s-commit" cx="420" cy="155" r="6"/>
+    <circle class="s-commit" cx="490" cy="155" r="6"/>
+    <circle class="s-commit" cx="560" cy="155" r="6"/>
+    <circle class="s-commit" cx="620" cy="155" r="6"/>
+  </g>
+  <text class="s-tiny" x="400" y="182">„wip(runner): salvage before teardown“ — die echte Arbeit (Splitter-Fix, +172/−19)</text>
+
+  <!-- task branch -->
+  <text class="s-label" x="60" y="240" fill="var(--taskbr)">task/source-detail-splitter-…</text>
+  <g>
+    <rect x="380" y="222" width="270" height="34" rx="8" fill="none" stroke="var(--taskbr)" stroke-dasharray="5 5" stroke-width="1.6"/>
+    <text class="s-sub" x="398" y="244">existiert nicht — oder 1 themenfremder Commit</text>
+  </g>
+
+  <!-- Review-Linse -->
+  <rect class="badge-bad" x="730" y="180" width="280" height="110" rx="10" stroke-width="1.5"/>
+  <text class="s-label" x="750" y="206">Code-Review-Grade (17.07.)</text>
+  <text class="s-sub" x="750" y="228">Diff = task/&lt;slug&gt; vs. develop</text>
+  <text class="s-sub" x="750" y="248">→ leer / themenfremd</text>
+  <text class="t-bad" x="750" y="274">✗ Grade D — „implementation exists only</text>
+  <text class="t-bad" x="750" y="288">   on an external salvage branch“</text>
+  <path class="s-flow" d="M650 240 H730" marker-end="url(#arr)"/>
+</svg>
+<figcaption><b>Abb. 2 — Die zwei Welten am realen Fall AGT-2190.</b> Die Arbeit liegt vollständig auf dem
+Salvage-Branch (Basis: develop vom 12.07.); der Task-Branch, den der Review diffed, ist leer.
+Das D-Urteil ist <b>korrekt</b> — es zeigt exakt das Integrationsloch. 19 Karten liefen am 17.07. in genau
+dieses Muster; die Reconciliation hat sie per Squash auf frische develop-basierte Task-Branches gehoben.</figcaption>
+</figure>
+
+<h3>§2.2 Wie der Review seinen Diff heute findet — die Rate-Kaskade</h3>
+<figure>
+<svg viewBox="0 0 1040 250" role="img" aria-label="Flussdiagramm der Diff-Scope-Auflösung">
+  <rect class="s-node" x="20" y="30" width="230" height="64" rx="10"/>
+  <text class="s-label" x="40" y="56">Aufgezeichnete Run-SHAs</text>
+  <text class="s-sub" x="40" y="78">aus Session-Timeline des Laufs</text>
+
+  <rect class="s-node" x="310" y="30" width="220" height="64" rx="10"/>
+  <text class="s-label" x="330" y="56">Aggregat-Diff</text>
+  <text class="s-sub" x="330" y="78">der aufgezeichneten Commits</text>
+
+  <rect class="s-node" x="590" y="30" width="200" height="64" rx="10"/>
+  <text class="s-label" x="610" y="56">leer?</text>
+  <text class="s-sub" x="610" y="78">Fallback-Entscheidung</text>
+
+  <rect class="s-node" x="840" y="30" width="180" height="64" rx="10"/>
+  <text class="s-label" x="860" y="56">Branch-Diff</text>
+  <text class="s-sub" x="860" y="78">task/&lt;slug&gt; vs. Base</text>
+
+  <path class="s-flow" d="M250 62 H310" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M530 62 H590" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M790 62 H840" marker-end="url(#arr)"/>
+
+  <rect class="badge-bad" x="130" y="140" width="780" height="80" rx="10" stroke-width="1.5"/>
+  <text class="t-bad" x="150" y="168">✗ Beide Stufen können beim Phantom-Fall falsch greifen:</text>
+  <text class="s-sub" x="150" y="190">Stufe 1 liefert die themenfremden Alt-Commits (nicht leer → kein Fallback!),</text>
+  <text class="s-sub" x="150" y="208">Stufe 2 diffed einen Branch, der die Remote-Arbeit nie bekommen hat. Der Review urteilt über das falsche Universum.</text>
+</svg>
+<figcaption><b>Abb. 3 — Diff-Scope-Auflösung heute.</b> Eine Rate-Kaskade: plausibel im Normalfall,
+systematisch falsch, sobald Arbeit außerhalb von <code>task/&lt;slug&gt;</code> entsteht. Die Härtung ersetzt
+die Kaskade nicht durch mehr Heuristik, sondern durch einen Vertrag (§2.5) — der Grade-Step selbst
+bleibt unangetastet (§6).</figcaption>
+</figure>
+
+<h3>§2.3 Kreuzkontamination: Salvage baut auf Salvage</h3>
+<p>Weil Pickups zeitweise vom Umgebungszustand statt von einer autoritativen Basis starteten, tragen
+spätere Salvage-Branches die Arbeit früherer Tasks mit. Realer Fall: der Salvage von AGT-2191
+(Wiki-Dark-Theme) enthielt nahezu das komplette Werk von AGT-2108 (WikiSourceBranch):</p>
+
+<figure>
+<svg viewBox="0 0 1040 210" role="img" aria-label="Kreuzkontamination: Branch AGT-2191 enthält die Commits von AGT-2108">
+  <text class="s-label" x="30" y="40" fill="var(--salvage)">runner/…/AGT-2108</text>
+  <line x1="230" y1="35" x2="480" y2="35" stroke="var(--salvage)" stroke-width="2.5"/>
+  <g stroke="var(--salvage)">
+    <circle class="s-commit" cx="280" cy="35" r="6"/><circle class="s-commit" cx="350" cy="35" r="6"/><circle class="s-commit" cx="420" cy="35" r="6"/>
+  </g>
+  <text class="s-tiny" x="270" y="62">WikiSourceBranch-Feature (24 Dateien)</text>
+
+  <text class="s-label" x="30" y="120" fill="var(--salvage)">runner/…/AGT-2191</text>
+  <path d="M480 35 C520 35 520 115 560 115" stroke="var(--salvage)" stroke-width="2.5" fill="none" stroke-dasharray="6 4"/>
+  <line x1="560" y1="115" x2="800" y2="115" stroke="var(--salvage)" stroke-width="2.5"/>
+  <g stroke="var(--salvage)">
+    <circle class="s-commit" cx="610" cy="115" r="6"/><circle class="s-commit" cx="680" cy="115" r="6"/><circle class="s-commit" cx="750" cy="115" r="6"/>
+  </g>
+  <text class="s-tiny" x="560" y="142">Dark-Theme-Tokens — plus das komplette 2108-Werk als „Beifang“</text>
+
+  <rect class="badge-warn" x="590" y="160" width="420" height="38" rx="10" stroke-width="1.5"/>
+  <text class="t-warn" x="608" y="184">⚠ Merge-Folge: der zweite der beiden wird No-Op oder Konflikt</text>
+</svg>
+<figcaption><b>Abb. 4 — Kreuzkontamination.</b> Branch-Inhalte sind keine sauberen Per-Task-Diffs mehr.
+Gegenmittel: Pickup materialisiert immer eine <b>explizit gefetchte, autoritative Basis-SHA</b>
+(<code>worktree add … &lt;sha&gt;</code> statt <code>origin/&lt;branch&gt;</code>) — Bestandteil von AGT-2177.</figcaption>
+</figure>
+
+<h3>§2.4 Divergenz ohne Requeue-Loop: die vier Ancestry-Fälle (AGT-2177)</h3>
+<p>Wenn ein zurückgehaltener lokaler Stand und der kanonische Remote-Ref auseinanderlaufen, darf weder
+force-gepusht noch endlos requeued werden. AGT-2177 klassifiziert per
+<code>git merge-base --is-ancestor</code>:</p>
+
+<figure>
+<svg viewBox="0 0 1040 240" role="img" aria-label="Vier Ancestry-Fälle der Salvage-Reconciliation">
+  <g>
+    <rect class="s-node" x="20" y="25" width="235" height="90" rx="10"/>
+    <text class="s-label" x="38" y="50">1 · equal</text>
+    <text class="s-sub" x="38" y="72">lokal = remote</text>
+    <text class="t-ok" x="38" y="96">✓ nichts zu tun</text>
+  </g>
+  <g>
+    <rect class="s-node" x="275" y="25" width="235" height="90" rx="10"/>
+    <text class="s-label" x="293" y="50">2 · local-ahead</text>
+    <text class="s-sub" x="293" y="72">Fast-Forward möglich</text>
+    <text class="t-ok" x="293" y="96">✓ Push + Verify (ls-remote)</text>
+  </g>
+  <g>
+    <rect class="s-node" x="530" y="25" width="235" height="90" rx="10"/>
+    <text class="s-label" x="548" y="50">3 · remote-ahead</text>
+    <text class="s-sub" x="548" y="72">Remote kennt mehr</text>
+    <text class="t-ok" x="548" y="96">✓ kanonischer Ref bleibt</text>
+  </g>
+  <g>
+    <rect class="s-node" x="785" y="25" width="235" height="90" rx="10"/>
+    <text class="s-label" x="803" y="50">4 · divergent</text>
+    <text class="s-sub" x="803" y="72">beide haben Eigenes</text>
+    <text class="t-warn" x="803" y="96">⚠ Collision-Ref, kein Force</text>
+  </g>
+  <rect class="s-node2" x="20" y="140" width="1000" height="80" rx="10"/>
+  <text class="s-label" x="40" y="168">Divergenz-Pfad im Detail</text>
+  <text class="s-sub" x="40" y="190">Lokaler Tip → deterministischer Ref <code>runner/&lt;id&gt;/&lt;task&gt;-collision-&lt;localSha&gt;-&lt;remoteSha&gt;</code>, beide SHAs verifiziert.</text>
+  <text class="s-sub" x="40" y="208">Publish-Budget: 3 Versuche → danach <code>WorktreeSalvageException</code>, Worktree bleibt erhalten, Eskalation als <code>worktree-blocked</code>. Kein Loop.</text>
+</svg>
+<figcaption><b>Abb. 5 — Ancestry-Klassifikation.</b> Der kanonische Ref wird nie umgeschrieben; Divergenz
+wird sichtbar gemacht statt überschrieben. Zusammen mit dem Basis-SHA-Pickup (Abb. 4) verschwindet
+sowohl der Requeue-Loop als auch die Kontaminationsquelle.</figcaption>
+</figure>
+
+<h3>§2.5 Zielbild: der Result-SHA-Vertrag</h3>
+<p>Der strukturelle Fix: Jeder Versuch (lokal wie remote) endet in einem <b>unveränderlichen
+Attempt-Record</b>. Er ist die einzige Quelle, aus der Urteiler und Konsumenten lesen — niemand
+rät mehr, wo Arbeit liegen könnte.</p>
+
+<figure>
+<svg viewBox="0 0 1040 330" role="img" aria-label="Attempt-Record als Nabe für Grade, Gate, Merge und UI">
+  <rect class="badge-ok" x="360" y="105" width="320" height="120" rx="12" stroke-width="2"/>
+  <text class="s-label" x="385" y="135">Attempt-Record (immutable)</text>
+  <text class="s-sub" x="385" y="160">attemptId · Karte · Runner-Identität</text>
+  <text class="s-sub" x="385" y="180">baseSha (autoritativ) · resultSha</text>
+  <text class="s-sub" x="385" y="200">push-verified ✓ · Artefakt-Inventar</text>
+
+  <rect class="s-node" x="30" y="30" width="240" height="56" rx="10"/>
+  <text class="s-label" x="48" y="54">Runner / Outbox</text>
+  <text class="s-sub" x="48" y="74">schreibt genau einmal (AGT-2183)</text>
+  <path class="s-flow" d="M270 60 C330 60 330 120 360 130" marker-end="url(#arr)"/>
+
+  <rect class="s-node" x="60" y="250" width="220" height="56" rx="10"/>
+  <text class="s-label" x="78" y="274">Code-Review-Grade</text>
+  <text class="s-sub" x="78" y="294">diffed resultSha vs. baseSha</text>
+  <path class="s-flow" d="M360 200 C320 220 300 235 280 255" marker-end="url(#arr)"/>
+
+  <rect class="s-node" x="410" y="250" width="220" height="56" rx="10"/>
+  <text class="s-label" x="428" y="274">Build-Test-Gate</text>
+  <text class="s-sub" x="428" y="294">Worktree exakt auf resultSha (§5)</text>
+  <path class="s-flow" d="M520 225 V250" marker-end="url(#arr)"/>
+
+  <rect class="s-node" x="760" y="250" width="220" height="56" rx="10"/>
+  <text class="s-label" x="778" y="274">Merge / Accept</text>
+  <text class="s-sub" x="778" y="294">landet genau diese SHA</text>
+  <path class="s-flow" d="M680 200 C730 220 750 235 775 255" marker-end="url(#arr)"/>
+
+  <rect class="s-node" x="770" y="30" width="240" height="56" rx="10"/>
+  <text class="s-label" x="788" y="54">Karte / UI</text>
+  <text class="s-sub" x="788" y="74">zeigt Attempt-Kette + Verdikte</text>
+  <path class="s-flow" d="M680 130 C730 120 750 75 770 62" marker-end="url(#arr)"/>
+
+  <text class="t-bad" x="365" y="255">✗ Record fehlt/ungültig → fail-closed:</text>
+  <text class="s-sub" x="365" y="273">Quarantäne + Human-Review,</text>
+  <text class="s-sub" x="365" y="289">niemals raten.</text>
+</svg>
+<figcaption><b>Abb. 6 — Ergebnis als Vertrag.</b> Genau das bauen die gequeuten P0-Karten:
+AGT-2183 (Outbox, immutable Result-SHA-Handoff), AGT-2184 (Review materialisiert exakt diese SHA),
+AGT-2182 (Attempt-Fencing). Der Grade-Step und das Gate bleiben, was sie sind — sie bekommen nur
+endlich einen garantierten, statt eines geratenen, Inputs.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="zeit"><span class="no">§3</span>Zeitachsen</h2>
+
+<h3>§3.1 Vorfalls- und Maßnahmen-Timeline (08.–18.07.)</h3>
+<figure>
+<svg viewBox="0 0 1040 330" role="img" aria-label="Timeline der Vorfälle (oben) und Maßnahmen (unten)">
+  <line x1="40" y1="165" x2="1010" y2="165" class="s-flow"/>
+  <g class="s-tiny">
+    <text x="70" y="182">08.07.</text><text x="250" y="182">11.07.</text><text x="420" y="182">12.07.</text>
+    <text x="580" y="182">13.07.</text><text x="760" y="182">17.07.</text><text x="945" y="182">18.07.</text>
+  </g>
+  <g stroke="var(--line)"><line x1="85" y1="158" x2="85" y2="172"/><line x1="265" y1="158" x2="265" y2="172"/><line x1="435" y1="158" x2="435" y2="172"/><line x1="595" y1="158" x2="595" y2="172"/><line x1="775" y1="158" x2="775" y2="172"/><line x1="955" y1="158" x2="955" y2="172"/></g>
+
+  <text class="t-bad" x="40" y="30">Probleme</text>
+  <g>
+    <rect class="badge-bad" x="40" y="45" width="150" height="52" rx="8" stroke-width="1.2"/>
+    <text class="s-sub" x="50" y="65">AGT-1917:</text><text class="s-sub" x="50" y="82">Out-of-band-„Leiche“</text>
+    <line x1="85" y1="97" x2="85" y2="158" stroke="var(--bad)" stroke-dasharray="3 4"/>
+  </g>
+  <g>
+    <rect class="badge-bad" x="200" y="45" width="170" height="52" rx="8" stroke-width="1.2"/>
+    <text class="s-sub" x="210" y="65">Phantom-Welle: ~29 Karten,</text><text class="s-sub" x="210" y="82">3 Runner-Löcher, Arbeit weg</text>
+    <line x1="265" y1="97" x2="265" y2="158" stroke="var(--bad)" stroke-dasharray="3 4"/>
+  </g>
+  <g>
+    <rect class="badge-bad" x="530" y="45" width="180" height="52" rx="8" stroke-width="1.2"/>
+    <text class="s-sub" x="540" y="65">QS-15-Wedge · Steer wartet</text><text class="s-sub" x="540" y="82">tagelang (kein Timeout)</text>
+    <line x1="595" y1="97" x2="595" y2="158" stroke="var(--bad)" stroke-dasharray="3 4"/>
+  </g>
+  <g>
+    <rect class="badge-bad" x="725" y="45" width="200" height="52" rx="8" stroke-width="1.2"/>
+    <text class="s-sub" x="735" y="65">Grade-D-Welle: 17 Karten ·</text><text class="s-sub" x="735" y="82">7 rote Gate-Blocker auf develop</text>
+    <line x1="775" y1="97" x2="775" y2="158" stroke="var(--bad)" stroke-dasharray="3 4"/>
+  </g>
+
+  <text class="t-ok" x="40" y="225">Maßnahmen</text>
+  <g>
+    <rect class="badge-ok" x="330" y="240" width="220" height="68" rx="8" stroke-width="1.2"/>
+    <text class="s-sub" x="340" y="260">AGT-2147/48/49 deployed:</text>
+    <text class="s-sub" x="340" y="277">verified-push-before-completion,</text>
+    <text class="s-sub" x="340" y="294">Push-Probe, read-only-Admission</text>
+    <line x1="435" y1="240" x2="435" y2="172" stroke="var(--ok)" stroke-dasharray="3 4"/>
+  </g>
+  <g>
+    <rect class="badge-ok" x="565" y="240" width="130" height="68" rx="8" stroke-width="1.2"/>
+    <text class="s-sub" x="575" y="260">Rescue-Merge</text>
+    <text class="s-sub" x="575" y="277">der 13.07.-Charge</text>
+    <text class="s-sub" x="575" y="294">nach develop</text>
+    <line x1="595" y1="240" x2="595" y2="172" stroke="var(--ok)" stroke-dasharray="3 4"/>
+  </g>
+  <g>
+    <rect class="badge-ok" x="710" y="240" width="300" height="68" rx="8" stroke-width="1.2"/>
+    <text class="s-sub" x="720" y="260">Reconciliation: 19 Salvage-Tickets auf frische</text>
+    <text class="s-sub" x="720" y="277">task-Branches · 7 Gate-Blocker gefixt (2 Commits)</text>
+    <text class="s-sub" x="720" y="294">· dieses Härtungskonzept</text>
+    <line x1="820" y1="240" x2="820" y2="172" stroke="var(--ok)" stroke-dasharray="3 4"/>
+  </g>
+</svg>
+<figcaption><b>Abb. 7 — Zehn Tage im Überblick.</b> Vollständige Chronik mit allen Einträgen, Ursachen
+und Ticket-Referenzen: Unterseite <code>historie.html</code> (§8).</figcaption>
+</figure>
+
+<h3>§3.2 Lebenslauf eines Remote-Runs: Ist → Heute → Ziel</h3>
+<figure>
+<svg viewBox="0 0 1040 380" role="img" aria-label="Drei Varianten des Run-Lebenslaufs als Sequenz">
+  <!-- Reihe 1: vor 12.07 -->
+  <text class="t-bad" x="20" y="35">Vor 12.07. (die Phantom-Mechanik)</text>
+  <g>
+    <rect class="s-node" x="20"  y="50" width="130" height="40" rx="8"/><text class="s-sub" x="34" y="75">Claim</text>
+    <rect class="s-node" x="170" y="50" width="130" height="40" rx="8"/><text class="s-sub" x="184" y="75">CLI-Run</text>
+    <rect class="badge-bad" x="320" y="50" width="200" height="40" rx="8" stroke-width="1.2"/><text class="s-sub" x="334" y="75">Complete („done“!)</text>
+    <rect class="badge-bad" x="540" y="50" width="240" height="40" rx="8" stroke-width="1.2"/><text class="s-sub" x="554" y="75">Teardown: löscht ohne Push</text>
+    <path class="s-flow" d="M150 70 H170" marker-end="url(#arr)"/><path class="s-flow" d="M300 70 H320" marker-end="url(#arr)"/><path class="s-flow" d="M520 70 H540" marker-end="url(#arr)"/>
+    <text class="t-bad" x="800" y="75">✗ Arbeit vernichtet, Karte „done“</text>
+  </g>
+
+  <!-- Reihe 2: heute -->
+  <text class="t-ok" x="20" y="140">Heute (seit den 2147/48/49-Fixes)</text>
+  <g>
+    <rect class="s-node" x="20"  y="155" width="130" height="40" rx="8"/><text class="s-sub" x="34" y="180">Claim</text>
+    <rect class="s-node" x="170" y="155" width="130" height="40" rx="8"/><text class="s-sub" x="184" y="180">CLI-Run</text>
+    <rect class="badge-ok" x="320" y="155" width="280" height="40" rx="8" stroke-width="1.2"/><text class="s-sub" x="334" y="180">Teardown: Commit + Push + Verify</text>
+    <rect class="s-node" x="620" y="155" width="180" height="40" rx="8"/><text class="s-sub" x="634" y="180">Complete (mit SHA)</text>
+    <path class="s-flow" d="M150 175 H170" marker-end="url(#arr)"/><path class="s-flow" d="M300 175 H320" marker-end="url(#arr)"/><path class="s-flow" d="M600 175 H620" marker-end="url(#arr)"/>
+    <text class="t-warn" x="820" y="170">⚠ aber: Ziel ist runner/*,</text>
+    <text class="t-warn" x="820" y="186">Review schaut auf task/*</text>
+  </g>
+
+  <!-- Reihe 3: Ziel -->
+  <text class="s-label" x="20" y="245">Ziel (P0-Kette: 2177 + 2182–2184)</text>
+  <g>
+    <rect class="s-node" x="20"  y="260" width="150" height="52" rx="8"/><text class="s-sub" x="34" y="281">Claim + Fence</text><text class="s-tiny" x="34" y="299">Attempt-Token</text>
+    <rect class="s-node" x="190" y="260" width="170" height="52" rx="8"/><text class="s-sub" x="204" y="281">Worktree von</text><text class="s-tiny" x="204" y="299">autoritativer baseSha</text>
+    <rect class="s-node" x="380" y="260" width="130" height="52" rx="8"/><text class="s-sub" x="394" y="281">CLI-Run</text>
+    <rect class="badge-ok" x="530" y="260" width="190" height="52" rx="8" stroke-width="1.2"/><text class="s-sub" x="544" y="281">Outbox: Attempt-</text><text class="s-tiny" x="544" y="299">Record mit resultSha</text>
+    <rect class="s-node" x="740" y="260" width="130" height="52" rx="8"/><text class="s-sub" x="754" y="281">Review auf</text><text class="s-tiny" x="754" y="299">exakter SHA</text>
+    <rect class="s-node" x="890" y="260" width="130" height="52" rx="8"/><text class="s-sub" x="904" y="281">Hermet. Gate</text><text class="s-tiny" x="904" y="299">→ Merge</text>
+    <path class="s-flow" d="M170 286 H190" marker-end="url(#arr)"/><path class="s-flow" d="M360 286 H380" marker-end="url(#arr)"/>
+    <path class="s-flow" d="M510 286 H530" marker-end="url(#arr)"/><path class="s-flow" d="M720 286 H740" marker-end="url(#arr)"/>
+    <path class="s-flow" d="M870 286 H890" marker-end="url(#arr)"/>
+  </g>
+  <text class="s-sub" x="20" y="350">Jede Stufe konsumiert die Ausgabe der vorherigen als Vertrag; Mehrdeutigkeit auf jeder Stufe → fail-closed in Quarantäne statt „weiter mit Annahme“.</text>
+</svg>
+<figcaption><b>Abb. 8 — Drei Generationen des Run-Lebenslaufs.</b> Die erste Reihe erklärt die Phantome
+(Complete <i>vor</i> und unabhängig vom Push). Die zweite ist der heutige, bereits fail-closed abgesicherte
+Stand. Die dritte schließt die verbliebene Lücke: die Brücke von <code>runner/*</code> zur reviewten Welt.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="schreiber"><span class="no">§4</span>Schreibmodell &amp; Fencing</h2>
+<p class="dim">Zur Einordnung der Frage „die Schreiber sind Post- und Pre-Steps in der Pipeline, aber nicht
+Agenten — was passiert, wenn Agenten trotzdem schreiben?“: Erst die Landkarte aller Schreiber, dann
+genau dieser Fall.</p>
+
+<table>
+  <thead><tr><th>Schreiber</th><th>Was er mutiert</th><th>Fence heute</th><th>Fence im Zielbild</th></tr></thead>
+  <tbody>
+    <tr><td><b>TaskStateMachine / Board-API</b></td><td>Lanes, task.json, Ordner-Moves</td>
+        <td><code>X-Client-Id</code> (Pflicht seit 10.07.), LaneMutex, seit 17.07. Recheck nach Mutex-Wait (DeleteJob-Fix)</td>
+        <td>+ Attempt-Fence &amp; Versions-Check auf jeder Mutation (AGT-2182); Recheck-Muster auf <i>alle</i> Writer ausgerollt</td></tr>
+    <tr><td><b>Pipeline Pre-/Post-Steps</b></td><td>Verdikte, Grade-Files, Gate-Ergebnisse, Lane-Folgen</td>
+        <td>Sequenziell pro Karte; Loop-Guards (2-Strike)</td>
+        <td>Lesen/schreiben ausschließlich Attempt-Records; Steps sind idempotent und tragen die Attempt-ID</td></tr>
+    <tr><td><b>Remote-Runner-Daemon</b></td><td>Git: <code>runner/&lt;id&gt;/*</code>; Lease-/Complete-API</td>
+        <td>Push-Probe, verified-push, read-only-Admission</td>
+        <td>Outbox als einziger Schreibkanal (AGT-2183); Ref-Namespace-Policy: Runner-Identität darf <i>nur</i> <code>runner/&lt;id&gt;/*</code> pushen</td></tr>
+    <tr><td><b>CLI-Agenten (codex, claude, …)</b></td><td>Quellcode im Worktree, results/, potenziell <i>alles</i></td>
+        <td>⚠ Konvention, kein Fence: Worktree-Isolation + Prompt-Regeln</td>
+        <td>Contract + Detect + Quarantine — siehe unten</td></tr>
+    <tr><td><b>Operator / UI</b></td><td>Lanes, Registry, Settings, Steer-Antworten</td>
+        <td><code>X-Client-Id</code>; Registry-Writes teils unvalidiert (→ PROJ-017)</td>
+        <td>Validierung an jeder Registry-Schreibstelle (Pfad absolut + existent); Steer mit Timeout + definierter Konsequenz</td></tr>
+    <tr><td><b>External-Completion</b></td><td>status.md, deliverables, Lane</td>
+        <td>Atomarer Endpoint (seit AGT-1917-Nachwehen), Quell-Attribution</td>
+        <td>Erzeugt ebenfalls einen Attempt-Record (Quelle: <code>external</code>) — gleiche Evidenzklasse wie Runner-Arbeit</td></tr>
+  </tbody>
+</table>
+
+<h3>Und wenn ein Agent trotzdem schreibt?</h3>
+<p>Die ehrliche Antwort zuerst: <b>Agenten lassen sich nicht vollständig fencen.</b> Ein CLI-Agent läuft
+mit echten Prozessrechten in einem echten Checkout — er <i>kann</i> in den Haupt-Checkout wechseln,
+Branches anlegen, die API rufen oder pushen. Härtung heißt hier nicht „unmöglich machen“, sondern
+<b>Blast-Radius klein, Abweichung sichtbar, Wirkung neutralisierbar</b> — auf vier Ebenen:</p>
+
+<figure>
+<svg viewBox="0 0 1040 300" role="img" aria-label="Vier Ebenen: Begrenzen, Erkennen, Quarantäne, API-Fence">
+  <g>
+    <rect class="s-node" x="20" y="30" width="240" height="120" rx="10"/>
+    <text class="s-label" x="38" y="56">1 · Begrenzen</text>
+    <text class="s-sub" x="38" y="80">Eigener Worktree = Blast-Radius.</text>
+    <text class="s-sub" x="38" y="100">Keine Ambient-Push-Credentials</text>
+    <text class="s-sub" x="38" y="120">im Worktree; Ref-Namespace-</text>
+    <text class="s-sub" x="38" y="140">Policy auf origin (Identität→Refs).</text>
+  </g>
+  <g>
+    <rect class="s-node" x="280" y="30" width="240" height="120" rx="10"/>
+    <text class="s-label" x="298" y="56">2 · Erkennen</text>
+    <text class="s-sub" x="298" y="80">post-git-commit-attribution</text>
+    <text class="s-sub" x="298" y="100">vergleicht Ist-Writes gegen den</text>
+    <text class="s-sub" x="298" y="120">Contract (nur Worktree + eigener</text>
+    <text class="s-sub" x="298" y="140">Task-Folder). Scanner sieht Board-Ordner.</text>
+  </g>
+  <g>
+    <rect class="badge-warn" x="540" y="30" width="240" height="120" rx="10" stroke-width="1.5"/>
+    <text class="s-label" x="558" y="56">3 · Quarantäne</text>
+    <text class="s-sub" x="558" y="80">Out-of-contract-Write ⇒ Gate-Punkt</text>
+    <text class="s-sub" x="558" y="100">„out-of-contract-write“ ⇒ Karte in</text>
+    <text class="s-sub" x="558" y="120">Human-Review, Evidenz konserviert.</text>
+    <text class="s-sub" x="558" y="140">Nie still mergen, nie löschen.</text>
+  </g>
+  <g>
+    <rect class="s-node" x="800" y="30" width="220" height="120" rx="10"/>
+    <text class="s-label" x="818" y="56">4 · API-Fence</text>
+    <text class="s-sub" x="818" y="80">Board-Mutationen tragen das</text>
+    <text class="s-sub" x="818" y="100">Attempt-Token; stale/fremde</text>
+    <text class="s-sub" x="818" y="120">Agenten bekommen 409/412 —</text>
+    <text class="s-sub" x="818" y="140">Wirkung statt Wunsch verweigert.</text>
+  </g>
+  <path class="s-flow" d="M260 90 H280" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M520 90 H540" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M780 90 H800" marker-end="url(#arr)"/>
+  <rect class="s-node2" x="20" y="185" width="1000" height="90" rx="10"/>
+  <text class="s-label" x="40" y="213">Leitsatz</text>
+  <text class="s-sub" x="40" y="236">Ein Agent, der außerhalb seines Vertrags schreibt, ist kein Fehlerfall, der verschwinden muss — er ist ein <tspan font-weight="600">Evidenzfall</tspan>,</text>
+  <text class="s-sub" x="40" y="256">der sichtbar werden muss. Genau deshalb ist die Erkennungs- und Quarantäne-Schiene wichtiger als jede weitere Verbotsregel im Prompt.</text>
+</svg>
+<figcaption><b>Abb. 9 — Umgang mit unfencbaren Schreibern.</b> Prompts und Konventionen bleiben die erste
+Verteidigungslinie, aber die Architektur verlässt sich nicht auf sie: Was ein Agent außerhalb seines
+Worktrees anrichtet, wird erkannt, konserviert und dem Menschen vorgelegt — und seine API-Wirkung
+scheitert am Fence, nicht an seiner Disziplin.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="hermetik"><span class="no">§5</span>Hermetische Verifikation, ausgebaut</h2>
+
+<h3>§5.1 Warum Gates heute lügen können</h3>
+<p>Das Build-Test-Gate baut und testet den <b>geteilten Checkout</b>, während daneben Agenten,
+Builds und weitere Gates dieselbe Maschine belasten. Damit hängt das Urteil nicht nur am Code:</p>
+
+<figure>
+<svg viewBox="0 0 1040 300" role="img" aria-label="Ist-Zustand: geteilter Checkout unter Last erzeugt Flakes und falsche Eskalationen">
+  <rect class="s-node" x="30" y="40" width="380" height="200" rx="10"/>
+  <text class="s-label" x="50" y="68">Eine Maschine, ein Checkout</text>
+  <rect class="s-node2" x="50" y="85" width="160" height="34" rx="6"/><text class="s-sub" x="62" y="107">Gate: dotnet test</text>
+  <rect class="s-node2" x="230" y="85" width="160" height="34" rx="6"/><text class="s-sub" x="242" y="107">Agent-Run (codex)</text>
+  <rect class="s-node2" x="50" y="130" width="160" height="34" rx="6"/><text class="s-sub" x="62" y="152">ng build / tsc</text>
+  <rect class="s-node2" x="230" y="130" width="160" height="34" rx="6"/><text class="s-sub" x="242" y="152">weiteres Gate</text>
+  <text class="s-tiny" x="50" y="195">geteilte Ressourcen: CPU, IO, FileSystemWatcher-</text>
+  <text class="s-tiny" x="50" y="212">Zustellung, Prozess-globale Statics (Serilog!)</text>
+
+  <path class="s-flow" d="M410 140 H460" marker-end="url(#arr)"/>
+
+  <rect class="badge-bad" x="460" y="60" width="260" height="160" rx="10" stroke-width="1.5"/>
+  <text class="s-label" x="480" y="88">Flake-Mechanik</text>
+  <text class="s-sub" x="480" y="112">Watcher-Events &gt; Zeitbudget</text>
+  <text class="s-sub" x="480" y="132">Quiet-Windows verpasst</text>
+  <text class="s-sub" x="480" y="152">Logger-Freeze-Race paralleler Hosts</text>
+  <text class="s-sub" x="480" y="172">Perf-Asserts unter Fremdlast</text>
+  <text class="s-tiny" x="480" y="200">alles am 17.07. real beobachtet</text>
+
+  <path class="s-flow" d="M720 140 H770" marker-end="url(#arr)"/>
+
+  <rect class="badge-bad" x="770" y="80" width="240" height="120" rx="10" stroke-width="1.5"/>
+  <text class="s-label" x="790" y="108">2-Strike-Loop-Guard</text>
+  <text class="s-sub" x="790" y="132">2× rot in Folge ⇒ Eskalation</text>
+  <text class="t-bad" x="790" y="160">✗ Flake wird zur falschen</text>
+  <text class="t-bad" x="790" y="176">   Karten-Eskalation</text>
+</svg>
+<figcaption><b>Abb. 10 — Die Falsch-Eskalations-Fabrik.</b> Das Gate ist korrekt streng — aber es misst
+in einer Umgebung, die das Ergebnis mitbestimmt. Der 2-Strike-Guard, gedacht gegen Einzel-Flakes,
+wird unter Dauerlast selbst zum Eskalationsverstärker.</figcaption>
+</figure>
+
+<h3>§5.2 Zielarchitektur: das Gate als hermetischer Executor</h3>
+<figure>
+<svg viewBox="0 0 1040 270" role="img" aria-label="Zielbild hermetisches Gate">
+  <rect class="s-node" x="20" y="40" width="220" height="70" rx="10"/>
+  <text class="s-label" x="38" y="66">Attempt-Record</text>
+  <text class="s-sub" x="38" y="90">resultSha + baseSha</text>
+  <path class="s-flow" d="M240 75 H290" marker-end="url(#arr)"/>
+  <rect class="badge-ok" x="290" y="30" width="300" height="150" rx="10" stroke-width="1.5"/>
+  <text class="s-label" x="310" y="58">Gate-Executor</text>
+  <text class="s-sub" x="310" y="82">frischer Worktree, exakt resultSha</text>
+  <text class="s-sub" x="310" y="102">Ressourcen-Klasse: max. 1 Gate/Maschine</text>
+  <text class="s-sub" x="310" y="122">(oder dedizierter Gate-Runner)</text>
+  <text class="s-sub" x="310" y="142">virtuelle Zeit statt Wanduhr in Tests</text>
+  <text class="s-sub" x="310" y="162">Log + Umgebung = Teil der Evidenz</text>
+  <path class="s-flow" d="M590 105 H640" marker-end="url(#arr)"/>
+  <rect class="s-node" x="640" y="40" width="180" height="130" rx="10"/>
+  <text class="s-label" x="658" y="66">Verdikt</text>
+  <text class="s-sub" x="658" y="90">grün / rot / </text>
+  <text class="s-sub" x="658" y="110">„flake-quarantäne“</text>
+  <text class="s-tiny" x="658" y="134">Strikes zählen nur auf</text>
+  <text class="s-tiny" x="658" y="150">hermetischen Läufen</text>
+  <path class="s-flow" d="M820 105 H870" marker-end="url(#arr)"/>
+  <rect class="s-node" x="870" y="55" width="150" height="100" rx="10"/>
+  <text class="s-label" x="888" y="82">Attempt-</text>
+  <text class="s-label" x="888" y="100">Record ergänzt</text>
+  <text class="s-tiny" x="888" y="124">Gate-Evidenz</text>
+  <text class="s-tiny" x="888" y="140">unveränderlich</text>
+  <rect class="s-node2" x="20" y="205" width="1000" height="45" rx="10"/>
+  <text class="s-sub" x="40" y="233">Baseline separat bewacht: nächtlicher Volltest auf develop + Alarm — Brüche werden am <tspan font-weight="600">Zustand</tspan> entdeckt, nicht erst am nächsten Karten-Gate.</text>
+</svg>
+<figcaption><b>Abb. 11 — Hermetisches Gate.</b> Ein Urteil = eine SHA + eine kontrollierte Umgebung.
+AGT-2155 (Gate raus aus dem geteilten Checkout) und AGT-2184 (exakt-SHA-Materialisierung) sind die
+Träger; der Rest sind Testdisziplin-Bausteine (§5.3).</figcaption>
+</figure>
+
+<h3>§5.3 Die acht Bausteine im Einzelnen</h3>
+<table>
+  <thead><tr><th>#</th><th>Baustein</th><th>Inhalt</th><th>Träger</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><b>Exakt-SHA-Worktree</b></td><td>Gate checkt nie „den Checkout“, sondern die Result-SHA des Attempts in einem frischen, danach verworfenen Worktree.</td><td>AGT-2155 + AGT-2184 <span class="pill queued">gequeued</span></td></tr>
+    <tr><td>2</td><td><b>Ressourcen-Klassen</b></td><td>Pro Maschine läuft höchstens ein Gate; Agenten-Slots und Gate-Slots sind getrennte Budgets. Alternativ: dedizierter Gate-Runner.</td><td>Admission/Slots (AGT-2189-Familie) <span class="pill queued">gequeued</span></td></tr>
+    <tr><td>3</td><td><b>Virtuelle Zeit</b></td><td>Timing-Semantik (Debounce, Quiet-Windows, TTLs) testet gegen <code>FakeTimeProvider</code> — im Codebase etabliert, aber nicht flächendeckend.</td><td>Testkonvention <span class="pill new">neu</span></td></tr>
+    <tr><td>4</td><td><b>MachineBound-Taxonomie + Meta-Guard</b></td><td>Wanduhr-Tests tragen <code>[Trait("Category","MachineBound")]</code>. Ein Architektur-Guard-Test macht <code>SpinUntil</code>/<code>Sleep</code> ohne Trait zum Testfehler — die Klasse kann nicht nachwachsen.</td><td>Guard-Test <span class="pill new">neu</span></td></tr>
+    <tr><td>5</td><td><b>Flake-Quarantäne</b></td><td>Bekannte Flakes laufen weiter, zählen aber nicht als Strike; wöchentliche Analyse statt Ad-hoc-Ausschluss. (Aktuelle Kandidaten: 4 Stück, siehe Historie.)</td><td>Gate-Policy <span class="pill new">neu</span></td></tr>
+    <tr><td>6</td><td><b>2-Strike nur hermetisch</b></td><td>Der Loop-Guard bleibt — aber Strikes zählen ausschließlich auf hermetischen Läufen. Ein Strike aus einem Last-Kontext ist kein Signal.</td><td>Gate-Policy <span class="pill new">neu</span></td></tr>
+    <tr><td>7</td><td><b>Gate-Evidenz</b></td><td>Jeder Gate-Lauf archiviert Log, Filter, Dauer, Maschinenlast am Attempt — „warum rot?“ ist nachlesbar statt rekonstruierbar.</td><td>Attempt-Record (§2.5)</td></tr>
+    <tr><td>8</td><td><b>Bewachte Baseline</b></td><td>Nightly-Volltest auf develop mit Alarm; Guard gegen committete Konfliktmarker; <code>.gitattributes</code>-EOL-Normalisierung (CRLF-Churn kostete am 17.07. real Arbeitszeit).</td><td>Routine + Guards <span class="pill new">neu</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="grade"><span class="no">§6</span>Der Grade-Step bleibt — und wird ehrlich gefüttert</h2>
+<div class="box ok">
+  <h4>Festlegung</h4>
+  <p>Der Code-Review-Grade ist die <b>Nutzer-Wahrheitsanzeige</b>: „War der Code da, und taugt er?“
+  Er wird <b>nicht</b> abgeschafft und nicht abgeschwächt. Die Grade-D-Urteile der Phantom-Phase waren
+  fachlich richtig — sie haben das Integrationsloch überhaupt erst sichtbar gemacht.</p>
+</div>
+<p>Was sich ändert, ist ausschließlich seine <b>Eingabe</b>:</p>
+<ul>
+  <li><b>Heute:</b> Rate-Kaskade (Abb. 3) — Run-SHAs, sonst Branch-Fallback. Im Normalfall richtig, im
+      Sonderfall systematisch falsch, und das Urteil kann nicht zwischen „Code fehlt“ und „ich habe auf
+      das falsche Universum geschaut“ unterscheiden.</li>
+  <li><b>Ziel:</b> Der Grade-Step diffed <code>resultSha</code> gegen <code>baseSha</code> aus dem
+      Attempt-Record — garantiert das, was der Versuch wirklich produziert hat. Ein D heißt dann
+      beweisbar: <i>die Arbeit fehlt wirklich.</i></li>
+  <li><b>Neues drittes Verdikt:</b> Ist kein gültiger Attempt-Record da, sagt der Step das explizit
+      („Scope unauflösbar — kein Attempt-Record“) statt zu raten. Auch das ist Nutzer-Information:
+      es unterscheidet „schlechte Lieferung“ von „kaputte Evidenzkette“ — zwei völlig verschiedene
+      Handlungsanweisungen.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="programm"><span class="no">§7</span>Härtungsprogramm &amp; Roadmap</h2>
+<p class="dim">Die Hälfte des Programms liegt bereits als Karten auf dem Board — Härtung ist hier vor
+allem Priorisierung. Die harte Regel zuerst:</p>
+<div class="box warn">
+  <h4>Harte Bedingung</h4>
+  <p><b>Remote-Execution bleibt deaktiviert, bis Phase 1 gemergt und deployed ist.</b> Das verlängert die
+  bestehende Regel („Reaktivierung erst nach 2147/48/49 + Push-Probe“) um die zweite Hälfte: den
+  Result-SHA-Vertrag.</p>
+</div>
+
+<table>
+  <thead><tr><th>Phase</th><th>Inhalt</th><th>Träger</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><b>0 · erledigt</b></td>
+        <td>Phantom-Ursachen (Auth/Sentinel/Teardown); 19 Salvage-Tickets reconciled; 7 Gate-Blocker auf develop gefixt; DeleteJob-Lost-Update geschlossen</td>
+        <td>AGT-2147/48/49 · Reconciliation 17.07. · Commits <code>13581a70</code>, <code>e9520c2b</code></td>
+        <td><span class="pill done">deployed/gemergt</span></td></tr>
+    <tr><td><b>1 · Ergebnis als Vertrag</b><br><span class="s-tiny">vor Remote-Reaktivierung</span></td>
+        <td>Attempt-Record + Fencing; Outbox mit Result-SHA; Review auf exakter SHA; Divergenz-Reconciliation; truthful Runner-Status</td>
+        <td>AGT-2182 · 2183 · 2184 · 2177 · 2189</td>
+        <td><span class="pill queued">gequeued (P0)</span></td></tr>
+    <tr><td><b>2 · Hermetik</b></td>
+        <td>Gate raus aus dem geteilten Checkout; Ressourcen-Klassen; virtuelle Zeit; MachineBound-Meta-Guard; Flake-Quarantäne; 2-Strike nur hermetisch</td>
+        <td>AGT-2155 + Bausteine §5.3 (3–6)</td>
+        <td><span class="pill queued">teils gequeued</span> <span class="pill new">teils neu</span></td></tr>
+    <tr><td><b>3 · Wachsamkeit</b></td>
+        <td>Nightly-Volltest auf develop mit Alarm; Board-Watchdog (escalated &gt; N, steer-pending &gt; 24 h, Phase hängt &gt; X h); Steer-Timeout mit definierter Konsequenz</td>
+        <td>Routine/Cron · <code>run-liveness-b-steer-timeout</code>-Branch</td>
+        <td><span class="pill new">neu, je ~1 Abend</span></td></tr>
+    <tr><td><b>4 · Vereinfachung</b></td>
+        <td>Completion-Gate auf strukturierte Evidenz statt Prosa; Registry-Write-Validierung (PROJ-017-Klasse) + Bereinigung; Sonderpfade abbauen — ein kanonischer Weg, wie Arbeit entsteht, reviewt wird und landet</td>
+        <td><code>completion-gate-use-structured-evidence</code> · Kleintickets</td>
+        <td><span class="pill queued">teils gequeued</span> <span class="pill open">Registry: Operator-Entscheid</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="historie"><span class="no">§8</span>Historie: Summary-Block</h2>
+<p class="dim">Kompaktübersicht aller bekannten Vorfälle und Maßnahmen. Vollständige Chronik mit
+Ursachen, Evidenz und Ticket-Referenzen auf der Unterseite
+<code>historie.html</code> — sie ist der kanonische Ort, an dem künftige
+Vorfälle <b>nachgetragen werden müssen</b>.</p>
+
+<table>
+  <thead><tr><th>Datum</th><th>Problem</th><th>Maßnahme</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>07./08.07.</td><td>AGT-1917: Out-of-band erledigte Karte blieb „Leiche“</td><td>External-Completion-Endpoint, „extern erledigt“-Badge, Timeline-Aktor <code>external</code></td><td><span class="pill done">shipped</span></td></tr>
+    <tr><td>10.07.</td><td>API-Mutationen ohne Absender-Identität</td><td><code>X-Client-Id</code> Pflicht-Header</td><td><span class="pill done">shipped</span></td></tr>
+    <tr><td>11.07.</td><td>Phantom-Welle: ~29 Karten „done“ ohne Commit auf origin</td><td>AGT-2147/48/49: verified-push-before-completion, Sentinel-Fix, Push-Probe, read-only-Admission</td><td><span class="pill done">deployed 12.07.</span></td></tr>
+    <tr><td>12.07.</td><td>Gate-Test-Stufe wird Falsch-Eskalations-Fabrik (MachineBound-Saga, 300s-Timeout, BuildProfile-Validierungsbug)</td><td>MachineBound-Filter, Timeout 900 s, Settings-Patch-Workaround</td><td><span class="pill done">Workarounds aktiv</span> <span class="pill open">Validierungsbug offen</span></td></tr>
+    <tr><td>13.07.</td><td>Rescue der Phantom-Charge; QS-15 wedged (missing-terminal-sentinel); Steer ohne Timeout</td><td>Rescue-Branches → develop; QS-15 am 17.07. entstuckt; Steer-Timeout weiter offen</td><td><span class="pill done">Rescue</span> <span class="pill open">Steer-Timeout</span></td></tr>
+    <tr><td>17.07.</td><td>Grade-D-Welle: 17 Karten eskaliert, Salvage nie in task-Branches integriert</td><td>Reconciliation: 19 Karten per Squash auf frische develop-basierte task-Branches, requeued</td><td><span class="pill done">erledigt</span></td></tr>
+    <tr><td>17.07.</td><td>7 vorbestehende Gate-Blocker auf develop (inkl. DeleteJob-Race, Serilog-Freeze)</td><td>2 Fix-Commits (<code>13581a70</code>, <code>e9520c2b</code>), Volltest-verifiziert; 4 Rest-Flakes dokumentiert</td><td><span class="pill done">gemergt</span> <span class="pill open">4 Flakes</span></td></tr>
+    <tr><td>17.07.</td><td>Korrupte Registry-Doppel-Registrierung PROJ-017 (Pfad ohne Backslashes; watchPath-Moves → 404)</td><td>Workaround <code>?project=</code>-Handle; Validierung + Bereinigung ausstehend</td><td><span class="pill open">offen</span></td></tr>
+    <tr><td>17.07.</td><td>Kreuzkontaminierte Salvage-Branches (2191 ⊃ 2108); verlorene Library-API (<code>composerContext</code>); CAC-7 npm-Publish blockiert (E401)</td><td>Basis-SHA-Pickup via AGT-2177; App-lokale Brücke + CAC-Backlog-Ticket; npm-Publish = Operator-Entscheid</td><td><span class="pill queued">2177</span> <span class="pill open">npm</span></td></tr>
+    <tr><td>18.07.</td><td>—</td><td>Dieses Härtungskonzept; Programm in §7</td><td><span class="pill new">beschlossen</span></td></tr>
+    <tr><td>19.07.</td><td>Workstream-Frame nicht bewährt (0 Inhalt nach 10 Tagen/200 Tasks; 0 von 575 Task-Logs lasen Frame-Seiten; Bedarf lag in learnings/common-problems/Workbenches)</td><td>Rückbau: Pulse-Drift auf reale Top-Ordner, human-action als ordnerunabhängige Frontmatter-Konvention, toter Stack (Frame/Seeder/Collector/Curator/Pinning) entfernt</td><td><span class="pill done">done</span></td></tr>
+    <tr><td>19.07.</td><td>16 „überholt“-klassifizierte Wiki-Seiten als gebannerte Altlasten (Inhalt in Nachfolgern aufgegangen)</td><td>Seiten + Companions + pfadgebundenes Drift-Sidecar via <code>git rm</code> gelöscht (34 Dateien); aktive Referenzen auf Nachfolger umgebogen, historische de-linkt; diese Chronik ist Sammelort der Runner-Vorfallsseiten</td><td><span class="pill done">done</span></td></tr>
+    <tr><td>19.07.</td><td>Wissens-Content und Maschinen-Verträge lagen im selben <code>docs/</code>-Baum vermischt; hartkodierte <code>docs/</code>-Pfade verstreut</td><td>Welle 2: Schemas/In-App-Hilfe/Config unter <b>einen</b> Code-Vertrags-Bereich <code>docs/app/</code> gezogen (aus Tree/Suche/Pulse/Grading ausgeblendet); zentrale <code>WikiProducerTargets</code> + Build-brechender Pfad-Guard; Klassifikations-Sidecar ab Seiten-Erstellung + dezente „unklassifiziert“-Pulse-Warnung; fünf Themen-Zweck-READMEs, <code>README-aus-wiki</code> eingeschmolzen</td><td><span class="pill done">done</span></td></tr>
+  </tbody>
+</table>
+
+<div class="box accent">
+  <h4>Das Muster über allen Einträgen</h4>
+  <p>Jeder Vorfall hatte dieselbe Tiefenstruktur: <b>Mehrdeutigkeit wurde optimistisch aufgelöst</b>
+  (fehlendes Sentinel → „done“, unklarer Diff-Scope → raten, Prosa-Checkliste → Urteil) und
+  <b>Wahrheit lag an mehreren Orten gleichzeitig</b>. Die gesamte Härtung ist die Umkehrung genau
+  dieser zwei Eigenschaften: fail-closed bei Mehrdeutigkeit, ein Vertrag als einzige Quelle.</p>
+</div>
+
+</main>
+</body>
+</html>

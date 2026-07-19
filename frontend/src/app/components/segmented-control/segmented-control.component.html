@@ -1,12 +1,21 @@
-<div class="segmented" role="group" [attr.aria-label]="ariaLabel()">
+<div class="segmented"
+     role="group"
+     [class.segmented--subtle]="appearance() === 'subtle'"
+     [attr.aria-label]="ariaLabel()">
   @for (option of options(); track trackOption($index, option)) {
     <button type="button"
             class="segmented__option"
             [class.segmented__option--active]="option.value === value()"
+            [class.segmented__option--with-icon]="!!option.icon"
             [attr.aria-pressed]="option.value === value()"
             [disabled]="option.disabled === true"
             [attr.data-testid]="option.testid ?? null"
             (click)="select(option)">
+      @if (option.icon; as icon) {
+        <span class="segmented__icon" aria-hidden="true">
+          <app-studio-icon [name]="icon" [size]="12"></app-studio-icon>
+        </span>
+      }
       {{ option.label }}
     </button>
   }

@@ -22,6 +22,7 @@ export class CrashRecoveryPromptComponent implements OnInit {
   readonly pending = signal<CrashRecoveryPending[]>([]);
   readonly loading = signal(false);
   readonly busyId = signal<string | null>(null);
+  readonly busyAll = signal(false);
   readonly error = signal<string | null>(null);
   readonly open = computed(() => this.pending().length > 0);
 
@@ -61,7 +62,7 @@ export class CrashRecoveryPromptComponent implements OnInit {
   }
 
   commit(item: CrashRecoveryPending): void {
-    if (this.busyId()) return;
+    if (this.busyId() || this.busyAll()) return;
     this.busyId.set(item.id);
     this.error.set(null);
     this.tasks.commitCrashRecovery(item.id).subscribe({
@@ -76,8 +77,36 @@ export class CrashRecoveryPromptComponent implements OnInit {
     });
   }
 
+  /// Dismisses every pending item in sequence. Already-dismissed items stay
+  /// removed when a later one fails; the error then names the failing item
+  /// and the rest remain reviewable.
+  dismissAll(): void {
+    if (this.busyId() || this.busyAll()) return;
+    this.busyAll.set(true);
+    this.error.set(null);
+    const queue = [...this.pending()];
+    const next = () => {
+      const item = queue.shift();
+      if (!item) {
+        this.busyAll.set(false);
+        return;
+      }
+      this.tasks.dismissCrashRecovery(item.id).subscribe({
+        next: () => {
+          this.remove(item.id);
+          next();
+        },
+        error: (err) => {
+          this.busyAll.set(false);
+          this.error.set(this.errorMessage(err, `Could not dismiss '${item.projectName}'.`));
+        },
+      });
+    };
+    next();
+  }
+
   dismiss(item: CrashRecoveryPending): void {
-    if (this.busyId()) return;
+    if (this.busyId() || this.busyAll()) return;
     this.busyId.set(item.id);
     this.error.set(null);
     this.tasks.dismissCrashRecovery(item.id).subscribe({

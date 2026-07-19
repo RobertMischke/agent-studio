@@ -4,9 +4,9 @@ FAQ-style: known failure modes you may hit while operating agent-orchestrator, w
 
 For deeper context, the structural references are:
 
-- [../filesystem-contract.md](../../contracts/filesystem.md) - lane catalog, on-disk shape.
+- [../filesystem-contract.md](../../system/contracts/filesystem.md) - lane catalog, on-disk shape.
 - [../../.agents/skills/task-api/references/known-pitfalls.md](../../../.agents/skills/task-api/references/known-pitfalls.md) - operator-side pitfalls when scripting via the API.
-- [../cli-skills/](../../cli/skills) - per-CLI quirks and known incidents.
+- [../cli-skills/](../../system/cli/skills) - per-CLI quirks and known incidents.
 
 ## "The agent only emits sandbox errors"
 
@@ -73,7 +73,7 @@ Symptom: a Codex job finishes the work cleanly but the run is marked `missing-te
 
 Cause: Codex has no `--append-system-prompt` flag, so the sentinel grammar is only injected via `CodexCliService.BuildSystemPromptPrefix`. On a resume turn the fresh-start template is not re-rendered. Without the prefix, Codex regularly drops the terminal sentinel.
 
-Fix: the runner already prepends the prefix on every invocation. If you see this on runs that came from the runner (not a manual `codex exec`), check that the prefix length-guard test (`CodexCliServiceTests.BuildSystemPromptPrefix_StaysShort`) didn't get accidentally stripped. The grammar lives in [../agent-task-contract.md](../../contracts/agent-task.md).
+Fix: the runner already prepends the prefix on every invocation. If you see this on runs that came from the runner (not a manual `codex exec`), check that the prefix length-guard test (`CodexCliServiceTests.BuildSystemPromptPrefix_StaysShort`) didn't get accidentally stripped. The grammar lives in [../agent-task-contract.md](../../system/contracts/agent-task.md).
 
 ## "Empty shell folder in a lane"
 
