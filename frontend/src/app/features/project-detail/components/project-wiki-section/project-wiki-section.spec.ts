@@ -329,6 +329,9 @@ const HISTORY: WikiFileHistory = {
 describe('ProjectWikiSectionComponent', () => {
   beforeEach(() => {
     clearWikiStorage();
+    // Deep-link tests drive the hash; reset it so each test starts clean and
+    // the existing (hash-agnostic) tests never inherit a stale wiki route.
+    window.history.replaceState(null, '', '/');
   });
 
   it('renders the physical folder tree with folders collapsed by default and md/html/json files when expanded', async () => {
@@ -939,10 +942,11 @@ describe('ProjectWikiSectionComponent', () => {
       expect(panel.querySelectorAll('.app-menu__icon')).toHaveLength(0);
     };
 
-    // File context menu: Rename + View history + Delete, text-only.
+    // File context menu: Link kopieren + Rename + View history + Delete, text-only.
     openCtx('concepts/overview.md');
     let panel = document.querySelector<HTMLElement>('[data-testid="wiki-ctx-panel"]');
     expect(panel, 'file context menu panel').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-copy-link"]')!.textContent).toContain('Link kopieren');
     expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="wiki-ctx-item-history"]')).toBeTruthy();
     assertTextOnly(panel!);
@@ -950,12 +954,13 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.componentInstance.closeMenu();
     fixture.detectChanges();
 
-    // Category context menu: New page + New category + Rename + Delete category, text-only.
+    // Category context menu: New page + New category + Link kopieren + Rename + Delete category, text-only.
     openCtx('concepts');
     panel = document.querySelector<HTMLElement>('[data-testid="wiki-ctx-panel"]');
     expect(panel, 'folder context menu panel').toBeTruthy();
     expect(document.querySelector('[data-testid="wiki-ctx-item-new-page"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="wiki-ctx-item-new-folder"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-copy-link"]')!.textContent).toContain('Link kopieren');
     expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]')!.textContent).toContain('Delete');
     assertTextOnly(panel!);
     http.verify();
@@ -1336,6 +1341,169 @@ describe('ProjectWikiSectionComponent', () => {
       .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
     fixture.detectChanges();
     expect(root.querySelector('[data-testid="wiki-folder-error"]')).toBeTruthy();
+    http.verify();
+  });
+
+  // ---- shareable deep links (URL <-> open page/folder) ----
+
+  const WIKI_BASE_HASH = '#/projects/demo/wiki';
+
+  /** Put the browser on the wiki rail route so the component owns the URL. */
+  function setWikiHash(query = ''): void {
+    window.history.replaceState(null, '', `/${WIKI_BASE_HASH}${query}`);
+  }
+
+  function flushDoc(http: HttpTestingController, rel: string, content = '# Doc\n'): void {
+    http.expectOne(`/api/projects/Demo/wiki/files/${rel}`).flush({ relPath: rel, content });
+    http.expectOne(`/api/projects/Demo/wiki/history/${rel}`).flush({ ...HISTORY, relPath: rel });
+  }
+
+  it('syncs the URL when a page is opened (history push) and cleared on close', async () => {
+    setWikiHash();
+    const { fixture, http } = await setup();
+    const push = vi.spyOn(window.history, 'pushState');
+    expandConcepts(fixture);
+
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    flushDoc(http, 'concepts/overview.md');
+    fixture.detectChanges();
+
+    // Opening a page is a history entry carrying the encoded relPath.
+    expect(push).toHaveBeenCalled();
+    expect(window.location.hash).toBe(`${WIKI_BASE_HASH}?page=concepts%2Foverview.md`);
+
+    // Closing the page clears the param back to the bare rail route.
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-close"]')!.click();
+    fixture.detectChanges();
+    http.match('/api/projects/Demo/style-guides').forEach(r => r.flush(STYLE_GUIDES));
+    http.match('/api/projects/Demo/wiki/home').forEach(r => r.flush(HOME));
+    expect(window.location.hash).toBe(WIKI_BASE_HASH);
+    push.mockRestore();
+    http.verify();
+  });
+
+  it('syncs a folder overview as a replace (no history spam on tree clicks)', async () => {
+    setWikiHash();
+    const { fixture, http } = await setup();
+    const push = vi.spyOn(window.history, 'pushState');
+    const replace = vi.spyOn(window.history, 'replaceState');
+
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-folder-label-concepts"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts').flush({ path: 'concepts', name: 'concepts', children: [] });
+    fixture.detectChanges();
+
+    expect(window.location.hash).toBe(`${WIKI_BASE_HASH}?folder=concepts`);
+    expect(replace).toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    push.mockRestore();
+    replace.mockRestore();
+    http.verify();
+  });
+
+  it('leaves the URL untouched when mounted off the wiki rail route', async () => {
+    // No wiki hash (e.g. studio Hub tab): the component must not hijack the URL.
+    window.history.replaceState(null, '', '/');
+    const { fixture, http } = await setup();
+    const push = vi.spyOn(window.history, 'pushState');
+    const replace = vi.spyOn(window.history, 'replaceState');
+    expandConcepts(fixture);
+
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    flushDoc(http, 'concepts/overview.md');
+    fixture.detectChanges();
+
+    expect(window.location.hash).toBe('');
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    push.mockRestore();
+    replace.mockRestore();
+    http.verify();
+  });
+
+  it('restores an open page from the ?page= URL param on load', async () => {
+    setWikiHash('?page=concepts%2Foverview.md');
+    const { fixture, http } = await setup();
+    flushDoc(http, 'concepts/overview.md', '# Restored via URL\n');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedRel()).toBe('concepts/overview.md');
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('concepts/overview.md');
+    http.verify();
+  });
+
+  it('restores a folder overview from the ?folder= URL param on load', async () => {
+    setWikiHash('?folder=concepts');
+    const { fixture, http } = await setup();
+    http.expectOne('/api/projects/Demo/wiki/folder/concepts').flush({ path: 'concepts', name: 'concepts', children: [] });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedFolderRel()).toBe('concepts');
+    expect(el(fixture).querySelector('[data-testid="wiki-folder-view"]')).toBeTruthy();
+    http.verify();
+  });
+
+  it('falls back to the landing with a dezent hint for an unknown deep-linked path', async () => {
+    setWikiHash('?page=ghost%2Fmissing.md');
+    const { fixture } = await setup();
+
+    // No page opened: the landing shows, the param is dropped, and a hint names the path.
+    expect(fixture.componentInstance.openedRel()).toBeNull();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-viewer-empty"]')).toBeTruthy();
+    const hint = el(fixture).querySelector('[data-testid="project-wiki-deeplink-missing"]');
+    expect(hint, 'missing-link hint').toBeTruthy();
+    expect(hint!.textContent).toContain('ghost/missing.md');
+    expect(hint!.textContent).toContain('Die verlinkte Seite');
+    expect(window.location.hash).toBe(WIKI_BASE_HASH);
+  });
+
+  it('names a missing folder deep-link a folder, not a page, in the hint', async () => {
+    setWikiHash('?folder=ghost-folder');
+    const { fixture } = await setup();
+
+    expect(fixture.componentInstance.selectedFolderRel()).toBeNull();
+    const hint = el(fixture).querySelector('[data-testid="project-wiki-deeplink-missing"]');
+    expect(hint, 'missing-link hint').toBeTruthy();
+    expect(hint!.textContent).toContain('ghost-folder');
+    expect(hint!.textContent).toContain('Der verlinkte Ordner');
+    expect(window.location.hash).toBe(WIKI_BASE_HASH);
+  });
+
+  it('copies an absolute page link from the viewer-header copy icon', async () => {
+    setWikiHash();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    flushDoc(http, 'concepts/overview.md');
+    fixture.detectChanges();
+
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-copy-link"]')!.click();
+    expect(writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/${WIKI_BASE_HASH}?page=concepts%2Foverview.md`,
+    );
+    http.verify();
+  });
+
+  it('copies an absolute folder link from the context menu', async () => {
+    setWikiHash();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    const { fixture, http } = await setup();
+    fixture.componentInstance.copyWikiLinkForNode({
+      name: 'concepts', title: 'concepts', relPath: 'concepts', type: 'folder', children: [],
+    });
+
+    expect(writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/${WIKI_BASE_HASH}?folder=concepts`,
+    );
     http.verify();
   });
 

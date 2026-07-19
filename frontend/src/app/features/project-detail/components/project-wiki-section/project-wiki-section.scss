@@ -854,6 +854,60 @@
   color: var(--studio-fg);
 }
 
+// Icon-only "copy shareable link" affordance in the viewer head. Mirrors the
+// viewer-close chrome (border-left divider, muted->fg on hover) but without the
+// margin-left:auto the Edit action uses, so it sits in the trailing cluster.
+.pwiki__copy-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 var(--studio-spacing-2);
+  border: 0;
+  border-left: 1px solid var(--studio-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  cursor: pointer;
+}
+
+.pwiki__copy-link:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+}
+
+// Dezent hint shown when a shared deep-link points at a path no longer in the
+// tree. Sits directly under the header, above the body.
+.pwiki__deeplink-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-muted);
+  font-size: 0.78rem;
+}
+
+.pwiki__deeplink-hint code {
+  color: var(--studio-fg);
+}
+
+.pwiki__deeplink-dismiss {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.pwiki__deeplink-dismiss:hover {
+  color: var(--studio-fg);
+}
+
 .pwiki__workspace {
   // Collapsed meta rail keeps a slim strip (chevron + vertical "Meta" + grade
   // badge) instead of vanishing, so the grade stays readable and the reopen

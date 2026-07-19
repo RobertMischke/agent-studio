@@ -58,6 +58,19 @@
     }
   </header>
 
+  @if (deepLinkMissing(); as missing) {
+    <div class="pwiki__deeplink-hint" role="status" data-testid="project-wiki-deeplink-missing">
+      <app-studio-icon name="warn" [size]="13"></app-studio-icon>
+      <span>{{ missing.kind === 'folder' ? 'Der verlinkte Ordner' : 'Die verlinkte Seite' }} <code>{{ missing.relPath }}</code> wurde nicht gefunden.</span>
+      <button class="pwiki__deeplink-dismiss" type="button"
+              data-testid="project-wiki-deeplink-dismiss"
+              aria-label="Hinweis schließen"
+              (click)="dismissDeepLinkHint()">
+        <app-studio-icon name="close" [size]="12"></app-studio-icon>
+      </button>
+    </div>
+  }
+
   @if (loading()) {
     <p class="studio-empty">Loading...</p>
   } @else if (!tree()) {
@@ -318,6 +331,13 @@
                     data-testid="project-wiki-edit">
               <app-studio-icon name="code" [size]="12"></app-studio-icon>
               <span>Edit</span>
+            </button>
+            <button class="pwiki__copy-link" type="button"
+                    data-testid="project-wiki-copy-link"
+                    cacTooltip="Link zu dieser Seite kopieren"
+                    aria-label="Link zu dieser Seite kopieren"
+                    (click)="copyOpenedPageLink()">
+              <app-studio-icon name="link" [size]="13"></app-studio-icon>
             </button>
             <button class="pwiki__star-toggle" type="button"
                     data-testid="project-wiki-star-toggle"
@@ -651,6 +671,7 @@
               [relPath]="folderRel"
               (openFolder)="openFolderOverview($event)"
               (openPage)="openFile($event.relPath, $event.type)"
+              (copyLink)="copyFolderLink($event)"
               (openRoot)="showWikiLanding()" />
         } @else {
           <header class="pwiki__viewer-head" data-testid="project-wiki-tabs-empty">

@@ -46,6 +46,8 @@ export class WikiFolderViewComponent {
   readonly openPage = output<WikiFolderOpenRequest>();
   /** Root breadcrumb: back to the wiki landing view. */
   readonly openRoot = output<void>();
+  /** Breadcrumb-end copy icon: request a shareable link to this folder. */
+  readonly copyLink = output<string>();
 
   readonly overview = signal<WikiFolderOverview | null>(null);
   readonly loading = signal(true);

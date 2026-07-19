@@ -154,6 +154,12 @@ describe('WikiFolderViewComponent', () => {
 
     root.querySelector<HTMLButtonElement>('[data-testid="wiki-folder-crumb-root"]')!.click();
     expect(rootRequested).toBe(1);
+
+    // The breadcrumb-end copy icon requests a link to the shown folder.
+    const copied: string[] = [];
+    cmp.copyLink.subscribe(rel => copied.push(rel));
+    root.querySelector<HTMLButtonElement>('[data-testid="wiki-folder-copy-link"]')!.click();
+    expect(copied).toEqual(['concepts/deep']);
     http.verify();
   });
 
