@@ -67,3 +67,66 @@
     color: var(--studio-on-accent);
   }
 }
+
+/* Optional per-option icon (SegmentedOption.icon): inline before the label. */
+.segmented__option.segmented__option--with-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--studio-spacing-1);
+}
+.segmented__icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/*
+ * `subtle` appearance: a quiet, closed control for in-content toolbars.
+ * One bordered container on the surface tone, equal-width segments, and an
+ * active state that only lifts to a muted surface fill with a border-strong
+ * inset ring — no brand accent, so it does not compete with the content.
+ * The default (`accent`) rules above stay untouched for existing callers.
+ */
+.segmented.segmented--subtle {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0;
+  padding: 0;
+  background: var(--studio-surface);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented--subtle .segmented__option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--studio-spacing-1);
+  border-radius: 0;
+  color: var(--studio-fg-muted);
+
+  &:hover:not(:disabled):not(.segmented__option--active) {
+    background: var(--studio-bg-hover);
+    color: var(--studio-fg);
+  }
+
+  /* The container clips (overflow: hidden), so keep the ring inside it. */
+  &:focus-visible {
+    outline-offset: -2px;
+  }
+}
+
+.segmented--subtle .segmented__option.segmented__option--active {
+  background: var(--studio-surface-muted);
+  color: var(--studio-text-primary);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--studio-border-strong);
+
+  &:hover:not(:disabled) {
+    background: var(--studio-surface-muted);
+    color: var(--studio-text-primary);
+  }
+}

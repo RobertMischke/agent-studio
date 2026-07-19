@@ -9,7 +9,7 @@
 // `[data-studio-theme='light']` overrides). Both files are loaded globally
 // via `styles.scss` so EVERY component reads from `var(--studio-*)` directly.
 //
-// See `docs/frontend/audits/scss-quality.md` for the Tier-1 / Tier-2 contract and
+// See `docs/quality/frontend/audits/scss-quality.md` for the Tier-1 / Tier-2 contract and
 // the enforced stylelint rules.
 // =========================================================================
 

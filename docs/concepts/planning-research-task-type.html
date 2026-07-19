@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planning &amp; Research Task Type</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --ink: #1c2330;
+    --muted: #5b6676;
+    --line: #e2e6ec;
+    --accent: #2f6fed;
+    --accent-soft: #eaf1ff;
+    --code-bg: #f0f2f6;
+    --code-ink: #2b3344;
+    --good: #1f8a52;
+    --good-soft: #e7f5ec;
+    --warn: #b8860b;
+    --warn-soft: #fbf3e0;
+    --danger: #c0392b;
+    --danger-soft: #fbecea;
+    --read: #6a4fb6;
+    --read-soft: #efebf9;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 40px 28px 96px;
+  }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 22px;
+    margin-bottom: 8px;
+  }
+  header.page .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-size: 30px;
+    line-height: 1.2;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  header.page .sub {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 0;
+    max-width: 70ch;
+  }
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 26px 0 36px;
+  }
+  nav.toc h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 20px;
+    columns: 2;
+    column-gap: 32px;
+  }
+  nav.toc li { margin: 3px 0; break-inside: avoid; }
+  nav.toc a { color: var(--ink); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); text-decoration: underline; }
+  section { margin: 0 0 44px; scroll-margin-top: 20px; }
+  h2.sec {
+    font-size: 21px;
+    margin: 0 0 14px;
+    padding-top: 12px;
+    border-top: 2px solid var(--line);
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    font-size: 16px;
+    margin: 24px 0 8px;
+    color: var(--ink);
+  }
+  p { margin: 0 0 13px; }
+  ul, ol { margin: 0 0 13px; padding-left: 22px; }
+  li { margin: 5px 0; }
+  code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    word-break: break-word;
+  }
+  .lead {
+    font-size: 16.5px;
+    color: var(--ink);
+  }
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 18px 0;
+  }
+  .callout.good { border-left-color: var(--good); background: var(--good-soft); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout .label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 5px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 18px 0 22px;
+    padding: 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .flow .node {
+    background: var(--accent-soft);
+    border: 1px solid #cfe0ff;
+    color: #1d3f8a;
+    border-radius: 7px;
+    padding: 7px 12px;
+    font-weight: 600;
+    font-size: 13.5px;
+    white-space: nowrap;
+  }
+  .flow .arrow { color: var(--muted); font-weight: 700; font-size: 15px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 18px 0 12px;
+    font-size: 13.6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  thead th {
+    background: #f1f3f7;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  tbody th {
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    width: 130px;
+    background: #fafbfc;
+  }
+  tr:last-child td, tr:last-child th { border-bottom: none; }
+  td.coding { background: #fff; }
+  td.pr { background: #faf9fd; }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+  }
+  .tag.read { background: var(--read-soft); color: var(--read); }
+  .tag.code { background: var(--accent-soft); color: #1d3f8a; }
+  .tag.new { background: var(--good-soft); color: var(--good); }
+  .tag.exists { background: #eef0f4; color: var(--muted); }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    position: relative;
+    padding: 14px 16px 14px 56px;
+    margin: 0 0 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .steps > li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 14px;
+    top: 14px;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .steps .slice-title {
+    font-weight: 700;
+    font-size: 15px;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .steps .meta { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .qa { margin: 0 0 14px; padding: 0 0 14px; border-bottom: 1px dashed var(--line); }
+  .qa:last-child { border-bottom: none; }
+  .qa .q { font-weight: 600; margin: 0 0 4px; }
+  .qa .q::before { content: "Q. "; color: var(--accent); font-weight: 700; }
+  .qa .note { color: var(--muted); margin: 0; font-size: 14px; }
+  .filelist code { display: inline-block; margin: 1px 0; }
+  footer.page {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  .pill-row { margin: 4px 0 16px; }
+  .pill-row .tag { margin-right: 6px; }
+  @media (max-width: 680px) {
+    nav.toc ol { columns: 1; }
+    tbody th { width: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <p class="eyebrow">Concept &middot; Agent Taskboard</p>
+    <h1>Planning &amp; Research Task Type</h1>
+    <p class="sub">A first-class task type whose deliverable is a reviewable HTML report, not merged code. The operator analyzes, gets an artifact, decides, and continues. This document describes the type model, the decide-then-continue loop, and an incremental build plan grounded in the current codebase.</p>
+  </header>
+
+  <nav class="toc" aria-label="Table of contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#vision">Vision &amp; motive</a></li>
+      <li><a href="#today">How it works today, and the gap</a></li>
+      <li><a href="#type-model">The proposed type model</a></li>
+      <li><a href="#loop">The decide-then-continue loop</a></li>
+      <li><a href="#plan">Build plan</a></li>
+      <li><a href="#questions">Open questions</a></li>
+    </ol>
+  </nav>
+
+  <section id="vision">
+    <h2 class="sec">1. Vision &amp; motive</h2>
+    <p class="lead">A recurring motive: analysis, research, and concept tasks whose deliverable is a small HTML report the operator looks at, then continues working from.</p>
+    <p>The shape is an iteration loop, not a one-shot job. The operator commissions some work, receives an artifact, reviews it, makes a decision, and that decision drives the next unit of work. In the operator's words: <em>"Erarbeite etwas, dann entscheide, dann weiter."</em></p>
+
+    <div class="flow" aria-label="Iteration loop">
+      <span class="node">Analyze</span>
+      <span class="arrow">&rarr;</span>
+      <span class="node">Artifact (HTML report)</span>
+      <span class="arrow">&rarr;</span>
+      <span class="node">Review</span>
+      <span class="arrow">&rarr;</span>
+      <span class="node">Decide</span>
+      <span class="arrow">&rarr;</span>
+      <span class="node">Continue</span>
+    </div>
+
+    <p>Concrete examples the operator names:</p>
+    <ul>
+      <li>"Measure orchestrator input latency" &rarr; an HTML report to read.</li>
+      <li>"Make 5 comparison or concept proposals I can look at" &rarr; then I decide and we continue.</li>
+      <li>"Develop X, then resolve Y" &rarr; a worked-out artifact that drives a follow-up.</li>
+    </ul>
+
+    <p>This work is fundamentally different from a coding task. It does not merge code into <code>develop</code>. It produces a report or a concept. The presentation must be a great wiki/HTML experience, and after reviewing it the operator wants to easily continue: spawn a follow-up task, a next slice, or a decision that drives more work. That "decide then continue" handoff is the key gap today.</p>
+
+    <div class="callout">
+      <span class="label">Thesis</span>
+      <p>Almost all the structural plumbing already exists and is load-bearing. What is missing is the part the operator actually feels: a guaranteed reviewable HTML artifact, terminal-state semantics that are honestly different from coding, and the decide-then-continue handoff that turns a reviewed report into the next unit of work with a durable link back.</p>
+    </div>
+  </section>
+
+  <section id="today">
+    <h2 class="sec">2. How it works today, and the gap</h2>
+
+    <h3>The plumbing already exists (two read-only modes)</h3>
+    <p>The codebase has two orthogonal classification dimensions. <strong>Mode</strong> (<code>coding</code> | <code>planning</code> | <code>research</code>) drives substantial runtime behavior. <strong>TaskType</strong> (<code>bug</code> | <code>feature</code> | <code>chore</code>) is almost entirely display metadata. "Planning &amp; Research" is the operator-facing product name for the two read-only modes, which are already wired into the runner:</p>
+
+    <ul>
+      <li><strong>Pipeline shape.</strong> <code>PipelineCatalogue.ForMode(mode)</code> returns a git-free <code>ReadOnlyPipeline</code> for planning/research, built by filtering <code>GitStepIds</code> out of all three sections so the two pipelines stay in lock-step. See <code>backend/Features/Pipeline/PipelineCatalogue.cs</code> (selector at line 355, read-only definition 615-628; the lock-step comment is at line 613). A read-only run is render prompt &rarr; run agent &rarr; produce report &rarr; status, with no commit, merge, worktree, or conflict steps.</li>
+      <li><strong>Isolation.</strong> <code>WorktreeRunPolicy.RequiresWorktree</code> returns false for read-only modes, so the run executes in-place in the main checkout. See <code>backend/Features/Runner/WorktreeRunPolicy.cs</code> (lines 30-31).</li>
+      <li><strong>Parallelism.</strong> <code>ParallelSlotPolicy.ReadOnlyTask</code> is unconditionally <code>parallel-ok</code> (no predicted scope, can never collide). See <code>backend/Features/Runner/ParallelSlotPolicy.cs</code> (lines 12-26). Read-only tasks never block coding seats by scope; they are bounded only by <code>maxParallelism</code>.</li>
+      <li><strong>Containment.</strong> <code>ReadOnlyContainmentPolicy.Evaluate</code> flags any non-empty source-tree diff as a hard violation, never auto-reverted. See <code>backend/Features/Runner/ReadOnlyContainmentPolicy.cs</code> (line 43).</li>
+      <li><strong>Prompt framing.</strong> <code>RuntimePromptService.RenderModeFraming</code> injects <code>prompts/runtime/mode-framing-readonly.md</code> ("Read-only run. Investigate and report... Capture findings under results/") and, for research with web on, <code>prompts/runtime/mode-framing-web.md</code>. See <code>backend/Features/Prompts/RuntimePromptService.cs</code> (lines 66-75).</li>
+      <li><strong>Web default.</strong> <code>AllowWebAccess</code> defaults to <code>true</code> for research, <code>false</code> for planning/coding. See <code>backend/Features/Tasks/TaskMutationService.cs</code> (line 650) and <code>backend/Shared/Models/TaskInfo.cs</code> (lines 68-72).</li>
+    </ul>
+
+    <div class="callout good">
+      <span class="label">Why the deliverable does not break containment</span>
+      <p>The report artifact is written to the job folder's <code>results/</code> directory, which lives outside the app source repository (per <code>docs/system/contracts/filesystem.md</code>). Writing <code>results/report.html</code> therefore does not create a source-tree diff and does not trip <code>ReadOnlyContainmentPolicy</code>. This is what makes "produces a rich HTML report" compatible with "read-only, zero source mutation."</p>
+    </div>
+
+    <h3>The gap: review, decide, continue is not closed</h3>
+    <p>Three things the operator feels are missing:</p>
+    <ul>
+      <li><strong>No guaranteed HTML artifact reviewed in-studio.</strong> The mode-framing tells the agent to capture Markdown under <code>results/</code>, but there is no required self-contained HTML report and no task-level surface to render it. HTML rendering exists elsewhere (the wiki renders HTML pages and linked reasoning reports in a sandboxed iframe via <code>[srcdoc]="trustedHtml()"</code> in <code>frontend/src/app/features/project-detail/components/project-wiki-section/project-wiki-section.html</code>, lines 319-323 and 378-382; the analysis-report drilldown renders the Markdown body), but a read-only task has no equivalent in-studio report tab.</li>
+      <li><strong>Terminal-state semantics borrowed from coding.</strong> The read-only pipeline currently reuses the coding-shaped tail. The four aspect verdicts and the evidence gate are meaningless when there is no code to grade, and there is no merge to approve. Success for a report is "reviewed," not "merged."</li>
+      <li><strong>No decide-then-continue handoff.</strong> A planning task can be promoted to a coding task via <code>GET /api/tasks/{jobId}/promote-to-coding</code> (<code>backend/Features/Tasks/TaskCrudEndpoints.cs</code>, lines 201-222), but that endpoint is fire-and-forget (it copies the prompt and images and forgets the parent) and is planning-only (it rejects any non-planning mode with a BadRequest at line 205, so research has no continuation path at all). The <code>ReviewDecisionOrchestrator</code> only has <code>REISSUE</code> and <code>ESCALATE</code> decisions; there is no <code>SPAWN_FOLLOW_UP</code> kind. See <code>backend/Features/Runner/ReviewDecisionOrchestrator.cs</code> (ProcessBlockedAsync, lines 1249-1292).</li>
+    </ul>
+
+    <div class="callout warn">
+      <span class="label">Design groundwork that already exists</span>
+      <p>The taxonomy is reconciled in <code>docs/concepts/planning-research-task-kinds-2026-05.md</code> (three modes, read-only pipeline, promote flow, five pinned decisions). The decision-action pattern lives in <code>docs/research/escalated-lane-and-decision-surface-2026-06.md</code> (four actions on a card: discard, reissue with steer, manual, accept). The candidate-to-commitment ledger pattern is already proven in the analysis-report follow-up suggestions (<code>frontend/src/app/models/analysis-report.model.ts</code>). This concept synthesizes those fragments into one product feature.</p>
+    </div>
+  </section>
+
+  <section id="type-model">
+    <h2 class="sec">3. The proposed type model</h2>
+    <p>Planning &amp; Research differs from Coding across all four axes. The table contrasts the two. <span class="tag exists">reuse</span> marks behavior already in code; <span class="tag new">new</span> marks the seams this concept adds.</p>
+
+    <table>
+      <caption>Coding vs Planning &amp; Research (the read-only modes)</caption>
+      <thead>
+        <tr>
+          <th scope="col">Dimension</th>
+          <th scope="col"><span class="tag code">Coding</span></th>
+          <th scope="col"><span class="tag read">Planning &amp; Research</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Lifecycle</th>
+          <td class="coding">Full <code>StandardPipeline</code>: worktree + <code>task/&lt;id&gt;</code> branch, commit-attribution, four aspect verdicts, evidence gate, integrate-merge into <code>develop</code>, conflict-resolution. Terminal success = code merged. <span class="tag exists">reuse</span></td>
+          <td class="pr"><code>ReadOnlyPipeline</code> (git steps filtered out), runs in-place in the main checkout, parallel-ok. No worktree, no branch, no commit, no merge, no accept-against-develop. Terminal success = report exists, containment clean, parked as a decision. <span class="tag exists">reuse</span> <span class="tag new">terminal correction</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Interaction</th>
+          <td class="coding">Approve the merge, reissue, or escalate. The feedback verb is approve-merge.</td>
+          <td class="pr">Read the HTML report, then decide what work it spawns. The feedback verb is <strong>spawn</strong>. A four-action surface re-skins the escalated-lane pattern: Promote/Continue, Reissue-with-steer, Log-decision, Discard. Failures and uncertainty are hoisted into a host-rendered verdict strip (sentinel + confidence chip + open-questions counter) above the report. <span class="tag new">new</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Deliverable</th>
+          <td class="coding">A diff merged into <code>develop</code>; <code>status.md</code> is a summary.</td>
+          <td class="pr">A self-contained <code>results/report.html</code> (inline CSS, no network so it renders in <code>sandbox="allow-scripts"</code> with an opaque origin), with <code>status.md</code> as the structured fallback. Required regions: header (confidence + scope), body, open-questions, plus Sources (research) and a Proposed-next-steps list for the continue parser. <span class="tag new">new</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Presentation</th>
+          <td class="coding">Diff view, run protocol, aspect verdicts.</td>
+          <td class="pr">A Report tab (default for read-only tasks) renders <code>results/report.html</code> in the same sandboxed iframe the wiki uses. Falls back to the existing <code>beautiful-results</code> Markdown renderer over <code>status.md</code> when no HTML exists. A <code>publish-report</code> post-step commits the report into <code>docs/research/&lt;slug&gt;.html</code> as the one deliberate, auditable git action, so it is durable and searchable. <span class="tag new">new</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Continue</th>
+          <td class="coding">Reissue or escalate the same task; no follow-up spawning.</td>
+          <td class="pr">A Continuation primitive turns a reviewed report into linked follow-up task(s) through the existing create-task modal. Forward link <code>continuations[]</code> on the source, back link <code>derivedFrom</code> on the child. Fan-out (N children from one report) is native. <span class="tag new">new</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>What terminal "Reviewed" means</h3>
+    <p>A read-only run cannot merge: the pipeline has no git steps, the run is in-place, and containment guarantees a clean source tree. Its success terminal is therefore: a report exists at <code>results/report.html</code>, the read-only-containment check passed, and the card is parked in <code>5-human-review</code> as an <strong>awaiting-decision</strong> substate (reusing the escalated-lane substate split, not a new folder lane). That landing is a decision surface, not a merge-approval gate. The operator's review is the terminal transition: choosing a next action moves the card to <code>6-completed</code>. The orchestrator-decision step for a read-only task must route straight to that surface with <code>verdict=report-ready</code>, and must never attempt accept-to-develop and never park in <code>4-auto-review</code>.</p>
+
+    <div class="callout">
+      <span class="label">Scope decision</span>
+      <p>Keep the <code>ReadOnlyPipeline</code> a pure git-filter of <code>StandardPipeline</code>. Do not add a custom report-quality verdict step, because that breaks the lock-step invariant the code comment at <code>PipelineCatalogue.cs:613</code> explicitly protects. The coding-shaped aspect verdicts simply no-op on a read-only run; report quality is enforced by the verdict strip and the prompt contract, not a pipeline step.</p>
+    </div>
+  </section>
+
+  <section id="loop">
+    <h2 class="sec">4. The decide-then-continue loop</h2>
+    <p>The loop is closed by one handoff primitive, the <strong>Continuation</strong>, plus the host-rendered decision surface. The Continuation record is modeled on the already-proven analysis-report follow-up suggestion (candidate, then <code>CreatedJobId</code> once materialized) and made bidirectional and durable.</p>
+
+    <div class="flow" aria-label="Decide then continue mechanics">
+      <span class="node">Report at results/report.html</span>
+      <span class="arrow">&rarr;</span>
+      <span class="node">5-human-review (awaiting-decision)</span>
+      <span class="arrow">&rarr;</span>
+      <span class="node">Operator reads report</span>
+      <span class="arrow">&rarr;</span>
+      <span class="node">Picks typed action</span>
+      <span class="arrow">&rarr;</span>
+      <span class="node">Follow-up task(s) with derivedFrom</span>
+    </div>
+
+    <h3>The Continuation record</h3>
+    <ul>
+      <li><strong>Forward link.</strong> A <code>continuations[]</code> array on the source task. The source can always answer "what did I spawn?".</li>
+      <li><strong>Back link.</strong> A new <code>derivedFrom { sourceKind, sourceId, sourceRunIndex, continuationId, intent }</code> field on the child's <code>TaskInfo</code>, modeled exactly on the existing <code>EpicId</code> field in <code>backend/Shared/Models/TaskInfo.cs</code> (same persistence, same boot-normalize-to-null, behavior-neutral when absent). The child can always answer "where did I come from?". Resolving the link is a pure id-join, no output scraping, consistent with ADR-0002 (deterministic over prompt-trust).</li>
+      <li><strong>Why not reuse <code>EpicId</code>.</strong> <code>EpicId</code> means container membership and decomposition. A Continuation means lineage and iteration (one artifact, one chosen next step, possibly cross-mode research to coding). Keeping them separate avoids overloading the epic-decomposition path in <code>backend/Features/Runner/ProjectRunner.cs</code> (DecomposeEpicAndCreateSubTasks, lines 4832-4876).</li>
+    </ul>
+
+    <h3>The four typed actions (text-only menu items)</h3>
+    <ol>
+      <li><strong>Promote / Continue.</strong> Turn the report into the next task(s). Generalizes <code>promote-to-coding</code> to be intent-aware and mode-agnostic, lifting the planning-only BadRequest at <code>TaskCrudEndpoints.cs:205</code> so research can promote too. Opens the existing create-task modal pre-filled (prompt body from the report, images copied byte-for-byte per the planning-research decision, intent preselected, plus an editable Steer box). On Save, <code>childJobId</code> is stamped and <code>derivedFrom</code> is written in the same atomic mutation.</li>
+      <li><strong>Reissue with steer.</strong> Re-run the same read-only task with the operator's added direction (continue endpoint, <code>mode=steer</code>), producing a v2 report. This is the iteration loop.</li>
+      <li><strong>Log decision and archive.</strong> Record the conclusion in the per-project decision journal (<code>ReviewDecisionRecord</code>, kind=Research/Planning), move to <code>6-completed</code>. This captures the "I reviewed and chose direction X / chose not to continue" case as durable evidence, so a later coding task can cite "preceded by research task X."</li>
+      <li><strong>Discard.</strong> The report did not help; archive without spawning work.</li>
+    </ol>
+
+    <h3>Intents map onto existing pipelines</h3>
+    <ul>
+      <li><code>promote-to-coding</code> &rarr; child mode=coding, state=1-preparation (today's promote, now linked and extended to research).</li>
+      <li><code>deeper-research</code> &rarr; child mode=research, web on, parent report pre-seeded into the prompt.</li>
+      <li><code>next-slice</code> &rarr; coding child carrying a <code>sliceOrdinal</code>, so lineage reads Slice 1, 2, 3.</li>
+      <li><code>decision-only</code> &rarr; no child task; writes a decision-journal record plus a timeline entry.</li>
+    </ul>
+
+    <div class="callout good">
+      <span class="label">Fan-out is native</span>
+      <p>Because the Continuation is an array, one report can spawn N children. "Make 5 comparison concepts, I pick these 3, we continue" is supported directly. Each spawned child runs its own lifecycle (a coding child gets a worktree and full pipeline; a research child stays read-only), and the Research to report to Slice 1 to Slice 2 chain is a visible, navigable lineage thread.</p>
+    </div>
+
+    <div class="callout warn">
+      <span class="label">Human-gated by default</span>
+      <p>Spawning is an operator click, not an in-run auto-decision. A typed <code>SPAWN_FOLLOW_UP</code> decision kind is added to <code>ReviewDecisionOrchestrator</code> as a clean seam but ships default-OFF, with a depth cap and a <code>MaxAutoContinue</code> guard (mirroring <code>MaxAutoReissueAttempts</code>). This preserves "operator reviews first; 5-human-review is a WANTED gate" and avoids any overnight auto-fan-out.</p>
+    </div>
+  </section>
+
+  <section id="plan">
+    <h2 class="sec">5. Build plan</h2>
+    <p>Incremental, each slice independently shippable. Slices 0 to 2 deliver the reviewable artifact and honest terminal state; 3 and 4 close the continue loop; 5 and 6 are optional.</p>
+
+    <ol class="steps">
+      <li>
+        <span class="slice-title">Slice 0 &mdash; Report contract + prompt framing</span>
+        Extend <code>prompts/runtime/mode-framing-readonly.md</code> to require a self-contained <code>results/report.html</code> (inline CSS, no external network) alongside <code>status.md</code>, with stable required regions: header (confidence + scope), body, open-questions, plus Sources (research) and a Proposed-next-steps list for the continue parser. Add a fenced confidence block (high | medium | low) the host parses deterministically. Add a structural unit test guarding the template, mirroring existing sentinel-template guards.
+        <div class="meta">No backend behavior change. The read-only pipeline already runs and writes <code>results/</code>.</div>
+      </li>
+      <li>
+        <span class="slice-title">Slice 1 &mdash; Report tab + verdict strip</span>
+        Add a Report inspector tab on task-detail that is the default tab for read-only tasks (coding unchanged). Render <code>results/report.html</code> in the wiki's existing sandboxed iframe pattern (<code>&lt;iframe sandbox="allow-scripts" [srcdoc]="trustedHtml()"&gt;</code> plus <code>DomSanitizer.bypassSecurityTrustHtml</code>). Deliberately omit <code>allow-same-origin</code>. Fall back to <code>beautiful-results</code> over <code>status.md</code> when no HTML exists. Above the iframe, render a host (Angular) sticky verdict strip (sentinel banner + confidence chip or "undeclared" + open-questions counter), parsed from the sentinel and the fenced confidence block, not the HTML body.
+        <div class="meta">Reuses <code>project-wiki-section.html</code> rendering and the <code>beautiful-results</code> renderer. Only new UI: one tab plus the strip.</div>
+      </li>
+      <li>
+        <span class="slice-title">Slice 2 &mdash; Lifecycle terminal-state correction</span>
+        Make the read-only orchestrator-decision step route a finished read-only task to <code>5-human-review</code> with <code>verdict=report-ready</code> (never accept-to-develop, never park in <code>4-auto-review</code>). Model the landing as an awaiting-decision substate, reusing the escalated-lane substate split, not a new folder lane. Keep the <code>ReadOnlyPipeline</code> a pure git-filter of <code>StandardPipeline</code>. Wire containment violation, empty-results, and BLOCKED/NEEDS_INPUT outcomes to the same surface with their reason summary.
+        <div class="meta">Depends on the escalated-lane substate split, or ships a minimal read-only-scoped substate flag.</div>
+      </li>
+      <li>
+        <span class="slice-title">Slice 3 &mdash; Continuation primitive</span>
+        Add the behavior-neutral <code>derivedFrom</code> field on <code>TaskInfo</code> (modeled on <code>EpicId</code>, with boot-normalize-to-null and unit tests like the mode field had). Add the <code>continuations[]</code> ledger on the source (candidate, committed, resolved). Generalize the promote endpoint to be intent-aware and mode-agnostic (lift the planning-only reject at <code>TaskCrudEndpoints.cs:205</code>). On create, stamp <code>childJobId</code> and write <code>derivedFrom</code> atomically. Copy images byte-for-byte so children stay self-contained.
+        <div class="meta">Reuses <code>BuildPromoteToCodingPlan</code> in <code>backend/Features/Tasks/TaskScannerService.cs</code> (lines 523-546).</div>
+      </li>
+      <li>
+        <span class="slice-title">Slice 4 &mdash; Decide-then-continue action bar + lineage UI</span>
+        On the decision surface (and the analysis-report drilldown), add the text-only four-action bar: Continue from this (intent picker) opening the pre-filled create modal with an editable Steer box; Reissue-with-steer; Log-decision (writes <code>ReviewDecisionRecord</code>); Discard. Support fan-out. Present lineage: a "Derived from" chip on the child header (modeled on the epic-link chip, click navigates to source) and a "Continued as" list on the source.
+      </li>
+      <li>
+        <span class="slice-title">Slice 5 &mdash; Typed SPAWN_FOLLOW_UP decision (default OFF)</span>
+        Add <code>SPAWN_FOLLOW_UP</code> to <code>ReviewDecisionOrchestrator</code> to auto-commit a single high-confidence candidate Continuation only when a project explicitly arms auto-continue. Ship default-OFF. Self-bounding: depth cap on the <code>derivedFrom</code> chain plus <code>MaxAutoContinue</code>. Never fan-out, never for research, child lands in <code>1-preparation</code> (held, not auto-picked).
+      </li>
+      <li>
+        <span class="slice-title">Slice 6 &mdash; Cross-project report index (optional)</span>
+        Register each published report as an analysis-report record (<code>scope.kind=Task</code>, <code>scope.jobId</code>, <code>topic=planning-and-research</code>) so it also appears newest-first in the project-level analysis-report drilldown, giving an "all my research and concept reports" view. Markdown-is-durable fallback holds.
+      </li>
+    </ol>
+
+    <h3>Primary code anchors</h3>
+    <p class="filelist">
+      <code>backend/Features/Pipeline/PipelineCatalogue.cs</code>
+      <code>backend/Features/Runner/WorktreeRunPolicy.cs</code>
+      <code>backend/Features/Runner/ParallelSlotPolicy.cs</code>
+      <code>backend/Features/Runner/ReadOnlyContainmentPolicy.cs</code>
+      <code>backend/Features/Prompts/RuntimePromptService.cs</code>
+      <code>backend/Features/Tasks/TaskCrudEndpoints.cs</code>
+      <code>backend/Features/Tasks/TaskScannerService.cs</code>
+      <code>backend/Features/Runner/ReviewDecisionOrchestrator.cs</code>
+      <code>backend/Shared/Models/TaskInfo.cs</code>
+      <code>prompts/runtime/mode-framing-readonly.md</code>
+      <code>frontend/src/app/features/project-detail/components/project-wiki-section/project-wiki-section.html</code>
+    </p>
+  </section>
+
+  <section id="questions">
+    <h2 class="sec">6. Open questions</h2>
+
+    <div class="qa">
+      <p class="q">Default tab override</p>
+      <p class="note">For planning/research, should the Report tab replace Protokoll as the default, or just be added (coding unchanged)? Changing the default tab is a small navigation-model change. Confirm read-only tasks should open on the report rather than the run log.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">5-human-review overloading</p>
+      <p class="note">This parks reports in <code>5-human-review</code> as awaiting-decision, distinct from coding's awaiting-acceptance. That needs the escalated-lane substate split first, or a minimal read-only-scoped flag. Options: (a) gate on the substate split shipping, (b) ship a minimal scoped flag now, (c) temporarily route reports to a different surface.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Research promote scope</p>
+      <p class="note">Today <code>promote-to-coding</code> hard-rejects research (<code>TaskCrudEndpoints.cs:205</code>), and the prior design deliberately gave research no promote button. The operator vision explicitly wants research to decide and continue. Confirm research should get continuation actions, overriding the prior decision.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">HTML richness vs sandbox</p>
+      <p class="note"><code>sandbox="allow-scripts"</code> supports self-contained interactive reports while the omitted <code>allow-same-origin</code> keeps an opaque origin. Reports that need same-origin or controlled network integration belong in the Workbench viewer.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Auto-continue appetite</p>
+      <p class="note">Slice 5 ships <code>SPAWN_FOLLOW_UP</code> default-OFF. Given prior overnight bulk-run incidents, do you want auto-continue at all yet, or keep the loop fully human-gated and treat Slice 5 as a future-only seam?</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Wiki publish location and lifecycle</p>
+      <p class="note">Reports publish to <code>docs/research/&lt;slug&gt;.html</code> as the one git action of a read-only task. Confirm the path convention, and whether a superseded report (after a reissue v2) should overwrite, version (v1/v2), or accumulate as separate wiki pages.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Confidence signal source of truth</p>
+      <p class="note">The verdict-strip confidence chip is parsed from an agent-emitted fenced block; absent it shows "undeclared". Is host-parsed agent-declared confidence sufficient, or do you eventually want an independent report-quality grade, noting that adding a verdict step would diverge the <code>ReadOnlyPipeline</code> from the <code>StandardPipeline</code> lock-step we are deliberately preserving?</p>
+    </div>
+  </section>
+
+  <footer class="page">
+    Concept document &middot; Planning &amp; Research Task Type. Grounded in the current agent-taskboard codebase; file paths cite verified source locations. No code is invented; all behavioral claims trace to the cited files.
+  </footer>
+
+</div>
+</body>
+</html>

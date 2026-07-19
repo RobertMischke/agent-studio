@@ -14,7 +14,7 @@ namespace AgentStudio.Tests;
 /// <para>
 /// The renderer is pure and dependency-free, so these tests construct it with a
 /// plain <c>new()</c> - no process, no Codex behavior constructor graph. The
-/// matching skill at <c>docs/cli/skills/cli-codex.md</c> documents the frame
+/// matching skill at <c>docs/system/cli/skills/cli-codex.md</c> documents the frame
 /// catalogue these tests lock.
 /// </para>
 /// </summary>

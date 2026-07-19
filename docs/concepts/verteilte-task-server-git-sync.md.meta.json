@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Verteilte Task-Server mit Git als Sync-Transport",
+  "source": {
+    "path": "docs/concepts/verteilte-task-server-git-sync.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "3a9d3fc188362d40f179c8c828863d87132b3438a289de344c3e19e8c52f6b4a",
+      "sizeBytes": 9947,
+      "lineCount": 177,
+      "capturedAt": "2026-07-19T00:00:00.000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-19"
+  }
+}

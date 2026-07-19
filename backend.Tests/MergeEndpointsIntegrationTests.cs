@@ -114,6 +114,8 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
             File.ReadAllText(TaskPaths.TimelineLog(Path.Combine(_watchPath, TaskStates.Ready, "false-done"))));
     }
 
+    // MachineBound 19.07.: flaky unter Parallellast im Karten-Gate (Audit-Poll-Timing).
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task CompletedLaneAuditRoutes_StartPollAndRenderReport()
     {

@@ -5,7 +5,7 @@ namespace AgentStudio.Cli;
 /// <summary>
 /// In-memory shape of the structured header carried at the top of a
 /// job's <c>status.md</c>. Mirrors
-/// <c>docs/schemas/protocol-header.schema.json</c>. Every field except
+/// <c>docs/app/schemas/protocol-header.schema.json</c>. Every field except
 /// <see cref="Phase"/> and <see cref="Summary"/> is optional, matching
 /// the schema's tolerance contract.
 /// </summary>

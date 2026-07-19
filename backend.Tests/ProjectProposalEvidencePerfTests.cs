@@ -19,7 +19,7 @@ public sealed class ProjectProposalEvidencePerfTests : IDisposable
     [Fact]
     public void WarmCatalogue_ResolvesEveryEvidenceRequestWithoutRescanningMarkdown()
     {
-        var proposalsDir = Path.Combine(_root, "docs", "proposals", "2026-07-11");
+        var proposalsDir = Path.Combine(_root, "docs", "concepts", "proposals", "2026-07-11");
         var assetsDir = Path.Combine(proposalsDir, "assets");
         var jobsDir = Path.Combine(_root, ".orchestrator", "jobs");
         Directory.CreateDirectory(assetsDir);

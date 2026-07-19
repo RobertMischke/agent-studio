@@ -55,4 +55,43 @@ describe('SegmentedControlComponent', () => {
     fixture.nativeElement.querySelector('[data-testid="opt-light"]').click(); // active → no-op
     expect(emitted).toEqual(['dark']);
   });
+
+  it('defaults to the accent appearance (no subtle modifier) so Settings stay untouched', () => {
+    const fixture = setup('light');
+    const group = fixture.nativeElement.querySelector('.segmented');
+    expect(group.classList.contains('segmented--subtle')).toBe(false);
+    // Icon-less options render pure text buttons — no icon span, no icon class.
+    expect(group.querySelector('.segmented__icon')).toBeNull();
+    expect(group.querySelector('.segmented__option--with-icon')).toBeNull();
+  });
+
+  it('renders the subtle appearance without the accent styling hook', () => {
+    const fixture = setup('light');
+    fixture.componentRef.setInput('appearance', 'subtle');
+    fixture.detectChanges();
+    const group = fixture.nativeElement.querySelector('.segmented');
+    expect(group.classList.contains('segmented--subtle')).toBe(true);
+    // Selection contract is appearance-independent.
+    const light = fixture.nativeElement.querySelector('[data-testid="opt-light"]');
+    expect(light.getAttribute('aria-pressed')).toBe('true');
+    expect(light.classList.contains('segmented__option--active')).toBe(true);
+  });
+
+  it('renders a studio icon only for options that declare one', () => {
+    const fixture = setup('light');
+    fixture.componentRef.setInput('options', [
+      { value: 'dark', label: 'Dark', icon: 'moon', testid: 'opt-dark' },
+      { value: 'light', label: 'Light', testid: 'opt-light' },
+    ]);
+    fixture.detectChanges();
+
+    const dark = fixture.nativeElement.querySelector('[data-testid="opt-dark"]');
+    expect(dark.classList.contains('segmented__option--with-icon')).toBe(true);
+    expect(dark.querySelector('.segmented__icon svg'), 'icon svg').toBeTruthy();
+    expect(dark.textContent).toContain('Dark');
+
+    const light = fixture.nativeElement.querySelector('[data-testid="opt-light"]');
+    expect(light.classList.contains('segmented__option--with-icon')).toBe(false);
+    expect(light.querySelector('.segmented__icon')).toBeNull();
+  });
 });
