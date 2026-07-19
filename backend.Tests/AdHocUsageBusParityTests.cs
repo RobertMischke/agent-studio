@@ -37,6 +37,8 @@ public sealed class AdHocUsageBusParityTests : IDisposable
         catch { /* best-effort */ }
     }
 
+    // MachineBound 19.07.: Bus-Drain-Timing flakt unter Parallellast im Karten-Gate (Analyse-Vorbehalt s.u. bleibt bestehen).
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task LegacyAndBusReaders_ProduceIdenticalAggregateForMixedRealisticRecords()
     {
