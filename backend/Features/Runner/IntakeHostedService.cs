@@ -16,7 +16,7 @@ namespace AgentStudio.Runner;
 ///
 /// <para>
 /// Intake runs decoupled from the coding runner: per the open question in
-/// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c> section 13,
+/// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c> section 13,
 /// intake is not a coding run, so it can run while the project's coding
 /// runner is busy on a different job. The single-active-run boundary
 /// applies to <c>3-progress</c>, not to intake. Because intake holds no

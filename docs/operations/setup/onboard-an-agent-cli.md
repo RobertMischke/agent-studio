@@ -2,15 +2,15 @@
 
 agent-orchestrator drives four coding-agent CLIs: Claude Code, Codex, GitHub Copilot, and Gemini. Each is a separate install with its own auth, config file, and quirks. This page is the checklist to get one of them running cleanly on a new machine (or to fix one that has started misbehaving).
 
-For deep operational references (frame model, session capture, watchdog tuning, fixtures) read the matching per-CLI skill in [../cli-skills/](../../cli/skills) - this page links to them.
+For deep operational references (frame model, session capture, watchdog tuning, fixtures) read the matching per-CLI skill in [../cli-skills/](../../system/cli/skills) - this page links to them.
 
 ## Common contract
 
-Every CLI must satisfy the cross-CLI invariants in [../supported-clis.md](../../cli/supported-clis.md): headless invocation, session resume, model selection, quota probing, plain stdout/stderr. The runner picks one of them per job via `cliType` and dispatches through [`CliRouter`](../../../backend/Services/Cli/CliRouter.cs).
+Every CLI must satisfy the cross-CLI invariants in [../supported-clis.md](../../system/cli/supported-clis.md): headless invocation, session resume, model selection, quota probing, plain stdout/stderr. The runner picks one of them per job via `cliType` and dispatches through [`CliRouter`](../../../backend/Services/Cli/CliRouter.cs).
 
 ### Sentinel awareness applies to every CLI
 
-The orchestrator decides outcomes by parsing terminal sentinels: `[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, `[[TASK_NOOP]]`. The grammar lives in [../agent-task-contract.md](../../contracts/agent-task.md) and is enforced by `AgentOutcomeAnalyzer` (see [../../backend/Services/Runner/AgentOutcomeAnalyzer.cs](../../../backend/Services/Runner/AgentOutcomeAnalyzer.cs)).
+The orchestrator decides outcomes by parsing terminal sentinels: `[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, `[[TASK_NOOP]]`. The grammar lives in [../agent-task-contract.md](../../system/contracts/agent-task.md) and is enforced by `AgentOutcomeAnalyzer` (see [../../backend/Services/Runner/AgentOutcomeAnalyzer.cs](../../../backend/Services/Runner/AgentOutcomeAnalyzer.cs)).
 
 The default runtime prompt that wraps every task already tells the agent to emit one. **Codex needs an extra nudge** because it has no `--append-system-prompt` flag (see "Codex" below).
 
@@ -22,7 +22,7 @@ The default runtime prompt that wraps every task already tells the agent to emit
 | Expected binary | `claude` (resolves to `node_modules\@anthropic-ai\claude-code\bin\claude.exe` via `PATHEXT` on Windows) |
 | Config override | `ClaudeCli:Path` in `backend/appsettings.Local.json` |
 | Auth | `claude` interactive login the first time; credentials persist in `~/.claude/`. |
-| Deep ref | [../cli-skills/cli-claude.md](../../cli/skills/cli-claude.md) |
+| Deep ref | [../cli-skills/cli-claude.md](../../system/cli/skills/cli-claude.md) |
 
 **Recommended defaults.** Leave the CLI defaults alone - the runner passes the flags it needs (`-p`, `--output-format stream-json`, `--verbose`, `--dangerously-skip-permissions`). The system-prompt overlay file ([`agent-rules/core.md`](../../../agent-rules/core.md)) is injected via `--append-system-prompt-file`.
 
@@ -40,7 +40,7 @@ The default runtime prompt that wraps every task already tells the agent to emit
 | Config override | `CodexCli:Path` |
 | Local config | `~/.codex/config.toml` |
 | Auth | `codex` interactive login the first time. |
-| Deep ref | [../cli-skills/cli-codex.md](../../cli/skills/cli-codex.md) |
+| Deep ref | [../cli-skills/cli-codex.md](../../system/cli/skills/cli-codex.md) |
 
 ### Codex on Windows: the sandbox quirk (read this)
 
@@ -104,14 +104,14 @@ When you bypass that codepath (one-off `codex exec --json "<your prompt>"` from 
 | Expected binary | `gemini` (verified against v0.39.1) |
 | Config override | `GeminiCli:Path` |
 | Auth | `gemini` interactive auth; credentials in `~/.gemini/` |
-| Deep ref | [../cli-skills/cli-gemini.md](../../cli/skills/cli-gemini.md) |
+| Deep ref | [../cli-skills/cli-gemini.md](../../system/cli/skills/cli-gemini.md) |
 
 **Recommended defaults.** The runner already passes the headless flags it needs: `--skip-trust` (bypass folder-trust modal) and `-y` / `--yolo` (auto-approve tool calls).
 
 **Known quirks**:
 
 - **Stream-json frame shape differs from Claude's.** Same `--output-format stream-json` flag name, different frame catalog. The parser lives in [`GeminiCliService`](../../../backend/Services/Cli/GeminiCliService.cs).
-- **Stdout-buffering bug.** Gemini buffers stdout under certain conditions; the Activity Log can appear frozen even when the model is producing. See [`cli-gemini.md`](../../cli/skills/cli-gemini.md) for the latest workaround.
+- **Stdout-buffering bug.** Gemini buffers stdout under certain conditions; the Activity Log can appear frozen even when the model is producing. See [`cli-gemini.md`](../../system/cli/skills/cli-gemini.md) for the latest workaround.
 - **Slug map.** Sessions are stored under `~/.gemini/tmp/<project-slug>/chats/...` with the slug map in `~/.gemini/projects.json`. If the slug map gets corrupted, sessions become unresumable; delete the entry and let Gemini regenerate it.
 
 ## After install: verify with a hello-world
@@ -124,4 +124,4 @@ npx playwright test --grep "@billable" -g "claude-hello-world"
 # or codex-hello-world / copilot-hello-world / gemini-hello-world
 ```
 
-These are cheap (one Haiku-class call, ~10 s) and prove the install end-to-end. If the spec fails, the per-CLI deep ref ([../cli-skills/](../../cli/skills)) is the next stop.
+These are cheap (one Haiku-class call, ~10 s) and prove the install end-to-end. If the spec fails, the per-CLI deep ref ([../cli-skills/](../../system/cli/skills)) is the next stop.

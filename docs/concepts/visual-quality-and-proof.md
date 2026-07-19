@@ -3,7 +3,7 @@
 **Status:** research + concept v1, 2026-07-10 evening — operator-directed
 ("umfassende, coole Recherche: konsistentes Layout, visuelles Feedback,
 eine Skill-Welt rund um Visual Proof — werdet kreativ"). Related:
-`docs/design/style-guide-hard-rules.md` (live, prompt-known — AGT-2061),
+`docs/quality/design/style-guide-hard-rules.md` (live, prompt-known — AGT-2061),
 AGT-1918 (screenshot standardization, parked), withdrawn AGT-2059
 (deploy smoke — operator pulled it; its ideas partially return here in a
 different shape), AGT-2049 (acute vs. history), wiki-pulse (grading).
@@ -57,7 +57,7 @@ easy instead of heroic:
 
 **Loop 3 — Integrated watch (after merge, human-owned).**
 The operator withdrew the automatic deploy smoke — respected. The light
-variant that remains: after deploy, the **Pulse/Workstream** gets a
+variant that remains: after deploy, the **wiki Pulse** gets a
 "fresh deploy" entry listing UI-touching cards since last deploy, each
 with its evidence pair — a 60-second human flip-through instead of a bot
 gate. The bot prepares the review; the human keeps the taste authority.
@@ -75,8 +75,7 @@ expectations. Start set:
 | `layout-primitives` | the blessed flex/grid/chip/header patterns (copy-paste-able), so new UI reuses instead of reinvents — attacks "Kraut und Rüben" at the source |
 | `component-map` | which component owns which surface (stops parallel cards building second truths) |
 
-The collector/curator keep these pages honest (Workstream mechanics);
-the grading run (AGT-2051) grades them like any page.
+The grading run (AGT-2051) grades these pages like any page.
 
 ## 3. Slices (proposal for the operator's return)
 

@@ -10,7 +10,7 @@ namespace AgentStudio.State;
 /// <see cref="SupervisorAdvisoryStore"/>; same semantics, different file.
 /// </summary>
 /// <remarks>
-/// Schema: <c>docs/schemas/supervisor-intervention.schema.json</c>. The store
+/// Schema: <c>docs/app/schemas/supervisor-intervention.schema.json</c>. The store
 /// does not invoke any pre-emptive primitive; it only persists the typed
 /// record. <see cref="Supervisor.SupervisorInterventionService"/> remains the
 /// single dispatcher and is the only writer of these records.

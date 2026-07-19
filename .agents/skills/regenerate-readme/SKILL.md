@@ -25,9 +25,9 @@ The README must stay in sync with these sources of truth. Read them first; never
 
 - [`ROADMAP.md`](../../../ROADMAP.md) - product thesis, themes, hard boundaries.
 - [`AGENTS.md`](../../../AGENTS.md) - architecture pointers, orchestration philosophy, supervision model.
-- [`docs/architecture/decisions/adr-archive.md`](../../../docs/architecture/decisions/adr-archive.md) - load-bearing decisions to honour.
-- [`docs/product/design-principles.md`](../../../docs/product/design-principles.md) - UX contract.
-- [`docs/contracts/protocol-style.md`](../../../docs/contracts/protocol-style.md) - Activity Log shape.
+- [`docs/system/architecture/decisions/adr-archive.md`](../../../docs/system/architecture/decisions/adr-archive.md) - load-bearing decisions to honour.
+- [`docs/quality/design-principles.md`](../../../docs/quality/design-principles.md) - UX contract.
+- [`docs/system/contracts/protocol-style.md`](../../../docs/system/contracts/protocol-style.md) - Activity Log shape.
 - [`backend/Endpoints/EndpointMapping.cs`](../../../backend/Endpoints/EndpointMapping.cs) - the actual route surface; never invent endpoints.
 
 ## Hard rules

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Process Termination &amp; Abort Scenarios — Test Suite",
+  "source": {
+    "path": "docs/concepts/process-termination-scenarios.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "a88ac33a7e26638c4f15ed280ebfabf69b7ff9e184f28c74877a19d4e2bbd60c",
+      "sizeBytes": 13468,
+      "lineCount": 178,
+      "capturedAt": "2026-07-18T18:45:50.407Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "contract",
+    "analyzedAt": "2026-07-18"
+  }
+}
