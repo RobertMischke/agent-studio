@@ -249,6 +249,30 @@ public static class RunOutcomePolicy
             };
         }
 
+        if (outcome.IssueKind == RunIssueKind.AuthRefreshFailed)
+        {
+            // AGT-2066 WÄCHTER / breaker. The CLI could not launch because its
+            // OAuth session expired and the token refresh failed. Because every
+            // parallel run shares the one operator credential, this fails EVERY
+            // launch identically until the credential is re-authenticated - the
+            // 2026-07-10 incident burned 17 cards this way. NON-RETRYABLE: a
+            // re-issue spawns straight back into the same dead token, so (unlike
+            // CliLaunchFailed, which rebuilds from disk and retries once) we
+            // spend NO retry budget. Stop immediately and route to human review
+            // with a concrete re-auth instruction so the operator fixes the
+            // credential centrally instead of watching the lane drain. Mirrors
+            // the non-retryable ContextOverflow / ModelInvalid stops.
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: outcome.Summary
+                    ?? "The agent CLI could not refresh its OAuth session. Every launch shares the one credential and will fail identically until it is re-authenticated centrally. Stopping instead of burning further launches; re-auth the CLI, then re-queue. Routing to human review.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.AuthRefreshFailed,
+                MessageKind = OrchestratorMessageKind.AuthRefreshFailed
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.EnvironmentBlocker)
         {
             // Environment blockers are unrecoverable by the agent. The

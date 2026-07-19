@@ -38,10 +38,28 @@ public static class PublishManifestLocator
     /// </summary>
     public static ManifestInfo? LocateNpm(string repoRoot, IReadOnlyCollection<string> websiteRoots)
     {
-        var best = EnumerateManifests(repoRoot, "package.json", websiteRoots)
+        TryLocateNpm(repoRoot, websiteRoots, out var manifest);
+        return manifest;
+    }
+
+    internal static bool TryLocateNpm(
+        string repoRoot,
+        IReadOnlyCollection<string> websiteRoots,
+        out ManifestInfo? manifest)
+    {
+        var candidates = EnumerateManifests(
+            repoRoot,
+            "package.json",
+            websiteRoots,
+            out var complete);
+        var best = candidates
             .OrderBy(f => Depth(repoRoot, f))
             .FirstOrDefault();
-        if (best == null) return null;
+        if (best == null)
+        {
+            manifest = null;
+            return complete;
+        }
 
         string? name = null;
         try
@@ -54,14 +72,20 @@ public static class PublishManifestLocator
                 name = n.GetString();
             }
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (JsonException ex)
         {
             // A malformed / unreadable manifest still yields a target (scoped to
             // its folder); the name is simply unknown.
             AgentStudio.Diagnostics.SilentCatch.Note(ex, "PublishManifestLocator: unreadable package.json");
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            complete = false;
+            AgentStudio.Diagnostics.SilentCatch.Note(ex, "PublishManifestLocator: unreadable package.json");
+        }
 
-        return new ManifestInfo(PublishEcosystems.Npm, name, RelDir(repoRoot, best));
+        manifest = new ManifestInfo(PublishEcosystems.Npm, name, RelDir(repoRoot, best));
+        return complete;
     }
 
     /// <summary>
@@ -74,7 +98,21 @@ public static class PublishManifestLocator
     /// </summary>
     public static ManifestInfo? LocateNuGet(string repoRoot, IReadOnlyCollection<string> websiteRoots)
     {
-        var candidates = EnumerateManifests(repoRoot, "*.csproj", websiteRoots)
+        TryLocateNuGet(repoRoot, websiteRoots, out var manifest);
+        return manifest;
+    }
+
+    internal static bool TryLocateNuGet(
+        string repoRoot,
+        IReadOnlyCollection<string> websiteRoots,
+        out ManifestInfo? manifest)
+    {
+        var files = EnumerateManifests(
+            repoRoot,
+            "*.csproj",
+            websiteRoots,
+            out var complete);
+        var candidates = files
             .OrderBy(f => Depth(repoRoot, f))
             .ToList();
 
@@ -82,16 +120,22 @@ public static class PublishManifestLocator
         {
             string text;
             try { text = File.ReadAllText(csproj); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                complete = false;
+                continue;
+            }
 
             if (IsTestProject(csproj, text)) continue;
             if (!IsPackable(text)) continue;
 
             var packageId = FirstGroup(text, @"<PackageId>\s*([^<\s]+)\s*</PackageId>")
                             ?? Path.GetFileNameWithoutExtension(csproj);
-            return new ManifestInfo(PublishEcosystems.NuGet, packageId, RelDir(repoRoot, csproj));
+            manifest = new ManifestInfo(PublishEcosystems.NuGet, packageId, RelDir(repoRoot, csproj));
+            return complete;
         }
-        return null;
+        manifest = null;
+        return complete;
     }
 
     private static bool IsPackable(string csprojText)
@@ -116,10 +160,16 @@ public static class PublishManifestLocator
             || Regex.IsMatch(text, @"<IsTestProject>\s*true", RegexOptions.IgnoreCase);
     }
 
-    private static IEnumerable<string> EnumerateManifests(
-        string repoRoot, string pattern, IReadOnlyCollection<string> websiteRoots)
+    private static List<string> EnumerateManifests(
+        string repoRoot,
+        string pattern,
+        IReadOnlyCollection<string> websiteRoots,
+        out bool complete)
     {
-        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) yield break;
+        complete = true;
+        var results = new List<string>();
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return results;
         var websiteSet = new HashSet<string>(
             websiteRoots.Select(w => w.Replace('\\', '/').Trim('/')),
             StringComparer.OrdinalIgnoreCase);
@@ -131,14 +181,22 @@ public static class PublishManifestLocator
             var (dir, depth) = queue.Dequeue();
 
             IEnumerable<string> files;
-            try { files = Directory.EnumerateFiles(dir, pattern); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { files = []; }
-            foreach (var f in files) yield return f;
+            try { files = Directory.EnumerateFiles(dir, pattern).ToArray(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                complete = false;
+                files = [];
+            }
+            results.AddRange(files);
 
             if (depth >= MaxDepth) continue;
             IEnumerable<string> subs;
-            try { subs = Directory.EnumerateDirectories(dir); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { subs = []; }
+            try { subs = Directory.EnumerateDirectories(dir).ToArray(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                complete = false;
+                subs = [];
+            }
             foreach (var sub in subs)
             {
                 var name = Path.GetFileName(sub);
@@ -148,6 +206,7 @@ public static class PublishManifestLocator
                 queue.Enqueue((sub, depth + 1));
             }
         }
+        return results;
     }
 
     private static int Depth(string repoRoot, string file)

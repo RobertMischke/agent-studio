@@ -286,8 +286,9 @@ export class GitPaneComponent {
   // Changed .md/.html files can be shown as a rendered preview instead of a
   // raw diff (UI-feedback 2026-07-09, observed on two README.md). The toggle
   // is per selected file and defaults to Diff; markdown renders through the
-  // shared <cac-markdown> surface, html through a scripts-disabled sandboxed
-  // iframe so untrusted page markup can never execute in the app origin.
+  // shared <cac-markdown> surface, html through a script-enabled but
+  // opaque-origin sandbox. Interactive artifacts can run, but omitting
+  // allow-same-origin keeps Studio cookies, storage, DOM, and APIs isolated.
 
   /** Whether the rendered preview (vs. the diff) is shown for the current file. */
   readonly previewActive = signal(false);
@@ -336,11 +337,7 @@ export class GitPaneComponent {
     Promise.resolve().then(() => this.git.loadPreview(path));
   });
 
-  /**
-   * Sandboxed srcdoc for the html preview. The iframe carries `sandbox=""`
-   * (no allow-scripts / allow-same-origin) so the document is inert; the
-   * content is trusted only for rendering, never for execution.
-   */
+  /** `allow-scripts` enables interaction; omitted same-origin isolates Studio state and APIs. */
   readonly previewHtmlDoc = computed<SafeHtml | null>(() => {
     if (this.previewKind() !== 'html') return null;
     const content = this.git.previewContent();

@@ -985,20 +985,37 @@ public class TaskRunnerService : BackgroundService
     }
 
     /// <summary>
-    /// Sweeps every project runner's defensive
-    /// <see cref="ProjectRunner.ReconcileActiveJobAgainstDisk"/>. Cheap when
-    /// no project has an active-job latch held; one disk scan per project
-    /// otherwise. Wired off <see cref="TaskWatcherService.OnJobChanged"/> so
-    /// non-API folder changes (external scripts, hand edits, boot-time
-    /// stuck-folder sweep) get reconciled within the watcher's debounce
-    /// interval rather than waiting for the next 5 s pickup tick.
+    /// Reconciles only the project whose watch tree emitted the change. The
+    /// runner inspects its captured active task folder directly, avoiding the
+    /// global task-index lookup that used to run synchronously on every watcher
+    /// event.
     /// </summary>
-    public void ReconcileAllRunners()
+    public void ReconcileRunnerForPath(string changedPath)
     {
         foreach (var runner in _runners.Values)
         {
+            if (!PathIsUnder(runner.Entry.Path, changedPath)) continue;
             try { runner.ReconcileActiveJobAgainstDisk(); }
             catch (Exception ex) { _logger.LogDebug(ex, "Reconcile failed for runner {Project}", runner.ProjectName); }
+            return;
+        }
+    }
+
+    private static bool PathIsUnder(string root, string path)
+    {
+        try
+        {
+            var relative = Path.GetRelativePath(root, path);
+            return relative != "."
+                   && !Path.IsPathRooted(relative)
+                   && !relative.Split(
+                           [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                           StringSplitOptions.RemoveEmptyEntries)
+                       .Any(part => part == "..");
+        }
+        catch
+        {
+            return false;
         }
     }
 

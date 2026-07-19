@@ -47,7 +47,7 @@ public sealed class SourceWatcher : IHostedService, IDisposable
             try { OnPathChanged(path); }
             catch (Exception ex) { _logger.LogWarning(ex, "SourceWatcher dispatch failed for {Path}", path); }
         };
-        _watcher.OnJobChanged += _subscription;
+        _watcher.OnPathChanged += _subscription;
         return Task.CompletedTask;
     }
 
@@ -55,7 +55,7 @@ public sealed class SourceWatcher : IHostedService, IDisposable
     {
         if (_subscription is not null)
         {
-            _watcher.OnJobChanged -= _subscription;
+            _watcher.OnPathChanged -= _subscription;
             _subscription = null;
         }
         return Task.CompletedTask;

@@ -56,7 +56,8 @@ export class ProjectOverviewUrlsComponent {
 
   statusFor(url: RegistryProjectUrl): OverviewUrlStatus {
     if (this.buildingIds().has(url.id)) return 'building';
-    return this.probe.statusFor(url.url);
+    const projectId = this.projectId();
+    return projectId ? this.probe.statusFor(projectId, url.id) : 'unknown';
   }
 
   start(url: RegistryProjectUrl): void {
@@ -66,7 +67,7 @@ export class ProjectOverviewUrlsComponent {
     this.tasks.startProjectUrl(projectId, url.id).subscribe({
       next: () => {
         setTimeout(() => {
-          this.probe.refresh(url.url);
+          this.probe.refresh(projectId, url.id);
           this.setBuilding(url.id, false);
         }, 1200);
       },

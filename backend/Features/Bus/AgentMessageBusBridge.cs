@@ -129,6 +129,7 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.WatchdogTimeout   => "High",
             OrchestratorMessageKind.EmptyFastExit     => "High",
             OrchestratorMessageKind.InfraCrash        => "High",
+            OrchestratorMessageKind.AuthRefreshFailed => "High",
             OrchestratorMessageKind.IntegrationConflict => "High",
             OrchestratorMessageKind.IntegrationError  => "High",
             OrchestratorMessageKind.Reissue           => "Warn",
@@ -697,8 +698,8 @@ public sealed class AgentMessageBusBridge
     // <c>logs/analysis/&lt;project&gt;/&lt;reportId&gt;.{md,json}</c>. The bus
     // never edits source code; supporting agents are observability + decision
     // records, not coding-agent extensions. See
-    // <c>docs/architecture/bus/agent-message-bus.md</c> section "Supporting agents" and
-    // <c>docs/reports/analysis-reports.md</c> section 11.
+    // <c>docs/system/architecture/bus/agent-message-bus.md</c> section "Supporting agents" and
+    // <c>docs/system/reports/analysis-reports.md</c> section 11.
     // ---------------------------------------------------------------------
 
     /// <summary>

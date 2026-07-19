@@ -1,6 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { map } from 'rxjs';
+import { finalize, map } from 'rxjs';
 import type {
   ArchivedTasksResponse,
   CreateTaskRequest,
@@ -29,6 +29,7 @@ import type {
   RegistryProjectSummary,
   ProjectUrlStartRule,
   ProjectUrlSuggestion,
+  ProjectUrlProcessSnapshot,
   PublishActionPanel,
   PublishAutomationMode,
   PublishWorkflowRun,
@@ -132,6 +133,7 @@ export interface CodeReviewRunResponse {
   concernTagId?: string | null;
   durationMs: number;
   startedAt: string;
+  grade?: string | null;
 }
 
 type LaneKey = keyof GroupedJobs;
@@ -157,6 +159,26 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
   [TaskState.Completed]: 'completed',
   [TaskState.Archive]: 'archive',
 };
+
+/**
+ * The grouped response already contains every live board task. Build the flat
+ * signal from that same snapshot so one refresh cannot launch two equivalent
+ * backend enrichment pipelines. The legacy `review` lane aliases
+ * `autoReview`, hence the identity-based de-duplication.
+ */
+function uniqueJobsFromGrouped(grouped: GroupedJobs): TaskInfo[] {
+  const seen = new Set<string>();
+  const jobs: TaskInfo[] = [];
+  for (const lane of Object.values(grouped)) {
+    for (const job of lane ?? []) {
+      const key = job.taskKey || `${job.watchPath}::${job.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      jobs.push(job);
+    }
+  }
+  return jobs;
+}
 
 /**
  * Turn an orchestrator context key (`project:<PROJ>` or `task:<PROJ>/<KEY>`,
@@ -193,6 +215,12 @@ export class TaskService {
   private readonly baseUrl = '/api';
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private pushRefreshHandle: ReturnType<typeof setTimeout> | null = null;
+  private groupedRefreshInFlight = false;
+  private groupedRefreshQueued = false;
+  private groupedRefreshQueuedSilent = true;
+  private runnerRefreshInFlight = false;
+  private runnerRefreshQueued = false;
+  private runnerRefreshQueuedSilent = true;
 
   // Push (SignalR `/hubs/jobs`) is the primary update path. The poll is
   // demoted to a slow heartbeat that reconciles drift and backs up the socket
@@ -288,6 +316,25 @@ export class TaskService {
       this.error.set(null);
     }
 
+    this.refreshGrouped(silent);
+    this.refreshRunnerStatus(silent);
+  }
+
+  /**
+   * Keep the expensive board snapshot single-flight. Runner and SignalR
+   * events can request another refresh while a slow response is outstanding;
+   * collapse all of them into one trailing read instead of allowing an
+   * unbounded queue of full snapshots to build up behind the backend.
+   */
+  private refreshGrouped(silent: boolean): void {
+    if (this.groupedRefreshInFlight) {
+      this.groupedRefreshQueued = true;
+      this.groupedRefreshQueuedSilent &&= silent;
+      return;
+    }
+
+    this.groupedRefreshInFlight = true;
+
     const versionAtStart = this.mutationVersion;
     const acceptOptimisticTarget = () => {
       if (!silent) return true;
@@ -297,15 +344,17 @@ export class TaskService {
       return true;
     };
 
-    this.http.get<TaskInfo[]>(`${this.baseUrl}/tasks`).subscribe({
-      next: (jobs) => {
+    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).pipe(
+      finalize(() => this.finishGroupedRefresh()),
+    ).subscribe({
+      next: (grouped) => {
         if (acceptOptimisticTarget()) {
-          this.jobs.set(jobs);
+          this.grouped.set(grouped);
+          this.jobs.set(uniqueJobsFromGrouped(grouped));
         }
         if (silent) {
           this.error.set(null);
         }
-        this.loading.set(false);
       },
       error: (err) => {
         const message =
@@ -318,31 +367,25 @@ export class TaskService {
           this.errorDialog.show(err, {
             title: 'Failed to load jobs',
             fallbackMessage: 'Failed to load jobs',
-            source: 'Dashboard refresh',
-          });
-        }
-        this.loading.set(false);
-      },
-    });
-
-    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).subscribe({
-      next: (grouped) => {
-        if (acceptOptimisticTarget()) {
-          this.grouped.set(grouped);
-        }
-      },
-      error: (err) => {
-        if (!silent) {
-          this.errorDialog.show(err, {
-            title: 'Failed to load board columns',
-            fallbackMessage: 'Failed to load board columns',
             source: 'Board refresh',
           });
         }
       },
     });
+  }
 
-    this.refreshRunnerStatus(silent);
+  private finishGroupedRefresh(): void {
+    this.groupedRefreshInFlight = false;
+    if (!this.groupedRefreshQueued) {
+      this.loading.set(false);
+      return;
+    }
+
+    const silent = this.groupedRefreshQueuedSilent;
+    this.groupedRefreshQueued = false;
+    this.groupedRefreshQueuedSilent = true;
+    this.loading.set(!silent);
+    this.refreshGrouped(silent);
   }
 
   /**
@@ -614,17 +657,21 @@ export class TaskService {
     clearRepositoryPath?: boolean;
     rootPath?: string;
     clearRootPath?: boolean;
+    repositoryUrl?: string;
+    clearRepositoryUrl?: boolean;
+    cliDefault?: CliType;
+    clearCliDefault?: boolean;
+    modelDefault?: string;
+    clearModelDefault?: boolean;
+    executionRunner?: string;
+    clearExecutionRunner?: boolean;
   }) {
-    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
+    return this.http.put<RegistryProjectSummary>(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
   }
 
   /** Create a registry project. Backend chooses projects/PROJ-NNN/tasks; no storage path is accepted from the UI. */
   createRegistryProject(body: CreateRegistryProjectRequest) {
     return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
-  }
-
-  getProjectSources() {
-    return this.http.get<import('../models/task.model').ProjectSourceDescriptor[]>(`${this.baseUrl}/project-sources`);
   }
 
   // ----- Project URLs (per-project watchable dev-server / preview URLs) -----
@@ -653,10 +700,22 @@ export class TaskService {
       `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`);
   }
 
-  /** Build &amp; start (or restart) the dev server behind a URL's start rule. */
+  /** Start/restart the owned dev server and return its observable session. */
   startProjectUrl(projId: string, urlId: string) {
-    return this.http.post<{ started: boolean; urlId: string }>(
+    return this.http.post<ProjectUrlProcessSnapshot>(
       `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/start`, {});
+  }
+
+  /** Current owned process, or null (HTTP 204) when Studio did not start one. */
+  getProjectUrlProcess(projId: string, urlId: string) {
+    return this.http.get<ProjectUrlProcessSnapshot | null>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
+  }
+
+  /** Explicitly stop the process tree owned for this URL. */
+  stopProjectUrlProcess(projId: string, urlId: string) {
+    return this.http.delete<ProjectUrlProcessSnapshot>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
   }
 
   /**
@@ -836,13 +895,27 @@ export class TaskService {
    */
   runCodeReview(
     jobId: string,
-    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string },
+    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string; mode?: 'verdict' | 'grade' },
     watchPath?: string,
   ) {
     return this.http.post<CodeReviewRunResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/code-review`,
       body,
       this.withWatchPath(watchPath),
+    );
+  }
+
+  /** Add an implemented post-step to an existing card and run only that step. */
+  runTaskPostStep(jobId: string, stepId: string, watchPath?: string) {
+    return this.http.post<{
+      stepId: string;
+      attempt: number;
+      status: string;
+      summary: string;
+      artifactRef?: string | null;
+    }>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/pipeline/steps/${encodeURIComponent(stepId)}/run`,
+      { watchPath, addToCard: true },
     );
   }
 
@@ -877,7 +950,8 @@ export class TaskService {
   /**
    * Create a queued follow-up task in the same project, prefilled with the
    * finding's title + body + linked artifacts/file refs. Returns the new
-   * job's id so the UI can route the user to the new card.
+   * job's id plus its stable key so the UI can route without exposing the
+   * project's filesystem location.
    */
   createReviewEvidenceFollowup(
     jobId: string,
@@ -885,7 +959,7 @@ export class TaskService {
     body: { title?: string; targetState?: string },
     watchPath?: string,
   ) {
-    return this.http.post<{ jobId: string; targetState: string }>(
+    return this.http.post<{ jobId: string; taskKey?: string; targetState: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/follow-up`,
       body,
       this.withWatchPath(watchPath),
@@ -909,9 +983,10 @@ export class TaskService {
   }
 
   /**
-   * Lists every `.md` file in the job root (status.md excluded). Drives the
-   * Files tab in the detail view; cheap manifest call so the tab can fetch
-   * individual file contents lazily through {@link readJobFile}.
+   * Lists supported Markdown, HTML, and aspect JSON documents in the job root
+   * (status.md excluded). Drives the Files tab in the detail view; cheap
+   * manifest call so the tab can fetch individual contents lazily through
+   * {@link readJobFile}.
    */
   listJobArtifacts(jobId: string, watchPath?: string) {
     return this.http.get<TaskArtifactsResponse>(
@@ -922,8 +997,8 @@ export class TaskService {
 
   /**
    * Reads one file from the job root. Used by the Files tab to lazily
-   * fetch the content of an aspect / note / other markdown card when the
-   * user expands it. Returns the body as plain text.
+   * fetch the content of an aspect, note, HTML, or other document card when
+   * the user expands it. Returns the body as plain text.
    */
   readJobFile(jobId: string, fileName: string, watchPath?: string) {
     const opts = this.withWatchPath(watchPath);
@@ -1960,9 +2035,10 @@ export class TaskService {
     );
   }
 
-  getProjectVisualEvidence(projectName: string) {
+  getProjectVisualEvidence(projectName: string, refresh = false) {
     return this.http.get<ProjectVisualEvidenceQueue>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/visual-evidence`,
+      { params: refresh ? { refresh: 'true' } : undefined },
     );
   }
 
@@ -2216,7 +2292,16 @@ export class TaskService {
   }
 
   refreshRunnerStatus(silent = false): void {
-    this.getRunnerStatus().subscribe({
+    if (this.runnerRefreshInFlight) {
+      this.runnerRefreshQueued = true;
+      this.runnerRefreshQueuedSilent &&= silent;
+      return;
+    }
+
+    this.runnerRefreshInFlight = true;
+    this.getRunnerStatus().pipe(
+      finalize(() => this.finishRunnerRefresh()),
+    ).subscribe({
       next: (status) => this.runnerStatus.set(status),
       error: (err) => {
         if (!silent) {
@@ -2228,6 +2313,16 @@ export class TaskService {
         }
       },
     });
+  }
+
+  private finishRunnerRefresh(): void {
+    this.runnerRefreshInFlight = false;
+    if (!this.runnerRefreshQueued) return;
+
+    const silent = this.runnerRefreshQueuedSilent;
+    this.runnerRefreshQueued = false;
+    this.runnerRefreshQueuedSilent = true;
+    this.refreshRunnerStatus(silent);
   }
 
   startLiveUpdates(intervalMs = 2000): void {

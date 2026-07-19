@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TaskService, orchestratorContextChatSegment } from './task.service';
 import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient, type JobsHubHandlers } from './jobs-hub-client.service';
+import type { TaskInfo } from '../models/task.model';
 
 class ErrorDialogServiceStub {
   show(): void { return undefined; }
@@ -59,23 +60,6 @@ describe('TaskService', () => {
     http.verify();
   });
 
-  it('loads the extensible project source catalogue', () => {
-    let sources: readonly { id: string; available: boolean }[] = [];
-
-    service.getProjectSources().subscribe(value => { sources = value; });
-
-    const req = http.expectOne('/api/project-sources');
-    expect(req.request.method).toBe('GET');
-    req.flush([
-      { id: 'local-folder', label: 'Local folder', available: true, description: 'Local checkout' },
-      { id: 'remote-git', label: 'Remote Git', available: false, description: 'Coming soon' },
-    ]);
-    expect(sources).toEqual([
-      expect.objectContaining({ id: 'local-folder', available: true }),
-      expect.objectContaining({ id: 'remote-git', available: false }),
-    ]);
-  });
-
   it('decodes job file content from UTF-8 bytes', () => {
     const expected = 'Lücken / gehört / für / „Anführung"';
     let actual = '';
@@ -126,8 +110,8 @@ describe('TaskService', () => {
     expect(hub.handlers?.reconnected).toBeTruthy();
     hub.handlers?.reconnected?.();
 
-    http.expectOne('/api/tasks').flush([]);
     http.expectOne('/api/tasks/grouped').flush(emptyGrouped);
+    http.expectNone('/api/tasks');
     http.expectOne('/api/runner/status').flush({
       projects: {
         demo: {
@@ -143,6 +127,48 @@ describe('TaskService', () => {
     expect(service.runnerStatus().projects['demo'].activeJobId).toBe('job-1');
     expect(service.runnerStatus().projects['demo'].mode).toBe('auto-continuous');
     service.stopLiveUpdates();
+  });
+
+  it('builds flat and grouped board state from one grouped request', () => {
+    const task = {
+      id: 'job-1',
+      taskKey: 'DEMO-1',
+      watchPath: 'C:/projects/demo/.orchestrator/jobs',
+      state: '4-auto-review',
+      title: 'Single snapshot',
+    } as TaskInfo;
+
+    service.refresh();
+
+    const grouped = {
+      ...emptyGrouped,
+      autoReview: [task],
+      review: [task],
+    };
+    http.expectOne('/api/tasks/grouped').flush(grouped);
+    http.expectNone('/api/tasks');
+    http.expectOne('/api/runner/status').flush({ projects: {} });
+
+    expect(service.grouped().autoReview).toEqual([task]);
+    expect(service.jobs()).toEqual([task]);
+    expect(service.loading()).toBe(false);
+  });
+
+  it('coalesces overlapping board and runner refreshes into one trailing request', () => {
+    service.refresh(true);
+    service.refresh(true);
+    service.refresh(true);
+
+    const firstGrouped = http.expectOne('/api/tasks/grouped');
+    const firstRunner = http.expectOne('/api/runner/status');
+
+    firstGrouped.flush(emptyGrouped);
+    firstRunner.flush({ projects: {} });
+
+    http.expectOne('/api/tasks/grouped').flush(emptyGrouped);
+    http.expectOne('/api/runner/status').flush({ projects: {} });
+    http.expectNone('/api/tasks/grouped');
+    http.expectNone('/api/runner/status');
   });
 
   it('calls the file-source history endpoints with encoded paths and source params', () => {

@@ -111,7 +111,6 @@ public static class PipelineCatalogue
     /// is a correctness signal, not an opt-in pass.
     /// </summary>
     public const string PreReissueOpenItemsStepId = "pre-reissue-open-items";
-    public const string PreWorkstreamOnboardingStepId = "pre-workstream-onboarding";
 
     /// <summary>
     /// The five drift dimensions ship as opt-in <see cref="StepKind.Drift"/>
@@ -210,7 +209,7 @@ public static class PipelineCatalogue
 
     /// <summary>
     /// Opt-in deterministic post-step that keeps a watched project's local
-    /// <c>docs/wiki/common-problems</c> library current from task outcome
+    /// <c>docs/common-problems</c> library current from task outcome
     /// signals. It dedupes by slug, increments occurrence evidence, updates
     /// <c>last-seen</c>, and regenerates the common-problems index without an
     /// LLM call. Implemented by <c>WikiMaintenancePostStepRunner</c>.
@@ -222,7 +221,7 @@ public static class PipelineCatalogue
     /// derived review verdict, the per-aspect orchestrator-review findings, the
     /// agent's own close-out notes, and any typed outcome stumbling block - into
     /// a per-task page under the watched project's
-    /// <c>docs/wiki/learnings/&lt;task&gt;.md</c> tree, then regenerates the
+    /// <c>docs/operations/learnings/&lt;task&gt;.md</c> tree, then regenerates the
     /// learnings index. It is CLI-agnostic (no model call - it reads structured
     /// run evidence the orchestrator already has) and idempotent: a re-run dedupes
     /// by run signature so it merges/augments the page rather than overwriting it,
@@ -239,7 +238,7 @@ public static class PipelineCatalogue
     /// Opt-in deterministic post-step that keeps the AGENTS.md -&gt; wiki pointers
     /// for a set of designated topics consistent (no dead / missing link) and
     /// maintains a machine-owned "Current State / Progress" page per designated
-    /// topic under <c>docs/wiki/concepts/designated-topics/</c>, so agents read the
+    /// topic under <c>docs/concepts/designated-topics/</c>, so agents read the
     /// current state of a topic instead of re-discovering it every run ("gegen im
     /// Kreis drehen"). It is CLI-agnostic (no model call - it derives the per-topic
     /// current-state line from the task's own title / newest commit / typed outcome,
@@ -252,14 +251,6 @@ public static class PipelineCatalogue
     /// self-provisions an empty designated-topics registry the operator fills in.
     /// </summary>
     public const string AgentsWikiSyncStepId = "post-agents-wiki-sync";
-
-    /// <summary>
-    /// Opt-in EW-2 collector. It gives a model the fixed frame map, known pages,
-    /// and settled task evidence, then applies the returned proposal through
-    /// server-owned identity merge, provenance, depth, and growth budgets.
-    /// Reporting-only and non-gating.
-    /// </summary>
-    public const string WorkstreamCollectorStepId = "post-workstream-collector";
 
     /// <summary>
     /// Post-core completeness check that runs immediately after the core agent
@@ -307,8 +298,8 @@ public static class PipelineCatalogue
     /// <see cref="AgentStudio.Review.CodeReviewStepService"/> (a
     /// grade mode), runs after the parallel aspect verdicts and before the final
     /// orchestrator decision, and uses a quality-first model
-    /// (<c>CodeReviewStep:DefaultModel</c>, Claude Opus by default) rather than
-    /// the cheap aspect model. Default-on; the recording lives in
+    /// (<c>CodeReviewStep:DefaultModel</c>, the live Codex flagship by default)
+    /// rather than the bounded aspect model. Default-on; the recording lives in
     /// <c>ReviewDecisionOrchestrator</c>. Reporting only - the grade never gates
     /// the lane decision, so a low grade surfaces for the human without forcing a
     /// reissue.
@@ -321,8 +312,8 @@ public static class PipelineCatalogue
     /// (a new feature, a removed capability, ...) and, on a conservative yes,
     /// SPAWNS a follow-up card there with a generated prompt and a
     /// <c>relatedTo</c> reference back to the source task. The relevance +
-    /// prompt-generation model is quality-first (defaults to the catalogue's best
-    /// Claude, currently Opus 4.8, at <c>max</c> effort); the spawned card is
+    /// prompt-generation model is quality-first (defaults to the live Codex
+    /// flagship at its top advertised reasoning level); the spawned card is
     /// worked by the target project's default model. Generic, not
     /// website-hardwired: the target project, relevance question, and spawn lane
     /// come from <c>ProjectSettings.TaskSpawner</c>. Reporting-only - it never
@@ -526,15 +517,6 @@ public static class PipelineCatalogue
                     // correctness signal the orchestrator should not skip.
                     DefaultEnabled = true,
                 },
-                new PipelineStep
-                {
-                    Id = PreWorkstreamOnboardingStepId,
-                    DisplayName = "Workstream onboarding",
-                    Kind = StepKind.Module,
-                    RunMode = StepRunMode.Sequential,
-                    Idempotent = true,
-                    DefaultEnabled = false,
-                },
             ],
             Core =
             [
@@ -687,7 +669,7 @@ public static class PipelineCatalogue
                 new PipelineStep
                 {
                     Id = AgentsWikiSyncStepId,
-                    DisplayName = "AGENTS/wiki sync",
+                    DisplayName = "Agent skills / AGENTS wiki sync",
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
                     // Deterministic wiki upkeep keyed off the task's own evidence
@@ -699,17 +681,6 @@ public static class PipelineCatalogue
                     // Opt-in per project: an operator turns on the designated-topic
                     // sync (and fills in the seeded registry), same as the sibling
                     // wiki steps.
-                    DefaultEnabled = false,
-                },
-                new PipelineStep
-                {
-                    Id = WorkstreamCollectorStepId,
-                    DisplayName = "Workstream collector",
-                    Kind = StepKind.Orchestrator,
-                    RunMode = StepRunMode.Sequential,
-                    DependsOn = [.. AspectStepIds],
-                    Idempotent = true,
-                    PromptTemplate = "workstream-collector.md",
                     DefaultEnabled = false,
                 },
                 new PipelineStep

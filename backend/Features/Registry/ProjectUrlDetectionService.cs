@@ -109,7 +109,7 @@ public sealed class ProjectUrlDetectionService
                 Label = Humanise(name),
                 Url = port.HasValue ? $"http://localhost:{port.Value}" : null,
                 Command = runCommand,
-                Cwd = null,
+                Cwd = repoRoot,
                 Port = port,
                 Source = "package-json",
             });
@@ -139,7 +139,7 @@ public sealed class ProjectUrlDetectionService
                 Label = Humanise(proj.Name),
                 Url = $"http://localhost:{port.Value}",
                 Command = $"ng serve {proj.Name}",
-                Cwd = null,
+                Cwd = repoRoot,
                 Port = port,
                 Source = "angular-json",
             });
@@ -185,7 +185,7 @@ public sealed class ProjectUrlDetectionService
                     Label = "From README",
                     Url = port.HasValue ? $"http://localhost:{port.Value}" : null,
                     Command = line,
-                    Cwd = null,
+                    Cwd = repoRoot,
                     Port = port,
                     Source = "readme",
                 });

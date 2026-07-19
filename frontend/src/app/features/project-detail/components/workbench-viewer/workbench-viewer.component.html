@@ -1,0 +1,35 @@
+<section class="workbench-viewer" data-testid="workbench-viewer">
+  @if (loading()) {
+    <div class="workbench-viewer__state" data-testid="workbench-viewer-loading">Loading Workbench…</div>
+  } @else if (error(); as message) {
+    <div class="workbench-viewer__state workbench-viewer__state--error" role="alert">{{ message }}</div>
+  } @else if (document(); as doc) {
+    <header class="workbench-viewer__header">
+      <div class="workbench-viewer__identity">
+        <span class="workbench-viewer__eyebrow">Workbenches / open experiment</span>
+        <h1>{{ doc.workbench.title }}</h1>
+        <p>{{ doc.workbench.summary }}</p>
+      </div>
+      <span class="workbench-viewer__status" [attr.data-status]="doc.workbench.status">
+        <i aria-hidden="true"></i>{{ statusLabel() }}
+      </span>
+    </header>
+    <div class="workbench-viewer__provenance" data-testid="workbench-viewer-provenance">
+      <app-studio-icon name="branch" [size]="12" />
+      <span>{{ projectName() }}</span><span aria-hidden="true">·</span>
+      <code>{{ doc.workbench.entryPath }}</code><span aria-hidden="true">·</span>
+      <span>{{ doc.branch || 'branch unavailable' }}</span>
+      @if (doc.workingTreeModified) {
+        <span data-testid="workbench-viewer-working-tree">working tree · uncommitted</span>
+      } @else if (doc.revision) {
+        <code>{{ doc.revision.slice(0, 8) }}</code>
+      }
+    </div>
+    <iframe class="workbench-viewer__frame"
+            #workbenchFrame
+            data-testid="workbench-viewer-frame"
+            title="Workbench artifact: {{ doc.workbench.title }}"
+            sandbox="allow-scripts"
+            referrerpolicy="no-referrer"></iframe>
+  }
+</section>

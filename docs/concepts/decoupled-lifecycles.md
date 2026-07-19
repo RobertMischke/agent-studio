@@ -4,6 +4,12 @@ Status: operator-vision concept and Workbench-family mockup, 2026-07-12. This
 is an architecture target, not a claim that the production runtime already has
 these lifecycle guarantees.
 
+The system-level ownership and disconnect contract is coordinated by
+[Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md).
+In particular, "detached" means Studio may disappear while Task Server and
+Runner stay online. It does not authorize an autonomous Runner-side Task Store
+when Task Server is unavailable.
+
 Review artifact:
 [interactive lifecycle Workbench-family mockup](mockups/decoupled-lifecycles.html).
 It is browsable in the current Wiki. It is not yet a manifest-backed Project
@@ -42,18 +48,23 @@ The target separates three different questions:
 
 This builds on, rather than replaces, the current architecture:
 
-- [Remote execution product integration](remote-execution-product-integration.md)
+- [Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md)
   and the standalone [Linux runner](../operations/setup/linux-runner-host.md)
   already separate the execution host from the Task Server and assign a stable
   `executionRunner` per project. This is the executionRunner and remote-lease
   mechanism to extend, not a second scheduler.
 - The standalone [Linux runner](../operations/setup/linux-runner-host.md)
   productively uses the fenced `/api/runner/lease` path. The proposed
-  [ADR-0060](../architecture/decisions/proposed/adr-0060-fenced-run-lease-and-runner-identity.md)
+  [ADR-0060](../system/architecture/decisions/proposed/adr-0060-fenced-run-lease-and-runner-identity.md)
   records its contract and history, including the important current gap that
   lease rows are in memory. The lease is execution authority, not a viewer
   connection, and detached lifecycles cannot ship until restart continuity is
   closed as specified below.
+- The Wiki's
+  [runner provenance and host handoff contract](completion-review-and-remote-runner-stability.html#provenance)
+  owns the user-visible ordered runner route, the deferred assignment-switch
+  default, the positive no-overlap requirement, and the rule that a cross-host
+  continuation creates a new process and attempt identity.
 - [Remote Dauerbetrieb A/B](../operations/setup/linux-runner-host.md), delivered
   through AGT-2004/AGT-2005, and the
   [persistent connection runbook](../operations/setup/remote-runner-persistent-connection.md)
@@ -65,7 +76,7 @@ This builds on, rather than replaces, the current architecture:
   remains attribution only, exactly as documented in the remote-ready kickoff.
   It is not authentication.
 - [Orchestrator in-app](orchestrator-in-app.md) and the context-keyed
-  [orchestrator session registry](../product/orchestrator-chat.md) provide the
+  [orchestrator session registry](./orchestrator-chat.md) provide the
   precedent for stable logical session identities and resumable transcripts.
 - [Experiment Workbenches](experimentier-workbench.md), created by AGT-2084,
   provide the repository-owned, self-contained review pattern followed by this

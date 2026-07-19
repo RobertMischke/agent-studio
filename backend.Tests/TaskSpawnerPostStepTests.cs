@@ -148,13 +148,12 @@ public class TaskSpawnerPostStepTests : IDisposable
     // ---- best-available model default ----------------------------------
 
     [Fact]
-    public void ModelSelector_DefaultsToBestAvailableClaude_AtMaxEffort()
+    public void ModelSelector_DefaultsToLiveCodexFlagship_AtTopEffort()
     {
         var (model, cli, thinking) = TaskSpawnerModelSelector.Resolve(null, null, null);
-        Assert.Equal(ModelMetadataRegistry.DefaultForCli(CliTypes.Claude), model);
-        Assert.Equal(ModelIds.ClaudeOpus48, model); // the catalogue default today
-        Assert.Equal("claude", cli);
-        Assert.Equal("max", thinking);
+        Assert.Equal(ModelMetadataRegistry.DefaultForCli(CliTypes.Codex), model);
+        Assert.Equal(CliTypes.Codex, cli);
+        Assert.Equal(ModelMetadataRegistry.DefaultThinkingLevelForCli(cli, model), thinking);
 
         var overridden = TaskSpawnerModelSelector.Resolve("claude-opus-4-7", "claude", "high");
         Assert.Equal(("claude-opus-4-7", "claude", "high"), overridden);
@@ -311,9 +310,9 @@ public class TaskSpawnerPostStepTests : IDisposable
         StatusSummary = "Result: Success",
         DiffSummary = "+ POST /export",
         ResultsInventory = "No results/ inventory available.",
-        Model = ModelIds.ClaudeOpus48,
-        Cli = "claude",
-        ThinkingLevel = "max",
+        Model = TaskSpawnerModelSelector.DefaultModel,
+        Cli = TaskSpawnerModelSelector.DefaultCli,
+        ThinkingLevel = TaskSpawnerModelSelector.DefaultThinkingLevel,
     };
 
     private TaskInfo CreateSource(TaskScannerService scanner, TaskMutationService mutations, string id)

@@ -485,6 +485,8 @@ public sealed class TaskFileHistoryService
     {
         if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return "application/json";
         if (path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) return "text/markdown";
+        if (path.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)) return "text/html";
         return "text/plain";
     }
 

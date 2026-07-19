@@ -117,7 +117,8 @@ export class ProjectUrlsPanelComponent {
 
   pillFor(url: RegistryProjectUrl): UrlPill {
     if (this.buildingIds().has(url.id)) return 'building';
-    return this.probe.statusFor(url.url);
+    const projectId = this.projectId();
+    return projectId ? this.probe.statusFor(projectId, url.id) : 'unknown';
   }
 
   host(rawUrl: string): string {
@@ -157,7 +158,8 @@ export class ProjectUrlsPanelComponent {
     // Give the server a moment to bind its port, then re-probe and clear the
     // building pill.
     setTimeout(() => {
-      this.probe.refresh(url.url);
+      const projectId = this.projectId();
+      if (projectId) this.probe.refresh(projectId, url.id);
       this.markBuilding(url.id, false);
     }, 1200);
   }

@@ -977,4 +977,49 @@ public class RunOutcomePolicyTests
         Assert.Equal(OrchestratorMessageKind.QuotaExhausted, action.MessageKind);
         Assert.False(action.IsHeuristicFallback);
     }
+
+    /// <summary>
+    /// AGT-2066 WÄCHTER / breaker. A failed OAuth-session refresh is
+    /// NON-RETRYABLE and shared across every parallel run, so the policy STOPS
+    /// immediately and routes to human review with a re-auth instruction - it
+    /// never spends a retry, never re-issues. This is the guard that stops the
+    /// 17-cards-in-minutes cascade the 2026-07-10 incident produced.
+    /// </summary>
+    [Fact]
+    public void AuthRefreshFailed_StopsAndRoutesToHumanReview_WithoutRetry()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown) with { IssueKind = RunIssueKind.AuthRefreshFailed },
+            followupPrompt: "please continue",
+            reissueAttempt: 0,
+            codexEvidence: null);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.AuthRefreshFailed, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.AuthRefreshFailed, action.MessageKind);
+        Assert.Null(action.FollowupRetryPrompt);
+        Assert.False(action.IsHeuristicFallback);
+    }
+
+    /// <summary>
+    /// The breaker is non-retryable even once a retry budget has already been
+    /// spent: re-issuing walks straight back into the same dead token, so the
+    /// action stays a stop regardless of the attempt counter.
+    /// </summary>
+    [Fact]
+    public void AuthRefreshFailed_StaysStop_EvenAfterPriorAttempts()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown) with { IssueKind = RunIssueKind.AuthRefreshFailed },
+            followupPrompt: "please continue",
+            reissueAttempt: 3,
+            codexEvidence: null);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.AuthRefreshFailed, action.IssueKind);
+    }
 }

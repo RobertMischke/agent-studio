@@ -5,6 +5,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 
 /**
  * One choice in a {@link SegmentedControlComponent}.
@@ -18,11 +19,21 @@ export interface SegmentedOption<T extends string = string> {
   readonly value: T;
   /** User-facing label rendered in the segment. */
   readonly label: string;
+  /** Optional studio icon rendered before the label; omitted → text only. */
+  readonly icon?: StudioIconName;
   /** Stable test hook; falls back to no `data-testid`. */
   readonly testid?: string;
   /** Disables this one segment but keeps it in the strip. */
   readonly disabled?: boolean;
 }
+
+/**
+ * Visual weight of the control. `accent` is the original loud variant (active
+ * option fills with the brand accent — Settings toggles); `subtle` is a quiet
+ * bordered container whose active option only lifts to a muted surface fill,
+ * for in-content toolbars where the accent would shout (wiki search tree|list).
+ */
+export type SegmentedAppearance = 'accent' | 'subtle';
 
 /**
  * Shared two-or-more option segmented control (single-select toggle).
@@ -37,6 +48,7 @@ export interface SegmentedOption<T extends string = string> {
 @Component({
   selector: 'app-segmented-control',
   standalone: true,
+  imports: [StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './segmented-control.component.html',
@@ -47,6 +59,8 @@ export class SegmentedControlComponent<T extends string = string> {
   readonly value = input.required<T>();
   /** Accessible name for the whole group (e.g. "Theme", "Activity bar"). */
   readonly ariaLabel = input<string | null>(null);
+  /** Visual variant; the default keeps existing callers pixel-identical. */
+  readonly appearance = input<SegmentedAppearance>('accent');
 
   readonly valueChange = output<T>();
 

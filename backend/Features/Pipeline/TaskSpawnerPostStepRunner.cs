@@ -47,9 +47,9 @@ public sealed record TaskSpawnerRunContext
     public string StatusSummary { get; init; } = "";
     public string DiffSummary { get; init; } = "";
     public string ResultsInventory { get; init; } = "";
-    public string Model { get; init; } = "";
-    public string Cli { get; init; } = CliTypes.Claude;
-    public string? ThinkingLevel { get; init; }
+    public string Model { get; init; } = TaskSpawnerModelSelector.DefaultModel;
+    public string Cli { get; init; } = TaskSpawnerModelSelector.DefaultCli;
+    public string? ThinkingLevel { get; init; } = TaskSpawnerModelSelector.DefaultThinkingLevel;
 }
 
 /// <summary>
@@ -244,7 +244,7 @@ public sealed class TaskSpawnerPostStepRunner
     private async Task<CliOneShotResult> RunOneShotAsync(CliOneShotRequest request, CancellationToken ct)
     {
         if (OneShotOverride != null) return await OneShotOverride(request, ct);
-        var oneShot = _oneShots?.Get(request.CliType) ?? _oneShots?.Get(CliTypes.Claude);
+        var oneShot = _oneShots?.Get(request.CliType);
         if (oneShot == null)
         {
             var now = DateTime.UtcNow;

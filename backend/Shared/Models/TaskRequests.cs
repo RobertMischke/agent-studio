@@ -14,13 +14,14 @@ public record CreateFollowupFromEvidenceRequest
 }
 
 /// <summary>
-/// Response shape for the follow-up endpoint. <c>JobId</c> is the slug
-/// assigned to the new task; the frontend uses it to route the user to the
-/// new card.
+/// Response shape for the follow-up endpoint. <c>JobId</c> remains the
+/// storage slug for backwards compatibility; <c>TaskKey</c> is the stable,
+/// globally resolvable reference clients should put in links.
 /// </summary>
 public record CreateFollowupFromEvidenceResponse
 {
     public string JobId { get; init; } = "";
+    public string? TaskKey { get; init; }
     public string TargetState { get; init; } = TaskStates.Preparation;
 }
 
@@ -299,7 +300,7 @@ public record CreateTaskRequest
 /// the modal stays the single source of truth for the create UX. Images
 /// are returned as fetchable references (not inline bytes); the modal
 /// re-uploads them byte-for-byte into the new task's <c>attachments/</c>
-/// on save. See docs/research/planning-research-task-kinds-2026-05.md.
+/// on save. See docs/concepts/planning-research-task-kinds-2026-05.md.
 /// </summary>
 public record PromoteToCodingResponse
 {

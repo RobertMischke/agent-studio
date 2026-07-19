@@ -124,4 +124,15 @@ public sealed class SteerTimeoutPolicyTests
             TimeSpan.FromSeconds(expectedSeconds),
             SteerTimeoutMonitorHostedService.ResolveInterval(config));
     }
+
+    [Fact]
+    public void AutoPickedNeedsInput_RemainsUnattendedAfterModeFlipAndWithoutRunPlan()
+    {
+        var task = new TaskInfo { Id = "AGT-2087" };
+
+        Assert.True(ProjectRunner.ShouldHandleNeedsInputUnattended(
+            AgentOutcomeKind.NeedsInput, RunIntent.AutoPickup, "manual", task));
+        Assert.False(ProjectRunner.ShouldHandleNeedsInputUnattended(
+            AgentOutcomeKind.NeedsInput, RunIntent.ManualStart, "manual", task));
+    }
 }

@@ -1,0 +1,59 @@
+<article class="pbc" data-testid="project-basics-card">
+  <header class="pbc__head">
+    <div>
+      <p class="pbc__eyebrow">Project configuration</p>
+      <h3 class="pbc__title">Project basics</h3>
+      <p class="pbc__desc">The same identity, code-location, and agent defaults used during onboarding.</p>
+    </div>
+    @if (project(); as current) {
+      <span class="pbc__id" data-testid="project-basics-id">{{ current.id }}</span>
+    }
+  </header>
+
+  @if (loading()) {
+    <p class="pbc__state" data-testid="project-basics-loading">Loading project basics...</p>
+  } @else if (loadError(); as error) {
+    <p class="pbc__state pbc__state--error" role="alert">{{ error }}</p>
+  } @else {
+    <app-project-basics-form
+      mode="edit"
+      testidPrefix="project-basics"
+      [allowAgentInheritance]="true"
+      [disabled]="saving()"
+      [workspaces]="workspaces()"
+      [projects]="allProjects()"
+      [currentProjectId]="project()?.id ?? null"
+      [availableModels]="models()"
+      [(workspaceId)]="workspaceId"
+      [(displayName)]="displayName"
+      [(shortCode)]="shortCode"
+      [(color)]="color"
+      [(repositoryPath)]="repositoryPath"
+      [(rootPath)]="rootPath"
+      [(repositoryUrl)]="repositoryUrl"
+      [(agentOverrideEnabled)]="agentOverrideEnabled"
+      [(cliDefault)]="cliDefault"
+      [(modelDefault)]="modelDefault" />
+
+    <footer class="pbc__actions">
+      <div class="pbc__feedback" aria-live="polite">
+        @if (saveError(); as error) {
+          <span class="pbc__error" role="alert" data-testid="project-basics-save-error">{{ error }}</span>
+        } @else if (savedMessage(); as message) {
+          <span class="pbc__saved" data-testid="project-basics-save-success">{{ message }}</span>
+        } @else if (dirty() && !canSave()) {
+          <span>Resolve the highlighted fields before saving.</span>
+        }
+      </div>
+      <button type="button"
+              class="pbc__save"
+              data-testid="project-basics-save"
+              [appPendingButton]="saving()"
+              pendingLabel="Saving project basics..."
+              [disabled]="!canSave()"
+              (click)="save()">
+        Save project basics
+      </button>
+    </footer>
+  }
+</article>

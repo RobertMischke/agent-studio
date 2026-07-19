@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { TaskDetail, TaskInfo, TaskState } from '../../../models/task.model';
 import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
@@ -8,6 +8,7 @@ import { LanePagerService } from './lane-pager.service';
 import { BoardFiltersService } from '../../board/state/board-filters.service';
 import { laneLabelFor } from './triage-actions.model';
 import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
+import { clearTaskUrl, taskUrlKey, writeTaskUrl, type TaskUrlHistoryMode } from './task-url';
 
 /**
  * Cycle 9j job-detail-feature service: owns the "currently selected
@@ -17,7 +18,8 @@ import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
  *   - `selected`        which TaskDetail (if any) the side panel renders
  *   - `triageToast`     transient banner shown by the triage panel
  *   - `triageLanePeers` siblings in the same lane (drives j/k navigation)
- *   - URL sync          `?job=<id>&watchPath=<wp>` reproduces the open detail
+ *   - URL sync          `?task=<AGT-NNN>` reproduces the open detail without
+ *                       leaking a filesystem path
  *   - request token     drops late getDetail replies so panel doesn't
  *                       flash back open after Esc/lane-cleared close
  *
@@ -35,11 +37,18 @@ export class TaskSelectionService {
   private readonly pager = inject(LanePagerService);
   private readonly prefetch = inject(TaskDetailPrefetchService);
   private readonly boardFilters = inject(BoardFiltersService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** How many slots ahead of the current pager index to warm. */
   private static readonly PREFETCH_LOOKAHEAD = 2;
 
   constructor() {
+    if (typeof window !== 'undefined') {
+      const onPopState = () => this.restoreFromUrl(true);
+      window.addEventListener('popstate', onPopState);
+      this.destroyRef.onDestroy(() => window.removeEventListener('popstate', onPopState));
+    }
+
     // Ensure the lane-pager snapshot covers the currently selected job.
     // `openDetail` captures synchronously on the board-click path, so this
     // effect is a no-op there. The deep-link / URL-restore path sets
@@ -129,6 +138,9 @@ export class TaskSelectionService {
   }
 
   readonly selected = signal<TaskDetail | null>(null);
+
+  /** Monotonic event consumed by the studio shell when Back returns to a non-task URL. */
+  readonly browserRouteCleared = signal(0);
 
   /**
    * True while a navigation fetch (pager step, board click, post-mutation
@@ -221,6 +233,29 @@ export class TaskSelectionService {
     return this.selected()?.info.taskKey === job.taskKey;
   }
 
+  /** Keep every app-owned task link on the stable key-only URL contract. */
+  syncTaskUrl(info: TaskInfo, mode: TaskUrlHistoryMode = 'replace'): boolean {
+    const key = taskUrlKey(info);
+    if (!key) return false;
+    writeTaskUrl(key, mode);
+    return true;
+  }
+
+  /** Select a detail already fetched by another shell surface. */
+  selectResolvedDetail(detail: TaskDetail, mode: TaskUrlHistoryMode = 'push'): void {
+    this.syncTaskUrl(detail.info, mode);
+    const token = ++this.openDetailToken;
+    this.triageLaneState = detail.info.state;
+    this.setSelectedFromAdvance(detail, token);
+  }
+
+  private getDetailFor(info: TaskInfo) {
+    const key = taskUrlKey(info);
+    return key
+      ? this.jobService.getDetail(key)
+      : this.jobService.getDetail(info.id, info.watchPath);
+  }
+
   /**
    * Open the side panel for `job`. Updates URL + fetches detail. By
    * default captures a fresh lane-pager snapshot anchored on `job` —
@@ -232,7 +267,7 @@ export class TaskSelectionService {
     // accept-to-next-task pipeline owns its own marks via markAcceptClick;
     // this one covers ad-hoc board clicks where no accept-click preceded.
     perfMark('job-select-click');
-    history.replaceState(null, '', `?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
+    this.syncTaskUrl(job, 'push');
     this.triageLaneState = job.state;
     if (!opts.keepPagerSnapshot) {
       // Capture peers for `job.state` directly: at this point `selected`
@@ -257,7 +292,7 @@ export class TaskSelectionService {
     } else {
       this.detailLoading.set(true);
     }
-    this.jobService.getDetail(job.id, job.watchPath).subscribe({
+    this.getDetailFor(job).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
         this.detailLoading.set(false);
@@ -275,7 +310,7 @@ export class TaskSelectionService {
         // the panel is already showing the cached detail and a transient
         // network blip should not pop a modal.
         if (cached) return;
-        history.replaceState(null, '', window.location.pathname);
+        clearTaskUrl('replace');
         this.errorDialog.show(err, {
           title: 'Failed to load task details',
           fallbackMessage: 'Failed to load task details',
@@ -319,7 +354,7 @@ export class TaskSelectionService {
   pagerStep(direction: -1 | 1): boolean {
     const entry = this.pager.step(direction);
     if (!entry) return false;
-    history.replaceState(null, '', `?job=${encodeURIComponent(entry.id)}&watchPath=${encodeURIComponent(entry.watchPath)}`);
+    if (entry.routeKey) writeTaskUrl(entry.routeKey, 'push');
     const token = ++this.openDetailToken;
     const cached = this.prefetch.take(entry.id, entry.watchPath);
     if (cached) {
@@ -330,9 +365,10 @@ export class TaskSelectionService {
     } else {
       this.detailLoading.set(true);
     }
-    this.jobService.getDetail(entry.id, entry.watchPath).subscribe({
+    this.jobService.getDetail(entry.routeKey ?? entry.id, entry.routeKey ? undefined : entry.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
+        if (!entry.routeKey) this.syncTaskUrl(detail.info, 'push');
         this.detailLoading.set(false);
         // Re-anchor the triage lane to the snapshot's lane so the
         // external-advance effect in the shell doesn't fire on the
@@ -366,7 +402,7 @@ export class TaskSelectionService {
     this.selected.set(null);
     this.triageLaneState = null;
     this.pager.clear();
-    history.replaceState(null, '', window.location.pathname);
+    clearTaskUrl('push');
   }
 
   /**
@@ -376,9 +412,8 @@ export class TaskSelectionService {
    * sync effect so that on a cold reload the restored active task tab
    * paints its detail instead of the "No task selected" placeholder.
    *
-   * Mirrors `openDetail`'s URL contract (`?job=&watchPath=`) so a reload
-   * landing on a task tab keeps the deep-link honest; on fetch failure it
-   * strips those params (preserving any hash overlay).
+   * On success the composite internal key is projected to the public
+   * `?task=<AGT-NNN>` route. The watch path never enters browser history.
    */
   openDetailByTaskKey(taskKey: string): void {
     const sep = taskKey.lastIndexOf('::');
@@ -386,25 +421,25 @@ export class TaskSelectionService {
     const watchPath = taskKey.slice(0, sep);
     const jobId = taskKey.slice(sep + 2);
     if (!jobId || !watchPath) return;
-    history.replaceState(null, '', `?job=${encodeURIComponent(jobId)}&watchPath=${encodeURIComponent(watchPath)}`);
     const token = ++this.openDetailToken;
     this.jobService.getDetail(jobId, watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
+        this.syncTaskUrl(detail.info, 'replace');
         this.selected.set(detail);
         this.triageLaneState = detail.info.state;
       },
       error: () => {
         if (token !== this.openDetailToken) return;
-        this.clearJobParamsFromUrl();
+        this.clearTaskParamsFromUrl();
       },
     });
   }
 
   /**
    * Studio-shell tab switch away from a task (board / project / hub / diff
-   * / activity tab becomes active): drop the selection and strip the stale
-   * `?job=` param so a subsequent F5 restores the *current* view rather than
+   * / activity tab becomes active): drop the selection and strip stale task
+   * route params so a subsequent F5 restores the *current* view rather than
    * re-opening the last task detail. Unlike `closeDetail`, this preserves
    * any hash-based overlay route in the URL.
    */
@@ -414,55 +449,73 @@ export class TaskSelectionService {
     this.selected.set(null);
     this.triageLaneState = null;
     this.pager.clear();
-    this.clearJobParamsFromUrl();
+    this.clearTaskParamsFromUrl();
   }
 
-  /** Strip only `job`/`watchPath` query params, preserving path + hash. */
-  private clearJobParamsFromUrl(): void {
-    const url = new URL(window.location.href);
-    url.searchParams.delete('job');
-    url.searchParams.delete('watchPath');
-    history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  /** Strip only task-routing query params, preserving path + hash. */
+  private clearTaskParamsFromUrl(): void {
+    clearTaskUrl('replace');
   }
 
   /**
-   * Reload-survival: hydrate `selected` from `?job=<id>&watchPath=<wp>`
-   * on app boot. If the detail fetch fails (job was deleted while the
-   * tab was closed), strip the query so the URL stops referencing a
-   * nonexistent job.
+   * Reload and browser-history survival. `?task=<key>` is canonical and is
+   * resolved without a watch path. The legacy `?job=<slug>&watchPath=<path>`
+   * shape remains readable, but a successful lookup replaces it with the
+   * canonical key URL so the local path is not retained in history.
    */
-  restoreFromUrl(): void {
+  restoreFromUrl(fromPopState = false): void {
     const params = new URLSearchParams(window.location.search);
-    const jobId = params.get('job');
-    const watchPath = params.get('watchPath');
-    if (jobId && watchPath) {
-      this.jobService.getDetail(jobId, watchPath).subscribe({
-        next: (detail) => {
-          this.selected.set(detail);
-          // Re-anchor the pager to the restored job's position in the
-          // existing sessionStorage snapshot (if any). If the open job
-          // isn't part of the stored snapshot, drop it - the
-          // ensure-snapshot effect then captures a fresh iteration from
-          // the job's lane once grouped() lands, so the pager appears
-          // without requiring keyboard navigation first.
-          const snap = this.pager.snapshot();
-          if (snap && snap.jobs.some(j => j.taskKey === detail.info.taskKey)) {
-            this.triageLaneState = snap.lane;
-            this.pager.reanchorTo(detail.info.taskKey);
-          } else {
-            if (snap) this.pager.clear();
-            // Anchor triage navigation on the restored job's lane so the
-            // external-move auto-advance in the shell still has a lane
-            // to compare against after a deep-link restore.
-            this.triageLaneState = detail.info.state;
-          }
-        },
-        error: () => history.replaceState(null, '', window.location.pathname),
-      });
-    } else {
-      // No URL detail to restore - any stored pager snapshot is stale.
+    const taskReference = params.get('task')?.trim() || null;
+    const legacyJobId = params.get('job')?.trim() || null;
+    const legacyWatchPath = params.get('watchPath')?.trim() || null;
+    const legacy = !taskReference && !!legacyJobId;
+    const canonicalWithLegacyResidue = !!taskReference && (!!legacyJobId || !!legacyWatchPath);
+
+    if (!taskReference && !legacyJobId) {
+      if (fromPopState) {
+        this.openDetailToken++;
+        this.detailLoading.set(false);
+        this.selected.set(null);
+        this.triageLaneState = null;
+        this.browserRouteCleared.update(value => value + 1);
+      }
       this.pager.clear();
+      return;
     }
+
+    const token = ++this.openDetailToken;
+    this.detailLoading.set(true);
+    const request = taskReference
+      ? this.jobService.getDetail(taskReference)
+      : this.jobService.getDetail(legacyJobId!, legacyWatchPath ?? undefined);
+
+    request.subscribe({
+      next: (detail) => {
+        if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
+        // A clean canonical URL is deliberately left byte-for-byte untouched.
+        // Legacy locators are redirected once, and mixed URLs are scrubbed
+        // after the server proves which stable key owns the reference.
+        if (legacy || canonicalWithLegacyResidue) this.syncTaskUrl(detail.info, 'replace');
+        this.selected.set(detail);
+
+        const snap = this.pager.snapshot();
+        if (snap && snap.jobs.some(j => j.taskKey === detail.info.taskKey)) {
+          this.triageLaneState = snap.lane;
+          this.pager.reanchorTo(detail.info.taskKey);
+        } else {
+          if (snap) this.pager.clear();
+          this.triageLaneState = detail.info.state;
+        }
+      },
+      error: () => {
+        if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
+        this.selected.set(null);
+        this.triageLaneState = null;
+        clearTaskUrl('replace');
+      },
+    });
   }
 
   /**
@@ -508,11 +561,7 @@ export class TaskSelectionService {
       return false;
     }
     this.triageLaneState = this.pager.snapshot()?.lane ?? this.triageLaneState;
-    history.replaceState(
-      null,
-      '',
-      `?job=${encodeURIComponent(entry.id)}&watchPath=${encodeURIComponent(entry.watchPath)}`,
-    );
+    if (entry.routeKey) writeTaskUrl(entry.routeKey, 'replace');
     const token = ++this.openDetailToken;
     // Optimistic-navigation path: serve a prefetched detail synchronously
     // when one is on hand so the panel re-renders without waiting for the
@@ -526,9 +575,10 @@ export class TaskSelectionService {
     } else {
       this.detailLoading.set(true);
     }
-    this.jobService.getDetail(entry.id, entry.watchPath).subscribe({
+    this.jobService.getDetail(entry.routeKey ?? entry.id, entry.routeKey ? undefined : entry.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
+        if (!entry.routeKey) this.syncTaskUrl(detail.info, 'replace');
         this.detailLoading.set(false);
         this.selected.set(detail);
         if (!cached) this.markNextTaskRendered();

@@ -9,51 +9,39 @@
             class="operator-dashboard__refresh"
             data-testid="project-overview-refresh"
             [disabled]="loading()"
-            (click)="refresh()">
+            (click)="refresh(projectName(), true)">
       <app-studio-icon name="refresh" [size]="14" />
       {{ loading() ? 'Refreshing...' : 'Refresh' }}
     </button>
   </header>
 
-  <section class="operator-dashboard__metrics" aria-labelledby="project-overview-metrics-title">
-    <header class="operator-dashboard__section-head">
-      <div>
-        <p class="operator-dashboard__eyebrow">Throughput &amp; spend</p>
-        <h2 id="project-overview-metrics-title">Key numbers</h2>
-      </div>
-      <button type="button"
-              data-testid="project-overview-open-token-usage"
-              (click)="openRail.emit('token-usage')">Open Token Usage</button>
-    </header>
-
-    <div class="operator-dashboard__metric-lines">
-      <article class="operator-dashboard__metric-line" data-testid="project-overview-throughput">
-        <span class="operator-dashboard__metric-icon"><app-studio-icon name="check" [size]="16" /></span>
-        <div class="operator-dashboard__metric-copy">
-          <strong>Delivered tickets</strong>
-          <span>Accepted into Completed, including archived history</span>
-        </div>
-        <dl>
-          <div><dt>24 hours</dt><dd data-testid="project-overview-throughput-24h">{{ throughput()?.completedLast24h ?? 'Not available' }}</dd></div>
-          <div><dt>7 days</dt><dd data-testid="project-overview-throughput-7d">{{ throughput()?.completedLast7d ?? 'Not available' }}</dd></div>
-        </dl>
-      </article>
-
-      <article class="operator-dashboard__metric-line" data-testid="project-overview-tokens">
-        <span class="operator-dashboard__metric-icon operator-dashboard__metric-icon--tokens"><app-studio-icon name="cli" [size]="16" /></span>
-        <div class="operator-dashboard__metric-copy">
-          <strong>Token usage</strong>
-          <span>Job, supporting, and orchestrator calls</span>
-        </div>
-        <dl>
-          <div><dt>24 hours</dt><dd data-testid="project-overview-tokens-24h">{{ formatCompact(tokenUsage()?.last24hTotalTokens) }}</dd></div>
-          <div><dt>7 days</dt><dd data-testid="project-overview-tokens-7d">{{ formatCompact(tokenUsage()?.last7dTotalTokens) }}</dd></div>
-        </dl>
-      </article>
-    </div>
-  </section>
-
   <div class="operator-dashboard__split">
+    <section class="operator-dashboard__metrics" aria-labelledby="project-overview-metrics-title">
+      <header class="operator-dashboard__section-head">
+        <div>
+          <p class="operator-dashboard__eyebrow">Usage</p>
+          <h2 id="project-overview-metrics-title">Key numbers</h2>
+        </div>
+        <button type="button"
+                data-testid="project-overview-open-token-usage"
+                (click)="openRail.emit('token-usage')">Token details</button>
+      </header>
+
+      <div class="operator-dashboard__metric-lines">
+        <article class="operator-dashboard__metric-line" data-testid="project-overview-tokens">
+          <span class="operator-dashboard__metric-icon"><app-studio-icon name="cli" [size]="16" /></span>
+          <div class="operator-dashboard__metric-copy">
+            <strong>Token usage</strong>
+            <span>Task, supporting, and orchestrator calls</span>
+          </div>
+          <dl>
+            <div><dt>24 h</dt><dd data-testid="project-overview-tokens-24h">{{ formatCompact(tokenUsage()?.last24hTotalTokens) }}</dd></div>
+            <div><dt>7 d</dt><dd data-testid="project-overview-tokens-7d">{{ formatCompact(tokenUsage()?.last7dTotalTokens) }}</dd></div>
+          </dl>
+        </article>
+      </div>
+    </section>
+
     <app-project-visual-evidence-queue
       [projectName]="projectName()"
       [refreshGeneration]="evidenceRefreshGeneration()"
@@ -82,7 +70,7 @@
                 <li>
                   <button type="button" (click)="openRail.emit('wiki')">
                     <strong>{{ item.title }}</strong>
-                    <span>{{ item.frameAreaTitle || 'Wiki' }} · {{ formatAgo(item.authorDateUtc) }}</span>
+                    <span>{{ item.areaTitle || 'Wiki' }} · {{ formatAgo(item.authorDateUtc) }}</span>
                   </button>
                 </li>
               }
@@ -123,18 +111,37 @@
       <div>
         <p class="operator-dashboard__eyebrow">Remote durability</p>
         <h2>Verified branch state</h2>
+        <p class="operator-dashboard__remote-help">Push compares local commits to the tracked remote branch. Pull compares remote commits to the local branch. No upstream means the local branch is not linked to a remote branch, so neither direction can be verified.</p>
       </div>
-      @if (hasLargeUnpushedDelta()) {
-        <span class="operator-dashboard__remote-warning">More than 50 commits unpushed</span>
+      @if (hasLargeSyncDelta()) {
+        <span class="operator-dashboard__remote-warning">More than 50 commits need synchronization</span>
       }
     </header>
     @if (managedRemoteBranches().length > 0) {
       <div class="operator-dashboard__remote-rows">
         @for (branch of managedRemoteBranches(); track branch.name) {
-          <div class="operator-dashboard__remote-row" [attr.data-state]="branch.ahead === 0 ? 'pushed' : 'pending'">
-            <code>{{ branch.name }}</code>
-            <strong>{{ branch.ahead === 0 ? 'Pushed' : branch.ahead + ' unpushed' }}</strong>
-            <span>{{ branch.upstream || 'No upstream' }} · {{ formatAgo(branch.lastCommitAtUtc) }}</span>
+          <div class="operator-dashboard__remote-row"
+               [attr.data-state]="!branch.upstream ? 'untracked' : (branch.ahead === 0 && branch.behind === 0 ? 'current' : 'pending')">
+            <div class="operator-dashboard__branch-identity">
+              <span>{{ branchKind(branch) }}</span>
+              @if (taskForBranch(branch); as task) {
+                <button type="button"
+                        [attr.data-testid]="'project-overview-branch-task-' + task.id"
+                        (click)="openPlanningTask(task)">{{ task.key || task.id }} · {{ task.title }}</button>
+                <code>{{ branch.name }}</code>
+              } @else {
+                <code>{{ branch.name }}</code>
+              }
+            </div>
+            <div class="operator-dashboard__sync-directions">
+              <span data-direction="push">Push <strong>{{ pushLabel(branch) }}</strong></span>
+              <span data-direction="pull">Pull <strong>{{ pullLabel(branch) }}</strong></span>
+            </div>
+            <span class="operator-dashboard__tracking">@if (branch.upstream) {
+              Tracking {{ branch.upstream }} · {{ formatAgo(branch.lastCommitAtUtc) }}
+            } @else {
+              No upstream · local-only, remote comparison unavailable
+            }</span>
           </div>
         }
       </div>
@@ -190,7 +197,7 @@
         </div>
         <div>
           <span>Delivered</span>
-          <strong>{{ last.jobsSinceLastRestart }} ticket{{ last.jobsSinceLastRestart === 1 ? '' : 's' }}</strong>
+          <strong>{{ last.jobsSinceLastRestart }} task{{ last.jobsSinceLastRestart === 1 ? '' : 's' }}</strong>
           <small>{{ last.durationSeconds }} s · {{ last.status }}</small>
         </div>
       </div>
