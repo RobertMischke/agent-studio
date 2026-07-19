@@ -10,7 +10,7 @@ The doctrine for the layer: stable is the single state-machine authority over it
 
 A read-only review skill for the running stable instance. Drives the `system-review` skill via a CLI (`claude` by default) and writes one Markdown review file under `<workspace>/logs/system-review/<YYYY-MM-DD-HHmm>.md`. See `system-review.md` for the skill itself.
 
-The skill reads **Agent Message Bus** evidence first (`<workspace>/logs/bus/<scope>/<date>.jsonl`, schema in [`docs/schemas/agent-message.schema.json`](../../docs/schemas/agent-message.schema.json)) and falls back to the legacy raw streams (`logs/meta/<project>/observations.jsonl`, `interventions.jsonl`, per-job `cli-output.log`) when the bus is empty or absent. The eight structured health checks (long silent periods, repeated interventions, repeated failed/cancelled runs, token spikes, supporting jobs without accepted review, stuck loops, weak review evidence, backend crash markers) are implemented in `system-health-check.mjs` so they can run without the CLI session.
+The skill reads **Agent Message Bus** evidence first (`<workspace>/logs/bus/<scope>/<date>.jsonl`, schema in [`docs/system/schemas/agent-message.schema.json`](../../docs/system/schemas/agent-message.schema.json)) and falls back to the legacy raw streams (`logs/meta/<project>/observations.jsonl`, `interventions.jsonl`, per-job `cli-output.log`) when the bus is empty or absent. The eight structured health checks (long silent periods, repeated interventions, repeated failed/cancelled runs, token spikes, supporting jobs without accepted review, stuck loops, weak review evidence, backend crash markers) are implemented in `system-health-check.mjs` so they can run without the CLI session.
 
 Three invocation modes:
 

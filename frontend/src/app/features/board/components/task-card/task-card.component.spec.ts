@@ -73,7 +73,7 @@ describe('TaskCardComponent (smoke)', () => {
     const files = [
       'backend/Services/Analysis/AnalysisReportContract.cs',
       'backend/Services/Analysis/AnalysisReportStore.cs',
-      'docs/reports/analysis-reports.md',
+      'docs/system/reports/analysis-reports.md',
     ];
     fixture.componentRef.setInput('job', makeJob({
       state: '5-human-review',

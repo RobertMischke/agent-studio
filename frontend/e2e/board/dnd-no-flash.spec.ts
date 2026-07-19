@@ -2,7 +2,7 @@
  * Drag-and-drop polish: motion contract.
  *
  * Closes the "brightness flash on drop" regression by pinning three rules
- * from docs/product/design-principles.md "Motion":
+ * from docs/quality/design-principles.md "Motion":
  *
  *   1. The dropped card's transition list does NOT contain `background` or
  *      `filter`. Only `opacity`, `transform`, and `box-shadow` may animate

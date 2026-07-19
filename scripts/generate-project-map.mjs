@@ -5,8 +5,8 @@ import path from 'node:path';
 import process from 'node:process';
 
 const DOCUMENTATION_GENERATOR_VERSION = 'project-map-doc-v1';
-const DEFAULT_OUTPUT = 'docs/architecture/project-map.md';
-const DEFAULT_HISTORY = 'docs/architecture/project-map-history';
+const DEFAULT_OUTPUT = 'docs/system/architecture/project-map.md';
+const DEFAULT_HISTORY = 'docs/system/architecture/project-map-history';
 
 function parseArguments(argv) {
   const options = {

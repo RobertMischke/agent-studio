@@ -58,8 +58,8 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "workbench.json"), """
           {"schemaVersion":1,"id":"escape","title":"Escape","summary":"Bad", "entrypoint":"../../../secret.html","status":"active","updatedAt":"2026-07-12T10:00:00Z"}
           """);
-        Directory.CreateDirectory(Path.Combine(_root, "docs", "design"));
-        File.WriteAllText(Path.Combine(_root, "docs", "design", "app-survey-2026-07-11.html"), "<h1>Survey</h1>");
+        Directory.CreateDirectory(Path.Combine(_root, "docs", "quality", "design"));
+        File.WriteAllText(Path.Combine(_root, "docs", "quality", "design", "app-survey-2026-07-11.html"), "<h1>Survey</h1>");
 
         var service = Service();
         var catalogue = service.List("Project")!;

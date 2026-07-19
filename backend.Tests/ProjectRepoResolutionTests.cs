@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// The docs/wiki root is &lt;repo&gt;/docs by convention — never a setting of
+/// The wiki root is &lt;repo&gt;/docs by convention — never a setting of
 /// its own. These tests pin the repository resolution order behind that
 /// convention: registry record → legacy WatchPaths config → derivation from
 /// the in-repo storage layout (&lt;repo&gt;/.orchestrator/jobs).
@@ -155,11 +155,13 @@ public sealed class ProjectRepoResolverPairingTests : IDisposable
             ["WatchPaths:0:Path"] = storageA,
         });
         // Project A backs the watch path; project B is an unrelated record
-        // that happens to carry the same display name plus a RepositoryPath.
+        // that happens to carry the same display name. Rename() rejects
+        // display-name collisions nowadays, but auto-discovery still can
+        // mint a same-named record (EnsureProjectForStorage keys by storage
+        // location only) — so seed B through that route.
         registry.EnsureProjectForStorage(storageA, "Website", "ws-1");
-        var other = registry.EnsureProjectForStorage(
-            Path.Combine(_tempDir, "workspace", "projects", "other"), "Other", "ws-1");
-        registry.Rename(other.Id, "Website");
+        registry.EnsureProjectForStorage(
+            Path.Combine(_tempDir, "workspace", "projects", "other"), "Website", "ws-1");
 
         // Record B's repository must not win: project A has no repository at
         // all, so resolution yields null instead of B's path.

@@ -13,7 +13,7 @@ A task's **execution mode** (`mode` field in `task.json`, orthogonal to the
 `planning`, or `research`. Planning and research are **read-only**: they analyse
 the codebase and produce a report; they skip the git pre/post pipeline (no
 worktree, no commit, no merge). See
-[docs/research/planning-research-task-kinds-2026-05.md](../research/planning-research-task-kinds-2026-05.md)
+[docs/concepts/planning-research-task-kinds-2026-05.md](./planning-research-task-kinds-2026-05.md)
 for the taxonomy and [`TaskModes`](../../backend/Shared/Models/TaskModes.cs) for
 the carrier.
 
@@ -94,7 +94,7 @@ the detail's Overview, next to the Promote affordance.
 
 ## Related
 
-- Task modes taxonomy: [research/planning-research-task-kinds-2026-05.md](../research/planning-research-task-kinds-2026-05.md)
+- Task modes taxonomy: [research/planning-research-task-kinds-2026-05.md](./planning-research-task-kinds-2026-05.md)
 - Task-spawner step: [`TaskSpawnerPostStepRunner`](../../backend/Features/Pipeline/TaskSpawnerPostStepRunner.cs) (AGT-2028)
 - Reference microcards: `app/components/task-reference-microcard` (AGT-2050)
-- Tasks domain: [domains/tasks.md](../domains/tasks.md)
+- Tasks domain: [domains/tasks.md](../system/domains/tasks.md)

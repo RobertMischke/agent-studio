@@ -1,8 +1,8 @@
 # Multichat orchestrator — context-bound sessions with own history
 
 **Status:** concept 2026-07-08, deliverable of **AGT-1917**. Companion:
-[`remote-execution-product-integration.md`](remote-execution-product-integration.md)
-(§7 places this as MVP priority 2), AGT-1915 (iframe split view),
+[`distributed-agent-studio-target-architecture.md`](distributed-agent-studio-target-architecture.md)
+(successor of the retired remote-execution product-integration concept, which placed this as MVP priority 2), AGT-1915 (iframe split view),
 AGT-1916 (context header — merged, built data-only *for this surface*).
 Mockup: [`mockups/multichat-orchestrator.html`](mockups/multichat-orchestrator.html).
 

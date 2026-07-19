@@ -1,0 +1,80 @@
+namespace AgentStudio.Docs;
+
+/// <summary>
+/// The single registry of <c>docs/</c> path literals that the backend is allowed
+/// to hardcode. Enforced by <c>WikiPathCentralizationGuardTests</c>: every
+/// <c>docs/</c> path literal in <c>backend/**</c> must either point under
+/// <see cref="AppRoot"/> (<c>docs/app/</c>, the code-contract area) OR be
+/// registered here. Two kinds of entry live in this class:
+///
+/// <list type="bullet">
+///   <item><b>Producer write-targets</b> - the only <c>docs/</c> locations the
+///   backend GENERATES pages into. The producers reference these constants so the
+///   write-paths live in exactly one place.</item>
+///   <item><b>Deliberate reference roots</b> - steering docs, contracts, mockups,
+///   and the security archive that the drift / analysis / intake services consult
+///   by convention. Each root carries a one-line justification.</item>
+/// </list>
+///
+/// Adding a new hardcoded <c>docs/</c> path outside <c>docs/app/</c> and outside
+/// these roots fails the guard build until it is registered here. Config and
+/// schema paths always live under <c>docs/app/</c> and never need an entry.
+/// </summary>
+public static class WikiProducerTargets
+{
+    /// <summary>The code-contract area: JSON schemas, in-app help, wiki config.</summary>
+    public const string AppRoot = "docs/app/";
+
+    // ---- Producer write-targets (pages the backend generates on disk) ----
+
+    /// <summary>
+    /// Recurring-problem entries, written under <c>{theme}/common-problems/{slug}/</c>
+    /// by <c>WikiMaintenancePostStepRunner</c>. The theme prefix is dynamic, so the
+    /// target is matched by this folder segment anywhere in the path.
+    /// </summary>
+    public const string CommonProblemsSegment = "common-problems";
+
+    /// <summary>Distilled task learnings: <c>operations/learnings/{slug}.md</c> (WikiLearningsPostStepRunner).</summary>
+    public const string LearningsFolder = "operations/learnings";
+
+    /// <summary>Designated-topic state pages + index: <c>concepts/designated-topics/</c> (AgentsWikiSyncPostStepRunner).</summary>
+    public const string DesignatedTopicsFolder = "concepts/designated-topics";
+
+    /// <summary>Project proposals: <c>concepts/proposals/</c> (ProjectProposalService).</summary>
+    public const string ProposalsFolder = "concepts/proposals";
+
+    // ---- Deliberate reference roots (paths the backend reads, not writes) ----
+    // Grouped so the guard has one source of truth; each carries its justification.
+    private static readonly string[] ReferenceRoots =
+    {
+        "docs/system/",     // contracts, ADRs, reports, domains, architecture, cli skills - drift/analysis steering
+        "docs/concepts/",   // skills-architecture, mockups, designated-topics, proposals, orchestrator drive-to-conclusion
+        "docs/quality/",    // design-principles + the project style guide the reviewers read
+        "docs/operations/", // security archive, git commit/push doctrine, learnings, common-problems
+        "docs/start/",      // the README entry point the intake runner steers agents to
+    };
+
+    /// <summary>
+    /// True when <paramref name="docsPathLiteral"/> (a whole-string <c>docs/…</c>
+    /// path literal found in backend source) is sanctioned: under the code-contract
+    /// area, under a registered reference root, or an interpolated dynamic path
+    /// whose first segment after <c>docs/</c> is a placeholder (<c>docs/{…}</c>).
+    /// </summary>
+    public static bool IsRegistered(string docsPathLiteral)
+    {
+        if (string.IsNullOrWhiteSpace(docsPathLiteral)) return true;
+        var path = docsPathLiteral.Replace('\\', '/').Trim();
+
+        // Code-contract area is always allowed.
+        if (path.StartsWith(AppRoot, StringComparison.OrdinalIgnoreCase)) return true;
+
+        // A dynamic path whose segment after docs/ is an interpolation hole
+        // (e.g. $"docs/{relPath}") carries no hardcoded location to centralize.
+        if (path.StartsWith("docs/{", StringComparison.Ordinal)) return true;
+
+        foreach (var root in ReferenceRoots)
+            if (path.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return true;
+
+        return false;
+    }
+}

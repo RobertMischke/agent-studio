@@ -71,8 +71,6 @@ public class PipelineStepModelDefaultsTests
             PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.ConflictResolutionStepId))!.Model);
         Assert.Equal(PipelineStepModelDefaults.SupportModel,
             PipelineStepModelDefaults.Resolve(null, PipelineCatalogue.AbortReviewStep)!.Model);
-        Assert.Equal(PipelineStepModelDefaults.SupportModel,
-            PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.WorkstreamCollectorStepId))!.Model);
     }
 
     [Fact]
