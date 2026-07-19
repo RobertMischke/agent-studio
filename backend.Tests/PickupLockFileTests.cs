@@ -100,6 +100,29 @@ public sealed class PickupLockFileTests : IDisposable
         Assert.Equal(foreignLivePid, existing.Pid);
     }
 
+    [Fact]
+    public async Task TryAcquire_ConcurrentBackends_ExactlyOneLaunchOwnsTheLock()
+    {
+        var gate = new ManualResetEventSlim(false);
+        var contenders = Enumerable.Range(0, 12)
+            .Select(i => Task.Run(() =>
+            {
+                gate.Wait();
+                var lockFile = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
+                return lockFile.TryAcquire(
+                    _jobFolder,
+                    BuildOwner(System.Environment.ProcessId, $"backend-{i}"),
+                    out _);
+            }))
+            .ToArray();
+
+        gate.Set();
+        var outcomes = await Task.WhenAll(contenders);
+
+        Assert.Equal(1, outcomes.Count(o => o == LockAcquireOutcome.Acquired));
+        Assert.Equal(11, outcomes.Count(o => o == LockAcquireOutcome.ForeignHeld));
+    }
+
     /// <summary>
     /// A lock left behind by a dead pid is treated as stale and reclaimed
     /// (Stale outcome). We synthesise the stale state by writing the lock
@@ -128,6 +151,34 @@ public sealed class PickupLockFileTests : IDisposable
         var current = lockFile.Peek(_jobFolder);
         Assert.NotNull(current);
         Assert.Equal(System.Environment.ProcessId, current!.Pid);
+    }
+
+    [Fact]
+    public void TryAcquire_ReusedLivePidFromOlderLock_ReclaimedAsStale()
+    {
+        // A live PID alone is not ownership: the OS can reuse the number after
+        // the backend that wrote the lock has died. This lock predates the
+        // current process, proving the PID belongs to a different incarnation.
+        WriteRawLock(new PickupLockInfo
+        {
+            Schema = "pickup-lock/v2",
+            Pid = System.Environment.ProcessId,
+            Hostname = System.Environment.MachineName,
+            Role = RunnerRoles.Orchestrator,
+            BackendName = "old-backend",
+            AcquiredAt = DateTime.UtcNow.AddYears(-1),
+            ExpiresAt = DateTime.UtcNow.AddYears(1)
+        });
+        var lockFile = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
+
+        var outcome = lockFile.TryAcquire(
+            _jobFolder,
+            BuildOwner(System.Environment.ProcessId, "stable"),
+            out var previous);
+
+        Assert.Equal(LockAcquireOutcome.Stale, outcome);
+        Assert.Equal("old-backend", previous!.BackendName);
+        Assert.Equal("stable", lockFile.Peek(_jobFolder)!.BackendName);
     }
 
     [Fact]

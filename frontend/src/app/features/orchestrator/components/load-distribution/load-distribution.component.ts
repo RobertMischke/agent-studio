@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { CliUsageStore } from '../../../tokens';
 import type { CliUsageQuotaRow, TokenSummaryByModel } from '../../../tokens';
 import type { OrchestratorLogEntry } from '../../models/orchestrator.model';
+import { TaskService } from '../../../../services/task.service';
+import { taskNavigationHref } from '../../../task-detail/state/task-url';
 
 type Period = '1h' | '24h' | '7d';
 interface UsageEvent { ts: number; tokens: number; }
@@ -24,6 +26,7 @@ interface ModelRow {
 export class LoadDistributionComponent implements OnInit, OnDestroy {
   readonly entries = input<OrchestratorLogEntry[]>([]);
   readonly store = inject(CliUsageStore);
+  private readonly tasks = inject(TaskService);
   readonly period = signal<Period>('24h');
   readonly decisionFilter = signal('all');
   readonly periods: { id: Period; label: string; hours: number }[] = [
@@ -85,6 +88,12 @@ export class LoadDistributionComponent implements OnInit, OnDestroy {
     const elapsed = duration - Math.max(0, Date.parse(window.resetAt) - Date.now());
     return elapsed <= 0 ? window.usedPct : Math.min(999, window.usedPct * duration / elapsed);
   }
+  projectionLabel(row: CliUsageQuotaRow, label: '5h' | '7d'): string {
+    const projected = this.projection(row, label);
+    if (projected === null) return 'Projection unavailable';
+    const state = projected > 100 ? 'Projected to exceed' : 'Within window';
+    return `${state} · ${projected.toFixed(0)}% at reset`;
+  }
   windowPct(row: CliUsageQuotaRow, label: '5h' | '7d'): number | null {
     return row.windows.find(w => w.label.toLowerCase().includes(label))?.usedPct ?? null;
   }
@@ -96,7 +105,13 @@ export class LoadDistributionComponent implements OnInit, OnDestroy {
     return this.decisionKinds.slice(1).find(kind => value.includes(kind)) ?? null;
   }
   openTask(entry: OrchestratorLogEntry): void {
-    if (entry.jobId && entry.watchPath) window.location.assign(`?job=${encodeURIComponent(entry.jobId)}&watchPath=${encodeURIComponent(entry.watchPath)}`);
+    if (!entry.jobId || !entry.watchPath) return;
+    this.tasks.getDetail(entry.jobId, entry.watchPath).subscribe({
+      next: (detail) => {
+        const href = taskNavigationHref(detail.info);
+        if (href) window.location.assign(href);
+      },
+    });
   }
   formatTokens(value: number): string {
     if (value < 1_000) return value.toLocaleString();

@@ -91,7 +91,7 @@ test.describe('Project detail - Knowledge section', () => {
       }
     }
 
-    expect(projectName, 'expected at least one project with a populated docs/wiki tree').not.toBe('');
+    expect(projectName, 'expected at least one project with a populated docs tree').not.toBe('');
   });
 
   test.beforeEach(async ({ page }) => {

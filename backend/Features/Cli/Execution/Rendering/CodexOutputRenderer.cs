@@ -37,9 +37,23 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed class CodexOutputRenderer : ICliOutputRenderer
 {
+    private const string ToolRouterDiagnosticPrefix = "codex_core::tools::router: error=Exit code:";
+
     public IEnumerable<CliOutputLine> Render(CliOutputLine raw)
     {
-        // Stderr (and non-JSON stdout) passes through unchanged.
+        // codex-cli duplicates every non-zero command result on stderr as an
+        // internal router diagnostic. The authoritative command_execution
+        // item.completed frame follows with the command, captured output and
+        // exit_code, so projecting this line creates a second, malformed tool
+        // event ("expected: tool-result") between otherwise valid tool frames.
+        // Suppress only the exact Codex router prefix; genuine stderr remains
+        // visible and the completed item still renders as a failed Run marker.
+        if (raw.Stream == "stderr" && IsToolRouterExitDiagnostic(raw.Text))
+        {
+            yield break;
+        }
+
+        // Other stderr (and non-JSON stdout) passes through unchanged.
         if (raw.Stream != "stdout" || string.IsNullOrWhiteSpace(raw.Text) || raw.Text[0] != '{')
         {
             yield return raw;
@@ -125,6 +139,21 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
                 yield return raw with { Text = $"● {type ?? "frame"}" };
                 yield break;
         }
+    }
+
+    private static bool IsToolRouterExitDiagnostic(string text)
+    {
+        var trimmed = text.TrimStart();
+        if (trimmed.StartsWith(ToolRouterDiagnosticPrefix, StringComparison.Ordinal)) return true;
+
+        // Current codex-cli prefixes tracing diagnostics with an RFC3339
+        // timestamp and level. Keep that wrapper part of the contract instead
+        // of using Contains(), which could hide command-owned stderr that only
+        // quotes the diagnostic text.
+        var marker = trimmed.IndexOf(" ERROR ", StringComparison.Ordinal);
+        return marker >= 0
+            && trimmed.AsSpan(marker + " ERROR ".Length)
+                .StartsWith(ToolRouterDiagnosticPrefix, StringComparison.Ordinal);
     }
 
     private static IEnumerable<CliOutputLine> RenderItem(CliOutputLine raw, JsonElement root)

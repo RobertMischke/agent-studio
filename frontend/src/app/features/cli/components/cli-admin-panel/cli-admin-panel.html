@@ -23,8 +23,8 @@
 
   <section class="cli-admin__section" data-testid="cli-admin-models">
     <header class="cli-admin__section-head">
-      <h3>CLI types &amp; models</h3>
-      <span class="cli-admin__hint">discovered catalog · default model &amp; thinking</span>
+      <h3>CLIs &amp; models</h3>
+      <span class="cli-admin__hint">what's available · primary model &amp; fallback route per CLI</span>
     </header>
     <app-cli-models-panel />
   </section>
@@ -98,21 +98,20 @@
       <span class="cli-admin__hint">how each CLI signals turn completion</span>
     </header>
     <p class="cli-admin__explainer" data-testid="cli-admin-contracts-explainer">
-      A read-only honesty layer, not configuration. For each CLI it shows the
-      native signal the orchestrator treats as turn-completed or turn-failed,
-      and where the per-turn usage summary is read from. It answers "how does
-      the orchestrator know a turn ended, and where did the numbers come from" —
-      pure introspection into the adapter's contract, with nothing to change here.
+      Each adapter's self-report: which native frame it treats as a turn
+      finished or failed, where the per-turn usage summary is read from, and
+      whether it is a typed adapter (structured events) or falls back to
+      exit-based detection. Read-only <em>by design</em> — nothing here is
+      configuration. It is a diagnosis tool: when completion detection misfires
+      (as with the tool-router parser bug, AGT-2089), this is where you confirm
+      what signal the orchestrator was actually waiting on.
     </p>
     <app-cli-contracts-panel />
   </section>
 
-  <section class="cli-admin__section" data-testid="cli-admin-sessions">
-    <header class="cli-admin__section-head">
-      <h3>CLI sessions</h3>
-      <span class="cli-admin__hint">per-CLI per-project inventory</span>
-    </header>
-    <app-cli-sessions-panel (openJobDetail)="openJobDetail.emit($event)" />
-  </section>
+  <p class="cli-admin__seealso" data-testid="cli-admin-seealso">
+    Looking for the session inventory or on-disk locations? They live on their
+    own pages now: <strong>CLI sessions</strong> and <strong>CLI paths</strong>.
+  </p>
 </div>
-  
+

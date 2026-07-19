@@ -1,0 +1,64 @@
+<section class="overview-urls" data-testid="project-overview-urls">
+  <header class="overview-urls__head">
+    <div>
+      <p class="overview-urls__eyebrow">Live surfaces</p>
+      <h2>Project URLs</h2>
+    </div>
+    <button type="button"
+            class="overview-urls__details"
+            data-testid="project-overview-urls-details"
+            (click)="openDetails.emit()">Manage URLs</button>
+  </header>
+
+  @if (loading()) {
+    <div class="overview-urls__empty" data-testid="project-overview-urls-loading">Checking project URLs...</div>
+  } @else if (loadError(); as err) {
+    <div class="overview-urls__empty overview-urls__empty--error">{{ err }}</div>
+  } @else if (visibleUrls().length === 0) {
+    <div class="overview-urls__empty" data-testid="project-overview-urls-empty">No project URLs are configured yet.</div>
+  } @else {
+    <div class="overview-urls__summary" data-testid="project-overview-urls-summary">
+      <strong>{{ runningCount() }} / {{ visibleUrls().length }}</strong>
+      <span>{{ summaryLabel() }}</span>
+    </div>
+    <ul class="overview-urls__list">
+      @for (url of visibleUrls(); track url.id) {
+        <li class="overview-urls__row" [attr.data-testid]="'project-overview-url-' + url.id">
+          <span class="overview-urls__dot"
+                [class.overview-urls__dot--running]="statusFor(url) === 'running'"
+                [class.overview-urls__dot--offline]="statusFor(url) === 'offline'"
+                [class.overview-urls__dot--building]="statusFor(url) === 'building'"
+                aria-hidden="true"></span>
+          <button type="button"
+                  class="overview-urls__link"
+                  [attr.aria-label]="'Open ' + url.label + ' preview'"
+                  (click)="openPreview.emit(url)">
+            <strong>{{ url.label }}</strong>
+            <span>{{ host(url.url) }}</span>
+          </button>
+          <span class="overview-urls__pill"
+                [class.overview-urls__pill--running]="statusFor(url) === 'running'"
+                [class.overview-urls__pill--offline]="statusFor(url) === 'offline'"
+                [class.overview-urls__pill--building]="statusFor(url) === 'building'"
+                role="status"
+                aria-live="polite"
+                [attr.data-status]="statusFor(url)"
+                [attr.data-testid]="'project-overview-url-status-' + url.id">{{ statusFor(url) }}</span>
+          @if (url.startRule && (statusFor(url) === 'offline' || statusFor(url) === 'building')) {
+            <button type="button"
+                    class="overview-urls__start"
+                    [disabled]="statusFor(url) === 'building'"
+                    [attr.aria-label]="(statusFor(url) === 'building' ? 'Starting ' : 'Start ') + url.label"
+                    [attr.data-testid]="'project-overview-url-start-' + url.id"
+                    (click)="start(url)">{{ statusFor(url) === 'building' ? 'Starting...' : 'Start' }}</button>
+          }
+        </li>
+      }
+    </ul>
+    @if (hiddenCount() > 0) {
+      <button type="button" class="overview-urls__more" (click)="openDetails.emit()">
+        + {{ hiddenCount() }} more configured
+      </button>
+    }
+  }
+</section>

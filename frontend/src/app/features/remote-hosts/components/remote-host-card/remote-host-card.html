@@ -6,6 +6,13 @@
     <span class="host__name" data-testid="remote-host-name">{{ h.name }}</span>
     <span class="host__role" [attr.data-role]="h.role">{{ roleLabel() }}</span>
     <span class="host__badge" [attr.data-tone]="tone()" data-testid="remote-host-status">{{ statusLabel() }}</span>
+    @if (h.role === 'remote') {
+      <span class="host__badge" [attr.data-tone]="h.gitPushStatus === 'ready' ? 'ok' : 'error'"
+            data-testid="remote-host-git-status"
+            [attr.title]="h.gitPushDetail || 'No successful push probe has been reported'">
+        Writable: {{ h.gitPushStatus === 'ready' ? 'yes' : 'no' }}
+      </span>
+    }
     <span class="host__spacer"></span>
     @if (h.address) {
       <span class="host__addr" [attr.title]="h.address">{{ h.address }}</span>
@@ -21,6 +28,21 @@
       <span class="host__meta-item">up {{ h.uptimeLabel }}</span>
     }
   </div>
+
+  <section class="activity" data-testid="remote-host-activity" [class.activity--stale]="stale()">
+    <div><span>Agent sessions</span><strong>{{ stale() ? '-' : sessionCount() }}</strong></div>
+    <div><span>Running tasks</span><strong>{{ stale() ? '-' : (h.activeTaskCount ?? 0) }}</strong></div>
+    <div><span>Task inflow</span><strong>{{ taskInflowLabel() }}</strong></div>
+    <div><span>Last contact</span><strong>{{ heartbeatLabel() }}</strong></div>
+    <div><span>Daemon</span><strong>{{ daemonLabel() }}</strong></div>
+    <div><span>Last claim</span><strong>{{ h.lastClaimAt ? (h.lastClaimAt | date:'short') : 'none' }}</strong></div>
+    <div><span>Slots</span><strong>{{ slotsLabel() }}</strong></div>
+    <div><span>Push probe</span><strong>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'never' }}</strong></div>
+  </section>
+
+  @if (stale() && !retired()) {
+    <p class="host__stale" data-testid="remote-host-stale">Stale: last seen {{ heartbeatLabel() }}. Historical metrics are hidden.</p>
+  }
 
   @if (h.capabilities.length) {
     <ul class="chips" aria-label="Capabilities">
@@ -49,6 +71,41 @@
     <p class="host__no-stats" data-testid="remote-host-no-stats">No live system stats reported.</p>
   }
 
+  @if (!stale() && h.telemetry && h.telemetry.points.length) {
+    <section class="telemetry" data-testid="remote-host-telemetry" aria-label="Host performance history">
+      <div class="telemetry__head">
+        <strong>Performance history</strong>
+        <span class="telemetry__context" data-testid="remote-host-slots-context">{{ latestContext() }}</span>
+        <div class="telemetry__windows" aria-label="Telemetry time window">
+          @for (window of ['1h', '6h', '48h', '14d']; track window) {
+            <button type="button" [attr.aria-pressed]="telemetryWindow() === window"
+                    [attr.data-testid]="'remote-host-window-' + window"
+                    (click)="selectTelemetryWindow($any(window))">{{ window }}</button>
+          }
+        </div>
+      </div>
+      @if (h.telemetry.findings.length) {
+        <div class="telemetry__findings" data-testid="remote-host-findings">
+          @for (finding of h.telemetry.findings; track finding.kind) {
+            <span class="host__badge" data-tone="warn" [attr.title]="finding.since + ' to ' + finding.until">
+              {{ finding.label }} · since {{ finding.since | date:'short' }}
+            </span>
+          }
+        </div>
+      }
+      <div class="telemetry__charts">
+        @for (row of chartRows(); track row.key) {
+          <div class="telemetry__row" [attr.data-chart]="row.key">
+            <span>{{ row.label }}</span>
+            <svg viewBox="0 0 100 30" preserveAspectRatio="none" role="img" [attr.aria-label]="row.label + ' history'">
+              <polyline [attr.points]="row.path"></polyline>
+            </svg>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
   @if (h.cliQuotas.length) {
     <ul class="chips chips--quota" aria-label="Per-CLI quota" data-testid="remote-host-quotas">
       @for (q of h.cliQuotas; track q.cliType + '|' + q.windowLabel) {
@@ -66,6 +123,14 @@
   }
 
   <footer class="host__actions">
+    @if (h.role === 'remote') {
+      <button class="host__btn host__btn--primary" type="button"
+              data-testid="remote-host-action-setup"
+              [disabled]="!!h.busyAction || retired()"
+              (click)="requestSetup()">
+        Set up runner
+      </button>
+    }
     <button class="host__btn" type="button"
             data-testid="remote-host-action-reprobe"
             [disabled]="!!h.busyAction"
@@ -74,9 +139,10 @@
     </button>
     <button class="host__btn" type="button"
             data-testid="remote-host-action-drain"
+            title="Stop new leases. Running work continues until it finishes; the host then remains drained."
             [disabled]="!!h.busyAction || retired() || h.status === 'draining'"
             (click)="emit('drain')">
-      {{ h.busyAction === 'drain' ? 'Draining…' : 'Drain' }}
+      {{ h.busyAction === 'drain' ? 'Draining…' : 'Drain ⓘ' }}
     </button>
     <button class="host__btn host__btn--danger" type="button"
             data-testid="remote-host-action-retire"
@@ -84,5 +150,15 @@
             (click)="emit('retire')">
       {{ h.busyAction === 'retire' ? 'Retiring…' : 'Retire' }}
     </button>
+    @if (retired()) {
+      <button class="host__btn host__btn--primary" type="button" data-testid="remote-host-action-revive"
+              [disabled]="!!h.busyAction" (click)="emit('revive')">
+        {{ h.busyAction === 'revive' ? 'Reviving…' : 'Revive' }}
+      </button>
+      <button class="host__btn host__btn--danger" type="button" data-testid="remote-host-action-delete"
+              [disabled]="!!h.busyAction" (click)="emit('delete')">
+        {{ h.busyAction === 'delete' ? 'Deleting…' : 'Delete permanently' }}
+      </button>
+    }
   </footer>
 </article>

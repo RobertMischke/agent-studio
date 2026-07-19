@@ -25,7 +25,7 @@ async function dismissBlockingOverlays(page: Page): Promise<void> {
   for (let i = 0; i < 40; i++) {
     const dismiss = page.getByTestId('crash-recovery-dismiss').first();
     if (await dismiss.isVisible().catch(() => false)) {
-      await dismiss.click({ force: true }).catch(() => {});
+      await dismiss.click({ force: true }).catch(() => undefined);
       await page.waitForTimeout(350);
       continue;
     }
@@ -34,7 +34,7 @@ async function dismissBlockingOverlays(page: Page): Promise<void> {
   }
   const overlay = page.getByTestId('studio-overlay-root').first();
   if (await overlay.isVisible().catch(() => false)) {
-    await page.keyboard.press('Escape').catch(() => {});
+    await page.keyboard.press('Escape').catch(() => undefined);
     await page.waitForTimeout(300);
   }
 }
@@ -46,7 +46,7 @@ async function dismissCrashRecoveryCards(page: Page): Promise<void> {
   for (let i = 0; i < 20; i++) {
     const card = page.getByTestId('crash-recovery-dismiss').first();
     if (await card.isVisible().catch(() => false)) {
-      await card.click({ force: true }).catch(() => {});
+      await card.click({ force: true }).catch(() => undefined);
       await page.waitForTimeout(300);
       continue;
     }
@@ -154,10 +154,14 @@ test('screenshot tour — orchestrator chat (composer + conversation)', async ({
   await toggle.click();
   const sheet = page.getByTestId('orch-side-sheet');
   await expect(sheet).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByTestId('chat-body')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('conversation-view')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('chat-input')).toBeVisible();
   await page.waitForTimeout(1_000);
   await captureBoth(page, testInfo, 'orchestrator-chat-conversation');
+
+  await page.getByTestId('orch-context-badge').click();
+  await expect(page.getByTestId('orch-context-menu')).toBeVisible();
+  await captureBoth(page, testInfo, 'orchestrator-chat-context-menu');
 });
 
 test('screenshot tour — project hub rails (URLs, token usage, wiki)', async ({ page }, testInfo) => {
@@ -177,8 +181,8 @@ test('screenshot tour — project hub rails (URLs, token usage, wiki)', async ({
   if (await tree.isVisible().catch(() => false)) {
     const firstFile = tree.locator('[data-testid^="project-wiki-file-"]').first();
     if (await firstFile.count()) {
-      await firstFile.click().catch(() => {});
-      await page.getByTestId('project-wiki-viewer').first().waitFor({ state: 'visible', timeout: 8_000 }).catch(() => {});
+      await firstFile.click().catch(() => undefined);
+      await page.getByTestId('project-wiki-viewer').first().waitFor({ state: 'visible', timeout: 8_000 }).catch(() => undefined);
       await page.waitForTimeout(400);
     }
   }

@@ -23,6 +23,7 @@ const DEFAULT_DURATION: Record<NotificationKind, number> = {
  */
 @Injectable({ providedIn: 'root' })
 export class NotificationService {
+  private renderPendingFeedback: (() => void) | null = null;
   readonly notifications = signal<NotificationState[]>([]);
 
   private nextId = 1;
@@ -44,6 +45,10 @@ export class NotificationService {
     const state: NotificationState = { id, durationMs, ...options };
 
     this.notifications.update((arr) => [...arr, state]);
+    // A notification often accompanies a deliberately still-pending HTTP
+    // request. Zone-based change detection otherwise waits for that request
+    // to settle before painting the toast, defeating optimistic feedback.
+    queueMicrotask(() => this.renderPendingFeedback?.());
     if (durationMs > 0) {
       const timer = setTimeout(() => this.dismiss(id), durationMs);
       this.timers.set(id, timer);
@@ -85,5 +90,13 @@ export class NotificationService {
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
     this.notifications.set([]);
+  }
+
+  /** Register the single stack renderer so pending-request toasts paint now. */
+  registerRenderer(render: () => void): () => void {
+    this.renderPendingFeedback = render;
+    return () => {
+      if (this.renderPendingFeedback === render) this.renderPendingFeedback = null;
+    };
   }
 }

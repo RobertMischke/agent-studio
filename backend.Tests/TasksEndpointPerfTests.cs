@@ -34,6 +34,7 @@ namespace AgentStudio.Tests;
 /// brings it under 50 ms); we leave headroom for a slow CI runner.
 /// </para>
 /// </summary>
+[Trait("Category", "MachineBound")]
 public class JobsEndpointPerfTests : IDisposable
 {
     private readonly string _watchPath;

@@ -29,6 +29,7 @@ const rollups = [
   {
     id: 'epic-completed', title: 'Account migration', projectName: 'Identity', watchPath: WATCH_PATH,
     state: '7-archive', subTaskTotal: 2, completed: 2, inProgress: 0, open: 0, byState: {},
+    completedAt: '2026-07-09T12:00:00Z',
     subTasks: [
       { id: 'account-export', title: 'Account export', state: '7-archive', order: 1 },
       { id: 'account-import', title: 'Account import', state: '6-completed', order: 2 },
@@ -40,18 +41,26 @@ const rollups = [
   },
 ];
 
-async function installRoutes(page: Page): Promise<void> {
+async function installRoutes(page: Page): Promise<() => number> {
+  let completedRollupsRequested = 0;
   await page.route('**/api/**', route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
   await page.route('**/api/tasks/grouped**', route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(grouped) }));
-  await page.route('**/api/epics**', route =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rollups) }));
+  await page.route('**/api/epics**', route => {
+    const status = new URL(route.request().url()).searchParams.get('status');
+    if (status === 'completed') completedRollupsRequested += 1;
+    const body = status === 'active' ? [rollups[0]] : status === 'completed' ? [rollups[1]] : rollups;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route('**/api/epics/completed/count**', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 1 }) }));
   await page.route('**/api/watch-paths**', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify([{ name: 'Storefront', path: WATCH_PATH, rootPath: WATCH_PATH }]),
   }));
+  return () => completedRollupsRequested;
 }
 
 test.describe('Epic overview history', () => {
@@ -61,17 +70,23 @@ test.describe('Epic overview history', () => {
       tabs: [{ kind: 'epics', projectName: null }],
       activeKey: 'epics:__all__',
     })));
-    await installRoutes(page);
+    const completedRequests = await installRoutes(page);
     await page.goto('/');
 
     const screen = page.getByTestId('epic-overview-screen');
     await expect(screen).toBeVisible();
-    await expect(page.getByTestId('epic-overview-section-active')).toBeVisible();
     const completed = page.getByTestId('epic-overview-section-completed');
     await expect(completed).toBeVisible();
+    await expect(completed.getByText('1 completed')).toBeVisible();
+    await expect(page.getByText('Account migration')).toHaveCount(0);
+    expect(completedRequests()).toBe(0);
+    await completed.getByTestId('epic-overview-completed-toggle').click();
+    await expect(page.getByText('Account migration')).toBeVisible();
+    await expect(page.getByTestId('epic-overview-completed-date')).toBeVisible();
+    expect(completedRequests()).toBe(1);
     await expect(screen.getByText('Old placeholder')).toHaveCount(0);
 
-    const completedCard = completed.getByTestId('epic-overview-card').first();
+    const completedCard = page.locator('[data-testid="epic-overview-card"][data-epic-id="epic-completed"]');
     await expect(completedCard.getByTestId('epic-overview-card-count')).toHaveText('2 / 2 done');
     const errorClose = page.getByTestId('error-dialog-close');
     if (await errorClose.isVisible().catch(() => false)) await errorClose.click();

@@ -52,7 +52,11 @@ public sealed class CompletedPushWorker : BackgroundService
         var sw = Stopwatch.StartNew();
         try
         {
-            var pushed = await _transitions.PushCompletedJobCommitsAsync(request.Job, request.Strategy, ct);
+            var pushed = await _transitions.PushJobCommitsAsync(
+                request.Job,
+                request.Strategy,
+                request.RequireCompletedState,
+                ct);
             sw.Stop();
             if (pushed > 0)
             {

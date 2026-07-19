@@ -124,23 +124,19 @@ test.describe('Project chat — Slice E /bug directive', () => {
     // the request body itself does not need to carry the field.
     expect((captured.headers['x-client-id'] || '').length).toBeGreaterThan(0);
 
-    // Inline event card appears at the user's turn position.
-    const card = page.getByTestId('chat-event-task').first();
+    // The task confirmation is projected into the canonical conversation.
+    const card = page.locator('[data-testid="conversation-system-status"][data-category="task"]').first();
     await expect(card).toBeVisible({ timeout: 5_000 });
-    await expect(card).not.toHaveClass(/chat__event--error/);
-    await expect(card.locator('.chat__event-summary')).toContainText('0-backlog');
-    await expect(card.locator('.chat__event-summary')).toContainText('Frontend chips overlap on narrow viewport');
+    await expect(card).toHaveAttribute('data-severity', 'info');
+    await expect(card).toContainText('0-backlog');
+    await expect(card).toContainText('Frontend chips overlap on narrow viewport');
 
-    // Expand the card and confirm it cites the new job id.
-    await card.locator('button.chat__event-head').click();
-    const detail = card.locator('[data-testid="chat-event-detail"]');
-    await expect(detail).toBeVisible();
-    await expect(detail).toContainText('fixture-bug-12345');
-    await expect(detail).toContainText('bug');
+    await expect(card).toContainText('fixture-bug-12345');
+    await expect(card).toContainText('bug');
 
     // Click-through: the action button opens the kanban detail panel
     // in the same tab via the existing `?job=...&watchPath=...` URL flow.
-    const action = card.locator('[data-testid^="chat-event-action-"]');
+    const action = page.locator('[data-testid^="orch-conversation-event-action-"]').first();
     await expect(action).toBeVisible();
     // Screenshot the side sheet with the confirmation card visible so a
     // reviewer can eyeball the rendering (also harvested into the job
@@ -189,14 +185,13 @@ test.describe('Project chat — Slice E /bug directive', () => {
     await send.click();
     await createCallPromise;
 
-    // The failure surfaces in the chat as an event card with severity=error.
-    const errorCard = page.locator('[data-testid="chat-event-task"].chat__event--error').first();
+    // The failure surfaces in the conversation as an error status row.
+    const errorCard = page.locator(
+      '[data-testid="conversation-system-status"][data-category="task"][data-severity="error"]'
+    ).first();
     await expect(errorCard).toBeVisible({ timeout: 5_000 });
-    await expect(errorCard.locator('.chat__event-summary')).toContainText('Bug not filed');
-    await errorCard.locator('button.chat__event-head').click();
-    await expect(errorCard.locator('[data-testid="chat-event-detail"]')).toContainText(
-      'Job already exists or invalid input'
-    );
+    await expect(errorCard).toContainText('Bug not filed');
+    await expect(errorCard).toContainText('Job already exists or invalid input');
 
     // Hard rule: no toast — bug reporting must never feel like a side-channel.
     // The toast surface in this app uses [data-testid^="toast-"]; no such

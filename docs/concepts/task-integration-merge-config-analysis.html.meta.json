@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Task Integration &amp; Merge: Configuration Analysis",
+  "source": {
+    "path": "docs/concepts/task-integration-merge-config-analysis.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "352a523928062f1c0a803eda61724cc8c8bfa1efd5266a6aaf3239ceb73efb98",
+      "sizeBytes": 41489,
+      "lineCount": 702,
+      "capturedAt": "2026-07-18T18:45:50.424Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

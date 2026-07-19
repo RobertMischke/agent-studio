@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   DestroyRef,
   computed,
@@ -46,6 +47,9 @@ export class NotificationStackComponent {
   );
 
   constructor() {
+    const cdr = inject(ChangeDetectorRef);
+    const unregisterRenderer = this.service.registerRenderer(() => cdr.detectChanges());
+    inject(DestroyRef).onDestroy(unregisterRenderer);
     if (typeof document !== 'undefined') {
       const destroyRef = inject(DestroyRef);
       const ac = new AbortController();

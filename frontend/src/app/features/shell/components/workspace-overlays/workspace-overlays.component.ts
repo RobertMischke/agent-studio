@@ -1,10 +1,15 @@
 ﻿import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output } from '@angular/core';
 import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
 import type { WorkspaceSettingsSection } from '../../state/workspace-overlays.service';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { TokenUsageSectionComponent } from '../../../tokens';
-import { CliAdminPanelComponent, CliWorkingMemoryPanelComponent } from '../../../cli';
+import {
+  CliAdminPanelComponent,
+  CliWorkingMemoryPanelComponent,
+  CliSessionsPanelComponent,
+  CliPathsPanelComponent,
+} from '../../../cli';
 import { RemoteHostsPanelComponent } from '../../../remote-hosts';
 import { TaskServerPanelComponent } from '../../../task-server';
 import { OrchestratorLogicPanelComponent, PromptAdminPanelComponent } from '../../../orchestrator';
@@ -16,8 +21,7 @@ import { WorkspaceManagementComponent } from '../workspace-management/workspace-
 import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TaskService } from '../../../../services/task.service';
-import type { ProjectSourceDescriptor } from '../../../../models/task.model';
+import type { WatchPathEntry } from '../../../../models/task.model';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 
@@ -43,8 +47,10 @@ interface SettingsRailItem {
  * server's URL, store, evidence git, client registry and management sweeps -
  * AGT-1924), Remote hosts, Orchestrator (the platform-global lifecycle flags
  * AGT-1812 moved out of their standalone modal). Workspace group
- * (defaults applied across the workspace's projects): Usage caps, Working memory,
- * System prompts, Token usage, Visual evidence.
+ * (defaults applied across the workspace's projects): CLI Management (the CLI
+ * catalog / models / routes / usage caps / completion-contracts hub), CLI
+ * sessions and CLI paths (encapsulated pages split out of that hub - AGT-2101),
+ * Working memory, System prompts, Token usage, Visual evidence.
  *
  * Each content section re-uses a stable outer test id
  * (`cli-admin-overlay`, `prompt-admin-overlay`, `workspace-tokens-overlay`,
@@ -61,6 +67,8 @@ interface SettingsRailItem {
     WorkspaceScreenshotsComponent,
     CliAdminPanelComponent,
     CliWorkingMemoryPanelComponent,
+    CliSessionsPanelComponent,
+    CliPathsPanelComponent,
     RemoteHostsPanelComponent,
     TaskServerPanelComponent,
     PromptAdminPanelComponent,
@@ -79,6 +87,7 @@ export class WorkspaceOverlaysComponent {
   readonly overlays = inject(WorkspaceOverlaysService);
   /** Render inside the Studio editor tab instead of as a modal dialog. */
   readonly inline = input(false);
+  readonly watchPaths = input<readonly WatchPathEntry[]>([]);
   readonly openTask = output<TaskScreenshot>();
   /** Project name whose Settings rail the shell should open (bubbled up from
    *  the Token-usage section's per-project usage rows). */
@@ -88,8 +97,6 @@ export class WorkspaceOverlaysComponent {
   readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
   private readonly modalStack = inject(ModalStackService);
-  private readonly tasks = inject(TaskService);
-  readonly projectSources = signal<readonly ProjectSourceDescriptor[]>([]);
   private readonly destroyRef = inject(DestroyRef);
   private modalDisposer: (() => void) | null = null;
 
@@ -101,9 +108,10 @@ export class WorkspaceOverlaysComponent {
     { key: 'workspaces', label: 'Workspaces', description: 'Manage every workspace and its projects.', icon: '\u{1F5C2}', group: 'global' },
     { key: 'task-server', label: 'Task Server', description: 'Connected URL, workspace store, evidence git, client registry, and management sweeps.', icon: '\u{1F5C4}', group: 'global' },
     { key: 'remote-hosts', label: 'Remote hosts', description: 'Execution locations: heartbeat, vitals, quota, and Re-Probe / Drain / Retire.', icon: '\u{1F4E1}', group: 'global' },
-    { key: 'project-sources', label: 'Project sources', description: 'Available origins for newly onboarded projects.', icon: '\u{1F4C1}', group: 'global' },
     { key: 'orchestrator', label: 'Orchestrator', description: 'Platform-global supervisor, meta-cycle, and auto-intervention lifecycle flags.', icon: '\u{1F916}', group: 'global' },
-    { key: 'caps', label: 'Usage caps', description: 'Per-CLI quota caps and runner rules.', icon: '⚙', group: 'workspace' },
+    { key: 'caps', label: 'CLI Management', description: 'What CLIs and models are available, their fallback routes, usage caps and completion contracts.', icon: '⚙', group: 'workspace' },
+    { key: 'cli-sessions', label: 'CLI sessions', description: 'Per-CLI per-project native session inventory.', icon: '\u{1F5C3}', group: 'workspace' },
+    { key: 'cli-paths', label: 'CLI paths', description: 'Where each CLI lives on disk: executable path and known project roots.', icon: '\u{1F4CD}', group: 'workspace' },
     { key: 'working-memory', label: 'Working memory', description: 'Per-CLI memory and session state. Auth stays protected.', icon: '\u{1F9E0}', group: 'workspace' },
     { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'T', group: 'workspace' },
     { key: 'tokens', label: 'Token usage', description: 'The single usage area: token spend across every project.', icon: '\u{1F4CA}', group: 'workspace' },
@@ -129,7 +137,6 @@ export class WorkspaceOverlaysComponent {
   }
 
   constructor() {
-    this.tasks.getProjectSources().subscribe({ next: sources => this.projectSources.set(sources), error: () => this.projectSources.set([]) });
     // One modal-stack registration tracks the whole view so Escape and
     // backdrop ordering behave like the other studio modals.
     effect(() => {
@@ -157,6 +164,8 @@ export class WorkspaceOverlaysComponent {
   panelTestid(): string {
     switch (this.overlays.section()) {
       case 'caps': return 'cli-admin-overlay';
+      case 'cli-sessions': return 'cli-sessions-overlay';
+      case 'cli-paths': return 'cli-paths-overlay';
       case 'prompts': return 'prompt-admin-overlay';
       case 'tokens': return 'workspace-tokens-overlay';
       case 'screenshots': return 'workspace-screenshots-overlay';
@@ -165,7 +174,6 @@ export class WorkspaceOverlaysComponent {
       case 'workspaces': return 'workspace-management-overlay';
       case 'task-server': return 'workspace-task-server-overlay';
       case 'remote-hosts': return 'workspace-remote-hosts-overlay';
-      case 'project-sources': return 'workspace-project-sources-overlay';
       case 'orchestrator': return 'orchestrator-config-overlay';
       case 'working-memory': return 'workspace-working-memory-overlay';
       case 'overview': return 'workspace-settings-overview-panel';

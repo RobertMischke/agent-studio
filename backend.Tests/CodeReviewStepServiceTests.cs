@@ -280,6 +280,24 @@ public class CodeReviewStepServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GradeMode_CliThrows_ReportsExecutionError_WithoutAuthoritativeGradeTag()
+    {
+        File.WriteAllText(
+            Path.Combine(_jobFolder, "task.json"),
+            "{ \"id\": \"demo\", \"title\": \"Demo\", \"tags\": [\"keep-me\", \"code-review:grade-a\"] }");
+        var service = BuildService((_, _, _, _, _) =>
+            throw new InvalidOperationException("Codex grade process unavailable"));
+
+        var report = await service.RunAsync(BuildGradeRequest(), CancellationToken.None);
+
+        Assert.Equal("Codex grade process unavailable", report.ExecutionError);
+        Assert.Null(report.ConcernTagId);
+        Assert.DoesNotContain(ReadTags(), tag => tag.StartsWith("code-review:grade-"));
+        Assert.Contains("keep-me", ReadTags());
+        Assert.True(File.Exists(report.FilePath));
+    }
+
+    [Fact]
     public async Task GradeMode_DGrade_MapsToBlock_AndTags()
     {
         var service = BuildService((_, _, _, _, _) =>

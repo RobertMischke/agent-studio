@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import type { CliType } from '../../../../models/task.model';
 import type { QuotaWindow } from '../../../../features/quota';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../models/tokens.model';
+import { CostBreakdownService } from '../../services/cost-breakdown.service';
 
 interface ModelUsageRow {
   model: string;
@@ -72,6 +73,7 @@ interface UsageTotals {
   styleUrl: './cli-usage-modal.scss',
 })
 export class CliUsageModalComponent {
+  private readonly costBreakdown = inject(CostBreakdownService);
   readonly cliType = input.required<CliType>();
   readonly row = input<CliUsageQuotaRow | null>(null);
   readonly tokens = input<TokenSummaryAggregate | null>(null);
@@ -176,6 +178,26 @@ export class CliUsageModalComponent {
   /** Read + creation cache tokens folded into one "Cache" column value. */
   cacheTokens(row: ModelUsageRow): number {
     return row.cacheReadTokens + row.cacheCreationTokens;
+  }
+
+  showTotalCalculation(): void {
+    this.costBreakdown.show(this.modelRows().map(row => this.priceItem(row)),
+      `${this.title()} recorded usage cost`);
+  }
+
+  showModelCalculation(row: ModelUsageRow): void {
+    this.costBreakdown.show([this.priceItem(row)], `${row.model} cost calculation`);
+  }
+
+  private priceItem(row: ModelUsageRow) {
+    return {
+      model: row.model,
+      label: row.source,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheReadTokens: row.cacheReadTokens,
+      cacheWriteTokens: row.cacheCreationTokens,
+    };
   }
 
   private toneForPct(pct: number | null): WindowTone {

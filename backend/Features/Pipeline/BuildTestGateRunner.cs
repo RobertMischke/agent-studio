@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using AgentStudio.Git;
+using AgentStudio.Runner;
 
 namespace AgentStudio.Pipeline;
 
@@ -47,6 +50,14 @@ public interface IBuildTestGateRunner
 /// hardcoded <c>backend/OrchestratorApi.csproj</c> broke on every project with a
 /// different layout).
 /// </para>
+///
+/// <para>
+/// Verification command loops are serialized per Git repository. Parallel
+/// reviews may still prepare and run model-backed aspects concurrently, but
+/// they must not launch duplicate full builds/tests against the same checkout
+/// or sibling linked worktrees. The repository identity is resolved from the
+/// Git common directory without spawning another process.
+/// </para>
 /// </summary>
 public sealed class BuildTestGateRunner : IBuildTestGateRunner
 {
@@ -59,10 +70,16 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     ];
 
     private readonly ILogger<BuildTestGateRunner> _logger;
+    private readonly ILoadThrottleGate? _loadThrottle;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _repositoryAdmissions =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
-    public BuildTestGateRunner(ILogger<BuildTestGateRunner> logger)
+    public BuildTestGateRunner(
+        ILogger<BuildTestGateRunner> logger,
+        ILoadThrottleGate? loadThrottle = null)
     {
         _logger = logger;
+        _loadThrottle = loadThrottle;
     }
 
     public async Task<BuildTestGateResult> RunAsync(
@@ -78,6 +95,12 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
         if (!Directory.Exists(repositoryPath))
             return Skipped($"repository not found: {repositoryPath}");
+
+        // ProcessStartInfo accepts relative working directories, but resolves
+        // them against the backend process cwd. Freeze the repository root here
+        // so a gate selected from a job folder or supervisor session cannot
+        // accidentally run a target-less command outside the task checkout.
+        repositoryPath = Path.GetFullPath(repositoryPath);
 
         if (changedFiles is { Count: > 0 } && !HasCodeDiff(changedFiles))
             return Skipped("no code diff");
@@ -104,42 +127,84 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         if (toRun.Count == 0)
             return Skipped($"no verify commands apply to the changed files ({plan.Source})");
 
-        var sw = Stopwatch.StartNew();
-        var output = new BoundedOutput(MaxOutputLines);
-        output.AppendLine($"# verify plan: {plan.Source} ({toRun.Count} command(s))");
-
-        var ranBackend = false;
-        var ranFrontend = false;
-
-        foreach (var cmd in toRun)
+        var admissionKey = ResolveAdmissionKey(repositoryPath);
+        var admission = _repositoryAdmissions.GetOrAdd(admissionKey, static _ => new SemaphoreSlim(1, 1));
+        var admissionWait = Stopwatch.StartNew();
+        if (admission.CurrentCount == 0)
         {
-            var workingDir = string.IsNullOrEmpty(cmd.WorkingSubdir)
-                ? repositoryPath
-                : Path.Combine(repositoryPath, cmd.WorkingSubdir);
-            if (!Directory.Exists(workingDir))
-            {
-                output.AppendLine($"! skipped {Describe(cmd)} (missing directory)");
-                continue;
-            }
-
-            // Node -> frontend flag; dotnet and verbatim build-profile commands
-            // -> backend flag, so the log line still shows the gate did real work.
-            if (cmd.Ecosystem == VerifyEcosystem.Node) ranFrontend = true;
-            else ranBackend = true;
-
-            var exit = await RunShellAsync(workingDir, cmd.Command, Remaining(timeout, sw.Elapsed), output, ct);
-            if (exit != 0)
-            {
-                sw.Stop();
-                var verdict = mode == PostStepMode.Fail ? BuildTestGateVerdict.Fail : BuildTestGateVerdict.Warn;
-                return new BuildTestGateResult(verdict, exit, sw.ElapsedMilliseconds,
-                    output.Text, $"{Describe(cmd)} exit {exit?.ToString() ?? "n/a"}", ranBackend, ranFrontend);
-            }
+            _logger.LogInformation(
+                "build_test_gate_admission_waiting repository={Repository} admission_key={AdmissionKey}",
+                repositoryPath, admissionKey);
         }
+        await admission.WaitAsync(ct).ConfigureAwait(false);
+        admissionWait.Stop();
+        _logger.LogInformation(
+            "build_test_gate_admission_acquired repository={Repository} admission_key={AdmissionKey} wait_ms={WaitMs}",
+            repositoryPath, admissionKey, admissionWait.ElapsedMilliseconds);
 
-        sw.Stop();
-        return new BuildTestGateResult(BuildTestGateVerdict.Ok, 0, sw.ElapsedMilliseconds,
-            output.Text, $"verify gate passed ({plan.Source})", ranBackend, ranFrontend);
+        try
+        {
+            if (_loadThrottle != null)
+            {
+                await _loadThrottle.WaitUntilReadyAsync(
+                    $"build-test-gate:{Path.GetFileName(repositoryPath)}", ct).ConfigureAwait(false);
+            }
+
+            // Admission wait is intentionally outside the command timeout. A
+            // queued task receives the same verification budget as the leader
+            // once host and repository capacity are available.
+            var sw = Stopwatch.StartNew();
+            var output = new BoundedOutput(MaxOutputLines);
+            output.AppendLine($"# verify plan: {plan.Source} ({toRun.Count} command(s))");
+
+            var ranBackend = false;
+            var ranFrontend = false;
+
+            foreach (var cmd in toRun)
+            {
+                var workingDir = ResolveWorkingDirectory(repositoryPath, cmd);
+                if (!Directory.Exists(workingDir))
+                {
+                    output.AppendLine($"! skipped {Describe(cmd)} (missing directory)");
+                    continue;
+                }
+
+                // Node -> frontend flag; dotnet and verbatim build-profile commands
+                // -> backend flag, so the log line still shows the gate did real work.
+                if (cmd.Ecosystem == VerifyEcosystem.Node) ranFrontend = true;
+                else ranBackend = true;
+
+                _logger.LogInformation(
+                    "build_test_gate_command_started repository={Repository} working_directory={WorkingDirectory} command={Command}",
+                    repositoryPath, workingDir, cmd.Command);
+                output.AppendLine($"# working directory: {workingDir}");
+                var exit = await RunShellAsync(workingDir, cmd.Command, Remaining(timeout, sw.Elapsed), output, ct);
+                if (exit != 0)
+                {
+                    sw.Stop();
+                    var verdict = mode == PostStepMode.Fail ? BuildTestGateVerdict.Fail : BuildTestGateVerdict.Warn;
+                    return new BuildTestGateResult(verdict, exit, sw.ElapsedMilliseconds,
+                        output.Text, $"{Describe(cmd)} exit {exit?.ToString() ?? "n/a"}", ranBackend, ranFrontend);
+                }
+            }
+
+            sw.Stop();
+            return new BuildTestGateResult(BuildTestGateVerdict.Ok, 0, sw.ElapsedMilliseconds,
+                output.Text, $"verify gate passed ({plan.Source})", ranBackend, ranFrontend);
+        }
+        finally
+        {
+            admission.Release();
+        }
+    }
+
+    internal static string ResolveAdmissionKey(string repositoryPath)
+    {
+        var canonical = Path.TrimEndingDirectorySeparator(Path.GetFullPath(repositoryPath));
+        var commonGitDirectory = ReadOnlyGitRefFingerprint.ResolveCommonDirectory(canonical);
+        return commonGitDirectory is null
+            ? canonical
+            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(commonGitDirectory));
     }
 
     private static BuildTestGateResult Skipped(string reason) =>
@@ -167,6 +232,20 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     {
         var where = string.IsNullOrEmpty(cmd.WorkingSubdir) ? "" : $" ({cmd.WorkingSubdir})";
         return $"`{cmd.Command}`{where}";
+    }
+
+    /// <summary>
+    /// Resolves every command cwd from the selected checkout root. In
+    /// particular, target-less dotnet commands have an empty subdirectory and
+    /// therefore execute exactly at the worktree root where discovery found the
+    /// solution.
+    /// </summary>
+    internal static string ResolveWorkingDirectory(string repositoryPath, VerifyCommand cmd)
+    {
+        var repositoryRoot = Path.GetFullPath(repositoryPath);
+        return string.IsNullOrEmpty(cmd.WorkingSubdir)
+            ? repositoryRoot
+            : Path.GetFullPath(Path.Combine(repositoryRoot, cmd.WorkingSubdir));
     }
 
     private Task<int?> RunShellAsync(

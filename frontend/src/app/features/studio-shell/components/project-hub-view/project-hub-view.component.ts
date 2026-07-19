@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, output, sign
 import {
   ProjectShellComponent,
   ProjectDetailComponent,
+  ProjectOverviewDashboardComponent,
+  ProjectDeploymentPanelComponent,
   ProjectSettingsPanelComponent,
   SecurityPanelComponent,
   UxuiPanelComponent,
@@ -12,10 +14,12 @@ import {
   ProjectUrlsPanelComponent,
   ProjectGitPanelComponent,
   ProjectProposalsPanelComponent,
+  ProjectGraphComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
+import { RegressionRadarComponent } from '../../../regression-radar';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   ProjectRailKey,
@@ -24,18 +28,22 @@ import {
 import { ProjectOverlaysService } from '../../../project-detail/state/project-overlays.service';
 import { StudioTabStateService } from '../../services/studio-tab-state.service';
 import { studioTabKey } from '../../studio-shell.types';
+import type { WorkbenchListItem } from '../../../../models/project-docs.model';
 
 /** Rails whose content panel is real (not the project-shell placeholder). */
 const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRailKey>([
   'overview',
+  'deployment',
   'project-urls',
   'git',
   'visual-evidence',
   'security',
   'proposals',
   'architecture',
+  'project-graph',
   'drift',
   'uxui',
+  'test-quality',
   'token-usage',
   'observability',
   'steering',
@@ -70,6 +78,8 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   imports: [
     ProjectShellComponent,
     ProjectDetailComponent,
+    ProjectOverviewDashboardComponent,
+    ProjectDeploymentPanelComponent,
     ProjectSettingsPanelComponent,
     SecurityPanelComponent,
     UxuiPanelComponent,
@@ -81,8 +91,10 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectUrlsPanelComponent,
     ProjectGitPanelComponent,
     ProjectProposalsPanelComponent,
+    ProjectGraphComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
+    RegressionRadarComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-hub-view.component.html',
@@ -95,6 +107,8 @@ export class ProjectHubViewComponent {
   readonly projectName = input.required<string>();
   /** Optional initial rail; defaults to "overview" if absent or unknown. */
   readonly initialSection = input<string>('overview');
+  /** Exact Project Pipeline row requested by a task-detail activation link. */
+  readonly pipelineStepId = input<string | undefined>();
 
   /** Bubbles to the parent so it can navigate when a row link is clicked. */
   readonly openTask = output<{ jobId: string; watchPath: string }>();
@@ -109,6 +123,7 @@ export class ProjectHubViewComponent {
   }
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
+    if (rail === 'project-graph') return true;
     return RAILS_WITH_CUSTOM_PANEL.has(rail);
   }
 
@@ -151,6 +166,11 @@ export class ProjectHubViewComponent {
    */
   openUrlPreview(url: { id: string }): void {
     this.tabState.open({ kind: 'url-preview', projectName: this.projectName(), urlId: url.id });
+  }
+
+  openWorkbench(workbench: WorkbenchListItem): void {
+    if (!workbench.valid) return;
+    this.tabState.open({ kind: 'workbench', projectName: this.projectName(), workbenchId: workbench.id, title: workbench.title });
   }
 
   /** Hub closes when the user closes the editor tab; the in-rail button only collapses navigation. */

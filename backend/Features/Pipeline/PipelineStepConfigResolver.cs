@@ -242,7 +242,7 @@ public static class PipelineStepConfigResolver
         var step = Normalize(stepOverride);
         var project = Normalize(projectOverride);
         var global = Normalize(globalDefault);
-        var modelDefault = CliThinkingLevels.DefaultFor(cliType, resolvedModel);
+        var modelDefault = ModelMetadataRegistry.DefaultThinkingLevelForCli(cliType, resolvedModel);
 
         if (step is not null)
             return new(CliThinkingLevels.Normalize(cliType, resolvedModel, step), ModelSourceStep, step, project, global, modelDefault);

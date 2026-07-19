@@ -9,6 +9,7 @@ const HOST: RemoteHost = {
   name: 'agent-runner',
   role: 'remote',
   address: 'ssh://agent@runner.hetzner',
+  clientId: 'agent-runner',
   status: 'online',
   os: 'Ubuntu 24.04 LTS',
   lastHeartbeatAt: '2026-07-10T11:59:55Z',
@@ -27,6 +28,7 @@ const HOST: RemoteHost = {
 };
 
 function mount(host: RemoteHost) {
+  TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     imports: [RemoteHostCardComponent],
     providers: [provideZonelessChangeDetection()],
@@ -56,6 +58,17 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelector('[data-testid="remote-host-status"]')?.textContent).toContain('Offline');
   });
 
+  it('shows the independent read-only badge when the startup push probe fails', () => {
+    const el: HTMLElement = mount({
+      ...HOST,
+      gitPushStatus: 'read-only',
+      gitPushDetail: 'push-dry-run failed (128): permission denied',
+    }).nativeElement;
+    const badge = el.querySelector('[data-testid="remote-host-git-status"]');
+    expect(badge?.textContent).toContain('Writable: no');
+    expect(badge?.getAttribute('title')).toContain('permission denied');
+  });
+
   it('emits an action event with the host id when a control is clicked', () => {
     const fixture = mount(HOST);
     let received: { kind: string; id: string } | null = null;
@@ -65,9 +78,53 @@ describe('RemoteHostCardComponent', () => {
     expect(received).toEqual({ kind: 'drain', id: 'hetzner' });
   });
 
+  it('offers setup only for active remote hosts and emits the selected host', () => {
+    const remote = mount(HOST);
+    let selected: RemoteHost | null = null;
+    remote.componentInstance.setup.subscribe(host => { selected = host; });
+
+    const setup = remote.nativeElement.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
+    expect(setup).toBeTruthy();
+    setup.click();
+    expect(selected).toEqual(HOST);
+
+    const local = mount({ ...HOST, id: 'local', role: 'local', address: null });
+    expect(local.nativeElement.querySelector('[data-testid="remote-host-action-setup"]')).toBeNull();
+  });
+
   it('renders "no stats" when a host reports none (e.g. retired)', () => {
     const el: HTMLElement = mount({ ...HOST, status: 'retired', stats: null }).nativeElement;
     expect(el.querySelector('[data-testid="remote-host-no-stats"]')).toBeTruthy();
     expect(el.querySelectorAll('.meter').length).toBe(0);
+  });
+
+  it('hides stale metrics instead of presenting the last CPU value as live', () => {
+    const el: HTMLElement = mount({ ...HOST, lastHeartbeatAt: '2026-07-08T12:00:00Z' }).nativeElement;
+    expect(el.querySelector('[data-testid="remote-host-stale"]')?.textContent).toContain('last seen 2d ago');
+    expect(el.querySelectorAll('.meter').length).toBe(0);
+    expect(el.textContent).not.toContain('54%');
+  });
+
+  it('renders telemetry charts, slot context, findings, and switches windows', () => {
+    const telemetry = {
+      clientId: 'agent-runner', window: '14d',
+      points: [
+        { timestamp: '2026-07-10T11:00:00Z', cpuPercent: 42, load1: 5.8, load5: 5, load15: 4,
+          memoryUsedBytes: 32e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
+          cpuStealPercent: 6, ioWaitPercent: 2, cpuCores: 12, activeSlots: 5 },
+        { timestamp: '2026-07-10T11:59:30Z', cpuPercent: 54, load1: 6.4, load5: 6, load15: 5,
+          memoryUsedBytes: 34e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
+          cpuStealPercent: 7, ioWaitPercent: 3, cpuCores: 12, activeSlots: 6 },
+      ],
+      findings: [{ kind: 'vm-throttled' as const, label: 'VM throttled', since: '2026-07-10T11:58:00Z', until: '2026-07-10T11:59:30Z' }],
+    };
+    const fixture = mount({ ...HOST, telemetry });
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelectorAll('.telemetry__row').length).toBe(4);
+    expect(el.querySelector('[data-testid="remote-host-slots-context"]')?.textContent).toContain('6 active slots · load 6.4 of 12 cores');
+    expect(el.querySelector('[data-testid="remote-host-findings"]')?.textContent).toContain('VM throttled');
+    (el.querySelector('[data-testid="remote-host-window-1h"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.telemetryWindow()).toBe('1h');
   });
 });

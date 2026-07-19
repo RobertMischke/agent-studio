@@ -1624,3 +1624,20 @@
     transition-duration: 0s !important;
   }
 }
+.ov-pl-step__cost-button,
+.ov-pl-total__cost-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.ov-pl-step__cost-button:disabled {
+  text-decoration: none;
+  cursor: default;
+}

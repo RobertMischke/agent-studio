@@ -23,6 +23,7 @@ import {
   type WorkspaceOrchestratorSettings,
 } from '../../../../services/workspace-orchestrator-settings.service';
 import { ExecutionAssignmentCardComponent } from '../execution-assignment-card/execution-assignment-card';
+import { ProjectBasicsCardComponent } from '../project-basics-card/project-basics-card.component';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -62,12 +63,11 @@ interface WorkspaceListItemLite {
  * global default agent (CLI + model) and the per-CLI usage caps, each labelled
  * as inherited from the global Workspace settings.
  *
- * Neither of those two defaults has a per-project override backend today, so
- * they render read-only with a deep-link affordance into the matching global
- * Workspace-settings section (`overview` for the default agent, `caps` for the
- * usage caps). The per-project settings that DO override globals (runner mode,
- * orchestrator model, auto-commit / auto-push) keep living in the embedded
- * `<app-project-detail view="settings">` below.
+ * They render read-only with a deep-link affordance into the matching global
+ * Workspace-settings section (`overview` for the default-agent fallback,
+ * `caps` for usage caps). Project basics owns the editable per-project coding
+ * agent override. Runner mode, orchestrator model, auto-commit, and auto-push
+ * keep living in the project-specific controls below.
  *
  * Nav-rebuild step 2 (T5b) relocated three formerly-embedded sections to their
  * own project rails — lane sort → Workflow, pipeline steps → Pipeline, CLI
@@ -79,7 +79,13 @@ interface WorkspaceListItemLite {
   selector: 'app-project-settings-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectDetailComponent, CliModelSelectorComponent, TooltipDirective, ExecutionAssignmentCardComponent],
+  imports: [
+    ProjectDetailComponent,
+    CliModelSelectorComponent,
+    TooltipDirective,
+    ExecutionAssignmentCardComponent,
+    ProjectBasicsCardComponent,
+  ],
   templateUrl: './project-settings-panel.component.html',
   styleUrl: './project-settings-panel.component.scss',
 })
@@ -119,7 +125,7 @@ export class ProjectSettingsPanelComponent implements OnInit {
   /** The stored workspace-default autonomy, or -1 ("Inherit") when none is set. */
   readonly orchAutonomy = computed(() => this.orchestratorSettings()?.autonomyLevel ?? -1);
 
-  /** Global default agent, read-only — the value the orchestrator inherits. */
+  /** Global default-agent fallback, read-only; Project basics may override it. */
   readonly defaultCli = signal<CliType | null>(null);
   readonly defaultModel = signal<string | null>(null);
   readonly defaultThinkingLevel = signal<string | null>(null);

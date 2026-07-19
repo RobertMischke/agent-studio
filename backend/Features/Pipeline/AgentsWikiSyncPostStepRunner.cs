@@ -46,7 +46,7 @@ public sealed record AgentsWikiSyncResult(
 /// </para>
 ///
 /// <para>
-/// It writes only under <c>docs/wiki/concepts/designated-topics/</c> plus, when
+/// It writes only under <c>docs/concepts/designated-topics/</c> plus, when
 /// self-healing a missing pointer, a single managed block at the end of the
 /// project's <c>AGENTS.md</c>. It never edits a hand-maintained concept page in
 /// place (those pages are HTML/Markdown owned by humans); the machine-maintained
@@ -57,10 +57,10 @@ public sealed record AgentsWikiSyncResult(
 public sealed class AgentsWikiSyncPostStepRunner
 {
     /// <summary>Wiki-root-relative folder that holds the registry + generated pages.</summary>
-    public const string TopicsFolderRel = "wiki/concepts/designated-topics";
+    public const string TopicsFolderRel = WikiProducerTargets.DesignatedTopicsFolder;
 
     /// <summary>Repo-relative index the AGENTS.md pointer targets.</summary>
-    public const string IndexRepoRel = "docs/wiki/concepts/designated-topics/README.md";
+    public const string IndexRepoRel = "docs/" + WikiProducerTargets.DesignatedTopicsFolder + "/README.md";
 
     private const string AgentsBeginMarker = "<!-- designated-topics:begin (managed by post-agents-wiki-sync) -->";
     private const string AgentsEndMarker = "<!-- designated-topics:end -->";
@@ -92,19 +92,16 @@ public sealed class AgentsWikiSyncPostStepRunner
         TaskInfo task,
         WatchPathEntry entry,
         IReadOnlyList<string>? changedFiles = null,
-        DateTime? nowUtc = null,
-        EngineeringWorkstreamFrameLanguage? frameLanguage = null)
+        DateTime? nowUtc = null)
     {
         var now = nowUtc ?? DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(entry.RootPath))
             return new AgentsWikiSyncResult(AgentsWikiSyncVerdict.Skipped, "project root is not configured");
 
-        // Self-provisioning (AGT-2024): ensure the Workstream frame exists before
-        // this step writes, exactly like the sibling wiki steps. Idempotent and
-        // never overwriting.
+        // Self-provisioning (AGT-2024): the step bootstraps its own home under
+        // docs/, exactly like the sibling wiki steps. Idempotent and never
+        // overwriting.
         var docsRoot = Path.Combine(entry.RootPath, "docs");
-        var language = frameLanguage ?? WorkstreamFrameLanguageResolver.Resolve(entry.Name, isPublicOverride: null);
-        EnsureWorkstreamFrame(docsRoot, language, task, entry);
 
         try
         {
@@ -149,9 +146,15 @@ public sealed class AgentsWikiSyncPostStepRunner
                 if (isMatch) matched++;
 
                 var statePath = Path.Combine(topicsFolder, topic.Slug + ".md");
-                UpsertStatePage(statePath, topicsFolder, entry.RootPath, topic, task, isMatch, matchedBy, pageExists, now);
+                var created = UpsertStatePage(statePath, topicsFolder, entry.RootPath, topic, task, isMatch, matchedBy, pageExists, now);
 
                 var stateText = File.ReadAllText(statePath, Utf8NoBom);
+                if (created)
+                    // Metadata convention (2026-07): born classified so a generated
+                    // designated-topic page never reads as "unclassified" on the pulse.
+                    new WikiCompanionStore().WriteCreationClassification(
+                        Path.Combine(entry.RootPath, "docs"), $"{TopicsFolderRel}/{topic.Slug}.md",
+                        topic.Slug, stateText, ProjectDocsService.DefaultClassificationType($"{TopicsFolderRel}/{topic.Slug}.md"), now);
                 rows.Add(new IndexRow(
                     topic,
                     pageExists,
@@ -185,23 +188,6 @@ public sealed class AgentsWikiSyncPostStepRunner
             _logger.LogWarning(ex,
                 "Agents-wiki-sync failed for {Project}/{JobId}", entry.Name, task.Id);
             return new AgentsWikiSyncResult(AgentsWikiSyncVerdict.Error, ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// Runs the shared ensure-frame primitive and logs only when it actually
-    /// materialized (or failed to materialize) frame shells, so a warm project
-    /// stays quiet.
-    /// </summary>
-    private void EnsureWorkstreamFrame(
-        string docsRoot, EngineeringWorkstreamFrameLanguage language, TaskInfo task, WatchPathEntry entry)
-    {
-        var result = EngineeringWorkstreamFrameSeeder.EnsureFrame(docsRoot, language);
-        if (result.CreatedAnything || result.Failed.Count > 0)
-        {
-            _logger.LogInformation(
-                "Workstream frame ensured for {Project}/{JobId} lang={Language} {Summary} created=[{Created}]",
-                entry.Name, task.Id, language, result.Summary, string.Join(", ", result.Created));
         }
     }
 
@@ -257,7 +243,7 @@ public sealed class AgentsWikiSyncPostStepRunner
         var dto = new RegistryDto
         {
             Note = "Designated topics for the post-agents-wiki-sync pipeline step. Each entry pins an "
-                 + "AGENTS-surface pointer to a docs/wiki/concepts page and a machine-maintained "
+                 + "AGENTS-surface pointer to a docs/concepts page and a machine-maintained "
                  + "'Current State / Progress' page in this folder, so agents read the current state of a "
                  + "topic instead of re-discovering it. A task is matched to a topic by shared tags or by a "
                  + "changed-file path prefix. Add entries to enable the sync.",
@@ -266,7 +252,7 @@ public sealed class AgentsWikiSyncPostStepRunner
             {
                 Slug = "drive-to-conclusion",
                 Title = "Orchestrator drive-to-conclusion",
-                Page = "docs/wiki/concepts/orchestrator-drive-to-conclusion.html",
+                Page = "docs/concepts/orchestrator-drive-to-conclusion.html",
                 Tags = ["drive-to-conclusion", "orchestrator"],
                 PathPrefixes = ["backend/Features/Runner/"],
             },
@@ -326,7 +312,8 @@ public sealed class AgentsWikiSyncPostStepRunner
     /// a re-run on the same task, or an unmatched task, only refreshes the
     /// validation scalars (concept-page-exists / last-synced) so nothing is lost.
     /// </summary>
-    private static void UpsertStatePage(
+    /// <returns>True when the page was freshly created (no file existed yet).</returns>
+    private static bool UpsertStatePage(
         string statePath,
         string topicsFolder,
         string repoRoot,
@@ -345,7 +332,7 @@ public sealed class AgentsWikiSyncPostStepRunner
             File.WriteAllText(statePath,
                 RenderNewStatePage(topicsFolder, repoRoot, topic, task, matched, matchedBy, pageExists, now),
                 Utf8NoBom);
-            return;
+            return true;
         }
 
         var text = File.ReadAllText(statePath, Utf8NoBom);
@@ -366,6 +353,7 @@ public sealed class AgentsWikiSyncPostStepRunner
         }
 
         File.WriteAllText(statePath, text, Utf8NoBom);
+        return false;
     }
 
     private static string RenderNewStatePage(

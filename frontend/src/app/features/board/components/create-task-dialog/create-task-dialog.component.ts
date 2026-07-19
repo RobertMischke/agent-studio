@@ -114,6 +114,7 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   }
 
   readonly cliTypeChange = output<CliType>();
+  readonly modelSelectionTouched = output<void>();
   readonly cancelRequest = output<void>();
   readonly openChatRequest = output<void>();
   readonly submitRequest = output<void>();

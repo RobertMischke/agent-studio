@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace AgentStudio.Docs.Grading;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// Grades one wiki page. The seam that lets the run loop stay identical whether

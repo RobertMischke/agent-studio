@@ -140,6 +140,7 @@ export class EscalationSummaryComponent {
       followUpMarkdown: this.followUpMarkdown(),
       steering: this.steering(),
       statusMarkdown: this.detail().statusMarkdown,
+      timeline: this.timelinePoll.events(),
     }),
   );
 
@@ -170,20 +171,6 @@ export class EscalationSummaryComponent {
   readonly headTitle = computed<string>(() =>
     this.view().escalation?.kind === 'gave-up' ? 'Orchestrator gave up' : 'Escalation',
   );
-
-  /**
-   * One-line reason essence for the collapsed header: for a GaveUpToHuman card
-   * the escalation-category label leads (e.g. `Infra crash`); otherwise the
-   * machine cause label (e.g. `completion-gate`) when the gate recorded one,
-   * else the human reason headline. Null when none exists, so the slot stays empty.
-   */
-  readonly essenceReason = computed<string | null>(() => {
-    const v = this.view();
-    if (v.escalation?.kind === 'gave-up') {
-      return v.escalation.categoryLabel ?? v.escalation.reason ?? v.cause?.trim() ?? v.reason?.trim() ?? null;
-    }
-    return v.cause?.trim() || v.reason?.trim() || null;
-  });
 
   /** Toggle the panel open/closed and persist the choice for this task. */
   toggleCollapsed(): void {

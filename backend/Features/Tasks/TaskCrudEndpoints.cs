@@ -182,7 +182,13 @@ public static class TaskCrudEndpoints
         group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures,
             TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, ILoggerFactory loggerFactory) =>
         {
+            var projectRequested = !string.IsNullOrWhiteSpace(project);
             watchPath = ResolveWatchPath(projects, project, watchPath);
+            // A project-scoped archive must never degrade to the workspace-wide
+            // archive when a UI sends an unknown/stale handle. That leak made a
+            // Token Economy tab display Agent Studio's 1,000+ archived cards.
+            if (projectRequested && string.IsNullOrWhiteSpace(watchPath))
+                return Results.NotFound(new { error = $"Unknown project '{project}'" });
             var logger = loggerFactory.CreateLogger("TaskArchiveEndpoint");
             var sw = Stopwatch.StartNew();
             var all = scanner.ScanArchivedJobs();
@@ -276,7 +282,7 @@ public static class TaskCrudEndpoints
         // mode=coding, state=1-preparation) that the frontend feeds into the
         // existing create-task modal. The modal stays the single source of
         // truth for create UX; this endpoint only reads. See
-        // docs/research/planning-research-task-kinds-2026-05.md.
+        // docs/concepts/planning-research-task-kinds-2026-05.md.
         group.MapGet("/{jobId}/promote-to-coding", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);

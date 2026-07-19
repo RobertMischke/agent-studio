@@ -1,6 +1,6 @@
 # Publishing Workflows (concept)
 
-Version: v2 (2026-07-11)
+Version: v2 (2026-07-13)
 Status: PUB-1 derivation and PUB-2 guided publish actions are implemented.
 
 Operator intent: **dead simple sehen, dass etwas Publizierbares da ist - im
@@ -8,6 +8,10 @@ Prinzip nach jedem Task.** After a task lands, the operator should see at a glan
 whether the project now has something worth publishing (a package release, a
 website deploy) without opening a terminal or remembering per-project release
 mechanics.
+
+Publishing a package or website target is distinct from promoting the whole
+integration stream. The latter follows the
+[`develop -> main` release and stable-freeze contract](release-semantics.md).
 
 ## 1. Scope and non-goals
 
@@ -69,14 +73,13 @@ actions (`actions/deploy-pages`, `actions/upload-pages-artifact`), the classic
 For each target, the pending delta is the number of **merged mainline
 (first-parent) commits on the integration branch, since the target's reference
 point, that touch the target's path scope**. First-parent collapses each merged
-task branch to one mainline commit, so the number reads as "how many tasks
-touched this target since it was last shipped", not raw commit churn.
+task branch to one mainline commit, so the number reads as “how many tasks
+touched this target since it was last shipped”, not raw commit churn.
 
 - **Path scope.** Package = the package source paths (the manifest's directory),
   minus the website folder and repo-meta folders (`.github`, `docs`,
   `.orchestrator`) that are never package source. Website = the website folder.
-  So a website change never counts toward the package, and vice versa
-  ("Package-Quellpfade vs. website/").
+  So a website change never counts toward the package, and vice versa.
 - **Reference point.**
   - Package: the last `v*` tag (`referenceKind: tag`).
   - Website: the tip date of a `gh-pages` deploy branch when one exists
@@ -86,27 +89,25 @@ touched this target since it was last shipped", not raw commit churn.
     because the modern `actions/deploy-pages` flow leaves **no** git marker. When
     there is no baseline the count is not asserted (null) and the UI stays quiet
     rather than inventing a number.
-- **Quiet by default.** `pendingCount === 0` (nothing merged since the reference
-  touched the scope) renders **no badge**. Silence means "nothing to publish".
+- **Quiet by default.** `pendingCount === 0` renders no badge. Silence means
+  “nothing to publish”.
 
 ### 3.1 UI surfaces (read-only)
 
-- **Project Hub badge** (project overview): one badge per non-quiet target, e.g.
-  `NuGet 0.3.1 → 4 tasks pending`. Green for a normal package delta, violet for a
-  website delta, amber for the first-publish state.
-- **Accepted-task chip** (kanban card + task detail): a `publishable: npm,
-  website` chip on a 6-completed task, listing the targets whose scope that task's
-  merged work touched. Derived by set-membership of the task's mainline anchor
-  (its recorded develop-merge commit, else its last commit) against each target's
-  pending commit set - so it is computed once per project, never per card.
+- **Project Hub badge:** one badge per non-quiet target, e.g.
+  `NuGet 0.3.1 -> 4 tasks pending`. Green for a normal package delta, violet for
+  a website delta, amber for the first-publish state.
+- **Accepted-task chip:** a `publishable: npm, website` chip on a completed task,
+  listing the targets whose scope that task's merged work touched. It is derived
+  by set-membership of the task's mainline anchor against each target's pending
+  commit set, once per project rather than once per card.
 
 ## 4. Special state: first publish pending
 
 A package with a release workflow / manifest but **no `v*` tag at all** has never
 been published. There is no version and no meaningful delta baseline, so instead
-of a count the Hub shows `<ecosystem> first publish pending (manual, operator)`
-(amber). The first publish is intentionally a manual operator action -
-coding-agent-chat is the reference case.
+of a count the Hub shows `<ecosystem> first publish pending (manual, operator)`.
+The first publish is intentionally a manual operator action.
 
 For later releases, a feature task in the pending set suggests the next minor
 version; a mix containing only bugs and chores suggests the next patch. The
@@ -116,8 +117,8 @@ release commit and `vX.Y.Z`, then atomically pushes `HEAD` and the tag to
 `origin`. The product does not run `npm publish` or `dotnet nuget push`.
 
 Each target stores an automation mode: `manual`, `suggest`, or `auto`. Package
-targets clamp `auto` to `suggest`; website targets may use all three modes.
-The action panel is the shared operator surface for the suggestion and current
+targets clamp `auto` to `suggest`; website targets may use all three modes. The
+action panel is the shared operator surface for the suggestion and current
 workflow result. Website `auto` subscribes to the accepted-task transition and
 waits for that task's integration merge to appear in the website delta before
 dispatching the existing workflow.
@@ -125,31 +126,32 @@ dispatching the existing workflow.
 ## 5. Implementation map
 
 - Backend derivation: `backend/Features/Publishing/` -
-  `PublishWorkflowParser` (workflow facts), `PublishManifestLocator` (npm/NuGet
-  manifest + source root), `PublishTargetService` (targets + pending deltas,
-  cached per project), `TaskPublishableService` (per-task chip fold),
-  `PublishEndpoints` (`GET /api/projects/{project}/publish-status`).
+  `PublishWorkflowParser`, `PublishManifestLocator`, `PublishTargetService`,
+  `TaskPublishableService`, and `PublishEndpoints`.
 - Backend actions: `PublishActionService` performs guarded manifest/tag pushes,
-  GitHub workflow dispatch, and `gh api` run tracking. `PublishEndpoints` owns
-  the panel, automation setting, trigger, and run-status routes.
-  GitHub authorization comes exclusively from the operator-managed `gh` CLI
-  session on the host. The product does not accept, inject, or persist a GitHub
-  token; unattended hosts must authenticate `gh` outside Agent Studio.
-- Git primitives (read-only): `GitService.GetLatestVersionTag`,
-  `GetMainlineCommitsForScope`, `GetTipCommitDateUtc`.
-- Snapshot fold: `publishTargets` on `GET /api/projects/{project}/snapshot`.
-- Board fold: `TaskInfo.PublishSignal` on `/api/tasks` + `/grouped` + detail.
-- Frontend: `project-publish-panel` turns the overview badges into the guided
-  release/deploy flow; the accepted-task chip remains the per-task signal.
+  GitHub workflow dispatch, and `gh api` run tracking. Authorization comes from
+  the operator-managed `gh` CLI session; the product never persists a token.
+- Git primitives: `GitService.GetLatestVersionTag`,
+  `GetMainlineCommitsForScope`, and `GetTipCommitDateUtc`.
+- Snapshot fold: `publishTargets` on the project snapshot.
+- Board fold: `TaskInfo.PublishSignal` on task lists and detail.
+- Frontend: `project-publish-panel` provides the guided release/deploy flow; the
+  accepted-task chip remains the per-task signal.
 
 ## 6. Honest limitations
 
-- Website pending is only precise when a `gh-pages` deploy branch exists. The
+- Website pending is only precise when a `gh-pages` deploy branch exists. A
   modern `actions/deploy-pages` deployment is not recorded in git, so PUB-1
-  approximates the baseline with the last release tag and labels it as such
-  (`referenceKind`), or stays quiet when there is no anchor. It never fabricates a
-  website count from thin air.
-- Derivation is heuristic over the workflow text (no YAML dependency, matching the
-  rest of the codebase). It targets the common publish/deploy vocabularies; an
-  unusual custom pipeline may not be recognised, which fails safe to "no target"
-  (quiet) rather than a wrong badge.
+  labels a release-tag approximation or stays quiet when no anchor exists.
+- Derivation is heuristic over workflow text. An unusual custom pipeline may not
+  be recognized, which fails safe to “no target” rather than a wrong badge.
+- Target publishing does not answer whether all of `develop` should be promoted
+  to `main`; the transparent release manifest owns that broader decision.
+
+## 7. Executed reference instance
+
+On 2026-07-10, CodingAgentRunner `v0.5.0` was published to NuGet through its
+existing tag-driven Trusted Publishing workflow. The consumer bump remained a
+separate task. This is the reference shape for a package target: Agent Studio
+drives and observes the existing workflow instead of becoming a second package
+publisher.

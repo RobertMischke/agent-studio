@@ -1,0 +1,115 @@
+@use '../../../../../../../styles/mixins' as m;
+
+// One card in the wiki dashboard grid (mounted through the display:contents
+// Pulse host, so this host is the grid item). Absent catalogue = no card.
+:host {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wbinbox {
+  @include m.knowledge-card;
+
+  flex: 1 1 auto;
+}
+
+.wbinbox__head {
+  @include m.knowledge-card-head;
+}
+
+.wbinbox__icon {
+  @include m.knowledge-card-icon;
+}
+
+.wbinbox__head strong {
+  margin-left: auto;
+  padding: 0 var(--studio-spacing-2);
+  border-radius: 999px;
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+.wbinbox ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wbinbox button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--pwiki-paper-fg, var(--studio-fg));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wbinbox button:hover:not(:disabled) {
+  border-color: var(--pwiki-paper-border, var(--studio-border));
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
+}
+
+.wbinbox button:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+
+.wbinbox button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.wbinbox__meta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.64rem;
+}
+
+.wbinbox__meta i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--studio-accent-3);
+}
+
+.wbinbox__meta i[data-status='invalid'],
+.wbinbox__meta i[data-status='decision-pending'] { background: var(--studio-warn); }
+
+.wbinbox time { margin-left: auto; }
+
+.wbinbox b {
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wbinbox small {
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.72rem;
+}
+
+.wbinbox p {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  margin: 0;
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.76rem;
+}

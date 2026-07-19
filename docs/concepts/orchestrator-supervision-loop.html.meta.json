@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Orchestrator Supervision Loop",
+  "source": {
+    "path": "docs/concepts/orchestrator-supervision-loop.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "fbef0e06be3d229eb98d8f37dece74af3b9a4aecf001db4ef413d938c934ebe6",
+      "sizeBytes": 49253,
+      "lineCount": 870,
+      "capturedAt": "2026-07-18T18:45:50.415Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

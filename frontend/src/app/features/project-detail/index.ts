@@ -6,6 +6,8 @@ export { ProjectOverlaysService } from './state/project-overlays.service';
 // container components
 export { ProjectOverlaysComponent } from './components/project-overlays/project-overlays.component';
 export { ProjectDetailComponent } from './components/project-detail/project-detail';
+export { ProjectOverviewDashboardComponent } from './components/project-overview-dashboard/project-overview-dashboard';
+export { ProjectDeploymentPanelComponent } from './components/project-deployment-panel/project-deployment-panel.component';
 export { ProjectShellComponent } from './components/project-shell/project-shell.component';
 export { ProjectSettingsPanelComponent } from './components/project-settings-panel/project-settings-panel.component';
 export { AnalysisReportDrilldownComponent } from './components/analysis-report-drilldown/analysis-report-drilldown';
@@ -19,8 +21,10 @@ export { ProjectProductRuntimePanelComponent } from './components/project-produc
 export { ProjectPipelinePanelComponent } from './components/project-pipeline-panel/project-pipeline-panel.component';
 export { ProjectUrlsPanelComponent } from './components/project-urls-panel/project-urls-panel.component';
 export { ProjectUrlPreviewTabComponent } from './components/project-url-preview-tab/project-url-preview-tab.component';
+export { WorkbenchViewerComponent } from './components/workbench-viewer/workbench-viewer.component';
 export { ProjectGitPanelComponent } from './components/project-git-panel/project-git-panel.component';
 export { ProjectProposalsPanelComponent } from './components/project-proposals-panel/project-proposals-panel.component';
+export { ProjectGraphComponent } from './components/project-graph/project-graph.component';
 
 // section components used cross-feature
 export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section/project-steering-docs-section';

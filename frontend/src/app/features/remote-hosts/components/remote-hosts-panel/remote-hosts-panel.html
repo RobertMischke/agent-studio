@@ -46,13 +46,55 @@
     </div>
   }
 
-  <div class="rh__list">
-    @for (host of hosts(); track host.id) {
-      <app-remote-host-card [host]="host" [now]="now()" (action)="onAction($event)" />
+  <div class="rh__list" data-testid="remote-hosts-active">
+    @for (host of activeHosts(); track host.id) {
+      <app-remote-host-card
+        [host]="host"
+        [now]="now()"
+        (action)="onAction($event)"
+        (setup)="openSetup($event)" />
     }
   </div>
 
+  @if (retiredHosts().length) {
+    <details class="rh__retired" data-testid="remote-hosts-retired">
+      <summary>Retired clients ({{ retiredHosts().length }})</summary>
+      <p>Retired clients stay visible for history. Revive re-enables the identity; permanent deletion is a separate irreversible step.</p>
+      <div class="rh__list">
+        @for (host of retiredHosts(); track host.id) {
+          <app-remote-host-card [host]="host" [now]="now()" (action)="onAction($event)" />
+        }
+      </div>
+    </details>
+  }
+
   @if (wizardOpen()) {
     <app-add-host-wizard (cancelled)="closeWizard()" (completed)="completeWizard($event)" />
+  }
+
+  @if (setupHost(); as host) {
+    <app-runner-setup-dialog
+      [host]="host"
+      [workspaces]="workspaces()"
+      (cancelled)="closeSetup()"
+      (taskCreated)="onSetupTaskCreated($event)" />
+  }
+
+
+  @if (pendingConfirmation(); as pending) {
+    <div class="rh__modal-backdrop" data-testid="remote-host-confirm">
+      <section class="rh__modal" role="dialog" aria-modal="true"
+               [attr.aria-label]="pending.kind === 'retire' ? 'Retire host' : 'Delete host permanently'"
+               >
+        <h3>{{ confirmationTitle() }}</h3>
+        <p>{{ confirmationText() }}</p>
+        <div class="rh__modal-actions">
+          <button type="button" (click)="cancelConfirmation()">Cancel</button>
+          <button type="button" class="rh__danger" data-testid="remote-host-confirm-submit" (click)="confirmLifecycleAction()">
+            {{ pending.kind === 'retire' ? 'Drain and retire' : 'Delete permanently' }}
+          </button>
+        </div>
+      </section>
+    </div>
   }
 </div>

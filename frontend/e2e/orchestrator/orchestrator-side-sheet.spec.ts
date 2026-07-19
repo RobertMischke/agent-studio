@@ -38,8 +38,8 @@ test.describe('Orchestrator side sheet', () => {
     await page.waitForTimeout(1200);
     await page.screenshot({ path: `${SHOTS}/02-side-sheet-open.png`, fullPage: false });
 
-    const chatBody = page.getByTestId('chat-body');
-    await expect(chatBody).toBeVisible();
+    const conversation = page.getByTestId('conversation-view');
+    await expect(conversation).toBeVisible();
 
     const composer = page.getByTestId('chat-input');
     await expect(composer).toBeVisible();
@@ -144,8 +144,9 @@ test.describe('Orchestrator side sheet', () => {
     await expect(page.getByTestId('orch-side-sheet-tab-sessions')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-tab-supervisor')).toHaveCount(0);
 
-    // The Settings (⚙) button opens the consolidated Settings view on the
-    // platform-global Orchestrator section (AGT-1812).
+    // Settings lives in the context menu so the chat header stays compact.
+    await page.getByTestId('orch-context-badge').click();
+    await expect(page.getByTestId('orch-context-menu')).toBeVisible();
     const settingsBtn = page.getByTestId('orch-side-sheet-settings');
     await expect(settingsBtn).toBeVisible();
     await settingsBtn.click();

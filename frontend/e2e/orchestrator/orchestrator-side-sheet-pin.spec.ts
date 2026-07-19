@@ -147,12 +147,46 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await stubWorkspace(page);
     await openSideSheet(page);
 
+    const badge = page.getByTestId('orch-context-badge');
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('orch-context-count')).toHaveText('3');
+    await expect(page.getByTestId('orch-context-menu')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-pin')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-settings')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-refresh')).toHaveCount(0);
+
+    const resultsDir = process.env.JOB_RESULTS_DIR;
+    if (resultsDir) {
+      await page.screenshot({ path: path.join(resultsDir, 'orchestrator-context-collapsed--mocked.png'), fullPage: false });
+    }
+
+    await badge.click();
+    await expect(badge).toHaveAttribute('aria-expanded', 'true');
+    const contextMenu = page.getByTestId('orch-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await expect(page.getByTestId('chat-context-groups')).toBeVisible();
+
+    const sheetBox = await page.getByTestId('orch-side-sheet').boundingBox();
+    const menuBox = await contextMenu.boundingBox();
+    expect(sheetBox).not.toBeNull();
+    expect(menuBox).not.toBeNull();
+    expect(Math.abs(menuBox!.x - sheetBox!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(menuBox!.width - sheetBox!.width)).toBeLessThanOrEqual(2);
+
     const header = page.getByTestId('orch-context-header');
     await expect(header).toBeVisible();
     await expect(header).toHaveAttribute('data-scope', 'board');
     await expect(header).toHaveAttribute('data-context-key', `project:${PROJECT}`);
     await expect(page.getByTestId('orch-context-scope')).toHaveText('Project context');
     await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
+    await expect(page.getByTestId(`chat-switcher-row-project:${PROJECT}`)).toContainText('running');
+    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('parked');
+    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('15k');
+
+    if (resultsDir) {
+      await page.screenshot({ path: path.join(resultsDir, 'orchestrator-context-expanded--mocked.png'), fullPage: false });
+    }
 
     const forcedRefresh = page.waitForRequest((request) =>
       request.method() === 'POST'
@@ -160,31 +194,11 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await page.getByTestId('orch-side-sheet-refresh').click();
     await forcedRefresh;
     await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
-    // Not pinned yet.
-    await expect(header).not.toHaveAttribute('data-pinned', 'true');
-    await expect(page.getByTestId('orch-context-pin')).toHaveCount(0);
 
     const pinBtn = page.getByTestId('orch-side-sheet-pin');
-    await expect(pinBtn).toContainText('Pin');
+    await expect(pinBtn).toContainText('Pin context');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeEnabled();
-
-    const railChip = page.getByTestId('chat-switcher-chip');
-    await expect(railChip).toContainText('1 active');
-    await expect(page.getByTestId('chat-switcher-groups')).toHaveCount(0);
-    const resultsDir = process.env.JOB_RESULTS_DIR;
-    if (resultsDir) {
-      await page.screenshot({ path: path.join(resultsDir, 'chat-switcher-rail-collapsed--mocked.png'), fullPage: false });
-    }
-    await railChip.click();
-    await expect(page.getByTestId('chat-switcher-groups')).toBeVisible();
-    await expect(page.getByTestId(`chat-switcher-row-project:${PROJECT}`)).toContainText('running');
-    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('parked');
-    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('15k');
-
-    if (resultsDir) {
-      await page.screenshot({ path: path.join(resultsDir, 'chat-switcher-rail-expanded--mocked.png'), fullPage: false });
-    }
 
     await page.screenshot({
       path: 'screenshots/orchestrator-side-sheet-pin/following--mocked.png',
@@ -196,7 +210,7 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(header).toHaveAttribute('data-pinned', 'true');
     await expect(page.getByTestId('orch-context-pin')).toContainText('Pinned');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'true');
-    await expect(pinBtn).toContainText('Pinned');
+    await expect(pinBtn).toContainText('Follow navigation');
     await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeDisabled();
 
     await page.screenshot({

@@ -14,13 +14,14 @@ public record CreateFollowupFromEvidenceRequest
 }
 
 /// <summary>
-/// Response shape for the follow-up endpoint. <c>JobId</c> is the slug
-/// assigned to the new task; the frontend uses it to route the user to the
-/// new card.
+/// Response shape for the follow-up endpoint. <c>JobId</c> remains the
+/// storage slug for backwards compatibility; <c>TaskKey</c> is the stable,
+/// globally resolvable reference clients should put in links.
 /// </summary>
 public record CreateFollowupFromEvidenceResponse
 {
     public string JobId { get; init; } = "";
+    public string? TaskKey { get; init; }
     public string TargetState { get; init; } = TaskStates.Preparation;
 }
 
@@ -47,6 +48,12 @@ public record ExternalCompletionRequest
     /// <see cref="TaskStates"/> value.
     /// </summary>
     public string? TargetState { get; init; }
+    /// <summary>
+    /// Optional open checklist items that require operator action. Remote
+    /// runners use this when a worktree could not be secured and therefore
+    /// remains on its host.
+    /// </summary>
+    public List<string>? GateItems { get; init; }
 }
 
 /// <summary>One delivered artifact recorded in <c>results/deliverables.md</c>.</summary>
@@ -238,6 +245,13 @@ public record CreateTaskRequest
     public string? PromptMarkdown { get; init; }
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
+    /// <summary>
+    /// Provenance for model qualification. Null preserves the legacy API rule
+    /// that a supplied value is explicit; false means the UI merely
+    /// materialized its default and qualification may replace it.
+    /// </summary>
+    public bool? ModelExplicit { get; init; }
+    public bool? ThinkingLevelExplicit { get; init; }
     public string? TargetState { get; init; }
     /// <summary>Optional CLI backend (claude|codex|gemini). Defaults to claude when omitted.</summary>
     public string? CliType { get; init; }
@@ -286,7 +300,7 @@ public record CreateTaskRequest
 /// the modal stays the single source of truth for the create UX. Images
 /// are returned as fetchable references (not inline bytes); the modal
 /// re-uploads them byte-for-byte into the new task's <c>attachments/</c>
-/// on save. See docs/research/planning-research-task-kinds-2026-05.md.
+/// on save. See docs/concepts/planning-research-task-kinds-2026-05.md.
 /// </summary>
 public record PromoteToCodingResponse
 {
@@ -484,7 +498,7 @@ public record SetIntegrationStrategyRequest
 
 public record SetAutoPushStrategyRequest
 {
-    public string Strategy { get; init; } = AutoPushStrategies.OnCompleted;
+    public string Strategy { get; init; } = AutoPushStrategies.AlwaysImmediate;
 }
 
 /// <summary>
@@ -560,6 +574,7 @@ public record SetPipelineStepRequest
     /// <summary>Full pipeline step id (e.g. <c>aspect-code-quality</c>) or bare suffix (<c>code-quality</c>).</summary>
     public string StepId { get; init; } = "";
     public bool? Enabled { get; init; }
+    public bool? EconomyModel { get; init; }
     public string? Mode { get; init; }
     public string? CliType { get; init; }
     public string? Model { get; init; }

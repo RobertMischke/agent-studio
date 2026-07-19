@@ -21,10 +21,10 @@ public record ProjectSettings
 
     /// <summary>
     /// Controls when the platform pushes runner-owned commits. Default is
-    /// <see cref="AutoPushStrategies.OnCompleted"/> so only commits that have
-    /// passed human review and reached <c>6-completed</c> are pushed.
+    /// <see cref="AutoPushStrategies.AlwaysImmediate"/> so every platform-owned
+    /// commit is made durable on origin without waiting for lane transitions.
     /// </summary>
-    public string AutoPushStrategy { get; init; } = AutoPushStrategies.OnCompleted;
+    public string AutoPushStrategy { get; init; } = AutoPushStrategies.AlwaysImmediate;
 
     /// <summary>
     /// Last <i>live</i> runner mode for this project ("manual", "auto-single",
@@ -84,7 +84,7 @@ public record ProjectSettings
     /// <c>disabled</c>, <c>fewHours</c>, <c>daily</c>, <c>manualOnly</c>.
     /// Default null = "disabled" for every topic; reports never auto-run
     /// without an explicit opt-in. The contract for execution is documented
-    /// in <c>docs/reports/analysis-reports.md</c>; this struct stores the user's
+    /// in <c>docs/system/reports/analysis-reports.md</c>; this struct stores the user's
     /// cadence choice only.
     /// </summary>
     public Dictionary<string, string>? AnalysisSchedules { get; init; }
@@ -241,17 +241,6 @@ public record ProjectSettings
     public bool? EpicSubTasksToReady { get; init; }
 
     /// <summary>
-    /// AGT-2024: language of the self-provisioned Workstream frame shells a
-    /// wiki-writing pipeline step seeds into this project's <c>docs/</c>. True
-    /// (a public / open-source repo) forces English; false opts the project into
-    /// the localized frame. Null uses the heuristic default (English) resolved by
-    /// <see cref="AgentStudio.Docs.WorkstreamFrameLanguageResolver"/>. It only
-    /// affects shells created from now on - existing shells are never rewritten.
-    /// Persisted in <c>project-settings.json</c>.
-    /// </summary>
-    public bool? WorkstreamFramePublic { get; init; }
-
-    /// <summary>
     /// AGT-2028: per-project configuration for the opt-in <c>post-task-spawner</c>
     /// pipeline step. When set (and the step is enabled via
     /// <see cref="PipelineSteps"/>), a completed task whose change set the best
@@ -402,6 +391,13 @@ public record PipelineStepCondition
 public record PipelineStepSetting
 {
     /// <summary>
+    /// Opts this LLM-backed step into the TokenEconomy recommendation path.
+    /// An explicit per-step <see cref="Model"/> still wins. The runtime falls
+    /// back to its normal model when no qualified economy model is available.
+    /// </summary>
+    public bool? EconomyModel { get; init; }
+
+    /// <summary>
     /// When <c>false</c>, the step is skipped for this project. Null or
     /// <c>true</c> leaves the step enabled. Only honoured for steps the
     /// runtime can actually skip (today: the aspect post-steps and the
@@ -421,8 +417,8 @@ public record PipelineStepSetting
     /// selector vocabulary). Null falls back to the project
     /// <see cref="ProjectSettings.OrchestratorModel"/>, then the global
     /// default model, then the runtime default. Only meaningful for steps that
-    /// invoke an LLM (the aspect and drift post-steps); deterministic tool
-    /// steps ignore it.
+    /// invoke an LLM (including aspects, abort review, grade, and drift);
+    /// deterministic tool steps ignore it.
     /// </summary>
     public string? Model { get; init; }
 
@@ -678,12 +674,12 @@ public static class AutoPushStrategies
 
     public static string Normalize(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value)) return OnCompleted;
+        if (string.IsNullOrWhiteSpace(value)) return AlwaysImmediate;
         var v = value.Trim();
         foreach (var strategy in All)
             if (string.Equals(strategy, v, StringComparison.OrdinalIgnoreCase))
                 return strategy;
-        return OnCompleted;
+        return AlwaysImmediate;
     }
 }
 

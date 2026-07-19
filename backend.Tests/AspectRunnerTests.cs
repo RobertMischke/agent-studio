@@ -198,6 +198,22 @@ public class AspectRunnerTests : IDisposable
         Assert.Equal(AspectStatus.Concerns, AspectVerdictParsing.ReadStatusFromReport(content));
     }
 
+    [Fact]
+    public async Task SparkReply_WithMalformedVerdict_UsesDeterministicUnparseableConcern()
+    {
+        var runner = BuildRunner(_ => "Analysis complete. [[ASPECT_VERDICT: status=maybe; summary=looks fine]]");
+
+        var report = await runner.RunAsync(BuildInputs(), ["documentation-impact"],
+            CliTypes.Codex, "gpt-5.6-codex-spark", TimeSpan.FromSeconds(5), CancellationToken.None,
+            modelForAspect: _ => "gpt-5.6-codex-spark",
+            cliForAspect: _ => CliTypes.Codex);
+
+        var verdict = Assert.Single(report.Verdicts);
+        Assert.Equal(AspectStatus.Concerns, verdict.Status);
+        Assert.Equal("Aspect runner produced no parseable verdict.", verdict.Summary);
+        Assert.Equal("review:unparseable", verdict.ConcernTagId);
+    }
+
     [Theory]
     [InlineData("Looks fine.\n\nStatus: pass", AspectStatus.Pass)]
     [InlineData("**Status:** concerns\n\nNeeds review.", AspectStatus.Concerns)]
@@ -369,6 +385,50 @@ public class AspectRunnerTests : IDisposable
 
         Assert.Equal("claude-haiku-4-5", captured["code-quality"]);
         Assert.Equal("claude-haiku-4-5", captured["tests-and-evidence"]);
+    }
+
+    [Fact]
+    public async Task PerAspectCli_RoutesConfiguredCodexCliWithSparkModel()
+    {
+        string? capturedCli = null;
+        string? capturedModel = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, cli, model, _, _, _) =>
+        {
+            capturedCli = cli;
+            capturedModel = model;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        await runner.RunAsync(BuildInputs(), new[] { "documentation-impact" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None,
+            modelForAspect: _ => "gpt-5.3-codex-spark",
+            cliForAspect: _ => CliTypes.Codex);
+
+        Assert.Equal(CliTypes.Codex, capturedCli);
+        Assert.Equal("gpt-5.3-codex-spark", capturedModel);
+    }
+
+    [Fact]
+    public async Task NullPerAspectCli_KeepsRunWideCli()
+    {
+        string? capturedCli = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, cli, _, _, _, _) =>
+        {
+            capturedCli = cli;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        await runner.RunAsync(BuildInputs(), ["documentation-impact"],
+            CliTypes.Codex, ModelIds.Gpt54Mini, TimeSpan.FromSeconds(5), CancellationToken.None,
+            cliForAspect: null);
+
+        Assert.Equal(CliTypes.Codex, capturedCli);
     }
 
     [Fact]

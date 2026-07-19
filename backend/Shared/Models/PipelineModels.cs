@@ -199,6 +199,16 @@ public sealed record PipelineStepExecution
     /// when the runtime fell back to the project / client default.
     /// </summary>
     public string? Model { get; init; }
+    /// <summary>Reasoning level selected for this step or recommendation.</summary>
+    public string? ThinkingLevel { get; init; }
+    /// <summary>Model recommended by a qualification step before overrides.</summary>
+    public string? RecommendedModel { get; init; }
+    /// <summary>Reasoning level recommended before overrides.</summary>
+    public string? RecommendedThinkingLevel { get; init; }
+    /// <summary>Where the effective selection came from, e.g. qualification or task-override.</summary>
+    public string? SelectionSource { get; init; }
+    /// <summary>Heuristic saving versus the live catalogue's top rung.</summary>
+    public int? EstimatedSavingsPercent { get; init; }
     public PipelineStepStatus Status { get; init; } = PipelineStepStatus.Pending;
     public DateTime? StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }

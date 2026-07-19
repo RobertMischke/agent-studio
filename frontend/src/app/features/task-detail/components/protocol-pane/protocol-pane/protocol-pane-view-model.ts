@@ -15,10 +15,16 @@ import {
 export function buildInspectorTabs(args: {
   summaryStatus: TaskSummaryStatus;
   hasStatusMarkdown: boolean;
+  hasCliActivity: boolean;
+  isHumanReview: boolean;
   isRunning: boolean;
 }): readonly PaneTabDef[] {
   const protocolDisabled =
-    !args.hasStatusMarkdown && args.summaryStatus !== 'generating' && args.summaryStatus !== 'failed';
+    !args.hasStatusMarkdown &&
+    args.summaryStatus !== 'generating' &&
+    args.summaryStatus !== 'failed' &&
+    !args.hasCliActivity &&
+    !args.isHumanReview;
   return [
     {
       // The user-facing area was renamed Protocol -> Result. The tab `id`

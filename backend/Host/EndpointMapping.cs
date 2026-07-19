@@ -54,8 +54,11 @@ public static class EndpointMapping
         app.MapSecurityReviewEndpoints();
         app.MapDesignSurfaceEndpoints();
         app.MapProjectTokenUsageEndpoints();
+        app.MapTokenPricingEndpoints();
         app.MapReviewDecisionsEndpoints();
         app.MapProjectSnapshotEndpoints();
+        app.MapProjectOperatorDashboardEndpoints();
+        app.MapProjectGraphEndpoints();
         app.MapPublishEndpoints();
         app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();

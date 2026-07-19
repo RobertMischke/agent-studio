@@ -22,6 +22,7 @@ public sealed class TaskTransitionService
     private readonly CliRouter? _cliRouter;
     private readonly IAutoReviewPostProcessingQueue? _autoReviewQueue;
     private readonly TaskProvenanceService? _provenance;
+    private readonly AgentStudio.Bus.AgentMessageBusBridge? _bus;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -48,7 +49,8 @@ public sealed class TaskTransitionService
         CliRouter? cliRouter = null,
         IAutoReviewPostProcessingQueue? autoReviewQueue = null,
         AgentStudio.Pipeline.MergeIntoDevelopRunner? mergeRunner = null,
-        TaskProvenanceService? provenance = null)
+        TaskProvenanceService? provenance = null,
+        AgentStudio.Bus.AgentMessageBusBridge? bus = null)
     {
         _scanner = scanner;
         _states = states;
@@ -63,6 +65,7 @@ public sealed class TaskTransitionService
         _autoReviewQueue = autoReviewQueue;
         _mergeRunner = mergeRunner;
         _provenance = provenance;
+        _bus = bus;
     }
 
     /// <summary>
@@ -108,9 +111,13 @@ public sealed class TaskTransitionService
         if (shouldAutoCommit)
         {
             commitToStamp = await TryAutoCommitAsync(jobId, watchPath, ct);
-            if (commitToStamp != null && autoPushStrategy == AutoPushStrategies.AlwaysImmediate)
+            if (commitToStamp != null
+                && autoPushStrategy == AutoPushStrategies.AlwaysImmediate
+                && _pushQueue == null)
             {
-                await TryPushCommitAsync(commitToStamp.Sha, info.WatchPath, jobId, "auto-commit", ct);
+                // Compatibility fallback for isolated fixtures. Production always
+                // supplies the queue so network work never blocks this transition.
+                await TryPushCommitAsync(commitToStamp.Sha, info.WatchPath, info.ProjectName, jobId, "auto-commit", ct);
             }
         }
 
@@ -134,6 +141,19 @@ public sealed class TaskTransitionService
             if (moved != null)
             {
                 _mutations.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
+                if (autoPushStrategy == AutoPushStrategies.AlwaysImmediate && _pushQueue != null)
+                {
+                    var stamped = _scanner.FindJob(jobId, watchPath) ?? moved;
+                    if (!_pushQueue.Enqueue(new CompletedPushRequest(
+                            stamped,
+                            autoPushStrategy,
+                            RequireCompletedState: false)))
+                    {
+                        _logger.LogWarning(
+                            "Immediate auto-push enqueue failed for {JobId}; completion backstop will retry",
+                            jobId);
+                    }
+                }
             }
         }
 
@@ -582,18 +602,26 @@ public sealed class TaskTransitionService
     }
 
     public async Task<int> PushCompletedJobCommitsAsync(TaskInfo job, string strategy, CancellationToken ct = default)
+        => await PushJobCommitsAsync(job, strategy, requireCompletedState: true, ct);
+
+    public async Task<int> PushJobCommitsAsync(
+        TaskInfo job,
+        string strategy,
+        bool requireCompletedState,
+        CancellationToken ct = default)
     {
         if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return 0;
-        if (job.State != TaskStates.Completed) return 0;
+        if (requireCompletedState && job.State != TaskStates.Completed) return 0;
 
         var commits = job.Commits.Count > 0
             ? job.Commits
             : job.Commit is null ? [] : [job.Commit];
 
         var pushed = 0;
+        var reason = requireCompletedState ? "completed" : "auto-commit";
         foreach (var commit in commits.Where(c => !string.IsNullOrWhiteSpace(c.Sha)).OrderBy(c => c.At))
         {
-            if (await TryPushCommitAsync(commit.Sha, job.WatchPath, job.Id, "completed", ct))
+            if (await TryPushCommitAsync(commit.Sha, job.WatchPath, job.ProjectName, job.Id, reason, ct))
                 pushed++;
         }
         return pushed;
@@ -684,7 +712,7 @@ public sealed class TaskTransitionService
         return new AutoCommitPlan(AutoCommitScope.Scoped, scoped);
     }
 
-    private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string jobId, string reason, CancellationToken ct)
+    private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)
     {
         try
         {
@@ -697,11 +725,17 @@ public sealed class TaskTransitionService
 
             _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
                 jobId, sha, reason, result.Status, result.Error);
+            if (_bus != null)
+                await _bus.EmitManagedRepoPushFailureAsync(
+                    project, jobId, watchPath, "main", result.Status, result.Error, 1, ct);
             return false;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Auto-push threw for {JobId} at {Sha} ({Reason})", jobId, sha, reason);
+            if (_bus != null)
+                await _bus.EmitManagedRepoPushFailureAsync(
+                    project, jobId, watchPath, "main", "error", ex.Message, 1, ct);
             return false;
         }
     }

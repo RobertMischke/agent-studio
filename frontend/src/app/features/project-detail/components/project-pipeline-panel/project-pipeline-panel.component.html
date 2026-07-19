@@ -7,11 +7,9 @@
       <em>content</em> lives in Prompts; changes apply to the next run.
     </p>
   </header>
-
   @if (loadError(); as err) {
     <p class="pp__error" data-testid="pipeline-load-error">{{ err }}</p>
   }
-
   @if (rows().length === 0) {
     <p class="pp__empty" data-testid="pipeline-empty">
       No configurable pipeline steps for this project yet.
@@ -24,7 +22,6 @@
           <span class="pp__group-meta">{{ groupSummary(group) }}</span>
           <span class="pp__group-caret" aria-hidden="true">▾</span>
         </summary>
-
         <div class="pp__rows" role="list">
           @for (step of group.rows; track step.id) {
             <details class="pp__row"
@@ -48,7 +45,6 @@
                         [cacTooltip]="canDragStep(step) ? 'Drag this step within its pipeline section.' : 'This step has a fixed position.'"
                         (click)="$event.preventDefault(); $event.stopPropagation()"
                         (dragstart)="onStepDragStart($event, step)">⠿</button>
-
                 <span class="pp__summary-main">
                   <span class="pp__name">{{ step.displayName }}</span>
                   <span class="pp__kind"
@@ -62,7 +58,6 @@
                           tooltipPosition="right"
                           (click)="$event.preventDefault(); $event.stopPropagation()">i</button>
                 </span>
-
                 <span class="pp__summary-chips">
                   <span class="pp__state" [class.pp__state--off]="!step.enabled">
                     {{ step.canDisable ? (step.enabled ? 'On' : 'Off') : 'always on' }}
@@ -99,13 +94,10 @@
                     <span class="pp__chip pp__chip--muted">When {{ conditionSummary(step) }}</span>
                   }
                 </span>
-
                 <span class="pp__summary-caret" aria-hidden="true">▾</span>
               </summary>
-
               <div class="pp__details">
                 <p class="pp__purpose">{{ stepPurpose(step) }}</p>
-
                 <div class="pp__settings"
                      role="table"
                      [attr.aria-label]="step.displayName + ' settings'">
@@ -114,7 +106,6 @@
                     <span role="columnheader">Setting</span>
                     <span role="columnheader">Explanation</span>
                   </div>
-
                   <div class="pp__settings-row"
                        role="row"
                        [attr.data-testid]="'pipeline-step-setting-run-' + step.id">
@@ -124,7 +115,6 @@
                     </span>
                     <span class="pp__settings-note" role="cell">{{ runExplanation(step) }}</span>
                   </div>
-
                   <div class="pp__settings-row"
                        role="row"
                        [attr.data-testid]="'pipeline-step-setting-tokens-' + step.id">
@@ -138,7 +128,6 @@
                       Tokens this step has spent across every task run in the last {{ tokenWindowDays }} days.
                     </span>
                   </div>
-
                   <div class="pp__settings-row"
                        role="row"
                        [attr.data-testid]="'pipeline-step-setting-active-' + step.id">
@@ -162,6 +151,17 @@
                   </div>
 
                   @if (step.usesModel) {
+                    @if (step.supportsEconomyModel) {
+                    <div class="pp__settings-row" role="row" [attr.data-testid]="'pipeline-step-setting-economy-' + step.id">
+                      <span class="pp__settings-label" role="cell">Economy model</span>
+                      <span class="pp__settings-value" role="cell"><label class="pp__toggle" [cacTooltip]="'Ask TokenEconomy to choose a qualified Spark model from the live Codex catalogue. An explicit model pin wins.'">
+                        <input type="checkbox" [attr.data-testid]="'pipeline-step-economy-' + step.id" [disabled]="!step.enabled || !!stepBusy[step.id]"
+                               [ngModel]="step.economyModel" (ngModelChange)="writeStep(step.id, { economyModel: $event })">
+                        <span class="pp__toggle-text">{{ step.economyModel ? 'Spark auto' : 'Off' }}</span>
+                      </label></span>
+                      <span class="pp__settings-note" role="cell">Opt-in Spark recommendation; falls back to the normal model when unavailable.</span>
+                    </div>
+                    }
                     <div class="pp__settings-row"
                          role="row"
                          [attr.data-testid]="'pipeline-step-setting-model-' + step.id">

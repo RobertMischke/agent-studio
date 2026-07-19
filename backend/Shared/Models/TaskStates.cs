@@ -3,7 +3,7 @@ namespace AgentStudio.Shared;
 /// <summary>
 /// String constants and helpers for the optional <c>phase</c> substate on
 /// <see cref="TaskInfo"/>. The hybrid V1 model picked in
-/// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c> keeps the
+/// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c> keeps the
 /// existing six folder-level states as the durable skeleton and adds this
 /// optional substate so the orchestrator-driven lanes (Intake, Post
 /// Processing) can be projected by the UI without a filesystem-state
@@ -78,7 +78,7 @@ public static class LifecyclePhases
     /// <summary>
     /// Pure default-derivation for jobs whose <c>phase</c> is null on disk.
     /// Implements the compatibility contract from
-    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>
+    /// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>
     /// section 10: a job with no <c>phase</c> renders in the default lane of
     /// its state. Returns null for states that carry no phase (preparation,
     /// the orchestrator-prep lane, the review lanes,
@@ -193,18 +193,40 @@ public record ContextManifest
 /// </summary>
 public record IntakeEnrichmentManifest
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
     /// <summary>Relative Markdown artifact path inside the job folder.</summary>
     public string ArtifactPath { get; init; } = "";
     /// <summary>Selector implementation that produced this manifest.</summary>
     public string Selector { get; init; } = "";
     /// <summary>Detected task areas that drove relevance selection.</summary>
     public List<string> Areas { get; init; } = [];
+    /// <summary>Cached style-guide catalogue snapshot used for this selection, when available.</summary>
+    public string? StyleGuideSnapshotId { get; init; }
     /// <summary>Constraints injected into the coding-run prompt.</summary>
     public List<IntakeConstraintSelection> Constraints { get; init; } = [];
+    /// <summary>Hard rendered-character ceiling applied by the selector.</summary>
+    public int CharacterBudget { get; init; }
+    /// <summary>Conservative planning estimate derived from the character ceiling.</summary>
+    public int EstimatedTokenBudget { get; init; }
+    /// <summary>Final rendered artifact length after deterministic omissions.</summary>
+    public int UsedCharacters { get; init; }
+    /// <summary>Estimated final token count using the documented four-characters-per-token rule.</summary>
+    public int EstimatedTokens { get; init; }
+    /// <summary>Bounded audit rows for relevant constraints omitted by the hard budget.</summary>
+    public List<IntakeConstraintOmission> Omissions { get; init; } = [];
+    /// <summary>Further omissions summarized after the bounded audit-row limit.</summary>
+    public int AdditionalOmissionCount { get; init; }
 
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsEmpty => Constraints.Count == 0;
+}
+
+/// <summary>Audit record for a relevant constraint that could not fit the prompt budget.</summary>
+public record IntakeConstraintOmission
+{
+    public string Id { get; init; } = "";
+    public string Reason { get; init; } = "";
+    public int EstimatedCharacters { get; init; }
 }
 
 /// <summary>One repository-wide constraint selected for a task by intake.</summary>

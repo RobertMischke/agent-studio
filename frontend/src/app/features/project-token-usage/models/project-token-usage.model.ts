@@ -23,6 +23,11 @@ export interface ProjectTokenUsageSummary {
   last24hSupportingTokens: number;
   last24hOrchestratorTokens: number;
   last24hCalls: number;
+  last7dTotalTokens: number;
+  last7dJobTokens: number;
+  last7dSupportingTokens: number;
+  last7dOrchestratorTokens: number;
+  last7dCalls: number;
   firstActivity: string | null;
   lastActivity: string | null;
   fetchedAt: string;

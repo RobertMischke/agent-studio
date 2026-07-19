@@ -166,6 +166,58 @@ public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
         Assert.Contains("Steps: pre-loop-guard=passed,aspect-code-quality=warn,post-orchestrator-decision=skipped", message);
     }
 
+    [Fact]
+    public void RunBoundaryCommit_EnqueuesEveryCommitForImmediatePush()
+    {
+        var queue = new WorkspaceArtifactPushQueue();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _root })
+            .Build();
+        var service = new WorkspaceArtifactCommitService(
+            config, NullLogger<WorkspaceArtifactCommitService>.Instance, queue);
+        var job = JobFolder("ASS-PUSH");
+        Directory.CreateDirectory(job);
+
+        File.WriteAllText(Path.Combine(job, "status.md"), "one\n");
+        Assert.True(service.TryCommitArtifactUpload(_root, "ASS-PUSH", job, ["status.md"]).DidCommit);
+        File.AppendAllText(Path.Combine(job, "status.md"), "two\n");
+        Assert.True(service.TryCommitArtifactUpload(_root, "ASS-PUSH", job, ["status.md"]).DidCommit);
+
+        Assert.True(queue.Reader.TryRead(out var first));
+        Assert.True(queue.Reader.TryRead(out var second));
+        Assert.Equal("ASS-PUSH", first!.JobId);
+        Assert.Equal("ASS-PUSH", second!.JobId);
+    }
+
+    [Fact]
+    public async Task WorkspacePushWorker_FailureIsToleratedAfterBoundedRetries()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _root,
+                ["WorkspaceArtifacts:PushRetrySeconds"] = "0"
+            })
+            .Build();
+        var store = new AgentStudio.Bus.AgentMessageBusStore();
+        var bus = new AgentStudio.Bus.AgentMessageBusBridge(
+            store, config, NullLogger<AgentStudio.Bus.AgentMessageBusBridge>.Instance);
+        var worker = new WorkspaceArtifactPushWorker(
+            new WorkspaceArtifactPushQueue(),
+            NullLogger<WorkspaceArtifactPushWorker>.Instance,
+            config,
+            bus);
+
+        var pushed = await worker.ProcessAsync(
+            new WorkspaceArtifactPushRequest(_root, "ASS-OFFLINE"), default);
+
+        Assert.False(pushed);
+        var pushFailure = Assert.Single(store.Recent(_root, project: null, limit: 10));
+        Assert.Equal("managed-repo-push-failed", pushFailure.Topic);
+        Assert.Equal("error", pushFailure.Kind);
+        Assert.Equal("ASS-OFFLINE", pushFailure.JobId);
+    }
+
     private string JobFolder(string id) =>
         Path.Combine(_root, "projects", "agent-taskboard", "tasks", "001", id);
 

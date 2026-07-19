@@ -1,239 +1,194 @@
-<section class="wpulse" data-testid="project-wiki-pulse">
-  <header class="wpulse__head">
-    <span class="wpulse__title-icon" aria-hidden="true">
-      <app-studio-icon name="activity" [size]="15"></app-studio-icon>
+<!-- Drift strip: full-width band across the dashboard grid (deterministic, per top-level docs folder). -->
+<section class="wpulse__card wpulse__card--drift" data-testid="project-wiki-pulse-drift" aria-label="Drift grade bar">
+  <header class="wpulse__card-head">
+    <span class="wpulse__card-icon" aria-hidden="true">
+      <app-studio-icon name="diff" [size]="13"></app-studio-icon>
     </span>
-    <div class="wpulse__title-copy">
-      <h3 class="wpulse__title">Pulse</h3>
-      <p class="wpulse__subtitle">Generated entry view - changes, warnings, live docs work, and drift. Not a wiki page.</p>
-    </div>
+    <h4>Drift</h4>
     @if (loading()) {
       <span class="wpulse__loading" data-testid="project-wiki-pulse-loading">Refreshing…</span>
     }
-    @if (drift(); as d) {
-      @if (d.available) {
-        <span class="wpulse__overall"
-              [attr.data-tone]="gradeTone(d.overallGrade)"
-              data-testid="project-wiki-pulse-overall">
-          Drift {{ d.overallGrade }}
-        </span>
+  </header>
+  @if (drift(); as d) {
+    @if (d.available) {
+      <div class="wpulse__gradebar" role="list">
+        @for (area of d.areas; track area.slug) {
+          <div class="wpulse__seg"
+               role="listitem"
+               [attr.data-tone]="gradeTone(area.grade)"
+               [attr.data-grade]="area.grade"
+               [attr.data-testid]="'project-wiki-pulse-area-' + area.slug"
+               [cacTooltip]="areaTooltip(area)">
+            <span class="wpulse__seg-title">{{ area.title }}</span>
+            <span class="wpulse__seg-grade">{{ area.grade }}</span>
+            <span class="wpulse__seg-count">{{ areaCaption(area.worstCommitCount, area.grade) }}</span>
+          </div>
+        }
+      </div>
+      @if (d.counts.graded === 0) {
+        <p class="wpulse__hint" data-testid="project-wiki-pulse-drift-empty">{{ d.reason }}</p>
       }
+    } @else {
+      <p class="wpulse__hint" data-testid="project-wiki-pulse-drift-unavailable">
+        {{ d.reason || 'Drift grading is unavailable.' }}
+      </p>
+    }
+  }
+</section>
+
+<!-- Zuletzt geändert: compact change feed, remainder behind a pure UI toggle. -->
+<article class="wpulse__card" data-testid="project-wiki-pulse-feed">
+  <header class="wpulse__card-head">
+    <span class="wpulse__card-icon" aria-hidden="true">
+      <app-studio-icon name="activity" [size]="13"></app-studio-icon>
+    </span>
+    <h4>Zuletzt geändert</h4>
+    <span class="wpulse__badge">{{ feedItems().length }}</span>
+    @if (hiddenFeedCount() > 0 || feedExpanded()) {
+      <button class="wpulse__card-action" type="button"
+              data-testid="project-wiki-pulse-feed-toggle"
+              [attr.aria-expanded]="feedExpanded()"
+              (click)="toggleFeedExpanded()">
+        {{ feedExpanded() ? 'Weniger anzeigen' : 'Alle anzeigen' }}
+      </button>
     }
   </header>
-
-  <!-- Drift grade bar (deterministic, per Workstream frame area) -->
-  <section class="wpulse__drift" data-testid="project-wiki-pulse-drift" aria-label="Drift grade bar">
-    @if (drift(); as d) {
-      @if (d.available) {
-        <div class="wpulse__gradebar" role="list">
-          @for (area of d.areas; track area.slug) {
-            <div class="wpulse__seg"
-                 role="listitem"
-                 [attr.data-tone]="gradeTone(area.grade)"
-                 [attr.data-grade]="area.grade"
-                 [attr.data-testid]="'project-wiki-pulse-area-' + area.slug"
-                 [cacTooltip]="areaTooltip(area)">
-              <span class="wpulse__seg-title">{{ area.title }}</span>
-              <span class="wpulse__seg-grade">{{ area.grade }}</span>
-              <span class="wpulse__seg-count">{{ areaCaption(area.worstCommitCount, area.grade) }}</span>
-            </div>
+  @if (feed(); as f) {
+    @if (f.available) {
+      @if (hasFeedItems()) {
+        <ul class="wpulse__list">
+          @for (item of visibleFeedItems(); track item.relPath) {
+            <li>
+              <button type="button" class="wpulse__row"
+                      [attr.data-testid]="'project-wiki-pulse-feed-open-' + item.relPath"
+                      (click)="openFeed(item)">
+                <span class="wpulse__row-top">
+                  @if (item.areaTitle) {
+                    <span class="wpulse__area"
+                          [attr.data-testid]="'project-wiki-pulse-area-badge-' + item.relPath">
+                      <app-studio-icon name="folder" [size]="9"></app-studio-icon>{{ item.areaTitle }}
+                    </span>
+                  }
+                  @if (item.taskKey) {
+                    <span class="wpulse__task"
+                          [attr.data-testid]="'project-wiki-pulse-task-' + item.relPath">{{ item.taskKey }}</span>
+                  }
+                  <span class="wpulse__kind">{{ kindLabel(typeForRel(item.relPath)) }}</span>
+                </span>
+                <strong class="wpulse__row-title">{{ item.title }}</strong>
+                <span class="wpulse__row-meta">
+                  <span class="wpulse__author">{{ item.author }}</span>
+                  <span class="wpulse__dot-sep" aria-hidden="true">·</span>
+                  <time [attr.datetime]="item.authorDateUtc"
+                        [cacTooltip]="absoluteTime(item.authorDateUtc)">{{ relativeTime(item.authorDateUtc) }}</time>
+                </span>
+              </button>
+            </li>
           }
-        </div>
-        @if (d.counts.graded === 0) {
-          <p class="wpulse__hint" data-testid="project-wiki-pulse-drift-empty">{{ d.reason }}</p>
-        } @else {
-          <div class="wpulse__legend" aria-hidden="true">
-            <span data-tone="good"><i class="wpulse__dot"></i>Fresh {{ d.counts.fresh }}</span>
-            <span data-tone="warn"><i class="wpulse__dot"></i>Aging {{ d.counts.aging }}</span>
-            <span data-tone="bad"><i class="wpulse__dot"></i>Stale {{ d.counts.stale }}</span>
-          </div>
-        }
+        </ul>
       } @else {
-        <p class="wpulse__hint" data-testid="project-wiki-pulse-drift-unavailable">
-          {{ d.reason || 'Drift grading is unavailable.' }}
+        <p class="wpulse__empty" data-testid="project-wiki-pulse-feed-empty">
+          {{ f.reason || 'No recent edits.' }}
         </p>
       }
+    } @else {
+      <p class="wpulse__empty" data-testid="project-wiki-pulse-feed-unavailable">
+        {{ f.reason || 'Change feed unavailable.' }}
+      </p>
     }
-  </section>
+  }
+</article>
 
-  <div class="wpulse__grid">
-    <article class="wpulse__panel" data-testid="project-wiki-pulse-warnings">
-      <header class="wpulse__panel-head">
+<!-- Aufmerksamkeit: warnings + unfiled inbox, merged; a clear state leaves no card. -->
+@if (attentionVisible()) {
+  <article class="wpulse__card" data-testid="project-wiki-pulse-attention">
+    <header class="wpulse__card-head">
+      <span class="wpulse__card-icon" aria-hidden="true">
         <app-studio-icon name="warn" [size]="13"></app-studio-icon>
-        <h4>Warnings</h4>
-        <span class="wpulse__badge" [attr.data-tone]="(warnings()?.count ?? 0) > 0 ? 'warn' : 'good'">
-          {{ warnings()?.count ?? 0 }}
-        </span>
-      </header>
-      @if (warnings(); as warningSet) {
-        @if (warningSet.available && warningSet.count === 0) {
-          <div class="wpulse__healthy" data-testid="project-wiki-pulse-warnings-empty">
-            <app-studio-icon name="check" [size]="16"></app-studio-icon>
-            <p>{{ warningSet.reason }}</p>
-          </div>
-        } @else if (warningSet.available) {
-          <ul class="wpulse__list">
-            @for (warning of warningSet.items; track warning.kind + ':' + warning.relPath + ':' + warning.detail) {
-              <li class="wpulse__warning" [attr.data-kind]="warning.kind">
-                <span class="wpulse__row-top">
-                  <span class="wpulse__signal-kind">{{ warning.kind }}</span>
-                  @if (warning.status) { <span class="wpulse__status">{{ warning.status }}</span> }
-                </span>
-                <strong class="wpulse__row-title">{{ warning.title }}</strong>
-                <span class="wpulse__reason">{{ warning.detail }}</span>
-                <span class="wpulse__action">{{ warning.humanAction }}</span>
-              </li>
-            }
-          </ul>
-        } @else {
-          <p class="wpulse__empty">{{ warningSet.reason || 'Warnings unavailable.' }}</p>
-        }
+      </span>
+      <h4>Aufmerksamkeit</h4>
+      <span class="wpulse__badge" [attr.data-tone]="attentionCount() > 0 ? 'warn' : null">
+        {{ attentionCount() }}
+      </span>
+    </header>
+    @if (warnings(); as warningSet) {
+      @if (!warningSet.available) {
+        <p class="wpulse__empty" data-testid="project-wiki-pulse-warnings-unavailable">
+          {{ warningSet.reason || 'Warnings unavailable.' }}
+        </p>
+      } @else if (warningSet.count > 0) {
+        <ul class="wpulse__list" data-testid="project-wiki-pulse-warnings">
+          @for (warning of warningSet.items; track warning.kind + ':' + warning.relPath + ':' + warning.detail) {
+            <li class="wpulse__warning" [attr.data-kind]="warning.kind">
+              <span class="wpulse__row-top">
+                <span class="wpulse__signal-kind">{{ warning.kind }}</span>
+                @if (warning.status) { <span class="wpulse__status">{{ warning.status }}</span> }
+              </span>
+              <strong class="wpulse__row-title">{{ warning.title }}</strong>
+              <span class="wpulse__reason">{{ warning.detail }}</span>
+              <span class="wpulse__action">{{ warning.humanAction }}</span>
+            </li>
+          }
+        </ul>
       }
-    </article>
-
-    <article class="wpulse__panel" data-testid="project-wiki-pulse-activity">
-      <header class="wpulse__panel-head">
-        <app-studio-icon name="play" [size]="13"></app-studio-icon>
-        <h4>In progress</h4>
-        <span class="wpulse__badge" [attr.data-tone]="(activity()?.runs?.length ?? 0) > 0 ? 'info' : null">
-          {{ activity()?.runs?.length ?? 0 }}
-        </span>
-      </header>
-      @if (activity(); as live) {
-        @if (live.runs.length > 0) {
+    }
+    @if (inbox(); as ib) {
+      @if (!ib.available) {
+        <p class="wpulse__empty" data-testid="project-wiki-pulse-inbox-unavailable">
+          {{ ib.reason || 'Inbox unavailable.' }}
+        </p>
+      } @else if (ib.count > 0) {
+        <div class="wpulse__sub" data-testid="project-wiki-pulse-inbox">
+          <h5 class="wpulse__sub-title">Needs sorting</h5>
           <ul class="wpulse__list">
-            @for (run of live.runs; track run.taskKey) {
-              <li class="wpulse__live-run" [attr.data-testid]="'project-wiki-pulse-live-' + run.taskKey">
-                <strong>{{ run.taskKey }}</strong>
-                <span>{{ run.lane }} · {{ runtime(run.startedAtUtc) }}</span>
-                <span>{{ run.docsFilesChanged }} docs {{ run.docsFilesChanged === 1 ? 'file' : 'files' }} changed</span>
+            @for (item of ib.items; track item.relPath) {
+              <li>
+                <button type="button" class="wpulse__row"
+                        [attr.data-testid]="'project-wiki-pulse-inbox-open-' + item.relPath"
+                        (click)="openPage.emit({ relPath: item.relPath, type: item.type })">
+                  <span class="wpulse__row-top">
+                    <span class="wpulse__kind">{{ kindLabel(item.type) }}</span>
+                  </span>
+                  <strong class="wpulse__row-title">{{ item.title }}</strong>
+                  <span class="wpulse__reason">{{ item.reason }}</span>
+                  <code class="wpulse__path">{{ item.relPath }}</code>
+                </button>
               </li>
             }
           </ul>
-        } @else {
-          <p class="wpulse__empty" data-testid="project-wiki-pulse-activity-empty">{{ live.reason }}</p>
-        }
-        <div class="wpulse__run-summaries">
-          <div data-testid="project-wiki-pulse-collector-run">
-            <strong>Collector</strong>
-            @if (live.collector; as run) {
-              <span [attr.data-tone]="run.status === 'ok' ? 'good' : 'bad'">{{ run.status }}</span>
-              <time [cacTooltip]="absoluteTime(run.ranAtUtc)">{{ relativeTime(run.ranAtUtc) }}</time>
-              @if (run.error) { <small>{{ run.error }}</small> }
-            } @else { <span>not run</span> }
-          </div>
-          <div data-testid="project-wiki-pulse-curator-run">
-            <strong>Curator</strong>
-            @if (live.curator; as run) {
-              <span [attr.data-tone]="run.status === 'ok' ? 'good' : 'bad'">{{ run.status }}</span>
-              <time [cacTooltip]="absoluteTime(run.ranAtUtc)">{{ relativeTime(run.ranAtUtc) }}</time>
-              <small>{{ run.merges }} merges · {{ run.condensations }} condensations</small>
-              @if (run.error) { <small>{{ run.error }}</small> }
-            } @else { <span>not run</span> }
-          </div>
         </div>
       }
-    </article>
+    }
+  </article>
+}
 
-    <!-- Change feed -->
-    <article class="wpulse__panel wpulse__panel--feed" data-testid="project-wiki-pulse-feed">
-      <header class="wpulse__panel-head">
-        <app-studio-icon name="activity" [size]="13"></app-studio-icon>
-        <h4>Change feed</h4>
-        <span class="wpulse__badge">{{ feed()?.items?.length ?? 0 }}</span>
-      </header>
-      @if (feed(); as f) {
-        @if (f.available) {
-          @if (hasFeedItems()) {
-            <div class="wpulse__feed">
-              @for (group of feedGroups(); track group.key) {
-                <div class="wpulse__day">
-                  <div class="wpulse__day-head">{{ group.label }}</div>
-                  <ul class="wpulse__list">
-                    @for (item of group.items; track item.relPath) {
-                      <li>
-                        <button type="button" class="wpulse__row"
-                                [attr.data-testid]="'project-wiki-pulse-feed-open-' + item.relPath"
-                                (click)="openFeed(item)">
-                          <span class="wpulse__row-top">
-                            @if (item.frameAreaTitle) {
-                              <span class="wpulse__area"
-                                    [attr.data-testid]="'project-wiki-pulse-area-badge-' + item.relPath">
-                                <app-studio-icon name="pin" [size]="9"></app-studio-icon>{{ item.frameAreaTitle }}
-                              </span>
-                            }
-                            @if (item.taskKey) {
-                              <span class="wpulse__task"
-                                    [attr.data-testid]="'project-wiki-pulse-task-' + item.relPath">{{ item.taskKey }}</span>
-                            }
-                            <span class="wpulse__kind">{{ kindLabel(typeForRel(item.relPath)) }}</span>
-                          </span>
-                          <strong class="wpulse__row-title">{{ item.title }}</strong>
-                          <span class="wpulse__row-meta">
-                            <span class="wpulse__author">{{ item.author }}</span>
-                            <span class="wpulse__dot-sep" aria-hidden="true">·</span>
-                            <time [attr.datetime]="item.authorDateUtc"
-                                  [cacTooltip]="absoluteTime(item.authorDateUtc)">{{ relativeTime(item.authorDateUtc) }}</time>
-                          </span>
-                        </button>
-                      </li>
-                    }
-                  </ul>
-                </div>
-              }
-            </div>
-          } @else {
-            <p class="wpulse__empty" data-testid="project-wiki-pulse-feed-empty">
-              {{ f.reason || 'No recent edits.' }}
-            </p>
-          }
-        } @else {
-          <p class="wpulse__empty" data-testid="project-wiki-pulse-feed-unavailable">
-            {{ f.reason || 'Change feed unavailable.' }}
-          </p>
-        }
-      }
-    </article>
+<!-- Workbenches: catalogue entries with title + summary line. -->
+<app-workbench-inbox [catalogue]="pulse()?.workbenches ?? null" (openWorkbench)="openWorkbench.emit($event)" />
 
-    <!-- Inbox / needs sorting -->
-    <article class="wpulse__panel wpulse__panel--inbox" data-testid="project-wiki-pulse-inbox">
-      <header class="wpulse__panel-head">
-        <app-studio-icon name="backlog" [size]="13"></app-studio-icon>
-        <h4>Needs sorting</h4>
-        <span class="wpulse__badge"
-              [attr.data-tone]="(inbox()?.count ?? 0) > 0 ? 'warn' : 'good'">{{ inbox()?.count ?? 0 }}</span>
-      </header>
-      @if (inbox(); as ib) {
-        @if (ib.available) {
-          @if (inboxClear()) {
-            <div class="wpulse__healthy" data-testid="project-wiki-pulse-inbox-empty">
-              <app-studio-icon name="check" [size]="16"></app-studio-icon>
-              <p>Inbox clear - every page is filed under a category.</p>
-            </div>
-          } @else {
-            <ul class="wpulse__list">
-              @for (item of ib.items; track item.relPath) {
-                <li>
-                  <button type="button" class="wpulse__row"
-                          [attr.data-testid]="'project-wiki-pulse-inbox-open-' + item.relPath"
-                          (click)="openPage.emit({ relPath: item.relPath, type: item.type })">
-                    <span class="wpulse__row-top">
-                      <span class="wpulse__kind">{{ kindLabel(item.type) }}</span>
-                    </span>
-                    <strong class="wpulse__row-title">{{ item.title }}</strong>
-                    <span class="wpulse__reason">{{ item.reason }}</span>
-                    <code class="wpulse__path">{{ item.relPath }}</code>
-                  </button>
-                </li>
-              }
-            </ul>
-          }
-        } @else {
-          <p class="wpulse__empty" data-testid="project-wiki-pulse-inbox-unavailable">
-            {{ ib.reason || 'Inbox unavailable.' }}
-          </p>
+<!-- In Arbeit: docs-touching live runs. -->
+@if (activity(); as live) {
+  <article class="wpulse__card" data-testid="project-wiki-pulse-activity">
+    <header class="wpulse__card-head">
+      <span class="wpulse__card-icon" aria-hidden="true">
+        <app-studio-icon name="play" [size]="13"></app-studio-icon>
+      </span>
+      <h4>In Arbeit</h4>
+      <span class="wpulse__badge" [attr.data-tone]="live.runs.length > 0 ? 'info' : null">
+        {{ live.runs.length }}
+      </span>
+    </header>
+    @if (live.runs.length > 0) {
+      <ul class="wpulse__list">
+        @for (run of live.runs; track run.taskKey) {
+          <li class="wpulse__live-run" [attr.data-testid]="'project-wiki-pulse-live-' + run.taskKey">
+            <strong>{{ run.taskKey }}</strong>
+            <span>{{ run.lane }} · {{ runtime(run.startedAtUtc) }}</span>
+            <span>{{ run.docsFilesChanged }} docs {{ run.docsFilesChanged === 1 ? 'file' : 'files' }} changed</span>
+          </li>
         }
-      }
-    </article>
-  </div>
-</section>
+      </ul>
+    } @else {
+      <p class="wpulse__empty" data-testid="project-wiki-pulse-activity-empty">{{ live.reason }}</p>
+    }
+  </article>
+}

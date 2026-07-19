@@ -1,5 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { TaskInfo, TaskState } from '../../../models/task.model';
+import { taskUrlKey } from './task-url';
 
 /**
  * Lane pager snapshot: the captured iteration the detail header walks
@@ -17,6 +18,8 @@ import { TaskInfo, TaskState } from '../../../models/task.model';
  */
 export interface LanePagerEntry {
   taskKey: string;
+  /** Globally stable AGT-NNN reference used by the browser URL. */
+  routeKey: string | null;
   id: string;
   watchPath: string;
   title: string | null;
@@ -29,7 +32,7 @@ export interface LanePagerSnapshot {
   capturedAt: number;
 }
 
-const STORAGE_KEY = 'app:lanePager:v1';
+const STORAGE_KEY = 'app:lanePager:v2';
 
 export const LANE_LABELS: Record<string, string> = {
   [TaskState.Backlog]:          'Backlog',
@@ -90,6 +93,7 @@ export class LanePagerService {
     }
     const jobs: LanePagerEntry[] = peers.map(p => ({
       taskKey: p.taskKey,
+      routeKey: taskUrlKey(p),
       id: p.id,
       watchPath: p.watchPath,
       title: p.title ?? null,

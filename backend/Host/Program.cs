@@ -88,11 +88,17 @@ builder.Logging.AddProvider(new BackendFileLoggerProvider(fileLogSink));
 // dropped and no behaviour change beyond the console format. The fully
 // configured logger also replaces the bootstrap Log.Logger in place, so the
 // static SilentCatch standard and other DI-less callers share this config.
+// preserveStaticLogger under a test host: parallel WebApplicationFactory
+// boots re-run these top-level statements concurrently, and two hosts racing
+// to swap-and-freeze the one static bootstrap Log.Logger throw "The logger
+// is already frozen" (flaky full-suite failures). Production keeps the
+// in-place swap so DI-less callers (SilentCatch) share the configured logger.
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Console(),
+    preserveStaticLogger: underTestHost,
     writeToProviders: true);
 
 // Last-resort safety nets: an uncaught exception in a fire-and-forget Task
@@ -177,6 +183,7 @@ catch (Exception ex)
 }
 
 builder.Services.AddSingleton<ClientIdentityStore>();
+builder.Services.AddSingleton<HostTelemetryStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<TaskScannerService>();
@@ -192,12 +199,13 @@ builder.Services.AddSingleton<AgentStudio.Registry.OrchestratorDefaultsProvider>
 // Project URLs: read-only repo scan for suggestions + minimal dev-server spawn.
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlDetectionService>();
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlProcessService>();
+builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlReadinessService>();
 builder.Services.AddSingleton<AgentStudio.Tasks.TaskKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
 // before TaskStateMachine / TaskMutationService / TaskAccessService so
 // every lane-mutating service can take it as a dependency. See
-// docs/architecture/runner-lanes/progress-lane-writers.md.
+// docs/system/architecture/runner-lanes/progress-lane-writers.md.
 builder.Services.AddSingleton<LaneMutexRegistry>();
 // SignalR fanout for fine-grained job mutation events (jobCreated /
 // jobUpdated / jobMoved / jobDeleted / jobsReordered). Registered before
@@ -222,6 +230,9 @@ builder.Services.AddSingleton<AgentStudio.Tasks.CompletedLaneAuditService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
 builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
+builder.Services.AddSingleton<ProjectThroughputService>();
+builder.Services.AddSingleton<ProjectVisualEvidenceService>();
+builder.Services.AddSingleton<ProjectGraphDiscoveryService>();
 // T2b (ASS-1740): the single per-task read layer. Loads all raw sources
 // (detail, session-events, cli-output, timeline ledger) once and projects the
 // run timeline + meshed ledger so the /runs and /timeline views stop
@@ -263,6 +274,8 @@ builder.Services.AddSingleton<BoardMergeStatusService>();
 builder.Services.AddSingleton<PublishTargetService>();
 builder.Services.AddSingleton<TaskPublishableService>();
 builder.Services.AddSingleton<PublishActionService>();
+builder.Services.AddSingleton<ProjectDeploymentSummaryService>();
+builder.Services.AddSingleton<ProjectDeploymentCompiler>();
 builder.Services.AddSingleton<TaskTransitionService>();
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.
@@ -384,10 +397,18 @@ builder.Services.AddSingleton<AgentStudio.Runner.ILoadThrottleGate>(sp =>
     sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
 builder.Services.AddSingleton<AgentStudio.Cli.ClaudeOneShot>();
+builder.Services.AddSingleton<AgentStudio.Cli.CodexOneShot>();
 builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
     new AgentStudio.Cli.PromptLoggingCliOneShot(
         new AgentStudio.Cli.LoadAwareCliOneShot(
             sp.GetRequiredService<AgentStudio.Cli.ClaudeOneShot>(),
+            sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>(),
+            sp.GetRequiredService<ILogger<AgentStudio.Cli.LoadAwareCliOneShot>>()),
+        sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));
+builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
+    new AgentStudio.Cli.PromptLoggingCliOneShot(
+        new AgentStudio.Cli.LoadAwareCliOneShot(
+            sp.GetRequiredService<AgentStudio.Cli.CodexOneShot>(),
             sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>(),
             sp.GetRequiredService<ILogger<AgentStudio.Cli.LoadAwareCliOneShot>>()),
         sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));
@@ -419,6 +440,12 @@ builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineExecutionLog>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
+    AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineModelCatalogueProvider,
+    AgentStudio.Pipeline.CliPipelineModelCatalogueProvider>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineStepEconomyAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.MergeIntoDevelopRunner>();
 builder.Services.AddSingleton<AgentStudio.GeneratedFiles.FileGenerationIndex>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ProjectPipelineCostService>();
@@ -428,13 +455,13 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
-builder.Services.AddSingleton<AgentStudio.Docs.WorkstreamCurationService>();
-builder.Services.AddHostedService<AgentStudio.Docs.WorkstreamCuratorHostedService>();
 // Opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782): keeps the
 // designated-topic pointers consistent and collects each topic's current state.
 // Injected into the review orchestrator; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AgentsWikiSyncPostStepRunner>();
-builder.Services.AddSingleton<AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IManagedProjectArtifactCommitService,
+    AgentStudio.Pipeline.ManagedProjectArtifactCommitService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.OnDemandPostStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService>();
 // Opt-in task-spawner post-step (AGT-2028): relevance judgment + follow-up
 // card creation into a configured target project. Injected into the review
@@ -443,7 +470,24 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService
 builder.Services.AddSingleton<AgentStudio.Pipeline.TaskSpawnerPostStepRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactCommitService>();
+// Transition-Committer (WorkspaceEvidence): every successful lane transition
+// enqueues an evidence-commit wish (TaskStateMachine.EnqueueEvidence); the
+// worker debounces and commits the touched projects/<name> data paths per
+// workspace repo off the request path, plus a one-shot boot catch-up. Reuses
+// WorkspaceArtifactCommitService's git plumbing and (when Push=true) the
+// existing WorkspaceArtifactPushQueue.
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceEvidenceQueue>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceEvidenceBatcher>(sp =>
+    new AgentStudio.Pipeline.WorkspaceEvidenceBatcher(
+        sp.GetRequiredService<AgentStudio.Pipeline.WorkspaceArtifactCommitService>(),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Pipeline.WorkspaceEvidence"),
+        sp.GetService<TimeProvider>(),
+        sp.GetService<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>()));
+builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();
@@ -496,14 +540,20 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // hours the way 2062/2067/2068 did on 2026-07-10.
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+// Lexical wiki search (BM25 in-memory index, lazily rebuilt on a docs
+// fingerprint change) with the fail-open semantic query-expansion layer.
+builder.Services.AddSingleton<WikiSearchService>();
+builder.Services.AddSingleton<ProjectStyleGuideService>();
+builder.Services.AddSingleton<WorkbenchCatalogueService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
+builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
 // config class in the CLI-management area), the companion sidecar writer, the
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiMaintenanceModelService>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiCompanionStore>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.IWikiPageGrader, AgentStudio.Docs.Grading.CliWikiPageGrader>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiGradingService>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiMaintenanceModelService>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiCompanionStore>();
+builder.Services.AddSingleton<AgentStudio.Docs.IWikiPageGrader, AgentStudio.Docs.CliWikiPageGrader>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiGradingService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<AgentDocsReadAnalyticsService>();
 builder.Services.AddSingleton<SkillReadinessService>();
@@ -720,7 +770,7 @@ catch (Exception ex)
 }
 
 // Seed the Agent Message Bus participant registry. Workspace-scoped, idempotent
-// across boots; safe to fire-and-forget. See docs/architecture/bus/agent-message-bus.md section 2.
+// across boots; safe to fire-and-forget. See docs/system/architecture/bus/agent-message-bus.md section 2.
 try
 {
     var bus = app.Services.GetRequiredService<AgentMessageBusBridge>();
@@ -929,10 +979,10 @@ transitionsForRunner.OnJobMoved += (projectName, jobId, _, toState) =>
         publishActionsForTransitions.HandleTaskAccepted(projectName, jobId);
 };
 
-// Defensive: when a non-API folder change touches the watch tree (external
-// script, manual edit, boot-time stuck-folder sweep), sweep every runner so
-// a stale active-job latch is cleared before the next pickup tick.
-watcher.OnJobChanged += _ => runnerForTransitions.ReconcileAllRunners();
+// Defensive: when a non-API task change touches the watch tree, reconcile only
+// the affected project's active runner against its captured task folder. This
+// deliberately avoids a global FindJob/index scan on the watcher callback.
+watcher.OnJobChanged += path => runnerForTransitions.ReconcileRunnerForPath(path);
 
 // Wire up CLI events → SignalR push (across all CLI backends via the router)
 var cliRouter = app.Services.GetRequiredService<CliRouter>();

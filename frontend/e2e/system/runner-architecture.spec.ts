@@ -9,8 +9,8 @@ import { join, resolve } from 'node:path';
  *
  * Three concerns are exercised:
  *   1. The lane mode pill renders the deferred-mode overlay
- *      ("AUTO -> MANUAL") and a tooltip that names the active job that
- *      the deferred change is waiting on (acceptance criterion #4).
+ *      ("AUTO -> MANUAL") and a concise count-aware drain tooltip
+ *      (acceptance criterion #4).
  *   2. The lane mode pill annotates the test-subject role so an operator
  *      glancing at a dev backend sees why nothing is being picked up even
  *      when the mode reads AUTO (acceptance criterion #1).
@@ -63,16 +63,14 @@ ${variant === 'deferred'
   ? `
   <section>
     <h2>Deferred mode-switch overlay</h2>
-    <p class="lead">ADR-0044: PUT /api/runner/{project}/mode arrived while a job was active.
-      The live mode stays at auto-continuous; the queued manual flip surfaces on the
-      pill with an arrow + tooltip until the active job clears.</p>
+    <p class="lead">ADR-0044: PUT /api/runner/{project}/mode arrived while a task was active.
+      The live mode stays at auto-continuous without admitting new work; the queued manual
+      flip surfaces on the pill until the active request-time task set drains.</p>
     <div class="pill-cluster" data-testid="mode-pill-cluster">
       <span class="label">Mode:</span>
       <span class="pill auto" data-testid="mode-pill-label">AUTO &rarr; MANUAL</span>
     </div>
-    <div class="tooltip" data-testid="mode-pill-tooltip">Auto-pickup: when the active task finishes, the runner will start the next item in 2-ready automatically.
-
-Deferred change pending: mode will flip to "manual" when the active job (running-task) finishes (ADR-0044).</div>
+    <div class="tooltip" data-testid="mode-pill-tooltip">Switches to MANUAL when 1 active task finishes (Publish release notes).</div>
   </section>
   `
   : `
@@ -96,13 +94,11 @@ This backend is the test-subject seat (ADR-0044). The auto-pickup loop is struct
 </body></html>`;
 
 test.describe('ADR-0044 runner architecture surfaces', () => {
-  test('lane pill: deferred-mode overlay shows AUTO -> MANUAL with after-current tooltip', async ({ page }) => {
+  test('lane pill: deferred-mode overlay shows AUTO -> MANUAL with concise drain tooltip', async ({ page }) => {
     await page.setContent(HARNESS_HTML('deferred'));
     await expect(page.locator('[data-testid="mode-pill-label"]')).toHaveText(/AUTO\s*[→\->]+\s*MANUAL/);
     const tooltip = await page.locator('[data-testid="mode-pill-tooltip"]').innerText();
-    expect(tooltip).toContain('Deferred change pending');
-    expect(tooltip).toContain('running-task');
-    expect(tooltip).toContain('ADR-0044');
+    expect(tooltip).toBe('Switches to MANUAL when 1 active task finishes (Publish release notes).');
 
     const outDir = join(process.cwd(), 'test-results', 'runner-architecture');
     mkdirSync(outDir, { recursive: true });

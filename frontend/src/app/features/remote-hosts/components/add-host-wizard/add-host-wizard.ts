@@ -16,10 +16,11 @@ interface WizardStep {
 }
 
 const STEPS: readonly WizardStep[] = [
-  { label: 'Connect', eyebrow: 'Step 1 of 4', title: 'Connect to the host', description: 'Name the runner and verify its SSH target before provisioning starts.' },
-  { label: 'Provision', eyebrow: 'Step 2 of 4', title: 'Provision the runner', description: 'Install the supported runtime, agent CLIs, browser dependencies, and runner binary.' },
-  { label: 'CLI auth', eyebrow: 'Step 3 of 4', title: 'Authenticate agent CLIs', description: 'Log in on this host so every credential has an independent refresh-token lineage.' },
-  { label: 'Smoke', eyebrow: 'Step 4 of 4', title: 'Run the smoke check', description: 'Confirm connectivity, registration, daemon startup, and one clean task handoff.' },
+  { label: 'Connect', eyebrow: 'Step 1 of 5', title: 'Connect to the host', description: 'Name the runner and verify its SSH target before provisioning starts.' },
+  { label: 'Provision', eyebrow: 'Step 2 of 5', title: 'Provision the runner', description: 'Install the supported runtime, agent CLIs, browser dependencies, and runner binary.' },
+  { label: 'Push key', eyebrow: 'Step 3 of 5', title: 'Give this host write access', description: 'Create one deploy key per host and repository, register the public key as write-enabled, and configure the SSH push URL.' },
+  { label: 'CLI auth', eyebrow: 'Step 4 of 5', title: 'Authenticate agent CLIs', description: 'Log in on this host so every credential has an independent refresh-token lineage.' },
+  { label: 'Smoke', eyebrow: 'Step 5 of 5', title: 'Run the smoke check', description: 'Confirm connectivity, registration, daemon startup, push capability, and one clean task handoff.' },
 ];
 
 @Component({
@@ -38,6 +39,7 @@ export class AddHostWizardComponent {
   readonly address = signal('ssh://runner@host.example.com');
   readonly connectionChecked = signal(false);
   readonly provisioned = signal(false);
+  readonly deployKeyReady = signal(false);
   readonly claudeAuthed = signal(false);
   readonly codexAuthed = signal(false);
   readonly smokePassed = signal(false);
@@ -48,7 +50,8 @@ export class AddHostWizardComponent {
     switch (this.step()) {
       case 0: return !!this.name().trim() && !!this.address().trim() && this.connectionChecked();
       case 1: return this.provisioned();
-      case 2: return this.claudeAuthed() && this.codexAuthed();
+      case 2: return this.deployKeyReady();
+      case 3: return this.claudeAuthed() && this.codexAuthed();
       default: return this.smokePassed();
     }
   });
@@ -66,8 +69,9 @@ export class AddHostWizardComponent {
     this.step.update((value) => value + 1);
     const hints = [
       'Connection verified. Provision the host packages and publish the runner to `/opt/agent-runner`.',
-      'Provisioning is ready. Authenticate Claude and Codex on this host; do not copy credentials from the operator machine.',
-      'Both CLIs are authenticated. The final smoke check should prove `/healthz`, client registration, daemon startup, and task handoff.',
+      'Provisioning is ready. Generate the host deploy key, register it with write access, and configure the SSH push URL.',
+      'Push identity is configured. Authenticate Claude and Codex on this host; do not copy credentials from the operator machine.',
+      'Both CLIs are authenticated. The final smoke check should prove `/healthz`, client registration, daemon startup, push capability, and task handoff.',
     ];
     this.messages.update((items) => [...items, this.message('orchestrator', hints[this.step() - 1])]);
   }
@@ -90,7 +94,8 @@ export class AddHostWizardComponent {
     switch (this.step()) {
       case 0: return 'Use an SSH URI for the runner account. The connection check should confirm key authentication, Ubuntu LTS, and sudo access.';
       case 1: return 'Install git, curl, build-essential, .NET 10, Node 22, Claude, Codex, and Playwright Chromium. Then publish `runner/AgentRunner.csproj` to `/opt/agent-runner`.';
-      case 2: return 'Run `claude` or `claude setup-token`, then `codex login`, directly on the host. Verify each CLI with its version command and a small non-interactive prompt.';
+      case 2: return 'Run `ssh-keygen -t ed25519 -f ~/.ssh/agent-studio-deploy -N ""`, register the `.pub` key as a write-enabled repository deploy key, then set `RUNNER_GIT_PUSH_REMOTE` to the SSH repository URL.';
+      case 3: return 'Run `claude` or `claude setup-token`, then `codex login`, directly on the host. Verify each CLI with its version command and a small non-interactive prompt.';
       default: return 'Run `agent-runner --health-check`, start the systemd service, and send one ready task through the remote runner. A clean external completion confirms the handoff.';
     }
   }

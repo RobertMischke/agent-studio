@@ -21,7 +21,7 @@ public static class EpicEndpoints
 
         // List every epic with a live sub-task rollup. includeFixtures mirrors
         // the tasks list so test fixtures don't leak into the normal view.
-        group.MapGet("/", (bool? includeFixtures, TaskScannerService scanner) =>
+        group.MapGet("/", (bool? includeFixtures, string? status, string? project, TaskScannerService scanner) =>
         {
             // Historical epics and their completed/archived children are part
             // of this overview contract. The normal active-lane scan omits
@@ -30,11 +30,32 @@ public static class EpicEndpoints
             if (includeFixtures != true) all = all.Where(j => !j.Fixture).ToList();
             var rollups = all
                 .Where(t => TaskKinds.IsEpic(t.Kind))
+                .Where(e => project is null || string.Equals(e.ProjectName, project, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(e => e.ProjectName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(e => e.Order)
                 .Select(e => BuildRollup(e, all))
+                .Where(e => status switch
+                {
+                    "active" => !IsCompleted(e),
+                    "completed" => IsCompleted(e),
+                    _ => true,
+                })
                 .ToList();
             return Results.Ok(rollups);
+        });
+
+        // Cheap payload for the collapsed history header. Full completed
+        // rollups are requested only when the operator expands the section.
+        group.MapGet("/completed/count", (bool? includeFixtures, string? project, TaskScannerService scanner) =>
+        {
+            var all = scanner.ScanAllJobsWithArchive();
+            if (includeFixtures != true) all = all.Where(j => !j.Fixture).ToList();
+            var count = all
+                .Where(t => TaskKinds.IsEpic(t.Kind))
+                .Where(e => project is null || string.Equals(e.ProjectName, project, StringComparison.OrdinalIgnoreCase))
+                .Select(e => BuildRollup(e, all))
+                .Count(IsCompleted);
+            return Results.Ok(new { count });
         });
 
         // Single epic rollup. 404 when the id is unknown or is not an epic.
@@ -80,13 +101,19 @@ public static class EpicEndpoints
         var byState = subs.GroupBy(s => s.State).ToDictionary(g => g.Key, g => g.Count());
         int Count(params string[] lanes) => subs.Count(s => lanes.Contains(s.State));
         var completed = Count(TaskStates.Completed, TaskStates.Archive);
+        var completedAt = subs.Count > 0 && completed == subs.Count
+            ? subs.Max(s => s.EnteredLaneAt)
+            : (DateTime?)null;
         var open = Count(TaskStates.Backlog, TaskStates.Ready);
         var inProgress = subs.Count - completed - open;
         return new EpicRollup(
             epic.Id, epic.Key, epic.Title, epic.ProjectName, epic.WatchPath, epic.State,
-            subs.Count, completed, inProgress, open, byState,
+            subs.Count, completed, inProgress, open, completedAt, byState,
             subs.OrderBy(s => s.Order)
                 .Select(s => new EpicSubTaskRef(s.Id, s.Title, s.State, s.Order, s.OrchestratorVerdict))
                 .ToList());
     }
+
+    private static bool IsCompleted(EpicRollup epic) =>
+        epic.SubTaskTotal > 0 && epic.Completed == epic.SubTaskTotal;
 }

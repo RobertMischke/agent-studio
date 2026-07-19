@@ -37,7 +37,7 @@ Fix: finish the onboarding wizard once by running `claude` interactively yoursel
 ### 2.1 Clone this repo and the chat library
 
 ```sh
-git clone https://github.com/RobertMischke/agent-studio.git agent-orchestrator
+git clone https://github.com/agent-orc/agent-studio.git agent-orchestrator
 ```
 
 The frontend depends on a sibling library, `coding-agent-chat`, via a relative `file:` path (`frontend/package.json`: `"@coding-agent/chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`). Three `../` means your checkout must sit **two folders deep under a common root**, with `coding-agent-chat` cloned as a sibling of that root. For example:
@@ -52,7 +52,7 @@ C:\Projects\
 Build the library before you touch the frontend - `npm install` in `frontend/` will fail otherwise because `dist/coding-agent-chat` doesn't exist yet:
 
 ```sh
-git clone https://github.com/RobertMischke/coding-agent-chat.git C:/Projects/coding-agent-chat
+git clone https://github.com/agent-orc/chat.git C:/Projects/coding-agent-chat
 cd C:/Projects/coding-agent-chat
 npm install
 npm run build
@@ -116,14 +116,14 @@ Only needed if you want the in-app Update Center to work. `./update-service.sh s
 2. Click "+" next to that workspace to open **Onboard Project**. Fill in a display name (a short code is auto-derived and editable), pick a default CLI + model, and - important - set **CLI working directory** (`rootPath`) to the target project's folder on disk. Without it the project has no auto-pickup runner and the mode toggle won't work later.
 3. Submit. This calls `POST /api/projects` and provisions the project's lane folders immediately - **no backend restart needed.**
 
-This is the current, working path (`RegistryEndpoints.cs`, ADR-0042/ADR-0046). Note on scope: the persistent **Orchestrator Chat** side panel (the chat window docked to a project) is great for asking the orchestrator questions about a project once it's onboarded, but it cannot create a project registration for you today - that capability is still on the roadmap (see [orchestrator-chat.md](../../product/orchestrator-chat.md)). Use the dialog above for the actual creation step.
+This is the current, working path (`RegistryEndpoints.cs`, ADR-0042/ADR-0046). Note on scope: the persistent **Orchestrator Chat** side panel (the chat window docked to a project) is great for asking the orchestrator questions about a project once it's onboarded, but it cannot create a project registration for you today - that capability is still on the roadmap (see [orchestrator-chat.md](../../concepts/orchestrator-chat.md)). Use the dialog above for the actual creation step.
 
 Two cases the dialog doesn't cover, still documented in [onboard-a-project.md](./onboard-a-project.md):
 
 - **Legacy `WatchPaths` bootstrap** (kept for reference / scripted setups) - editing `appsettings.Local.json` directly and restarting.
 - **Repo root differs from the CLI working directory** (monorepo, app nested under a parent repo) - set `RepositoryPath` via `PUT /api/projects/{id}` after creating the project, so Git status/diff/commits resolve from the right folder.
 
-That's the whole onboarding step: **register the project, and (if you want the project wiki) enable a wiki-writing pipeline step.** There is no separate "bootstrap the wiki" action and no "not-onboarded" state to clear. The fixed **Workstream** frame (the five immutable areas plus their landing pages, under the project's `docs/engineering-workstream/`) is *self-provisioned* - it is materialized automatically the first time a wiki-writing step (`post-wiki-maintenance` or `post-wiki-learnings`) runs for the project, then completed idempotently on later runs and never overwritten. Frame pages default to English for public / open-source repos; set `WorkstreamFramePublic` to `false` in `project-settings.json` to seed a localized frame. Details: [onboard-a-project.md](./onboard-a-project.md#the-workstream-wiki-frame-is-self-provisioned) and the frame itself in [engineering-workstream.md](../../concepts/engineering-workstream.md).
+That's the whole onboarding step: **register the project, and (if you want the project wiki) enable a wiki-writing pipeline step.** There is no separate "bootstrap the wiki" action and no "not-onboarded" state to clear. Each wiki-writing step (`post-wiki-maintenance`, `post-wiki-learnings`, `post-agents-wiki-sync`) *self-provisions* its own home under the project's `docs/` (`common-problems/`, `learnings/`, `concepts/designated-topics/`) the first time it runs, idempotently and without overwriting existing content. Details: [onboard-a-project.md](./onboard-a-project.md).
 
 ### Onboarding checklist: registry + working directory + build profile belong together
 
@@ -196,7 +196,7 @@ Agents and scripts must organize jobs through the application API, not by direct
 
 ### Supported CLIs
 
-Claude Code, Codex, GitHub Copilot, Gemini. The cross-CLI contract (process lifecycle, session model, model selection, quota probing, logging, cancellation) is in [supported-clis.md](../../cli/supported-clis.md).
+Claude Code, Codex, GitHub Copilot, Gemini. The cross-CLI contract (process lifecycle, session model, model selection, quota probing, logging, cancellation) is in [supported-clis.md](../../system/cli/supported-clis.md).
 
 ### Keeping target projects in sync
 

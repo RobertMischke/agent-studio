@@ -1,15 +1,19 @@
-
+using System.Collections.Concurrent;
+using System.Text;
+using System.Text.Json;
 
 namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Watches the resolved job-folder paths configured under
 /// <c>WatchPaths</c> and fans out a single <see cref="OnJobChanged"/>
-/// event whenever something inside a job folder appears, disappears, or
-/// changes on disk. Subscribers include
+/// event when task.json semantics or task-folder structure changes on disk.
+/// High-churn logs and generated sidecars remain available through the raw
+/// <see cref="OnPathChanged"/> stream but cannot invalidate the task index.
+/// Subscribers include
 /// <see cref="TaskIndexCache.Invalidate"/> (Cycle 1 cache invalidation),
 /// the SignalR hub (broadcasts <c>jobsChanged</c> to clients), and
-/// <see cref="TaskRunnerService.ReconcileAllRunners"/> (releases the
+/// <see cref="TaskRunnerService.ReconcileRunnerForPath"/> (releases the
 /// runner's active-job latch when the folder leaves <c>3-progress</c>
 /// outside the API).
 ///
@@ -30,11 +34,22 @@ public class TaskWatcherService : BackgroundService
     private readonly ILogger<TaskWatcherService> _logger;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly TimeSpan _debounce;
+    private readonly ConcurrentDictionary<string, string> _taskIndexSignatures = new(PathComparer);
     private DateTime? _startedAt;
     private int _configuredPathCount;
     private string? _lastError;
 
     public event Action<string>? OnJobChanged;
+    /// <summary>
+    /// Raw filesystem change stream for consumers that own their own narrow
+    /// filtering (for example conversation projection of cli-output.log).
+    /// Unlike <see cref="OnJobChanged"/>, this event never invalidates the
+    /// task index by itself.
+    /// </summary>
+    public event Action<string>? OnPathChanged;
+
+    private static StringComparer PathComparer =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     public TaskWatcherService(TaskScannerService scanner, ILogger<TaskWatcherService> logger, IConfiguration config)
     {
@@ -55,66 +70,61 @@ public class TaskWatcherService : BackgroundService
         }
         foreach (var entry in entries)
         {
-            if (string.IsNullOrWhiteSpace(entry.Path))
-            {
-                _logger.LogWarning("WatchPath '{Name}' resolved to empty path; skipping watcher", entry.Name);
-                continue;
-            }
-            if (!Directory.Exists(entry.Path))
-            {
-                _logger.LogWarning("Watch path does not exist, creating: {Path}", entry.Path);
-                try { Directory.CreateDirectory(entry.Path); }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to create watch path {Path}; skipping watcher", entry.Path);
-                    continue;
-                }
-            }
-
-            try
-            {
-                var watcher = new FileSystemWatcher(entry.Path)
-                {
-                    IncludeSubdirectories = true,
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.Size,
-                    EnableRaisingEvents = true,
-                    InternalBufferSize = 64 * 1024
-                };
-
-                watcher.Changed += (_, e) => Debounce(e.FullPath);
-                watcher.Created += (_, e) => Debounce(e.FullPath);
-                watcher.Deleted += (_, e) => Debounce(e.FullPath);
-                watcher.Renamed += (_, e) => Debounce(e.FullPath);
-                watcher.Error += (_, e) =>
-                {
-                    var error = e.GetException();
-                    lock (_lock) _lastError = error?.Message ?? "FileSystemWatcher reported an unknown error.";
-                    _logger.LogWarning(error, "FileSystemWatcher error for {Path}", entry.Path);
-                };
-                lock (_lock) _watchers.Add(watcher);
-                _logger.LogInformation("Watching: {Name} -> {Path}", entry.Name, entry.Path);
-            }
-            catch (Exception ex)
-            {
-                lock (_lock) _lastError = ex.Message;
-                _logger.LogError(ex, "Failed to start watcher for {Path}", entry.Path);
-            }
+            EnsureWatching(entry);
         }
-        stoppingToken.Register(() =>
+        stoppingToken.Register(DisposeResources);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Add a live watcher for an API-created project.</summary>
+    public bool EnsureWatching(WatchPathEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Path))
         {
-            FileSystemWatcher[] watchers;
+            _logger.LogWarning("WatchPath '{Name}' resolved to empty path; skipping watcher", entry.Name);
+            return false;
+        }
+
+        lock (_lock)
+        {
+            if (_watchers.Any(w => string.Equals(w.Path, entry.Path, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(entry.Path);
+            var watcher = new FileSystemWatcher(entry.Path)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.Size,
+                EnableRaisingEvents = true,
+                InternalBufferSize = 64 * 1024
+            };
+            watcher.Changed += (_, e) => HandleChange(entry.Path, e.FullPath, e.ChangeType);
+            watcher.Created += (_, e) => HandleChange(entry.Path, e.FullPath, e.ChangeType);
+            watcher.Deleted += (_, e) => HandleChange(entry.Path, e.FullPath, e.ChangeType);
+            watcher.Renamed += (_, e) => HandleChange(entry.Path, e.FullPath, e.ChangeType, e.OldFullPath);
+            watcher.Error += (_, e) =>
+            {
+                var error = e.GetException();
+                lock (_lock) _lastError = error?.Message ?? "FileSystemWatcher reported an unknown error.";
+                _logger.LogWarning(error, "FileSystemWatcher error for {Path}", entry.Path);
+            };
             lock (_lock)
             {
-                watchers = _watchers.ToArray();
-                _watchers.Clear();
+                _watchers.Add(watcher);
+                _configuredPathCount = Math.Max(_configuredPathCount, _watchers.Count);
             }
-            foreach (var watcher in watchers)
-            {
-                try { watcher.Dispose(); }
-                catch (Exception __ex) { SilentCatch.Note(__ex, "TaskWatcherService: watcher dispose"); }
-            }
-        });
-        return Task.CompletedTask;
+            _logger.LogInformation("watch-path-activated project={Name} path={Path}", entry.Name, entry.Path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            lock (_lock) _lastError = ex.Message;
+            _logger.LogError(ex, "Failed to start watcher for {Path}", entry.Path);
+            return false;
+        }
     }
 
     /// <summary>
@@ -142,62 +152,201 @@ public class TaskWatcherService : BackgroundService
 
     private DateTime _lastEvent = DateTime.MinValue;
     private readonly Lock _lock = new();
+    private readonly Dictionary<string, PendingDispatch> _pendingDispatches = new(PathComparer);
+    private bool _disposed;
+
+    private sealed class PendingDispatch(string path, Timer timer)
+    {
+        public string Path { get; set; } = path;
+        public Timer Timer { get; } = timer;
+    }
+
+    internal void HandleChange(
+        string watchPath,
+        string path,
+        WatcherChangeTypes changeType,
+        string? oldPath = null)
+    {
+        try { OnPathChanged?.Invoke(path); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnPathChanged subscriber threw for {Path}", path); }
+
+        if (!ShouldNotifyIndexChange(watchPath, path, changeType, oldPath)) return;
+        Debounce(path);
+    }
 
     /// <summary>
-    /// Coalesces bursty FileSystemWatcher events into a single
-    /// <see cref="OnJobChanged"/> invocation per debounce window. Also
-    /// filters out paths that obviously don't represent a job-state change
-    /// (orchestrator log churn, attachment binary writes) so cache
-    /// invalidations don't fire on every CLI heartbeat.
+    /// Coalesces bursty FileSystemWatcher events into a single trailing-edge
+    /// <see cref="OnJobChanged"/> invocation per task after a quiet window.
+    /// Filtering happens before this method so generated sidecars never enter
+    /// the task-index invalidation path.
     /// </summary>
     private void Debounce(string path)
     {
-        if (IsNoiseyPath(path)) return;
-
+        string key;
         lock (_lock)
         {
-            var now = DateTime.UtcNow;
-            if (now - _lastEvent < _debounce) return;
-            _lastEvent = now;
-        }
+            if (_disposed) return;
+            key = string.Equals(Path.GetFileName(path), "task.json", StringComparison.OrdinalIgnoreCase)
+                ? Path.GetDirectoryName(path) ?? path
+                : path;
+            if (_pendingDispatches.TryGetValue(key, out var pending))
+            {
+                pending.Path = path;
+                pending.Timer.Change(_debounce, Timeout.InfiniteTimeSpan);
+                return;
+            }
 
-        _logger.LogDebug("Watcher fired for {Path}", path);
+            var timer = new Timer(
+                _ => DispatchPending(key),
+                null,
+                _debounce,
+                Timeout.InfiniteTimeSpan);
+            _pendingDispatches[key] = new PendingDispatch(path, timer);
+        }
+    }
+
+    private void DispatchPending(string key)
+    {
+        PendingDispatch? pending;
+        lock (_lock)
+        {
+            if (_disposed || !_pendingDispatches.Remove(key, out pending)) return;
+            _lastEvent = DateTime.UtcNow;
+        }
+        pending.Timer.Dispose();
+
+        _logger.LogDebug("Watcher fired for {Path}", pending.Path);
         // FileSystemWatcher delivers callbacks on the thread pool. An
         // unhandled exception escaping a subscriber goes through
         // AppDomain.UnhandledException and terminates the host - the
         // silent-kill class we are guarding against. Log and swallow so a
         // single bad subscriber cannot crash the process.
-        try { OnJobChanged?.Invoke(path); }
-        catch (Exception ex) { _logger.LogWarning(ex, "OnJobChanged subscriber threw for {Path}", path); }
+        try { OnJobChanged?.Invoke(pending.Path); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnJobChanged subscriber threw for {Path}", pending.Path); }
+    }
+
+    private void DisposeResources()
+    {
+        FileSystemWatcher[] watchers;
+        Timer[] timers;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            watchers = _watchers.ToArray();
+            timers = _pendingDispatches.Values.Select(p => p.Timer).ToArray();
+            _watchers.Clear();
+            _pendingDispatches.Clear();
+        }
+        foreach (var timer in timers) timer.Dispose();
+        foreach (var watcher in watchers)
+        {
+            try { watcher.Dispose(); }
+            catch (Exception ex) { SilentCatch.Note(ex, "TaskWatcherService: watcher dispose"); }
+        }
+    }
+
+    public override void Dispose()
+    {
+        DisposeResources();
+        base.Dispose();
     }
 
     /// <summary>
-    /// Returns true when the path obviously doesn't represent a job lane
-    /// change worth notifying about. Lives here so the noise filter is in
-    /// one place; downstream subscribers (TaskIndexCache, runner
-    /// reconciliation, SignalR push) all benefit from the same gate.
+    /// Decides whether a filesystem event can change a cached
+    /// <see cref="TaskInfo"/>. Only task.json content and task-folder
+    /// structural moves/deletes qualify. Generated sidecars, logs, results,
+    /// lifecycle output and index mirrors are intentionally excluded: API
+    /// writers invalidate synchronously, while genuinely external edits are
+    /// covered by the safety TTL.
+    ///
+    /// A task.json-only <c>lastProgressAt</c> heartbeat is also excluded after
+    /// its first observation. That field is crash-recovery metadata and is not
+    /// projected into <see cref="TaskInfo"/>; treating every heartbeat as a
+    /// board mutation caused a full workspace scan feedback loop.
     /// </summary>
-    private static bool IsNoiseyPath(string path)
+    internal bool ShouldNotifyIndexChange(
+        string watchPath,
+        string path,
+        WatcherChangeTypes changeType,
+        string? oldPath = null)
     {
-        if (string.IsNullOrEmpty(path)) return true;
-        // Orchestrator log files and chat attachments churn constantly during
-        // a run. The runner's active job stays in 3-progress for the whole
-        // run, so cache invalidation on every log line is pure waste.
-        var p = path.Replace('\\', '/');
-        if (p.Contains("/.orchestrator/")) return true;
-        if (p.Contains("/chat/")) return true;
-        if (p.Contains("/attachments/")) return true;
-        if (p.Contains("/results/")) return true;
-        // CLI streams write tool-calls.jsonl, cli-output.log, session-events.jsonl
-        // continuously. They live under <jobDir>/logs/ and never affect the
-        // lane / task.json fields the cache tracks.
-        if (p.Contains("/logs/")) return true;
-        // VS Code, ripgrep, and other tooling create temp files on the way
-        // to atomic writes. Ignore the obvious patterns.
-        var name = Path.GetFileName(path);
-        if (name.StartsWith('.') && (name.EndsWith(".tmp") || name.EndsWith(".swp"))) return true;
-        if (name.EndsWith("~")) return true;
+        if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(path)) return false;
+
+        if (string.Equals(Path.GetFileName(path), "task.json", StringComparison.OrdinalIgnoreCase))
+        {
+            if (changeType == WatcherChangeTypes.Deleted)
+            {
+                _taskIndexSignatures.TryRemove(path, out _);
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(oldPath)
+                && !string.Equals(oldPath, path, OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal))
+            {
+                _taskIndexSignatures.TryRemove(oldPath, out _);
+            }
+
+            var signature = ComputeTaskIndexSignature(path);
+            if (signature == null) return true; // partial/locked write: fail open
+            if (_taskIndexSignatures.TryGetValue(path, out var previous)
+                && string.Equals(previous, signature, StringComparison.Ordinal))
+                return false;
+            _taskIndexSignatures[path] = signature;
+            return true;
+        }
+
+        if (changeType is WatcherChangeTypes.Deleted or WatcherChangeTypes.Renamed)
+            return IsTaskFolderPath(watchPath, path)
+                   || (!string.IsNullOrWhiteSpace(oldPath) && IsTaskFolderPath(watchPath, oldPath));
+
         return false;
+    }
+
+    internal static string? ComputeTaskIndexSignature(string taskJsonPath)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(taskJsonPath));
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
+            var signature = new StringBuilder();
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (string.Equals(property.Name, "lastProgressAt", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                signature.Append(property.Name.Length).Append(':').Append(property.Name)
+                    .Append('=').Append(property.Value.GetRawText()).Append(';');
+            }
+            return signature.ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsTaskFolderPath(string watchPath, string path)
+    {
+        try
+        {
+            var relative = Path.GetRelativePath(watchPath, path);
+            if (relative == "." || Path.IsPathRooted(relative)) return false;
+            var parts = relative.Split(
+                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Any(part => part == "..")) return false;
+
+            // Legacy: <root>/<lane>/<slug>. Flat: <root>/tasks/<bucket>/<key>.
+            return parts.Length == 2 && TaskStates.All.Contains(parts[0], StringComparer.Ordinal)
+                   || parts.Length == 3
+                   && string.Equals(parts[0], TaskStorageLayout.JobsDirName, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
 

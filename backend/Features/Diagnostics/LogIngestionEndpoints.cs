@@ -35,7 +35,7 @@ public static class LogIngestionEndpoints
             var logPath = Path.Combine(logsDir, "cli-output.log");
 
             var rendered = string.Join(Environment.NewLine,
-                req.Lines.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {l.Text}"));
+                req.Lines.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {AnsiText.Strip(l.Text)}"));
 
             try
             {

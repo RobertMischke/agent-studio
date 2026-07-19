@@ -47,12 +47,14 @@ export interface PipelineAdminRow {
   stub: boolean;
   deferred: boolean;
   usesModel: boolean;
+  supportsEconomyModel: boolean;
   usesPrompt: boolean;
   supportsMode: boolean;
   canDisable: boolean;
   supportsCondition: boolean;
   phase: string;
   enabled: boolean;
+  economyModel: boolean;
   cliType: string;
   model: string;
   thinkingLevel: string;

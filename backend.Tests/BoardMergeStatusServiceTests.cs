@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 using AgentStudio.Shared;
 using AgentStudio.Tasks;
@@ -214,9 +215,70 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         Assert.False(lookup.ContainsKey(job.TaskKey));
     }
 
+    [Fact]
+    public void BuildLookup_WarmHeartbeatBeyondFormerTtl_DoesNotRecomputeGitProjection()
+    {
+        var repo = SeedDevelopMainRepo(out var mainTip, out _);
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-07-13T12:00:00Z"));
+        var svc = BuildService(repo, out var project, time);
+        var job = Job("warm", project: project, repo: repo, commits: [Commit(mainTip)]);
+
+        svc.BuildLookup([job]);
+        Assert.Equal(1, svc.ComputationCount);
+
+        time.Advance(TimeSpan.FromMinutes(5));
+        svc.BuildLookup([job]);
+
+        Assert.Equal(1, svc.ComputationCount);
+    }
+
+    [Fact]
+    public void BuildLookup_RefMoveInvalidatesWarmProjectionImmediately()
+    {
+        var repo = SeedDevelopMainRepo(out _, out _);
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/ref-driven");
+        File.WriteAllText(Path.Combine(repo, "ref-driven.txt"), "task");
+        Commit(repo, "feat: ref driven");
+        var tip = RunGit(repo, "rev-parse task/ref-driven").Out.Trim();
+
+        var svc = BuildService(repo, out var project);
+        var job = Job("ref-driven", project: project, repo: repo, commits: [Commit(tip)]);
+        Assert.False(svc.BuildLookup([job])[job.TaskKey].InIntegration);
+        Assert.Equal(1, svc.ComputationCount);
+
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/ref-driven");
+
+        Assert.True(svc.BuildLookup([job])[job.TaskKey].InIntegration);
+        Assert.Equal(2, svc.ComputationCount);
+    }
+
+    [Fact]
+    public void BuildLookup_RemoteOnlyOriginHeadFallbackUsesRemoteTrackingBranch()
+    {
+        var repo = SeedDevelopMainRepo(out var mainTip, out _);
+        RunGit(repo, "update-ref refs/remotes/origin/main main");
+        RunGit(repo, "symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main");
+        RunGit(repo, "checkout -q --detach main");
+        RunGit(repo, "branch -D develop main");
+
+        var svc = BuildService(repo, out var project);
+        var job = Job("remote-only", project: project, repo: repo, commits: [Commit(mainTip)]);
+
+        var signal = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.True(signal.InIntegration);
+        Assert.True(signal.InRelease);
+        Assert.Equal("main", signal.IntegrationBranch);
+    }
+
     // --- helpers -----------------------------------------------------------
 
-    private BoardMergeStatusService BuildService(string repo, out string projectName)
+    private BoardMergeStatusService BuildService(
+        string repo,
+        out string projectName,
+        TimeProvider? timeProvider = null)
     {
         projectName = "Fixture";
         var dict = new Dictionary<string, string?>
@@ -231,7 +293,11 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
-        return new BoardMergeStatusService(git, settings, NullLogger<BoardMergeStatusService>.Instance);
+        return new BoardMergeStatusService(
+            git,
+            settings,
+            NullLogger<BoardMergeStatusService>.Instance,
+            timeProvider ?? TimeProvider.System);
     }
 
     /// <summary>main + a develop branched off it, both with one seed commit.</summary>

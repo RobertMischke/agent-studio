@@ -53,6 +53,11 @@ export interface CliSessionInfo {
   label: string | null;
   updatedAt: string | null;
   cwd: string | null;
+  /**
+   * On-disk transcript size in bytes. 0 when the CLI's inventory is index-only
+   * (Codex), which the UI renders as "size unknown" rather than "0 B".
+   */
+  sizeBytes: number;
   lastUsage: SessionUsage | null;
   isProjectDefault: boolean;
   /**
@@ -97,6 +102,37 @@ export interface CliUsageSection {
 export interface CliUsageReport {
   at: string;
   sections: CliUsageSection[];
+}
+
+/**
+ * On-demand deep read of a single session (mirror of the backend
+ * `CliSessionDetail` record). Fetched lazily when a session row is expanded in
+ * the CLI-session tool, so the list itself never reads transcript bodies. Every
+ * field is best-effort; a value the transcript does not record is null and the
+ * UI shows a muted placeholder.
+ */
+export interface CliSessionDetail {
+  id: string;
+  cliType: CliType;
+  model: string | null;
+  thinkingLevel: string | null;
+  messageCount: number;
+  firstPrompt: string | null;
+  cwd: string | null;
+  gitBranch: string | null;
+  cliVersion: string | null;
+  sizeBytes: number;
+  path: string | null;
+  updatedAt: string | null;
+  error: string | null;
+}
+
+/** Mirror of the backend `CliSessionDeleteResult` record. */
+export interface CliSessionDeleteResult {
+  /** One of 'Deleted' | 'NotFound' | 'Error'. */
+  status: string;
+  message: string | null;
+  freedBytes: number;
 }
 
 /**

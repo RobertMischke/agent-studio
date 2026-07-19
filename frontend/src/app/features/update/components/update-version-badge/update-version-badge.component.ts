@@ -4,7 +4,7 @@ import { UpdateClientService } from '../../../../services/update.service';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
- * Tiny header chip:  v0.1.0  bd05f36   plus an orange dot when origin/main
+ * Tiny header chip: deploy identity + commit, plus an orange dot when origin/main
  * has moved past stable. Click opens the Update Center drawer. Designed
  * to sit in the top header rail next to the project tabs.
  */

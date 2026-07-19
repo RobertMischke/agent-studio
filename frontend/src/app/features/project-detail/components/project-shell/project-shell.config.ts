@@ -11,11 +11,13 @@ export type ProjectRailGroup = 'insight' | 'quality' | 'context' | 'config';
 
 export type ProjectRailKey =
   | 'overview'
+  | 'deployment'
   | 'project-urls'
   | 'git'
   | 'visual-evidence'
   | 'security'
   | 'architecture'
+  | 'project-graph'
   | 'drift'
   | 'uxui'
   | 'test-quality'
@@ -71,8 +73,8 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     group: 'insight',
     label: 'Overview',
     panelTitle: 'Overview',
-    description: 'Snapshot of project health and quick actions',
-    empty: 'Overview placeholder. Health snapshot and quick actions will land in a later slice.',
+    description: 'Operator pulse: delivery, spend, live URLs, deployment, and project knowledge',
+    empty: 'No operator overview is available for this project.',
     icon: '▤',
     railIcon: 'layout',
   },
@@ -85,6 +87,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'No URLs configured yet. Add one to see it here and as a row in the Explorer tree.',
     icon: '◍',
     railIcon: 'link',
+  },
+  {
+    key: 'deployment',
+    group: 'insight',
+    label: 'Deployment',
+    panelTitle: 'Deployment',
+    description: 'Deploy targets, current delta, and durable run history for this project',
+    empty: 'No deployment history is available for this project.',
+    icon: 'â‡§',
+    railIcon: 'activity',
   },
   {
     key: 'git',
@@ -189,6 +201,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'Architecture placeholder. ADR list and high-level map land in the architecture slice.',
     icon: '⊞',
     railIcon: 'layout',
+  },
+  {
+    key: 'project-graph',
+    group: 'context',
+    label: 'Project Graph',
+    panelTitle: 'Project Graph',
+    description: 'Read-only component inventory from solution, project, package, Angular workspace, and workflow manifests',
+    empty: 'No repository graph is available for this project.',
+    icon: '⌘',
+    railIcon: 'branch',
   },
   {
     key: 'wiki',

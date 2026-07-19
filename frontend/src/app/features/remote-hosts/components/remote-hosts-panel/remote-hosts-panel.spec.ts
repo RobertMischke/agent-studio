@@ -36,6 +36,14 @@ describe('RemoteHostsPanelComponent', () => {
     const summary = el.querySelector('[data-testid="remote-hosts-summary"]')?.textContent ?? '';
     expect(summary).toContain(String(cards.length));
 
+    const setupButton = el.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
+    setupButton.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.setupHost()?.id).toBe('agent-runner-01');
+    expect(el.querySelector('[data-testid="runner-setup-dialog"]')).toBeTruthy();
+    fixture.componentInstance.closeSetup();
+    fixture.detectChanges();
+
     const addButton = el.querySelector('[data-testid="remote-hosts-add"]') as HTMLButtonElement;
     addButton.click();
     fixture.detectChanges();

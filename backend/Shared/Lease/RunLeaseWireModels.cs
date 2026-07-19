@@ -79,7 +79,9 @@ public sealed record RunnerClaimRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    AgentStudio.Clients.HostTelemetrySample? Telemetry = null,
+    int AvailableSlots = 1);
 
 /// <summary>Typed status handed back by one daemon pickup poll.</summary>
 public enum RunnerClaimStatus
@@ -96,4 +98,31 @@ public sealed record RunnerClaimResponse(
     string? JobId = null,
     string? ProjectName = null,
     RunLeaseInfoDto? Lease = null,
+    string? Message = null,
+    string? ProjectId = null,
+    string? RepositoryUrl = null,
+    string? DefaultBranch = null);
+
+/// <summary>
+/// Fenced handoff from a standalone runner after its CLI exits. This is a
+/// normal runner completion, not an out-of-band reconciliation: successful
+/// outcomes enter auto-review and retain the regular agent-run timeline.
+/// </summary>
+public sealed record RemoteRunCompletionRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string Outcome,
+    string? Reason = null,
+    string? Source = null,
+    int? ExitCode = null,
+    string? SalvageBranch = null,
+    string? SalvageCommitSha = null,
+    string? SalvageBranchUrl = null);
+
+public sealed record RemoteRunCompletionResponse(
+    string TaskKey,
+    string Outcome,
+    string TargetState,
     string? Message = null);

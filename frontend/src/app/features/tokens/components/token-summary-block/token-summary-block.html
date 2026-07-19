@@ -35,11 +35,12 @@
 
       <div class="tok-sum__cost" data-testid="token-summary-cost">
         <span class="tok-sum__cost-label">Theoretical API cost</span>
-        <span class="tok-sum__cost-amount"
-              [class.tok-sum__cost-amount--partial]="!s.allModelsPriced">
+        <button type="button" class="tok-sum__cost-amount tok-sum__cost-button"
+              [class.tok-sum__cost-amount--partial]="!s.allModelsPriced"
+              (click)="showTotalCalculation(s)">
           {{ formatUsd(s.estimatedApiCostUsd) }}
           @if (!s.allModelsPriced) { <span class="tok-sum__partial">(partial; some models not priced)</span> }
-        </span>
+        </button>
       </div>
 
       @if (s.byModel.length > 0) {
@@ -64,7 +65,9 @@
                   <td>{{ formatTokens(m.outputTokens) }}</td>
                   <td>
                     @if (m.modelPriced) {
-                      {{ formatUsd(m.estimatedApiCostUsd) }}
+                      <button type="button" class="tok-sum__table-cost" (click)="showModelCalculation(m)">
+                        {{ formatUsd(m.estimatedApiCostUsd) }}
+                      </button>
                     } @else {
                       <span class="tok-sum__na">n/a</span>
                     }

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Agent task contract metadata",
+  "source": {
+    "path": "docs/system/contracts/agent-task.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "79c837ea5366834a8a29bfd01a86bcf000b8d125d40bec8fb91e523f2547ccc0",
+      "sizeBytes": 8993,
+      "lineCount": 130,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/system/contracts/agent-task.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "tasks",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "implemented"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "sample metadata pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "79c837ea5366834a8a29bfd01a86bcf000b8d125d40bec8fb91e523f2547ccc0",
+      "sizeBytes": 8993,
+      "lineCount": 130,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "A",
+    "hasDrift": false,
+    "score": 0.08,
+    "summary": "The contract remains a reliable source of truth for task file semantics and API-backed task flow.",
+    "rationale": [
+      "Recent work respected the API boundary and did not bypass task storage.",
+      "The contract still matches the known task mutation rules.",
+      "Only routine future checks are needed."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "high",
+    "freshness": "high",
+    "operatorUsefulness": "high"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "info",
+      "axis": "drift",
+      "summary": "The contract remains a reliable source of truth for task file semantics and API-backed task flow.",
+      "rationale": [
+        "Recent work respected the API boundary and did not bypass task storage.",
+        "The contract still matches the known task mutation rules.",
+        "Only routine future checks are needed."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "info",
+      "axis": "drift",
+      "summary": "Recent work respected the API boundary and did not bypass task storage.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "info",
+      "axis": "drift",
+      "summary": "The contract still matches the known task mutation rules.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "info",
+      "axis": "drift",
+      "summary": "Only routine future checks are needed.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Keep as a reference document and re-check only when task mutation APIs change."
+}

@@ -2,7 +2,7 @@ namespace AgentStudio.Shared;
 
 /// <summary>
 /// Pure text helpers behind "promote a finished planning task to a coding
-/// task" (see docs/research/planning-research-task-kinds-2026-05.md). The
+/// task" (see docs/concepts/planning-research-task-kinds-2026-05.md). The
 /// planning agent writes its report to <c>status.md</c>; these functions
 /// pull the prefill the create-task modal needs out of it without touching
 /// the filesystem, so they unit-test in isolation.

@@ -1,0 +1,185 @@
+<div class="pbf" [attr.data-testid]="fieldTestid('form')">
+  <section class="pbf__section" [attr.aria-labelledby]="fieldTestid('identity-title')">
+    <header class="pbf__section-head">
+      <span class="pbf__step" aria-hidden="true">1</span>
+      <div>
+        <h3 class="pbf__section-title" [id]="fieldTestid('identity-title')">Identity</h3>
+        <p class="pbf__section-desc">How the project appears across Agent Studio and in task keys.</p>
+      </div>
+    </header>
+    <div class="pbf__grid">
+      <label class="pbf__field">
+        <span class="pbf__label">Workspace</span>
+        <select class="pbf__input"
+                [attr.data-testid]="fieldTestid('workspace')"
+                [disabled]="disabled()"
+                [attr.aria-invalid]="errorFor('workspaceId') ? 'true' : null"
+                [ngModel]="workspaceId()"
+                (ngModelChange)="workspaceId.set($event)"
+                (blur)="markTouched('workspaceId')">
+          @for (workspace of workspaces(); track workspace.id) {
+            <option [value]="workspace.id">{{ workspace.displayName }}</option>
+          }
+        </select>
+        @if (errorFor('workspaceId'); as error) {
+          <span class="pbf__error" role="alert">{{ error }}</span>
+        }
+      </label>
+
+      <label class="pbf__field">
+        <span class="pbf__label">Display name</span>
+        <input #displayNameInput class="pbf__input"
+               type="text"
+               autocomplete="off"
+               required
+               maxlength="64"
+               [attr.data-testid]="fieldTestid('display-name')"
+               [disabled]="disabled()"
+               [attr.aria-invalid]="errorFor('displayName') ? 'true' : null"
+               [ngModel]="displayName()"
+               (ngModelChange)="onNameChange($event)"
+               (blur)="markTouched('displayName')" />
+        @if (errorFor('displayName'); as error) {
+          <span class="pbf__error" role="alert">{{ error }}</span>
+        }
+      </label>
+
+      <label class="pbf__field">
+        <span class="pbf__label">Short code</span>
+        <input class="pbf__input pbf__input--code"
+               type="text"
+               autocomplete="off"
+               required
+               maxlength="6"
+               [attr.data-testid]="fieldTestid('short-code')"
+               [disabled]="disabled()"
+               [attr.aria-invalid]="errorFor('shortCode') ? 'true' : null"
+               [ngModel]="shortCode()"
+               (ngModelChange)="onCodeChange($event)"
+               (blur)="markTouched('shortCode')" />
+        <span class="pbf__hint">2-6 uppercase letters or numbers, starting with a letter.</span>
+        @if (errorFor('shortCode'); as error) {
+          <span class="pbf__error" role="alert">{{ error }}</span>
+        }
+      </label>
+
+      <div class="pbf__field">
+        <span class="pbf__label">Project color</span>
+        <div class="pbf__swatches" [attr.data-testid]="fieldTestid('color')">
+          @for (swatch of swatches; track swatch) {
+            <button type="button"
+                    class="pbf__swatch"
+                    [class.pbf__swatch--selected]="color() === swatch"
+                    [style.background]="swatch"
+                    [disabled]="disabled()"
+                    [attr.aria-label]="'Use project color ' + swatch"
+                    [attr.aria-pressed]="color() === swatch"
+                    (click)="color.set(swatch)"></button>
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pbf__section" [attr.aria-labelledby]="fieldTestid('code-title')">
+    <header class="pbf__section-head">
+      <span class="pbf__step" aria-hidden="true">2</span>
+      <div>
+        <h3 class="pbf__section-title" [id]="fieldTestid('code-title')">Code location</h3>
+        <p class="pbf__section-desc">Optional now. You can finish or change these paths later in Project Settings.</p>
+      </div>
+    </header>
+    <div class="pbf__grid">
+      <label class="pbf__field pbf__field--full">
+        <span class="pbf__label">Repository checkout path</span>
+        <input class="pbf__input"
+               type="text"
+               autocomplete="off"
+               placeholder="C:\Projects\my-repo"
+               [attr.data-testid]="fieldTestid('repository-path')"
+               [disabled]="disabled()"
+               [attr.aria-invalid]="errorFor('repositoryPath') ? 'true' : null"
+               [ngModel]="repositoryPath()"
+               (ngModelChange)="repositoryPath.set($event)"
+               (blur)="markTouched('repositoryPath')" />
+        <span class="pbf__hint">Absolute local path to the Git checkout. Network paths are not supported.</span>
+        @if (errorFor('repositoryPath'); as error) {
+          <span class="pbf__error" role="alert">{{ error }}</span>
+        }
+      </label>
+
+      <label class="pbf__field">
+        <span class="pbf__label">Working directory</span>
+        <input class="pbf__input"
+               type="text"
+               autocomplete="off"
+               placeholder="Defaults to the checkout path"
+               [attr.data-testid]="fieldTestid('root-path')"
+               [disabled]="disabled()"
+               [attr.aria-invalid]="errorFor('rootPath') ? 'true' : null"
+               [ngModel]="rootPath()"
+               (ngModelChange)="rootPath.set($event)"
+               (blur)="markTouched('rootPath')" />
+        <span class="pbf__hint">Where the coding CLI starts, for example a package folder in a monorepo.</span>
+        @if (errorFor('rootPath'); as error) {
+          <span class="pbf__error" role="alert">{{ error }}</span>
+        }
+      </label>
+
+      <label class="pbf__field">
+        <span class="pbf__label">Repository URL</span>
+        <input class="pbf__input"
+               type="url"
+               autocomplete="url"
+               placeholder="https://github.com/acme/my-repo"
+               [attr.data-testid]="fieldTestid('repository-url')"
+               [disabled]="disabled()"
+               [attr.aria-invalid]="errorFor('repositoryUrl') ? 'true' : null"
+               [ngModel]="repositoryUrl()"
+               (ngModelChange)="repositoryUrl.set($event)"
+               (blur)="markTouched('repositoryUrl')" />
+        <span class="pbf__hint">An http(s) URL used for navigation and remote checkout.</span>
+        @if (errorFor('repositoryUrl'); as error) {
+          <span class="pbf__error" role="alert">{{ error }}</span>
+        }
+      </label>
+    </div>
+  </section>
+
+  <section class="pbf__section" [attr.aria-labelledby]="fieldTestid('agent-title')">
+    <header class="pbf__section-head">
+      <span class="pbf__step" aria-hidden="true">3</span>
+      <div>
+        <h3 class="pbf__section-title" [id]="fieldTestid('agent-title')">Default coding agent</h3>
+        <p class="pbf__section-desc">The CLI and model new tasks use unless a task overrides them.</p>
+      </div>
+    </header>
+    @if (allowAgentInheritance()) {
+      <label class="pbf__inherit">
+        <input type="checkbox"
+               [attr.data-testid]="fieldTestid('agent-override')"
+               [disabled]="disabled()"
+               [ngModel]="agentOverrideEnabled()"
+               (ngModelChange)="agentOverrideEnabled.set($event)" />
+        <span>Use a project-specific default agent</span>
+      </label>
+    }
+    @if (agentOverrideEnabled() || !allowAgentInheritance()) {
+      <div class="pbf__agent">
+        <app-cli-model-selector
+          [cliType]="cliDefault()"
+          [model]="modelDefault()"
+          [availableModels]="availableModels()"
+          [disabled]="disabled()"
+          eyebrow="Project default agent"
+          [triggerTestid]="fieldTestid('agent')"
+          [pickerTestidPrefix]="fieldTestid('agent-picker')"
+          (commit)="onAgentCommit($event)" />
+      </div>
+    } @else {
+      <p class="pbf__inherited" [attr.data-testid]="fieldTestid('agent-inherited')">
+        This project inherits the workspace default agent.
+      </p>
+    }
+  </section>
+</div>

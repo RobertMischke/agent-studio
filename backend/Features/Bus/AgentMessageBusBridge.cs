@@ -129,6 +129,7 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.WatchdogTimeout   => "High",
             OrchestratorMessageKind.EmptyFastExit     => "High",
             OrchestratorMessageKind.InfraCrash        => "High",
+            OrchestratorMessageKind.AuthRefreshFailed => "High",
             OrchestratorMessageKind.IntegrationConflict => "High",
             OrchestratorMessageKind.IntegrationError  => "High",
             OrchestratorMessageKind.Reissue           => "Warn",
@@ -420,6 +421,40 @@ public sealed class AgentMessageBusBridge
     }
 
     /// <summary>
+    /// Emits the final failure of a platform-owned repository push. Producers
+    /// call this only after their retry budget is exhausted so the operator
+    /// feed stays useful instead of receiving one message per retry attempt.
+    /// </summary>
+    public Task EmitManagedRepoPushFailureAsync(
+        string? project,
+        string? jobId,
+        string repository,
+        string branch,
+        string status,
+        string? error,
+        int attempts,
+        CancellationToken ct = default)
+    {
+        var scope = string.IsNullOrWhiteSpace(project) ? "workspace" : project;
+        var detail = string.IsNullOrWhiteSpace(error) ? status : $"{status}: {error}";
+        var msg = NewMessage(
+            participantId: string.IsNullOrWhiteSpace(project)
+                ? ParticipantOrchestrator
+                : ParticipantOrchestratorFor(project),
+            role: "system",
+            kind: "error",
+            severity: "Warn",
+            project: project,
+            jobId: jobId,
+            topic: "managed-repo-push-failed",
+            summary: TruncateSummary($"Push failed for {scope}/{branch} after {attempts} attempt(s): {detail}"),
+            body: $"Repository: {repository}\nBranch: {branch}\nStatus: {status}\nError: {error ?? "(none)"}",
+            payload: new { repository, branch, status, error, attempts },
+            tags: new[] { "managed-repo-push", "push-failed", $"branch:{branch}" });
+        return EmitAsync(msg, ct);
+    }
+
+    /// <summary>
     /// Token-usage attribution for one orchestrator turn or supporting-agent
     /// call. The aggregate rollup view stays in <c>orchestrator.jsonl</c> /
     /// the token summary service; the bus carries one event per recorded
@@ -501,6 +536,49 @@ public sealed class AgentMessageBusBridge
     }
 
     /// <summary>
+    /// <summary>
+    /// Quota-snapshot observation for one run boundary (AGT-2100). Emitted at
+    /// run-start and run-end, this mirrors the currently CACHED quota snapshot
+    /// for the CLI that ran - all windows, plus the snapshot's age so a reader
+    /// can tell a fresh reading from a stale one. It never forces a fresh probe;
+    /// the caller passes whatever <see cref="QuotaService.GetCachedFor"/> holds
+    /// (null when nothing is cached). The compact payload is a
+    /// <see cref="QuotaSnapshotEvent"/> so downstream cap-forecast tooling reads
+    /// one line of stable-named JSON per event.
+    /// </summary>
+    public Task EmitQuotaSnapshotAsync(
+        string? project,
+        string? jobId,
+        string? runId,
+        string cliType,
+        string? model,
+        string? thinkingLevel,
+        string phase,
+        QuotaSnapshot? snapshot,
+        TimeSpan ttl,
+        DateTime? createdAt = null,
+        CancellationToken ct = default)
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        var evt = QuotaSnapshotEventBuilder.Build(
+            phase, cliType, model, thinkingLevel, snapshot, ttl, now, runId, jobId);
+
+        var msg = NewMessage(
+            participantId: ParticipantRuntime,
+            role: "evidence",
+            kind: "observation",
+            severity: "Info",
+            project: project,
+            jobId: jobId,
+            runId: runId,
+            topic: "quota-snapshot",
+            summary: QuotaSnapshotEventBuilder.Summarize(evt),
+            createdAt: createdAt,
+            payload: evt,
+            tags: new[] { "quota-snapshot", $"phase:{evt.Phase}", $"cli:{cliType}" });
+        return EmitAsync(msg, ct);
+    }
+
     /// Free-form structured event emit. Awaitable, so tests and future
     /// producers that want backpressure can chain off the result. Production
     /// callers should discard the task (<c>_ = bridge.EmitAsync(...)</c>) so
@@ -620,8 +698,8 @@ public sealed class AgentMessageBusBridge
     // <c>logs/analysis/&lt;project&gt;/&lt;reportId&gt;.{md,json}</c>. The bus
     // never edits source code; supporting agents are observability + decision
     // records, not coding-agent extensions. See
-    // <c>docs/architecture/bus/agent-message-bus.md</c> section "Supporting agents" and
-    // <c>docs/reports/analysis-reports.md</c> section 11.
+    // <c>docs/system/architecture/bus/agent-message-bus.md</c> section "Supporting agents" and
+    // <c>docs/system/reports/analysis-reports.md</c> section 11.
     // ---------------------------------------------------------------------
 
     /// <summary>
