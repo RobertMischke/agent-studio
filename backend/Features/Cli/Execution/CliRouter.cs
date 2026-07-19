@@ -15,15 +15,6 @@ public sealed class CliRouter
     public event Action<string, string, CliExecution>?  OnFinished;
     public event Action<string, string, CliRunEvent>?   OnRunEvent;        // (cliType, jobKey, event)
 
-    public CliRouter(
-        CopilotCliService copilot,
-        ClaudeCliService claude,
-        CodexCliService codex,
-        AntigravityCliService gemini)
-        : this((ICliExecutionService)copilot, claude, codex, gemini)
-    {
-    }
-
     public CliRouter(params ICliExecutionService[] services)
     {
         _byType = new(StringComparer.OrdinalIgnoreCase);
@@ -47,12 +38,9 @@ public sealed class CliRouter
     public ICliExecutionService Get(string? cliType)
         => _byType.TryGetValue(CliTypes.Normalize(cliType), out var svc)
             ? svc
-            // Fallback for an unknown/unset cli is Claude, not Copilot: Claude is
-            // the project default and always has plan quota, whereas defaulting to
-            // Copilot sent every cli-less task into a 402 "no quota" retry loop
-            // that pinned the task in 3-progress and stalled the whole queue.
-            : _byType.TryGetValue(CliTypes.Claude, out var claude) ? claude
-            : _byType[CliTypes.Copilot];
+            // Fallback for an unknown/unset cli is Claude: it is the project
+            // default and always has plan quota.
+            : _byType[CliTypes.Claude];
 
     public void ReattachAll()
     {

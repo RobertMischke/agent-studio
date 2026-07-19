@@ -1,12 +1,11 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TaskService } from '../../../../services/task.service';
 import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport } from '../../../../features/quota';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';
-import { CliUsageDetailComponent, CliUsageStore } from '../../../tokens';
-import { CliSessionsPanelComponent } from '../cli-sessions-panel/cli-sessions-panel';
+import { CliModelsPanelComponent } from '../cli-models-panel/cli-models-panel';
+import { CliContractsPanelComponent } from '../cli-contracts-panel/cli-contracts-panel';
 
 interface CapsResponse {
   defaultCapPct: number;
@@ -25,41 +24,35 @@ interface CapRow {
 }
 
 /**
- * Admin / management surface for installed CLIs. The first capability shipped
- * here is the per-CLI per-window usage cap: each quota window from the latest
- * /api/cli/quota snapshot gets a slider that the user drags to set "do not
- * run past N% of this window". The runner gates auto-pickup and stops in-
- * flight runs when usage crosses these caps.
+ * The "CLI Management" hub for installed CLIs (AGT-2035, restructured AGT-2101).
+ * Sections, top to bottom, answer "what is available and how is it wired":
+ * the per-CLI model catalog and fallback routes (what CLIs exist, which models
+ * per CLI, the primary/fallback route state); per-CLI per-window usage caps
+ * (each quota window from the latest /api/cli/quota snapshot gets a slider the
+ * user drags to set "do not run past N% of this window" - the runner gates
+ * auto-pickup and stops in-flight runs when usage crosses these caps); and the
+ * per-CLI completion contract (how each backend signals turn completion).
  *
- * Other admin / statistics content lives behind a "Coming soon" placeholder
- * - the user explicitly asked for the sliders first; the rest is on the
- *   roadmap but does not block this surface.
+ * The per-CLI session inventory and on-disk filesystem locations were split out
+ * of this host into their own encapsulated settings pages (CLI sessions / CLI
+ * paths) per AGT-2101, so this hub stays focused on catalog + caps + contracts.
+ * The former "Usage detail" displays moved to the Token-usage section (one
+ * usage area, no double display) and the "Working memory" panel moved to its
+ * own settings section; both left this host per AGT-2035. The model catalog and
+ * completion-contract sections are dedicated child components
+ * ({@link CliModelsPanelComponent} / {@link CliContractsPanelComponent}) so
+ * this host stays within its size budget.
  */
 @Component({
   selector: 'app-cli-admin-panel',
   standalone: true,
-  imports: [FormsModule, CliUsageDetailComponent, CliSessionsPanelComponent],
+  imports: [FormsModule, CliModelsPanelComponent, CliContractsPanelComponent],
   templateUrl: './cli-admin-panel.html',
   styleUrl: './cli-admin-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CliAdminPanelComponent implements OnInit, OnDestroy {
   private readonly quotaApi = inject(QuotaApiService);
-  private readonly jobService = inject(TaskService);
-  // Shared usage store - feeds the embedded full detail. Ref-counted so
-  // the heavy token / timeline / expensive-job polls run only while this
-  // panel is mounted (started in ngOnInit, released in ngOnDestroy).
-  readonly usage = inject(CliUsageStore);
-
-  /** Re-emitted from the embedded usage detail so the shell can route to a
-   *  project's Settings rail when a "By project" usage row is clicked. */
-  readonly openProjectSettings = output<string>();
-
-  /** Re-emitted from the embedded CLI-sessions list so the shell can open
-   *  the owning task's detail panel when a session's task-link chip is
-   *  clicked. Navigation is shell-coordinated, so this leaf only forwards
-   *  the reference up. */
-  readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
   readonly loading = signal(false);
   readonly errorMsg = signal<string | null>(null);
@@ -121,13 +114,11 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
     // Refresh quota every 60s so the visible "used %" stays current. Caps
     // themselves rarely change so we only re-fetch caps on explicit reload.
     this.autoHandle = setInterval(() => this.refreshQuotaOnly(), 60000);
-    this.usage.startDetail();
   }
 
   ngOnDestroy(): void {
     if (this.autoHandle) clearInterval(this.autoHandle);
     for (const handle of this.debounceHandles.values()) clearTimeout(handle);
-    this.usage.stopDetail();
   }
 
   reload() {

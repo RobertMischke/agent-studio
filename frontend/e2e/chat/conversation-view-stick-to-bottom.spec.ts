@@ -6,11 +6,20 @@ import * as path from 'path';
  * (`Frontend:NextGenChat`, ASS-677..682 Job-Details cluster).
  *
  * The bug: the embedded conversation view never pinned to the latest entry.
- * Its real scroll container is the protocol pane's `.pane__body` (the view
- * itself does not scroll), and nothing scrolled it to the bottom on load or
- * while the agent streamed — so the newest line sat far below the fold
- * (measured ~2100px on a 900px viewport). The fix adds a shared
+ * Its real scroll container used to be the protocol pane's `.pane__body`
+ * (the view itself did not scroll), and nothing scrolled it to the bottom on
+ * load or while the agent streamed — so the newest line sat far below the
+ * fold (measured ~2100px on a 900px viewport). The fix adds a shared
  * `StickToBottomDirective` to the conversation view.
+ *
+ * Since then the protocol pane turned `[virtualised]="true"` on for this
+ * consumer (windowed DOM for long transcripts). Virtualised mode moves scroll
+ * ownership onto the conversation view's own `.conv` root (bounded via
+ * `bodyMaxHeight`, `overflow-y: auto`) instead of the `.pane__body` ancestor
+ * — see the `cac-conversation-view` host-sizing rule in
+ * `protocol-pane.component.scss`. `readGeometry`/`scrollContainerToTop` below
+ * check the conversation-view element itself before walking up, so the spec
+ * finds the right scroller under either ownership model.
  *
  * This spec mounts the view over a large deterministic output buffer (so the
  * pane is guaranteed to overflow) and asserts:
@@ -61,11 +70,11 @@ async function pickJob(page: Page): Promise<{ id: string; watchPath: string } | 
 async function mountConversation(page: Page, job: { id: string; watchPath: string }): Promise<void> {
   const body = JSON.stringify(buildLargeBuffer());
   const esc = encodeURIComponent(job.id);
-  // Cover both the current (/api/tasks) and legacy (/api/jobs) output routes.
+  // Cover both the current (/api/tasks) and legacy (/api/tasks) output routes.
   await page.route(`**/api/tasks/${esc}/output?**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body })
   );
-  await page.route(`**/api/jobs/${esc}/output?**`, (route) =>
+  await page.route(`**/api/tasks/${esc}/output?**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body })
   );
   await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '1'));
@@ -76,10 +85,16 @@ async function mountConversation(page: Page, job: { id: string; watchPath: strin
   await activityTab.click();
 }
 
-/** Geometry of the conversation view's nearest scrollable ancestor. */
+/**
+ * Geometry of the conversation view's nearest scrollable container. Checks
+ * the element itself first — virtualised mode makes `.conv` (the element
+ * carrying `data-testid="conversation-view"`) the scroller — then falls back
+ * to walking up the ancestor chain for the non-virtualised/legacy case where
+ * a wrapping host (e.g. `.pane__body`) owns the scroll instead.
+ */
 async function readGeometry(page: Page) {
   return page.getByTestId('conversation-view').evaluate((el) => {
-    let cur: HTMLElement | null = (el as HTMLElement).parentElement;
+    let cur: HTMLElement | null = el as HTMLElement;
     while (cur) {
       const oy = getComputedStyle(cur).overflowY;
       if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') && cur.scrollHeight > cur.clientHeight + 1) break;
@@ -97,7 +112,7 @@ async function readGeometry(page: Page) {
 
 async function scrollContainerToTop(page: Page): Promise<void> {
   await page.getByTestId('conversation-view').evaluate((el) => {
-    let cur: HTMLElement | null = (el as HTMLElement).parentElement;
+    let cur: HTMLElement | null = el as HTMLElement;
     while (cur) {
       const oy = getComputedStyle(cur).overflowY;
       if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') && cur.scrollHeight > cur.clientHeight + 1) break;

@@ -1,0 +1,24 @@
+@if (clients().length) {
+  <ul class="clients" data-testid="task-server-clients" aria-label="Registered clients">
+    @for (client of clients(); track client.id) {
+      <li class="client"
+          [class.client--retired]="retired(client)"
+          [attr.data-testid]="'task-server-client-' + client.id">
+        <span class="client__emoji" aria-hidden="true">{{ client.emoji || '·' }}</span>
+        <span class="client__name">
+          <span class="client__display">{{ client.displayName }}</span>
+          <span class="client__id">{{ client.id }}</span>
+        </span>
+        <span class="client__kind" [attr.data-kind]="client.kind">{{ kindLabel(client.kind) }}</span>
+        <span class="client__seen">seen {{ lastSeen(client) }}</span>
+        <span class="client__owned">
+          <strong>{{ client.ownedTaskCount }}</strong> {{ client.ownedTaskCount === 1 ? 'task' : 'tasks' }}
+        </span>
+      </li>
+    }
+  </ul>
+} @else {
+  <p class="clients__empty" data-testid="task-server-clients-empty">
+    No client identities registered yet.
+  </p>
+}

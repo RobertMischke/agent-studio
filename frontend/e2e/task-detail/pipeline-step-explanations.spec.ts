@@ -6,7 +6,7 @@ import * as path from 'path';
  * explanation tooltip.
  *
  * Acceptance ("Hover-Erklaerungen fuer alle Pipeline-Steps"): hovering a step
- * name in the Overview pipeline opens the canonical app-tooltip with the step
+ * name in the Overview pipeline opens the canonical cac-tooltip with the step
  * label as title and a per-step explanation as body, so a user understands what
  * PRE / CORE / ASPECT / TOOL / DECISION / DRIFT each do without leaving the
  * Overview.
@@ -270,39 +270,39 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     const names = page.getByTestId('overview-pipeline-step-name');
     await expect(names).toHaveCount(6);
 
-    const tooltip = page.getByTestId('app-tooltip');
+    const tooltip = page.getByTestId('cac-tooltip');
 
     // CORE: hovering the agent-run step explains the single coding seat.
     await page.locator('[data-step-id="core-agent-run"]')
       .getByTestId('overview-pipeline-step-name').hover();
     await expect(tooltip).toBeVisible();
-    await expect(tooltip.locator('.app-tooltip__title')).toHaveText('Agent execution');
-    await expect(tooltip.locator('.app-tooltip__body')).toContainText('coding seat');
+    await expect(tooltip.locator('.cac-tooltip__title')).toHaveText('Agent execution');
+    await expect(tooltip.locator('.cac-tooltip__body')).toContainText('coding seat');
 
     // PRE: the loop guard explanation mentions the loop guard.
     await page.locator('[data-step-id="pre-loop-guard"]')
       .getByTestId('overview-pipeline-step-name').hover();
-    await expect(tooltip.locator('.app-tooltip__body')).toContainText('loop guard');
+    await expect(tooltip.locator('.cac-tooltip__body')).toContainText('loop guard');
 
     // ASPECT: the requirement-fit aspect explanation mentions acceptance criteria.
     await page.locator('[data-step-id="aspect-requirement-fit"]')
       .getByTestId('overview-pipeline-step-name').hover();
-    await expect(tooltip.locator('.app-tooltip__body')).toContainText('acceptance criteria');
+    await expect(tooltip.locator('.cac-tooltip__body')).toContainText('acceptance criteria');
 
     // TOOL: the commit-attribution step explanation mentions git commits.
     await page.locator('[data-step-id="post-git-commit-attribution"]')
       .getByTestId('overview-pipeline-step-name').hover();
-    await expect(tooltip.locator('.app-tooltip__body')).toContainText('git commits');
+    await expect(tooltip.locator('.cac-tooltip__body')).toContainText('git commits');
 
     // DECISION: the orchestrator decision explanation mentions the final ruling.
     await page.locator('[data-step-id="post-orchestrator-decision"]')
       .getByTestId('overview-pipeline-step-name').hover();
-    await expect(tooltip.locator('.app-tooltip__body')).toContainText('final ruling');
+    await expect(tooltip.locator('.cac-tooltip__body')).toContainText('final ruling');
 
     // DRIFT: the drift step explanation flags that it is off by default.
     await page.locator('[data-step-id="post-drift-adr-code"]')
       .getByTestId('overview-pipeline-step-name').hover();
-    await expect(tooltip.locator('.app-tooltip__body')).toContainText('off by default');
+    await expect(tooltip.locator('.cac-tooltip__body')).toContainText('off by default');
 
     if (RESULTS_DIR) {
       // Keep the last tooltip open for the capture.

@@ -52,6 +52,12 @@
   --studio-border:        var(--alpha-white-06);
   --studio-border-strong: var(--alpha-white-10);
   --studio-border-muted:  color-mix(in srgb, var(--studio-fg-dim) 18%, transparent);
+  // AGT-2034 — ring around the tab project-colour dot. On dark surfaces the
+  // 72%-lightness pastel already clears 5.7:1 against the tab, so the ring is
+  // just a subtle separator (--studio-border). The light block below overrides
+  // it with a defined dark edge because the same pastel drops below 3:1 on a
+  // white tab (see WCAG audit in results/contrast-audit.md).
+  --studio-tab-dot-ring:  var(--studio-border);
 
   // ---------------------------------------------------------------------------
   // Layout — theme-independent sizing contracts
@@ -167,6 +173,30 @@
   // Text to use ON an accent fill (a brand-orange button etc.). Tuned for dark
   // text on the saturated accent in both themes.
   --studio-on-accent: var(--color-grey-950);
+  // Tab counters use a deliberately darker brand fill so white numerals clear
+  // WCAG AA in both themes. This is separate from button on-accent contrast.
+  --studio-tab-count-active-bg: var(--color-orange-700);
+  --studio-tab-count-active-fg: var(--color-grey-50);
+
+  // ---------------------------------------------------------------------------
+  // Navigation: the ONE active side-menu-item treatment (AGT-2010)
+  // ---------------------------------------------------------------------------
+  // Operator directive 2026-07-09: the active entry in every side menu must be
+  // a clearly *coloured* band that reads at a glance, with one shared visual
+  // concept across all of them. Before this, each rail rolled its own active
+  // look: a near-grey 14% tint on the shared tree-row, a plain grey
+  // bg-selected on the settings rails, and hard-coded off-brand blue / indigo
+  // on the CLI-session and focused-view task lists. These four tokens are the
+  // single source of truth: an accent-tinted fill, a bright accent side bar,
+  // strong foreground text, and a distinct hover-on-active. Every side menu
+  // (Explorer tree, Project Hub rail, Prompt catalogue, Workspace / Orchestrator
+  // settings rails, Wiki + Agent-Docs trees, Open-tabs list, activity bar)
+  // consumes them so the concept stays identical and future-proof. The bar is
+  // painted by consumers via `inset <n>px 0 0 0 var(--studio-nav-active-bar)`.
+  --studio-nav-active-bg:       color-mix(in srgb, var(--studio-accent) 30%, var(--studio-bg-selected));
+  --studio-nav-active-bg-hover: color-mix(in srgb, var(--studio-accent) 38%, var(--studio-bg-selected));
+  --studio-nav-active-fg:       var(--studio-fg-strong);
+  --studio-nav-active-bar:      var(--studio-accent);
 
   // ---------------------------------------------------------------------------
   // Severity — pass / warn / high / info / pending verdict colours
@@ -183,7 +213,7 @@
   --lane-backlog:      #9d9d9d;
   --lane-prep:         #d1bfa5;
   --lane-ready:        var(--color-green-vscode);
-  --lane-progress:     var(--color-blue-400);
+  --lane-progress:     var(--studio-accent-warn-strong);
   --lane-auto-review:  var(--color-yellow-200);
   --lane-human-review: var(--color-purple-vscode);
   --lane-escalated:    var(--studio-accent-6);
@@ -531,6 +561,11 @@
   --studio-border:        var(--color-grey-400);
   --studio-border-strong: var(--color-grey-500);
   --studio-border-muted:  color-mix(in srgb, var(--studio-fg-muted) 22%, transparent);
+  // AGT-2034 — a defined dark edge so the pastel dot stays perceivable on the
+  // white/grey-200 tab surfaces. rgba(0,0,0,0.50) measures 3.95:1 against #fff
+  // and 3.84:1 against #ececec, clearing WCAG 1.4.11 (3:1 for non-text objects)
+  // regardless of the fill hue — the grey-400 border alone was only ~1.4:1.
+  --studio-tab-dot-ring:  var(--alpha-black-50);
 
   // Scrim — lighter overlay over a white shell.
   --studio-scrim:         var(--alpha-black-40);
@@ -565,6 +600,14 @@
   --studio-error:                 var(--studio-accent-6-strong);
   --studio-mono:                  var(--studio-fg-strong);
   --studio-hash:                  var(--studio-accent-success-strong);
+
+  // Navigation active-item fill on the white shell. Mixed over the opaque
+  // elevated grey (not the translucent orange bg-selected) so the band stays a
+  // predictable, clearly-warm orange tint that reads against the near-white
+  // sidebar; fg + bar inherit the :root definitions (fg-strong flips to near
+  // black, the bar stays brand orange).
+  --studio-nav-active-bg:       color-mix(in srgb, var(--studio-accent) 26%, var(--studio-bg-elevated));
+  --studio-nav-active-bg-hover: color-mix(in srgb, var(--studio-accent) 34%, var(--studio-bg-elevated));
 
   // Teal status pigment — darker teal so teal-on-tint stays legible on white.
   --studio-accent-teal:           var(--color-teal-700);
@@ -609,7 +652,7 @@
   --lane-backlog:      #6e6e6e;
   --lane-prep:         #92745a;
   --lane-ready:        var(--color-green-700);
-  --lane-progress:     var(--color-blue-700);
+  --lane-progress:     var(--color-amber-700);
   --lane-auto-review:  var(--color-yellow-700);
   --lane-human-review: #7c3aed;
   --lane-escalated:    var(--color-red-700);

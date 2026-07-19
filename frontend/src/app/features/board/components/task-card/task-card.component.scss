@@ -1,9 +1,10 @@
     .task-card {
       --task-card-state-color: var(--state-color, var(--studio-card-border));
       --task-card-ring: 0 0 0 1px var(--studio-card-state-border);
+      --task-card-type-color: rgba(148, 163, 184, 0.55);
 
       background: var(--studio-card-bg, var(--card-bg, #1e1e2e));
-      border: 1px solid var(--studio-card-state-border, var(--border, #333));
+      border: 1px solid color-mix(in srgb, var(--task-card-type-color) 20%, var(--studio-card-state-border, var(--border, #333)));
       border-radius: var(--studio-card-radius);
       padding: var(--studio-card-padding);
       cursor: pointer;
@@ -39,6 +40,14 @@
       box-shadow:
         var(--task-card-ring),
         var(--studio-card-shadow);
+    }
+    /* Keyboard focus: the card is tabbable (tabindex=0) so the context menu —
+       now the only place Delete lives — is reachable via the Menu key /
+       Shift+F10 without a mouse. Show a clear accent ring on keyboard focus,
+       suppressed for mouse clicks via :focus-visible. */
+    .task-card:focus-visible {
+      outline: 2px solid var(--studio-accent, #d97757);
+      outline-offset: 2px;
     }
     /* Drag-source: while a card is being dragged, dim it to ~55% so the
        drag-image (browser-rendered ghost) reads as the active object.
@@ -95,6 +104,9 @@
     .task-card--5-completed { --state-color: var(--lane-completed); }
     .task-card--6-completed { --state-color: var(--lane-completed); }
     .task-card--7-archive { --state-color: var(--lane-archive); }
+    .task-card[data-task-type='bug'] { --task-card-type-color: rgba(248, 113, 113, 0.85); }
+    .task-card[data-task-type='feature'] { --task-card-type-color: rgba(96, 165, 250, 0.85); }
+    .task-card[data-task-type='chore'] { --task-card-type-color: rgba(148, 163, 184, 0.55); }
 
     /* F39: running tasks must jump out of the column on BOTH themes. The
        prior dark-only halo (hardcoded blue rgba + #1e1e2e base) dissolved
@@ -159,10 +171,19 @@
     }
 
     .task-card__header {
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      margin-bottom: var(--studio-card-section-gap);
+      gap: var(--studio-spacing-2);
+      min-height: 22px;
+      margin-bottom: var(--studio-spacing-2);
+    }
+    .task-card__header-signals {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--studio-spacing-1);
+      min-width: 0;
     }
     .task-card__project {
       display: inline-flex;
@@ -203,66 +224,37 @@
     .task-card__owner-chip {
       display: inline-flex;
       align-items: center;
-      gap: var(--studio-spacing-1);
-      min-height: var(--studio-card-pill-height);
-      padding: 0 var(--studio-card-pill-padding-x) 0 var(--studio-spacing-1);
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 600;
+      gap: 4px;
+      height: 22px;
+      padding: 0 6px;
+      border-radius: 7px;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.10);
       color: var(--studio-fg-dim);
-      max-width: 140px;
+      max-width: 58px;
       overflow: hidden;
+      font-variant-numeric: tabular-nums;
     }
+    .task-card__owner-icon,
     .task-card__owner-emoji {
-      font-size: 12px;
+      font-size: 11px;
       line-height: 1;
+      opacity: 0.72;
     }
     .task-card__owner-name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       min-width: 0;
+      letter-spacing: 0.02em;
     }
-    /* Delete affordance: positioned absolutely on the card so it survives
-       compact mode (the header is display:none in compact). Hidden until
-       card hover so the cards stay calm in the default board view. The
-       button stops propagation so clicking it never opens the detail panel.
-       The confirmation prompt itself lives in the parent component. */
-    .task-card__delete {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      z-index: 2;
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--studio-fg-muted);
-      width: 22px;
-      height: 22px;
-      padding: 0;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      line-height: 1;
-      display: grid;
-      place-items: center;
-      opacity: 0;
-      transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    .task-card--compact .task-card__delete {
-      top: 4px;
-      right: 4px;
-    }
-    .task-card:hover .task-card__delete,
-    .task-card__delete:focus-visible {
-      opacity: 1;
-    }
-    .task-card__delete:hover {
-      background: rgba(244, 63, 94, 0.15);
-      border-color: rgba(244, 63, 94, 0.40);
-      color: #fda4af;
-    }
+    /* Delete moved off the card into the right-click / Menu-key context menu
+       (destructive row) — the hover trash button was a fehlklick-risk right
+       where the operator clicks/drags. The confirm/undo prompt still lives in
+       the parent component. */
 
     // F5 + A5 (2026-05-21): "Pick next" affordance for 2-ready cards.
     // Idle: small icon-only pill. Hover/focus: text "Next" expands in
@@ -358,20 +350,25 @@
     .task-card__key-chip {
       display: inline-flex;
       align-items: center;
-      min-height: 18px;
-      padding: 0 var(--studio-spacing-2);
-      border-radius: 999px;
+      justify-content: center;
+      justify-self: start;
+      height: 22px;
+      max-width: 100%;
+      padding: 0 6px;
+      border-radius: 7px;
       font-size: 10px;
-      font-weight: 650;
+      font-weight: 700;
+      line-height: 1;
       font-variant-numeric: tabular-nums;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.02em;
       color: var(--studio-fg-dim);
       background: var(--studio-card-muted-bg);
       border: 1px solid var(--studio-card-muted-border);
       vertical-align: middle;
-      margin-right: 4px;
       user-select: none;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     // Epic container badge: a loud accent pill so an epic card is obvious in a
     // lane mixed with ordinary tasks. Sub-task chip is the quiet inverse - a
@@ -493,12 +490,40 @@
       gap: var(--studio-spacing-2);
       margin-bottom: var(--studio-card-section-gap);
     }
+    /* DtC step 6 — CooldownRetry banner. A 3-progress card that infra-crashed and
+       is holding out its scheduled re-pickup backoff (runActivity.failed-backoff).
+       Full-width warn-toned banner (the DtC "transient" tone) so a cooling task
+       reads distinctly from the "Running live" tint and from a fresh stall — it is
+       neither a live run nor a dead one. R1: status via all-round background tint,
+       never a left accent bar. */
+    .task-card__cooldown {
+      display: flex;
+      align-items: center;
+      gap: var(--studio-spacing-2);
+      margin-bottom: var(--studio-card-section-gap);
+      padding: 4px var(--studio-spacing-2);
+      border-radius: 6px;
+      font-size: var(--studio-card-meta-size);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 42%, transparent);
+      cursor: help;
+    }
+    .task-card__cooldown-glyph { flex: 0 0 auto; font-size: 12px; }
+    .task-card__cooldown-label { flex: 1 1 auto; min-width: 0; }
+    .task-card__cooldown-countdown {
+      flex: 0 0 auto;
+      font-variant-numeric: tabular-nums;
+      opacity: 0.85;
+    }
     .task-card__execution-pill,
     .task-card__pending-pill,
     .task-card__waiting-pill,
     .task-card__mode-pill,
     .task-card__type-pill,
-    .task-card__state-pill,
     .task-card__loop-pill,
     .task-card__review-pill,
     .task-card__code-review-pill,
@@ -507,39 +532,49 @@
     .task-card__human-review-pill,
     .task-card__git-state-pill,
     .task-card__grade-pill,
+    .task-card__external-pill,
     .task-card__phase-pill {
       display: inline-flex;
       align-items: center;
       gap: var(--studio-spacing-1);
       min-height: var(--studio-card-pill-height);
       padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 999px;
+      border-radius: 7px;
       font-size: var(--studio-card-meta-size);
       font-weight: 600;
       letter-spacing: 0.02em;
     }
     /* Mode badge (planning / research). Only non-coding modes render a pill so
-       the board stays quiet for the default mode; the tinted variants make a
-       planning or research card recognizable at a glance. Glyph + label come
-       from the same source as the create-dialog mode picker. */
+       the board stays quiet for the default mode. AGT-2069: planning cards get
+       a deliberately loud, filled badge ("here work is PLANNED") so a
+       planning-task -> follow-up-card workflow is unmistakable at a glance;
+       research stays a calmer filled tint. Glyph + label come from the same
+       source as the create-dialog mode picker. */
     .task-card__mode-pill {
       border: 1px solid transparent;
       cursor: help;
       white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 700;
     }
     .task-card__mode-glyph {
       font-size: 11px;
       line-height: 1;
     }
+    /* AGT-2069: prominent filled planning badge (both themes: saturated fill +
+       light text reads on light and dark card surfaces). */
     .task-card__mode-pill--planning {
-      color: #d8b4fe;
-      background: rgba(192, 132, 252, 0.12);
-      border-color: rgba(192, 132, 252, 0.32);
+      color: #f5f3ff;
+      background: #7c3aed;
+      border-color: #6d28d9;
+      box-shadow: 0 1px 4px rgba(124, 58, 237, 0.45);
     }
     .task-card__mode-pill--research {
-      color: #7dd3fc;
-      background: rgba(56, 189, 248, 0.12);
-      border-color: rgba(56, 189, 248, 0.32);
+      color: #ecfeff;
+      background: #0e7490;
+      border-color: #155e75;
+      box-shadow: 0 1px 4px rgba(14, 116, 144, 0.4);
     }
     .task-card__pending-pill {
       color: var(--severity-warn);
@@ -547,14 +582,55 @@
       border: 1px solid rgba(249, 226, 175, 0.28);
       cursor: help;
     }
-    /* F34: dependsOn target not yet complete. Amber-toned "blocked" cue so
-       the operator can see at a glance that a card is gated on another task. */
+    /* AGT-2029: waits-on dependency chip. Clickable (routes to the dependency
+       it names) and state-aware: amber "open" while a dependency is still
+       running (the card is held back from auto-pickup), green "ready" once all
+       dependencies complete, red "cycle" for an unfulfillable dependency cycle
+       (a configuration error). */
     .task-card__waiting-pill {
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: inherit;
+      border: 1px solid transparent;
+      background: transparent;
+      transition:
+        background 0.12s ease,
+        border-color 0.12s ease;
+    }
+    .task-card__waiting-glyph {
+      font-size: 11px;
+      line-height: 1;
+    }
+    .task-card__waiting-pill--open {
       color: var(--severity-warn);
       background: rgba(249, 226, 175, 0.12);
-      border: 1px solid rgba(249, 226, 175, 0.28);
-      cursor: help;
-      white-space: nowrap;
+      border-color: rgba(249, 226, 175, 0.28);
+    }
+    .task-card__waiting-pill--open:hover {
+      background: rgba(249, 226, 175, 0.2);
+      border-color: rgba(249, 226, 175, 0.45);
+    }
+    .task-card__waiting-pill--ready {
+      color: #a6e3a1;
+      background: rgba(166, 227, 161, 0.12);
+      border-color: rgba(166, 227, 161, 0.28);
+    }
+    .task-card__waiting-pill--ready:hover {
+      background: rgba(166, 227, 161, 0.2);
+      border-color: rgba(166, 227, 161, 0.45);
+    }
+    .task-card__waiting-pill--cycle {
+      color: #f38ba8;
+      background: rgba(243, 139, 168, 0.14);
+      border-color: rgba(243, 139, 168, 0.34);
+    }
+    .task-card__waiting-pill--cycle:hover {
+      background: rgba(243, 139, 168, 0.22);
+      border-color: rgba(243, 139, 168, 0.5);
+    }
+    .task-card__waiting-pill:focus-visible {
+      outline: 2px solid var(--studio-accent);
+      outline-offset: 1px;
     }
     /* Auto-loop pill: shown only while the orchestrator is actively
        answering NEEDS_INPUT for this job. Cyan when within budget;
@@ -566,7 +642,7 @@
       gap: var(--studio-spacing-1);
       min-height: var(--studio-card-pill-height);
       padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 999px;
+      border-radius: 7px;
       font-size: var(--studio-card-meta-size);
       font-weight: 600;
       letter-spacing: 0.02em;
@@ -592,7 +668,7 @@
       gap: var(--studio-spacing-1);
       min-height: var(--studio-card-pill-height);
       padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 999px;
+      border-radius: 7px;
       font-size: var(--studio-card-meta-size);
       font-weight: 600;
       letter-spacing: 0.02em;
@@ -634,7 +710,7 @@
       gap: var(--studio-spacing-1);
       min-height: var(--studio-card-pill-height);
       padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 999px;
+      border-radius: 7px;
       font-size: var(--studio-card-meta-size);
       font-weight: 600;
       letter-spacing: 0.02em;
@@ -658,7 +734,7 @@
       gap: var(--studio-spacing-1);
       min-height: var(--studio-card-pill-height);
       padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 999px;
+      border-radius: 7px;
       font-size: var(--studio-card-meta-size);
       font-weight: 650;
       letter-spacing: 0;
@@ -701,7 +777,7 @@
       gap: var(--studio-spacing-1);
       min-height: var(--studio-card-pill-height);
       padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 999px;
+      border-radius: 7px;
       font-size: var(--studio-card-meta-size);
       font-weight: 650;
       letter-spacing: 0;
@@ -723,18 +799,24 @@
       background: color-mix(in srgb, var(--studio-accent-6) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 40%, transparent);
     }
+    .task-card__issue-pill--historical {
+      color: var(--studio-fg-dim);
+      background: color-mix(in srgb, var(--studio-fg-dim) 8%, transparent);
+      border-color: color-mix(in srgb, var(--studio-fg-dim) 35%, transparent);
+      font-weight: 500;
+    }
     /* Human-decision pill (Done & Decide column). The attention variant
        reuses the failure accent (--studio-accent-6) shared with the failed
        execution pill and high-severity issue pill, so "this needs a human"
-       reads in the same red vocabulary across the board. The accept variant
-       is a calm green sign-off cue, distinct from the loud attention tone. */
+       reads in the same red vocabulary across the board. Accepted cards stay
+       quiet so the board does not repeat "Reviewed" as another chip. */
     .task-card__human-review-pill {
       display: inline-flex;
       align-items: center;
       gap: var(--studio-spacing-1);
       min-height: var(--studio-card-pill-height);
       padding: 0 var(--studio-card-pill-padding-x);
-      border-radius: 999px;
+      border-radius: 7px;
       font-size: var(--studio-card-meta-size);
       font-weight: 650;
       letter-spacing: 0.02em;
@@ -750,11 +832,6 @@
       background: color-mix(in srgb, var(--studio-accent-6) 18%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
     }
-    .task-card__human-review-pill--accept {
-      color: var(--studio-accent-success-strong);
-      background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
-    }
     /* Quality-grade pill (ASS-1657). The automatic code-review step grades
        every pipelined task A/B/C/D; the grade reads loud and colour-coded so
        the operator gets the quality verdict at a glance. A/B share the calm
@@ -762,7 +839,15 @@
        failure red — matching the verdict colour language used elsewhere on the
        card. The boxed letter makes the grade legible even when the row is busy. */
     .task-card__grade-pill {
+      display: inline-grid;
+      place-items: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 5px;
+      border-radius: 7px;
       font-weight: 700;
+      font-size: 10px;
+      line-height: 1;
       border: 1px solid transparent;
       cursor: help;
     }
@@ -770,15 +855,15 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 15px;
-      height: 15px;
-      padding: 0 3px;
-      border-radius: 4px;
+      min-width: auto;
+      height: auto;
+      padding: 0;
+      border-radius: 0;
       font-weight: 800;
-      font-size: 11px;
+      font-size: 10px;
       line-height: 1;
-      background: currentColor;
-      color: var(--studio-bg-elevated);
+      background: transparent;
+      color: currentColor;
     }
     .task-card__grade-pill--a {
       color: var(--studio-accent-success-strong);
@@ -799,6 +884,22 @@
       color: var(--studio-accent-6-strong);
       background: color-mix(in srgb, var(--studio-accent-6) 18%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
+    }
+    /* "extern erledigt" badge: a task reconciled through the external-completion
+       endpoint. Info/blue tone reads as neutral-positive (deliberately distinct
+       from the green "accepted" and red "attention" pills) so an out-of-band
+       completion looks intentionally done, not abandoned. */
+    .task-card__external-pill {
+      border: 1px solid transparent;
+      cursor: help;
+      white-space: nowrap;
+      color: var(--studio-accent-3-strong);
+      background: color-mix(in srgb, var(--studio-accent-3) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
+    }
+    .task-card__external-glyph {
+      font-size: 11px;
+      line-height: 1;
     }
     .task-card__execution-pill {
       border: 1px solid transparent;
@@ -860,6 +961,14 @@
       background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
     }
+    /* Run-Liveness Slice B: "Waiting for answer since m:ss". An attention/pending
+       amber tint (like intake-running, but a different lane so they never
+       co-occur) so a steered card stands out without a left accent bar (R1). */
+    :is(.task-card__phase-pill--steer-pending, .task-card__phase-pill--loop-waiting) {
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-warn) 42%, transparent);
+    }
     .task-card__phase-pill--post-processing-running {
       color: var(--lane-auto-review);
       background: color-mix(in srgb, var(--lane-auto-review) 14%, var(--studio-bg-elevated));
@@ -881,13 +990,6 @@
     .task-card__type-pill {
       border: 1px solid transparent;
       font-weight: 600;
-    }
-    .task-card__state-pill {
-      color: var(--task-card-state-color);
-      background: color-mix(in srgb, var(--task-card-state-color) 12%, var(--studio-bg-elevated));
-      border: 1px solid color-mix(in srgb, var(--task-card-state-color) 36%, transparent);
-      font-weight: 650;
-      text-transform: lowercase;
     }
     /* Git-integration-state badge (ASS-1665). Pure lane-derived phase: a card's
        work is either still on its task branch (pre-merge), merged into develop
@@ -936,23 +1038,41 @@
       display: flex;
       flex-wrap: wrap;
       gap: var(--studio-spacing-1);
+      align-items: center;
       margin: 0 0 var(--studio-card-section-gap);
     }
     .task-card__tag-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.02em;
-      min-height: 18px;
+      line-height: 1;
+      height: 18px;
       padding: 0 var(--studio-spacing-2);
-      border-radius: 999px;
+      border-radius: 5px;
       color: var(--studio-fg-strong);
       background: color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 22%, rgba(0,0,0,0));
       border: 1px solid var(--tag-color, var(--studio-fg-dim));
+      box-sizing: border-box;
     }
     .task-card__tag-chip--ghost {
       color: var(--studio-fg-dim);
       background: rgba(255, 255, 255, 0.02);
       border: 1px dashed rgba(148, 163, 184, 0.40);
+    }
+    .task-card__tag-chip--historical {
+      color: var(--studio-fg-dim);
+      background: color-mix(in srgb, var(--studio-fg-dim) 8%, transparent);
+      border-color: color-mix(in srgb, var(--studio-fg-dim) 35%, transparent);
+      font-weight: 500;
+      gap: var(--studio-spacing-1);
+    }
+    .task-card__tag-chip-history-glyph {
+      font-size: 9px;
+      line-height: 1;
+      opacity: 0.75;
     }
     /* ADR-0025: ephemeral aspect-concern chips. The ⚠ glyph + amber
        tone signals "the orchestrator looked at this and flagged
@@ -987,34 +1107,116 @@
       line-height: 1;
       opacity: 0.8;
     }
+    /* PUB-1: "publishable: npm, website" chip on accepted cards. */
+    .task-card__publishable {
+      display: flex;
+      margin: 0 0 var(--studio-card-section-gap);
+    }
+    .task-card__publishable-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1;
+      padding: 3px var(--studio-spacing-2);
+      border-radius: 5px;
+      color: var(--studio-success);
+      background: color-mix(in srgb, var(--studio-success) 14%, rgba(0,0,0,0));
+      border: 1px solid color-mix(in srgb, var(--studio-success) 55%, transparent);
+    }
+    .task-card__publishable-label { opacity: 0.8; font-weight: 500; }
     .task-card__meta {
       display: flex;
-      justify-content: space-between;
-      gap: var(--studio-spacing-2);
+      justify-content: flex-start;
+      align-items: center;
+      gap: 6px;
       flex-wrap: wrap;
       font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-dim);
-      margin-bottom: var(--studio-card-section-gap);
+      margin-bottom: 5px;
+      min-width: 0;
+    }
+    .task-card__meta-main {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      row-gap: 3px;
+      flex-wrap: wrap;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+    .task-card__type-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      line-height: 1;
+      cursor: help;
+      flex: 0 0 auto;
+    }
+    .task-card__type-icon app-studio-icon {
+      display: block;
+      line-height: 0;
+    }
+    .task-card__type-icon--bug {
+      color: #ef4444;
+      background: rgba(248, 113, 113, 0.07);
+      border-color: rgba(248, 113, 113, 0.22);
+    }
+    .task-card__type-icon--feature {
+      color: #2563eb;
+      background: rgba(96, 165, 250, 0.07);
+      border-color: rgba(96, 165, 250, 0.22);
+    }
+    .task-card__type-icon--chore {
+      color: var(--studio-fg-dim);
+      background: rgba(148, 163, 184, 0.08);
+      border-color: rgba(148, 163, 184, 0.20);
     }
     .task-card__effective-model {
       display: inline-flex;
       align-items: center;
-      gap: var(--studio-spacing-1);
+      gap: 4px;
+      flex: 1 1 80px;
       font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-dim);
+      min-width: 0;
+      max-width: 100%;
+      line-height: 1.2;
     }
     .task-card__effective-model-icon {
-      font-size: 12px;
+      font-size: 11px;
       line-height: 1;
       flex: 0 0 auto;
     }
     .task-card__effective-model-cli {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-weight: 600;
       color: var(--studio-fg-dim);
+      white-space: nowrap;
+    }
+    .task-card__effective-model-cli::after {
+      content: "";
+      width: 2px;
+      height: 2px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.42;
     }
     .task-card__effective-model-name {
       font-family: var(--font-mono, monospace);
       color: var(--studio-fg);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .task-card__effective-model--default .task-card__effective-model-name {
       font-style: italic;
@@ -1023,11 +1225,107 @@
     .task-card__effective-model--default .task-card__effective-model-cli {
       font-style: italic;
     }
+    .task-card__effective-model[data-model-source="fallback"] {
+      border-color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn-strong) 12%, transparent);
+    }
+    /* AGT-2003 runner badge next to the CLI badge. Remote = accent chip with an
+       arrow + runner name so a card running on another host is recognizable at a
+       glance (the operator's lokal-vs-remote "Abgleich"); local = a quiet muted
+       "lokal" chip. Recognizable-pattern sibling of the git-state signal. */
+    .task-card__runner-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--studio-spacing-1);
+      flex: 0 0 auto;
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
+      border-radius: 7px;
+      border: 1px solid transparent;
+      font-size: var(--studio-card-meta-size);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      max-width: 40%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: help;
+    }
+    .task-card__runner-pill--remote {
+      color: var(--studio-accent-strong);
+      background: color-mix(in srgb, var(--studio-accent-2) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-2) 40%, transparent);
+    }
+    .task-card__runner-pill--local {
+      color: var(--studio-fg-muted);
+      background: color-mix(in srgb, var(--studio-fg-muted) 8%, var(--studio-bg-elevated));
+      border-color: var(--studio-card-muted-border);
+      font-weight: 500;
+    }
+    .task-card__runner-glyph {
+      font-size: 11px;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
     .task-card__activity {
       padding-top: var(--studio-spacing-2);
       border-top: 1px solid var(--studio-card-muted-border);
       font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-muted);
+    }
+    .task-card__pipeline {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 12px;
+      margin: 0 0 5px;
+      color: var(--studio-fg-muted);
+      font-size: 8px;
+      font-weight: 650;
+      letter-spacing: 0;
+      cursor: help;
+    }
+    .task-card__pipeline-dots {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      height: 12px;
+    }
+    .task-card__pipeline-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--studio-card-muted-border);
+      opacity: 0.62;
+      flex: 0 0 auto;
+    }
+    .task-card__pipeline-dot--done {
+      background: color-mix(in srgb, var(--studio-accent-success) 68%, var(--studio-card-muted-border));
+      opacity: 0.68;
+    }
+    .task-card__pipeline-dot--active {
+      width: 9px;
+      height: 9px;
+      box-sizing: border-box;
+      background: transparent;
+      border: 1.5px solid var(--studio-accent-3-strong);
+      opacity: 1;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
+    }
+    .task-card__pipeline-dot--blocked {
+      width: 9px;
+      height: 9px;
+      box-sizing: border-box;
+      background: transparent;
+      border: 1.5px solid var(--studio-accent-6-strong);
+      opacity: 1;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--studio-accent-6) 14%, transparent);
+    }
+    .task-card__pipeline-current {
+      color: var(--studio-fg-muted);
+      font-size: 8px;
+      line-height: 1;
     }
     .task-card__git {
       display: inline-flex;
@@ -1046,6 +1344,92 @@
     .task-card__git-count { color: #fbbf24; font-weight: 600; }
     .task-card__git-count--clean { color: #86efac; }
     .task-card__git-stat { color: var(--studio-fg-dim); font-family: var(--font-mono, monospace); font-size: 10px; }
+    .task-card__change-context {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin: 0 0 var(--studio-card-section-gap);
+      padding-top: var(--studio-spacing-2);
+      border-top: 1px solid var(--studio-card-muted-border);
+      color: var(--studio-fg-dim);
+      font-size: var(--studio-card-meta-size);
+    }
+    .task-card__change-head {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: var(--studio-spacing-2);
+      min-width: 0;
+    }
+    .task-card__change-ref {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--studio-spacing-1);
+      min-width: 0;
+    }
+    /* AGT-2046: the cryptic "BR"/"WT"/"TAG" two-letter chip is gone (the operator
+       could not decode it). A quiet branch / archive glyph with a plain-text
+       tooltip replaces it; the branch NAME beside it now carries the meaning. */
+    .task-card__change-ref-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 16px;
+      height: 16px;
+      color: var(--studio-fg-muted);
+      font-size: 12px;
+      line-height: 1;
+      cursor: help;
+      flex: 0 0 auto;
+    }
+    /* AGT-2046 / AGT-2063: always-on two-segment merge signal [d|m]. develop |
+       main. The old design boxed the whole pair in a bordered tile AND boxed each
+       letter in its own bordered slot, the boxed-in look the operator flagged. It
+       now reads as two NAKED mono letters (no frames, matching the card's other
+       bare glyphs): a strong success-green letter means the work has landed on
+       that rung, a quiet dimmed letter means it has not. Colour is the only
+       channel, read from theme tokens so it holds in both themes (R5). No left
+       accent bar or border box anywhere (R1). */
+    .task-card__merge-signal {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      cursor: help;
+      flex: 0 0 auto;
+      font-variant-numeric: tabular-nums;
+    }
+    .task-card__merge-seg {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      text-transform: lowercase;
+      /* NOT merged: a quiet, dimmed letter so it recedes. */
+      color: var(--studio-fg-dim);
+    }
+    /* Merged: strong success green so the landed rung catches the eye on a scan
+       (the operator asked for a stronger signal), carried by colour + weight,
+       not a box. */
+    .task-card__merge-seg--on {
+      color: var(--studio-success);
+      font-weight: 800;
+    }
+    .task-card__change-ref-value {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--font-mono, monospace);
+      color: var(--studio-fg);
+    }
+    .task-card__change-summary,
+    .task-card__change-stat {
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .task-card__change-stat {
+      color: var(--studio-fg-muted);
+      font-family: var(--font-mono, monospace);
+      font-size: 10px;
+    }
     // Commit chain: one row per attributed commit (newest first), up to
     // three, then a "+N more" disclosure. Stacked rather than inline so 2-3
     // commits each show their own SHA + subject + files line (AC#4).
@@ -1053,11 +1437,11 @@
       display: flex;
       flex-direction: column;
       gap: var(--studio-spacing-1);
-      margin: 0 0 var(--studio-card-section-gap);
-      padding: var(--studio-spacing-2);
-      border-radius: 10px;
-      background: var(--studio-commit-bg);
-      border: 1px solid var(--studio-commit-border);
+      margin: 0;
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+      border: 0;
       font-size: var(--studio-card-meta-size);
       color: var(--studio-commit-fg);
     }
@@ -1097,8 +1481,8 @@
       gap: var(--studio-spacing-1);
       min-height: var(--studio-card-pill-height);
       padding: 0 var(--studio-card-pill-padding-x);
-      margin: 0 0 var(--studio-card-section-gap);
-      border-radius: 999px;
+      margin: 0;
+      border-radius: 7px;
       font-size: var(--studio-card-meta-size);
       font-weight: 600;
     }
@@ -1122,26 +1506,57 @@
       position: relative;
       display: inline-flex;
       align-items: center;
+      margin-left: auto;
+      min-width: 0;
+      flex: 0 0 auto;
     }
     .task-card__token-bubble {
-      min-width: 28px;
-      height: 18px;
-      padding: 0 6px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.18);
-      display: inline-grid;
-      place-items: center;
+      min-width: 0;
+      height: 17px;
+      padding: 0 3px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
+      font-weight: 650;
+      line-height: 1;
+      letter-spacing: 0;
       cursor: help;
-      color: var(--studio-fg);
-      background: rgba(148,163,184,0.18);
+      color: var(--studio-fg-muted);
+      background: transparent;
       font-variant-numeric: tabular-nums;
+    }
+    .task-card__token-bubble:hover {
+      background: var(--studio-card-muted-bg);
+      border-color: var(--studio-card-muted-border);
+      color: var(--studio-fg-dim);
     }
     .task-card__token-bubble:focus-visible {
       outline: 2px solid #7dd3fc;
       outline-offset: 2px;
+    }
+    .task-card__token-bars {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 1px;
+      width: 9px;
+      height: 9px;
+      flex: 0 0 auto;
+      color: currentColor;
+      opacity: 0.9;
+    }
+    .task-card__token-bars span {
+      width: 2px;
+      border-radius: 2px 2px 0 0;
+      background: currentColor;
+    }
+    .task-card__token-bars span:nth-child(1) { height: 3px; opacity: 0.55; }
+    .task-card__token-bars span:nth-child(2) { height: 6px; opacity: 0.75; }
+    .task-card__token-bars span:nth-child(3) { height: 9px; }
+    .task-card__token-label {
+      white-space: nowrap;
     }
     /* Spend-tier colours. Defaults: < 50k = neutral, 50k-500k = blue,
        500k-5M = mauve, > 5M = peach. Tier thresholds are computed in the
@@ -1149,23 +1564,15 @@
        with the rest of the board. */
     .task-card__token-bubble--neutral {
       color: var(--studio-fg-dim);
-      background: rgba(148,163,184,0.18);
-      border-color: rgba(148,163,184,0.32);
     }
     .task-card__token-bubble--blue {
-      color: #bae6fd;
-      background: rgba(56,189,248,0.18);
-      border-color: rgba(56,189,248,0.40);
+      color: color-mix(in srgb, var(--studio-accent-3-strong) 82%, var(--studio-fg-dim));
     }
     .task-card__token-bubble--mauve {
-      color: #e9d5ff;
-      background: rgba(192,132,252,0.20);
-      border-color: rgba(192,132,252,0.42);
+      color: color-mix(in srgb, #c084fc 78%, var(--studio-fg-dim));
     }
     .task-card__token-bubble--peach {
-      color: #fed7aa;
-      background: rgba(251,146,60,0.22);
-      border-color: rgba(251,146,60,0.45);
+      color: color-mix(in srgb, #fb923c 76%, var(--studio-fg-dim));
     }
 
     /* TokenPopoverDirective portals this element to the central body overlay
@@ -1260,8 +1667,10 @@
     .task-card--compact .task-card__header,
     .task-card--compact .task-card__badges,
     .task-card--compact .task-card__meta,
+    .task-card--compact .task-card__pipeline,
     .task-card--compact .task-card__epic-subtasks,
     .task-card--compact .task-card__git,
+    .task-card--compact .task-card__change-context,
     .task-card--compact .task-card__commits,
     .task-card--compact .task-card__no-commits,
     .task-card--compact .task-card__activity {

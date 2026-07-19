@@ -38,8 +38,8 @@ test.describe('Orchestrator side sheet', () => {
     await page.waitForTimeout(1200);
     await page.screenshot({ path: `${SHOTS}/02-side-sheet-open.png`, fullPage: false });
 
-    const chatBody = page.getByTestId('chat-body');
-    await expect(chatBody).toBeVisible();
+    const conversation = page.getByTestId('conversation-view');
+    await expect(conversation).toBeVisible();
 
     const composer = page.getByTestId('chat-input');
     await expect(composer).toBeVisible();
@@ -130,8 +130,10 @@ test.describe('Orchestrator side sheet', () => {
     // 2026-05-16 sidesheet restructure: the sidesheet is Chat-centric.
     // Roadmap Intake / Send to roadmap was retired; the Task (pure chat),
     // Feed, Logic, Manage CLI, Sessions, and Supervisor tabs are also out
-    // of the sheet. Settings opens as a dedicated modal triggered by the
-    // ⚙ button in the sidesheet header.
+    // of the sheet. The ⚙ button in the sidesheet header opens the
+    // orchestrator lifecycle flags; AGT-1812 repointed it from the retired
+    // standalone modal to the "Orchestrator" section of the one consolidated
+    // Settings view.
     await expect(page.getByTestId('orch-side-sheet-tabs')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-tab-intake')).toHaveCount(0);
     await expect(page.getByTestId('roadmap-intake-panel')).toHaveCount(0);
@@ -142,27 +144,34 @@ test.describe('Orchestrator side sheet', () => {
     await expect(page.getByTestId('orch-side-sheet-tab-sessions')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-tab-supervisor')).toHaveCount(0);
 
-    // The Settings (⚙) button opens the Orchestrator Settings modal.
+    // Settings lives in the context menu so the chat header stays compact.
+    await page.getByTestId('orch-context-badge').click();
+    await expect(page.getByTestId('orch-context-menu')).toBeVisible();
     const settingsBtn = page.getByTestId('orch-side-sheet-settings');
     await expect(settingsBtn).toBeVisible();
     await settingsBtn.click();
-    const modal = page.getByTestId('orchestrator-settings-modal');
-    await expect(modal).toBeVisible();
+    const settingsView = page.getByTestId('workspace-settings-inline');
+    await expect(settingsView).toBeVisible();
+    await expect(page.getByTestId('orchestrator-config-overlay')).toBeVisible();
+    await expect(page.getByTestId('orchestrator-logic-panel')).toBeVisible();
+    // The retired standalone modal must be gone.
+    await expect(page.getByTestId('orchestrator-settings-modal')).toHaveCount(0);
     await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
-    await page.screenshot({ path: `${SHOTS}/06-settings-modal-open.png`, fullPage: false });
+    await page.screenshot({ path: `${SHOTS}/06-settings-orchestrator-section.png`, fullPage: false });
 
-    // The modal uses the project-window rail + panel pattern with two
-    // sections: Orchestrator (default) and General.
-    await expect(page.getByTestId('orchestrator-settings-rail-orchestrator')).toBeVisible();
-    await expect(page.getByTestId('orchestrator-settings-rail-general')).toBeVisible();
-    await page.getByTestId('orchestrator-settings-rail-general').click();
-    await expect(page.getByTestId('orchestrator-settings-general-empty')).toBeVisible();
+    // The Settings view rail groups Orchestrator under Global; switch to a
+    // neighbouring Global section and back to prove the rail navigates.
+    await page.getByTestId('workspace-settings-rail-appearance').click();
+    await expect(page.getByTestId('workspace-appearance-overlay')).toBeVisible();
+    await page.getByTestId('workspace-settings-rail-orchestrator').click();
+    await expect(page.getByTestId('orchestrator-logic-panel')).toBeVisible();
     await page.waitForTimeout(150);
-    await page.screenshot({ path: `${SHOTS}/07-settings-modal-general.png`, fullPage: false });
+    await page.screenshot({ path: `${SHOTS}/07-settings-rail-nav.png`, fullPage: false });
 
-    await page.getByTestId('orchestrator-settings-modal-close').click();
-    await expect(modal).toHaveCount(0);
+    await page.getByRole('tab').filter({ hasText: 'Workspace settings' })
+      .getByRole('button', { name: 'Close tab' }).click();
+    await expect(settingsView).toHaveCount(0);
 
     // Final close.
     const closeBtn = page.getByTestId('orch-side-sheet-close');

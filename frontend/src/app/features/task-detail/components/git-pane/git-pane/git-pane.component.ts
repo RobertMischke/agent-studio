@@ -1,13 +1,23 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { GitPaneService } from '../../../services/git-pane.service';
+import { LayoutPanesService } from '../../../services/layout-panes.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
-import type { TaskCommitInfo, TaskCommitMembership, TaskProvenanceView } from '../../../../git';
+import type { TaskCommitInfo, TaskLandedLadder } from '../../../../git';
+import type { CodeReviewListEntry } from '../../../../../services/task.service';
+import {
+  codeReviewVerdictGlyph,
+  codeReviewVerdictLabel,
+  codeReviewVerdictTone,
+  type CodeReviewVerdictTone,
+} from '../../code-review-verdict.util';
 
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
 import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
+import { coalesceDiffByFile } from '../../../../../utils/coalesce-diff';
 import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../../utils/diff2html-lazy';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
 // loaded lazily the first time a non-empty diff arrives. The pre-Cycle-7f
@@ -35,7 +45,7 @@ import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../..
   selector: 'app-git-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, GitFileTreeComponent, TooltipDirective],
+  imports: [DatePipe, NgTemplateOutlet, GitFileTreeComponent, TooltipDirective, MarkdownViewComponent],
   templateUrl: './git-pane.component.html',
   styleUrls: ['./git-pane.component.scss']
 })
@@ -61,6 +71,7 @@ export class GitPaneComponent {
   readonly hide = output<void>();
 
   readonly git = inject(GitPaneService);
+  private readonly layout = inject(LayoutPanesService);
   private readonly sanitizer = inject(DomSanitizer);
 
   /** Diff section fullscreen toggle, scoped to this component. */
@@ -85,6 +96,94 @@ export class GitPaneComponent {
     const next = !this.commitGroupCollapsed();
     this.commitGroupCollapsed.set(next);
     writeCommitGroupCollapsed(next);
+  }
+
+  /**
+   * Master collapse for the whole commit-meta head (landed ladder +
+   * "N task commits" group + per-commit banner) that sits above the
+   * tree/diff split. Collapsing it hands all the vertical space to the
+   * tree + diff so the review surface reads compact; persisted so the
+   * operator's preference survives a reload. Default expanded so the
+   * ladder / commit context stays visible for first-time viewers.
+   */
+  readonly headCollapsed = signal<boolean>(readHeadCollapsed());
+
+  toggleHeadCollapsed(): void {
+    const next = !this.headCollapsed();
+    this.headCollapsed.set(next);
+    writeHeadCollapsed(next);
+  }
+
+  /** Compact label for the collapsed head strip. */
+  readonly headTitle = computed<string>(() => {
+    const n = this.git.commitChain().length;
+    return n > 1 ? `${n} task commits` : 'Commit details';
+  });
+
+  /**
+   * Diff render layout. Side-by-side shows the before/after columns; the
+   * unified (inline) mode collapses to a single "just the change" column
+   * per the operator's ask. Persisted; default side-by-side. This is now
+   * the single source of truth for the diff2html `outputFormat` - the
+   * previous behaviour (implicitly side-by-side only while maximized,
+   * line-by-line otherwise) is replaced by this explicit, remembered
+   * toggle so maximizing no longer silently changes the layout.
+   */
+  readonly diffViewMode = signal<DiffViewMode>(readDiffViewMode());
+
+  toggleDiffViewMode(): void {
+    const next: DiffViewMode = this.diffViewMode() === 'side-by-side' ? 'line-by-line' : 'side-by-side';
+    this.diffViewMode.set(next);
+    writeDiffViewMode(next);
+  }
+
+  // --- Tree | diff splitter (draggable, persisted) -----------------------
+  // In the split (pane-maximized) layout the file-change tree sits left of
+  // the diff. The divider between them is draggable; its width is stored in
+  // px and pushed to the tree column through the `--git-tree-width` custom
+  // property so the SCSS keeps the min/behaviour in one place. Clamp math
+  // lives in `clampTreeWidth` so the drag can never squeeze either side
+  // below its readable floor.
+  readonly treeColWidth = signal<number>(readTreeWidth());
+  readonly treeResizing = signal(false);
+  private treeResize: { pointerId: number; container: HTMLElement } | null = null;
+
+  startTreeResize(event: PointerEvent): void {
+    const splitter = event.currentTarget as HTMLElement;
+    const container = splitter.parentElement;
+    if (!container) return;
+    event.preventDefault();
+    splitter.setPointerCapture(event.pointerId);
+    this.treeResize = { pointerId: event.pointerId, container };
+    this.treeResizing.set(true);
+    document.body.style.cursor = 'col-resize';
+  }
+
+  onTreeResizeMove(event: PointerEvent): void {
+    const drag = this.treeResize;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const rect = drag.container.getBoundingClientRect();
+    this.treeColWidth.set(clampTreeWidth(event.clientX - rect.left, rect.width));
+  }
+
+  endTreeResize(event: PointerEvent): void {
+    const drag = this.treeResize;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    this.treeResize = null;
+    this.treeResizing.set(false);
+    document.body.style.cursor = '';
+    writeTreeWidth(this.treeColWidth());
+  }
+
+  onTreeResizeKey(event: KeyboardEvent): void {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const container = (event.currentTarget as HTMLElement).parentElement;
+    const width = container?.getBoundingClientRect().width ?? 0;
+    const step = event.key === 'ArrowLeft' ? -TREE_RESIZE_STEP : TREE_RESIZE_STEP;
+    this.treeColWidth.set(clampTreeWidth(this.treeColWidth() + step, width));
+    writeTreeWidth(this.treeColWidth());
   }
 
   /**
@@ -165,8 +264,12 @@ export class GitPaneComponent {
     if (this.diffGated()) return null;
     const diff2html = currentDiff2Html();
     if (!this.diff2htmlReady() || !diff2html) return null;
-    const sideBySide = this.maximized() || this.diffMaximized();
-    const rendered = diff2html.html(text, {
+    const sideBySide = this.diffViewMode() === 'side-by-side';
+    // Group multiple same-file sections (the aggregate diff concatenates one
+    // `diff --git` block per attributed commit) under a single file header so
+    // a file changed across several commits no longer renders as repeated
+    // "README" blocks - the AGT-2008 "Datei-Gruppierung" fix.
+    const rendered = diff2html.html(coalesceDiffByFile(text), {
       drawFileList: false,
       outputFormat: sideBySide ? 'side-by-side' : 'line-by-line',
       matching: 'lines',
@@ -178,6 +281,69 @@ export class GitPaneComponent {
   toggleDiffMaximize(): void {
     this.diffMaximized.update(v => !v);
   }
+
+  // --- md/html preview (AGT-2008) ---------------------------------------
+  // Changed .md/.html files can be shown as a rendered preview instead of a
+  // raw diff (UI-feedback 2026-07-09, observed on two README.md). The toggle
+  // is per selected file and defaults to Diff; markdown renders through the
+  // shared <cac-markdown> surface, html through a script-enabled but
+  // opaque-origin sandbox. Interactive artifacts can run, but omitting
+  // allow-same-origin keeps Studio cookies, storage, DOM, and APIs isolated.
+
+  /** Whether the rendered preview (vs. the diff) is shown for the current file. */
+  readonly previewActive = signal(false);
+
+  /** Preview kind for the selected file, or null when it is not previewable. */
+  readonly previewKind = computed<'markdown' | 'html' | null>(() =>
+    previewKindOf(this.git.selectedDiffPath()),
+  );
+
+  readonly selectedIsPreviewable = computed<boolean>(() => this.previewKind() !== null);
+
+  /**
+   * Reset the Diff/Preview toggle back to Diff whenever the selected file
+   * changes or stops being previewable, so a leftover "Preview" state never
+   * applies to a file that has no preview.
+   */
+  private readonly _resetPreviewOnSelectionChange = effect(() => {
+    if (!this.selectedIsPreviewable() && this.previewActive()) {
+      this.previewActive.set(false);
+    }
+  });
+
+  togglePreview(): void {
+    const next = !this.previewActive();
+    this.previewActive.set(next);
+    const path = this.git.selectedDiffPath();
+    if (next && path) this.git.loadPreview(path);
+  }
+
+  /**
+   * Keep the preview in sync when the operator switches to another previewable
+   * file while Preview stays active: `selectDiffPath` clears the old content,
+   * so kick a fresh load for the new path. Scheduled off the effect's
+   * synchronous pass (microtask) so it never writes signals mid-effect; the
+   * guards stop it re-firing once a load is in flight or has resolved.
+   */
+  private readonly _loadPreviewWhenActive = effect(() => {
+    const path = this.git.selectedDiffPath();
+    const active = this.previewActive();
+    const previewable = this.selectedIsPreviewable();
+    const empty = this.git.previewContent() === null
+      && !this.git.previewIsBinary()
+      && !this.git.previewLoading()
+      && !this.git.previewError();
+    if (!path || !active || !previewable || !empty) return;
+    Promise.resolve().then(() => this.git.loadPreview(path));
+  });
+
+  /** `allow-scripts` enables interaction; omitted same-origin isolates Studio state and APIs. */
+  readonly previewHtmlDoc = computed<SafeHtml | null>(() => {
+    if (this.previewKind() !== 'html') return null;
+    const content = this.git.previewContent();
+    if (content == null) return null;
+    return this.sanitizer.bypassSecurityTrustHtml(content);
+  });
 
   commitChainTooltip(entry: TaskCommitInfo, index: number): string {
     return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${formatDateTime(entry.at)} · ${entry.message}`;
@@ -199,26 +365,13 @@ export class GitPaneComponent {
     return `${entry.shortSha} · ${entry.message.split('\n')[0]}`;
   }
 
-  /** Confidence as a whole-percent string (e.g. "90%"); empty when absent. */
-  confidencePercent(entry: TaskCommitInfo): string {
-    if (entry.confidence == null) return '';
-    return `${Math.round(entry.confidence * 100)}%`;
-  }
-
-  /** Hover text spelling out attribution kind + confidence for a chain entry. */
-  attributionTooltip(entry: TaskCommitInfo): string {
-    const kind =
-      entry.attribution === 'automatic'
-        ? 'Attributed automatically by the rule engine'
-        : 'Legacy attribution (pre-rule-engine)';
-    const pct = this.confidencePercent(entry);
-    return pct ? `${kind} · confidence ${pct}` : kind;
-  }
-
-  // --- Commit-provenance / landed-state (ASS-1724) ----------------------
-  // The landed ladder (task/<id> -> develop -> main) and per-commit branch
-  // membership are derived live off the git graph by the backend and read
-  // through git.provenance(). Labels are text-only per the slice's UI rule.
+  // --- Commit-provenance / landed-ladder (ASS-1724) ---------------------
+  // The landed ladder (task/<id> -> develop -> main) is derived live off the
+  // git graph by the backend and read through git.provenance(). It is the
+  // single place the task's develop-merged / main-pending state is shown
+  // (UI-feedback 2026-07-09: the redundant "Merged to develop" pill and the
+  // per-commit "on develop" membership chips were removed). Each rung carries
+  // its own reached/pending tooltip inline in the template.
 
   /** Short-SHA display; em-dash placeholder when a rung has no resolved HEAD. */
   short(sha: string | null | undefined): string {
@@ -226,47 +379,103 @@ export class GitPaneComponent {
     return sha.length > 7 ? sha.slice(0, 7) : sha;
   }
 
-  /** Human label for the task's overall landed state. */
-  landedStateLabel(state: string): string {
-    switch (state) {
-      case 'released-to-main': return 'Released to main';
-      case 'merged-to-develop': return 'Merged to develop';
-      case 'on-branch-only': return 'On task branch only';
-      default: return 'Landed state unknown';
-    }
+  /**
+   * Reached/pending tooltip for the develop-integration ladder rung. Kept as
+   * a component method (rather than an inline template ternary) so the rung's
+   * conditional stays within the angular-eslint template conditional-complexity
+   * budget; the string is identical to the former inline expression.
+   */
+  integrationRungTooltip(ladder: TaskLandedLadder): string {
+    const head = this.short(ladder.integrationHead);
+    return ladder.mergedToIntegration
+      ? `Merged into ${ladder.integrationBranch} (HEAD now ${head})`
+      : `Not yet merged into ${ladder.integrationBranch} (HEAD now ${head})`;
   }
 
-  /** Spells out where the task's work currently lives across the ladder. */
-  landedStateTooltip(prov: TaskProvenanceView): string {
-    const l = prov.ladder;
-    switch (prov.landedState) {
-      case 'released-to-main':
-        return `This task's work is contained in ${l.releaseBranch} (${this.short(l.releaseHead)}).`;
-      case 'merged-to-develop':
-        return `This task's work is contained in ${l.integrationBranch} (${this.short(l.integrationHead)}) but not yet in ${l.releaseBranch}.`;
-      default:
-        return `This task's commits live only on ${l.branch} (${this.short(l.branchTip)}); not yet merged into ${l.integrationBranch}.`;
-    }
+  /** Reached/pending tooltip for the release ladder rung. See {@link integrationRungTooltip}. */
+  releaseRungTooltip(ladder: TaskLandedLadder): string {
+    const head = this.short(ladder.releaseHead);
+    return ladder.releasedToRelease
+      ? `Released into ${ladder.releaseBranch} (HEAD now ${head})`
+      : `Not yet released into ${ladder.releaseBranch} (HEAD now ${head})`;
   }
 
-  /** Where a single commit currently lives, furthest rung first. */
-  membershipLabel(m: TaskCommitMembership): string {
-    if (m.alsoOnRelease) return 'on main';
-    if (m.alsoOnIntegration) return 'on develop';
-    return 'task only';
+  // --- Commit-row code-review rating badge (AGT-1995) --------------------
+  // A compact indicator of the code-review verdict for the commit currently
+  // shown on the commit line. Tone/label/glyph come from the shared verdict
+  // util so this stays in lockstep with the Code Review tab; the review data
+  // itself lives on GitPaneService.commitReview().
+
+  reviewTone(verdict: string | null | undefined): CodeReviewVerdictTone {
+    return codeReviewVerdictTone(verdict);
   }
 
-  /** Hover detail listing every branch a commit is reachable from. */
-  membershipTooltip(m: TaskCommitMembership, prov: TaskProvenanceView): string {
-    const where: string[] = [prov.ladder.branch];
-    if (m.alsoOnIntegration) where.push(prov.ladder.integrationBranch);
-    if (m.alsoOnRelease) where.push(prov.ladder.releaseBranch);
-    return `${m.shortSha} present on: ${where.join(', ')}`;
+  reviewLabel(verdict: string | null | undefined): string {
+    return codeReviewVerdictLabel(verdict);
   }
+
+  reviewGlyph(verdict: string | null | undefined): string {
+    return codeReviewVerdictGlyph(verdict);
+  }
+
+  /** Tooltip for the rating badge: verdict + one-line summary + affordance. */
+  reviewTooltip(review: CodeReviewListEntry): string {
+    const label = codeReviewVerdictLabel(review.verdict);
+    const summary = (review.summary ?? '').trim();
+    const head = summary ? `Code review: ${label} · ${summary}` : `Code review: ${label}`;
+    return `${head}. Click to open the Code Review tab.`;
+  }
+
+  /**
+   * Reveal the prompt pane (if hidden) and focus its Code Review tab. Routed
+   * through the shared layout service rather than an @Output so the git pane
+   * does not need the task-detail shell to mediate a same-feature navigation.
+   */
+  openCodeReview(): void {
+    this.layout.openPromptTab('code-review');
+  }
+}
+
+export type DiffViewMode = 'side-by-side' | 'line-by-line';
+
+/**
+ * Classify a changed-file path for the rendered preview: markdown for
+ * `.md`/`.markdown`, html for `.html`/`.htm`, null for everything else.
+ * Extension match is case-insensitive; the query/hash-free basename is used
+ * so a path is never mis-classified by a trailing fragment.
+ */
+export function previewKindOf(path: string | null | undefined): 'markdown' | 'html' | null {
+  if (!path) return null;
+  const clean = path.split(/[?#]/)[0];
+  const dot = clean.lastIndexOf('.');
+  if (dot < 0) return null;
+  const ext = clean.slice(dot + 1).toLowerCase();
+  if (ext === 'md' || ext === 'markdown') return 'markdown';
+  if (ext === 'html' || ext === 'htm') return 'html';
+  return null;
 }
 
 const COMMIT_HEADER_COLLAPSED_KEY = 'taskboard.gitPane.commitHeaderCollapsed';
 const COMMIT_GROUP_COLLAPSED_KEY = 'taskboard.gitPane.commitGroupCollapsed';
+const HEAD_COLLAPSED_KEY = 'taskboard.gitPane.headCollapsed';
+const DIFF_VIEW_MODE_KEY = 'taskboard.gitPane.diffViewMode';
+const TREE_WIDTH_KEY = 'taskboard.gitPane.treeWidth';
+
+// Splitter clamp: the tree may not drop below MIN_TREE_PX nor squeeze the
+// diff below MIN_DIFF_PX. Keyboard arrows nudge by TREE_RESIZE_STEP. The
+// tree floor mirrors the SCSS `min-width` on `.git-view__tree-col` so the
+// CSS minimum never fights the flex-basis mid-drag (the spring-back bug the
+// pane splitter documents in layout-panes.service).
+const MIN_TREE_PX = 200;
+const MIN_DIFF_PX = 320;
+const TREE_WIDTH_DEFAULT = 300;
+const TREE_RESIZE_STEP = 16;
+
+/** Clamp a proposed tree width against its floor and the diff's floor. */
+export function clampTreeWidth(raw: number, containerWidth: number): number {
+  const upper = containerWidth > 0 ? Math.max(MIN_TREE_PX, containerWidth - MIN_DIFF_PX) : Number.POSITIVE_INFINITY;
+  return Math.round(Math.max(MIN_TREE_PX, Math.min(upper, raw)));
+}
 
 function readCommitHeaderCollapsed(): boolean {
   try { return localStorage.getItem(COMMIT_HEADER_COLLAPSED_KEY) === '1'; }
@@ -288,5 +497,41 @@ function readCommitGroupCollapsed(): boolean {
 
 function writeCommitGroupCollapsed(value: boolean): void {
   try { localStorage.setItem(COMMIT_GROUP_COLLAPSED_KEY, value ? '1' : '0'); }
+  catch { /* ignore quota / privacy-mode errors */ }
+}
+
+function readHeadCollapsed(): boolean {
+  try { return localStorage.getItem(HEAD_COLLAPSED_KEY) === '1'; }
+  catch { return false; }
+}
+
+function writeHeadCollapsed(value: boolean): void {
+  try { localStorage.setItem(HEAD_COLLAPSED_KEY, value ? '1' : '0'); }
+  catch { /* ignore quota / privacy-mode errors */ }
+}
+
+function readDiffViewMode(): DiffViewMode {
+  try {
+    return localStorage.getItem(DIFF_VIEW_MODE_KEY) === 'line-by-line' ? 'line-by-line' : 'side-by-side';
+  }
+  catch { return 'side-by-side'; }
+}
+
+function writeDiffViewMode(value: DiffViewMode): void {
+  try { localStorage.setItem(DIFF_VIEW_MODE_KEY, value); }
+  catch { /* ignore quota / privacy-mode errors */ }
+}
+
+function readTreeWidth(): number {
+  try {
+    const raw = Number(localStorage.getItem(TREE_WIDTH_KEY));
+    if (Number.isFinite(raw) && raw >= MIN_TREE_PX) return Math.round(raw);
+  }
+  catch { /* ignore */ }
+  return TREE_WIDTH_DEFAULT;
+}
+
+function writeTreeWidth(value: number): void {
+  try { localStorage.setItem(TREE_WIDTH_KEY, String(Math.round(value))); }
   catch { /* ignore quota / privacy-mode errors */ }
 }

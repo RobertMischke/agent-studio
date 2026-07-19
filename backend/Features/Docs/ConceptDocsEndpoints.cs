@@ -3,7 +3,7 @@ namespace AgentStudio.Docs;
 
 /// <summary>
 /// Read-only routes for the in-product concept-docs (the markdown
-/// committed under <c>docs/concept-docs/</c>). The FE renders the body
+/// committed under <c>docs/app/help/lane-guides/</c>). The FE renders the body
 /// in the <c>&lt;app-info-button&gt;</c> side-drawer next to surfaces
 /// whose behaviour is non-obvious (e.g. the 4-auto-review and
 /// 3-progress lane headers).

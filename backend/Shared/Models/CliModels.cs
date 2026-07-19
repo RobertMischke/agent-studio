@@ -101,39 +101,8 @@ public static class ContinueModes
     }
 }
 
-/// <summary>Curated entry in a CLI's model catalog returned by <c>GET /api/cli/{type}/models</c>.</summary>
-public record CliModelInfo
-{
-    /// <summary>Model identifier passed to <c>--model &lt;id&gt;</c>.</summary>
-    public string Id { get; init; } = "";
-    /// <summary>Human-friendly label shown in dropdowns. Defaults to <c>Id</c> when empty.</summary>
-    public string Label { get; init; } = "";
-    /// <summary>Premium-request multiplier (Copilot only; null elsewhere).</summary>
-    public double? Multiplier { get; init; }
-    /// <summary>Optional vendor / family grouping (anthropic, openai, google, …).</summary>
-    public string? Vendor { get; init; }
-    /// <summary>Marks the entry the CLI uses by default when <c>--model</c> is omitted.</summary>
-    public bool IsDefault { get; init; }
-    /// <summary>Supported thinking / reasoning levels for this model. Empty means no selector.</summary>
-    public List<string> ThinkingLevels { get; init; } = [];
-    /// <summary>Default thinking / reasoning level for this model, or null when unsupported.</summary>
-    public string? DefaultThinkingLevel { get; init; }
-    /// <summary>Whether this model should be offered for new work.</summary>
-    public bool Available { get; init; } = true;
-    /// <summary>Known but no longer preferred or not found in live CLI discovery.</summary>
-    public bool Deprecated { get; init; }
-    /// <summary>Short note explaining why an entry is unavailable or metadata-light.</summary>
-    public string? AvailabilityNote { get; init; }
-}
-
-public record CliModelCatalog
-{
-    public List<CliModelInfo> Models { get; init; } = [];
-    /// <summary>How the catalog was obtained: <c>config</c>, <c>cli-pty</c>, <c>hardcoded</c>, …</summary>
-    public string Source { get; init; } = "config";
-    /// <summary>UTC timestamp of the most recent (re)build. Useful for cache diagnostics.</summary>
-    public DateTime FetchedAt { get; init; }
-}
+// CliModelInfo and CliModelCatalog now come from the CodingAgentRunner package
+// (aliased in the csproj).
 
 /// <summary>Canonical model id constants. Call sites should reference these instead of repeated literals.</summary>
 public static class ModelIds
@@ -142,9 +111,27 @@ public static class ModelIds
     public const string ClaudeOpus47 = "claude-opus-4-7";
     public const string ClaudeOpus46 = "claude-opus-4-6";
     public const string ClaudeOpus45 = "claude-opus-4-5";
+    public const string ClaudeSonnet5 = "claude-sonnet-5";
     public const string ClaudeSonnet46 = "claude-sonnet-4-6";
     public const string ClaudeSonnet45 = "claude-sonnet-4-5";
     public const string ClaudeHaiku45 = "claude-haiku-4-5";
+    /// <summary>Current default Codex/OpenAI model. codex-cli 0.143 on a
+    /// ChatGPT account rejects the older <c>gpt-5-codex</c> with a 400
+    /// invalid_request ("model not supported when using Codex with a ChatGPT
+    /// account"); <c>gpt-5.5</c> is the account-valid model per
+    /// <c>~/.codex/config.toml</c> and live test (AGT-1941).</summary>
+    public const string Gpt55 = "gpt-5.5";
+    /// <summary>Flagship Codex model id once the installed codex CLI advertises
+    /// it. gpt-5.6 is intentionally NOT a static catalog entry: its
+    /// availability follows the live CLI via <c>CodexModelDiscovery</c> (house
+    /// rule: convention/derivation over a hardcoded list, AGT-2025). This
+    /// constant only names the well-known id for detection defaults and
+    /// tests; <see cref="ModelMetadataRegistry.DefaultForCli"/> returns it when
+    /// discovery has detected it, otherwise it falls back to <see cref="Gpt55"/>.</summary>
+    public const string Gpt56Sol = "gpt-5.6-sol";
+    /// <summary>Economy Codex model for bounded supporting-agent and pipeline work.
+    /// Availability still comes from live CLI discovery.</summary>
+    public const string Gpt54Mini = "gpt-5.4-mini";
     public const string Gpt5Codex = "gpt-5-codex";
     public const string Gpt41 = "gpt-4.1";
     public const string Gpt4o = "gpt-4o";
@@ -159,12 +146,19 @@ public sealed record ModelMetadata(
     bool IsDefault,
     bool Deprecated,
     bool Available,
-    decimal? InputPricePerMillion,
-    decimal? OutputPricePerMillion,
     long? ContextWindow,
-    string[]? Aliases = null,
-    decimal? CacheReadPerMillionOverride = null,
-    decimal? CacheWritePerMillionOverride = null);
+    string[]? Aliases = null)
+{
+    // Pricing is intentionally a live catalog pass-through. Studio owns no
+    // rates; callers that need historical cost use TokenPricing.Estimate.
+    private CodingAgentRunner.Pricing.ModelPrice? CurrentPrice =>
+        CodingAgentRunner.Pricing.ModelPriceCatalog.Default
+            .ResolvePrice(Id, DateTime.UtcNow).Price;
+    public decimal? InputPricePerMillion => CurrentPrice?.InputPerMTok;
+    public decimal? OutputPricePerMillion => CurrentPrice?.OutputPerMTok;
+    public decimal? CacheReadPerMillionOverride => CurrentPrice?.CacheReadPerMTok;
+    public decimal? CacheWritePerMillionOverride => CurrentPrice?.CacheWritePerMTok;
+}
 
 /// <summary>
 /// Single server-side source of truth for known model metadata: catalog labels,
@@ -174,34 +168,125 @@ public static class ModelMetadataRegistry
 {
     private static readonly ModelMetadata[] Entries =
     [
-        Claude(ModelIds.ClaudeOpus48, "Claude Opus 4.8", isDefault: true, input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.8"]),
-        Claude(ModelIds.ClaudeOpus47, "Claude Opus 4.7", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.7"]),
-        Claude(ModelIds.ClaudeOpus46, "Claude Opus 4.6", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.6"]),
-        Claude(ModelIds.ClaudeOpus45, "Claude Opus 4.5", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.5"]),
-        Claude(ModelIds.ClaudeSonnet46, "Claude Sonnet 4.6", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.6"]),
-        Claude(ModelIds.ClaudeSonnet45, "Claude Sonnet 4.5", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.5"]),
-        Claude(ModelIds.ClaudeHaiku45, "Claude Haiku 4.5", input: 1.00m, output: 5.00m, context: 200_000, aliases: ["claude-haiku-4.5"]),
-        new(ModelIds.Gpt5Codex, "GPT-5 Codex", "openai", IsDefault: true, Deprecated: false, Available: true,
-            InputPricePerMillion: 1.25m, OutputPricePerMillion: 10.00m, ContextWindow: 272_000,
-            CacheReadPerMillionOverride: 0.125m, CacheWritePerMillionOverride: 1.25m),
+        Claude(ModelIds.ClaudeOpus48, "Claude Opus 4.8", isDefault: true, context: 200_000, aliases: ["claude-opus-4.8"]),
+        Claude(ModelIds.ClaudeOpus47, "Claude Opus 4.7", context: 200_000, aliases: ["claude-opus-4.7"]),
+        Claude(ModelIds.ClaudeOpus46, "Claude Opus 4.6", context: 200_000, aliases: ["claude-opus-4.6"]),
+        Claude(ModelIds.ClaudeOpus45, "Claude Opus 4.5", context: 200_000, aliases: ["claude-opus-4.5"]),
+        Claude(ModelIds.ClaudeSonnet5, "Claude Sonnet 5", context: 200_000),
+        Claude(ModelIds.ClaudeSonnet46, "Claude Sonnet 4.6", context: 200_000, aliases: ["claude-sonnet-4.6"]),
+        Claude(ModelIds.ClaudeSonnet45, "Claude Sonnet 4.5", context: 200_000, aliases: ["claude-sonnet-4.5"]),
+        Claude(ModelIds.ClaudeHaiku45, "Claude Haiku 4.5", context: 200_000, aliases: ["claude-haiku-4.5"]),
+        // gpt-5.5 is the current Codex/OpenAI default. codex-cli 0.143 on a
+        // ChatGPT account rejects gpt-5-codex with a 400 invalid_request, so
+        // the default must be the account-valid model (AGT-1941). Pricing is
+        // left null until authoritative numbers are confirmed (same posture as
+        // the GPT-4.1 / GPT-4o entries) so no invented cost is asserted.
+        new(ModelIds.Gpt55, "GPT-5.5", "openai", IsDefault: true, Deprecated: false, Available: true,
+            ContextWindow: 400_000),
+        // gpt-5-codex is retained (API-key accounts still accept it) but is no
+        // longer the default: a ChatGPT-account spawn rejects it outright.
+        new(ModelIds.Gpt5Codex, "GPT-5 Codex", "openai", IsDefault: false, Deprecated: false, Available: true,
+            ContextWindow: 272_000),
         new(ModelIds.Gpt41, "GPT-4.1", "openai", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 1_000_000),
+            ContextWindow: 1_000_000),
         new(ModelIds.Gpt4o, "GPT-4o", "openai", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 128_000),
+            ContextWindow: 128_000),
         new(ModelIds.Gemini25Pro, "Gemini 2.5 Pro", "google", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 2_000_000),
+            ContextWindow: 2_000_000),
         new(ModelIds.Gemini25Flash, "Gemini 2.5 Flash", "google", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 1_000_000),
+            ContextWindow: 1_000_000),
     ];
 
     private static readonly IReadOnlyDictionary<string, ModelMetadata> ById = Entries
         .SelectMany(e => new[] { e.Id }.Concat(e.Aliases ?? []).Select(id => (id, e)))
         .ToDictionary(x => x.id, x => x.e, StringComparer.OrdinalIgnoreCase);
 
+    // Detection-driven Codex default id, published by CodexModelDiscovery after
+    // a live catalog fetch (house rule: derive from the installed CLI, do not
+    // hardcode a catalog - AGT-2025). Volatile because it is read on request
+    // threads and written from the discovery gate. Null => CLI not yet probed,
+    // unavailable, or no gpt-5.6 detected => the static gpt-5.5 baseline holds.
+    private static volatile string? _detectedCodexDefaultId;
+
+    /// <summary>
+    /// Publish the Codex default model derived from the installed CLI. Pass null
+    /// to clear (CLI unavailable / no gpt-5.6 detected) so
+    /// <see cref="DefaultForCli"/> falls back to the static gpt-5.5 baseline.
+    /// </summary>
+    public static void SetDetectedCodexDefault(string? modelId)
+        => _detectedCodexDefaultId = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
+
+    /// <summary>The last Codex default detected from the installed CLI, or null.</summary>
+    public static string? DetectedCodexDefault => _detectedCodexDefaultId;
+
     public static IReadOnlyList<ModelMetadata> All => Entries;
 
     public static IReadOnlyList<ModelMetadata> ForVendor(string vendor)
         => Entries.Where(e => string.Equals(e.Vendor, vendor, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    public static string? DefaultForCli(string? cliType)
+    {
+        // Codex follows the installed CLI: once discovery detects a newer top
+        // model (gpt-5.6-*), it is published here and becomes the product
+        // default everywhere Gpt55 was drawn (task creation, cli-type switch,
+        // client-default materialization). Null => static gpt-5.5 baseline.
+        if (CliTypes.IsValid(cliType) && CliTypes.Normalize(cliType) == CliTypes.Codex
+            && _detectedCodexDefaultId is { Length: > 0 } detected)
+            return detected;
+
+        var vendor = VendorForCli(cliType);
+        if (vendor == null) return null;
+        var models = ForVendor(vendor).Where(e => e.Available && !e.Deprecated).ToList();
+        return models.FirstOrDefault(e => e.IsDefault)?.Id ?? models.FirstOrDefault()?.Id;
+    }
+
+    /// <summary>
+    /// Product default reasoning level for a CLI+model when the user/owner did
+    /// not pick one. For codex the operator directive (AGT-2025) is the biggest
+    /// reasoning value the installed CLI advertises for the model: the top of
+    /// the CLI-derived thinking-level ladder (gpt-5.6 -> ultra, gpt-5.5 ->
+    /// xhigh, gpt-5-codex -> high). Other CLIs keep the ladder's native default.
+    /// </summary>
+    public static string? DefaultThinkingLevelForCli(string? cliType, string? model)
+    {
+        if (CliTypes.IsValid(cliType) && CliTypes.Normalize(cliType) == CliTypes.Codex)
+        {
+            var top = CliThinkingLevels.For(cliType, model).LastOrDefault();
+            if (!string.IsNullOrWhiteSpace(top)) return top;
+        }
+        return CliThinkingLevels.DefaultFor(cliType, model);
+    }
+
+    /// <summary>
+    /// Resolve the effective reasoning level: an explicit or owner-provided
+    /// choice wins (normalized to the model's ladder); otherwise fall back to
+    /// the product default for the CLI (<see cref="DefaultThinkingLevelForCli"/>).
+    /// </summary>
+    public static string? ResolveThinkingLevel(string? cliType, string? model, string? requested)
+        => string.IsNullOrWhiteSpace(requested)
+            ? DefaultThinkingLevelForCli(cliType, model)
+            : CliThinkingLevels.Normalize(cliType, model, requested);
+
+    public static bool IsCompatibleWithCli(string? cliType, string? model)
+    {
+        if (string.IsNullOrWhiteSpace(cliType) || string.IsNullOrWhiteSpace(model)) return true;
+
+        var expectedVendor = VendorForCli(cliType);
+        if (expectedVendor == null) return true;
+
+        var metadata = Find(model);
+        return metadata == null
+               || string.Equals(metadata.Vendor, expectedVendor, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string? NormalizeForCli(string? cliType, string? model)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        if (string.IsNullOrWhiteSpace(cliType)) return trimmed;
+        return IsCompatibleWithCli(cliType, trimmed)
+            ? trimmed ?? DefaultForCli(cliType)
+            : DefaultForCli(cliType);
+    }
 
     public static ModelMetadata? Find(string? id)
     {
@@ -236,7 +321,7 @@ public static class ModelMetadataRegistry
             Available = metadata.Available && !metadata.Deprecated,
             Deprecated = metadata.Deprecated,
             ThinkingLevels = CliThinkingLevels.For(cliType, metadata.Id).ToList(),
-            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(cliType, metadata.Id)
+            DefaultThinkingLevel = DefaultThinkingLevelForCli(cliType, metadata.Id)
         };
 
     public static CliModelInfo UnknownCliModel(string id, string? label, string? vendor, string cliType)
@@ -250,17 +335,27 @@ public static class ModelMetadataRegistry
             Deprecated = false,
             AvailabilityNote = "Discovered from CLI; missing registry metadata.",
             ThinkingLevels = CliThinkingLevels.For(cliType, id).ToList(),
-            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(cliType, id)
+            DefaultThinkingLevel = DefaultThinkingLevelForCli(cliType, id)
         };
 
     private static ModelMetadata Claude(
         string id,
         string label,
         bool isDefault = false,
-        decimal input = 0,
-        decimal output = 0,
         long context = 200_000,
         string[]? aliases = null)
         => new(id, label, "anthropic", isDefault, Deprecated: false, Available: true,
-            InputPricePerMillion: input, OutputPricePerMillion: output, ContextWindow: context, Aliases: aliases);
+            ContextWindow: context, Aliases: aliases);
+
+    private static string? VendorForCli(string? cliType)
+    {
+        if (!CliTypes.IsValid(cliType)) return null;
+        return CliTypes.Normalize(cliType) switch
+        {
+            CliTypes.Claude => "anthropic",
+            CliTypes.Codex => "openai",
+            CliTypes.Gemini => "google",
+            _ => null
+        };
+    }
 }

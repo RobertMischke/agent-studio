@@ -130,17 +130,28 @@ public static class RegistryEndpoints
 
         // ----- F45b project mutations (ADR-0042) -----
 
-        app.MapPost("/api/projects", (RegistryCreateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces, WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
+        app.MapPost("/api/projects", (RegistryCreateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces,
+            WorkspaceManagementService workspaceManagement, TaskScannerService scanner, TaskWatcherService watcher,
+            AgentStudio.Runner.TaskRunnerService runners, AgentStudio.Projects.ProjectSettingsService projectSettings,
+            ClientIdentityStore clients, ILoggerFactory loggerFactory) =>
         {
-            if (body == null || string.IsNullOrWhiteSpace(body.DisplayName))
-                return Results.BadRequest(new { error = "displayName is required" });
+            if (body == null)
+                return Results.BadRequest(new { error = "body required" });
             if (string.IsNullOrWhiteSpace(body.WorkspaceId))
                 return Results.BadRequest(new { error = "workspaceId is required" });
             if (workspaces.Find(body.WorkspaceId) == null)
                 return Results.NotFound(new { error = $"Unknown workspaceId '{body.WorkspaceId}'" });
+            var sourceType = string.IsNullOrWhiteSpace(body.SourceType) ? ProjectSourceTypes.LocalFolder : body.SourceType.Trim();
+            if (!string.Equals(sourceType, ProjectSourceTypes.LocalFolder, StringComparison.Ordinal))
+                return Results.BadRequest(new { error = $"sourceType '{sourceType}' is not supported" });
 
-            var displayName = body.DisplayName.Trim();
+            string displayName;
+            try { displayName = ProjectRegistry.ValidateDisplayName(body.DisplayName); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
             var allProjects = projects.List();
+            if (allProjects.Any(project => string.Equals(
+                    project.DisplayName, displayName, StringComparison.OrdinalIgnoreCase)))
+                return Results.Conflict(new { error = $"displayName '{displayName}' is already used." });
             var existingCodes = allProjects.Select(p => p.ShortCode);
             var shortCode = string.IsNullOrWhiteSpace(body.ShortCode)
                 ? ShortCodeGenerator.Derive(displayName, existingCodes)
@@ -150,7 +161,33 @@ public static class RegistryEndpoints
             if (allProjects.Any(p => string.Equals(p.ShortCode, shortCode, StringComparison.OrdinalIgnoreCase)))
                 return Results.Conflict(new { error = $"shortCode '{shortCode}' is already used." });
 
-            var id = projects.AllocateNextId();
+            string? executionRunner;
+            try { executionRunner = ExecutionRunnerAssignment.NormalizeAndValidate(body.ExecutionRunner, clients); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+
+            string? repositoryUrl;
+            try { repositoryUrl = ProjectRegistry.ValidateRepositoryUrl(body.RepositoryUrl); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+
+            string? repositoryPath;
+            string? rootPath;
+            try
+            {
+                repositoryPath = ProjectRegistry.ValidateRepositoryPath(body.RepositoryPath);
+                rootPath = ProjectRegistry.ValidateRootPath(
+                    string.IsNullOrWhiteSpace(body.RootPath) ? repositoryPath : body.RootPath);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+
+            string id;
+            try { id = projects.AllocateNextId(); }
+            catch (ProjectPersistenceException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+            }
             var storage = workspaceManagement.CreateProjectStorage(displayName, id);
             if (storage.Outcome == WorkspaceManagementOutcome.BadRequest)
                 return Results.BadRequest(new { error = storage.Error });
@@ -160,6 +197,7 @@ public static class RegistryEndpoints
             var record = new ProjectRecord
             {
                 Id = id,
+                SourceType = sourceType,
                 DisplayName = displayName,
                 ShortCode = shortCode,
                 WorkspaceId = body.WorkspaceId.Trim(),
@@ -169,44 +207,132 @@ public static class RegistryEndpoints
                 SortOrder = allProjects.Count,
                 NextTaskKeySeq = 1,
                 StorageLocation = storage.Entry?.Path ?? "",
+                RepositoryPath = repositoryPath,
+                RootPath = rootPath,
+                Urls = repositoryUrl == null
+                    ? []
+                    : [new ProjectUrlRecord { Id = "repo", Label = "Repository", Url = repositoryUrl, SortOrder = 0 }],
                 Archived = false,
                 CreatedAt = DateTime.UtcNow,
             };
 
+            ProjectRecord created;
+            var appended = false;
             try
             {
-                var created = projects.Append(record);
-                loggerFactory.CreateLogger("ProjectCreate").LogInformation(
-                    "project-created id={Id} workspaceId={WorkspaceId} storage={Storage}",
-                    created.Id, created.WorkspaceId, created.StorageLocation);
-                return Results.Created($"/api/projects/{created.Id}", ProjectSummary.From(created));
+                created = projects.Append(record);
+                appended = true;
+                if (executionRunner != null)
+                {
+                    projectSettings.RekeyProject(
+                        created.DisplayName,
+                        created.DisplayName,
+                        updateExecutionRunner: true,
+                        executionRunner: executionRunner,
+                        remoteExecutionEnabled: true);
+                }
             }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
+                CleanupFailedCreate(record, appended, projects, workspaceManagement, loggerFactory);
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                CleanupFailedCreate(record, appended, projects, workspaceManagement, loggerFactory);
                 return Results.BadRequest(new { error = ex.Message });
             }
+            catch (ProjectPersistenceException ex)
+            {
+                // Append restores its in-memory snapshot when its own write
+                // fails. A later settings failure leaves the record live and
+                // must therefore be compensated before deleting its folder.
+                var liveRecord = projects.FindById(record.Id);
+                CleanupFailedCreate(
+                    record,
+                    appended && ReferenceEquals(liveRecord, record),
+                    projects,
+                    workspaceManagement,
+                    loggerFactory);
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            var liveEntry = scanner.GetWatchPaths().First(entry =>
+                string.Equals(entry.Path, created.StorageLocation, StringComparison.OrdinalIgnoreCase));
+            watcher.EnsureWatching(liveEntry);
+            runners.EnsureRunner(liveEntry);
+            loggerFactory.CreateLogger("ProjectCreate").LogInformation(
+                "project-onboarded id={Id} workspaceId={WorkspaceId} storage={Storage} repository={Repository} runner={Runner}",
+                created.Id, created.WorkspaceId, created.StorageLocation,
+                created.RepositoryPath ?? repositoryUrl ?? "(none)", executionRunner ?? "local");
+            return Results.Created($"/api/projects/{created.Id}", ProjectSummary.From(created));
         });
 
-        app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}", (string projId, UpdateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces) =>
+        app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}", (string projId, UpdateProjectRequest body,
+            ProjectRegistry projects, WorkspaceRegistry workspaces,
+            AgentStudio.Projects.ProjectSettingsService projectSettings,
+            ClientIdentityStore clients, ILoggerFactory loggerFactory) =>
         {
             if (body == null) return Results.BadRequest(new { error = "body required" });
+            var previous = projects.FindById(projId);
+            if (previous == null)
+                return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+
+            var updateExecutionRunner = body.ExecutionRunner != null || body.ClearExecutionRunner == true;
+            string? executionRunner = null;
+            if (updateExecutionRunner)
+            {
+                try
+                {
+                    executionRunner = ExecutionRunnerAssignment.NormalizeAndValidate(
+                        body.ClearExecutionRunner == true ? null : body.ExecutionRunner,
+                        clients);
+                }
+                catch (ArgumentException ex)
+                {
+                    return Results.BadRequest(new { error = ex.Message });
+                }
+            }
+
             try
             {
-                ProjectRecord? result = null;
-                if (body.DisplayName != null) result = projects.Rename(projId, body.DisplayName);
-                if (body.ShortCode != null) result = projects.SetShortCode(projId, body.ShortCode);
-                if (body.Color != null || body.ClearColor == true)
-                    result = projects.SetColor(projId, body.ClearColor == true ? null : body.Color);
-                if (body.WorkspaceId != null) result = projects.SetWorkspace(projId, body.WorkspaceId, workspaces);
-                if (body.Archived.HasValue) result = projects.SetArchived(projId, body.Archived.Value);
-                if (result == null) result = projects.FindById(projId);
-                return result == null
-                    ? Results.NotFound(new { error = $"Unknown projectId '{projId}'" })
-                    : Results.Ok(result);
+                var result = projects.Update(projId, body, workspaces);
+                if (!string.Equals(previous.DisplayName, result.DisplayName, StringComparison.Ordinal)
+                    || updateExecutionRunner)
+                {
+                    try
+                    {
+                        projectSettings.RekeyProject(
+                            previous.DisplayName,
+                            result.DisplayName,
+                            updateExecutionRunner,
+                            executionRunner,
+                            remoteExecutionEnabled: updateExecutionRunner ? true : null);
+                    }
+                    catch (ProjectPersistenceException ex)
+                    {
+                        try { projects.RollbackUpdate(result, previous); }
+                        catch (Exception rollbackEx)
+                        {
+                            loggerFactory.CreateLogger("ProjectUpdate").LogCritical(
+                                rollbackEx,
+                                "project-update-compensation-failed id={Id} after settings error={Error}",
+                                projId, ex.Message);
+                        }
+                        return Results.Problem(
+                            "Could not persist project settings; the project update was rolled back where possible.",
+                            statusCode: StatusCodes.Status500InternalServerError);
+                    }
+                }
+                return Results.Ok(ProjectSummary.From(result));
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
             catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+            catch (ProjectPersistenceException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+            }
         });
 
         // F46 — destructive project delete. Removes the on-disk project
@@ -215,13 +341,17 @@ public static class RegistryEndpoints
         // Storage is deleted first so a failure aborts before any metadata is
         // touched — never leaving an orphan folder behind a dangling pointer.
         app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}",
-            (string projId, ProjectRegistry projects, WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
+            (string projId, ProjectRegistry projects, ProjectUrlProcessService procs,
+                WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
         {
             var log = loggerFactory.CreateLogger("ProjectDelete");
             var record = projects.FindById(projId);
             if (record == null)
                 return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
 
+            // Stop repository-owned preview children before metadata and storage
+            // disappear. The process service also repeats this at host shutdown.
+            procs.StopProject(projId);
             var storageResult = workspaceManagement.DeleteProjectStorage(record.StorageLocation);
             if (storageResult.Outcome == WorkspaceManagementOutcome.BadRequest)
             {
@@ -247,7 +377,194 @@ public static class RegistryEndpoints
                 storageLocation = record.StorageLocation,
             });
         });
+
+        // ----- Project URLs (per-project watchable dev-server / preview URLs) -----
+
+        // Detection: scan the project's repository (package.json, angular.json,
+        // README.md) and return suggestions the UI offers as one-click chips.
+        // Never auto-applied; the user picks.
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/url-suggestions",
+            (string projId, ProjectRegistry projects, ProjectUrlDetectionService detection) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null)
+                return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var suggestions = detection.Detect(record);
+            return Results.Ok(suggestions);
+        });
+
+        app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls",
+            (string projId, CreateProjectUrlRequest body, ProjectRegistry projects) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            try
+            {
+                var updated = projects.AddUrl(projId, body.Label, body.Url, body.StartRule);
+                return Results.Ok(updated);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}",
+            (string projId, string urlId, UpdateProjectUrlRequest body, ProjectRegistry projects) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            try
+            {
+                var updated = projects.UpdateUrl(projId, urlId, body.Label, body.Url, body.StartRule);
+                return Results.Ok(updated);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}",
+            (string projId, string urlId, ProjectRegistry projects, ProjectUrlProcessService procs) =>
+        {
+            try
+            {
+                // A removed URL must not leave an owned process without a UI
+                // surface from which an operator can stop it.
+                procs.Stop(projId, urlId);
+                var updated = projects.RemoveUrl(projId, urlId);
+                return Results.Ok(updated);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+        });
+
+        app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/reorder",
+            (string projId, ReorderProjectUrlsRequest body, ProjectRegistry projects) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            try
+            {
+                var updated = projects.ReorderUrls(projId, body.OrderedUrlIds);
+                return Results.Ok(updated);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        // Start/restart, inspect, and stop the owned dev-server lifecycle. The
+        // bounded snapshot output powers the embed's in-place live console.
+        app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/start",
+            (string projId, string urlId, ProjectRegistry projects, ProjectUrlProcessService procs) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null)
+                return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var url = record.Urls.FirstOrDefault(u => string.Equals(u.Id, urlId, StringComparison.Ordinal));
+            if (url == null)
+                return Results.NotFound(new { error = $"Unknown url id '{urlId}'" });
+            if (url.StartRule == null || string.IsNullOrWhiteSpace(url.StartRule.Command))
+                return Results.BadRequest(new { error = "This URL has no start rule to run." });
+            try
+            {
+                return Results.Ok(procs.Start(record, url));
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                string? cwd;
+                try { cwd = ProjectUrlProcessService.ResolveWorkingDirectory(record, url.StartRule); }
+                catch (InvalidOperationException) { cwd = url.StartRule.Cwd ?? record.RepositoryPath ?? record.RootPath; }
+                return Results.BadRequest(new
+                {
+                    error = ex.Message,
+                    command = url.StartRule.Command,
+                    cwd,
+                });
+            }
+        });
+
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/process",
+            (string projId, string urlId, ProjectUrlProcessService procs) =>
+        {
+            var snapshot = procs.Get(projId, urlId);
+            return snapshot == null ? Results.NoContent() : Results.Ok(snapshot);
+        });
+
+        app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/process",
+            (string projId, string urlId, ProjectUrlProcessService procs) =>
+        {
+            var snapshot = procs.Stop(projId, urlId);
+            return snapshot == null
+                ? Results.NotFound(new { error = "No process is owned for this URL." })
+                : Results.Ok(snapshot);
+        });
+
+        // Browser no-cors probes hide HTTP status. Probe the registry-owned URL
+        // on the host so previews never mistake an HTTP error page for healthy.
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/readiness",
+            async (string projId, string urlId, HttpRequest request,
+                ProjectRegistry projects, ProjectUrlReadinessService readiness,
+                CancellationToken cancellationToken) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null)
+                return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var url = record.Urls.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, urlId, StringComparison.Ordinal));
+            if (url == null)
+                return Results.NotFound(new { error = $"Unknown url id '{urlId}'" });
+
+            string? studioOrigin = null;
+            if (Uri.TryCreate(request.Headers.Referer.FirstOrDefault(), UriKind.Absolute, out var referer))
+                studioOrigin = referer.GetLeftPart(UriPartial.Authority);
+            return Results.Ok(await readiness.ProbeAsync(
+                record, url, studioOrigin, cancellationToken));
+        });
     }
+
+    private static void CleanupFailedCreate(
+        ProjectRecord record,
+        bool appended,
+        ProjectRegistry projects,
+        WorkspaceManagementService workspaceManagement,
+        ILoggerFactory loggerFactory)
+    {
+        var logger = loggerFactory.CreateLogger("ProjectCreate");
+        if (appended)
+        {
+            try { projects.RollbackAppend(record); }
+            catch (Exception ex)
+            {
+                logger.LogCritical(ex,
+                    "project-create-registry-compensation-failed id={Id} storage={Storage}",
+                    record.Id, record.StorageLocation);
+            }
+        }
+
+        var cleanup = workspaceManagement.DeleteProjectStorage(record.StorageLocation);
+        if (cleanup.Outcome != WorkspaceManagementOutcome.Ok)
+        {
+            logger.LogCritical(
+                "project-create-storage-cleanup-failed id={Id} storage={Storage} error={Error}",
+                record.Id, record.StorageLocation, cleanup.Error);
+        }
+    }
+}
+
+/// <summary>POST /api/projects/{id}/urls payload.</summary>
+public sealed record CreateProjectUrlRequest
+{
+    public string Label { get; init; } = "";
+    public string Url { get; init; } = "";
+    public ProjectUrlStartRule? StartRule { get; init; }
+}
+
+/// <summary>PUT /api/projects/{id}/urls/{urlId} payload.</summary>
+public sealed record UpdateProjectUrlRequest
+{
+    public string Label { get; init; } = "";
+    public string Url { get; init; } = "";
+    public ProjectUrlStartRule? StartRule { get; init; }
+}
+
+/// <summary>POST /api/projects/{id}/urls/reorder payload.</summary>
+public sealed record ReorderProjectUrlsRequest
+{
+    public List<string> OrderedUrlIds { get; init; } = [];
 }
 
 /// <summary>F45b — POST /api/workspaces payload.</summary>
@@ -280,12 +597,31 @@ public sealed record WorkspaceReorderRequest
 /// <summary>F46 — POST /api/projects payload.</summary>
 public sealed record RegistryCreateProjectRequest
 {
+    public string? SourceType { get; init; }
     public string WorkspaceId { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public string? ShortCode { get; init; }
     public string? CliDefault { get; init; }
     public string? ModelDefault { get; init; }
     public string? Color { get; init; }
+    /// <summary>Absolute local Git checkout path.</summary>
+    public string? RepositoryPath { get; init; }
+    /// <summary>Optional browser/clone URL, stored as the well-known <c>repo</c> URL.</summary>
+    public string? RepositoryUrl { get; init; }
+    /// <summary>Optional remote runner id assigned immediately after creation.</summary>
+    public string? ExecutionRunner { get; init; }
+    /// <summary>
+    /// Optional CLI working directory, set at onboarding time so auto-pickup
+    /// has a runner from the first boot instead of silently having none
+    /// until someone notices the mode toggle failing (see
+    /// <see cref="ProjectRecord.RootPath"/>).
+    /// </summary>
+    public string? RootPath { get; init; }
+}
+
+public static class ProjectSourceTypes
+{
+    public const string LocalFolder = "local-folder";
 }
 
 /// <summary>
@@ -299,6 +635,25 @@ public sealed record UpdateProjectRequest
     public string? Color { get; init; }
     public bool? ClearColor { get; init; }
     public string? WorkspaceId { get; init; }
+    /// <summary>Absolute repo checkout path; see <see cref="ProjectRecord.RepositoryPath"/>.</summary>
+    public string? RepositoryPath { get; init; }
+    public bool? ClearRepositoryPath { get; init; }
+    /// <summary>Absolute CLI working directory; see <see cref="ProjectRecord.RootPath"/>.</summary>
+    public string? RootPath { get; init; }
+    public bool? ClearRootPath { get; init; }
+    /// <summary>Browser/clone URL maintained as the well-known <c>repo</c> project URL.</summary>
+    public string? RepositoryUrl { get; init; }
+    public bool? ClearRepositoryUrl { get; init; }
+    public string? CliDefault { get; init; }
+    public bool? ClearCliDefault { get; init; }
+    public string? ModelDefault { get; init; }
+    public bool? ClearModelDefault { get; init; }
+    /// <summary>
+    /// Optional convenience delegation to the established project-settings
+    /// runner assignment. This value is never stored on ProjectRecord.
+    /// </summary>
+    public string? ExecutionRunner { get; init; }
+    public bool? ClearExecutionRunner { get; init; }
     public bool? Archived { get; init; }
 }
 
@@ -327,6 +682,7 @@ public sealed record WorkspaceListItem
 /// </summary>
 public sealed record ProjectSummary
 {
+    public string SourceType { get; init; } = ProjectSourceTypes.LocalFolder;
     public string Id { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public string ShortCode { get; init; } = "";
@@ -336,12 +692,19 @@ public sealed record ProjectSummary
     public string? ModelDefault { get; init; }
     public int SortOrder { get; init; }
     public string StorageLocation { get; init; } = "";
+    public string? RepositoryPath { get; init; }
+    public string? RootPath { get; init; }
+    /// <summary>Well-known repository URL projected from <see cref="Urls"/>.</summary>
+    public string? RepositoryUrl { get; init; }
+    /// <summary>Configured watchable URLs, ordered; empty for most projects.</summary>
+    public IReadOnlyList<ProjectUrlRecord> Urls { get; init; } = [];
     public bool Archived { get; init; }
     public DateTime CreatedAt { get; init; }
 
     public static ProjectSummary From(ProjectRecord p) => new()
     {
         Id = p.Id,
+        SourceType = p.SourceType,
         DisplayName = p.DisplayName,
         ShortCode = p.ShortCode,
         WorkspaceId = p.WorkspaceId,
@@ -350,6 +713,11 @@ public sealed record ProjectSummary
         ModelDefault = p.ModelDefault,
         SortOrder = p.SortOrder,
         StorageLocation = p.StorageLocation,
+        RepositoryPath = p.RepositoryPath,
+        RootPath = p.RootPath,
+        RepositoryUrl = p.Urls.FirstOrDefault(url =>
+            string.Equals(url.Id, "repo", StringComparison.OrdinalIgnoreCase))?.Url,
+        Urls = [.. p.Urls.OrderBy(u => u.SortOrder)],
         Archived = p.Archived,
         CreatedAt = p.CreatedAt,
     };

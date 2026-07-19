@@ -140,7 +140,6 @@ html[data-studio-theme='light'] {
       0 0 0 1px var(--studio-card-state-border),
       var(--studio-card-shadow-hover);
   }
-  .backlog-triage__row,
   .epic-board__subtask-button {
     background: var(--studio-card-bg);
     border-color: var(--studio-card-state-border);
@@ -166,12 +165,6 @@ html[data-studio-theme='light'] {
     background: rgba(0, 0, 0, 0.05);
     border-color: rgba(0, 0, 0, 0.10);
     color: #3a3a3a;
-  }
-  .task-card__delete { color: var(--studio-fg-muted); }
-  .task-card__delete:hover {
-    background: rgba(220, 38, 38, 0.08);
-    border-color: rgba(220, 38, 38, 0.30);
-    color: #b91c1c;
   }
   // Card title now reads var(--studio-fg) component-side which already
   // resolves to dark in light theme — no bridge override needed.
@@ -491,7 +484,6 @@ html[data-studio-theme='light'] {
   app-kanban-filter-sidesheet .sheet,
   app-create-job-dialog .dialog,
   app-create-job-dialog .panel,
-  app-orchestrator-settings-modal .panel,
   app-e2e-cleanup-dialog .panel,
   app-update-block-modal .panel,
   app-update-center .panel,
@@ -786,4 +778,45 @@ select option:checked,
 select option:hover {
   background-color: #45475a;
   color: #ffffff;
+}
+/* Active work is warm across cards, chips, and the board lane header. */
+.column[data-state='3-progress'] .column__header {
+  border-bottom-color: color-mix(in srgb, var(--lane-progress) 55%, var(--studio-border));
+}
+.column[data-state='3-progress'] .column__icon,
+.column[data-state='3-progress'] .column__title {
+  color: var(--lane-progress);
+}
+/* Shared action-feedback contract. The directive owns state semantics while
+   this global primitive lets every native button inherit one visual pattern. */
+.app-pending-button--pending {
+  cursor: wait;
+  opacity: 0.78;
+  font-size: 0;
+}
+
+.app-pending-button--pending::before {
+  content: '';
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-inline-end: var(--studio-spacing-2);
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  vertical-align: -0.1rem;
+  animation: app-pending-spin 0.7s linear infinite;
+}
+
+.app-pending-button--pending::after {
+  content: attr(data-pending-label);
+  font-size: 0.75rem;
+}
+
+.app-pending-button--pending > * { display: none; }
+
+@keyframes app-pending-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-pending-button--pending::before { animation-duration: 0s; }
 }

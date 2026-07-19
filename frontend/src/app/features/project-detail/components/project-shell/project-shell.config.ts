@@ -5,42 +5,37 @@
  * inventory and copy below; per-panel real content lands in follow-up
  * slices listed in that mockup's README.
  */
+import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 
-export type ProjectRailGroup = 'insight' | 'quality' | 'operations' | 'config';
+export type ProjectRailGroup = 'insight' | 'quality' | 'context' | 'config';
 
 export type ProjectRailKey =
   | 'overview'
+  | 'deployment'
+  | 'project-urls'
+  | 'git'
   | 'visual-evidence'
   | 'security'
   | 'architecture'
+  | 'project-graph'
   | 'drift'
   | 'uxui'
   | 'test-quality'
   | 'token-usage'
   | 'observability'
-  | 'product-runtime'
-  // 'steering-docs' is the NON-navigable tree container that groups the
-  // documentation rails (Architecture / Wiki / Agent Docs). 'steering' is the
-  // (renamed) leaf that used to be labelled "Steering Docs" and now carries the
-  // "Agent Docs" label — the AGENTS.md-style instructions agents read of their
-  // own accord. Two different nodes; do not collapse them.
-  | 'steering-docs'
   | 'steering'
   | 'wiki'
-  // Nav-rebuild step 1 (T5a): three reachable shells that get their real
-  // content in step 2 (T5b). 'pipeline' ← T4, 'workflow' ← T6, 'prompts' ← T3.
-  // Until then they render as the project-shell placeholder panel.
+  // Nav-rebuild rails that were introduced as reachable project-level
+  // destinations and now render real panels where the host supplies them.
   | 'pipeline'
   | 'workflow'
   | 'prompts'
-  | 'runtime-prompts'
   | 'audits'
-  | 'jobs'
+  | 'proposals'
   | 'settings'
   | 'settings-defaults'
   | 'settings-overrides'
-  | 'orchestrator'
-  | 'activity';
+  | 'orchestrator';
 
 export interface ProjectRailItem {
   key: ProjectRailKey;
@@ -53,37 +48,65 @@ export interface ProjectRailItem {
   description: string;
   /** Empty-state copy for the placeholder body. */
   empty: string;
-  /** Glyph used in the panel header. The rail itself is text-only (no icons). */
+  /** Glyph used in the placeholder panel header. */
   icon: string;
+  /** SVG glyph used by the shared tree-row navigation control. */
+  railIcon?: StudioIconName | null;
   /**
    * When set, this item is a child of the given parent and renders nested /
    * indented under it; the parent gains a disclosure twisty. Children live in
    * the same `group` as their parent.
    */
   parent?: ProjectRailKey;
-  /**
-   * Whether selecting the row routes to a panel. Defaults to true. A pure tree
-   * container (e.g. "Steering Docs") sets this false: clicking the row only
-   * toggles its children, it never becomes the active panel.
-   */
+  /** Whether selecting the row routes to a panel. Defaults to true. */
   navigable?: boolean;
 }
 
 export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
   // ---- INSIGHT: what the project IS / does ----
-  // Order matches the agent-orchestrator.zip mockup (hub-view.png):
-  // Overview · Visual Evidence · Drift · UX / UI · Observability.
-  // Architecture used to live here; it now sits under the "Steering Docs"
-  // documentation container in CONFIG (ASS-1711) because it is thematically a
-  // doc surface, not a live-health surface.
+  // Order matches the current Project Hub IA:
+  // Overview · Visual Evidence · Drift · Observability · Token Usage.
+  // Architecture used to live here; it now sits in Context (ASS-1711)
+  // because it is thematically a doc surface, not a live-health surface.
   {
     key: 'overview',
     group: 'insight',
     label: 'Overview',
     panelTitle: 'Overview',
-    description: 'Snapshot of project health and quick actions',
-    empty: 'Overview placeholder. Health snapshot and quick actions will land in a later slice.',
+    description: 'Operator pulse: delivery, spend, live URLs, deployment, and project knowledge',
+    empty: 'No operator overview is available for this project.',
     icon: '▤',
+    railIcon: 'layout',
+  },
+  {
+    key: 'project-urls',
+    group: 'insight',
+    label: 'Project URLs',
+    panelTitle: 'Project URLs',
+    description: 'Dev-server and preview URLs for this project: status, build/restart, and add',
+    empty: 'No URLs configured yet. Add one to see it here and as a row in the Explorer tree.',
+    icon: '◍',
+    railIcon: 'link',
+  },
+  {
+    key: 'deployment',
+    group: 'insight',
+    label: 'Deployment',
+    panelTitle: 'Deployment',
+    description: 'Deploy targets, current delta, and durable run history for this project',
+    empty: 'No deployment history is available for this project.',
+    icon: 'â‡§',
+    railIcon: 'activity',
+  },
+  {
+    key: 'git',
+    group: 'insight',
+    label: 'Git View',
+    panelTitle: 'Git View',
+    description: 'Branches, worktree/checkout folders, and recent history for this project repository',
+    empty: 'No git data yet. Once the project has a git repository, its branches, worktrees, and recent commits appear here.',
+    icon: '⎇',
+    railIcon: 'branch',
   },
   {
     key: 'visual-evidence',
@@ -93,6 +116,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Project screenshots, UI evidence, and task links',
     empty: 'No visual evidence yet. Screenshots created by Playwright or browser checks will appear here.',
     icon: '◉',
+    railIcon: 'eye',
   },
   {
     key: 'drift',
@@ -102,15 +126,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Overall drift score, per-dimension state, findings, and follow-ups',
     empty: 'No drift reports yet. Run a comparison to produce the first one.',
     icon: '↯',
-  },
-  {
-    key: 'uxui',
-    group: 'insight',
-    label: 'UX / UI',
-    panelTitle: 'UX / UI',
-    description: 'Design references, screenshots, council critique, and next-version actions',
-    empty: 'UX/UI placeholder. Design surfaces and council critique arrive in a later slice.',
-    icon: '◐',
+    railIcon: 'diff',
   },
   {
     key: 'observability',
@@ -120,13 +136,21 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Agent communication on the message bus: timeline, participants, kinds, token usage',
     empty: 'No bus messages for this project yet. Once the orchestrator, an agent, or the supervisor speaks, the timeline and counters fill in here.',
     icon: '⌁',
+    railIcon: 'activity',
+  },
+  {
+    key: 'token-usage',
+    group: 'insight',
+    label: 'Token Usage',
+    panelTitle: 'Token Usage',
+    description: 'Inference spend by job, supporting runs, orchestrator turns, and time window',
+    empty: 'Token Usage placeholder. Heatmap, timeline, and per-job drill-down land in a later slice.',
+    icon: '▦',
+    railIcon: 'cli',
   },
 
   // ---- QUALITY: what guards the project ----
-  // Per mockup order: Security · Test Quality · Audits & Checks ·
-  // Product Runtime. Product Runtime lived under OPERATIONS before;
-  // the mockup groups it with the quality bar since it's about how
-  // the built software behaves under load, not project operations.
+  // Per mockup order: Security · Test Quality · Audits & Checks.
   {
     key: 'security',
     group: 'quality',
@@ -135,6 +159,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Baseline, reviews, and active findings for this project',
     empty: 'No security baseline yet. The Security slice ships the baseline action and review history.',
     icon: '⊡',
+    railIcon: 'warn',
   },
   {
     key: 'test-quality',
@@ -144,6 +169,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Backend tests, end-to-end tests, tuning runs, coverage, and source-code perspective',
     empty: 'Test Quality placeholder. Run history and coverage views land in a later slice.',
     icon: '✓',
+    railIcon: 'check',
   },
   {
     key: 'audits',
@@ -153,99 +179,78 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Review definitions, per-task checks, and runtime probe slots for this project',
     empty: 'Audits & Checks placeholder. The review-definition model lands in a later slice.',
     icon: '⊟',
+    railIcon: 'list',
   },
   {
-    key: 'product-runtime',
+    key: 'proposals',
     group: 'quality',
-    label: 'Product Runtime',
-    panelTitle: 'Product Runtime',
-    description: 'How the built software behaved during local runs and tests: events, errors, latency, domain timeline',
-    empty: 'No runtime events captured yet. Once the built software emits structured events to the runtime JSONL files, recent events, error groups, latency summaries, and the domain timeline appear here.',
-    icon: '⊜',
+    label: 'Proposals',
+    panelTitle: 'Project Proposals',
+    description: 'Measured findings ready for operator approval and implementation-card spawning',
+    empty: 'No proposal generation exists yet.',
+    icon: '◇',
+    railIcon: 'list',
   },
-
-  // ---- OPERATIONS: what's running right now ----
-  {
-    key: 'jobs',
-    group: 'operations',
-    label: 'Jobs',
-    panelTitle: 'Jobs',
-    description: 'Tasks queued, in progress, and recently completed',
-    empty: 'Jobs placeholder. The board page is the live view; this panel will show a project-scoped slice.',
-    icon: '☰',
-  },
-  {
-    key: 'token-usage',
-    group: 'operations',
-    label: 'Token Usage',
-    panelTitle: 'Token Usage',
-    description: 'Inference spend by job, supporting runs, orchestrator turns, and time window',
-    empty: 'Token Usage placeholder. Heatmap, timeline, and per-job drill-down land in a later slice.',
-    icon: '▦',
-  },
-  {
-    key: 'activity',
-    group: 'operations',
-    label: 'Activity',
-    panelTitle: 'Activity',
-    description: 'Decisions, actions, and observations recorded by the orchestrator',
-    empty: 'Activity placeholder. The full feed lives at the project-feed overlay; a scoped view lands later.',
-    icon: '⌖',
-  },
-
-  // ---- CONFIG: how the project is set up ----
-  // Documentation surfaces are grouped under one collapsible "Steering Docs"
-  // tree container (ASS-1711): Architecture + Wiki/Docs + Agent Docs. The
-  // container itself is non-navigable — it only expands to its children.
-  {
-    key: 'steering-docs',
-    group: 'config',
-    label: 'Steering Docs',
-    panelTitle: 'Steering Docs',
-    description: 'Documentation that steers this project: architecture, the docs tree, and agent-read instructions',
-    empty: 'Pick a document surface below: Architecture, Wiki / Docs, or Agent Docs.',
-    icon: '⊕',
-    navigable: false,
-  },
+  // ---- CONTEXT: what agents and humans read to understand the project ----
   {
     key: 'architecture',
-    group: 'config',
-    parent: 'steering-docs',
+    group: 'context',
     label: 'Architecture',
     panelTitle: 'Architecture',
     description: 'Architectural decisions and drift status',
     empty: 'Architecture placeholder. ADR list and high-level map land in the architecture slice.',
     icon: '⊞',
+    railIcon: 'layout',
+  },
+  {
+    key: 'project-graph',
+    group: 'context',
+    label: 'Project Graph',
+    panelTitle: 'Project Graph',
+    description: 'Read-only component inventory from solution, project, package, Angular workspace, and workflow manifests',
+    empty: 'No repository graph is available for this project.',
+    icon: '⌘',
+    railIcon: 'branch',
   },
   {
     key: 'wiki',
-    group: 'config',
-    parent: 'steering-docs',
-    label: 'Wiki / Docs',
-    panelTitle: 'Wiki / Docs',
-    description: 'Browse the project docs/ tree: navigation card, domain docs, and accumulated learnings',
-    empty: 'No docs found. Once the project has a docs/ folder, its tree and rendered documents appear here.',
+    group: 'context',
+    label: 'Wiki',
+    panelTitle: 'Wiki',
+    description: 'Browse the project wiki: categories, Markdown pages, HTML pages, and accumulated learnings',
+    empty: 'No pages found. Once the project has a wiki, its categories and rendered pages appear here.',
     icon: '📚',
+    railIcon: 'book',
   },
   {
-    // Renamed from "Steering Docs": these are the instructions agents read of
+    // These are the instructions agents read of
     // their own accord (AGENTS.md, frontend/AGENTS.md, the agent-facing
     // domain/nav docs). The key stays 'steering' so deep-links and the
-    // shipped steering-docs panel keep working.
+    // shipped Agent Docs panel keep working.
     key: 'steering',
-    group: 'config',
-    parent: 'steering-docs',
+    group: 'context',
     label: 'Agent Docs',
     panelTitle: 'Agent Docs',
     description: 'Instruction files agents read on their own (AGENTS.md and the agent-facing domain docs), with human summary and drift warnings',
     empty: 'No agent-doc inventory yet. The slice lists AGENTS.md, frontend/AGENTS.md, README, ROADMAP, the task contract, the skills lookup, and the ADR archive.',
     icon: '🧭',
+    railIcon: 'file',
   },
-  // ---- Nav-rebuild shells (T5a step 1) ----
-  // Target navigation (Zielbild §F2): Board · Wiki · Pipeline · Workflow ·
-  // Prompts · Einstellungen at project level. These three are reachable
-  // placeholder shells now; step 2 (T5b) moves the existing functionality
-  // here unchanged. Nothing is moved in this step — the source pages stay put.
+  {
+    key: 'prompts',
+    group: 'context',
+    label: 'Prompts',
+    panelTitle: 'Prompts',
+    description: 'Prompt registry for this project: inventory, source / override matrix, and coverage.',
+    empty: 'Prompts shell — navigation only. Step 2 (T5b) moves the prompt-admin surface here unchanged: registry inventory, source/override matrix, and coverage.',
+    icon: '✎',
+    railIcon: 'file',
+  },
+
+  // ---- CONFIG: how the project is set up ----
+  // Target navigation (Zielbild §F2): Board · Context · Pipeline · Workflow ·
+  // Einstellungen at project level. Pipeline / Workflow are real content
+  // moved out of Project Settings; Settings keeps its inherited defaults tree.
   {
     key: 'pipeline',
     group: 'config',
@@ -254,36 +259,17 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Run pipeline steps (pre / core / post): activation, order, per-step model and prompt binding, and cost.',
     empty: 'Pipeline shell — navigation only. Step 2 (T5b) moves the pipeline sections currently in Project Settings here unchanged: per-step activation and order, model + prompt binding (→ Prompts), and token/cost view. Step 3 (T4a) then redesigns this page.',
     icon: '⫶',
+    railIcon: 'sliders',
   },
   {
     key: 'workflow',
     group: 'config',
     label: 'Workflow',
     panelTitle: 'Workflow / Lanes',
-    description: 'Lanes, ordering, and transitions; later per-transition Git integration.',
-    empty: 'Workflow shell — navigation only. Step 2 (T5b) moves the lane sort-order controls here unchanged. The transition view (stage 1) and Git integration (stage 2, after the Git concept decision) land in step 3 (T6a) and step 4.',
+    description: 'The lane model and per-lane ordering, plus a read-only view of what the platform does at each transition today. Per-transition Git integration comes after the Git concept decision.',
+    empty: 'Workflow / Lanes — the lane list, per-lane sort order, and a read-only transition view. Per-transition Git profiles and MR / team workflow stay placeholders until the Git concept is decided.',
     icon: '⇄',
-  },
-  {
-    key: 'prompts',
-    group: 'config',
-    label: 'Prompts',
-    panelTitle: 'Prompts',
-    description: 'Prompt registry for this project: inventory, source / override matrix, and coverage.',
-    empty: 'Prompts shell — navigation only. Step 2 (T5b) moves the prompt-admin surface here unchanged: registry inventory, source/override matrix, and coverage. Distinct from Runtime Prompts below, which is the read-only browse over prompts/runtime/*.md.',
-    icon: '✎',
-  },
-  {
-    // Runtime prompts are a SEPARATE main point from the agent-read docs above:
-    // these are the pipeline / aspect / review / orchestrator prompts under
-    // prompts/runtime/*.md that the platform feeds to CLIs at run time.
-    key: 'runtime-prompts',
-    group: 'config',
-    label: 'Runtime Prompts',
-    panelTitle: 'Runtime Prompts',
-    description: 'Pipeline, aspect, review, and orchestrator prompts the platform injects at run time (prompts/runtime/*.md)',
-    empty: 'Runtime Prompts placeholder. A read-only browse over prompts/runtime/*.md lands in a later slice; these are CLI-behaviour prompts, distinct from the agent-read Agent Docs.',
-    icon: '⌥',
+    railIcon: 'branch',
   },
   {
     key: 'orchestrator',
@@ -293,6 +279,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Live session, recent decisions and observations',
     empty: 'Orchestrator placeholder. Session detail and recent decisions land in a later slice.',
     icon: '◈',
+    railIcon: 'bot',
   },
   {
     // Settings is a navigable tree parent: the row opens the full Settings
@@ -304,6 +291,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'How the orchestrator behaves on this project',
     empty: 'Settings placeholder. Runner mode, auto-commit, and orchestrator model controls arrive next.',
     icon: '⚙',
+    railIcon: 'settings',
   },
   {
     key: 'settings-defaults',
@@ -314,6 +302,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Global defaults inherited from Workspace settings (default agent, usage caps)',
     empty: 'Workspace defaults placeholder.',
     icon: '⚙',
+    railIcon: 'sliders',
   },
   {
     key: 'settings-overrides',
@@ -324,6 +313,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Per-project settings that win over the inherited workspace defaults',
     empty: 'Project overrides placeholder.',
     icon: '⚙',
+    railIcon: 'settings',
   },
 ];
 

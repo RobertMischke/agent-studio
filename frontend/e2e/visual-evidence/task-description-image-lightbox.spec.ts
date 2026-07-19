@@ -29,7 +29,7 @@ async function pickWatchPath(): Promise<string> {
 }
 
 async function uploadAttachment(jobId: string, watchPath: string, fileName: string): Promise<string> {
-  const url = `/api/jobs/${encodeURIComponent(jobId)}/attachments?watchPath=${encodeURIComponent(watchPath)}`;
+  const url = `/api/tasks/${encodeURIComponent(jobId)}/attachments?watchPath=${encodeURIComponent(watchPath)}`;
   const formData = new FormData();
   const blob = new Blob([new Uint8Array(PNG_BYTES)], { type: 'image/png' });
   formData.append('file', blob, fileName);
@@ -44,7 +44,7 @@ async function uploadAttachment(jobId: string, watchPath: string, fileName: stri
 }
 
 async function setPrompt(jobId: string, watchPath: string, markdown: string): Promise<void> {
-  await api(`/api/jobs/${encodeURIComponent(jobId)}/files/prompt.md?watchPath=${encodeURIComponent(watchPath)}`, {
+  await api(`/api/tasks/${encodeURIComponent(jobId)}/files/prompt.md?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'PUT',
     body: JSON.stringify({ content: markdown })
   });
@@ -52,7 +52,7 @@ async function setPrompt(jobId: string, watchPath: string, markdown: string): Pr
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch { /* best-effort */ }

@@ -3,9 +3,8 @@
     <div>
       <h2 class="cli-admin__title">CLI Management</h2>
       <p class="cli-admin__subtitle">
-        Per-CLI usage caps. The runner blocks pickup and stops in-flight
-        runs when the configured percentage is reached, so manual ad-hoc
-        work outside the orchestrator keeps a buffer.
+        Manage the CLI types and models available to the workspace, inspect
+        their runtime contracts and sessions, and control usage in one place.
       </p>
     </div>
     <button class="cli-admin__refresh"
@@ -21,6 +20,14 @@
   @if (errorMsg(); as err) {
     <div class="cli-admin__error" data-testid="cli-admin-error">{{ err }}</div>
   }
+
+  <section class="cli-admin__section" data-testid="cli-admin-models">
+    <header class="cli-admin__section-head">
+      <h3>CLIs &amp; models</h3>
+      <span class="cli-admin__hint">what's available · primary model &amp; fallback route per CLI</span>
+    </header>
+    <app-cli-models-panel />
+  </section>
 
   <section class="cli-admin__section">
     <header class="cli-admin__section-head">
@@ -85,31 +92,26 @@
     }
   </section>
 
-  <section class="cli-admin__section">
+  <section class="cli-admin__section" data-testid="cli-admin-contracts">
     <header class="cli-admin__section-head">
-      <h3>Usage detail</h3>
-      <span class="cli-admin__hint">quota · tokens · model spend</span>
+      <h3>Completion contracts</h3>
+      <span class="cli-admin__hint">how each CLI signals turn completion</span>
     </header>
-    <app-cli-usage-detail
-      [quotaRows]="usage.quotaRows()"
-      [tokens]="usage.tokens()"
-      [adhoc]="usage.adhoc()"
-      [timeline24h]="usage.timeline24h()"
-      [timeline7d]="usage.timeline7d()"
-      [expensiveJobs]="usage.expensiveJobs()"
-      [refreshing]="usage.refreshing()"
-      [refreshingAll]="usage.refreshingAll()"
-      (refreshAll)="usage.refreshAll()"
-      (refreshOne)="usage.refreshOne($event.cliType)"
-      (openProjectSettings)="openProjectSettings.emit($event)" />
+    <p class="cli-admin__explainer" data-testid="cli-admin-contracts-explainer">
+      Each adapter's self-report: which native frame it treats as a turn
+      finished or failed, where the per-turn usage summary is read from, and
+      whether it is a typed adapter (structured events) or falls back to
+      exit-based detection. Read-only <em>by design</em> — nothing here is
+      configuration. It is a diagnosis tool: when completion detection misfires
+      (as with the tool-router parser bug, AGT-2089), this is where you confirm
+      what signal the orchestrator was actually waiting on.
+    </p>
+    <app-cli-contracts-panel />
   </section>
 
-  <section class="cli-admin__section" data-testid="cli-admin-sessions">
-    <header class="cli-admin__section-head">
-      <h3>CLI sessions</h3>
-      <span class="cli-admin__hint">per-CLI per-project inventory</span>
-    </header>
-    <app-cli-sessions-panel (openJobDetail)="openJobDetail.emit($event)" />
-  </section>
+  <p class="cli-admin__seealso" data-testid="cli-admin-seealso">
+    Looking for the session inventory or on-disk locations? They live on their
+    own pages now: <strong>CLI sessions</strong> and <strong>CLI paths</strong>.
+  </p>
 </div>
-  
+

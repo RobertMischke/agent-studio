@@ -1,9 +1,9 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { map } from 'rxjs';
+import { finalize, map } from 'rxjs';
 import type {
   ArchivedTasksResponse,
-  CreateJobRequest,
+  CreateTaskRequest,
   GroupedJobs,
   TaskArtifactsResponse,
   TaskFileHistoryEntry,
@@ -13,6 +13,8 @@ import type {
   FileGenerationMeta,
   WatchPathEntry,
   RegistryWorkspaceListItem,
+  CrashRecoveryActionResult,
+  CrashRecoveryPending,
   CliOutputLine,
   RunnerStatus,
   CliSettings,
@@ -25,23 +27,24 @@ import type {
   PromoteToCodingResponse,
   CreateRegistryProjectRequest,
   RegistryProjectSummary,
+  ProjectUrlStartRule,
+  ProjectUrlSuggestion,
+  ProjectUrlProcessSnapshot,
+  PublishActionPanel,
+  PublishAutomationMode,
+  PublishWorkflowRun,
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
-import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
+import type { CliModelCatalog, CliCompletionContract, CliUsageReport, CliSessionDetail, CliSessionDeleteResult, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult } from '../features/cli';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } from '../features/git';
 import type {
   OrchestratorLogResponse,
   OrchestratorSessionResponse,
+  OrchestratorContextDigest,
   OrchestratorChatResponse,
   OrchestratorChatTurn,
 } from '../features/orchestrator';
-import type {
-  ProjectChatScrollResponse,
-  ProjectChatSearchResponse,
-  ProjectChatTurnResponse,
-  ProjectChatStatsResponse,
-} from '../features/project-chat';
 import type {
   ProjectTokenUsageSummary,
   ProjectTokenHeatmap,
@@ -75,11 +78,24 @@ import type { TaskPlanView } from '../features/plan-strip/plan.model';
 import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient } from './jobs-hub-client.service';
+import type {
+  ProjectDeploymentSummary,
+  CompiledDeploymentPrompt,
+  ProjectThroughputSummary,
+  ProjectVisualEvidenceItem,
+  ProjectVisualEvidenceQueue,
+} from '../models/project-overview.model';
 
 /** One row in the code-review list endpoint response (see backend `CodeReviewListEntry`). */
 export interface CodeReviewListEntry {
   fileName: string;
   verdict: string;
+  /**
+   * Quality grade `A`/`B`/`C`/`D` from the automatic grade pass; null for the
+   * older user-triggered verdict reviews that carry no grade. Mirrors backend
+   * `CodeReviewListEntry.Grade` (already serialised over the wire).
+   */
+  grade?: string | null;
   summary: string;
   model: string;
   cliType: string;
@@ -87,6 +103,16 @@ export interface CodeReviewListEntry {
   commit?: string | null;
   runAt: string;
   generation?: FileGenerationMeta | null;
+}
+
+/**
+ * Reply from `GET /api/tasks/{id}/git/file` (and the commit-scoped variant).
+ * `content` is the file's UTF-8 text; `isBinary` is true for a NUL-containing
+ * blob, in which case `content` is empty and the pane declines to preview it.
+ */
+export interface GitFileContentResponse {
+  content: string;
+  isBinary: boolean;
 }
 
 /** Reply from `GET /api/tasks/code-review/defaults` (see backend `CodeReviewDefaultsResponse`). */
@@ -107,6 +133,7 @@ export interface CodeReviewRunResponse {
   concernTagId?: string | null;
   durationMs: number;
   startedAt: string;
+  grade?: string | null;
 }
 
 type LaneKey = keyof GroupedJobs;
@@ -133,6 +160,52 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
   [TaskState.Archive]: 'archive',
 };
 
+/**
+ * The grouped response already contains every live board task. Build the flat
+ * signal from that same snapshot so one refresh cannot launch two equivalent
+ * backend enrichment pipelines. The legacy `review` lane aliases
+ * `autoReview`, hence the identity-based de-duplication.
+ */
+function uniqueJobsFromGrouped(grouped: GroupedJobs): TaskInfo[] {
+  const seen = new Set<string>();
+  const jobs: TaskInfo[] = [];
+  for (const lane of Object.values(grouped)) {
+    for (const job of lane ?? []) {
+      const key = job.taskKey || `${job.watchPath}::${job.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      jobs.push(job);
+    }
+  }
+  return jobs;
+}
+
+/**
+ * Turn an orchestrator context key (`project:<PROJ>` or `task:<PROJ>/<KEY>`,
+ * mirroring the backend `OrchestratorContextKey`) into the URL path segment(s)
+ * for the `/api/runner/{contextKey}/orchestrator-chat` route. Each id part is
+ * URL-encoded on its own so a project name with spaces stays valid while the
+ * literal `task:`/`project:` prefix and the `<proj>/<key>` slash — which the
+ * backend routes match structurally — are preserved. Unrecognized shapes fall
+ * back to encoding the whole key as one segment.
+ */
+export function orchestratorContextChatSegment(contextKey: string): string {
+  const taskPrefix = 'task:';
+  const projectPrefix = 'project:';
+  if (contextKey.startsWith(taskPrefix)) {
+    const rest = contextKey.slice(taskPrefix.length);
+    const slash = rest.indexOf('/');
+    if (slash >= 0) {
+      const proj = rest.slice(0, slash);
+      const key = rest.slice(slash + 1);
+      return `task:${encodeURIComponent(proj)}/${encodeURIComponent(key)}`;
+    }
+  } else if (contextKey.startsWith(projectPrefix)) {
+    return `project:${encodeURIComponent(contextKey.slice(projectPrefix.length))}`;
+  }
+  return encodeURIComponent(contextKey);
+}
+
 @Injectable({ providedIn: 'root' })
 export class TaskService {
   private http = inject(HttpClient);
@@ -142,6 +215,12 @@ export class TaskService {
   private readonly baseUrl = '/api';
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private pushRefreshHandle: ReturnType<typeof setTimeout> | null = null;
+  private groupedRefreshInFlight = false;
+  private groupedRefreshQueued = false;
+  private groupedRefreshQueuedSilent = true;
+  private runnerRefreshInFlight = false;
+  private runnerRefreshQueued = false;
+  private runnerRefreshQueuedSilent = true;
 
   // Push (SignalR `/hubs/jobs`) is the primary update path. The poll is
   // demoted to a slow heartbeat that reconciles drift and backs up the socket
@@ -237,6 +316,25 @@ export class TaskService {
       this.error.set(null);
     }
 
+    this.refreshGrouped(silent);
+    this.refreshRunnerStatus(silent);
+  }
+
+  /**
+   * Keep the expensive board snapshot single-flight. Runner and SignalR
+   * events can request another refresh while a slow response is outstanding;
+   * collapse all of them into one trailing read instead of allowing an
+   * unbounded queue of full snapshots to build up behind the backend.
+   */
+  private refreshGrouped(silent: boolean): void {
+    if (this.groupedRefreshInFlight) {
+      this.groupedRefreshQueued = true;
+      this.groupedRefreshQueuedSilent &&= silent;
+      return;
+    }
+
+    this.groupedRefreshInFlight = true;
+
     const versionAtStart = this.mutationVersion;
     const acceptOptimisticTarget = () => {
       if (!silent) return true;
@@ -246,15 +344,17 @@ export class TaskService {
       return true;
     };
 
-    this.http.get<TaskInfo[]>(`${this.baseUrl}/tasks`).subscribe({
-      next: (jobs) => {
+    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).pipe(
+      finalize(() => this.finishGroupedRefresh()),
+    ).subscribe({
+      next: (grouped) => {
         if (acceptOptimisticTarget()) {
-          this.jobs.set(jobs);
+          this.grouped.set(grouped);
+          this.jobs.set(uniqueJobsFromGrouped(grouped));
         }
         if (silent) {
           this.error.set(null);
         }
-        this.loading.set(false);
       },
       error: (err) => {
         const message =
@@ -267,31 +367,25 @@ export class TaskService {
           this.errorDialog.show(err, {
             title: 'Failed to load jobs',
             fallbackMessage: 'Failed to load jobs',
-            source: 'Dashboard refresh',
-          });
-        }
-        this.loading.set(false);
-      },
-    });
-
-    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).subscribe({
-      next: (grouped) => {
-        if (acceptOptimisticTarget()) {
-          this.grouped.set(grouped);
-        }
-      },
-      error: (err) => {
-        if (!silent) {
-          this.errorDialog.show(err, {
-            title: 'Failed to load board columns',
-            fallbackMessage: 'Failed to load board columns',
             source: 'Board refresh',
           });
         }
       },
     });
+  }
 
-    this.refreshRunnerStatus(silent);
+  private finishGroupedRefresh(): void {
+    this.groupedRefreshInFlight = false;
+    if (!this.groupedRefreshQueued) {
+      this.loading.set(false);
+      return;
+    }
+
+    const silent = this.groupedRefreshQueuedSilent;
+    this.groupedRefreshQueued = false;
+    this.groupedRefreshQueuedSilent = true;
+    this.loading.set(!silent);
+    this.refreshGrouped(silent);
   }
 
   /**
@@ -497,8 +591,9 @@ export class TaskService {
    * "load more" and an accurate empty state. No full disk walk per call —
    * the backend serves this from the same cached scan that feeds the board.
    */
-  getArchivedTasks(opts: { watchPath?: string; offset?: number; limit?: number; search?: string } = {}) {
+  getArchivedTasks(opts: { project?: string; watchPath?: string; offset?: number; limit?: number; search?: string } = {}) {
     let params = this.withWatchPath(opts.watchPath).params ?? new HttpParams();
+    if (opts.project?.trim()) params = params.set('project', opts.project.trim());
     if (typeof opts.offset === 'number') params = params.set('offset', String(opts.offset));
     if (typeof opts.limit === 'number') params = params.set('limit', String(opts.limit));
     const term = opts.search?.trim();
@@ -550,7 +645,7 @@ export class TaskService {
       `${this.baseUrl}/workspaces/${encodeURIComponent(id)}`);
   }
 
-  /** F45b — patch a project record (rename / short-code / color / workspace / archived). */
+  /** F45b — patch a project record (rename / short-code / color / workspace / archived / paths). */
   updateRegistryProject(projId: string, patch: {
     displayName?: string;
     shortCode?: string;
@@ -558,13 +653,69 @@ export class TaskService {
     clearColor?: boolean;
     workspaceId?: string;
     archived?: boolean;
+    repositoryPath?: string;
+    clearRepositoryPath?: boolean;
+    rootPath?: string;
+    clearRootPath?: boolean;
+    repositoryUrl?: string;
+    clearRepositoryUrl?: boolean;
+    cliDefault?: CliType;
+    clearCliDefault?: boolean;
+    modelDefault?: string;
+    clearModelDefault?: boolean;
+    executionRunner?: string;
+    clearExecutionRunner?: boolean;
   }) {
-    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
+    return this.http.put<RegistryProjectSummary>(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
   }
 
-  /** F46 — create a registry project. Backend chooses projects/PROJ-NNN; no path is accepted from the UI. */
+  /** Create a registry project. Backend chooses projects/PROJ-NNN/tasks; no storage path is accepted from the UI. */
   createRegistryProject(body: CreateRegistryProjectRequest) {
     return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
+  }
+
+  // ----- Project URLs (per-project watchable dev-server / preview URLs) -----
+
+  /** Detected URL suggestions from the project's repo (package.json / angular.json / README). */
+  getProjectUrlSuggestions(projId: string) {
+    return this.http.get<ProjectUrlSuggestion[]>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/url-suggestions`);
+  }
+
+  /** Add a URL to the project. Returns the updated project record. */
+  addProjectUrl(projId: string, body: { label: string; url: string; startRule?: ProjectUrlStartRule | null }) {
+    return this.http.post<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls`, body);
+  }
+
+  /** Update an existing URL (label / url / start rule). */
+  updateProjectUrl(projId: string, urlId: string, body: { label: string; url: string; startRule?: ProjectUrlStartRule | null }) {
+    return this.http.put<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`, body);
+  }
+
+  /** Remove a URL by id. Returns the updated project record. */
+  removeProjectUrl(projId: string, urlId: string) {
+    return this.http.delete<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`);
+  }
+
+  /** Start/restart the owned dev server and return its observable session. */
+  startProjectUrl(projId: string, urlId: string) {
+    return this.http.post<ProjectUrlProcessSnapshot>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/start`, {});
+  }
+
+  /** Current owned process, or null (HTTP 204) when Studio did not start one. */
+  getProjectUrlProcess(projId: string, urlId: string) {
+    return this.http.get<ProjectUrlProcessSnapshot | null>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
+  }
+
+  /** Explicitly stop the process tree owned for this URL. */
+  stopProjectUrlProcess(projId: string, urlId: string) {
+    return this.http.delete<ProjectUrlProcessSnapshot>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
   }
 
   /**
@@ -604,7 +755,7 @@ export class TaskService {
     );
   }
 
-  createJob(req: CreateJobRequest) {
+  createJob(req: CreateTaskRequest) {
     return this.http.post<{ id: string }>(`${this.baseUrl}/tasks`, req);
   }
 
@@ -617,6 +768,21 @@ export class TaskService {
   getPromoteToCoding(jobId: string, watchPath?: string) {
     return this.http.get<PromoteToCodingResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/promote-to-coding`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * AGT-2069 — declare (or clear) "no follow-up intended" on a planning task.
+   * This satisfies the spawn-contract completion gate without producing
+   * follow-up cards, by an explicit operator call. Returns the recomputed
+   * spawn summary so the detail can update without a re-fetch. 400 when the
+   * task is not a planning task.
+   */
+  setPlanningClosure(jobId: string, declared: boolean, reason: string | null, watchPath?: string) {
+    return this.http.post<import('../models/task.model').PlanningSpawnSummary>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/planning-closure`,
+      { declared, reason },
       this.withWatchPath(watchPath),
     );
   }
@@ -646,17 +812,19 @@ export class TaskService {
   }
 
   /**
-   * F34: replace-all write of a task's cross-references. Each list becomes the
-   * full set for its relation kind; the backend validates (keys must exist, no
-   * self-reference, dependsOn stays a DAG) and returns 400 with a per-edge
-   * `errors[]` body on rejection. Returns the persisted references on success.
+   * F34 / AGT-2029: replace-all write of a task's cross-references. Each list
+   * becomes the full set for its relation kind. Hard errors (self-reference,
+   * dependsOn cycle) return 400 with a per-edge `errors[]` body. An unknown key
+   * is NOT a hard failure - the waits-on target may be created later - so the
+   * write persists and the unknown edges come back as `warnings[]`. Returns the
+   * `{ references, warnings }` envelope on success.
    */
   setTaskReferences(
     jobId: string,
     references: import('../models/task.model').TaskReferences,
     watchPath?: string,
   ) {
-    return this.http.put<import('../models/task.model').TaskReferences>(
+    return this.http.put<import('../models/task.model').SetTaskReferencesResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/references`,
       references,
       this.withWatchPath(watchPath),
@@ -679,6 +847,23 @@ export class TaskService {
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/dependents`,
       params ? { params } : {},
     );
+  }
+
+  /**
+   * AGT-2050 batch projection (the same one the inline microcard hydrator uses):
+   * resolve a set of task keys to their compact live-or-ghost reference status.
+   * Keys whose project short-code is unknown are dropped by the backend, so the
+   * result may be shorter than the input; a known key with no live task comes
+   * back as a ghost (`exists === false`). Reused by the wiki cross-reference
+   * panel so a wiki page renders its related tasks with the very same microcard.
+   */
+  getReferenceStatuses(keys: string[]) {
+    return this.http
+      .post<{ items: import('../components/task-reference-microcard/task-reference-microcard').TaskReferenceStatus[] }>(
+        `${this.baseUrl}/tasks/reference-status`,
+        { keys },
+      )
+      .pipe(map((r) => r.items ?? []));
   }
 
   /**
@@ -710,13 +895,27 @@ export class TaskService {
    */
   runCodeReview(
     jobId: string,
-    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string },
+    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string; mode?: 'verdict' | 'grade' },
     watchPath?: string,
   ) {
     return this.http.post<CodeReviewRunResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/code-review`,
       body,
       this.withWatchPath(watchPath),
+    );
+  }
+
+  /** Add an implemented post-step to an existing card and run only that step. */
+  runTaskPostStep(jobId: string, stepId: string, watchPath?: string) {
+    return this.http.post<{
+      stepId: string;
+      attempt: number;
+      status: string;
+      summary: string;
+      artifactRef?: string | null;
+    }>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/pipeline/steps/${encodeURIComponent(stepId)}/run`,
+      { watchPath, addToCard: true },
     );
   }
 
@@ -751,7 +950,8 @@ export class TaskService {
   /**
    * Create a queued follow-up task in the same project, prefilled with the
    * finding's title + body + linked artifacts/file refs. Returns the new
-   * job's id so the UI can route the user to the new card.
+   * job's id plus its stable key so the UI can route without exposing the
+   * project's filesystem location.
    */
   createReviewEvidenceFollowup(
     jobId: string,
@@ -759,7 +959,7 @@ export class TaskService {
     body: { title?: string; targetState?: string },
     watchPath?: string,
   ) {
-    return this.http.post<{ jobId: string; targetState: string }>(
+    return this.http.post<{ jobId: string; taskKey?: string; targetState: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/follow-up`,
       body,
       this.withWatchPath(watchPath),
@@ -783,9 +983,10 @@ export class TaskService {
   }
 
   /**
-   * Lists every `.md` file in the job root (status.md excluded). Drives the
-   * Files tab in the detail view; cheap manifest call so the tab can fetch
-   * individual file contents lazily through {@link readJobFile}.
+   * Lists supported Markdown, HTML, and aspect JSON documents in the job root
+   * (status.md excluded). Drives the Files tab in the detail view; cheap
+   * manifest call so the tab can fetch individual contents lazily through
+   * {@link readJobFile}.
    */
   listJobArtifacts(jobId: string, watchPath?: string) {
     return this.http.get<TaskArtifactsResponse>(
@@ -796,8 +997,8 @@ export class TaskService {
 
   /**
    * Reads one file from the job root. Used by the Files tab to lazily
-   * fetch the content of an aspect / note / other markdown card when the
-   * user expands it. Returns the body as plain text.
+   * fetch the content of an aspect, note, HTML, or other document card when
+   * the user expands it. Returns the body as plain text.
    */
   readJobFile(jobId: string, fileName: string, watchPath?: string) {
     const opts = this.withWatchPath(watchPath);
@@ -1009,6 +1210,31 @@ export class TaskService {
     return this.http.get<{ diff: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
       opts,
+    );
+  }
+
+  /**
+   * Full working-tree text of one file, for the git-pane's rendered md/html
+   * preview (AGT-2008). Returns `{ content, isBinary }`; a binary blob comes
+   * back with empty content + `isBinary: true` so the pane shows a
+   * "not previewable" note instead of raw bytes.
+   */
+  getGitFileContent(jobId: string, path: string, watchPath?: string) {
+    return this.http.get<GitFileContentResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/file`,
+      this.withWatchPathAndPath(watchPath, path),
+    );
+  }
+
+  /**
+   * File text at a specific commit in this task's chain, for the commit-mode
+   * md/html preview. Mirrors {@link getGitFileContent}; the SHA is validated
+   * server-side as a known job commit.
+   */
+  getJobCommitFileBySha(jobId: string, sha: string, path: string, watchPath?: string) {
+    return this.http.get<GitFileContentResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/file`,
+      this.withWatchPathAndPath(watchPath, path),
     );
   }
 
@@ -1262,6 +1488,46 @@ export class TaskService {
     return this.http.get<CliUsageReport>(`${this.baseUrl}/cli/usage`);
   }
 
+  /**
+   * Lazy deep-read of one CLI session (model, thinking, message count, first
+   * prompt, git branch). Fetched only when a session row is expanded so the
+   * inventory list never reads transcript bodies.
+   */
+  getCliSessionDetail(cliType: CliType, id: string, cwd: string | null) {
+    return this.http.get<CliSessionDetail>(
+      `${this.baseUrl}/cli/${encodeURIComponent(cliType)}/session-detail`,
+      { params: cwd ? { id, cwd } : { id } },
+    );
+  }
+
+  /** Guarded cleanup delete of a single session transcript. The backend refuses paths outside the CLI session store. */
+  deleteCliSession(cliType: CliType, id: string, cwd: string | null) {
+    return this.http.delete<CliSessionDeleteResult>(
+      `${this.baseUrl}/cli/${encodeURIComponent(cliType)}/session`,
+      { params: cwd ? { id, cwd } : { id } },
+    );
+  }
+
+  /** Per-CLI completion contracts (how each backend signals turn completion). */
+  getCliCompletionContracts() {
+    return this.http.get<CliCompletionContract[]>(`${this.baseUrl}/cli/contracts`);
+  }
+
+  /** Per-CLI working-memory report: memory / session state plus protected auth / config (ASS-1748 / T1c). */
+  getCliWorkingMemory(cliType: CliType) {
+    return this.http.get<CliWorkingMemoryReport>(
+      `${this.baseUrl}/cli/${encodeURIComponent(cliType)}/working-memory`,
+    );
+  }
+
+  /** Delete one memory / session state by absolute path. The backend refuses auth / config paths. */
+  deleteCliWorkingMemory(cliType: CliType, path: string) {
+    return this.http.delete<CliWorkingMemoryDeleteResult>(
+      `${this.baseUrl}/cli/${encodeURIComponent(cliType)}/working-memory`,
+      { params: { path } },
+    );
+  }
+
   // Cycle 10d: quota / subscription rate-limit reporting moved to
   // QuotaApiService (`features/quota/services/`). Caller migration:
   // `inject(QuotaApiService)` instead of `inject(TaskService)` + the
@@ -1289,12 +1555,22 @@ export class TaskService {
   }
 
   /** All epics with their live sub-task rollups. */
-  getEpics(includeFixtures = false) {
-    const params = includeFixtures ? new HttpParams().set('includeFixtures', 'true') : undefined;
+  getEpics(includeFixtures = false, status?: 'active' | 'completed', project?: string) {
+    let params = new HttpParams();
+    if (includeFixtures) params = params.set('includeFixtures', 'true');
+    if (status) params = params.set('status', status);
+    if (project) params = params.set('project', project);
     return this.http.get<import('../models/task.model').EpicRollup[]>(
       `${this.baseUrl}/epics`,
-      params ? { params } : {},
+      { params },
     );
+  }
+
+  getCompletedEpicCount(includeFixtures = false, project?: string) {
+    let params = new HttpParams();
+    if (includeFixtures) params = params.set('includeFixtures', 'true');
+    if (project) params = params.set('project', project);
+    return this.http.get<{ count: number }>(`${this.baseUrl}/epics/completed/count`, { params });
   }
 
   /** A single epic's rollup. */
@@ -1319,7 +1595,7 @@ export class TaskService {
   }
 
   getModelCatalog() {
-    return this.http.get<CopilotModelCatalog>(`${this.baseUrl}/settings/cli/models`);
+    return this.http.get<CliModelCatalog>(`${this.baseUrl}/settings/cli/models`);
   }
 
   getJobOutput(jobId: string, watchPath?: string) {
@@ -1376,6 +1652,13 @@ export class TaskService {
     );
   }
 
+  /** Read the newest orchestrator events across every watched project. */
+  getGlobalOrchestratorFeed() {
+    return this.http.get<import('../features/orchestrator').GlobalOrchestratorFeedResponse>(
+      `${this.baseUrl}/runner/orchestrator-feed`,
+    );
+  }
+
   /**
    * Read the per-project list of 4-review jobs whose latest CLI output
    * carries an unresolved [[TASK_NEEDS_INPUT]] sentinel. Drives the
@@ -1424,6 +1707,59 @@ export class TaskService {
     );
   }
 
+  getPublishPanel(projectName: string, targetId: string) {
+    return this.http.get<PublishActionPanel>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/${encodeURIComponent(targetId)}/panel`,
+    );
+  }
+
+  setPublishAutomation(projectName: string, targetId: string, mode: PublishAutomationMode) {
+    return this.http.put<{ targetId: string; mode: PublishAutomationMode }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/automation`,
+      { targetId, mode },
+    );
+  }
+
+  publishPackage(projectName: string, targetId: string, version: string) {
+    return this.http.post<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/package`,
+      { targetId, version },
+    );
+  }
+
+  deployWebsite(projectName: string) {
+    return this.http.post<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/website`,
+      { targetId: 'website' },
+    );
+  }
+
+  getPublishRun(projectName: string, targetId: string) {
+    return this.http.get<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/${encodeURIComponent(targetId)}/run`,
+    );
+  }
+
+  getPendingCrashRecoveries() {
+    return this.http.get<{ pending: CrashRecoveryPending[] }>(
+      `${this.baseUrl}/crash-recovery/pending`,
+    );
+  }
+
+  commitCrashRecovery(id: string) {
+    return this.http.post<CrashRecoveryActionResult>(
+      `${this.baseUrl}/crash-recovery/pending/${encodeURIComponent(id)}/commit`,
+      {},
+    );
+  }
+
+  dismissCrashRecovery(id: string) {
+    return this.http.post<CrashRecoveryActionResult>(
+      `${this.baseUrl}/crash-recovery/pending/${encodeURIComponent(id)}/dismiss`,
+      {},
+    );
+  }
+
   repairProjectQueueHealth(projectName: string) {
     return this.http.post<{
       project: string;
@@ -1440,6 +1776,7 @@ export class TaskService {
         string,
         {
           autoCommit: boolean;
+          crashRecoveryEnabled: boolean;
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
           orchestratorModel: string | null;
@@ -1539,8 +1876,12 @@ export class TaskService {
    * flags). The Settings panel renders one control row per step from this,
    * so the step list is never hardcoded on the frontend.
    */
-  getPipelineCatalogue() {
-    return this.http.get<PipelineCatalogue>(`${this.baseUrl}/projects/pipeline-catalogue`);
+  getPipelineCatalogue(projectName?: string | null) {
+    const params = projectName ? new HttpParams().set('projectName', projectName) : undefined;
+    return this.http.get<PipelineCatalogue>(
+      `${this.baseUrl}/projects/pipeline-catalogue`,
+      params ? { params } : {},
+    );
   }
 
   /**
@@ -1553,6 +1894,7 @@ export class TaskService {
     step: {
       stepId: string;
       enabled?: boolean | null;
+      economyModel?: boolean | null;
       mode?: string | null;
       cliType?: string | null;
       model?: string | null;
@@ -1578,6 +1920,13 @@ export class TaskService {
   setProjectAutoCommit(projectName: string, enabled: boolean) {
     return this.http.put(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-commit`,
+      { enabled },
+    );
+  }
+
+  setProjectCrashRecovery(projectName: string, enabled: boolean) {
+    return this.http.put(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/crash-recovery`,
       { enabled },
     );
   }
@@ -1637,6 +1986,30 @@ export class TaskService {
     );
   }
 
+  getOrchestratorContextSessions() {
+    return this.http.get<import('../features/orchestrator').OrchestratorContextSessionsResponse>(
+      `${this.baseUrl}/orchestrator/sessions`,
+    );
+  }
+
+  /** Read the compact ORCH-1 application digest for one multichat context. */
+  getOrchestratorContextDigest(contextKey: string) {
+    return this.http.get<OrchestratorContextDigest>(
+      `${this.baseUrl}/orchestrator/context/${orchestratorContextChatSegment(contextKey)}`,
+    );
+  }
+
+  /**
+   * Rebuild one context digest on demand. Unlike the cheap read path this
+   * explicitly asks the backend to re-probe quota before assembling it.
+   */
+  refreshOrchestratorContextDigest(contextKey: string) {
+    return this.http.post<OrchestratorContextDigest>(
+      `${this.baseUrl}/orchestrator/context/${orchestratorContextChatSegment(contextKey)}/refresh`,
+      null,
+    );
+  }
+
   // Cycle 10d: token-aggregate endpoints moved to TokensApiService
   // (`features/tokens/services/`). Caller migration:
   // `inject(TokensApiService)` instead of `inject(TaskService)` + the
@@ -1652,6 +2025,41 @@ export class TaskService {
   getProjectTokenUsageSummary(projectName: string) {
     return this.http.get<ProjectTokenUsageSummary>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/summary`,
+    );
+  }
+
+  /** Operator Overview throughput, archive-inclusive through lane history. */
+  getProjectThroughput(projectName: string) {
+    return this.http.get<ProjectThroughputSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/throughput`,
+    );
+  }
+
+  getProjectVisualEvidence(projectName: string, refresh = false) {
+    return this.http.get<ProjectVisualEvidenceQueue>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/visual-evidence`,
+      { params: refresh ? { refresh: 'true' } : undefined },
+    );
+  }
+
+  acknowledgeProjectVisualEvidence(projectName: string, itemId: string) {
+    return this.http.post<ProjectVisualEvidenceItem>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/visual-evidence/${encodeURIComponent(itemId)}/acknowledge`,
+      {},
+    );
+  }
+
+  /** Shared DEP-1 read model: latest stable deploy plus current pending delta. */
+  getProjectDeploymentSummary(projectName: string) {
+    return this.http.get<ProjectDeploymentSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/summary`,
+    );
+  }
+
+  compileProjectDeployment(projectName: string, prompt: string) {
+    return this.http.post<CompiledDeploymentPrompt>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/compile`,
+      { prompt },
     );
   }
 
@@ -1753,6 +2161,21 @@ export class TaskService {
   }
 
   /**
+   * MC-2 (Concept §4): read the transcript for a specific navigation context.
+   * The side sheet derives a `project:<PROJ>` or `task:<PROJ>/<KEY>` context
+   * key from where the operator is (board vs. task page); this hits
+   * `GET /api/runner/{contextKey}/orchestrator-chat` so a pinned task and the
+   * board no longer share one history. A `project:` context resolves to the
+   * same canonical per-project thread {@link getOrchestratorChat} returns, so
+   * the board's chat is unchanged.
+   */
+  getOrchestratorChatByContext(contextKey: string) {
+    return this.http.get<OrchestratorChatResponse>(
+      `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
+    );
+  }
+
+  /**
    * Send a user message to the project's orchestrator chat. The backend
    * resumes the global orchestrator session, persists both user and
    * orchestrator turns, and returns the orchestrator's reply turn.
@@ -1777,6 +2200,33 @@ export class TaskService {
   }
 
   /**
+   * MC-2 (Concept §4): send a user message scoped to a navigation context.
+   * Hits `POST /api/runner/{contextKey}/orchestrator-chat` so a task context's
+   * turns land in — and are read back from — its own thread, while a `project:`
+   * context resolves to the same canonical per-project thread
+   * {@link sendOrchestratorChat} writes to. The resumed orchestrator session,
+   * prompt, and usage accounting stay project-level regardless of context.
+   */
+  sendOrchestratorChatByContext(
+    contextKey: string,
+    body: {
+      text: string;
+      attachments?: {
+        alt: string;
+        relativePath: string;
+        inlineBase64?: string | null;
+        mimeType?: string | null;
+      }[];
+      navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+    },
+  ) {
+    return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
+      `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
+      body,
+    );
+  }
+
+  /**
    * Upload one image to the project's chat-attachments folder so the
    * subsequent `sendOrchestratorChat` call can reference it by its
    * relative path. Multipart/form-data with `file` field.
@@ -1787,61 +2237,6 @@ export class TaskService {
     return this.http.post<{ fileName: string; relativePath: string; url: string }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments`,
       form,
-    );
-  }
-
-  /**
-   * Slice D scroll cursor: returns up to `limit` turns whose `ts` is
-   * strictly before / strictly after the anchor. Cursor is the ISO
-   * timestamp of the boundary turn already in the list. With no anchor
-   * it returns the most recent N (reverse-chronological), which is
-   * what the FE wants for the initial load.
-   */
-  scrollProjectChat(
-    projectName: string,
-    opts: { before?: string; after?: string; limit?: number },
-  ) {
-    let params = new HttpParams();
-    if (opts.before) params = params.set('before', opts.before);
-    if (opts.after) params = params.set('after', opts.after);
-    if (opts.limit != null) params = params.set('limit', String(opts.limit));
-    return this.http.get<ProjectChatScrollResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/scroll`,
-      { params },
-    );
-  }
-
-  /**
-   * BM25-ranked FTS5 search over the per-project chat history. Returns
-   * `<b>...</b>`-marked snippets that are HTML-encoded except for the
-   * marker tags; the caller renders them as `[innerHTML]` after
-   * mapping the markers to `<mark>`.
-   */
-  searchProjectChat(projectName: string, query: string, limit = 20) {
-    const params = new HttpParams().set('q', query).set('limit', String(limit));
-    return this.http.get<ProjectChatSearchResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/search`,
-      { params },
-    );
-  }
-
-  /**
-   * Per-project chat stats: total message count, oldest / newest ts.
-   * Drives the step-load panel's "viewing N of M, going back to …" line.
-   */
-  getProjectChatStats(projectName: string) {
-    return this.http.get<ProjectChatStatsResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/stats`,
-    );
-  }
-
-  /**
-   * Fetch a single chat turn's full body + frontmatter — used after a
-   * search-result click to scroll the live list to that turn.
-   */
-  getProjectChatTurn(projectName: string, turnId: string) {
-    return this.http.get<ProjectChatTurnResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/turn/${encodeURIComponent(turnId)}`,
     );
   }
 
@@ -1897,7 +2292,16 @@ export class TaskService {
   }
 
   refreshRunnerStatus(silent = false): void {
-    this.getRunnerStatus().subscribe({
+    if (this.runnerRefreshInFlight) {
+      this.runnerRefreshQueued = true;
+      this.runnerRefreshQueuedSilent &&= silent;
+      return;
+    }
+
+    this.runnerRefreshInFlight = true;
+    this.getRunnerStatus().pipe(
+      finalize(() => this.finishRunnerRefresh()),
+    ).subscribe({
       next: (status) => this.runnerStatus.set(status),
       error: (err) => {
         if (!silent) {
@@ -1909,6 +2313,16 @@ export class TaskService {
         }
       },
     });
+  }
+
+  private finishRunnerRefresh(): void {
+    this.runnerRefreshInFlight = false;
+    if (!this.runnerRefreshQueued) return;
+
+    const silent = this.runnerRefreshQueuedSilent;
+    this.runnerRefreshQueued = false;
+    this.runnerRefreshQueuedSilent = true;
+    this.refreshRunnerStatus(silent);
   }
 
   startLiveUpdates(intervalMs = 2000): void {

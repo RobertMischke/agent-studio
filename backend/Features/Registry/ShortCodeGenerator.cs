@@ -32,8 +32,7 @@ public static class ShortCodeGenerator
     public static string Derive(string displayName, IEnumerable<string> existingCodes)
     {
         var taken = new HashSet<string>(existingCodes ?? [], StringComparer.OrdinalIgnoreCase);
-        var seed = DeriveSeed(displayName);
-        if (string.IsNullOrEmpty(seed)) seed = "PROJ";
+        var seed = EnsureValidSeed(DeriveSeed(displayName), displayName);
 
         if (!taken.Contains(seed)) return seed;
         for (var i = 2; i < 1000; i++)
@@ -94,5 +93,26 @@ public static class ShortCodeGenerator
             }
         }
         return result;
+    }
+
+    private static string EnsureValidSeed(string? candidate, string? displayName)
+    {
+        var seed = (candidate ?? "").ToUpperInvariant();
+        if (seed.Length == 0) return "PROJ";
+
+        if (seed[0] is < 'A' or > 'Z')
+        {
+            var asciiLetters = new string((displayName ?? "")
+                .Where(ch => ch is >= 'A' and <= 'Z' or >= 'a' and <= 'z')
+                .Select(char.ToUpperInvariant)
+                .ToArray());
+            seed = asciiLetters.Length == 0
+                ? "PROJ"
+                : asciiLetters[..Math.Min(3, asciiLetters.Length)];
+        }
+
+        if (seed.Length == 1) seed += "X";
+        if (seed.Length > 6) seed = seed[..6];
+        return ValidCode.IsMatch(seed) ? seed : "PROJ";
     }
 }

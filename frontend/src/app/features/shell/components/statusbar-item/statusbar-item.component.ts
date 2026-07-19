@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, input, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 /**
  * Single status-bar chip: icon + label + click. Six call sites in the

@@ -6,13 +6,18 @@
  * it up. This fixture is the single way to do that. It calls
  * `scripts/supervisor/dev-lifecycle.sh` to start dev's backend on :5030 before
  * the spec runs and tears it down after, while staying idempotent: if the dev
- * backend was already healthy when the fixture loaded, the fixture leaves it
- * running on teardown.
+ * backend was already healthy and exposes a usable watch path when the fixture
+ * loaded, the fixture leaves it running on teardown.
  *
  * Set `KEEP_DEV_ON_FAIL=1` to keep dev up after a failing test for inspection.
  *
  * Resolution rules (no hard-coded paths):
  *   - DEV_CHECKOUT env var wins.
+ *   - A git worktree runs the backend from that worktree, so task verification
+ *     never falls through to a sibling checkout.
+ *   - A temporary task repository and watched project point back to the
+ *     selected checkout for repository provenance, so an isolated checkout
+ *     without appsettings.Local.json can still drive real-source UI coverage.
  *   - Else: ask the dev backend's `/api/watch-paths` endpoint after start
  *     (Agent Software Studio entry) for the workspace path.
  *   - Else: fall back to the script's own default (sibling folder).
@@ -24,7 +29,8 @@
  */
 import { test as base, expect } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 export interface DevBackend {
@@ -35,18 +41,40 @@ export interface DevBackend {
 
 const DEV_PORT = Number(process.env.DEV_PORT ?? 5030);
 const DEV_BASE_URL = `http://127.0.0.1:${DEV_PORT}`;
+let isolatedWorkspace: string | undefined;
+
+function ensureIsolatedWorkspace(): { taskRepository: string; watchPath: string } {
+  isolatedWorkspace ??= mkdtempSync(path.join(tmpdir(), 'agent-studio-dev-backend-'));
+  const watchPath = path.join(isolatedWorkspace, 'projects', 'agent-studio-worktree');
+  mkdirSync(watchPath, { recursive: true });
+  return { taskRepository: isolatedWorkspace, watchPath };
+}
+
+function resolveRepoRoot(): string {
+  return path.resolve(__dirname, '..', '..', '..');
+}
+
+function resolveDevCheckout(): string | undefined {
+  if (process.env.DEV_CHECKOUT) return process.env.DEV_CHECKOUT;
+
+  const repoRoot = resolveRepoRoot();
+  const gitMarker = path.join(repoRoot, '.git');
+  if (existsSync(gitMarker) && statSync(gitMarker).isFile()) return repoRoot;
+
+  return undefined;
+}
 
 function resolveScriptPath(): string {
   // The fixture file lives at <repo>/frontend/e2e/fixtures/dev-backend.ts.
   // The script lives at <repo>/scripts/supervisor/dev-lifecycle.sh.
   // __dirname is not available in ESM; derive from import.meta-style cwd.
-  const here = path.resolve(__dirname);
-  const repoRoot = path.resolve(here, '..', '..', '..');
-  return path.join(repoRoot, 'scripts', 'supervisor', 'dev-lifecycle.sh');
+  return path.join(resolveRepoRoot(), 'scripts', 'supervisor', 'dev-lifecycle.sh');
 }
 
 function runScript(cmd: 'start' | 'stop' | 'status'): { code: number; stdout: string; stderr: string } {
   const scriptPath = resolveScriptPath();
+  const devCheckout = resolveDevCheckout();
+  const isolated = cmd === 'start' && devCheckout ? ensureIsolatedWorkspace() : undefined;
   if (!existsSync(scriptPath)) {
     throw new Error(`dev-lifecycle.sh not found at ${scriptPath}`);
   }
@@ -55,6 +83,15 @@ function runScript(cmd: 'start' | 'stop' | 'status'): { code: number; stdout: st
     env: {
       ...process.env,
       DEV_PORT: String(DEV_PORT),
+      ...(devCheckout ? { DEV_CHECKOUT: devCheckout } : {}),
+      ...(isolated && !process.env.WatchPaths__0__Path ? {
+        TaskRepository: isolated.taskRepository,
+        Runner__Role: 'test-subject',
+        WatchPaths__0__Name: 'Agent Studio Worktree',
+        WatchPaths__0__Path: isolated.watchPath,
+        WatchPaths__0__RootPath: devCheckout,
+        WatchPaths__0__RepositoryPath: devCheckout,
+      } : {}),
     },
     encoding: 'utf8',
     timeout: 60_000,
@@ -75,12 +112,24 @@ async function isHealthy(): Promise<boolean> {
   }
 }
 
+async function hasWatchPath(): Promise<boolean> {
+  try {
+    const res = await fetch(`${DEV_BASE_URL}/api/watch-paths`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return false;
+    const paths: unknown[] = await res.json();
+    return paths.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function discoverWorkspace(): Promise<string> {
-  if (process.env.DEV_CHECKOUT) return process.env.DEV_CHECKOUT;
+  const checkout = resolveDevCheckout();
+  if (checkout) return checkout;
   try {
     const res = await fetch(`${DEV_BASE_URL}/api/watch-paths`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
-      const paths: Array<{ name?: string; rootPath?: string }> = await res.json();
+      const paths: { name?: string; rootPath?: string }[] = await res.json();
       const ours = paths.find(p => (p.rootPath ?? '').toLowerCase().includes('agent-taskboard-dev'));
       if (ours?.rootPath) return ours.rootPath;
     }
@@ -88,19 +137,37 @@ async function discoverWorkspace(): Promise<string> {
     // fall through
   }
   // Last resort: same default the script uses.
-  const here = path.resolve(__dirname);
-  const repoRoot = path.resolve(here, '..', '..', '..');
-  return path.resolve(repoRoot, '..', 'agent-taskboard-dev');
+  return path.resolve(resolveRepoRoot(), '..', 'agent-taskboard-dev');
 }
 
 export const test = base.extend<{ devBackend: DevBackend }>({
+  // Playwright 1.59 requires object destructuring even when the fixture has no dependencies.
+  // eslint-disable-next-line no-empty-pattern
   devBackend: async ({}, use, testInfo) => {
     const startedHealthy = await isHealthy();
     let weStartedIt = false;
 
-    if (!startedHealthy) {
+    // A fixture-started worktree backend needs the isolated WatchPaths values
+    // passed by runScript('start'). A stale KEEP_DEV_ON_FAIL process can still
+    // be healthy while carrying an empty configuration, so recycle only that
+    // incompatible case instead of silently yielding an unusable subject.
+    if (startedHealthy && resolveDevCheckout() && !await hasWatchPath()) {
+      const stopped = runScript('stop');
+      if (stopped.code !== 0) {
+        throw new Error(
+          `Could not recycle the incompatible dev backend (exit ${stopped.code}).\nstdout:\n${stopped.stdout}\nstderr:\n${stopped.stderr}`
+        );
+      }
+    }
+
+    if (!startedHealthy || !await isHealthy()) {
       const r = runScript('start');
       if (r.code !== 0) {
+        runScript('stop');
+        if (isolatedWorkspace) {
+          rmSync(isolatedWorkspace, { recursive: true, force: true });
+          isolatedWorkspace = undefined;
+        }
         throw new Error(
           `dev-lifecycle.sh start failed (exit ${r.code}).\nstdout:\n${r.stdout}\nstderr:\n${r.stderr}`
         );
@@ -124,6 +191,10 @@ export const test = base.extend<{ devBackend: DevBackend }>({
     const r = runScript('stop');
     if (r.code !== 0) {
       console.warn(`[dev-backend fixture] dev-lifecycle.sh stop returned ${r.code}\n${r.stderr}`);
+    }
+    if (isolatedWorkspace) {
+      rmSync(isolatedWorkspace, { recursive: true, force: true });
+      isolatedWorkspace = undefined;
     }
   },
 });

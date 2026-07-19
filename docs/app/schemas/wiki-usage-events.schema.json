@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-software-studio.local/schemas/wiki-usage-events.schema.json",
+  "title": "Wiki Usage Events",
+  "type": "object",
+  "required": ["taskId", "runId", "capturedAt", "documents"],
+  "properties": {
+    "taskId": { "type": "string" },
+    "runId": { "type": "string" },
+    "project": { "type": "string" },
+    "agent": { "type": "string" },
+    "model": { "type": "string" },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "state", "toolUseCount"],
+        "properties": {
+          "path": { "type": "string", "description": "docs-root-relative path" },
+          "state": { "enum": ["visited", "used", "changed"] },
+          "toolUseCount": { "type": "integer", "minimum": 1 },
+          "tools": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": { "enum": ["read", "search-hit", "quote", "patch", "report-reference"] },
+                "summary": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

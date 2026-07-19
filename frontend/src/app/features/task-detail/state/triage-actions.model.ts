@@ -11,6 +11,8 @@
  */
 
 import { TaskState } from '../../../models/task.model';
+import type { TaskInfo } from '../../../models/task.model';
+import type { LandedState } from '../../../features/git';
 
 export type TriageActionIntent =
   | { kind: 'move'; targetState: string }
@@ -155,6 +157,24 @@ export const ORCHESTRATOR_CONTROLLED_LANES: ReadonlySet<string> = new Set([
   TaskState.AutoReview,
 ]);
 
+/**
+ * AGT-2069 — whether accepting `info` should surface the spawn-contract warning
+ * (the AGT-1915 trap guard). True only when a planning task is being accepted
+ * into `6-completed` and its spawn contract is not satisfied: it has spawned no
+ * follow-up cards AND carries no deliberate "no follow-up intended" declaration.
+ *
+ * Coding / research tasks are never gated. A planning card whose backend
+ * `planningSpawn` projection is absent (older payload) is not gated either — the
+ * warning fires only on a *known*-unsatisfied contract, never on a guess.
+ */
+export function needsPlanningAcceptWarning(info: TaskInfo, targetState: string): boolean {
+  if (targetState !== TaskState.Completed) return false;
+  if (info.mode !== 'planning') return false;
+  const spawn = info.planningSpawn;
+  if (!spawn) return false;
+  return !spawn.contractSatisfied;
+}
+
 export function laneActionsFor(state: string): TriageButton[] {
   return LANE_ACTIONS[state] ?? [];
 }
@@ -167,6 +187,103 @@ export function laneLabelFor(state: string): string {
 export function primaryActionFor(state: string): TriageButton | null {
   const list = laneActionsFor(state);
   return list.length > 0 && list[0].variant === 'primary' ? list[0] : null;
+}
+
+/**
+ * State-dependent presentation for the `5-human-review` acceptance primary
+ * (`mark-done`, labelled "Merge into Develop"). The button literally offers a
+ * merge, but a parallel-worktree run is auto-integrated into develop *before*
+ * it lands in human-review (ADR-0052), so by the time the operator sees the
+ * card the work has often already merged. Offering "Merge into Develop" then
+ * lies. When the work has already landed, the header shows a read-only landed
+ * status and relabels the button to a plain "Accept" - accepting the
+ * already-merged work into Delivered, not triggering a merge. When nothing has
+ * landed yet, the offer stays "Merge into Develop".
+ */
+export interface MergeAcceptView {
+  /** True once the work is on develop (or further); drives status + relabel. */
+  landed: boolean;
+  /** Resolved lifecycle position used for the wording. */
+  landedState: LandedState;
+  /** Effective primary-button label. */
+  acceptLabel: string;
+  /** Status-pill text; null when not landed (no pill is shown). */
+  statusLabel: string | null;
+  /** Status-pill hover text; null when not landed. */
+  statusTooltip: string | null;
+}
+
+function shortMergeSha(sha: string | null | undefined): string | null {
+  const t = sha?.trim();
+  if (!t) return null;
+  return t.length > 7 ? t.slice(0, 7) : t;
+}
+
+/**
+ * Resolve how the human-review acceptance primary should read for `info`. The
+ * persisted `provenance.merge.mergeCommit` is the ground-truth "folded into
+ * develop" fact; the optional `landedStateHint` is the richer live-derived
+ * position (it can be more advanced, e.g. `released-to-main`). A stale
+ * `on-branch-only` hint never masks a recorded merge fact.
+ */
+export function mergeAcceptViewFor(
+  info: TaskInfo,
+  landedStateHint: LandedState | null = null,
+): MergeAcceptView {
+  // Match the card merge-signal contract: only an attributed task commit is a
+  // mergeable deliverable. A branch/base without one is a planning, docs,
+  // results-only, or no-op outcome, even when its base is in the git graph.
+  const hasTaskCommits = (info.commits?.length ?? 0) > 0 || !!info.commit;
+  const mergeSha = shortMergeSha(info.provenance?.merge?.mergeCommit);
+  const landedByMerge = mergeSha !== null;
+  const landedByMergeSignal = info.mergeSignal?.inIntegration === true;
+  const hintLanded =
+    landedStateHint === 'merged-to-develop' || landedStateHint === 'released-to-main';
+  const landed = landedByMerge || landedByMergeSignal || hintLanded;
+
+  if (!hasTaskCommits) {
+    return {
+      landed: false,
+      landedState: 'on-branch-only',
+      acceptLabel: 'Accept',
+      statusLabel: null,
+      statusTooltip: 'This task has no code changes to merge. Accept moves the card to Delivered.',
+    };
+  }
+
+  if (!landed) {
+    return {
+      landed: false,
+      landedState: 'on-branch-only',
+      acceptLabel: 'Merge into Develop',
+      statusLabel: null,
+      statusTooltip: null,
+    };
+  }
+
+  let landedState: LandedState = landedStateHint ?? (landed ? 'merged-to-develop' : 'on-branch-only');
+  if (landedState === 'on-branch-only' && landed) landedState = 'merged-to-develop';
+
+  if (landedState === 'released-to-main') {
+    return {
+      landed: true,
+      landedState,
+      acceptLabel: 'Accept',
+      statusLabel: 'Released to main',
+      statusTooltip:
+        "This task's work is already released to main. Accept moves the card to Delivered; no merge is triggered.",
+    };
+  }
+
+  return {
+    landed: true,
+    landedState: 'merged-to-develop',
+    acceptLabel: 'Accept',
+    statusLabel: mergeSha ? `Merged to develop @${mergeSha}` : 'Merged to develop',
+    statusTooltip: mergeSha
+      ? `This task's work is already merged into develop at ${mergeSha}. Accept moves the card to Delivered; no merge is triggered.`
+      : "This task's work is already merged into develop. Accept moves the card to Delivered; no merge is triggered.",
+  };
 }
 
 /**

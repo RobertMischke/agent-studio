@@ -294,6 +294,20 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Expand every collapsible pipeline section (ASS-1914). Sections that hold no
+ * running/failed work default-collapse, so a test that asserts on the full
+ * configured row set must first open every section. Each header is a toggle
+ * button carrying `aria-expanded`; clicking a collapsed one reduces the count.
+ */
+async function expandAllPipelineSections(page: Page): Promise<void> {
+  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
+  for (let i = 0; i < 20; i++) {
+    if ((await collapsed.count()) === 0) break;
+    await collapsed.first().click();
+  }
+}
+
 test.describe('Pipeline live step status', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -317,6 +331,7 @@ test.describe('Pipeline live step status', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     // The in-flight step carries the running status and an explicit badge.
     const coreRow = page.locator('[data-step-id="core-agent-run"]');
@@ -371,6 +386,10 @@ test.describe('Pipeline live step status', () => {
     // The poll runs every 10s; wait for the highlight to migrate.
     const lintRow = page.locator('[data-step-id="post-lint-scss"]');
     await expect(lintRow).toHaveAttribute('data-status', 'running', { timeout: 15_000 });
+    // Once the highlight moves on, the now-passed core section is quiet and
+    // recedes by default; open every section so the completed core row is still
+    // inspectable for the passed-status assertion below.
+    await expandAllPipelineSections(page);
     await expect(coreRow).toHaveAttribute('data-status', 'passed');
     await expect(page.getByTestId('overview-pipeline-step-running')).toHaveCount(1);
   });

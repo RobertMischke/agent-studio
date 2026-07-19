@@ -111,7 +111,6 @@ public class CodexSilentCompletionDetectorTests
 
     [Theory]
     [InlineData(CliTypes.Claude)]
-    [InlineData(CliTypes.Copilot)]
     [InlineData(CliTypes.Gemini)]
     [InlineData("")]
     public void DoesNotTrip_ForNonCodexCli(string cliType)

@@ -13,8 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
  *    treatment (red left ribbon + tint) and an explicit "Escalated" pill,
  *  - its surface + left-border are visually distinct from a Completed card
  *    sitting in the same super-column,
- *  - an accepted card gets the calm "Reviewed" pill but NOT the
- *    attention treatment,
+ *  - an accepted card stays quiet and does NOT get the attention treatment,
  *  - the differentiation survives the light theme and a narrow (mobile)
  *    viewport (acceptance criterion 3).
  *
@@ -208,11 +207,11 @@ test.describe('Done & Decide — escalated cards do not look like Done', () => {
       ]);
       expect(escBorder, `[${theme}] escalated vs completed left ribbon`).not.toBe(doneBorder);
 
-      // 3. The accepted card is calm: "Reviewed" pill, no attention treatment.
+      // 3. The accepted card is calm: no redundant "Reviewed" pill, no
+      //    attention treatment.
       await expect(accepted).not.toHaveClass(/task-card--attention/);
       const acceptPill = accepted.locator('[data-testid="task-card-human-review"]');
-      await expect(acceptPill).toHaveText(/Reviewed/);
-      await expect(acceptPill).toHaveClass(/task-card__human-review-pill--accept/);
+      await expect(acceptPill).toHaveCount(0);
 
       await testInfo.attach(`done-decide-${theme}.png`, {
         body: await page.screenshot({ fullPage: false }),

@@ -4,7 +4,7 @@ import { DriftService } from '../../../../services/drift.service';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import {
   DriftDimension,
   DriftDimensionType,
@@ -372,7 +372,7 @@ Spawned from the project Drift overview surface.
 ${action.description}
 
 Produce a Markdown report plus an inline JSON block conforming to
-\`docs/schemas/drift-report.schema.json\`. POST the reply back through the
+\`docs/app/schemas/drift-report.schema.json\`. POST the reply back through the
 appropriate \`/api/drift/{project}/actions/...\` endpoint when one exists,
 or attach the report to this task's \`status.md\` for review.
 

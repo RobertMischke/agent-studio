@@ -5,7 +5,7 @@
 # same source those tasks edit. Stable is never allowed to stop or restart
 # itself: a job that touches the running source while the same process is
 # running is the recipe for the silent crashes that motivated this layer
-# (see ADR-0021 and docs/architecture-decisions.md).
+# (see ADR-0021 and docs/system/architecture/decisions/adr-archive.md).
 #
 # This script is the external decision point. It does NOT loop; it makes one
 # decision per invocation and exits. The companion `run-stable-restart-watcher.sh`

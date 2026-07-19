@@ -13,12 +13,16 @@ namespace AgentStudio.Tests;
 public class ProjectRegistryTests : IDisposable
 {
     private readonly string _root;
+    private readonly string _repository;
     private readonly IConfiguration _config;
 
     public ProjectRegistryTests()
     {
         _root = Path.Combine(Path.GetTempPath(), "rdo-proj-reg-" + Guid.NewGuid().ToString("N"));
+        _repository = Path.Combine(Path.GetTempPath(), "rdo-product-repo-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
+        Directory.CreateDirectory(Path.Combine(_repository, ".git"));
+        Directory.CreateDirectory(Path.Combine(_repository, "src"));
         _config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -29,9 +33,11 @@ public class ProjectRegistryTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch { /* best-effort */ }
+        try { Directory.Delete(_repository, recursive: true); } catch { /* best-effort */ }
     }
 
-    private ProjectRegistry Build() => new(_config, NullLogger<ProjectRegistry>.Instance);
+    private ProjectRegistry Build(IAtomicJsonFileWriter? fileWriter = null) =>
+        new(_config, NullLogger<ProjectRegistry>.Instance, fileWriter);
 
     [Fact]
     public void EnsureProjectForStorage_AllocatesPROJ001_FirstTime()
@@ -48,6 +54,30 @@ public class ProjectRegistryTests : IDisposable
         Assert.Equal(DefaultWorkspace.Id, p.WorkspaceId);
         Assert.Equal(1, p.NextTaskKeySeq);
         Assert.False(p.Archived);
+    }
+
+    [Fact]
+    public void EnsureProjectForStorage_PersistFailure_RestoresProjectAndIdAllocation()
+    {
+        var writer = new ControllableAtomicJsonFileWriter
+        {
+            ShouldFail = (_, _) => true,
+        };
+        var reg = Build(writer);
+
+        Assert.Throws<ProjectPersistenceException>(() => reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "failed"),
+            "Failed Project",
+            DefaultWorkspace.Id));
+        Assert.Empty(reg.List());
+
+        writer.ShouldFail = null;
+        var created = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "created"),
+            "Created Project",
+            DefaultWorkspace.Id);
+        Assert.Equal("PROJ-001", created.Id);
+        Assert.Single(Build().List());
     }
 
     [Fact]
@@ -175,6 +205,25 @@ public class ProjectRegistryTests : IDisposable
     }
 
     [Fact]
+    public void Rename_PersistFailure_RestoresInMemoryAndDurableRecord()
+    {
+        var writer = new ControllableAtomicJsonFileWriter();
+        var reg = Build(writer);
+        var project = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "demo"), "Before Failure", DefaultWorkspace.Id);
+        var projectsFile = RegistryPaths.ProjectsFilePath(_root);
+        var durableBefore = File.ReadAllText(projectsFile);
+        writer.ShouldFail = (path, _) =>
+            string.Equals(path, projectsFile, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Throws<ProjectPersistenceException>(() => reg.Rename(project.Id, "Must Roll Back"));
+
+        Assert.Equal("Before Failure", reg.FindById(project.Id)!.DisplayName);
+        Assert.Equal(durableBefore, File.ReadAllText(projectsFile));
+        Assert.Equal("Before Failure", Build().FindById(project.Id)!.DisplayName);
+    }
+
+    [Fact]
     public void SetShortCode_NormalisesUppercase_AndValidates()
     {
         var reg = Build();
@@ -186,6 +235,7 @@ public class ProjectRegistryTests : IDisposable
         Assert.Throws<ArgumentException>(() => reg.SetShortCode(p.Id, "a"));         // too short
         Assert.Throws<ArgumentException>(() => reg.SetShortCode(p.Id, "abcdefg"));   // too long
         Assert.Throws<ArgumentException>(() => reg.SetShortCode(p.Id, "ab-cd"));     // invalid char
+        Assert.Throws<ArgumentException>(() => reg.SetShortCode(p.Id, "1abc"));      // must start with a letter
     }
 
     [Fact]
@@ -238,6 +288,150 @@ public class ProjectRegistryTests : IDisposable
     }
 
     [Fact]
+    public void Update_ValidatesWholePatchBeforePersistingAnyField()
+    {
+        var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);
+        workspaces.EnsureDefaultWorkspace();
+        var reg = Build();
+        var first = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "first"), "First Project", DefaultWorkspace.Id);
+        var second = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "second"), "Second Project", DefaultWorkspace.Id);
+
+        Assert.Throws<InvalidOperationException>(() => reg.Update(first.Id, new UpdateProjectRequest
+        {
+            DisplayName = "Must Not Persist",
+            ShortCode = second.ShortCode,
+            Color = "#123456",
+        }, workspaces));
+
+        var reloaded = Build().FindById(first.Id)!;
+        Assert.Equal("First Project", reloaded.DisplayName);
+        Assert.Equal(first.ShortCode, reloaded.ShortCode);
+        Assert.Null(reloaded.Color);
+    }
+
+    [Fact]
+    public void Update_PersistFailure_RestoresInMemoryAndDurableRecord()
+    {
+        var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);
+        workspaces.EnsureDefaultWorkspace();
+        var writer = new ControllableAtomicJsonFileWriter();
+        var reg = Build(writer);
+        var project = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "demo"), "Before Failure", DefaultWorkspace.Id);
+        var projectsFile = RegistryPaths.ProjectsFilePath(_root);
+        var durableBefore = File.ReadAllText(projectsFile);
+        writer.ShouldFail = (path, _) => string.Equals(path, projectsFile, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Throws<ProjectPersistenceException>(() => reg.Update(project.Id, new UpdateProjectRequest
+        {
+            DisplayName = "Must Roll Back",
+            Color = "#123456",
+        }, workspaces));
+
+        var inMemory = reg.FindById(project.Id)!;
+        Assert.Equal("Before Failure", inMemory.DisplayName);
+        Assert.Null(inMemory.Color);
+        Assert.Equal(durableBefore, File.ReadAllText(projectsFile));
+
+        var reloaded = Build().FindById(project.Id)!;
+        Assert.Equal("Before Failure", reloaded.DisplayName);
+        Assert.Null(reloaded.Color);
+    }
+
+    [Fact]
+    public void Update_RoundTripsAllBasics_WithoutChangingStableStorageOrIdentity()
+    {
+        var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);
+        workspaces.EnsureDefaultWorkspace();
+        var targetWorkspace = workspaces.Create("Product Engineering");
+        var reg = Build();
+        var storage = Path.Combine(_root, "projects", "PROJ-001", "tasks");
+        var project = reg.EnsureProjectForStorage(storage, "Initial Project", DefaultWorkspace.Id);
+        reg.IssueNextTaskKey(project.Id);
+
+        var updated = reg.Update(project.Id, new UpdateProjectRequest
+        {
+            DisplayName = "Edited Project",
+            ShortCode = "edt",
+            Color = " #123456 ",
+            WorkspaceId = targetWorkspace.Id,
+            RepositoryPath = _repository,
+            RootPath = Path.Combine(_repository, "src"),
+            RepositoryUrl = " https://example.test/org/repo.git ",
+            CliDefault = " codex ",
+            ModelDefault = " gpt-test ",
+        }, workspaces);
+
+        Assert.Equal(project.Id, updated.Id);
+        Assert.Equal(project.SourceType, updated.SourceType);
+        Assert.Equal(project.CreatedAt, updated.CreatedAt);
+        Assert.Equal(storage, updated.StorageLocation);
+        Assert.Equal(2, updated.NextTaskKeySeq);
+        Assert.Equal("Edited Project", updated.DisplayName);
+        Assert.Equal("EDT", updated.ShortCode);
+        Assert.Equal("#123456", updated.Color);
+        Assert.Equal(targetWorkspace.Id, updated.WorkspaceId);
+        Assert.Equal(_repository, updated.RepositoryPath);
+        Assert.Equal(Path.Combine(_repository, "src"), updated.RootPath);
+        Assert.Equal("https://example.test/org/repo.git", updated.Urls.Single(url => url.Id == "repo").Url);
+        Assert.Equal("codex", updated.CliDefault);
+        Assert.Equal("gpt-test", updated.ModelDefault);
+        Assert.False(Directory.Exists(Path.Combine(_repository, "tasks")));
+        Assert.False(Directory.Exists(Path.Combine(_repository, ".orchestrator", "jobs")));
+
+        var reloaded = Build().FindById(project.Id)!;
+        Assert.Equal(updated.Id, reloaded.Id);
+        Assert.Equal(updated.DisplayName, reloaded.DisplayName);
+        Assert.Equal(updated.ShortCode, reloaded.ShortCode);
+        Assert.Equal(updated.StorageLocation, reloaded.StorageLocation);
+        Assert.Equal(updated.RepositoryPath, reloaded.RepositoryPath);
+        Assert.Equal(updated.RootPath, reloaded.RootPath);
+        Assert.Equal(updated.CliDefault, reloaded.CliDefault);
+        Assert.Equal(updated.ModelDefault, reloaded.ModelDefault);
+        Assert.Equal(updated.Urls.Single(url => url.Id == "repo").Url,
+            reloaded.Urls.Single(url => url.Id == "repo").Url);
+    }
+
+    [Fact]
+    public void Update_ClearSemantics_RemoveEditableOptionalBasicsOnly()
+    {
+        var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);
+        workspaces.EnsureDefaultWorkspace();
+        var reg = Build();
+        var project = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "demo"), "Demo", DefaultWorkspace.Id);
+        reg.Update(project.Id, new UpdateProjectRequest
+        {
+            Color = "#abcdef",
+            RepositoryPath = _repository,
+            RootPath = Path.Combine(_repository, "src"),
+            RepositoryUrl = "https://example.test/repo",
+            CliDefault = "codex",
+            ModelDefault = "gpt-test",
+        }, workspaces);
+
+        var cleared = reg.Update(project.Id, new UpdateProjectRequest
+        {
+            ClearColor = true,
+            ClearRepositoryPath = true,
+            ClearRootPath = true,
+            ClearRepositoryUrl = true,
+            ClearCliDefault = true,
+            ClearModelDefault = true,
+        }, workspaces);
+
+        Assert.Null(cleared.Color);
+        Assert.Null(cleared.RepositoryPath);
+        Assert.Null(cleared.RootPath);
+        Assert.DoesNotContain(cleared.Urls, url => url.Id == "repo");
+        Assert.Null(cleared.CliDefault);
+        Assert.Null(cleared.ModelDefault);
+        Assert.Equal(project.StorageLocation, cleared.StorageLocation);
+    }
+
+    [Fact]
     public void Mutations_UnknownId_Throws()
     {
         var reg = Build();
@@ -255,5 +449,171 @@ public class ProjectRegistryTests : IDisposable
         Assert.Equal(p.Id, reg.FindByIdOrDisplayName("Runbook")?.Id);
         Assert.Equal(p.Id, reg.FindByIdOrDisplayName("runbook")?.Id);
         Assert.Null(reg.FindByIdOrDisplayName("does-not-exist"));
+    }
+
+    // ------------------------------------------------------------------
+    // Project URLs mutation tests
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void AddUrl_AppendsWithAllocatedIdAndSortOrder()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        Assert.Empty(p.Urls);
+
+        var afterFirst = reg.AddUrl(p.Id, "Dev frontend", "http://localhost:4010");
+        var afterSecond = reg.AddUrl(p.Id, "Stable frontend", "http://localhost:4011");
+
+        Assert.Equal(2, afterSecond.Urls.Count);
+        var first = afterSecond.Urls[0];
+        var second = afterSecond.Urls[1];
+        Assert.Equal("url-1", first.Id);
+        Assert.Equal("url-2", second.Id);
+        Assert.Equal("Dev frontend", first.Label);
+        Assert.Equal("http://localhost:4010", first.Url);
+        Assert.Equal(0, first.SortOrder);
+        Assert.Equal(1, second.SortOrder);
+        Assert.Null(first.StartRule);
+    }
+
+    [Fact]
+    public void AddUrl_WithStartRule_NormalisesAndKeepsIt()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        var updated = reg.AddUrl(p.Id, "Website", "http://localhost:4202",
+            new ProjectUrlStartRule { Command = "  npm run website  ", Port = 4202, Source = "package-json" });
+
+        var rule = updated.Urls.Single().StartRule;
+        Assert.NotNull(rule);
+        Assert.Equal("npm run website", rule!.Command); // trimmed
+        Assert.Equal(4202, rule.Port);
+        Assert.Equal("package-json", rule.Source);
+    }
+
+    [Fact]
+    public void AddUrl_EmptyCommandStartRule_BecomesNull()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        var updated = reg.AddUrl(p.Id, "Static", "http://localhost:5000",
+            new ProjectUrlStartRule { Command = "   ", Source = "manual" });
+
+        Assert.Null(updated.Urls.Single().StartRule); // a rule with no command is no rule
+    }
+
+    [Fact]
+    public void AddUrl_ValidatesLabelAndUrl()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        Assert.Throws<ArgumentException>(() => reg.AddUrl(p.Id, "  ", "http://localhost:4010")); // blank label
+        Assert.Throws<ArgumentException>(() => reg.AddUrl(p.Id, "X", ""));                        // blank url
+        Assert.Throws<ArgumentException>(() => reg.AddUrl(p.Id, "X", "not-a-url"));               // not absolute
+        Assert.Throws<ArgumentException>(() => reg.AddUrl(p.Id, "X", "ftp://host/x"));            // wrong scheme
+    }
+
+    [Fact]
+    public void AddUrl_UnknownProject_Throws()
+    {
+        var reg = Build();
+        Assert.Throws<KeyNotFoundException>(() => reg.AddUrl("PROJ-999", "X", "http://localhost:1"));
+    }
+
+    [Fact]
+    public void UpdateUrl_ChangesFieldsKeepsIdAndSortOrder()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "First", "http://localhost:4010");
+        var withSecond = reg.AddUrl(p.Id, "Second", "http://localhost:4011");
+        var secondId = withSecond.Urls[1].Id;
+
+        var updated = reg.UpdateUrl(p.Id, secondId, "Renamed", "http://localhost:4999",
+            new ProjectUrlStartRule { Command = "npm start" });
+
+        var row = updated.Urls.Single(u => u.Id == secondId);
+        Assert.Equal("Renamed", row.Label);
+        Assert.Equal("http://localhost:4999", row.Url);
+        Assert.Equal(1, row.SortOrder); // preserved
+        Assert.Equal("npm start", row.StartRule!.Command);
+    }
+
+    [Fact]
+    public void UpdateUrl_UnknownUrlId_Throws()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "First", "http://localhost:4010");
+        Assert.Throws<KeyNotFoundException>(() =>
+            reg.UpdateUrl(p.Id, "url-999", "X", "http://localhost:1", null));
+    }
+
+    [Fact]
+    public void RemoveUrl_DropsRowAndLeavesOthers()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "First", "http://localhost:4010");
+        var withSecond = reg.AddUrl(p.Id, "Second", "http://localhost:4011");
+        var firstId = withSecond.Urls[0].Id;
+
+        var updated = reg.RemoveUrl(p.Id, firstId);
+
+        Assert.Single(updated.Urls);
+        Assert.Equal("Second", updated.Urls[0].Label);
+        Assert.Throws<KeyNotFoundException>(() => reg.RemoveUrl(p.Id, "url-999"));
+    }
+
+    [Fact]
+    public void ReorderUrls_ReassignsSortOrderFromSequence()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "A", "http://localhost:4010");
+        reg.AddUrl(p.Id, "B", "http://localhost:4011");
+        var withThird = reg.AddUrl(p.Id, "C", "http://localhost:4012");
+        var ids = withThird.Urls.Select(u => u.Id).ToList(); // [url-1, url-2, url-3]
+
+        var reordered = reg.ReorderUrls(p.Id, [ids[2], ids[0], ids[1]]);
+
+        // New order by SortOrder: C, A, B.
+        var ordered = reordered.Urls.OrderBy(u => u.SortOrder).Select(u => u.Label).ToList();
+        Assert.Equal(["C", "A", "B"], ordered);
+    }
+
+    [Fact]
+    public void ReorderUrls_RejectsNonPermutation()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "A", "http://localhost:4010");
+        var withB = reg.AddUrl(p.Id, "B", "http://localhost:4011");
+        var ids = withB.Urls.Select(u => u.Id).ToList();
+
+        Assert.Throws<ArgumentException>(() => reg.ReorderUrls(p.Id, [ids[0]]));            // missing one
+        Assert.Throws<ArgumentException>(() => reg.ReorderUrls(p.Id, [ids[0], ids[0]]));    // duplicate
+        Assert.Throws<ArgumentException>(() => reg.ReorderUrls(p.Id, [ids[0], ids[1], "url-9"])); // unknown
+    }
+
+    [Fact]
+    public void Urls_RoundTrip_ThroughFreshInstance()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "Dev", "http://localhost:4010",
+            new ProjectUrlStartRule { Command = "npm run dev", Port = 4010, Source = "package-json" });
+
+        var reloaded = Build();
+        var reloadedProject = reloaded.FindById(p.Id)!;
+        Assert.Single(reloadedProject.Urls);
+        var url = reloadedProject.Urls[0];
+        Assert.Equal("Dev", url.Label);
+        Assert.Equal("npm run dev", url.StartRule!.Command);
+        Assert.Equal(4010, url.StartRule.Port);
     }
 }

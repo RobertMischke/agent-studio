@@ -337,7 +337,7 @@ public class EpicDecompositionTests : IDisposable
     private TaskInfo CreateEpic(string id, string? cli = null, string? model = null)
     {
         var (scanner, mutations) = (_scanner!, _mutations!);
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = id,
             Title = id,

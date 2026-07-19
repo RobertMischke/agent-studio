@@ -6,9 +6,9 @@ the JSON sidecar shape, and the reference patterns the report uses, so that
 two invocations of the skill on the same input produce comparable artifacts.
 
 The generic shape this contract specialises is documented in
-[`docs/analysis-reports.md`](../../../../docs/analysis-reports.md) and
+[`docs/system/reports/analysis-reports.md`](../../../../docs/system/reports/analysis-reports.md) and
 validated by
-[`docs/schemas/analysis-report.schema.json`](../../../../docs/schemas/analysis-report.schema.json).
+[`docs/system/schemas/analysis-report.schema.json`](../../../../docs/system/schemas/analysis-report.schema.json).
 This document does **not** introduce a new schema. It pins one valid
 configuration of the existing schema (`topic = "runtime-observability"`).
 
@@ -109,7 +109,7 @@ Markdown body remains the contract.
     { "kind": "LogSlice",     "ref": "<jobId>:<runIndex>:42-58", "label": "first repeated http.request.failed" },
     { "kind": "RuntimeEvent", "ref": "http.request.failed:01HXYZ...", "label": null },
     { "kind": "Screenshot",   "ref": "<jobId>/results/before.png",     "label": null },
-    { "kind": "Doc",          "ref": "docs/product-runtime-observability.md", "label": null }
+    { "kind": "Doc",          "ref": "docs/operations/runtime/observability.md", "label": null }
   ],
   "findings": [
     {
@@ -152,7 +152,7 @@ suggestion becomes a real queued job. The skill never sets it.
 
 Every `evidenceRefs` entry must resolve to a `references[]` entry of the
 correct `kind`. The shapes mirror
-[`docs/analysis-reports.md` §6](../../../../docs/analysis-reports.md#6-references).
+[`docs/system/reports/analysis-reports.md` §6](../../../../docs/system/reports/analysis-reports.md#6-references).
 
 | Finding category | Preferred reference kind(s) |
 |------------------|------------------------------|
@@ -217,4 +217,4 @@ are also used by the structural test in
   README; this contract only specifies the finding shape.
 - Retention. Reports follow the workspace's analysis-report retention rule
   (`<workspace>/logs/analysis/`); see
-  [`docs/analysis-reports.md` §7.3](../../../../docs/analysis-reports.md#73-retention).
+  [`docs/system/reports/analysis-reports.md` §7.3](../../../../docs/system/reports/analysis-reports.md#73-retention).

@@ -8,7 +8,7 @@ import {
 } from '../../../../models/analysis-report.model';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Project-level Analysis Reports surface (ROADMAP "Analysis Reports and
  * Meta-Actions"). Three things in one section:
@@ -18,7 +18,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
  * 2. Scheduling controls per topic, default <code>disabled</code>. The cadence
  *    is persisted in <code>ProjectSettings.AnalysisSchedules</code>; the
  *    backend does not auto-run scheduled reports yet, see
- *    <code>docs/analysis-reports.md</code>.
+ *    <code>docs/system/reports/analysis-reports.md</code>.
  * 3. Report history newest-first with title, scope, producer, trigger,
  *    severity, parse status and a count of follow-ups. Click a row to
  *    drill down (event surfaced through <code>(openReport)</code>).

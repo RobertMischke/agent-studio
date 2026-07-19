@@ -30,8 +30,9 @@ public sealed class WikiMaintenancePostStepRunnerTests : IDisposable
 
         Assert.Equal(WikiMaintenanceVerdict.Created, result.Verdict);
         Assert.Equal("missing-terminal-sentinel", result.Slug);
+        Assert.Equal("operations/common-problems/missing-terminal-sentinel/README.md", result.RelPath);
 
-        var problem = Path.Combine(projectRoot, "docs", "wiki", "common-problems", "missing-terminal-sentinel");
+        var problem = Path.Combine(projectRoot, "docs", "operations", "common-problems", "missing-terminal-sentinel");
         var readme = File.ReadAllText(Path.Combine(problem, "README.md"));
         Assert.Contains("id: missing-terminal-sentinel", readme);
         Assert.Contains("seen-count: 1", readme);
@@ -44,7 +45,7 @@ public sealed class WikiMaintenancePostStepRunnerTests : IDisposable
         var occurrences = File.ReadAllText(Path.Combine(problem, "occurrences.md"));
         Assert.Contains("| 2026-06-08T10:00:00Z | `task-1` | codex |", occurrences);
 
-        var index = File.ReadAllText(Path.Combine(projectRoot, "docs", "wiki", "common-problems", "README.md"));
+        var index = File.ReadAllText(Path.Combine(projectRoot, "docs", "operations", "common-problems", "README.md"));
         Assert.Contains("[missing-terminal-sentinel](missing-terminal-sentinel/)", index);
         Assert.Contains("Last regenerated: 2026-06-08", index);
     }
@@ -70,7 +71,7 @@ public sealed class WikiMaintenancePostStepRunnerTests : IDisposable
         var second = runner.Run(task, Entry(projectRoot), new DateTime(2026, 06, 08, 11, 0, 0, DateTimeKind.Utc));
 
         Assert.Equal(WikiMaintenanceVerdict.Updated, second.Verdict);
-        var problem = Path.Combine(projectRoot, "docs", "wiki", "common-problems", "classifier-unknown");
+        var problem = Path.Combine(projectRoot, "docs", "operations", "common-problems", "classifier-unknown");
         var readme = File.ReadAllText(Path.Combine(problem, "README.md"));
         Assert.Contains("last-seen: 2026-06-08T11:00:00Z", readme);
         Assert.Contains("seen-count: 1", readme);
@@ -79,10 +80,38 @@ public sealed class WikiMaintenancePostStepRunnerTests : IDisposable
         Assert.Equal(1, Count(occurrences, "`task-1`"));
     }
 
+    [Fact]
+    public void Run_EmptyDocs_SelfProvisionsCommonProblemsHome()
+    {
+        // Self-provisioning (AGT-2024): with a real signal to write, an empty
+        // docs/ tree no longer skips - the step bootstraps its own thematic
+        // docs/<theme>/common-problems home and writes.
+        var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "empty-docs")).FullName;
+        var jobFolder = Directory.CreateDirectory(Path.Combine(_root, "job2")).FullName;
+        var runner = new WikiMaintenancePostStepRunner(NullLogger<WikiMaintenancePostStepRunner>.Instance);
+        var task = Task(jobFolder) with
+        {
+            OutcomeIssue = new TaskOutcomeIssue
+            {
+                Kind = "missing-terminal-sentinel",
+                Label = "Missing terminal sentinel",
+                Severity = "Warn",
+                Summary = "The run ended without a terminal sentinel."
+            }
+        };
+
+        var result = runner.Run(task, Entry(projectRoot), new DateTime(2026, 06, 08, 10, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(WikiMaintenanceVerdict.Created, result.Verdict);
+        Assert.True(
+            File.Exists(Path.Combine(projectRoot, "docs", "operations", "common-problems", "missing-terminal-sentinel", "README.md")),
+            "common-problems entry was not written");
+    }
+
     private string PrepareProjectWiki()
     {
         var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "project")).FullName;
-        Directory.CreateDirectory(Path.Combine(projectRoot, "docs", "wiki", "common-problems"));
+        Directory.CreateDirectory(Path.Combine(projectRoot, "docs", "operations", "common-problems"));
         return projectRoot;
     }
 

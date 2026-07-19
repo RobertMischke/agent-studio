@@ -10,49 +10,51 @@ import {
   output,
   signal,
   untracked,
-  viewChild,
 } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { WatchPathEntry } from '../../../../models/task.model';
 import { TaskState } from '../../../../models/task.model';
-import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
+import type { OrchestratorChatTurn, OrchestratorContextSession } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
-import { ChatComponent } from '../../../../components/chat/chat/chat.component';
-import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from '../../../../components/chat/chat-types';
-import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
-
-import { TooltipDirective } from '../../../../components/tooltip';
+import { ChatComponent } from 'coding-agent-chat/composer';
+import { ConversationViewComponent } from 'coding-agent-chat/conversation';
+import { ChatEvent, ChatSubmitEvent, ChatToolbarItem } from 'coding-agent-chat/core';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
+import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
+import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
+import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
+import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
+import {
+  parseBugHashtags,
+  resolveAttachmentUrl,
+  readFileAsBase64,
+  buildDemoEvents,
+  buildOrchestratorConversationEvents,
+} from './orchestrator-side-sheet.util';
 /**
- * Right-hand side sheet that hosts the orchestrator chat. Shell follows
- * the same flex-collapse pattern as `kanban-filter-sidesheet` (host width
- * animates to 0 when closed so the board reflows instead of being overlaid).
- *
- * Phase 3 wires this to a real bidirectional conversation endpoint
- * (`/api/runner/{project}/orchestrator-chat`): the backend resumes the
- * singleton global Claude session, persists both user and orchestrator
- * turns under `<watchPath>/.orchestrator/orchestrator-chat.jsonl`, and
- * returns the reply turn. Project switching at the top mirrors the
- * board's project-tabs metaphor; threads are independent per project.
- *
- * The composer also emits a `createTaskFromDraft` event (Phase 5) so the
- * host can pre-fill the create-task dialog with the user's draft text and
- * pasted screenshots without reaching back into the chat component.
+ * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
+ * The reusable composer owns chat interaction; this host owns app context,
+ * transcript endpoints, task-draft handoff, and the ORCH-1 read digest.
  */
 @Component({
   selector: 'app-orchestrator-side-sheet',
   standalone: true,
   imports: [
     ChatComponent,
-    ProjectChatListComponent,
+    ConversationViewComponent,
     TooltipDirective,
-    SidesheetComponent
+    SidesheetComponent,
+    OrchestratorContextHeaderComponent,
+    ChatSwitcherRailComponent,
+    OrchestratorProjectPickerComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',
   styleUrl: './orchestrator-side-sheet.component.scss',
+  providers: [OrchestratorContextDigestService],
   host: {
     '[class.is-open]': 'open()',
     // When open, drive the host width from the persisted user choice so
@@ -63,6 +65,7 @@ import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-st
   }
 })
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
+  readonly jobService = inject(TaskService);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
   readonly watchPaths = input<WatchPathEntry[]>([]);
@@ -77,6 +80,19 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly activeJobId = input<string | null>(null);
   readonly activeJobTitle = input<string | null>(null);
   readonly activeWatchPath = input<string | null>(null);
+
+  /**
+   * "Where am I" context-header inputs. The host resolves the lane/state
+   * and the live run for the scope in view (the open task, or — on the
+   * board — the running task in the active project) and hands them here so
+   * the context header can render the operator's current location without
+   * re-fetching. `activeJobKey` is the short display key (e.g. `AGT-1916`);
+   * `activeJobState` is the canonical lane key; `activeRun` is non-null only
+   * while a CLI run is executing in scope.
+   */
+  readonly activeJobKey = input<string | null>(null);
+  readonly activeJobState = input<string | null>(null);
+  readonly activeRun = input<{ model: string | null; startedAt: string | null } | null>(null);
 
   /**
    * Phase 5: when the user clicks "Make a task from this reply", the
@@ -95,12 +111,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    */
   readonly openVerboseDebug = output<{ jobId: string; watchPath: string; jobTitle: string | null }>();
 
-  /**
-   * Slice E: opens the kanban detail panel for the new bug job created
-   * via the chat's `/bug` directive. The host (app shell) wires this to
-   * its existing `openDetail` flow so the click-through stays in-tab and
-   * the detail panel reuses the same fetch / URL-sync path it always has.
-   */
   readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
   /**
@@ -110,6 +120,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * inline "Logic" tab so the sidesheet stays Chat-centric.
    */
   readonly openSettings = output<void>();
+  readonly navigateToContext = output<string>();
 
   readonly open = signal(false);
 
@@ -117,58 +128,132 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   private readonly panelState = inject(OrchestratorPanelStateService);
   readonly panelWidth = this.panelState.width;
   readonly activeProject = signal<string | null>(null);
+  readonly selectedContextKey = signal<string | null>(null);
+  readonly contextSessions = signal<OrchestratorContextSession[]>([]);
+  readonly contextMenuOpen = signal(false);
+  readonly contextDigestState = inject(OrchestratorContextDigestService);
+  private readonly seenContexts = signal<Record<string, string>>(this.readSeenContexts());
+
+  /** Total selectable scopes represented by the header context badge. */
+  readonly contextCount = computed(() => {
+    const keys = new Set<string>(['global']);
+    for (const project of this.projects()) keys.add(`project:${project}`);
+    for (const session of this.contextSessions()) keys.add(session.contextKey);
+    return keys.size;
+  });
+
+  readonly unreadContextKeys = computed<ReadonlySet<string>>(() => {
+    const seen = this.seenContexts();
+    return new Set(this.contextSessions()
+      .filter(session => session.updatedAt && session.contextKey !== this.contextKey()
+        && session.updatedAt > (seen[session.contextKey] ?? ''))
+      .map(session => session.contextKey));
+  });
+
+  private readonly selectedSession = computed(() => {
+    const key = this.selectedContextKey();
+    return key ? this.contextSessions().find(session => session.contextKey === key) ?? null : null;
+  });
+
+  private readonly selectedTask = computed(() => {
+    const session = this.selectedSession();
+    if (!session || session.kind !== 'task') return null;
+    return this.jobService.jobs().find(job => job.projectName === session.projectId
+      && (job.taskKey === session.taskKey || job.displayKey === session.taskKey || job.key === session.taskKey)) ?? null;
+  });
+
+  /**
+   * MC-2 (Concept §4): the side sheet's context follows the operator's
+   * navigation — a task page yields a `task` context, the board yields a
+   * `project` context. `pinned` freezes that so navigating away no longer
+   * auto-switches the sheet; the frozen scope is captured in
+   * {@link pinnedSnapshot} at pin time. There is deliberately no "create
+   * context" UI: the context is derived from navigation, never authored.
+   */
+  readonly pinned = signal(false);
+  private readonly pinnedSnapshot = signal<{
+    project: string | null;
+    jobId: string | null;
+    jobTitle: string | null;
+    jobKey: string | null;
+    jobState: string | null;
+    watchPath: string | null;
+  } | null>(null);
+
+  readonly effectiveProject = computed<string | null>(() =>
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()
+      ? this.selectedSession()?.projectId ?? null
+      : (this.pinned() ? (this.pinnedSnapshot()?.project ?? null) : this.activeProject()));
+  readonly effectiveJobId = computed<string | null>(() =>
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
+      ? (this.selectedTask()?.id ?? null)
+      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobId ?? null) : this.activeJobId())));
+  readonly effectiveJobTitle = computed<string | null>(() =>
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
+      ? (this.selectedTask()?.title ?? this.selectedSession()?.taskKey ?? null)
+      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobTitle ?? null) : this.activeJobTitle())));
+  readonly effectiveJobKey = computed<string | null>(() =>
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
+      ? (this.selectedSession()?.taskKey ?? null)
+      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobKey ?? null) : this.activeJobKey())));
+  readonly effectiveJobState = computed<string | null>(() =>
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
+      ? (this.selectedTask()?.state ?? null)
+      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobState ?? null) : this.activeJobState())));
+  readonly effectiveWatchPath = computed<string | null>(() =>
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
+      ? (this.selectedTask()?.watchPath ?? null)
+      : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.watchPath ?? null) : this.activeWatchPath())));
+
+  /**
+   * Navigation-derived context kind and canonical context key. A task
+   * context needs both an id and a title in scope; anything else is the
+   * project (board) context. The key mirrors the backend registry shape
+   * (`project:<PROJ>` / `task:<PROJ>/<KEY>`, see OrchestratorContextKey) and
+   * the chat body reads and writes through it (see {@link readChat} and the
+   * context-aware send in {@link onSubmit}), so a task page and the board no
+   * longer share one history.
+   */
+  readonly contextKind = computed<'task' | 'project'>(() =>
+    this.effectiveJobId() && this.effectiveJobTitle() ? 'task' : 'project');
+  readonly contextKey = computed<string | null>(() => {
+    if (this.selectedContextKey()) return this.selectedContextKey();
+    const proj = (this.effectiveProject() ?? '').trim();
+    if (!proj) return null;
+    if (this.contextKind() === 'task') {
+      const key = (this.effectiveJobKey() ?? '').trim();
+      if (key) return `task:${proj}/${key}`;
+    }
+    return `project:${proj}`;
+  });
+
   readonly turns = signal<OrchestratorChatTurn[]>([]);
   readonly loading = signal(false);
   readonly sending = signal(false);
   readonly errorMsg = signal<string | null>(null);
 
   /**
-   * F14 context-chip + send caching. The chip dedupes consecutive sends
+   * F14 navigation-context send caching. The menu toggle dedupes sends
    * that would ship the same `navigationContext`: first send on a
    * (project, task) pair carries the full block, identical subsequent
    * sends carry `null`. Dismiss forces the next send to `null` even on
-   * a context change; switching project or task re-arms the chip.
+   * a context change; switching project or task re-arms context inclusion.
    */
   readonly contextDismissed = signal(false);
   private readonly lastSentContextSignature = signal<string | null>(null);
   private lastSentProjectForSignature: string | null = null;
-
-  /**
-   * Slice D virtualised chat list. Off by default so the existing
-   * non-virtualised surface (and its Playwright coverage) stays as-is
-   * while the new endpoints + index settle. The flag is read once at
-   * construction; reload to flip it.
-   */
-  readonly virtualChatEnabled = signal<boolean>(this.readVirtualFlag());
-
-  private readonly projectChatList = viewChild<ProjectChatListComponent>('projectChatList');
-
-  /** Read the `?virtualChat=1` URL flag once at construction. */
-  private readVirtualFlag(): boolean {
-    if (typeof window === 'undefined') return false;
-    try {
-      return new URLSearchParams(window.location.search).get('virtualChat') === '1';
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Searchable project combobox state. The plain list-style picker did
-   * not scale well past a handful of projects; with ~10 watched
-   * workspaces the user wants to filter by typing. The native <select>
-   * remains in the DOM (hidden) for accessibility and existing tests.
-   */
-  readonly comboOpen = signal(false);
-  readonly comboQuery = signal('');
-  readonly comboHighlight = signal(0);
-
-  readonly filteredProjects = computed<string[]>(() => {
-    const q = this.comboQuery().trim().toLowerCase();
-    const all = this.projects();
-    if (!q) return all;
-    return all.filter((p) => p.toLowerCase().includes(q));
-  });
 
   /** Locally-buffered user turns shown immediately (server is source of truth on next refresh). */
   private readonly localTurns = signal<OrchestratorChatTurn[]>([]);
@@ -217,92 +302,24 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     }
   });
 
-  private readonly jobService = inject(TaskService);
   private pollTimer: VisibleIntervalHandle | null = null;
 
-  /**
-   * Convert chat turns into the chat-component's message shape. Failed
-   * orchestrator turns surface the error in the bubble's footer instead
-   * of dropping the (typically empty) reply silently.
-   *
-   * Local user turns carry `localAttachments` with `blob:` preview URLs
-   * so the bubble paints with the image in the same frame as the text
-   * (no "text now, image later" flash on send). The matching persisted
-   * server turn is suppressed for as long as the local turn is still in
-   * flight; once the persisted URL is preloaded the local turn is dropped
-   * and the server turn takes over with the byte-identical cached image.
-   */
-  readonly messages = computed<ChatMessage[]>(() => {
-    const proj = this.activeProject();
-    const local = this.localTurns();
-    const serverFiltered = suppressLocalDuplicates(this.turns(), local);
-    const merged = [...serverFiltered, ...local];
-    return merged.map<ChatMessage>((t) => ({
-      id: t.id,
-      role: t.role,
-      text: t.text,
-      timestamp: t.ts,
-      pending: !!(t as { pending?: boolean }).pending,
-      error: t.errorMessage ?? undefined,
-      attachments: this.composeMessageAttachments(proj, t)
-    }));
-  });
-
-  /**
-   * Pick the attachment source for one turn. Local turns carry blob URLs
-   * for immediate render; server turns carry the persisted `relativePath`
-   * that we resolve through the GET endpoint.
-   */
-  private composeMessageAttachments(
-    projectName: string | null,
-    turn: OrchestratorChatTurn & { localAttachments?: { alt: string; previewUrl: string }[] }
-  ): ChatMessage['attachments'] {
-    if (turn.localAttachments && turn.localAttachments.length > 0) {
-      return turn.localAttachments.map((a) => ({
-        alt: a.alt,
-        url: a.previewUrl,
-        pending: true
-      }));
-    }
-    return (turn.attachments ?? []).map((a) => ({
-      alt: a.alt,
-      // Server returns "chat-attachments/<file>"; resolve through the
-      // GET endpoint so the <img> in the bubble actually loads.
-      url: this.resolveAttachmentUrl(projectName, a.relativePath)
-    }));
-  }
-
-  private resolveAttachmentUrl(projectName: string | null, relativePath: string): string {
-    if (!projectName || !relativePath) return relativePath;
-    const fileName = relativePath.startsWith('chat-attachments/')
-      ? relativePath.substring('chat-attachments/'.length)
-      : relativePath;
-    return `/api/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments/${encodeURIComponent(fileName)}`;
-  }
-
-  readonly emptyStateText = computed(() => {
-    if (this.loading()) return 'Loading…';
-    return 'No conversation yet. Ask the orchestrator about this project.';
-  });
-
-  // F14: subtitle tracks the active picker (was hardcoded before).
-  readonly subtitleText = computed<string>(() => {
-    const proj = this.activeProject();
-    return proj ? `${proj} · canonical session` : 'canonical session';
-  });
+  /** Canonical next-gen transcript consumed by `<cac-conversation-view>`. */
+  readonly conversationEvents = computed(() => buildOrchestratorConversationEvents(
+    this.turns(),
+    this.localTurns(),
+    this.events(),
+    this.effectiveProject(),
+    this.contextKey() ?? this.effectiveProject() ?? 'orchestrator-chat',
+  ));
 
   readonly contextChipText = computed<string | null>(() => {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return null;
-    const tail = this.activeJobId() && this.activeJobTitle()
-      ? `Task '${this.activeJobTitle()}'`
+    const tail = this.contextKind() === 'task'
+      ? `Task '${this.effectiveJobTitle()}'`
       : 'Board';
     return `Context: ${proj} · ${tail}`;
-  });
-
-  readonly contextChipVisible = computed<boolean>(() => {
-    if (this.contextDismissed()) return false;
-    return this.contextChipText() != null;
   });
 
   readonly canCreateTaskFromReply = computed(() => {
@@ -335,21 +352,30 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   });
 
   constructor() {
+    // MC-2: reload when the *effective context* changes — pinning freezes
+    // the scope, so following the effective value (not the raw picker)
+    // keeps a pinned sheet on its frozen thread while nav moves on. We track
+    // contextKey() (not just the project) so navigating between the board and
+    // a task in the same project — a project↔task context switch that leaves
+    // effectiveProject() unchanged — still swaps the visible transcript.
     effect(() => {
-      this.activeProject();
+      const proj = this.effectiveProject();
+      const key = this.contextKey();
+      untracked(() => this.contextDigestState.selectContext(key));
       this.open();
-      if (this.open() && this.activeProject()) {
+      if (this.open() && key) {
         this.localTurns.set([]);
-        this.refresh(false);
+        untracked(() => this.contextDigestState.load(key, false));
+        if (proj) this.refresh(false);
       }
     });
 
-    // F14: any picker move (project or task) re-arms the context chip
+    // F14: any picker move (project or task) re-arms context inclusion
     // and (on project change) clears the cache so the new thread sees
     // a fresh context block on its first send.
     effect(() => {
-      const proj = this.activeProject();
-      this.activeJobId();
+      const proj = this.effectiveProject();
+      this.effectiveJobId();
       untracked(() => {
         if (this.contextDismissed()) this.contextDismissed.set(false);
         if (proj !== this.lastSentProjectForSignature) {
@@ -370,6 +396,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       const preferred = this.preferredProject();
       const projects = this.projects();
       untracked(() => {
+        // MC-2: a pinned sheet ignores navigation — do not let the host's
+        // preferred project snap the frozen scope back.
+        if (this.pinned()) return;
         if (!preferred) {
           if (this.activeProject() == null && projects.length > 0) {
             this.activeProject.set(projects[0]);
@@ -384,17 +413,47 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   }
 
+  /**
+   * MC-2: pin freezes the current navigation context; unpin resumes
+   * following navigation. Pinning snapshots the live scope so the badge,
+   * context menu, and chat body all stay on it. Unpinning snaps the project back to
+   * the host's current preferred project because the preferred-sync effect
+   * only fires on an input change — without this nudge an unpinned sheet
+   * would keep the frozen project until the operator next navigated.
+   */
+  togglePin(): void {
+    if (this.pinned()) {
+      this.pinned.set(false);
+      this.pinnedSnapshot.set(null);
+      const preferred = this.preferredProject();
+      if (preferred && this.projects().includes(preferred)) {
+        this.activeProject.set(preferred);
+      }
+      return;
+    }
+    this.pinnedSnapshot.set({
+      project: this.activeProject(),
+      jobId: this.activeJobId(),
+      jobTitle: this.activeJobTitle(),
+      jobKey: this.activeJobKey(),
+      jobState: this.activeJobState(),
+      watchPath: this.activeWatchPath(),
+    });
+    this.pinned.set(true);
+  }
+
   ngOnInit(): void {
     // Slow poll: the chat history only changes when the user sends a
     // message (which we already refresh after) or when something else
     // appends a turn. 30s keeps the UI honest without burning quota.
     this.pollTimer = setVisibleInterval(() => {
-      if (this.open() && this.activeProject() && !this.loading() && !this.sending()) {
+      if (this.open() && this.effectiveProject() && !this.loading() && !this.sending()) {
         this.refresh(true);
       }
     }, 30_000);
 
     this.maybeSeedDemoEvents();
+    this.refreshContextSessions();
   }
 
   /**
@@ -407,110 +466,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('demoEvents') !== '1') return;
-    const baseTs = Date.now();
-    const iso = (offsetMs: number) => new Date(baseTs + offsetMs).toISOString();
-    this.events.set([
-      {
-        id: 'demo-tool-call-1',
-        kind: 'tool-call',
-        timestamp: iso(0),
-        summary: 'Read backend/Services/Runner/PhaseAwareWatchdog.cs',
-        detail:
-          '```\n'
-          + '/* Result: 412 lines, last modified 2026-05-04 */\n'
-          + 'PhaseAwareWatchdog observes per-phase silence budgets;\n'
-          + 'FormatBudgetReason emits a one-line summary plus the\n'
-          + 'previous CLI event that preceded the silence so the\n'
-          + 'operator can see what the agent was doing.\n'
-          + '```'
-      },
-      {
-        id: 'demo-watchdog-1',
-        kind: 'watchdog',
-        timestamp: iso(45_000),
-        severity: 'warn',
-        summary: 'Tool burst phase silent for 90s (budget: 60s)',
-        detail:
-          '**Phase:** tool-burst\n\n**Silence:** 90s\n\n**Budget:** 60s\n\n'
-          + 'Last event before the silence:\n\n'
-          + '```\n'
-          + '● Read frontend/src/app/components/chat/chat.component.ts\n'
-          + '  L1-100\n'
-          + '```'
-      },
-      {
-        id: 'demo-rate-limit-1',
-        kind: 'rate-limit',
-        timestamp: iso(90_000),
-        severity: 'warn',
-        summary: 'Anthropic 5h window: 78% used, resets in 1h 12m',
-        detail:
-          '```\n'
-          + '{\n'
-          + '  "type": "rate_limit_event",\n'
-          + '  "window": "5h",\n'
-          + '  "used_pct": 78,\n'
-          + '  "reset_at": "2026-05-06T13:12:00Z"\n'
-          + '}\n'
-          + '```'
-      },
-      {
-        id: 'demo-session-recovered-1',
-        kind: 'session-recovered',
-        timestamp: iso(120_000),
-        summary: '1 turn lost, retry succeeded',
-        detail:
-          'The model session dropped between the user steer and the\n'
-          + 'agent reply (network blip, ~7s). Retry succeeded against\n'
-          + 'the same session id; the lost turn was re-issued and the\n'
-          + 'agent picked up at the same instruction.'
-      },
-      {
-        id: 'demo-memory-refreshed-1',
-        kind: 'memory-refreshed',
-        timestamp: iso(150_000),
-        summary: 'sourced from 6 status files + roadmap',
-        detail:
-          '**Sources refreshed:**\n\n'
-          + '- `.orchestrator/status/*.md` (6 files)\n'
-          + '- `ROADMAP.md`\n\n'
-          + 'Working memory updated; the next agent reply will reflect\n'
-          + 'the latest project state.'
-      },
-      // F15: decision-event seeds. Each `decisionType` picks a distinct
-      // glyph in the chat head row; covers the four orchestrator-side
-      // verdict kinds (decision, reissue, heuristic, giveup).
-      {
-        id: 'demo-decision-1',
-        kind: 'decision',
-        decisionType: 'decision',
-        timestamp: iso(180_000),
-        summary: 'accept-as-done after 1 reissue',
-      },
-      {
-        id: 'demo-decision-2',
-        kind: 'decision',
-        decisionType: 'reissue',
-        timestamp: iso(210_000),
-        summary: 'fast NoOp on UserContinue with follow-up; re-issuing once',
-      },
-      {
-        id: 'demo-decision-3',
-        kind: 'decision',
-        decisionType: 'heuristic',
-        timestamp: iso(240_000),
-        summary: 'no sentinel matched; falling back to heuristic verdict',
-        severity: 'warn',
-      },
-      {
-        id: 'demo-decision-4',
-        kind: 'decision',
-        decisionType: 'giveup',
-        timestamp: iso(270_000),
-        summary: 'second reissue produced no progress; asking user',
-        severity: 'warn',
-      }
-    ]);
+    this.events.set(buildDemoEvents(Date.now()));
   }
 
   ngOnDestroy(): void {
@@ -519,7 +475,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   show(): void { this.open.set(true); }
-  hide(): void { this.open.set(false); }
+  hide(): void {
+    this.contextMenuOpen.set(false);
+    this.open.set(false);
+  }
+  toggleContextMenu(): void {
+    this.contextMenuOpen.update(open => !open);
+  }
   toggle(): void {
     if (this.open()) {
       this.hide();
@@ -529,72 +491,59 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   setActiveProject(proj: string): void {
+    // MC-2: the picker is inert while pinned — the frozen scope wins until
+    // the operator unpins.
+    if (this.pinned()) return;
+    this.selectedContextKey.set(null);
     if (proj === this.activeProject()) return;
     this.activeProject.set(proj);
   }
 
+  selectChatContext(contextKey: string): void {
+    this.selectedContextKey.set(contextKey);
+    const session = this.contextSessions().find(item => item.contextKey === contextKey);
+    const projectId = session?.projectId
+      ?? (contextKey.startsWith('project:') ? contextKey.slice('project:'.length) : null);
+    if (projectId) this.activeProject.set(projectId);
+    const updatedAt = session?.updatedAt ?? new Date().toISOString();
+    this.seenContexts.update(seen => ({ ...seen, [contextKey]: updatedAt }));
+    this.persistSeenContexts();
+    this.contextMenuOpen.set(false);
+  }
+
+  onNavigateToContext(contextKey: string): void {
+    this.selectedContextKey.set(null);
+    this.contextMenuOpen.set(false);
+    this.navigateToContext.emit(contextKey);
+  }
+  private refreshContextSessions(): void {
+    this.jobService.getOrchestratorContextSessions().subscribe({
+      next: response => this.contextSessions.set(response.sessions ?? []),
+      error: () => this.contextSessions.set([]),
+    });
+  }
+
+  refreshCurrentContext(): void {
+    const key = this.contextKey();
+    if (!key || this.contextDigestState.refreshing()) return;
+    this.contextDigestState.load(key, true);
+    if (this.effectiveProject()) this.refresh(false);
+    this.refreshContextSessions();
+  }
+
+  private readSeenContexts(): Record<string, string> {
+    if (typeof window === 'undefined') return {};
+    try { return JSON.parse(window.localStorage?.getItem('atp.chatSwitcher.seen.v1') ?? '{}'); }
+    catch { return {}; }
+  }
+  private persistSeenContexts(): void {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage?.setItem('atp.chatSwitcher.seen.v1', JSON.stringify(this.seenContexts())); }
+    catch { /* optional local read state */ }
+  }
+
   selectProjectTab(proj: string): void {
     this.setActiveProject(proj);
-  }
-
-  onProjectSelectChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement | null)?.value ?? '';
-    if (!value) return;
-    this.selectProjectTab(value);
-  }
-
-  onComboFocus(): void {
-    this.comboOpen.set(true);
-    this.comboHighlight.set(0);
-  }
-
-  onComboBlur(): void {
-    // Defer so a click on a list option (mousedown -> mouseup -> blur) still
-    // registers before we tear the list down.
-    setTimeout(() => {
-      this.comboOpen.set(false);
-      this.comboQuery.set('');
-    }, 120);
-  }
-
-  onComboInput(event: Event): void {
-    const value = (event.target as HTMLInputElement | null)?.value ?? '';
-    this.comboQuery.set(value);
-    this.comboOpen.set(true);
-    this.comboHighlight.set(0);
-  }
-
-  onComboKeydown(event: KeyboardEvent): void {
-    const list = this.filteredProjects();
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      if (list.length === 0) return;
-      this.comboOpen.set(true);
-      this.comboHighlight.update((i) => (i + 1) % list.length);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (list.length === 0) return;
-      this.comboOpen.set(true);
-      this.comboHighlight.update((i) => (i - 1 + list.length) % list.length);
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-      const pick = list[this.comboHighlight()] ?? list[0];
-      if (pick) this.commitComboSelection(pick);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      this.comboOpen.set(false);
-      this.comboQuery.set('');
-      (event.target as HTMLInputElement | null)?.blur();
-    }
-  }
-
-  /**
-   * Block the input's blur on mousedown so the click handler still has
-   * a live list to bind to. Without this the blur fires between
-   * mousedown and click and the option is gone before the click lands.
-   */
-  onComboOptionMousedown(event: MouseEvent): void {
-    event.preventDefault();
   }
 
   /**
@@ -624,44 +573,49 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     window.addEventListener('mouseup', onUp);
   }
 
-  selectComboOption(proj: string, event: Event): void {
-    event.preventDefault();
-    this.commitComboSelection(proj);
-  }
-
-  private commitComboSelection(proj: string): void {
-    this.selectProjectTab(proj);
-    this.comboOpen.set(false);
-    this.comboQuery.set('');
-  }
 
   onOpenSettings(): void {
     this.openSettings.emit();
   }
 
-  dismissContextChip(): void {
-    this.contextDismissed.set(true);
+  toggleNextMessageContext(): void {
+    this.contextDismissed.update(dismissed => !dismissed);
   }
 
   private currentContextSignature(): string {
-    const proj = (this.activeProject() ?? '').trim();
-    const jobId = (this.activeJobId() ?? '').trim();
-    const jobTitle = (this.activeJobTitle() ?? '').trim();
+    const proj = (this.effectiveProject() ?? '').trim();
+    const jobId = (this.effectiveJobId() ?? '').trim();
+    const jobTitle = (this.effectiveJobTitle() ?? '').trim();
     return `${proj}|${jobId}|${jobTitle}`;
   }
 
   onOpenVerboseDebug(): void {
-    const jobId = this.activeJobId();
-    const watchPath = this.activeWatchPath();
+    const jobId = this.effectiveJobId();
+    const watchPath = this.effectiveWatchPath();
     if (!jobId || !watchPath) return;
-    this.openVerboseDebug.emit({ jobId, watchPath, jobTitle: this.activeJobTitle() });
+    this.openVerboseDebug.emit({ jobId, watchPath, jobTitle: this.effectiveJobTitle() });
+  }
+
+  /**
+   * MC-2 (Concept §4): read the transcript for the *current navigation
+   * context*, not just the project. On a task page the sheet reads the
+   * `task:<PROJ>/<KEY>` thread; on the board it reads `project:<PROJ>`, which
+   * the backend resolves to the same canonical per-project log the plain
+   * project route serves. Falling back to the project read when no context
+   * key is derivable keeps the board's behaviour byte-for-byte unchanged.
+   */
+  private readChat(proj: string) {
+    const key = this.contextKey();
+    return key
+      ? this.jobService.getOrchestratorChatByContext(key)
+      : this.jobService.getOrchestratorChat(proj);
   }
 
   refresh(silent = false): void {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return;
     if (!silent) this.loading.set(true);
-    this.jobService.getOrchestratorChat(proj).subscribe({
+    this.readChat(proj).subscribe({
       next: (resp) => {
         this.turns.set(resp.turns ?? []);
         this.errorMsg.set(null);
@@ -684,7 +638,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   private readonly bugEventTargets = new Map<string, { jobId: string; watchPath: string }>();
 
   async onSubmit(event: ChatSubmitEvent): Promise<void> {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return;
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
@@ -743,7 +697,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       for (const att of event.attachments) {
         const [resp, inline] = await Promise.all([
           this.uploadOne(proj, att.file),
-          this.readAsBase64(att.file).catch(() => null)
+          readFileAsBase64(att.file).catch(() => null)
         ]);
         uploaded.push({
           alt: att.alt,
@@ -768,16 +722,24 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       !this.contextDismissed() && contextSignature !== this.lastSentContextSignature();
     const contextPayload = shouldShipContext
       ? buildChatNavigationContext({
-          activeJobId: this.activeJobId(),
-          activeJobTitle: this.activeJobTitle()
+          activeJobId: this.effectiveJobId(),
+          activeJobTitle: this.effectiveJobTitle()
         })
       : null;
 
-    this.jobService.sendOrchestratorChat(proj, {
+    // MC-2: route the send to the current context thread so a task page's
+    // turns accumulate in — and read back from — their own history. A
+    // project/board context falls through to the per-project route.
+    const contextKey = this.contextKey();
+    const sendBody = {
       text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined,
       navigationContext: contextPayload
-    }).subscribe({
+    };
+    const send$ = contextKey
+      ? this.jobService.sendOrchestratorChatByContext(contextKey, sendBody)
+      : this.jobService.sendOrchestratorChat(proj, sendBody);
+    send$.subscribe({
       next: () => {
         if (shouldShipContext) {
           this.lastSentContextSignature.set(contextSignature);
@@ -793,7 +755,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
             const img = new Image();
             img.onload = () => resolve();
             img.onerror = () => resolve();
-            img.src = this.resolveAttachmentUrl(proj, u.relativePath);
+            img.src = resolveAttachmentUrl(proj, u.relativePath);
           })
         );
         // Fetch the server's view of the conversation. While the local
@@ -802,7 +764,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         // momentarily. Once preloads resolve we drop the local turn and
         // revoke its blob URLs; the server turn takes over with the
         // cached image and the user perceives no swap.
-        this.jobService.getOrchestratorChat(proj).subscribe({
+        this.readChat(proj).subscribe({
           next: async (resp) => {
             this.turns.set(resp.turns ?? []);
             this.errorMsg.set(null);
@@ -822,11 +784,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
             for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           }
         });
-        // Slice D virtualised list: pull the new turn(s) from disk via
-        // /scroll. Cheap (one ranged query) and keeps the windowed
-        // renderer in sync without us having to mirror the OrchestratorChat
-        // append logic on the client side.
-        this.projectChatList()?.resetAndLoad();
       },
       error: (err) => {
         this.sending.set(false);
@@ -892,7 +849,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.jobService
       .createJob({
         title,
-        agent: 'copilot',
+        agent: 'claude',
         watchPath,
         promptMarkdown,
         targetState: TaskState.Backlog,
@@ -952,6 +909,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.openJobDetail.emit(target);
   }
 
+  hasChatEventAction(eventId: string): boolean {
+    return this.bugEventTargets.has(eventId);
+  }
+
   /**
    * Composer-toolbar click handler. The chat component is generic and
    * just rebroadcasts the toolbar item id; this is where the
@@ -980,38 +941,11 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Read a pasted/dropped file as a base64 payload for the multimodal
-   * fast path. Strips the `data:<mime>;base64,` prefix so the backend
-   * only sees the raw base64. Files larger than 10 MB resolve to null
-   * so the inline path is skipped and the chat falls back to the
-   * archived-only behaviour (matches the backend upload cap).
-   */
-  private readAsBase64(file: File): Promise<{ base64: string; mimeType: string } | null> {
-    return new Promise((resolve) => {
-      if (file.size > 10 * 1024 * 1024) {
-        resolve(null);
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = typeof reader.result === 'string' ? reader.result : '';
-        const comma = result.indexOf(',');
-        const base64 = comma >= 0 ? result.substring(comma + 1) : result;
-        const mimeMatch = /^data:([^;]+);base64,/.exec(result);
-        const mimeType = mimeMatch?.[1] ?? file.type ?? 'image/png';
-        resolve({ base64, mimeType });
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-  }
-
-  /**
    * Phase 5: hand the latest orchestrator reply back to the host so it
    * can open the create-task dialog pre-filled with that text.
    */
   onCreateTaskFromLastReply(): void {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return;
     const last = [...this.turns()].reverse().find(
       (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
@@ -1028,7 +962,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * affordance works the moment a message is submitted.
    */
   onCreateTaskFromYourMessage(): void {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return;
     const merged = [...this.turns(), ...this.localTurns()];
     const last = [...merged].reverse().find(
@@ -1038,67 +972,4 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
   }
 
-}
-
-/**
- * Hide any server user turn that an in-flight local turn already represents.
- *
- * After the operator hits Send we render a local "optimistic" turn so the
- * bubble shows up immediately (including the inline blob preview of any
- * attached image). When the round-trip to the orchestrator finishes the
- * server now reports the same user turn back, but the local turn is still
- * on screen until the persisted attachment URL has been pre-decoded into
- * the browser image cache. Without this dedup, the user would see the
- * bubble briefly duplicate during that pre-decode window.
- *
- * Match strategy: walk local user turns newest-to-oldest and pair each
- * with the newest unmatched server user turn that has the same text and
- * the same number of attachments. Pairing is greedy and one-shot so
- * sending the same message twice in a row only suppresses one copy per
- * local turn.
- */
-function suppressLocalDuplicates(
-  server: OrchestratorChatTurn[],
-  local: (OrchestratorChatTurn & { localAttachments?: { alt: string; previewUrl: string }[] })[]
-): OrchestratorChatTurn[] {
-  if (local.length === 0) return server;
-  const localUsers = local.filter((t) => t.role === 'user');
-  if (localUsers.length === 0) return server;
-  const suppress = new Set<string>();
-  for (const lt of localUsers) {
-    const ltAttCount = lt.localAttachments?.length ?? lt.attachments?.length ?? 0;
-    for (let i = server.length - 1; i >= 0; i--) {
-      const st = server[i];
-      if (suppress.has(st.id)) continue;
-      if (st.role !== 'user') continue;
-      if ((st.text ?? '') !== (lt.text ?? '')) continue;
-      const stAttCount = st.attachments?.length ?? 0;
-      if (stAttCount !== ltAttCount) continue;
-      suppress.add(st.id);
-      break;
-    }
-  }
-  return suppress.size === 0 ? server : server.filter((s) => !suppress.has(s.id));
-}
-
-/**
- * Slice E: parse `#tag1 #tag2` patterns at the start of any line in the
- * `/bug` description. A tag word is `[A-Za-z][\w-]*`; a leading `# ` (with
- * a space) is treated as Markdown heading syntax and skipped, so the
- * common case where the user opens the description with a heading does
- * not capture the heading text as a tag.
- */
-function parseBugHashtags(description: string): string[] {
-  const found: string[] = [];
-  for (const line of description.split('\n')) {
-    const trimmed = line.trim();
-    if (!/^#[A-Za-z]/.test(trimmed)) continue;
-    const matches = trimmed.match(/#[A-Za-z][\w-]*/g);
-    if (!matches) continue;
-    for (const m of matches) {
-      const tag = m.substring(1);
-      if (!found.includes(tag)) found.push(tag);
-    }
-  }
-  return found;
 }

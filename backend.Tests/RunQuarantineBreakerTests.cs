@@ -16,7 +16,8 @@ namespace AgentStudio.Tests;
 public class RunQuarantineBreakerTests
 {
     [Theory]
-    [InlineData(RunIssueKind.ClassifierUnknown)]
+    [InlineData(RunIssueKind.InfraCrash)]
+    [InlineData(RunIssueKind.OrchestratorInconclusive)]
     [InlineData(RunIssueKind.MissingTerminalSentinel)]
     [InlineData(RunIssueKind.NoAgentOutput)]
     [InlineData(RunIssueKind.HeuristicDone)]
@@ -33,6 +34,14 @@ public class RunQuarantineBreakerTests
     [InlineData(RunIssueKind.EmptyFastExit)]
     [InlineData(RunIssueKind.ContextOverflow)]
     [InlineData(RunIssueKind.CliLaunchFailed)]
+    // A transient host file lock / network glitch has its own bounded
+    // retry-with-backoff; it must not accrue toward the quarantine streak
+    // (AGT-1944).
+    [InlineData(RunIssueKind.EnvironmentalTransient)]
+    // A failed OAuth-session refresh is a shared credential/infra fault the task
+    // cannot fix by re-running; it routes to human review on its own and must
+    // not accrue toward the quarantine streak (AGT-2066).
+    [InlineData(RunIssueKind.AuthRefreshFailed)]
     [InlineData(RunIssueKind.SilentCompletion)]
     [InlineData(RunIssueKind.Quarantined)]
     public void RoutedOrTerminalKinds_DoNotCountTowardStreak(RunIssueKind kind)

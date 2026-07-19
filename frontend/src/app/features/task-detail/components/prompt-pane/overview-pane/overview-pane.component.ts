@@ -1,15 +1,5 @@
 import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  ElementRef,
-  ViewChild,
-  computed,
-  effect,
-  inject,
-  input,
-  output,
-  signal,
+  ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewChild, computed, effect, inject, input, output, signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { CliType, PromoteToCodingResponse, TaskInfo } from '../../../../../models/task.model';
@@ -27,42 +17,51 @@ import type {
   PipelineCostSummary,
   PipelineStepCost,
   PipelineStep,
+  PipelineStepConfig,
   PipelineStepStatus,
-  PipelineModelUsageSummary,
+  TaskPipelineResponse,
   StepKind,
   StepRunMode,
 } from '../../../../task-pipeline';
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { DialogComponent } from '../../../../../components/dialog/dialog.component';
+import {
+  StudioIconComponent,
+  type StudioIconName,
+} from '../../../../../components/studio-icon/studio-icon.component';
 import { RegressionRadarComponent } from '../../../../regression-radar';
 import { AgentWorkDetailComponent } from '../agent-work-detail/agent-work-detail.component';
-import {
-  PipelineStepResultComponent,
-  type PipelineStepResultHeader,
-} from '../pipeline-step-result/pipeline-step-result.component';
-import { PipelineTokenUsageComponent } from '../pipeline-token-usage/pipeline-token-usage.component';
+import type { PipelineStepResultHeader } from '../pipeline-step-result/pipeline-step-result.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
-import { TooltipDirective } from '../../../../../components/tooltip';
-import type { StructuredTooltip, TooltipSeverity } from '../../../../../components/tooltip';
+import { PlanningSpawnPanelComponent } from '../../planning-spawn-panel/planning-spawn-panel.component';
+import { TooltipDirective } from 'coding-agent-chat/shared';
+import type { StructuredTooltip, TooltipSeverity } from 'coding-agent-chat/shared';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
+import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-run-history.component';
+import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
+import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
+import { PostStepControlsComponent } from '../post-step-controls/post-step-controls.component';
+import { lifecyclePhaseLabel } from './lifecycle-phase.util';
 import {
   isSteeringKind,
   steeringInfoFromEvent,
   type SteeringInfo,
 } from '../../../../../components/steering-detail';
-import {
-  cliTypeIcon,
-  cliTypeLabel,
-  formatTokens,
-} from '../../../../../services/format.util';
+import { cliTypeLabel } from '../../../../../services/format.util';
 import { projectIdentity } from '../../../../../services/project-identity.util';
 import { TaskService } from '../../../../../services/task.service';
+import { CostBreakdownTriggerDirective } from '../../../../tokens';
 import { NotificationService } from '../../../../../services/notification.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
+import {
+  buildPipelineGroups,
+  groupAriaLabel,
+  groupToneLabel,
+  type PipelineGroupVm,
+} from './pipeline-groups.util';
 
-/** One per-step row in the Overview pipeline block. */
 interface PipelineRowVm {
   id: string;
   label: string;
@@ -86,9 +85,18 @@ interface PipelineRowVm {
    */
   isFinalVerdict: boolean;
   enabled: boolean;
+  canDisable: boolean;
+  hasExecution: boolean;
+  config: PipelineStepConfig | null;
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
+  /**
+   * Recorded failure / skip detail shown from the status icon. Null for
+   * successful or not-yet-reached steps, and for legacy rows with no reason.
+   */
+  statusTooltip: StructuredTooltip | null;
   model: string | null;
+  thinkingLevel: string | null;
   cliType: CliType | null;
   /**
    * Whether {@link model} is the pre-run resolved effective model (no run has
@@ -227,7 +235,7 @@ function makeAttachmentId(): string {
   return Math.random().toString(36).slice(2, 14);
 }
 
-/** Title-case label for an aspect concern verdict, for the tooltip header. */
+/** Title-case label for execution detail that belongs behind a verdict pill. */
 function verdictTitle(verdict: string | null): string | null {
   switch ((verdict ?? '').toLowerCase()) {
     case 'concern':
@@ -237,6 +245,12 @@ function verdictTitle(verdict: string | null): string | null {
     // Auto-mode Ralph-loop guard verdicts (pre-loop-guard step).
     case 'looping':       return 'Loop forming';
     case 'loop-detected': return 'Loop detected';
+    case 'open-items':    return 'Open items';
+    case 'escalated':
+    case 'escalate':      return 'Escalation reason';
+    case 'selected':      return 'Economy selection';
+    case 'override':      return 'Card override';
+    case 'fallback':      return 'Default fallback';
     default:              return null;
   }
 }
@@ -262,10 +276,10 @@ function reconcileCoreVerdict(
 }
 
 /**
- * Build the structured tooltip for an aspect step's verdict pill. Returns
- * null unless the step carries concern detail (a non-pass verdict with
- * summary text), so a pass verdict — or a step the backend left unenriched
- * — shows no tooltip rather than a misleading empty one.
+ * Build the structured tooltip for detail behind a step verdict. Aspect
+ * concerns, loop-guard findings, and reissue open-item/escalation decisions
+ * all use the same compact verdict pill and details-dialog concern section.
+ * A pass verdict or a step with no recorded detail stays bare.
  */
 function buildConcernTooltip(
   label: string,
@@ -277,6 +291,21 @@ function buildConcernTooltip(
   const kind = verdictTitle(verdict);
   if (!kind) return null;
   return { title: `${label} · ${kind}`, body: text };
+}
+
+/** Show the recorded cause behind an executed Failed / Skipped status. */
+function buildStepStatusTooltip(
+  label: string,
+  status: PipelineRowVm['status'],
+  detail: string | null,
+): StructuredTooltip | null {
+  if (status !== 'failed' && status !== 'skipped') return null;
+  const body = detail?.trim();
+  if (!body) return null;
+  return {
+    title: `${label}: ${status === 'failed' ? 'Failed' : 'Skipped'}`,
+    body,
+  };
 }
 
 /** Map a steering tone to the tooltip accent colour. */
@@ -328,6 +357,8 @@ const PIPELINE_STEP_EXPLANATIONS: Record<string, string> = {
     'Auto-mode loop guard. Before the agent runs, a deterministic check makes sure the same task is not being re-issued in circles: it flags a forming loop while still under budget and trips the circuit-breaker once the iteration or token limit is hit, pausing for the user.',
   'pre-orchestrator-prep':
     'Opt-in prompt-readiness pass. Scores the task prompt for clarity while it is still in Preparation and either admits it to Ready or bounces it back for refinement. Runs off the coding seat, so it never blocks throughput.',
+  'pre-model-qualification':
+    'Zero-token model qualification. Classifies task type, size, affected surface, and similar project history, then maps that profile onto the selected CLI\'s live model and reasoning ladders. A model or level pinned on the card always wins; the recommendation remains visible for comparison.',
   'pre-reissue-open-items':
     'Re-issue guard. On a re-issued run it detects open items left from the previous attempt (the auto-review follow-up reason, unchecked checklist boxes, aspect concerns) and foregrounds them into the run prompt so the agent finishes them instead of starting over.',
   'core-agent-run':
@@ -388,13 +419,13 @@ const FINAL_VERDICT_STEP_ID = 'post-orchestrator-decision';
 const PIPELINE_PHASES: Record<PipelinePhaseKey, PipelinePhaseVm> = {
   pre: {
     key: 'pre',
-    label: 'PRE',
+    label: 'PRE STEPS',
     description: 'Preparation checks before the agent gets the task.',
   },
   core: {
     key: 'core',
-    label: 'CORE',
-    description: 'The coding agent run.',
+    label: 'CORE AGENT WORK',
+    description: 'The coding agent work.',
   },
   aspect: {
     key: 'aspect',
@@ -448,7 +479,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineStepResultComponent, PipelineTokenUsageComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -481,7 +512,7 @@ export class OverviewPaneComponent {
 
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly agentWorkPoll = inject(AgentWorkSummaryPollService);
-  private readonly pipelinePoll = inject(TaskPipelinePollService);
+  readonly pipelinePoll = inject(TaskPipelinePollService);
   private readonly timelinePoll = inject(TaskTimelinePollService);
   private readonly clients = inject(ClientService);
   private readonly jobService = inject(TaskService);
@@ -523,7 +554,7 @@ export class OverviewPaneComponent {
    * Lanes a planning task counts as "finished successfully" for the
    * promote affordance — it has reached review or completion, not a
    * failure / still-running lane. See
-   * docs/research/planning-research-task-kinds-2026-05.md.
+   * docs/concepts/planning-research-task-kinds-2026-05.md.
    */
   private static readonly FINISHED_STATES = new Set<string>([
     TaskState.AutoReview,
@@ -531,6 +562,27 @@ export class OverviewPaneComponent {
     TaskState.Escalated,
     TaskState.Completed,
   ]);
+
+  /**
+   * Pending project-level step switches are useful only while this task can
+   * still reach another pipeline step. Human review and every lane after it
+   * are read-only evidence: changing project configuration there cannot alter
+   * the run being inspected and misleadingly looks like a task-local change.
+   */
+  private static readonly PIPELINE_CONFIGURABLE_STATES = new Set<string>([
+    TaskState.Backlog,
+    TaskState.Preparation,
+    TaskState.OrchestratorPrep,
+    TaskState.Ready,
+    TaskState.Progress,
+    TaskState.FailedPickup,
+    TaskState.CodeNotComplete,
+    TaskState.AutoReview,
+  ]);
+
+  readonly canConfigurePendingPipelineSteps = computed(() =>
+    OverviewPaneComponent.PIPELINE_CONFIGURABLE_STATES.has(this.job().state),
+  );
 
   /**
    * "Promote to coding task" is offered only on a planning task whose latest
@@ -611,7 +663,7 @@ export class OverviewPaneComponent {
     const override = this.thinkingLevelOverride();
     return override !== undefined ? override : (this.job().thinkingLevel ?? null);
   });
-
+  readonly agentConfigReadOnly = computed(() => this.job().state === TaskState.Completed || this.job().state === TaskState.Archive);
   /** Clear the optimistic override once the real `job().title` catches up
    *  to the saved value (parent re-fetched the detail after PUT). */
   private clearOptimisticOnSync = effect(() => {
@@ -814,15 +866,21 @@ export class OverviewPaneComponent {
     const isCurrentRun = this.selectedPipelineIsCurrent();
     const exec = new Map((selectedExecution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
     const cost = new Map((isCurrentRun ? (res.cost?.steps ?? []) : []).map(c => [c.stepId.toLowerCase(), c]));
+    const cardPlan = new Set((res.onDemand?.plannedStepIds ?? []).map(id => id.toLowerCase()));
+    const latestOnDemand = new Map<string, NonNullable<TaskPipelineResponse['onDemand']>['attempts'][number]>(isCurrentRun
+      ? (res.onDemand?.attempts ?? []).map(attempt => [attempt.stepId.toLowerCase(), attempt]) : []);
 
     const rows = steps.map(step => {
       const key = step.id.toLowerCase();
       const e = exec.get(key);
+      const onDemand = latestOnDemand.get(key);
       const c = cost.get(key);
       const cfg = res.config?.[step.id];
-      const enabled = cfg?.enabled ?? true;
+      const enabled = cardPlan.has(key) || (cfg?.enabled ?? true);
       let status: PipelineRowVm['status'];
       if (!enabled) status = 'disabled';
+      else if (onDemand) status = onDemand.status.toLowerCase() === 'failed' ? 'failed'
+        : onDemand.status.toLowerCase() === 'skipped' ? 'skipped' : 'passed';
       else if (e) status = e.status;
       else if (step.stub) status = 'planned';
       else status = 'pending';
@@ -833,6 +891,7 @@ export class OverviewPaneComponent {
       const recordedModel = e?.model ?? null;
       const resolvedModel = cfg?.resolvedModel ?? null;
       const model = recordedModel ?? resolvedModel ?? cfg?.model ?? step.model ?? null;
+      const thinkingLevel = e?.thinkingLevel ?? null;
       const cliType = this.asCliType(cfg?.cliType ?? step.cliType ?? this.effectiveCliType());
       const modelIsResolved = recordedModel == null && model != null;
       const modelTooltip = this.buildModelTooltip(label, model, modelIsResolved, cfg?.modelSource ?? null);
@@ -841,6 +900,7 @@ export class OverviewPaneComponent {
       const thinkingLevelOverride = cfg?.thinkingLevel ?? null;
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
+      const statusDetail = e?.verdictSummary ?? e?.reason ?? null;
       const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
       const costTooltip = this.buildStepCostTooltip(label, c ?? null);
       const phase = pipelinePhaseForKind(step.kind);
@@ -860,20 +920,25 @@ export class OverviewPaneComponent {
         runMode: step.runMode,
         isFinalVerdict: step.id === FINAL_VERDICT_STEP_ID,
         enabled,
+        canDisable: cfg?.canDisable ?? false,
+        hasExecution: e != null || onDemand != null,
+        config: cfg ?? null,
         status,
+        statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
         model,
+        thinkingLevel,
         cliType,
         modelIsResolved,
         modelTooltip,
         modelEditable,
         modelOverride,
         thinkingLevelOverride,
-        verdict,
-        concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
+        verdict: onDemand ? `attempt ${onDemand.attempt}` : verdict,
+        concernTooltip: buildConcernTooltip(label, verdict, statusDetail),
         explanation: buildStepExplanation(step.id, label, step.kind),
-        durationMs: e?.durationMs ?? 0,
-        startedAt: e?.startedAt ?? null,
-        completedAt: e?.completedAt ?? null,
+        durationMs: onDemand?.durationMs ?? e?.durationMs ?? 0,
+        startedAt: onDemand?.startedAt ?? e?.startedAt ?? null,
+        completedAt: onDemand?.finishedAt ?? e?.completedAt ?? null,
         tokenUsageSource: c?.tokenUsageSource ?? e?.tokenUsageSource ?? null,
         inputTokens,
         outputTokens,
@@ -897,6 +962,83 @@ export class OverviewPaneComponent {
   });
 
   readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
+  readonly hideDisabledPipelineSteps = signal(false);
+  readonly disabledPipelineStepCount = computed(() =>
+    this.pipelineRows().filter(row => row.status === 'disabled').length,
+  );
+  readonly visiblePipelineRows = computed<PipelineRowVm[]>(() => {
+    const rows = this.hideDisabledPipelineSteps()
+      ? this.pipelineRows().filter(row => row.status !== 'disabled')
+      : this.pipelineRows();
+    return rows.map((row, index) => ({
+      ...row,
+      startsPhase: index === 0 || row.phaseKey !== rows[index - 1].phaseKey,
+    }));
+  });
+
+  toggleDisabledPipelineSteps(): void {
+    this.hideDisabledPipelineSteps.update(value => !value);
+  }
+
+  refreshPipeline(): void {
+    this.pipelinePoll.refresh();
+  }
+
+  /**
+   * The complete configured pipeline folded into collapsible sections — one per
+   * contiguous run of the same phase (PRE STEPS, CORE AGENT WORK, ASPECT, TOOL,
+   * DECISION, DRIFT, and the repeated TOOL/DECISION runs in the post-bracket).
+   * Each carries the aggregate tone + honest counters ({@link PipelineGroupVm})
+   * the header shows whether expanded or collapsed. Derivation lives in the
+   * dependency-free `pipeline-groups.util` so the grouping/tone/collapse rules
+   * are unit-tested in isolation from this 1800-line host.
+   */
+  readonly pipelineGroups = computed<PipelineGroupVm<PipelineRowVm>[]>(() =>
+    buildPipelineGroups(this.visiblePipelineRows()),
+  );
+
+  /**
+   * Explicit per-section collapse choices, keyed by group key
+   * (`${phaseKey}#${occurrence}`). Absent -> the section follows its derived
+   * {@link PipelineGroupVm.defaultCollapsed} (attention sections open, quiet
+   * finished / not-yet-reached sections collapse), so the strip reacts to the
+   * run as it progresses until the operator overrides a section by hand.
+   */
+  private readonly groupCollapseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
+
+  /** Effective collapse state: an explicit operator choice wins over the default. */
+  isGroupCollapsed(group: Pick<PipelineGroupVm, 'key' | 'defaultCollapsed'>): boolean {
+    const override = this.groupCollapseOverrides().get(group.key);
+    return override ?? group.defaultCollapsed;
+  }
+
+  /** Flip a section between collapsed and expanded, recording the operator's choice. */
+  toggleGroup(group: Pick<PipelineGroupVm, 'key' | 'defaultCollapsed'>): void {
+    const collapsed = this.isGroupCollapsed(group);
+    this.groupCollapseOverrides.update(prev => {
+      const next = new Map(prev);
+      next.set(group.key, !collapsed);
+      return next;
+    });
+  }
+
+  /** Force every current section open (backs an expand-all affordance / tests). */
+  expandAllPipelineGroups(): void {
+    const groups = this.pipelineGroups();
+    this.groupCollapseOverrides.update(prev => {
+      const next = new Map(prev);
+      for (const group of groups) next.set(group.key, false);
+      return next;
+    });
+  }
+
+  /**
+   * Section-tone label + header accessible name are pure derivations kept in
+   * `pipeline-groups.util` (unit-tested there); bound here so the template can
+   * call them directly.
+   */
+  readonly groupToneLabel = groupToneLabel;
+  readonly groupAriaLabel = groupAriaLabel;
 
   /**
    * Latest raw step-call prompt per pipeline step, keyed by lowercased step id.
@@ -1086,22 +1228,13 @@ export class OverviewPaneComponent {
     };
   }
 
-  /**
-   * Per-step structured result, rendered "where it originates" as an
-   * expandable card under the row. Returns the on-disk markdown file the card
-   * fetches plus a self-contained header (title + status + verdict + run
-   * meta), or null for steps that have no per-job result file. The CORE run
-   * carries `status.md`; each review aspect carries `aspect-{id}.md` (the step
-   * id IS the report stem). Only shown once the step has actually run so the
-   * card never fetches a file that does not exist yet; the final orchestrator
-   * ruling carries its verdict via {@link decisionBadgeForRow}, and tool /
-   * drift steps have no per-job markdown.
-   */
+  /** Build result metadata only for a file the backend verified on disk. */
   resultForRow(row: PipelineRowVm): { fileName: string; header: PipelineStepResultHeader } | null {
     if (!this.selectedPipelineIsCurrent()) return null;
-    let fileName: string | null = null;
-    if (row.kind === 'core') fileName = 'status.md';
-    else if (row.kind === 'aspect') fileName = `${row.id}.md`;
+    const resultFiles = this.pipelinePoll.pipeline()?.resultFiles ?? {};
+    const fileName = Object.entries(resultFiles).find(
+      ([stepId]) => stepId.toLowerCase() === row.id.toLowerCase(),
+    )?.[1] ?? null;
     if (!fileName) return null;
     if (row.status !== 'passed' && row.status !== 'failed' && row.status !== 'skipped') return null;
 
@@ -1200,15 +1333,6 @@ export class OverviewPaneComponent {
   readonly hasPipelineExecution = computed(() => this.pipelinePoll.hasExecution());
 
   /**
-   * Per-model token usage for every run of this task (per-run breakdown plus
-   * a lifetime grand total), straight off the pipeline endpoint. Null until
-   * the first poll resolves; the child renders nothing when there are no runs.
-   */
-  readonly pipelineTokenUsage = computed<PipelineModelUsageSummary | null>(
-    () => this.pipelinePoll.pipeline()?.tokensByModel ?? null,
-  );
-
-  /**
    * Tooltip for a step's model chip. Before a run, names the resolved effective
    * model and where in the hierarchy it came from (step / project / global /
    * catalogue default); after a run, states the model the execution used.
@@ -1295,7 +1419,7 @@ export class OverviewPaneComponent {
   }
 
   asCliType(value: string | null | undefined): CliType | null {
-    return value && (['copilot', 'claude', 'codex', 'gemini'] as readonly string[]).includes(value)
+    return value && (['claude', 'codex', 'gemini'] as readonly string[]).includes(value)
       ? value as CliType
       : null;
   }
@@ -1669,13 +1793,25 @@ export class OverviewPaneComponent {
 
   stepKindLabel(kind: StepKind): string {
     switch (kind) {
-      case 'module':       return 'Pre';
-      case 'core':         return 'Core';
+      case 'module':       return 'Pre steps';
+      case 'core':         return 'Core agent work';
       case 'aspect':       return 'Aspect';
       case 'orchestrator': return 'Decision';
       case 'tool':         return 'Tool';
       case 'drift':        return 'Drift';
       default:             return kind;
+    }
+  }
+
+  stepKindIcon(kind: StepKind): StudioIconName {
+    switch (kind) {
+      case 'module':       return 'sliders';
+      case 'core':         return 'bot';
+      case 'aspect':       return 'eye';
+      case 'orchestrator': return 'branch';
+      case 'tool':         return 'cli';
+      case 'drift':        return 'diff';
+      default:             return 'dot';
     }
   }
 
@@ -1752,7 +1888,11 @@ export class OverviewPaneComponent {
   }
 
   formatTokens(n: number): string {
-    return formatTokens(n);
+    if (n <= 0) return '—';
+    if (n < 1000) return String(n);
+    const scale = n < 1_000_000 ? 1000 : 1_000_000;
+    const suffix = n < 1_000_000 ? 'k' : 'm';
+    return `${(n / scale).toFixed(1).replace(/\.0$/, '')}${suffix}`;
   }
 
   formatDuration(seconds: number): string {
@@ -1801,20 +1941,7 @@ export class OverviewPaneComponent {
     return cliTypeLabel(t);
   }
 
-  cliTypeIcon(t: CliType): string {
-    return cliTypeIcon(t);
-  }
-
-  phaseLabel(phase: string | null | undefined): string | null {
-    if (!phase) return null;
-    switch (phase) {
-      case 'human-ready':              return 'Ready';
-      case 'intake-running':           return 'Intake Running';
-      case 'intake-blocked':           return 'Intake Blocked';
-      case 'intake-passed':            return 'Intake Passed';
-      case 'execution-running':        return 'Execution Running';
-      case 'post-processing-running':  return 'Post-Processing';
-      default:                         return phase;
-    }
+  phaseLabel(phase: string | null | undefined, entered?: string | null, steerSince?: string | null): string | null {
+    return lifecyclePhaseLabel(phase, entered, steerSince, this.now());
   }
 }

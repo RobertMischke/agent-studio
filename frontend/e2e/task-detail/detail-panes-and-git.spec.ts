@@ -54,7 +54,7 @@ test.describe('Detail view — 3-pane layout + Git view', () => {
       await page.getByTestId('pane-toggle-prompt').click();
       await page.getByTestId('pane-toggle-git').click();
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -75,7 +75,7 @@ test.describe('Detail view — 3-pane layout + Git view', () => {
 
       // Track how many times the git/status endpoint is called.
       let statusCallCount = 0;
-      await page.route(`**/api/jobs/*/git/status**`, async (route) => {
+      await page.route(`**/api/tasks/*/git/status**`, async (route) => {
         statusCallCount++;
         await route.continue();
       });
@@ -97,7 +97,7 @@ test.describe('Detail view — 3-pane layout + Git view', () => {
       // Screenshot to confirm the pane is still rendered correctly.
       await page.screenshot({ path: 'e2e/_baselines/git-auto-refresh.png', fullPage: false });
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -126,7 +126,7 @@ test.describe('Detail view — 3-pane layout + Git view', () => {
       const empty = page.locator('.git-view__empty');
       await expect(count.or(empty).first()).toBeVisible({ timeout: 10_000 });
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

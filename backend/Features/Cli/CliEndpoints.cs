@@ -3,10 +3,7 @@
 namespace AgentStudio.Cli;
 
 /// <summary>
-/// Cross-CLI configuration and observability surface:
-/// the Copilot-specific path / token settings under
-/// <c>/api/settings/cli</c> (legacy carry-over from the
-/// Copilot-only era), plus the multi-CLI introspection
+/// Cross-CLI observability surface: the multi-CLI introspection
 /// routes under <c>/api/cli</c> (model catalogs, session
 /// usage, quota windows, and the dev-only PTY probe).
 /// </summary>
@@ -14,51 +11,47 @@ public static class CliEndpoints
 {
     public static void MapCliEndpoints(this WebApplication app)
     {
-        // CLI settings endpoints — Copilot-specific path / token controls.
-        var settingsGroup = app.MapGroup("/api/settings");
-
-        settingsGroup.MapGet("/cli", (CopilotCliService cli) =>
-        {
-            var (available, version, path) = cli.TestCliPath();
-            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
-        });
-
-        settingsGroup.MapPut("/cli", (SetCliPathRequest req, CopilotCliService cli) =>
-        {
-            cli.SetCliPath(req.Path);
-            var (available, version, path) = cli.TestCliPath();
-            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
-        });
-
-        settingsGroup.MapPost("/cli/test", (SetCliPathRequest req, CopilotCliService cli) =>
-        {
-            var (available, version, path) = cli.TestCliPath(req.Path);
-            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
-        });
-
-        settingsGroup.MapPut("/cli/token", (SetGitHubTokenRequest req, CopilotCliService cli) =>
-        {
-            cli.SetGitHubToken(req.Token);
-            var (available, version, path) = cli.TestCliPath();
-            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
-        });
-
-        settingsGroup.MapGet("/cli/models", (CopilotCliService cli, bool? refresh) =>
-        {
-            try { return Results.Ok(cli.GetModelCatalog(forceRefresh: refresh ?? false)); }
-            catch (Exception ex)
-            {
-                return Results.Json(
-                    new { error = ex.Message },
-                    statusCode: StatusCodes.Status503ServiceUnavailable);
-            }
-        });
-
         // ── Multi-CLI endpoints ────────────────────────────────────────
 
         var cliGroup = app.MapGroup("/api/cli");
 
         cliGroup.MapGet("/types", () => Results.Ok(CliTypes.All));
+
+        // Per-CLI completion contract: how each backend signals turn
+        // completion (native frame -> typed CliRunEvent). Static, derived
+        // from the live adapter mappings; the Admin/CLI page renders it so
+        // the contract shown is the real one, not a frontend guess.
+        cliGroup.MapGet("/contracts", () => Results.Ok(CliCompletionContracts.All));
+
+        // ── Working Memory (ASS-1748 / T1c): per-CLI persistent-state panel ──
+        // GET lists the memory / session state a CLI keeps on disk (path, size,
+        // last-used, preview) plus its protected auth / config entries; DELETE
+        // removes a single memory / session state. The delete is guarded inside
+        // CliWorkingMemoryService so this surface can never remove credentials -
+        // auth / config entries are reported Deletable=false and refused.
+        cliGroup.MapGet("/{cliType}/working-memory", (string cliType, CliWorkingMemoryService mem) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            return Results.Ok(mem.Describe(cliType));
+        });
+
+        cliGroup.MapDelete("/{cliType}/working-memory", (string cliType, string? path, CliWorkingMemoryService mem) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            if (string.IsNullOrWhiteSpace(path))
+                return Results.BadRequest(new { error = "path query parameter is required" });
+
+            var result = mem.Delete(cliType, path);
+            return result.Status switch
+            {
+                CliWorkingMemoryDeleteStatus.Deleted => Results.Ok(result),
+                CliWorkingMemoryDeleteStatus.NotFound => Results.Json(result, statusCode: StatusCodes.Status404NotFound),
+                CliWorkingMemoryDeleteStatus.Protected => Results.Json(result, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Json(result, statusCode: StatusCodes.Status500InternalServerError),
+            };
+        });
 
         cliGroup.MapGet("/{cliType}/models", async (string cliType, bool? refresh, CliRouter router, CancellationToken ct) =>
         {
@@ -71,7 +64,7 @@ public static class CliEndpoints
             }
             catch (Exception ex)
             {
-                // Last-resort guard: discovery (e.g. Copilot's PTY probe) can
+                // Last-resort guard: discovery (e.g. a CLI's PTY probe) can
                 // fail when no cache exists. Return 503 with the reason so the
                 // UI can surface "models temporarily unavailable" rather than
                 // breaking the whole page on a 500.
@@ -93,6 +86,37 @@ public static class CliEndpoints
                 activeJobByProject[name] = projectStatus.ActiveJobId;
             }
             return Results.Ok(sessions.BuildReport(router, activeJobByProject));
+        });
+
+        // Lazy deep-read of one session (row expand in the CLI-session tool).
+        // Parses exactly one transcript on demand so the list report stays
+        // body-free even with thousands of sessions.
+        cliGroup.MapGet("/{cliType}/session-detail", (string cliType, string id, string? cwd, SessionRegistry sessions) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            if (string.IsNullOrWhiteSpace(id))
+                return Results.BadRequest(new { error = "id query parameter is required" });
+            return Results.Ok(sessions.BuildSessionDetail(cliType, id, cwd));
+        });
+
+        // Guarded single-session cleanup. SessionRegistry confirms the resolved
+        // path lives under the CLI's own session store before deleting; anything
+        // outside is refused, so this can only remove a transcript.
+        cliGroup.MapDelete("/{cliType}/session", (string cliType, string id, string? cwd, SessionRegistry sessions) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            if (string.IsNullOrWhiteSpace(id))
+                return Results.BadRequest(new { error = "id query parameter is required" });
+
+            var result = sessions.DeleteSession(cliType, id, cwd);
+            return result.Status switch
+            {
+                "Deleted" => Results.Ok(result),
+                "NotFound" => Results.Json(result, statusCode: StatusCodes.Status404NotFound),
+                _ => Results.Json(result, statusCode: StatusCodes.Status500InternalServerError),
+            };
         });
 
         // ── Quota: per-CLI subscription quota for the right-hand sidesheet ──
@@ -145,10 +169,31 @@ public static class CliEndpoints
             });
         });
 
+        cliGroup.MapGet("/quota/model-routes", (CliQuotaFallbackService routes) =>
+            Results.Ok(new { profiles = routes.GetAll() }));
+
+        cliGroup.MapPut("/quota/model-routes", (SetCliModelRouteRequest req, CliQuotaFallbackService routes) =>
+        {
+            if (!CliTypes.IsValid(req.CliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{req.CliType}'" });
+            if (!string.IsNullOrWhiteSpace(req.FallbackCliType) && !CliTypes.IsValid(req.FallbackCliType))
+                return Results.BadRequest(new { error = $"Unknown fallbackCliType '{req.FallbackCliType}'" });
+            var saved = routes.Set(new CliModelRouteProfile
+            {
+                CliType = req.CliType,
+                PrimaryModel = req.PrimaryModel,
+                PrimaryThinkingLevel = req.PrimaryThinkingLevel,
+                FallbackCliType = req.FallbackCliType,
+                FallbackModel = req.FallbackModel,
+                FallbackThinkingLevel = req.FallbackThinkingLevel,
+            });
+            return Results.Ok(saved);
+        });
+
         // ── TEMPORARY: PTY slash-command probe for parser development ──
         // Spawns the requested CLI in a scratch dir, sends a slash command,
         // waits for output to settle, returns the ANSI-stripped snapshot.
-        // Example: /api/cli/_probe/copilot?cmd=/usage
+        // Example: /api/cli/_probe/claude?cmd=/usage
         cliGroup.MapGet("/_probe/{cliType}", async (
             string cliType,
             string? cmd,
@@ -156,7 +201,7 @@ public static class CliEndpoints
             int? settleMs,
             int? followUpSettleMs,
             CliRouter router,
-            CopilotCliEnvironment env,
+            CliEnvironment env,
             CancellationToken ct) =>
         {
             if (!CliTypes.IsValid(cliType))

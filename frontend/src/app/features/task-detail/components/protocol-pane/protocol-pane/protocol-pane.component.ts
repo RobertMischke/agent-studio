@@ -26,7 +26,7 @@ import { CliModelSelectorComponent } from '../../../../../components/cli-model-s
 import type { RunRecord } from '../../../../../features/run-timeline';
 import { deriveWatchdogPill } from '../watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
-import { buildConversationTurns, parseActivityLog } from '../../activity-log.parser';
+import { buildConversationTurns, parseActivityLog, sanitizeProjectionLines } from '../../activity-log.parser';
 import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import { ClaudeSessionPollService } from '../../../../polling/services/claude-session-poll.service';
@@ -44,17 +44,25 @@ import { FeatureFlagsService } from '../../../../../services/feature-flags.servi
 import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-debug';
 import { TaskService } from '../../../../../services/task.service';
 import type {
+  ChatContextUsage,
+  ChatPermissionOption,
   ConversationEvent,
   RawLineRange,
-} from '../../../../../components/chat/conversation-event';
-import { ConversationViewComponent } from '../../../../../components/chat/conversation-view/conversation-view.component';
-import { projectConversation } from '../../../../../components/chat/conversation-projection';
+} from 'coding-agent-chat/core';
+import { ConversationViewComponent } from 'coding-agent-chat/conversation';
+import { ContextRingComponent, PermissionSelectComponent } from 'coding-agent-chat/composer';
+import { projectConversation } from 'coding-agent-chat/core';
+import type { ContextUsageSnapshot } from '../../../../../models/task.model';
+import { toChatContextUsage } from '../../../context-usage.mapper';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+import { ResultViewComponent } from '../result-view/result-view.component';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { SourceViewerComponent, type SourceViewerRequest } from '../../source-viewer/source-viewer.component';
 import { MenuComponent } from '../../../../../components/menu';
 import type { MenuItem, MenuItemClickEvent } from '../../../../../components/menu';
 import { deriveProtocolVerdict, stripStatusHeader, type ProtocolVerdict } from '../protocol-verdict';
+import { deriveVerdictChain, type ChainEvidenceLink, type VerdictChain } from '../protocol-verdict-chain';
+import { ProtocolVerdictBannerComponent } from '../protocol-verdict-banner/protocol-verdict-banner.component';
 import {
   buildInspectorTabs,
   claudeSessionTooltip,
@@ -67,12 +75,42 @@ import {
 } from './protocol-pane-view-model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
+import { taskNavigationHref, taskUrl } from '../../../state/task-url';
 export type InspectorTab = 'protocol' | 'activity';
+
+/**
+ * Display metadata for the runner's permission-mode vocabulary
+ * (yolo / workspace-write / read-only / custom). Unknown ids coming from
+ * the backend still render, just without description/tone.
+ */
+const PERMISSION_OPTION_META: Record<string, ChatPermissionOption> = {
+  yolo: {
+    id: 'yolo',
+    label: 'YOLO',
+    tone: 'warn',
+    description: 'Skip every permission, sandbox, and trust prompt.',
+  },
+  'workspace-write': {
+    id: 'workspace-write',
+    label: 'Workspace write',
+    description: 'Auto-approve edits inside the workspace; other tools stay gated.',
+  },
+  'read-only': {
+    id: 'read-only',
+    label: 'Read-only',
+    description: 'Plan/inspect posture — the agent may not freely mutate.',
+  },
+  custom: {
+    id: 'custom',
+    label: 'Custom (global config)',
+    description: "Inject nothing; defer to the CLI's own global configuration.",
+  },
+};
 
 /**
  * Sub-view of the Activity tab: the agent's own task Plan, the compact
@@ -113,13 +151,17 @@ interface InterimSummaryState {
     RunGitViewerComponent,
     VerboseDebugOverlayComponent,
     BeautifulResultsComponent,
+    ResultViewComponent,
     FileSourceHistoryComponent,
     SourceViewerComponent,
     MenuComponent,
     TooltipDirective,
+    ProtocolVerdictBannerComponent,
     PaneHeaderComponent,
     PaneTabsComponent,
     CliModelSelectorComponent,
+    ContextRingComponent,
+    PermissionSelectComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -148,7 +190,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
   /** Emitted after a follow-up task was created from a review-evidence finding so the parent can refetch the detail and (optionally) navigate to the new job. */
-  readonly followupCreatedFromEvidence = output<{ jobId: string; targetState: string }>();
+  readonly followupCreatedFromEvidence = output<{ jobId: string; taskKey?: string; targetState: string }>();
   /** Emitted after a finding was acknowledged so the parent can refetch the detail. */
   readonly evidenceMutated = output<void>();
 
@@ -197,7 +239,25 @@ export class ProtocolPaneComponent implements OnDestroy {
       if (id !== this.activityViewJobId) {
         this.activityViewJobId = id;
         this.activityViewOverride.set(null);
+        this.contextRefreshResult.set(null);
       }
+    });
+    // Load the project's per-CLI permission modes once per project; the
+    // composer's permission chip reads/writes the project-level setting.
+    effect(() => {
+      const project = this.detail().info.projectName;
+      if (!project || project === this.permissionProject()) return;
+      this.permissionProject.set(project);
+      this.permissionState.set(null);
+      this.jobs.getProjectCliModes(project).subscribe({
+        next: (res) => {
+          if (this.permissionProject() !== project) return;
+          this.permissionState.set({ resolved: res.resolved, available: res.available });
+        },
+        error: () => {
+          // Chip simply stays hidden when the modes cannot be loaded.
+        },
+      });
     });
     effect(() => {
       if (this.outcomeIssueModalOpen()) {
@@ -220,7 +280,72 @@ export class ProtocolPaneComponent implements OnDestroy {
   }
 
   /** Set after "Create follow-up" returns; used to render the success banner. */
-  readonly followupCreated = signal<{ jobId: string; targetState: string } | null>(null);
+  readonly followupCreated = signal<{ jobId: string; taskKey?: string; targetState: string } | null>(null);
+
+  // --- Composer footer: context ring -------------------------------------
+  /** Snapshot returned by an explicit refresh; wins over the detail's copy
+   *  until the next task switch (the constructor effect clears it). */
+  private readonly contextRefreshResult = signal<ContextUsageSnapshot | null>(null);
+  readonly contextBusy = signal<boolean>(false);
+  readonly chatContextUsage = computed<ChatContextUsage | null>(() =>
+    toChatContextUsage(this.contextRefreshResult() ?? this.detail().contextUsage),
+  );
+
+  onContextRefresh(): void {
+    if (this.contextBusy()) return;
+    const job = this.detail().info;
+    this.contextBusy.set(true);
+    this.jobs.refreshContextUsage(job.id, job.watchPath).subscribe({
+      next: (snapshot) => {
+        this.contextBusy.set(false);
+        if (this.detail().info.id !== job.id) return;
+        this.contextRefreshResult.set(snapshot);
+      },
+      error: () => this.contextBusy.set(false),
+    });
+  }
+
+  // --- Composer footer: permission mode ----------------------------------
+  /** Which project the loaded permission state belongs to. */
+  private readonly permissionProject = signal<string | null>(null);
+  private readonly permissionState = signal<{
+    resolved: Record<string, { mode: string; source: string; args: string[] }>;
+    available: string[];
+  } | null>(null);
+
+  readonly permissionOptions = computed<readonly ChatPermissionOption[]>(() => {
+    const state = this.permissionState();
+    if (!state) return [];
+    return state.available.map((id) => PERMISSION_OPTION_META[id] ?? { id, label: id });
+  });
+
+  /** Effective mode for the task's current CLI, or null while unknown. */
+  readonly permissionMode = computed<string | null>(() => {
+    const state = this.permissionState();
+    const cli = this.cliType();
+    if (!state || !cli) return null;
+    return state.resolved[cli]?.mode ?? null;
+  });
+
+  onPermissionModeChange(mode: string): void {
+    const project = this.permissionProject();
+    const cli = this.cliType();
+    if (!project || !cli) return;
+    this.jobs.setProjectCliMode(project, cli, mode).subscribe({
+      next: (res) => {
+        const state = this.permissionState();
+        if (!state || this.permissionProject() !== project) return;
+        this.permissionState.set({
+          ...state,
+          resolved: { ...state.resolved, [res.cli]: { mode: res.mode, source: res.source, args: res.args } },
+        });
+      },
+      error: () => {
+        // Leave the previous mode visible; the settings panel remains the
+        // fallback surface for diagnosing failed writes.
+      },
+    });
+  }
 
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;
@@ -389,9 +514,11 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /**
    * Three-state simplified verdict shown at the very top of the protocol
-   * pane (above hygiene strip, evidence panels, tabs). Pure derivation
-   * from the existing signals - see protocol-verdict.ts for the priority
-   * table. Recomputes on any input change.
+   * pane. Pure derivation from the existing signals - see protocol-verdict.ts
+   * for the priority table. `laneState`/`orchestratorVerdict` let the current
+   * lane / review decision lead the head verdict so a Blocked from a superseded
+   * run is demoted to collapsed history (BEFUND 2); the banner rendering lives
+   * in <app-protocol-verdict-banner>. Recomputes on any input change.
    */
   readonly protocolVerdict = computed<ProtocolVerdict>(() =>
     deriveProtocolVerdict({
@@ -400,8 +527,37 @@ export class ProtocolPaneComponent implements OnDestroy {
       statusMarkdown: this.detail().statusMarkdown,
       outcomeIssue: this.detail().info.outcomeIssue,
       hasActivity: this.hasActivity(),
+      laneState: this.detail().info.state,
+      orchestratorVerdict: this.detail().info.orchestratorVerdict,
     }),
   );
+
+  /**
+   * The visible verdict chain (Run → Gate → Review aspects → Lane decision)
+   * shown beneath the pill (BEFUND 2), plus the causal narrative that links the
+   * earlier steps to the leading decision (BEFUND 3). Null while there is no run
+   * outcome or lane decision to narrate. Derived from the same signals as the
+   * head verdict so the two never disagree.
+   */
+  readonly verdictChain = computed<VerdictChain | null>(() =>
+    deriveVerdictChain({
+      verdict: this.protocolVerdict(),
+      laneState: this.detail().info.state,
+      orchestratorVerdict: this.detail().info.orchestratorVerdict,
+      reviewEvidence: this.detail().reviewEvidence,
+    }),
+  );
+
+  /**
+   * A user clicked an evidence link in the verdict chain. The status.md link
+   * opens the source viewer; review-evidence / lane links are informational for
+   * now (the review-evidence panel lives in the prompt pane's Evidence tab).
+   */
+  onVerdictChainEvidence(link: ChainEvidenceLink): void {
+    if (link.target === 'status') {
+      this.openSource({ path: 'status.md', line: null });
+    }
+  }
 
   /**
    * Status.md body with the `# Status` header (Result + Duration) lifted out
@@ -426,21 +582,21 @@ export class ProtocolPaneComponent implements OnDestroy {
    * Progressive spinner label so a slow Haiku call doesn't look frozen.
    * The backend caps the call at HaikuTimeoutSeconds = 90 s; we
    * intentionally mirror that constant here. Tiers:
-   *   < 30 s         "Generating protocol..."
-   *   30 s ... 60 s  "Generating protocol... (>=30 s)"
-   *   >= 60 s        "Generating protocol... (>=60 s, will time out)"
+   *   < 30 s         "Generating the result..."
+   *   30 s ... 60 s  "Generating the result... (>=30 s)"
+   *   >= 60 s        "Generating the result... (>=60 s, will time out)"
    * Re-evaluates on every NowTickService tick while summaryStatus is
    * 'generating'; falls back to the base label as soon as the state
    * flips to ready or failed.
    */
   readonly summarySpinnerLabel = computed<string>(() => {
-    if (this.summaryStatus() !== 'generating') return 'Generating protocol...';
+    if (this.summaryStatus() !== 'generating') return 'Generating the result...';
     const startedAtIso = this.detail().summaryState?.startedAt;
-    if (!startedAtIso) return 'Generating protocol...';
+    if (!startedAtIso) return 'Generating the result...';
     const elapsed = (this.nowTick() - new Date(startedAtIso).getTime()) / 1000;
-    if (elapsed >= 60) return 'Generating protocol... (>=60 s, will time out)';
-    if (elapsed >= 30) return 'Generating protocol... (>=30 s)';
-    return 'Generating protocol...';
+    if (elapsed >= 60) return 'Generating the result... (>=60 s, will time out)';
+    if (elapsed >= 30) return 'Generating the result... (>=30 s)';
+    return 'Generating the result...';
   });
 
   /**
@@ -526,6 +682,10 @@ export class ProtocolPaneComponent implements OnDestroy {
     buildInspectorTabs({
       summaryStatus: this.summaryStatus(),
       hasStatusMarkdown: !!this.detail().statusMarkdown,
+      hasCliActivity: this.cliOutput().length > 0,
+      isHumanReview:
+        this.detail().info.state === TaskState.HumanReview ||
+        this.detail().info.state === TaskState.Escalated,
       isRunning: this.isRunning(),
     }),
   );
@@ -537,15 +697,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     }
   }
 
-  // The button is meaningful only after the task has produced a cli-output.log.
-  // We can't see the disk from here, so use "summary has been touched" as a
-  // proxy: any non-`none` status means the runner already attempted to summarize
-  // (which only happens after a successful CLI run wrote logs/cli-output.log).
   readonly canRegenerate = computed(() => {
     const status = this.summaryStatus();
     if (status === 'generating') return false;
     if (this.regenerating()) return false;
-    return status !== 'none' || !!this.detail().statusMarkdown;
+    return status !== 'none' || !!this.detail().statusMarkdown || this.cliOutput().length > 0;
   });
 
   /**
@@ -737,7 +893,7 @@ export class ProtocolPaneComponent implements OnDestroy {
    * when null the panel falls back to {@link defaultActivityView} (Plan when
    * a plan exists, else CLI output). The constructor effect resets it per job.
    *
-   * CLI uses the next-gen `app-conversation-view` over the `ConversationEvent[]`
+   * CLI uses the next-gen `cac-conversation-view` over the `ConversationEvent[]`
    * projection when the flag is enabled, and otherwise falls back to the
    * legacy activity-log conversation view. Trace remains an overflow action.
    */
@@ -878,8 +1034,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     }));
     return projectConversation({
       source: info.id,
-      lines: filtered,
-      job: info,
+      // Guard the next-gen projection the same way the legacy path is guarded:
+      // strip raw stream-json transport frames before the library classifies
+      // them, so no raw JSON reaches the chat. See sanitizeProjectionLines.
+      lines: sanitizeProjectionLines(filtered),
+      task: info,
       runTimeline: this.runTimeline(),
       tokenSummary: info.tokenSummary ?? null,
       screenshots,
@@ -1202,7 +1361,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     this.jobs.createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath).subscribe({
       next: (resp) => {
         panel.clearBusy();
-        this.followupCreated.set({ jobId: resp.jobId, targetState: resp.targetState });
+        this.followupCreated.set(resp);
         this.followupCreatedFromEvidence.emit(resp);
         this.evidenceMutated.emit();
       },
@@ -1214,15 +1373,14 @@ export class ProtocolPaneComponent implements OnDestroy {
     this.followupCreated.set(null);
   }
 
-  onOpenFollowup(jobId: string): void {
-    const watch = this.detail().info.watchPath;
-    const url = `/?job=${encodeURIComponent(jobId)}&watchPath=${encodeURIComponent(watch)}`;
-    // Use full navigation: the protocol pane is mounted inside a job-detail
-    // view that owns its own routing state, and a follow-up task is in a
-    // different `?job=` slot. A full navigation re-mounts cleanly.
-    if (typeof window !== 'undefined') {
-      window.location.href = url;
-    }
+  onOpenFollowup(followup: string | { jobId: string; taskKey?: string }): void {
+    if (typeof window === 'undefined') return;
+    const reference = typeof followup === 'string' ? { jobId: followup } : followup;
+    const navigate = (href: string | null): void => { if (href) window.location.href = href; };
+    if (reference.taskKey) return navigate(taskUrl(reference.taskKey, new URL(window.location.href)));
+    this.jobs.getDetail(reference.jobId, this.detail().info.watchPath).subscribe(
+      (detail) => navigate(taskNavigationHref(detail.info))
+    );
   }
 
   rateLimitTooltip(): string {

@@ -79,6 +79,13 @@ export class StatusBarComponent implements OnInit {
 
   readonly projectCount = computed(() => this.projectNames().length || Object.keys(this.jobService.runnerStatus().projects).length);
 
+  readonly activeFallback = computed(() => {
+    for (const project of Object.values(this.jobService.runnerStatus().projects)) {
+      if (project.activeJobId && project.quotaFallbackModel) return project;
+    }
+    return null;
+  });
+
   ngOnInit(): void {
     void this.clientDefaults.hydrate().then(() => {
       const cli = this.readDefaultCli();
@@ -136,7 +143,7 @@ export class StatusBarComponent implements OnInit {
   private readDefaultCli(): CliType {
     const stored = localStorage.getItem(STORAGE_DEFAULT_CLI) as CliType | null;
     if (stored && (CLI_TYPES as string[]).includes(stored)) return stored;
-    return 'copilot';
+    return 'claude';
   }
 
   private readDefaultModel(cliType: CliType): string {

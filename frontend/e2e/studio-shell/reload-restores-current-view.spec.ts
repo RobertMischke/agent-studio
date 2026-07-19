@@ -105,7 +105,9 @@ async function stubApi(page: Page, opts: { resolveDetail?: boolean } = {}): Prom
     if (url.includes('/api/tasks/grouped')) return json(EMPTY_GROUPED);
     if (url.includes('/api/runner/status')) return json({ projects: {} });
     if (/\/api\/tasks(\?|$)/.test(url)) return json([]);
-    if (url.includes('/api/watch-paths')) return json([]);
+    if (url.includes('/api/watch-paths')) {
+      return json([{ name: WATCH_PATH, path: WATCH_PATH }]);
+    }
     // Everything else (the detail pane's sub-resource GETs, quota, clients, …)
     // is left to the live backend / inline non-blocking handling, exactly like
     // `navigation-no-deadend.spec.ts`. The fake task's sub-resources 404 and
@@ -131,17 +133,22 @@ const BOOT_TIMEOUT = 60_000;
 
 /** Seed the persisted studio tab state, then reload so the service restores it. */
 async function seedTabsAndReload(page: Page, activeKey: string): Promise<void> {
-  await page.evaluate((active) => {
-    const payload = {
-      v: 1,
-      tabs: [
-        { kind: 'board', projectName: '__all__', sticky: true },
-        { kind: 'task', taskKey: 'demo-project::reload-fix-task' },
-      ],
-      activeKey: active,
-    };
+  await seedStudioTabsAndReload(page, [
+    { kind: 'board', projectName: '__all__' },
+    { kind: 'task', taskKey: TASK_KEY },
+  ], activeKey);
+}
+
+async function seedStudioTabsAndReload(
+  page: Page,
+  tabs: Array<Record<string, unknown>>,
+  activeKey: string,
+  hash = '',
+): Promise<void> {
+  await page.evaluate(({ payload, nextHash }) => {
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify(payload));
-  }, activeKey);
+    history.replaceState(null, '', nextHash ? `/${nextHash}` : '/');
+  }, { payload: { v: 1, tabs, activeKey }, nextHash: hash });
   await page.reload();
   await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
 }
@@ -194,5 +201,40 @@ test.describe('studio-shell · reload restores the current view (F5 bug)', () =>
 
     await expect(tabBy(page, TASK_TAB_KEY)).toBeVisible();
     await expect(tabBy(page, TASK_TAB_KEY)).toHaveClass(/studio-tab--active/);
+  });
+
+  test('drops a persisted legacy Backlog tab and keeps the 0-backlog board lane', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+
+    await stubApi(page, { resolveDetail: false });
+    await page.goto('/');
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
+
+    await seedStudioTabsAndReload(page, [
+      { kind: 'board', projectName: '__all__' },
+      { kind: 'backlog', projectName: null },
+    ], 'backlog:__all__');
+
+    await expect(tabBy(page, STICKY_TAB_KEY)).toHaveClass(/studio-tab--active/);
+    await expect(page.locator('[data-testid^="studio-tab-backlog:"]')).toHaveCount(0);
+    await expect(page.getByTestId('studio-ab-backlog')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="studio-explorer-project-backlog-"]')).toHaveCount(0);
+    await expect(page.getByTestId('lane-0-backlog')).toBeVisible();
+
+    const persisted = await page.evaluate(() => localStorage.getItem('atp.studio.tabs.v1'));
+    expect(persisted).not.toContain('backlog');
+    expect(pageErrors).toEqual([]);
+
+    const resultsDir = process.env.JOB_RESULTS_DIR;
+    if (resultsDir) {
+      await page.screenshot({
+        path: `${resultsDir}/legacy-backlog-tab-discarded-board-lane-retained--mocked.png`,
+        fullPage: false,
+      });
+      await page.getByTestId('lane-0-backlog').screenshot({
+        path: `${resultsDir}/board-0-backlog-lane-retained--mocked.png`,
+      });
+    }
   });
 });

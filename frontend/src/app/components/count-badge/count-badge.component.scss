@@ -5,8 +5,10 @@
  * optically centred (no lopsided "9" vs "127").
  */
 .count-badge {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   min-width: 18px;
   height: 14px;
   padding: 0 6px;
@@ -16,6 +18,7 @@
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
   text-transform: none;
   letter-spacing: 0;
   flex-shrink: 0;
@@ -25,21 +28,27 @@
     color: var(--studio-on-accent);
   }
 
+  // Tab-strip variant: a dezent number chip that sits on the tab's
+  // icon/label baseline. Deliberately borderless and pill-shaped (vs the
+  // earlier chunky bordered block) so it reads as a quiet count, not a
+  // loud badge. The fill is a low-alpha wash of `--studio-fg-dim`, which
+  // flips for free in both themes (dim resolves dark on light surfaces,
+  // light on dark ones).
   &--pane-tab {
-    min-width: 20px;
-    height: 18px;
-    padding: 0 var(--studio-spacing-2);
-    border: 1px solid color-mix(in srgb, var(--studio-fg-dim) 18%, transparent);
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--studio-bg-elevated) 76%, var(--studio-fg-dim) 24%);
-    color: var(--studio-fg);
-    font-size: 11px;
+    min-width: 16px;
+    height: 15px;
+    padding: 0 var(--studio-spacing-1);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--studio-fg-dim) 16%, transparent);
+    color: var(--studio-fg-dim);
+    font-size: 10px;
     font-weight: 600;
   }
 
+  // Active tab: use the shared tab-count contrast pair. The solid fill keeps
+  // the count legible on every theme's tab surface.
   &--pane-tab.count-badge--active {
-    border-color: color-mix(in srgb, var(--studio-accent) 36%, transparent);
-    background: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-bg-elevated) 84%);
-    color: var(--studio-fg-strong);
+    background: var(--studio-tab-count-active-bg);
+    color: var(--studio-tab-count-active-fg);
   }
 }

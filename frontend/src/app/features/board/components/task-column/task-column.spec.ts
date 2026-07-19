@@ -166,20 +166,37 @@ describe('TaskColumnComponent (smoke)', () => {
   // job was active leaves the live mode at auto-* and queues the requested
   // mode in status.pendingMode. The pill renders an arrow + the deferred
   // value so the operator sees the change took, just not yet.
-  it('cluster: pendingMode on auto-continuous renders "AUTO → MANUAL" with deferred-mode tooltip', async () => {
+  it('cluster: one pending active task renders its count and title in the tooltip', async () => {
     const fixture = await buildColumn({
       mode: 'auto-continuous',
       status: makeStatus({
         mode: 'auto-continuous',
         activeJobId: 'running-task',
         pendingMode: 'manual',
-        pendingModeWillApplyAfter: 'running-task'
+        pendingModeWillApplyAfter: 'running-task',
+        pendingModeActiveTaskCount: 1,
+        pendingModeActiveTaskTitle: 'Publish release notes'
       })
     });
     const cluster = fixture.componentInstance.statusCluster();
     expect(cluster!.mode.label).toBe('AUTO → MANUAL');
-    expect(cluster!.mode.tooltip).toContain('Deferred change pending');
-    expect(cluster!.mode.tooltip).toContain('running-task');
+    expect(cluster!.mode.tooltip).toBe('Switches to MANUAL when 1 active task finishes (Publish release notes).');
+  });
+
+  it('cluster: multiple pending active tasks renders concise plural semantics', async () => {
+    const fixture = await buildColumn({
+      mode: 'auto-continuous',
+      status: makeStatus({
+        mode: 'auto-continuous',
+        activeJobId: 'task-a',
+        pendingMode: 'manual',
+        pendingModeActiveTaskCount: 4
+      })
+    });
+
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster!.mode.label).toBe('AUTO → MANUAL');
+    expect(cluster!.mode.tooltip).toBe('Switches to MANUAL when 4 active tasks finish.');
   });
 
   // ADR-0044: a test-subject backend's lane pill should explain why no
@@ -335,7 +352,32 @@ describe('TaskColumnComponent (smoke)', () => {
     expect(host.textContent ?? '').not.toContain('Last tick:');
   });
 
-  it('forwards card delete requests from regular lanes', async () => {
+  // AGT-2020: Delete moved off the hover trash button into the card context
+  // menu (destructive row). The card must carry NO standalone delete button,
+  // and the menu's "Delete task" row drives the same jobDeleteRequest flow.
+  it('no longer renders a hover delete button on the card', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskColumnComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskColumnComponent);
+    const job = makeJob();
+    fixture.componentRef.setInput('title', 'Ready');
+    fixture.componentRef.setInput('state', '2-ready');
+    fixture.componentRef.setInput('jobs', [job]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-delete"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.task-card__delete')).toBeNull();
+  });
+
+  it('forwards card delete requests from the context-menu Delete row', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskColumnComponent],
       providers: [
@@ -355,9 +397,21 @@ describe('TaskColumnComponent (smoke)', () => {
     fixture.componentRef.setInput('jobs', [job]);
     fixture.detectChanges();
 
-    const button = fixture.nativeElement.querySelector('[data-testid="task-card-delete"]') as HTMLButtonElement | null;
-    expect(button).toBeTruthy();
-    button!.click();
+    // Open the card context menu (same surface as right-click / Menu key).
+    const card = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement;
+    expect(card).toBeTruthy();
+    card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    fixture.detectChanges();
+
+    // The destructive Delete row lives at the end of the menu (testIdPrefix
+    // "card-ctx"). Clicking it must forward the job unchanged.
+    const deleteRow = document.querySelector('[data-testid="card-ctx-item-delete-task"]') as HTMLButtonElement | null;
+    expect(deleteRow).toBeTruthy();
+    expect(deleteRow!.classList.contains('app-menu__row--danger')).toBe(true);
+    deleteRow!.click();
+    fixture.detectChanges();
 
     expect(deleted).toEqual([job]);
   });
@@ -388,6 +442,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     fixture.componentRef.setInput('title', 'Archive');
     fixture.componentRef.setInput('state', '7-archive');
     fixture.componentRef.setInput('jobs', []);
+    fixture.componentRef.setInput('projectScope', 'Token Economy');
     fixture.detectChanges(); // first CD runs ngOnInit → initial fetch
     return { fixture, httpMock };
   }
@@ -400,6 +455,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     const req = httpMock.expectOne((r) => isArchiveReq(r.url));
     expect(req.request.params.get('offset')).toBe('0');
     expect(req.request.params.get('limit')).toBe('50');
+    expect(req.request.params.get('project')).toBe('Token Economy');
     req.flush({
       items: [makeArchived({ id: 'a1', title: 'Archived One' })],
       total: 1,
@@ -418,6 +474,23 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     httpMock.verify();
   });
 
+  it('reloads the archive when the active project scope changes', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+    httpMock.expectOne((r) => r.url === '/api/tasks/archive' && r.params.get('project') === 'Token Economy')
+      .flush({ items: [], total: 0, offset: 0, limit: 50 });
+
+    fixture.componentRef.setInput('projectScope', 'Agent Studio');
+    fixture.detectChanges();
+
+    const req = httpMock.expectOne((r) => r.url === '/api/tasks/archive' && r.params.get('project') === 'Agent Studio');
+    expect(req.request.params.get('offset')).toBe('0');
+    req.flush({ items: [makeArchived({ id: 'agt-archived', projectName: 'Agent Studio' })], total: 1, offset: 0, limit: 50 });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.archiveItems().map((item) => item.id)).toEqual(['agt-archived']);
+    httpMock.verify();
+  });
+
   it('shows the empty state only after a genuine zero-total response', async () => {
     const { fixture, httpMock } = await buildArchiveColumn();
 
@@ -430,6 +503,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     expect(fixture.componentInstance.archiveIsEmpty()).toBe(true);
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="archive-empty"]')).toBeTruthy();
+    expect(host.textContent ?? '').toContain('No archived ticket in this project');
     httpMock.verify();
   });
 
@@ -453,6 +527,37 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
 
     expect(fixture.componentInstance.archiveItems().map((i) => i.id)).toEqual(['a1', 'a2']);
     expect(fixture.componentInstance.archiveRemaining()).toBe(0);
+    httpMock.verify();
+  });
+
+  it('filtered empty state names the filter, not a bare "no archived tasks"', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+    // Initial load: archive has rows, so this is NOT a "truly empty" archive.
+    httpMock.expectOne((r) => isArchiveReq(r.url)).flush({
+      items: [makeArchived({ id: 'a1' })],
+      total: 1,
+      offset: 0,
+      limit: 50,
+    });
+    fixture.detectChanges();
+
+    vi.useFakeTimers();
+    try {
+      // A filter that matches nothing comes back as total=0 for the query.
+      fixture.componentInstance.onArchiveSearchInput('no-such-card');
+      vi.advanceTimersByTime(300);
+      httpMock.expectOne((r) => isArchiveReq(r.url)).flush({ items: [], total: 0, offset: 0, limit: 50 });
+    } finally {
+      vi.useRealTimers();
+    }
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const empty = host.querySelector('[data-testid="archive-empty"]');
+    expect(empty).toBeTruthy();
+    expect(empty?.textContent ?? '').toContain('match the filter');
+    // The lane header count tracks the (filtered) archive total, not jobs().
+    expect(fixture.componentInstance.headerCount()).toBe(0);
     httpMock.verify();
   });
 

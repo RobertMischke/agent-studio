@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskCardComponent } from './task-card.component';
+import { MODEL_IDS } from '../../../cli';
 import type { TaskInfo, ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
 import {
   buildEffectiveModelChip,
@@ -14,7 +15,11 @@ import {
   buildHumanReviewBadge,
   buildCodeReviewGradeBadge,
   buildPhaseBadge,
+  formatSteerWait,
+  buildOwnerChip,
+  buildPipelineDots,
   buildTokenBubble,
+  buildExternalDoneBadge,
 } from './task-card-view-model';
 
 /**
@@ -68,7 +73,7 @@ describe('TaskCardComponent (smoke)', () => {
     const files = [
       'backend/Services/Analysis/AnalysisReportContract.cs',
       'backend/Services/Analysis/AnalysisReportStore.cs',
-      'docs/analysis-reports.md',
+      'docs/system/reports/analysis-reports.md',
     ];
     fixture.componentRef.setInput('job', makeJob({
       state: '5-human-review',
@@ -254,7 +259,8 @@ describe('TaskCardComponent (smoke)', () => {
 
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host).not.toBeNull();
-    expect(findCssDeclaration('.task-card', 'border')).toContain('1px solid var(--studio-card-state-border');
+    expect(findCssDeclaration('.task-card', 'border')).toContain('1px solid color-mix');
+    expect(findCssDeclaration('.task-card[data-task-type', '--task-card-type-color')).toContain('248,113,113');
     expect(hasExplicitCssDeclaration('.task-card', 'border-left')).toBe(false);
     expect(hasExplicitCssDeclaration('.task-card__progress', 'height')).toBe(false);
     expect(findCssDeclaration('.task-card', '--task-card-ring')).toBe('0 0 0 1px var(--studio-card-state-border)');
@@ -263,8 +269,8 @@ describe('TaskCardComponent (smoke)', () => {
     expect(findCssDeclaration('.task-card', 'border-radius')).toBe('var(--studio-card-radius)');
     expect(findCssDeclaration('.task-card__title', 'font-size')).toBe('var(--studio-card-title-size)');
     expect(findCssDeclaration('.task-card__title', 'font-weight')).toBe('var(--studio-card-title-weight)');
-    expect(findCssDeclaration('.task-card__commits', 'background')).toBe('var(--studio-commit-bg)');
-    expect(findCssDeclaration('.task-card__commits', 'border')).toBe('1px solid var(--studio-commit-border)');
+    expect(findCssDeclaration('.task-card__commits', 'background')).toBe('transparent');
+    expect(findCssDeclaration('.task-card__commits', 'border')).toBe('0px');
   });
 
   it('routes compact-card density through the standard card tokens', async () => {
@@ -368,7 +374,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__human-review-pill--attention');
   });
 
-  it('shows a calm Reviewed pill (not attention) for an accepted human-review card', async () => {
+  it('stays quiet for an accepted human-review card', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
       providers: [
@@ -387,16 +393,13 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.needsAttention()).toBe(false);
-    expect(fixture.componentInstance.humanReviewBadge()?.tone).toBe('accept');
+    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
 
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host?.classList.contains('task-card--attention')).toBe(false);
 
     const pill = fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]') as HTMLElement | null;
-    // ASS-748: an accepted card carries the lane-independent "Reviewed" signal,
-    // not the old lane-mirroring "Ready to sign off" wording.
-    expect(pill?.textContent).toContain('Reviewed');
-    expect(pill?.className).toContain('task-card__human-review-pill--accept');
+    expect(pill).toBeNull();
   });
 
   it('stays quiet for an undecided human-review card and for completed cards', async () => {
@@ -452,6 +455,29 @@ describe('TaskCardComponent (smoke)', () => {
     const pill = fixture.nativeElement.querySelector('[data-testid="task-card-outcome-issue"]') as HTMLElement | null;
     expect(pill?.textContent).toContain('Permission blocked');
     expect(pill?.className).toContain('task-card__issue-pill--high');
+  });
+
+  it('renders an older outcome issue as history after a later accepted run', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '5-human-review',
+      orchestratorVerdict: 'accept',
+      lastActivity: '2026-07-10T11:00:00Z',
+      outcomeIssue: {
+        kind: 'watchdog-timeout', label: 'Watchdog', severity: 'High', summary: 'Older failed attempt',
+        lastSeenAt: '2026-07-10T10:00:00Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-outcome-issue"]') as HTMLElement;
+    expect(pill.className).toContain('task-card__issue-pill--historical');
+    expect(pill.className).not.toContain('task-card__issue-pill--high');
+    expect(pill.textContent).toContain('↺');
   });
 
   it('renders an unpushed task branch as a warning outcome issue', async () => {
@@ -752,6 +778,113 @@ describe('TaskCardComponent (smoke)', () => {
     };
   }
 
+  it('shows a ready task branch before commits without inventing file activity', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '2-ready',
+      commit: null,
+      commits: [],
+      provenance: {
+        branch: 'task/ready-before-first-commit',
+        base: 'base000',
+        transitions: [
+          {
+            lane: '2-ready',
+            atUtc: '2026-06-10T18:58:06.2321361Z',
+            branchTip: 'c599fb5c764b1991b5cb681d13dc6a4e98479c44',
+            workBranchHead: '948f4892c8a5bf0d2d234146547cba22f76501a8',
+          },
+        ],
+        merge: null,
+      },
+    }));
+
+    const context = fixture.componentInstance.changeContext();
+    expect(context?.label).toBe('BR');
+    expect(context?.value).toBe('task/ready-before-first-commit');
+    expect(context?.summary).toBe('no commits yet');
+    expect(context?.stat).toBeNull();
+
+    const change = fixture.nativeElement.querySelector('[data-testid="task-card-change-context"]') as HTMLElement | null;
+    expect(change?.textContent).toContain('task/ready-before-first-commit');
+    expect(change?.textContent).toContain('no commits yet');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-commit"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]')).toBeNull();
+  });
+
+  it('labels the shared main checkout as worktree context, not branch context', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      commit: null,
+      commits: [],
+      provenance: null,
+    }));
+
+    const context = fixture.componentInstance.changeContext();
+    expect(context?.label).toBe('WT');
+    expect(context?.value).toBe('main checkout');
+    expect(context?.summary).toBe('no commits yet');
+  });
+
+  it('AGT-2046 renders the two-segment merge signal with develop lit, main muted', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      // A merged card carries the task commit that landed; the signal is a fact
+      // about that commit (AGT-2063), so it must be present for the signal to show.
+      commits: [commit()],
+      mergeSignal: {
+        branch: 'task/ATP-1',
+        inIntegration: true,
+        inRelease: false,
+        integrationBranch: 'develop',
+        releaseBranch: 'main',
+        integrationSha: 'a1b2c3d',
+        releaseSha: null,
+      },
+    }));
+
+    const signal = fixture.nativeElement.querySelector('[data-testid="task-card-merge-signal"]') as HTMLElement | null;
+    expect(signal).not.toBeNull();
+    expect(signal?.getAttribute('data-develop')).toBe('true');
+    expect(signal?.getAttribute('data-main')).toBe('false');
+    const dev = signal?.querySelector('[data-seg="develop"]') as HTMLElement | null;
+    const main = signal?.querySelector('[data-seg="main"]') as HTMLElement | null;
+    expect(dev?.className).toContain('task-card__merge-seg--on');
+    expect(main?.className).not.toContain('task-card__merge-seg--on');
+  });
+
+  it('AGT-2063 renders NO merge signal on a card without a task commit', async () => {
+    // The operator bug: an empty card carried a backend mergeSignal (its branch
+    // base is trivially in develop/main) and showed a merge state. With no task
+    // commit the [d|m] indicator must not appear at all.
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [],
+      mergeSignal: {
+        branch: 'task/ATP-1',
+        inIntegration: true,
+        inRelease: false,
+        integrationBranch: 'develop',
+        releaseBranch: 'main',
+        integrationSha: 'a1b2c3d',
+        releaseSha: null,
+      },
+    }));
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-merge-signal"]')).toBeNull();
+  });
+
+  it('AGT-2046 replaces the cryptic BR label chip with a branch icon', async () => {
+    const fixture = await renderCard(makeJob({ state: '5-human-review' }));
+
+    // The old two-letter code chip is no longer in the DOM ...
+    expect(fixture.nativeElement.querySelector('.task-card__change-ref-label')).toBeNull();
+    // ... a self-explanatory icon chip took its place.
+    const icon = fixture.nativeElement.querySelector('.task-card__change-ref-icon') as HTMLElement | null;
+    expect(icon).not.toBeNull();
+    expect(icon?.getAttribute('aria-label') ?? '').toMatch(/branch|working tree/i);
+  });
+
   it('AC#6 0-commit analysis-only card shows a calm "no code changes" badge, no pill', async () => {
     const fixture = await renderCard(makeJob({
       state: '5-human-review',
@@ -943,9 +1076,144 @@ describe('TaskCardComponent (smoke)', () => {
 
     fixture.destroy();
   });
+
+  // ── Runner badge (AGT-2003 — lokal vs remote next to the CLI badge) ─────
+
+  it('renders a remote runner badge next to the CLI badge for a leased run', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 4242,
+        startedAt: '2026-07-09T10:00:00Z', status: 'running',
+        exitCode: null, durationSeconds: null, model: 'claude-sonnet-4.5', runOutcome: null,
+      },
+      runner: {
+        runnerId: 'agent-runner-01@linux-host',
+        runnerName: 'agent-runner-01',
+        hostname: 'linux-host',
+        backendName: 'remote',
+        isRemote: true,
+        leaseId: 'lease-abc',
+        fencingToken: 7,
+        acquiredAt: '2026-07-09T10:00:00Z',
+      },
+    }));
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-runner"]') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill?.getAttribute('data-runner-kind')).toBe('remote');
+    expect(pill?.className).toContain('task-card__runner-pill--remote');
+    expect(pill?.textContent).toContain('agent-runner-01');
+    expect(pill?.textContent).toContain('⇥');
+  });
+
+  it('treats a live remote lease as running when no local execution exists', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      execution: null,
+      runner: {
+        runnerId: 'agent-runner-01@linux-host',
+        runnerName: 'agent-runner-01',
+        hostname: 'linux-host',
+        backendName: 'remote',
+        isRemote: true,
+        leaseId: 'lease-live',
+        fencingToken: 9,
+        acquiredAt: '2026-07-11T13:45:00Z',
+      },
+    }));
+
+    const card = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(fixture.componentInstance.isRunning()).toBe(true);
+    expect(card?.classList.contains('task-card--running')).toBe(true);
+    expect(card?.getAttribute('data-running')).toBe('true');
+    expect(fixture.nativeElement.textContent).toContain('agent-runner-01');
+  });
+
+  it('renders a quiet "lokal" runner chip for an in-process run with no remote lease', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 4242,
+        startedAt: '2026-07-09T10:00:00Z', status: 'running',
+        exitCode: null, durationSeconds: null, model: null, runOutcome: null,
+      },
+      runner: null,
+    }));
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-runner"]') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill?.getAttribute('data-runner-kind')).toBe('local');
+    expect(pill?.textContent?.trim()).toBe('lokal');
+  });
+
+  it('shows no runner chip on an idle (not-running) card', async () => {
+    const fixture = await renderCard(makeJob({ state: '2-ready', execution: null, runner: null }));
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-runner"]')).toBeNull();
+  });
 });
 
 describe('buildEffectiveModelChip', () => {
+  it('shows the effective run thinking level and strengthens a default mismatch', () => {
+    const job = makeJob({
+      cliType: 'codex',
+      model: 'gpt-5.6-sol',
+      thinkingLevel: 'ultra',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 1, startedAt: '2026-07-11T00:00:00Z',
+        status: 'completed', exitCode: 0, durationSeconds: 12,
+        model: 'gpt-5.6-sol', thinkingLevel: 'medium', runOutcome: 'success',
+      },
+    });
+
+    const chip = buildEffectiveModelChip(job, makeOwner({ defaultThinkingLevel: 'high' }));
+
+    expect(chip.thinkingLevel).toMatchObject({
+      short: 'm',
+      effective: 'medium',
+      configured: 'ultra',
+      differsFromConfigured: true,
+      differsFromDefault: true,
+    });
+    expect(chip.tooltip.body).toContain('Thinking level:</b> medium');
+    expect(chip.tooltip.body).toContain('Configured thinking level:</b> ultra');
+  });
+
+  it('keeps a configured/default thinking level quiet before the first run', () => {
+    const chip = buildEffectiveModelChip(
+      makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'high', execution: null }),
+      makeOwner({ defaultThinkingLevel: 'high' }),
+    );
+
+    expect(chip.thinkingLevel).toMatchObject({ short: 'h', effective: 'high', differsFromDefault: false });
+  });
+
+  it('strengthens a task override even when the run matches its configured level', () => {
+    const chip = buildEffectiveModelChip(
+      makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'ultra', execution: null }),
+      makeOwner({ defaultThinkingLevel: 'high' }),
+    );
+
+    expect(chip.thinkingLevel).toMatchObject({
+      short: 'u', effective: 'ultra', configured: 'ultra', defaultLevel: 'high',
+      differsFromConfigured: false, differsFromDefault: true,
+    });
+  });
+
+  it('shows a visible quota-fallback badge with model and reason', () => {
+    const job = makeJob({
+      cliType: 'claude',
+      model: 'claude-opus-4-7',
+      quotaFallback: { cliType: 'codex', model: 'gpt-5.3-codex', reason: 'claude Weekly at 100% (cap 95%)' },
+    });
+    const chip = buildEffectiveModelChip(job, makeOwner());
+    expect(chip.source).toBe('fallback');
+    expect(chip.label).toBe('fallback: gpt-5.3-codex');
+    expect(chip.cliLabel).toBe('Codex');
+    expect(chip.tooltip.title).toBe('Quota fallback active');
+    expect(chip.tooltip.body).toContain('Weekly at 100%');
+  });
+
   it('shows owner-client default when job has no cliType/model', () => {
     const job = makeJob({ agent: 'human', cliType: null, model: null, ownerClientId: 'local-default' });
     const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
@@ -964,6 +1232,17 @@ describe('buildEffectiveModelChip', () => {
     expect(chip.source).toBe('explicit');
     expect(chip.isDefault).toBe(false);
     expect(chip.label).toBe('o3');
+  });
+
+  it('renders the codex gpt-5.6 default on the card (AGT-2025)', () => {
+    // A codex task created after gpt-5.6 detection carries the gpt-5.6-sol id;
+    // the card must surface it verbatim, never the literal agent field.
+    const job = makeJob({ cliType: 'codex', model: MODEL_IDS.gpt56Sol, ownerClientId: 'local-default' });
+    const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('explicit');
+    expect(chip.label).toBe('gpt-5.6-sol');
+    expect(chip.cliLabel).toBe('Codex');
   });
 
   it('shows running execution model for in-progress jobs', () => {
@@ -1052,6 +1331,26 @@ describe('buildEffectiveModelChip', () => {
   });
 });
 
+describe('buildOwnerChip', () => {
+  it('uses a stable two-letter owner marker while preserving the full tooltip', () => {
+    const chip = buildOwnerChip(makeOwner({ id: 'rainer-m', displayName: 'Rainer Mischewski' }));
+    expect(chip.initials).toBe('RM');
+    expect(chip.label).toBe('Rainer Mischewski');
+    expect(chip.tooltip).toContain('Rainer Mischewski');
+    expect(chip.tooltip).toContain('rainer-m');
+  });
+
+  it('falls back to the owner id for compact initials', () => {
+    const chip = buildOwnerChip(makeOwner({ id: 'codex-runner-1', displayName: '' }));
+    expect(chip.initials).toBe('CR');
+  });
+
+  it('keeps umlaut names readable when deriving initials', () => {
+    const chip = buildOwnerChip(makeOwner({ id: 'joerg-m', displayName: 'Jörg Müller' }));
+    expect(chip.initials).toBe('JM');
+  });
+});
+
 describe('buildTokenBubble', () => {
   it('uses backend-resolved model labels for aggregate and per-run rows', () => {
     const bubble = buildTokenBubble({
@@ -1120,7 +1419,7 @@ describe('buildModeBadge', () => {
 
 // ASS-748: the card must not repeat what the lane already says. These cover the
 // pure render-logic that drops lane-mirroring labels and concern/classifier
-// tags while keeping genuine content tags and the "Reviewed" signal.
+// tags while keeping genuine content tags.
 describe('buildTagChips — lane-mirror + concern suppression', () => {
   function registry(...entries: TagRegistryEntry[]): Map<string, TagRegistryEntry> {
     return new Map(entries.map((e) => [e.id, e]));
@@ -1170,6 +1469,38 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
     expect(chips.map((c) => c.label)).toEqual(['Architecture', 'Security']);
   });
 
+  it('renders the auto-review reissue marker as a readable tag', () => {
+    const chips = buildTagChips(['reissue:autoreview'], new Map(), '2-ready');
+    expect(chips).toEqual([expect.objectContaining({
+      id: 'reissue:autoreview',
+      label: 'Reissue',
+      ghost: false,
+    })]);
+  });
+
+  it('renders reissue and abort markers as quiet history in human review', () => {
+    const abort = tag('abort-review:watchdog', 'Abort: watchdog');
+    abort.color = '#ef4444';
+    abort.description = 'The run stopped after a watchdog timeout';
+    const chips = buildTagChips(['reissue:autoreview', abort.id], registry(abort), '5-human-review');
+
+    expect(chips).toEqual([
+      expect.objectContaining({ id: 'reissue:autoreview', historical: true, historyGlyph: '↺' }),
+      expect.objectContaining({ id: abort.id, historical: true, historyGlyph: '↺' }),
+    ]);
+    expect(chips[0].tooltip).toContain('Recorded occurrences: 1 tag');
+    expect(chips[1].tooltip).toContain('watchdog timeout');
+  });
+
+  it('keeps reissue and abort markers alarm-coloured in 5e-escalated', () => {
+    const abort = tag('abort-review:watchdog', 'Abort: watchdog');
+    abort.color = '#ef4444';
+    const chips = buildTagChips(['reissue:autoreview', abort.id], registry(abort), '5e-escalated');
+
+    expect(chips[0]).toEqual(expect.objectContaining({ historical: false, color: '#f59e0b' }));
+    expect(chips[1]).toEqual(expect.objectContaining({ historical: false, color: '#ef4444' }));
+  });
+
   it('does not suppress a lane-name tag in an unrelated lane', () => {
     const reg = registry(tag('review', 'Review'));
     // 'review' only mirrors review lanes; in 3-progress it survives.
@@ -1180,6 +1511,19 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
   it('suppresses the raw code-review:grade-* tag (the grade badge renders it)', () => {
     const reg = registry(tag('code-review:grade-a', 'Grade A'));
     const chips = buildTagChips(['code-review:grade-a'], reg, '4-auto-review');
+    expect(chips).toEqual([]);
+  });
+
+  it('drops redundant review and orchestrator-moved tags', () => {
+    const reg = registry(
+      tag('accepted', 'Reviewed'),
+      tag('orchestrator-moved', 'Orchestrator: moved'),
+    );
+    const chips = buildTagChips(
+      ['accepted', 'orchestrator-moved', 'orchestrator:moved'],
+      reg,
+      '5-human-review',
+    );
     expect(chips).toEqual([]);
   });
 });
@@ -1205,13 +1549,12 @@ describe('buildCodeReviewGradeBadge — A/B/C/D quality grade (ASS-1657)', () =>
   });
 });
 
-describe('buildReviewBadge — keeps the Reviewed signal, no lane label', () => {
-  it('renders "Reviewed" for a ready summary (not "review ready")', () => {
+describe('buildReviewBadge — active review status only', () => {
+  it('stays quiet for a ready summary', () => {
     const badge = buildReviewBadge({
       status: 'ready', startedAt: null, finishedAt: null, errorMessage: null, bytesWritten: 42,
     });
-    expect(badge?.label).toBe('Reviewed');
-    expect(badge?.tone).toBe('ready');
+    expect(badge).toBeNull();
   });
 
   it('uses "summarizing" (not "auto-reviewing") while generating', () => {
@@ -1222,16 +1565,20 @@ describe('buildReviewBadge — keeps the Reviewed signal, no lane label', () => 
   });
 });
 
-describe('buildHumanReviewBadge — verdict is kept, "Reviewed" replaces sign-off', () => {
-  it('renders "Reviewed" for an accepted card (not "Ready to sign off")', () => {
+describe('buildHumanReviewBadge — action-required verdicts only', () => {
+  it('stays quiet for an accepted card', () => {
     const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'accept' }));
-    expect(badge?.label).toBe('Reviewed');
-    expect(badge?.tone).toBe('accept');
+    expect(badge).toBeNull();
   });
 
   it('keeps the escalate verdict — it is not derivable from the lane', () => {
     const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'escalate' }));
     expect(badge?.label).toBe('Escalated');
+  });
+
+  it('keeps the reissue verdict — it is an action signal', () => {
+    const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'reissue' }));
+    expect(badge?.label).toBe('Needs rework');
   });
 
   it('stays quiet for an undecided human-review card (no lane mirror)', () => {
@@ -1257,6 +1604,68 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     expect(blocked?.label).toBe('Post processing blocked');
     expect(blocked?.tone).toBe('post-processing-blocked');
   });
+
+  it('surfaces a steer-pending wait with a live "since" timer (Run-Liveness Slice B)', () => {
+    const since = '2026-07-11T00:00:00.000Z';
+    const now = Date.parse(since) + 135_000; // 2m 15s later
+    const pill = buildPhaseBadge('steer-pending', since, now);
+    expect(pill?.tone).toBe('steer-pending');
+    expect(pill?.label).toBe('Waiting for answer · 2:15');
+    expect(pill?.tooltip).toContain('will not hang');
+  });
+
+  it('shows the bare steer-pending label when no wait-start is known', () => {
+    expect(buildPhaseBadge('steer-pending')?.label).toBe('Waiting for answer');
+  });
+
+  it('shows loop-waiting as a timed no-slot phase', () => {
+    const since = '2026-07-11T00:00:00.000Z';
+    const pill = buildPhaseBadge('loop-waiting', since, Date.parse(since) + 42_000);
+    expect(pill?.tone).toBe('loop-waiting');
+    expect(pill?.label).toBe('Waiting for loop continuation 0:42');
+    expect(pill?.tooltip).toContain('freed its execution slot');
+  });
+});
+
+describe('formatSteerWait', () => {
+  it('formats sub-hour waits as m:ss', () => {
+    expect(formatSteerWait(0)).toBe('0:00');
+    expect(formatSteerWait(75_000)).toBe('1:15');
+    expect(formatSteerWait(9_000)).toBe('0:09');
+  });
+  it('keeps hour-plus waits in total-minutes mm:ss form - the 5-hour hang shape', () => {
+    expect(formatSteerWait(5 * 3600_000 + 7 * 60_000 + 9_000)).toBe('307:09');
+  });
+  it('never goes negative on clock skew', () => {
+    expect(formatSteerWait(-5000)).toBe('0:00');
+  });
+});
+
+describe('buildPipelineDots', () => {
+  it('marks the core run dot as active for a live progress card', () => {
+    const dots = buildPipelineDots(makeJob({
+      state: '3-progress',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 1, startedAt: '',
+        status: 'running', exitCode: null, durationSeconds: null,
+        model: 'gpt-5-codex', runOutcome: null,
+      },
+    }));
+    expect(dots.currentLabel).toBe('Core agent work');
+    expect(dots.dots.map((dot) => [dot.id, dot.status])).toEqual([
+      ['pre', 'done'],
+      ['run', 'active'],
+      ['post', 'pending'],
+      ['review', 'pending'],
+    ]);
+  });
+
+  it('surfaces post-processing as the active step without a large progress bar', () => {
+    const dots = buildPipelineDots(makeJob({ state: '3-progress', phase: 'post-processing-running' }));
+    expect(dots.currentLabel).toBe('Post steps');
+    expect(dots.dots.find((dot) => dot.id === 'post')?.status).toBe('active');
+    expect(dots.dots.find((dot) => dot.id === 'run')?.status).toBe('done');
+  });
 });
 
 function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {
@@ -1275,6 +1684,158 @@ function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {
     ...overrides,
   };
 }
+
+describe('buildExternalDoneBadge', () => {
+  it('returns null for a task with no external completion', () => {
+    expect(buildExternalDoneBadge(makeJob())).toBeNull();
+  });
+
+  it('surfaces the source and summary for an externally completed task', () => {
+    const badge = buildExternalDoneBadge(makeJob({
+      externalCompletion: {
+        source: 'operator-chat',
+        summary: 'Implemented out-of-band in docs/concepts.',
+        completedAt: '2026-07-08T10:00:00Z',
+      },
+    }));
+    expect(badge).not.toBeNull();
+    expect(badge!.label).toBe('extern erledigt');
+    expect(badge!.tooltip).toContain('operator-chat');
+    expect(badge!.tooltip).toContain('Implemented out-of-band');
+  });
+});
+
+describe('TaskCardComponent external-done badge render', () => {
+  it('renders the extern-erledigt pill when externalCompletion is set', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '5-human-review',
+      externalCompletion: {
+        source: 'operator-chat',
+        summary: 'done elsewhere',
+        completedAt: '2026-07-08T10:00:00Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-external-done"]') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill!.textContent).toContain('extern erledigt');
+  });
+
+  it('does not render the pill for a normally completed task', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({ state: '6-completed' }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-external-done"]')).toBeNull();
+  });
+});
+
+describe('TaskCardComponent — waits-on dependency chip (AGT-2029)', () => {
+  async function mount(job: TaskInfo) {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', job);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders an open, clickable waiting chip from waitsOn', async () => {
+    const fixture = await mount(
+      makeJob({
+        state: '2-ready',
+        references: { dependsOn: ['CAR-3'], relatedTo: [], blockedBy: [], supersedes: [] },
+        waitsOn: {
+          blocked: true,
+          cycleDetected: false,
+          items: [
+            {
+              key: 'CAR-3',
+              resolved: true,
+              fulfilled: false,
+              targetJobId: 'car-3',
+              targetTitle: 'Pricing lib',
+              targetState: '2-ready',
+              targetWatchPath: '/ws/car',
+            },
+          ],
+        },
+      }),
+    );
+    const chip = fixture.nativeElement.querySelector(
+      '[data-testid="task-card-waiting-on"]',
+    ) as HTMLElement | null;
+    expect(chip).toBeTruthy();
+    expect(chip!.tagName).toBe('BUTTON');
+    expect(chip!.getAttribute('data-tone')).toBe('open');
+    expect(chip!.textContent).toContain('waits: CAR-3');
+  });
+
+  it('renders a cycle chip when the dependency graph is cyclic', async () => {
+    const fixture = await mount(
+      makeJob({
+        state: '2-ready',
+        references: { dependsOn: ['APP-2'], relatedTo: [], blockedBy: [], supersedes: [] },
+        waitsOn: {
+          blocked: true,
+          cycleDetected: true,
+          items: [
+            {
+              key: 'APP-2',
+              resolved: true,
+              fulfilled: false,
+              targetJobId: 'app-2',
+              targetTitle: 'B',
+              targetState: '2-ready',
+              targetWatchPath: '/ws/app',
+            },
+          ],
+        },
+      }),
+    );
+    const chip = fixture.nativeElement.querySelector(
+      '[data-testid="task-card-waiting-on"]',
+    ) as HTMLElement | null;
+    expect(chip!.getAttribute('data-tone')).toBe('cycle');
+    expect(chip!.textContent).toContain('dep cycle');
+  });
+
+  it('renders no chip when the card has no dependencies', async () => {
+    const fixture = await mount(makeJob({ state: '2-ready' }));
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="task-card-waiting-on"]'),
+    ).toBeNull();
+  });
+});
 
 function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {

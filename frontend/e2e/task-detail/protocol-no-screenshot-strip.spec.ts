@@ -43,7 +43,7 @@ test.describe('F38: protocol pane no longer renders the screenshot strip', () =>
       await expect(protocol.getByTestId('protocol-screenshot-strip')).toHaveCount(0);
       await expect(protocol.getByTestId('screenshot-strip')).toHaveCount(0);
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

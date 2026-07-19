@@ -14,13 +14,13 @@ namespace AgentStudio.Shared;
 /// what the CLI loads; policy changes are a separate task (T1b). For Claude the
 /// scalar header (<see cref="Model"/>, <see cref="PermissionMode"/>,
 /// <see cref="Cwd"/>) is parsed from the stream-json init frame the CLI already
-/// emits; for Codex / Copilot / Gemini it is derived from the adapter
+/// emits; for Codex / Gemini it is derived from the adapter
 /// invocation plus the CLI's documented config-path conventions.
 /// </para>
 /// </summary>
 public record CliExecutionContext
 {
-    /// <summary>One of <c>CliTypes</c>: claude / codex / copilot / gemini.</summary>
+    /// <summary>One of <c>CliTypes</c>: claude / codex / gemini.</summary>
     public string Cli { get; init; } = "";
 
     /// <summary>Model the run was invoked with, when known.</summary>
@@ -89,7 +89,7 @@ public record CliContextSource
 /// </summary>
 public static class CliContextSourceKinds
 {
-    /// <summary>A memory file the CLI auto-loads (Claude CLAUDE.md, Codex/Copilot AGENTS.md, Gemini GEMINI.md).</summary>
+    /// <summary>A memory file the CLI auto-loads (Claude CLAUDE.md, Codex AGENTS.md, Gemini GEMINI.md).</summary>
     public const string Memory = "memory";
     /// <summary>An instruction file in the upward project chain (e.g. .github/copilot-instructions.md).</summary>
     public const string InstructionFile = "instruction-file";

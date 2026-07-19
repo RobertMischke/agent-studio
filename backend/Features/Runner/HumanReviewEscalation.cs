@@ -15,12 +15,65 @@ public static class HumanReviewEscalationCategories
     public const string EnvironmentBlocker = "environment-blocker";
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
+    /// <summary>A task worktree remained locked after bounded cleanup retries.
+    /// The busy path is included in the escalation reason for operator action.</summary>
+    public const string WorktreeBlocked = "worktree-blocked";
     public const string EmptyFastExit = "empty-fast-exit";
+
+    /// <summary>The agent CLI process died hard (exitCode &lt; 0) before it could
+    /// reach a terminal verdict. An infra fault, not a logical failure; routed to
+    /// human review rather than left stranded in 3-progress.</summary>
+    public const string InfraCrash = "infra-crash";
+
+    /// <summary>The run failed and produced real text that maps to no terminal
+    /// verdict. The orchestrator could not conclude it, so it stops and hands the
+    /// task to a human (replaces the old classifier-unknown stranding).</summary>
+    public const string OrchestratorInconclusive = "orchestrator-inconclusive";
 
     /// <summary>The run exceeded the model's input window (prompt too long /
     /// context length). Non-retryable, so it is routed straight to human review
     /// instead of being re-issued into the same overflow.</summary>
     public const string ContextOverflow = "context-overflow";
+
+    /// <summary>The configured model is invalid/unsupported for this account or
+    /// CLI (invalid_request / HTTP 400 "model not supported"). Non-retryable:
+    /// re-issuing spawns into the same 400, so it is routed to human review with
+    /// a clear model-invalid reason instead of the orchestrator-inconclusive
+    /// catch-all.</summary>
+    public const string ModelInvalid = "model-invalid";
+
+    /// <summary>The account's usage/session/rate-limit budget is exhausted.
+    /// Transient (clears when the quota window resets); escalated with an honest
+    /// quota-exhausted reason so a human can re-queue after reset instead of
+    /// mistaking it for an orchestrator-inconclusive failure.</summary>
+    public const string QuotaExhausted = "quota-exhausted";
+
+    /// <summary>A transient environmental fault (host file lock / MSB302x, network
+    /// glitch) that persisted after the orchestrator's bounded retry-with-backoff.
+    /// Flagged environmental so a reviewer reads it as an infra problem to retry,
+    /// not a failed change (AGT-1944).</summary>
+    public const string Environmental = "environmental";
+
+    /// <summary>The agent CLI could not launch or resume its session even after an
+    /// automatic fresh-start retry (a dead session after a backend restart, a
+    /// rejected resume id). Distinct from the generic auto-failure park so the
+    /// board shows the recoverable host/CLI cause (AGT-1944; belege
+    /// AGT-1945/1929/1930).</summary>
+    public const string CliLaunchFailed = "cli-launch-failed";
+
+    /// <summary>The agent CLI could not launch because its OAuth session expired
+    /// and the token refresh failed. Non-retryable and shared across every
+    /// parallel run, so the orchestrator STOPS immediately (breaker) and escalates
+    /// with a re-auth instruction instead of burning further launches - the
+    /// AGT-2066 token-roulette signature (17 cards drained on 2026-07-10).</summary>
+    public const string AuthRefreshFailed = "auth-refresh-failed";
+
+    /// <summary>The run could not be mapped to a terminal verdict, but it left
+    /// files in <c>results/</c>. Routed to human review WITH a "there is partial
+    /// work to inspect" hint rather than a bare inconclusive park, so a reviewer
+    /// looks at the deliverables before deciding (AGT-1944 taxonomy:
+    /// inconclusive-with-results).</summary>
+    public const string InconclusiveWithResults = "inconclusive-with-results";
 
     /// <summary>The per-task circuit breaker tripped after N consecutive failed
     /// runs without progress; the task was parked to stop an endless reissue
@@ -35,6 +88,12 @@ public static class HumanReviewEscalationCategories
     /// a person to decide, never for an agent to run. Routed to 5e-escalated
     /// after the retired 1b-needs-human-review lane was removed.</summary>
     public const string HumanDecisionNeeded = "human-decision-needed";
+
+    /// <summary>An unanswered steer / NeedsInput question timed out (Run-Liveness
+    /// Slice B, concept Rule 2) and the answer was not derivable from the task
+    /// context. Routed to 5e-escalated with a clear reason instead of waiting
+    /// indefinitely (belegt 2062/2067/2068, 2026-07-10).</summary>
+    public const string SteerUnanswered = "steer-unanswered";
 
     /// <summary>Retroactive category for cards parked in 5-human-review before
     /// the escalation funnel existed (boot-time backfill).</summary>
@@ -213,7 +272,7 @@ public sealed class HumanReviewEscalation
     /// escalated-without-review card: a <c>- Result:</c> line (same shape the
     /// generated summaries use), the category, the reason, and a pointer to the
     /// logs and the decision journal.</summary>
-    public static string BuildStatusStub(string category, string reason)
+    public static string BuildStatusStub(string category, string reason, bool partialResultsPresent = false)
     {
         var c = string.IsNullOrWhiteSpace(category) ? HumanReviewEscalationCategories.UnknownLegacy : category.Trim();
         var r = (reason ?? string.Empty).Trim();
@@ -221,8 +280,16 @@ public sealed class HumanReviewEscalation
         var sb = new System.Text.StringBuilder();
         sb.Append("# Status").Append(nl).Append(nl);
         sb.Append("- Result: Escalated to human decision (").Append(c).Append(')').Append(nl).Append(nl);
-        sb.Append("This card was routed to 5e-escalated by the orchestrator runtime without an automated quality review, so there is no agent-written summary.")
-          .Append(nl).Append(nl);
+        // When a dying run left files in results/, say so: "no agent-written
+        // summary" made AGT-1917 look twice as lost as it was. Surfacing the
+        // partial results tells the reviewer there is work to inspect before
+        // deciding (docs/concepts/out-of-band-task-completion.md §3, last para).
+        if (partialResultsPresent)
+            sb.Append("This card was routed to 5e-escalated by the orchestrator runtime without an automated quality review, so there is no agent-written summary - but partial results are present in `results/`, review them before deciding.")
+              .Append(nl).Append(nl);
+        else
+            sb.Append("This card was routed to 5e-escalated by the orchestrator runtime without an automated quality review, so there is no agent-written summary.")
+              .Append(nl).Append(nl);
         sb.Append("- Category: ").Append(c).Append(nl);
         if (r.Length > 0)
             sb.Append("- Reason: ").Append(r).Append(nl);
@@ -242,13 +309,34 @@ public sealed class HumanReviewEscalation
                 if (!string.IsNullOrWhiteSpace(existing)) return; // never clobber a real summary
             }
             Directory.CreateDirectory(folderPath);
-            File.WriteAllText(path, BuildStatusStub(category, reason));
+            File.WriteAllText(path, BuildStatusStub(category, reason, HasPartialResults(folderPath)));
         }
         catch (Exception ex)
         {
             // Best-effort: the verdict already records the escalation; an
             // unwritable status.md must not crash the runner.
             _logger.LogWarning(ex, "HumanReviewEscalation: failed to write status.md stub at {Path}", path);
+        }
+    }
+
+    /// <summary>
+    /// True when the task's <c>results/</c> directory holds at least one file -
+    /// i.e. a dying run left partial deliverables the reviewer should see.
+    /// Best-effort and fails closed (no results claim on an unreadable dir):
+    /// a wrong "partial results present" line is worse than a missing one.
+    /// </summary>
+    private static bool HasPartialResults(string folderPath)
+    {
+        try
+        {
+            var resultsDir = AgentStudio.Tasks.TaskPaths.ResultsDir(folderPath);
+            return Directory.Exists(resultsDir)
+                && Directory.EnumerateFiles(resultsDir, "*", SearchOption.AllDirectories).Any();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "HumanReviewEscalation: best-effort partial-results probe for the status stub.");
+            return false;
         }
     }
 

@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
-import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { LayoutPanesService } from '../../services/layout-panes.service';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource, TaskState } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';
@@ -157,6 +158,21 @@ export class PromptPaneComponent {
     this.activeTab.set(tab);
   }
 
+  /**
+   * Consume a cross-pane tab request (e.g. the git pane's commit-row
+   * code-review badge, AGT-1995). Reading the shared layout signal here
+   * rather than taking an imperative call means a request raised while this
+   * pane was hidden is still honoured: the pane re-renders on reveal and
+   * this effect picks the pending request up on creation, then clears it.
+   */
+  private readonly layout = inject(LayoutPanesService);
+  private readonly requestedTabEffect = effect(() => {
+    const requested = this.layout.requestedPromptTab();
+    if (!requested) return;
+    this.onPromptTabChange(requested);
+    this.layout.requestedPromptTab.set(null);
+  });
+
   /** Type-safe bridge from the generic pane-tabs `tabChange` event. */
   onPromptTabChange(id: string): void {
     if (id === 'overview' || id === 'description' || id === 'timeline' || id === 'evidence' || id === 'code-review') {
@@ -194,13 +210,13 @@ export class PromptPaneComponent {
     return sections.filter(s => s.entries.length > 0);
   });
 
-  /** Maps severity → border-left class. */
+  /** Maps severity to its semantic treatment class. */
   severityClass(sev: ReviewEvidenceEntry['severity']): string {
     return sev === 'high' ? 'pass-fail' : sev === 'warn' ? 'pass-defer' : 'pass-info';
   }
 
   /** Resolver factory for prompt-history image refs (`attachments/foo.png` ->
-   *  job-folder API URL). Stable identity per render so `<app-markdown>`'s
+   *  job-folder API URL). Stable identity per render so `<cac-markdown>`'s
    *  signal doesn't churn unnecessarily. */
   readonly imageResolver = computed<(src: string) => string>(() => {
     const jobId = this.jobId();

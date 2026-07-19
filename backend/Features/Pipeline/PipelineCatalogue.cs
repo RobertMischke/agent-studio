@@ -7,7 +7,7 @@ namespace AgentStudio.Pipeline;
 /// <c>standard-task-pipeline</c>, derived from today's
 /// <c>3-progress -> 4-auto-review</c> flow. Pre-steps are reserved
 /// slots (no runtime today; future tasks plug requirement-clarification
-/// / context-retrieval / skill-readiness here). The Core step is the
+/// / context-retrieval / wiki-guidance upkeep here). The Core step is the
 /// CLI agent run owned by <see cref="TaskRunnerService"/>. Post-steps
 /// run the four <see cref="StepKind.Aspect"/> verdicts in parallel
 /// (the load-bearing behavioural change in this phase), the
@@ -66,6 +66,12 @@ public static class PipelineCatalogue
     /// verdict when the circuit-breaker fires.
     /// </summary>
     public const string LoopGuardStepId = "pre-loop-guard";
+    /// <summary>
+    /// Deterministic, zero-token task qualification performed immediately
+    /// before execution. It maps the task profile onto the selected CLI's live
+    /// model and reasoning ladders. Explicit card pins remain authoritative.
+    /// </summary>
+    public const string ModelQualificationStepId = "pre-model-qualification";
 
     /// <summary>
     /// Optional, parallelisable pre-coding step that surfaces the ADR-0026
@@ -153,6 +159,28 @@ public static class PipelineCatalogue
     /// from <c>TaskTransitionService</c>.
     /// </summary>
     public const string MergeIntoDevelopStepId = "post-merge-into-develop";
+
+    /// <summary>
+    /// Deferred, operator-triggered post-step that pushes the integration branch
+    /// (<c>develop</c>) to <c>origin</c> after <see cref="MergeIntoDevelopStepId"/>
+    /// has folded an accepted task branch into it (AGT-1999). Closes the
+    /// "integration nur lokal" gap: without it the platform pushed every
+    /// <c>task/*</c> branch but never the integration branch, so <c>origin/develop</c>
+    /// drifted stale, develop-push CI and the remote verification host tested an
+    /// old tree, and there was no remote backup. Like the merge step it is
+    /// <see cref="PipelineStep.Deferred"/> (runs only on the accept trigger, never
+    /// automatically) and ordered right after it. The push runs off the request
+    /// path (the same offload strategy as the completed-job workspace push, via
+    /// <c>IntegrationPushQueue</c> / <c>IntegrationPushWorker</c>): a transient
+    /// failure retries with backoff per the AGT-1944 environmental-retry taxonomy
+    /// and, once the budget is spent, is recorded as a visible
+    /// <see cref="PipelineStepStatus.Failed"/> step flagged <c>environmental</c>
+    /// rather than silently dropped. It is a git step (the read-only pipeline
+    /// drops it) and default-on; opt out per project via the same
+    /// <see cref="ProjectSettings.PipelineSteps"/> override the other steps use.
+    /// Implemented by <c>MergeIntoDevelopRunner.PushIntegrationBranchAsync</c>.
+    /// </summary>
+    public const string MergeIntoDevelopPushStepId = "post-merge-into-develop-push";
     /// <summary>
     /// Deterministic post-step that compiles the changed repository state before
     /// the orchestrator trusts any self-reported Success. It runs after the
@@ -181,7 +209,7 @@ public static class PipelineCatalogue
 
     /// <summary>
     /// Opt-in deterministic post-step that keeps a watched project's local
-    /// <c>docs/wiki/common-problems</c> library current from task outcome
+    /// <c>docs/common-problems</c> library current from task outcome
     /// signals. It dedupes by slug, increments occurrence evidence, updates
     /// <c>last-seen</c>, and regenerates the common-problems index without an
     /// LLM call. Implemented by <c>WikiMaintenancePostStepRunner</c>.
@@ -193,7 +221,7 @@ public static class PipelineCatalogue
     /// derived review verdict, the per-aspect orchestrator-review findings, the
     /// agent's own close-out notes, and any typed outcome stumbling block - into
     /// a per-task page under the watched project's
-    /// <c>docs/wiki/learnings/&lt;task&gt;.md</c> tree, then regenerates the
+    /// <c>docs/operations/learnings/&lt;task&gt;.md</c> tree, then regenerates the
     /// learnings index. It is CLI-agnostic (no model call - it reads structured
     /// run evidence the orchestrator already has) and idempotent: a re-run dedupes
     /// by run signature so it merges/augments the page rather than overwriting it,
@@ -205,6 +233,24 @@ public static class PipelineCatalogue
     /// drift steps use).
     /// </summary>
     public const string WikiLearningsStepId = "post-wiki-learnings";
+
+    /// <summary>
+    /// Opt-in deterministic post-step that keeps the AGENTS.md -&gt; wiki pointers
+    /// for a set of designated topics consistent (no dead / missing link) and
+    /// maintains a machine-owned "Current State / Progress" page per designated
+    /// topic under <c>docs/concepts/designated-topics/</c>, so agents read the
+    /// current state of a topic instead of re-discovering it every run ("gegen im
+    /// Kreis drehen"). It is CLI-agnostic (no model call - it derives the per-topic
+    /// current-state line from the task's own title / newest commit / typed outcome,
+    /// and matches a task to a topic by shared tags or changed-file path prefixes)
+    /// and idempotent (re-running on the same task refreshes timestamps without
+    /// duplicating a progress row). Reporting-only - it never changes the lane
+    /// decision. Implemented by <c>AgentsWikiSyncPostStepRunner</c>; defaults
+    /// <c>DefaultEnabled = false</c> because it is a per-project opt-in pass (same
+    /// switch the wiki-maintenance / wiki-learnings / drift steps use) that also
+    /// self-provisions an empty designated-topics registry the operator fills in.
+    /// </summary>
+    public const string AgentsWikiSyncStepId = "post-agents-wiki-sync";
 
     /// <summary>
     /// Post-core completeness check that runs immediately after the core agent
@@ -252,13 +298,34 @@ public static class PipelineCatalogue
     /// <see cref="AgentStudio.Review.CodeReviewStepService"/> (a
     /// grade mode), runs after the parallel aspect verdicts and before the final
     /// orchestrator decision, and uses a quality-first model
-    /// (<c>CodeReviewStep:DefaultModel</c>, Claude Opus by default) rather than
-    /// the cheap aspect model. Default-on; the recording lives in
+    /// (<c>CodeReviewStep:DefaultModel</c>, the live Codex flagship by default)
+    /// rather than the bounded aspect model. Default-on; the recording lives in
     /// <c>ReviewDecisionOrchestrator</c>. Reporting only - the grade never gates
     /// the lane decision, so a low grade surfaces for the human without forcing a
     /// reissue.
     /// </summary>
     public const string CodeReviewGradeStepId = "post-code-review-grade";
+
+    /// <summary>
+    /// Opt-in post-step (AGT-2028) that, after a task settles, asks the best
+    /// available model whether the change set is relevant to another project
+    /// (a new feature, a removed capability, ...) and, on a conservative yes,
+    /// SPAWNS a follow-up card there with a generated prompt and a
+    /// <c>relatedTo</c> reference back to the source task. The relevance +
+    /// prompt-generation model is quality-first (defaults to the live Codex
+    /// flagship at its top advertised reasoning level); the spawned card is
+    /// worked by the target project's default model. Generic, not
+    /// website-hardwired: the target project, relevance question, and spawn lane
+    /// come from <c>ProjectSettings.TaskSpawner</c>. Reporting-only - it never
+    /// gates the source task's lane decision. It is
+    /// <see cref="PipelineStep.DefaultEnabled"/> = false (an operator turns it on
+    /// per project, same opt-in switch the drift / wiki steps use) and, because it
+    /// makes a per-task LLM judgment plus writes a card, it dedupes via the source
+    /// job's <c>.metadata/spawned-tasks.jsonl</c> ledger (max 1 per source task by
+    /// default). Implemented by <c>TaskSpawnerPostStepRunner</c>, driven from
+    /// <c>ReviewDecisionOrchestrator</c>.
+    /// </summary>
+    public const string TaskSpawnerStepId = "post-task-spawner";
 
     /// <summary>
     /// Display name for the post-core completeness check
@@ -304,7 +371,7 @@ public static class PipelineCatalogue
     /// step. Kept off the static Post list (it does not run in the normal
     /// post-bracket) but defined here so the per-project config resolver and
     /// the runtime step-execution recorder share one id, display name, default
-    /// (opt-in / off), and model-resolution path.
+    /// (on / opt-out), and model-resolution path.
     /// </summary>
     public static PipelineStep AbortReviewStep { get; } = new()
     {
@@ -317,8 +384,11 @@ public static class PipelineCatalogue
         Kind = StepKind.Orchestrator,
         RunMode = StepRunMode.Sequential,
         Idempotent = true,
-        // Opt-in per project: an extra LLM pass the operator turns on.
-        DefaultEnabled = false,
+        // Default-on 2026-07-05 (was opt-in/off since ADR-0032): the bounded
+        // rerun budget (PostAbortReviewDecider.DefaultRerunBudget = 2) and the
+        // fail-closed-to-human-review behavior on an unparseable verdict make
+        // this safe to run for every project; opt out per project if undesired.
+        DefaultEnabled = true,
     };
 
     /// <summary>
@@ -339,6 +409,7 @@ public static class PipelineCatalogue
         IntegrateMergeStepId,
         ConflictResolutionStepId,
         MergeIntoDevelopStepId,
+        MergeIntoDevelopPushStepId,
     };
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
@@ -409,6 +480,15 @@ public static class PipelineCatalogue
                     Kind = StepKind.Module,
                     RunMode = StepRunMode.Sequential,
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = ModelQualificationStepId,
+                    DisplayName = "Model qualification",
+                    Kind = StepKind.Module,
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                    DefaultEnabled = true,
                 },
                 new PipelineStep
                 {
@@ -534,6 +614,20 @@ public static class PipelineCatalogue
                 },
                 new PipelineStep
                 {
+                    Id = MergeIntoDevelopPushStepId,
+                    DisplayName = "Push develop to origin",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    // Runs only once the merge into develop has actually landed.
+                    DependsOn = [MergeIntoDevelopStepId],
+                    // Re-runnable: an already-pushed branch is an ancestor no-op.
+                    Idempotent = true,
+                    // Same acceptance trigger as the merge, off the request path:
+                    // stays "pending" until the operator accepts the task.
+                    Deferred = true,
+                },
+                new PipelineStep
+                {
                     Id = LintScssStepId,
                     DisplayName = "Frontend stylelint",
                     Kind = StepKind.Tool,
@@ -574,6 +668,23 @@ public static class PipelineCatalogue
                 },
                 new PipelineStep
                 {
+                    Id = AgentsWikiSyncStepId,
+                    DisplayName = "Agent skills / AGENTS wiki sync",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    // Deterministic wiki upkeep keyed off the task's own evidence
+                    // (tags / changed files / commit), independent of the aspect
+                    // verdicts, so it only needs the core run to have produced the
+                    // change set - mirrors the wiki-maintenance dependency.
+                    DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                    // Opt-in per project: an operator turns on the designated-topic
+                    // sync (and fills in the seeded registry), same as the sibling
+                    // wiki steps.
+                    DefaultEnabled = false,
+                },
+                new PipelineStep
+                {
                     Id = CodeReviewGradeStepId,
                     DisplayName = "Code-review quality grade",
                     // An LLM review pass that produces a single A/B/C/D ruling,
@@ -591,6 +702,23 @@ public static class PipelineCatalogue
                     // Every pipelined task carries a grade (ASS-1657), so on by
                     // default; an operator can still disable it per project.
                     DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = TaskSpawnerStepId,
+                    DisplayName = "Task spawner",
+                    // An LLM relevance judgment that consumes the change set and
+                    // emits a spawn/no-spawn verdict, the same shape as the grade
+                    // step, so it reuses StepKind.Orchestrator rather than the
+                    // Aspect kind (pinned to the four aspect-runner ids).
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    // Reads the full settled change set after the aspects have run.
+                    DependsOn = [.. AspectStepIds],
+                    Idempotent = true,
+                    // Opt-in: a project turns it on only when it wants a follow-up
+                    // card auto-created in another project (Default aus). No spam.
+                    DefaultEnabled = false,
                 },
                 new PipelineStep
                 {

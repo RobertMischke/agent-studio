@@ -126,7 +126,7 @@ public class DuplicateSlugRootCauseTests : IDisposable
         Assert.Equal(0, second.FoldersNeutralised);
     }
 
-    private CreateJobRequest NewRequest(string title, string? targetState = null) => new()
+    private CreateTaskRequest NewRequest(string title, string? targetState = null) => new()
     {
         Title = title,
         WatchPath = _watchPath,

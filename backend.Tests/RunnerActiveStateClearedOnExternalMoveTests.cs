@@ -147,6 +147,25 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
     }
 
     [Fact]
+    public void Reconcile_AfterWatcherInvalidation_DoesNotRefreshGlobalTaskIndex()
+    {
+        WriteJob(TaskStates.Progress, "demo-task");
+        var deps = BuildDeps();
+        var runner = BuildRunner(deps);
+        runner.SetActiveJobForTest("demo-task");
+        _ = deps.Scanner.ScanAllJobs();
+        Assert.Equal(1, deps.IndexCache.Misses);
+
+        Directory.Move(
+            Path.Combine(_watchPath, TaskStates.Progress, "demo-task"),
+            Path.Combine(_watchPath, TaskStates.Ready, "demo-task"));
+        deps.IndexCache.Invalidate(TaskIndexCache.InvalidationSource.External);
+
+        Assert.True(runner.ReconcileActiveJobAgainstDisk());
+        Assert.Equal(1, deps.IndexCache.Misses);
+    }
+
+    [Fact]
     public void Reconcile_ActiveJobFolderDeleted_ClearsLatch()
     {
         WriteJob(TaskStates.Progress, "demo-task");
@@ -225,7 +244,8 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
         OrchestratorRunner OrchestratorRunner,
         OrchestratorSessionStore OrchestratorSessions,
         CliRouter Router,
-        AgentStudio.TaskAccess.ITaskAccess TaskAccess);
+        AgentStudio.TaskAccess.ITaskAccess TaskAccess,
+        TaskIndexCache IndexCache);
 
     private Deps BuildDeps()
     {
@@ -257,24 +277,19 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
             scanner, mutations, states, transitions, indexCache,
             NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
-        var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
-        var copilot = new CopilotCliService(
-            NullLogger<CopilotCliService>.Instance, config,
-            new CopilotModelDiscovery(NullLogger<CopilotModelDiscovery>.Instance, cliEnv, config),
-            cliEnv);
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, config);
         var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config);
-        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, config, codexDiscovery,
+        var codex = GenericCliExecutionService.ForCodex(NullLogger<GenericCliExecutionService>.Instance, config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
-        var router = new CliRouter(copilot, claude, codex, gemini);
+        var gemini = GenericCliExecutionService.ForAntigravity(NullLogger<GenericCliExecutionService>.Instance, config);
+        var router = new CliRouter(claude, codex, gemini);
 
         var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);
         var orchestratorSessions = new OrchestratorSessionStore(NullLogger<OrchestratorSessionStore>.Instance);
 
         return new Deps(config, scanner, states, mutations, sessions, summary, prompts, settings, git,
-            transitions, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, router, taskAccess);
+            transitions, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, router, taskAccess, indexCache);
     }
 
     private ProjectRunner BuildRunner(Deps d)

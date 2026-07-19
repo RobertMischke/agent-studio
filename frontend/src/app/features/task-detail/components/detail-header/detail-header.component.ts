@@ -3,25 +3,33 @@ import { TaskInfo, TaskState } from '../../../../models/task.model';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
-  stateLabel as fmtStateLabel
+  stateLabel as fmtStateLabel,
+  taskModeIcon,
+  taskModeLabel,
 } from '../../../../services/format.util';
 import { NowTickService } from '../../../../services/now-tick.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
+import { buildRunActivityBadge } from '../../../../services/run-activity.util';
 import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
-
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import {
+  MergeAcceptView,
   TriageActionPayload,
   TriageButton,
   laneLabelFor,
+  mergeAcceptViewFor,
   overflowActionsFor,
   primaryActionFor,
 } from '../../state/triage-actions.model';
-/**
- * Top header of the job-detail view: back button, editable title,
+import type { LandedState } from '../../../git';
+import { buildThinkingLevelIndicator } from '../../../../services/thinking-level.util';
+import { shortModelName } from '../../../../services/format.util';
+import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
+import { PendingButtonDirective } from '../../../../components/async-feedback';
+/** Top header of the job-detail view: back button, editable title,
  * state pill, and — top-right — the lane's primary triage action plus
  * an overflow menu of the remaining lane actions. The bottom-of-detail
  * triage bar that used to host these is gone (the operator reported the
@@ -33,12 +41,26 @@ import {
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ThinkingLevelIndicatorComponent, PendingButtonDirective],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })
 export class DetailHeaderComponent {
   readonly info = input.required<TaskInfo>();
+  readonly defaultThinkingLevel = input<string | null>(null);
+  readonly headerModel = computed(() => {
+    const info = this.info();
+    return info.execution?.model ?? info.model ?? null;
+  });
+  readonly headerModelLabel = computed(() => shortModelName(this.headerModel()));
+  readonly thinkingLevelIndicator = computed(() =>
+    buildThinkingLevelIndicator(
+      this.info().execution,
+      this.info().thinkingLevel,
+      this.defaultThinkingLevel(),
+      this.headerModel(),
+    )
+  );
   readonly editingTitle = input(false);
   readonly titleDraft = input<string>('');
   readonly savingTitle = input(false);
@@ -57,6 +79,12 @@ export class DetailHeaderComponent {
   readonly pagerTotal = input(0);
   readonly pagerCanPrev = input(false);
   readonly pagerCanNext = input(false);
+  /**
+   * True while the selection is fetching the next/previous task without a
+   * warmed prefetch. Renders a small spinner in the pager cluster so a
+   * (non-instant) pager/cursor step shows the reload is in progress.
+   */
+  readonly loading = input(false);
   /** Human-readable label of the snapshot's original lane (e.g. "Ready"). */
   readonly pagerLaneLabel = input<string>('');
   /** Index of the open job inside the live lane peers (0-based; -1 == unknown). */
@@ -69,6 +97,22 @@ export class DetailHeaderComponent {
   readonly triageActingId = input<string | null>(null);
   /** Whether the task-level commit actions should be exposed in the overflow menu. */
   readonly commitActionsAvailable = input(false);
+  /**
+   * Live-derived landed position of the task's work (graph-derived provenance
+   * view; null when unknown / still loading). Lets the Human Review acceptance
+   * primary read "Released to main" when the recorded merge fact only proves
+   * develop. The persisted `info.provenance.merge` fact is still the synchronous
+   * fallback, so a "Merged to develop" status renders even before this resolves.
+   */
+  readonly landedState = input<LandedState | null>(null);
+  /**
+   * True while the graph-derived git status (branch/merge position) for the open
+   * job has not settled yet. Gates the git-dependent acceptance primary: until
+   * the truth is known the button must not be clickable and must not show a
+   * guessed label, because `landedState` is still `null` and would render the
+   * "not yet merged" default that later flips to "already merged" (AGT-2006).
+   */
+  readonly gitInfoLoading = input(false);
   readonly commitMessageDraft = input<string>('');
   readonly generatingCommitMessage = input(false);
   readonly committing = input(false);
@@ -100,7 +144,7 @@ export class DetailHeaderComponent {
 
   /**
    * Tooltip text explaining the snapshot iteration, surfaced through the
-   * app's canonical `[appTooltip]` directive (single visual standard,
+   * app's canonical `[cacTooltip]` directive (single visual standard,
    * instant hover). Plain readable language, no embedded markup.
    */
   readonly pagerTooltip = computed(() => {
@@ -172,6 +216,43 @@ export class DetailHeaderComponent {
     primaryActionFor(this.info().state),
   );
 
+  /**
+   * State-dependent presentation for the Human Review acceptance primary. Null
+   * for every other primary (Run now, Stop run, ...). When the work has already
+   * landed it carries the landed-status pill text and relabels the button to
+   * "Accept"; otherwise the offer stays "Merge into Develop".
+   */
+  readonly mergeAcceptView = computed<MergeAcceptView | null>(() => {
+    const p = this.triagePrimary();
+    if (!p || p.id !== 'mark-done') return null;
+    return mergeAcceptViewFor(this.info(), this.landedState());
+  });
+
+  /** Effective primary label (state-aware for the Human Review acceptance). */
+  readonly primaryLabel = computed(() => {
+    const p = this.triagePrimary();
+    if (!p) return '';
+    return this.mergeAcceptView()?.acceptLabel ?? p.label;
+  });
+
+  /**
+   * Primary-action ids whose label and effect depend on the live git landed
+   * status. The Human Review acceptance (`mark-done`) is the sole one today: it
+   * reads "Merge into Develop" vs "Accept" off `landedState`, so it must not act
+   * (or show a guessed label) while the git status is still loading (AGT-2006).
+   */
+  private readonly GIT_DEPENDENT_PRIMARY_IDS: ReadonlySet<string> = new Set(['mark-done']);
+
+  /**
+   * True when the current primary depends on git status that is still loading.
+   * Drives the button's disabled + skeleton state so the acceptance action is
+   * held back until the branch/merge truth resolves, then switches atomically.
+   */
+  readonly primaryAwaitingGit = computed(() => {
+    const p = this.triagePrimary();
+    return !!p && this.GIT_DEPENDENT_PRIMARY_IDS.has(p.id) && this.gitInfoLoading();
+  });
+
   /** Remaining lane actions + always-on Edit/Delete fallbacks. */
   readonly triageOverflow = computed<TriageButton[]>(() =>
     overflowActionsFor(this.info().state),
@@ -231,9 +312,13 @@ export class DetailHeaderComponent {
   primaryTooltip(): string {
     const p = this.triagePrimary();
     if (!p) return '';
+    if (this.primaryAwaitingGit()) return 'Checking git status — action available once loaded.';
     if (this.mutationsBlocked()) return 'Update in progress — actions paused.';
-    if (this.triageActingId() === p.id) return `${p.label}…`;
-    return `${p.label} (Enter)`;
+    const label = this.primaryLabel();
+    if (this.triageActingId() === p.id) return `${label}…`;
+    const merge = this.mergeAcceptView();
+    if (merge?.landed && merge.statusTooltip) return `${merge.statusTooltip} (Enter)`;
+    return `${label} (Enter)`;
   }
 
   overflowTooltip(): string {
@@ -245,6 +330,9 @@ export class DetailHeaderComponent {
   onPrimaryClick(): void {
     const p = this.triagePrimary();
     if (!p) return;
+    // Hold git-dependent primaries until the branch/merge status has loaded, so
+    // Enter / click cannot trigger an acceptance while the label is still a guess.
+    if (this.primaryAwaitingGit()) return;
     this.emitTriage(p);
   }
 
@@ -325,7 +413,36 @@ export class DetailHeaderComponent {
   readonly relativeCreated = computed(() => fmtRelativeShort(this.info().createdAt, this.nowTick()));
   readonly createdAtTooltip = computed(() => fmtDateTime(this.info().createdAt));
 
+  /**
+   * ASS-1751: run-activity pill mirrored from the kanban card so the detail
+   * header explains a 3-progress task's run state at a glance — a live run, a
+   * failed run waiting out the rapid-crash backoff (with retry time), or an
+   * orphan ended by a backend restart. Null off the Progress lane. Re-evaluates
+   * with the shared tick so "retry at HH:MM" stays fresh.
+   */
+  readonly runActivityBadge = computed(() => buildRunActivityBadge(this.info(), this.nowTick()));
+
   readonly identity = computed(() => projectIdentity(this.info().projectName));
+
+  /**
+   * AGT-2069 — prominent planning/research badge for the detail header. Only
+   * non-coding modes render one, so the header stays quiet for the common case
+   * while a planning-task detail is unmistakably marked "here work is PLANNED".
+   * Glyph + label come from the same source as the board card + create picker.
+   */
+  readonly modeBadge = computed(() => {
+    const mode = this.info().mode;
+    if (mode !== 'planning' && mode !== 'research') return null;
+    return {
+      mode,
+      icon: taskModeIcon(mode),
+      label: taskModeLabel(mode),
+      tooltip:
+        mode === 'planning'
+          ? 'Planning task: read-only. It investigates and proposes the next work; it is only done once it spawns follow-up cards or declares no follow-up intended.'
+          : 'Research task: read-only with web access. It gathers information and reports findings.',
+    };
+  });
 
   stateLabel(state: string): string { return fmtStateLabel(state); }
 

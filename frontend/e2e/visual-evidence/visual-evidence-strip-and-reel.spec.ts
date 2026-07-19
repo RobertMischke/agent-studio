@@ -11,7 +11,7 @@ import { setTheme, dismissDevErrorDialog, sampleColours } from '../helpers/theme
  * runs against a clean dev frontend without needing real watched
  * projects on disk:
  *
- *   - `/api/jobs/{id}/screenshots` returns three fake entries with
+ *   - `/api/tasks/{id}/screenshots` returns three fake entries with
  *     ascending timestamps. The protocol pane renders the strip in
  *     chronological order.
  *   - `/api/workspace/screenshots` returns entries spread across two
@@ -109,7 +109,7 @@ function buildJobScreenshots() {
       watchPath: TASK_WATCH_PATH,
       fileName: 'home-loaded.png',
       relativePath: 'results/playwright/home/home-loaded.png',
-      url: `/api/jobs/${TASK_JOB_ID}/screenshot?path=playwright%2Fhome%2Fhome-loaded.png`,
+      url: `/api/tasks/${TASK_JOB_ID}/screenshot?path=playwright%2Fhome%2Fhome-loaded.png`,
       caption: 'home',
       status: 'passed',
       localPath: 'C:/Projects/.../results/playwright/home/home-loaded.png',
@@ -122,7 +122,7 @@ function buildJobScreenshots() {
       watchPath: TASK_WATCH_PATH,
       fileName: 'detail-open.png',
       relativePath: 'results/playwright/detail/detail-open.png',
-      url: `/api/jobs/${TASK_JOB_ID}/screenshot?path=playwright%2Fdetail%2Fdetail-open.png`,
+      url: `/api/tasks/${TASK_JOB_ID}/screenshot?path=playwright%2Fdetail%2Fdetail-open.png`,
       caption: 'detail',
       status: 'passed',
       localPath: 'C:/Projects/.../results/playwright/detail/detail-open.png',
@@ -135,7 +135,7 @@ function buildJobScreenshots() {
       watchPath: TASK_WATCH_PATH,
       fileName: 'lightbox-open.png',
       relativePath: 'results/playwright/lightbox/lightbox-open.png',
-      url: `/api/jobs/${TASK_JOB_ID}/screenshot?path=playwright%2Flightbox%2Flightbox-open.png`,
+      url: `/api/tasks/${TASK_JOB_ID}/screenshot?path=playwright%2Flightbox%2Flightbox-open.png`,
       caption: 'lightbox',
       status: 'failed',
       localPath: 'C:/Projects/.../results/playwright/lightbox/lightbox-open.png',
@@ -159,7 +159,7 @@ function buildWorkspaceScreenshots() {
       watchPath: 'C:/Projects/project-a',
       fileName: 'a1.png',
       relativePath: 'results/a1.png',
-      url: `/api/jobs/task-reel-a/screenshot?path=a1.png`,
+      url: `/api/tasks/task-reel-a/screenshot?path=a1.png`,
       caption: 'a1',
       status: null,
       localPath: 'C:/.../a1.png',
@@ -172,7 +172,7 @@ function buildWorkspaceScreenshots() {
       watchPath: 'C:/Projects/project-b',
       fileName: 'b1.png',
       relativePath: 'results/b1.png',
-      url: `/api/jobs/task-reel-b/screenshot?path=b1.png`,
+      url: `/api/tasks/task-reel-b/screenshot?path=b1.png`,
       caption: 'b1',
       status: 'passed',
       localPath: 'C:/.../b1.png',
@@ -185,7 +185,7 @@ function buildWorkspaceScreenshots() {
       watchPath: 'C:/Projects/project-a',
       fileName: 'c1.png',
       relativePath: 'results/c1.png',
-      url: `/api/jobs/task-reel-c/screenshot?path=c1.png`,
+      url: `/api/tasks/task-reel-c/screenshot?path=c1.png`,
       caption: 'c1',
       status: null,
       localPath: 'C:/.../c1.png',
@@ -199,11 +199,11 @@ async function stubBackgroundApis(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
   // Use a regex so the bare list endpoint does not eclipse
-  // `/api/jobs/<id>` and `/api/jobs/<id>/screenshots` route handlers
+  // `/api/tasks/<id>` and `/api/tasks/<id>/screenshots` route handlers
   // registered later. Playwright glob `?` matches a single char, which
   // is exactly the kind of pattern that does eclipse them.
   await page.route(/\/api\/(?:jobs|tasks)(\?.*)?$/, json(buildPagerTasks()));
-  await page.route('**/api/jobs/grouped*', json(emptyGrouped()));
+  await page.route('**/api/tasks/grouped*', json(emptyGrouped()));
   await page.route('**/api/tasks/grouped*', json(emptyGrouped()));
   await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: TASK_WATCH_PATH }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
@@ -298,7 +298,7 @@ async function stubJobDetailForTask(page: Page) {
   };
   for (const [suffix, body] of Object.entries(subRoutes)) {
     for (const info of buildPagerTasks()) {
-      await page.route(`**/api/jobs/${info.id}/${suffix}*`, async (route) => {
+      await page.route(`**/api/tasks/${info.id}/${suffix}*`, async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
       });
       await page.route(`**/api/tasks/${info.id}/${suffix}*`, async (route) => {

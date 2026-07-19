@@ -18,10 +18,10 @@ The only side effect is writing one Markdown file under `logs/system-review/<dat
 
 Set the workspace root via the `ATP_WORKSPACE` env var; defaults to `C:\Projects\agent-taskboard-workspace`. From there, **read the Agent Message Bus first** and only fall back to the legacy raw streams when the bus is missing or empty:
 
-1. **Agent Message Bus (primary).** `<workspace>/logs/bus/`. Layout per [docs/agent-message-bus.md](../../docs/agent-message-bus.md) section 4:
+1. **Agent Message Bus (primary).** `<workspace>/logs/bus/`. Layout per [docs/system/architecture/bus/agent-message-bus.md](../../docs/system/architecture/bus/agent-message-bus.md) section 4:
    - `participants/<id>.json` - one JSON document per participant. Use this to resolve `participantId` -> `cli` / `skill` / `kind` so filters can pivot.
    - `_workspace/<yyyy-mm-dd>.jsonl` - workspace-wide messages (orchestrator-global, runtime startup).
-   - `<project>/<yyyy-mm-dd>.jsonl` - per-project messages, one `AgentMessage` per line (schema: [`agent-message.schema.json`](../../docs/schemas/agent-message.schema.json)).
+   - `<project>/<yyyy-mm-dd>.jsonl` - per-project messages, one `AgentMessage` per line (schema: [`agent-message.schema.json`](../../docs/system/schemas/agent-message.schema.json)).
    Sort messages by `id` (ULID / UUID v7 lexical order matches creation time). Filter to the lookback window via `createdAt`. Every finding produced from the bus must reference the `id`, plus `project`, `jobId`, `runId`, `artifacts[].uri` when present.
 2. **Bus exported as JSONL fixtures (alternate).** When the full bus store is not yet available on the host (offline analysis, post-incident export, integration tests), the skill accepts a single hand-built or exported JSONL file via the dry-run path (see "Dry-run mode" below). The fixture is shaped exactly like a bus day-file; the skill code does not branch on the source. This is the documented integration point for any future tooling that produces bus-shaped exports (e.g. a `bus-export` CLI command).
 3. **Projects index (legacy).** `<workspace>/projects/`. List every project; for each, list lane folders `1-preparation` ... `7-archive`.

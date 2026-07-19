@@ -4,7 +4,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Locks the contract for the docs/code-patterns.md loader: well-formed
+/// Locks the contract for the docs/system/contracts/code-patterns.md loader: well-formed
 /// YAML blocks become CodePatternRule records; malformed blocks are
 /// skipped without breaking the rest; severity defaults to Warn.
 /// </summary>
@@ -95,7 +95,7 @@ public class CodePatternRuleLoaderTests
     [Fact]
     public void LoadEffectiveRules_MergesDocsRulesWithDefaults()
     {
-        // The repo includes docs/code-patterns.md; the live merge should
+        // The repo includes docs/system/contracts/code-patterns.md; the live merge should
         // include the hardcoded defaults plus at least one docs rule.
         var repo = LocateRepoRoot();
         if (repo is null) return; // CI/out-of-tree builds may not see it

@@ -31,7 +31,7 @@ async function pickWatchPath(): Promise<string> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch { /* best-effort cleanup */ }

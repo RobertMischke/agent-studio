@@ -14,14 +14,89 @@ public record CreateFollowupFromEvidenceRequest
 }
 
 /// <summary>
-/// Response shape for the follow-up endpoint. <c>JobId</c> is the slug
-/// assigned to the new task; the frontend uses it to route the user to the
-/// new card.
+/// Response shape for the follow-up endpoint. <c>JobId</c> remains the
+/// storage slug for backwards compatibility; <c>TaskKey</c> is the stable,
+/// globally resolvable reference clients should put in links.
 /// </summary>
 public record CreateFollowupFromEvidenceResponse
 {
     public string JobId { get; init; } = "";
+    public string? TaskKey { get; init; }
     public string TargetState { get; init; } = TaskStates.Preparation;
+}
+
+/// <summary>
+/// Body for <c>POST /api/tasks/{id}/external-completion</c>. Reconciles a task
+/// that was completed outside the runner (operator chat, external agent, a
+/// remote host) in one atomic call, per
+/// <c>docs/concepts/out-of-band-task-completion.md</c> §3: writes
+/// <c>status.md</c> + <c>results/deliverables.md</c>, terminalizes
+/// <c>lifecycle.json</c>, appends an <c>external</c> timeline entry, moves the
+/// lane, and commits the workspace evidence.
+/// </summary>
+public record ExternalCompletionRequest
+{
+    /// <summary>Result summary that replaces the stale <c>status.md</c> text. Required.</summary>
+    public string? Summary { get; init; }
+    /// <summary>What was delivered and where (repo paths + commits, or URLs).</summary>
+    public List<ExternalDeliverable>? Deliverables { get; init; }
+    /// <summary>Who or which channel did the work (operator name, agent id, "chat", ...).</summary>
+    public string? Source { get; init; }
+    /// <summary>
+    /// Optional destination lane. Defaults to <c>5-human-review</c> (the card
+    /// still gets a quick operator confirmation). Must be a valid
+    /// <see cref="TaskStates"/> value.
+    /// </summary>
+    public string? TargetState { get; init; }
+    /// <summary>
+    /// Optional open checklist items that require operator action. Remote
+    /// runners use this when a worktree could not be secured and therefore
+    /// remains on its host.
+    /// </summary>
+    public List<string>? GateItems { get; init; }
+}
+
+/// <summary>One delivered artifact recorded in <c>results/deliverables.md</c>.</summary>
+public record ExternalDeliverable
+{
+    /// <summary>Repo-relative path (with an optional <c>@sha</c> commit hint) of the delivered artifact.</summary>
+    public string? Path { get; init; }
+    /// <summary>External URL when the deliverable lives outside the repo.</summary>
+    public string? Url { get; init; }
+    /// <summary>Free-form note about this deliverable.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>Typed outcome of the external-completion service, mapped to HTTP by the endpoint.</summary>
+public enum ExternalCompletionStatus
+{
+    Success,
+    NotFound,
+    InvalidRequest,
+    MoveConflict,
+    MoveFailed
+}
+
+/// <summary>
+/// Result of an external-completion attempt. <see cref="TargetState"/> and
+/// <see cref="EvidenceCommitSha"/> are populated only on
+/// <see cref="ExternalCompletionStatus.Success"/>.
+/// </summary>
+public record ExternalCompletionOutcome(
+    ExternalCompletionStatus Status,
+    string? Message = null,
+    string? JobId = null,
+    string? TargetState = null,
+    string? EvidenceCommitSha = null);
+
+/// <summary>200 body for <c>POST /api/tasks/{id}/external-completion</c>.</summary>
+public record ExternalCompletionResponse
+{
+    public string JobId { get; init; } = "";
+    public string TargetState { get; init; } = TaskStates.HumanReview;
+    public string Source { get; init; } = "";
+    /// <summary>Short SHA of the workspace evidence commit, or null when nothing was committed.</summary>
+    public string? EvidenceCommitSha { get; init; }
 }
 
 public record MoveJobRequest
@@ -143,18 +218,42 @@ public record BatchMoveResponse
     public List<BatchMoveItemResult> Results { get; init; } = [];
 }
 
-public record CreateJobRequest
+public record CreateTaskRequest
 {
     public string Id { get; init; } = "";
     public string Title { get; init; } = "";
     public int Order { get; init; } = 999;
     public string Agent { get; init; } = "claude";
+
+    /// <summary>
+    /// Preferred, path-free project handle: a short code / Kürzel (e.g.
+    /// <c>ASS</c>) or a stable project id (<c>PROJ-NNN</c>). The server resolves
+    /// it to the project's storage location, so the filesystem layout never
+    /// travels over the wire. When set, this takes precedence over
+    /// <see cref="WatchPath"/>.
+    /// </summary>
+    public string? Project { get; init; }
+
+    /// <summary>
+    /// Deprecated absolute filesystem path of the target project. Retained for
+    /// legacy callers during the watchPath-encapsulation migration; new callers
+    /// should send <see cref="Project"/> (Kürzel or <c>PROJ-NNN</c>) instead.
+    /// Also accepts a <c>PROJ-NNN</c> id or short code, which is resolved
+    /// server-side.
+    /// </summary>
     public string WatchPath { get; init; } = "";
     public string? PromptMarkdown { get; init; }
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
+    /// <summary>
+    /// Provenance for model qualification. Null preserves the legacy API rule
+    /// that a supplied value is explicit; false means the UI merely
+    /// materialized its default and qualification may replace it.
+    /// </summary>
+    public bool? ModelExplicit { get; init; }
+    public bool? ThinkingLevelExplicit { get; init; }
     public string? TargetState { get; init; }
-    /// <summary>Optional CLI backend (claude|codex|copilot|gemini). Defaults to claude when omitted.</summary>
+    /// <summary>Optional CLI backend (claude|codex|gemini). Defaults to claude when omitted.</summary>
     public string? CliType { get; init; }
     /// <summary>Card kind: <c>task</c> (default) or <c>epic</c>. See <see cref="TaskKinds"/>.</summary>
     public string? Kind { get; init; }
@@ -201,7 +300,7 @@ public record CreateJobRequest
 /// the modal stays the single source of truth for the create UX. Images
 /// are returned as fetchable references (not inline bytes); the modal
 /// re-uploads them byte-for-byte into the new task's <c>attachments/</c>
-/// on save. See docs/research/planning-research-task-kinds-2026-05.md.
+/// on save. See docs/concepts/planning-research-task-kinds-2026-05.md.
 /// </summary>
 public record PromoteToCodingResponse
 {
@@ -313,6 +412,19 @@ public record TaskOrderItem
 
 public record ChangeProjectRequest
 {
+    /// <summary>
+    /// Preferred, path-free handle of the destination project: a short code /
+    /// Kürzel (e.g. <c>ASS</c>) or a stable <c>PROJ-NNN</c> id. Resolved
+    /// server-side to the project's storage location; wins over the deprecated
+    /// <see cref="TargetWatchPath"/> when set.
+    /// </summary>
+    public string? TargetProject { get; init; }
+
+    /// <summary>
+    /// Deprecated absolute filesystem path of the destination project. Retained
+    /// for legacy callers during the watchPath-encapsulation migration; new
+    /// callers should send <see cref="TargetProject"/> instead.
+    /// </summary>
     public string TargetWatchPath { get; init; } = "";
 }
 
@@ -359,6 +471,13 @@ public record SetMaxParallelismRequest
     public int MaxParallelism { get; init; } = 1;
 }
 
+/// <summary>Body for the server-owned remote runner assignment.</summary>
+public record SetExecutionRunnerRequest
+{
+    public string? ExecutionRunner { get; init; }
+    public bool? RemoteExecutionEnabled { get; init; }
+}
+
 /// <summary>
 /// Body for <c>PUT /api/projects/{name}/integration-branch</c> (ADR-0052).
 /// Blank reverts to the default integration branch.
@@ -379,7 +498,7 @@ public record SetIntegrationStrategyRequest
 
 public record SetAutoPushStrategyRequest
 {
-    public string Strategy { get; init; } = AutoPushStrategies.OnCompleted;
+    public string Strategy { get; init; } = AutoPushStrategies.AlwaysImmediate;
 }
 
 /// <summary>
@@ -455,6 +574,7 @@ public record SetPipelineStepRequest
     /// <summary>Full pipeline step id (e.g. <c>aspect-code-quality</c>) or bare suffix (<c>code-quality</c>).</summary>
     public string StepId { get; init; } = "";
     public bool? Enabled { get; init; }
+    public bool? EconomyModel { get; init; }
     public string? Mode { get; init; }
     public string? CliType { get; init; }
     public string? Model { get; init; }
@@ -518,6 +638,17 @@ public record SetJobEpicRequest
 public record SetRunnerModeRequest
 {
     public string Mode { get; init; } = "manual";
+
+    /// <summary>
+    /// Optional cause of the change, threaded into the runner's structured log
+    /// and <c>ClassifyModeSource</c>. The UI toggle omits it (defaults to the
+    /// operator "api:" reason → source <c>user</c>). The update-service sends
+    /// <c>update-quiesce</c> / <c>update-resume</c> so its transient flip to
+    /// manual classifies as <c>system</c> and does not overwrite the operator's
+    /// durable <see cref="AgentStudio.Shared.ProjectSettings.DesiredRunnerMode"/>
+    /// (ASS-1753).
+    /// </summary>
+    public string? Reason { get; init; }
 }
 
 public record SetCliPathRequest
@@ -540,4 +671,14 @@ public record SetCliQuotaCapRequest
     public string CliType { get; init; } = "";
     public string WindowLabel { get; init; } = "";
     public int CapPct { get; init; }
+}
+
+public record SetCliModelRouteRequest
+{
+    public string CliType { get; init; } = "";
+    public string? PrimaryModel { get; init; }
+    public string? PrimaryThinkingLevel { get; init; }
+    public string? FallbackCliType { get; init; }
+    public string? FallbackModel { get; init; }
+    public string? FallbackThinkingLevel { get; init; }
 }

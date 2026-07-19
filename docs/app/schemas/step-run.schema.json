@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/step-run.schema.json",
+  "title": "StepRun",
+  "description": "One row per (task, step, attempt). Source of truth is the per-job append-only logs/step-runs.jsonl, written through the Task Access append path (ADR-0024). The derived pipeline-history.db step_runs table is a rebuildable cross-task projection over every project's step-runs.jsonl (the ProjectChatIndex precedent; ADR-0023). ADR-0051.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "projectId", "jobId", "jobKey", "pipelineDefVersion", "stepId", "stepLabel", "phase", "stepType", "failureMode", "orchestratorReaction", "attempt", "status", "startedAt", "durationMs"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable identifier: hash of (jobKey, stepId, attempt). Idempotent re-projection yields the same id."
+    },
+    "projectId": {
+      "type": "string",
+      "description": "Canonical project id (PROJ-NNN, ADR-0042)."
+    },
+    "jobId": {
+      "type": "string",
+      "description": "Task slug."
+    },
+    "jobKey": {
+      "type": "string",
+      "description": "Canonical PROJ-NNN::jobId identity. Display names and filesystem paths are never persisted here."
+    },
+    "pipelineDefVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version of the pipeline definition (pipeline-definition.schema.json) this attempt executed against."
+    },
+    "stepId": {
+      "type": "string",
+      "description": "The step's slug within the definition."
+    },
+    "stepLabel": {
+      "type": "string",
+      "description": "Human-readable step name at run time (denormalised so history survives a later rename)."
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["Pre", "Core", "Post"],
+      "description": "Phase the step ran in."
+    },
+    "stepType": {
+      "type": "string",
+      "enum": ["Llm", "Script"],
+      "description": "Body kind of the step that ran."
+    },
+    "failureMode": {
+      "type": "string",
+      "enum": ["Hard", "Soft"],
+      "description": "Whether a failure of this step gated the pipeline."
+    },
+    "orchestratorReaction": {
+      "type": "string",
+      "enum": ["Review", "Scripted"],
+      "description": "How the orchestrator treated this step's artifact."
+    },
+    "runId": {
+      "type": ["string", "null"],
+      "description": "The task run/attempt this step belonged to (links to the run timeline, ADR-0049)."
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Which attempt of this step within the task (re-runs increment)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["Ok", "Failed", "Warn", "Skipped"],
+      "description": "Terminal status of the step attempt."
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC start time."
+    },
+    "finishedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO-8601 UTC finish time. Null while running (not yet appended)."
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall-clock duration in milliseconds."
+    },
+    "exitCode": {
+      "type": ["integer", "null"],
+      "description": "Script steps only. The command's exit code. Null for llm steps."
+    },
+    "model": {
+      "type": ["string", "null"],
+      "description": "Llm steps only. The model actually used (may differ from the configured override after fallback)."
+    },
+    "inputTokens": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Llm steps only."
+    },
+    "outputTokens": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Llm steps only."
+    },
+    "cacheReadTokens": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Llm steps only."
+    },
+    "costUsd": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Llm steps only. Estimated dollar cost of the step."
+    },
+    "artifactRef": {
+      "type": ["string", "null"],
+      "description": "Job-folder-relative path to the markdown artifact this step produced."
+    },
+    "orchestratorVerdict": {
+      "type": ["string", "null"],
+      "enum": ["pass", "reopen", "escalate", null],
+      "description": "Review steps only. The orchestrator's decision after reading the artifact. Null for scripted steps."
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "Short failure or skip reason; null on success."
+    },
+    "summary": {
+      "type": ["string", "null"],
+      "description": "Short human-readable outcome for an on-demand attempt."
+    }
+  }
+}

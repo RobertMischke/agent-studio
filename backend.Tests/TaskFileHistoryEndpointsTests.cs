@@ -92,6 +92,22 @@ public sealed class TaskFileHistoryEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task HtmlArtifact_ReturnsHtmlContentType()
+    {
+        var job = WriteJob("ASS-HTML");
+        File.WriteAllText(Path.Combine(job, "exploration.html"), "<button>switch</button>", Encoding.UTF8);
+
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var watchPath = Uri.EscapeDataString(_workspaceProjectRoot);
+        using var response = await client.GetAsync($"/api/tasks/ASS-HTML/files/exploration.html?watchPath={watchPath}");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("<button>switch</button>", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task CodeFileHistory_UsesProjectRepositoryWhenScopedToCode()
     {
         WriteJob("ASS-900");

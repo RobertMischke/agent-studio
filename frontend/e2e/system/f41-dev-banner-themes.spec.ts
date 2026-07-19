@@ -3,8 +3,8 @@ import { contrastRatio } from '../helpers/contrast';
 import { __devBannerStyleForTests } from '../../src/dev-mode';
 
 /**
- * F41 — the DEV-environment indicator (orange stripe + vertical "DEV"
- * badge injected by `frontend/src/dev-mode.ts` when /api/environment
+ * F41: the DEV-environment indicator (vertical "DEV" badge injected
+ * by `frontend/src/dev-mode.ts` when /api/environment
  * returns `{ isDev: true }`) was hardcoding `rgba(245, 158, 11, 0.82)` /
  * `#1a1208` and rendered as a pale, unreadable badge on the light theme.
  *
@@ -13,8 +13,7 @@ import { __devBannerStyleForTests } from '../../src/dev-mode';
  *     `--studio-on-accent` text in both themes (token-driven, no hex);
  *   - the body text contrast against the effective surface clears WCAG-AA
  *     in BOTH dark and light themes;
- *   - the left-edge stripe stays visibly coloured (non-transparent
- *     gradient end-stops) in both themes.
+ *   - no decorative left-edge stripe is injected beside the badge.
  *
  * The CSS block under test is imported verbatim from `dev-mode.ts`
  * (`__devBannerStyleForTests`), so the spec exercises the same rules the
@@ -97,13 +96,6 @@ async function readBannerSample(page: Page): Promise<BannerSample> {
   });
 }
 
-async function readStripeBg(page: Page): Promise<string> {
-  // `::before` is queryable through getComputedStyle on the host element.
-  return await page.evaluate(() => {
-    return getComputedStyle(document.body, '::before').backgroundImage;
-  });
-}
-
 test.describe('F41 — dev banner stays legible in both themes', () => {
   for (const theme of ['dark', 'light'] as const) {
     test(`badge body text clears WCAG-AA (${theme})`, async ({ page }, testInfo) => {
@@ -139,10 +131,10 @@ test.describe('F41 — dev banner stays legible in both themes', () => {
       expect(sample.width, `[${theme}] dev-banner width`).toBeGreaterThan(0);
       expect(sample.height, `[${theme}] dev-banner height`).toBeGreaterThan(0);
 
-      // 4. The body::before stripe must carry a real gradient (not
-      //    `none`) so the left-edge cue stays visible in both themes.
-      const stripeBg = await readStripeBg(page);
-      expect(stripeBg, `[${theme}] stripe ::before background-image`).toMatch(/linear-gradient/);
+      // 4. R1 prohibits a decorative left-edge stripe. The badge itself is
+      //    the environment signal, so the body pseudo-element stays empty.
+      const stripeContent = await page.evaluate(() => getComputedStyle(document.body, '::before').content);
+      expect(stripeContent, `[${theme}] body ::before content`).toBe('none');
 
       await testInfo.attach(`f41-dev-banner-${theme}.png`, {
         body: await page.screenshot({ fullPage: false, clip: { x: 0, y: 0, width: 60, height: 220 } }),

@@ -1,0 +1,201 @@
+// Task-Server settings page (AGT-1924). Full-bleed content, no max-width cap on
+// the top-level view (R2). Status is encoded with a dot + badge + soft tint,
+// never a left accent bar (R1); acute tone is reserved for a genuinely
+// unreachable server (R4). Every colour reads a --studio-* token (R5); all
+// padding/margin/gap read the --studio-spacing-* scale.
+
+:host { display: block; min-width: 0; }
+
+.ts {
+  padding: var(--studio-spacing-4) var(--studio-spacing-5) var(--studio-spacing-6);
+  color: var(--studio-fg);
+}
+
+// --- header ------------------------------------------------------------------
+.ts__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--studio-spacing-4);
+  margin-bottom: var(--studio-spacing-3);
+}
+.ts__title {
+  margin: 0 0 var(--studio-spacing-1);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--studio-fg-strong);
+}
+.ts__subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+  max-width: 68ch;
+  line-height: 1.45;
+}
+.ts__refresh {
+  margin-left: auto;
+  flex: 0 0 auto;
+  background: var(--studio-bg-hover);
+  border: 1px solid var(--studio-border-strong);
+  color: var(--studio-fg);
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+.ts__refresh:hover:not(:disabled) { background: var(--studio-bg-selected); }
+.ts__refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+.ts__refresh:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+
+.ts__error {
+  background: var(--notify-error-tint);
+  border: 1px solid var(--notify-error-border);
+  color: var(--notify-error-icon-fg);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: var(--studio-spacing-3);
+}
+
+.ts__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  margin-bottom: var(--studio-spacing-4);
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+}
+.ts__count strong { color: var(--studio-fg-strong); font-weight: 700; }
+.ts__sep { color: var(--studio-fg-muted); }
+
+// --- blocks (connection / store / evidence) ----------------------------------
+.ts__blocks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--studio-spacing-3);
+  margin-bottom: var(--studio-spacing-5);
+}
+.ts__block {
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: var(--studio-bg-hover);
+  padding: var(--studio-spacing-4);
+}
+// Acute wash only for an acute state (R4): a dirty evidence tree is a soft warn,
+// an unreachable server is an error. A clean/healthy block stays calm.
+.ts__block[data-tone='warn']  { background: var(--notify-warning-tint); border-color: var(--notify-warning-border); }
+.ts__block[data-tone='error'] { background: var(--notify-error-tint);   border-color: var(--notify-error-border); }
+
+.ts__block-head {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  margin-bottom: var(--studio-spacing-3);
+}
+.ts__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--studio-fg-muted);
+}
+.ts__dot[data-tone='ok']    { background: var(--severity-pass); }
+.ts__dot[data-tone='warn']  { background: var(--severity-warn); }
+.ts__dot[data-tone='error'] { background: var(--severity-high); }
+.ts__block-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--studio-fg-strong);
+}
+.ts__badge {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  // stylelint-disable-next-line declaration-property-unit-disallowed-list -- 1px pill inset is sub-scale
+  padding: 1px var(--studio-spacing-2);
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-dim);
+}
+.ts__badge[data-tone='ok'] {
+  background: var(--notify-success-tint);
+  color: var(--notify-success-icon-fg);
+}
+.ts__badge[data-tone='warn'] {
+  background: var(--notify-warning-icon-bg);
+  color: var(--notify-warning-icon-fg);
+}
+.ts__badge[data-tone='error'] {
+  background: var(--notify-error-icon-bg);
+  color: var(--notify-error-icon-fg);
+}
+
+// --- key/value rows ----------------------------------------------------------
+.ts__rows {
+  margin: 0;
+  display: grid;
+  gap: var(--studio-spacing-2);
+}
+.ts__row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: var(--studio-spacing-2);
+  align-items: baseline;
+  font-size: 11px;
+}
+.ts__row dt {
+  color: var(--studio-fg-muted);
+  font-weight: 600;
+}
+.ts__row dd {
+  margin: 0;
+  color: var(--studio-fg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ts__mono {
+  font-family: var(--font-mono, monospace);
+  color: var(--studio-fg-strong);
+}
+.ts__hint { color: var(--studio-fg-muted); }
+.ts__subject {
+  color: var(--studio-fg-dim);
+  font-style: italic;
+}
+
+// --- sections (clients / management) -----------------------------------------
+.ts__section { margin-top: var(--studio-spacing-5); }
+.ts__section-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-3);
+  margin-bottom: var(--studio-spacing-3);
+  flex-wrap: wrap;
+}
+.ts__section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--studio-fg-strong);
+}
+.ts__section-count { font-size: 11px; color: var(--studio-fg-dim); }
+.ts__section-count strong { color: var(--studio-fg-strong); font-weight: 700; }
+.ts__section-desc {
+  font-size: 11px;
+  color: var(--studio-fg-dim);
+  max-width: 64ch;
+  line-height: 1.4;
+}
+
+.ts__empty {
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+  padding: var(--studio-spacing-4);
+  border: 1px dashed var(--studio-border);
+  border-radius: 8px;
+}

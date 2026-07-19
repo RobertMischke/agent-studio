@@ -13,7 +13,7 @@ namespace AgentStudio.Tests;
 /// Codex loads every <c>SKILL.md</c> in this tree on session start and
 /// refuses any file that does not open with a <c>---</c>-delimited YAML
 /// frontmatter block ("missing YAML frontmatter delimited by ---"). Two
-/// skills (<c>job-api</c>, <c>regenerate-readme</c>) shipped without that
+/// skills (<c>task-api</c>, <c>regenerate-readme</c>) shipped without that
 /// block and produced an ERROR on every Codex run. The backend skill
 /// catalog (<see cref="AgentStudio.Runtime.SkillReadinessService"/>)
 /// also reads <c>name</c> + <c>description</c> from the same block.
@@ -23,7 +23,7 @@ namespace AgentStudio.Tests;
 /// added skill that forgets its frontmatter is flagged in the repo before
 /// it ever reaches a Codex run. It complements
 /// <see cref="CliSkillFilesTests"/>, which guards the separate
-/// <c>docs/cli-skills/</c> family.
+/// <c>docs/system/cli/skills/</c> family.
 /// </para>
 /// </summary>
 public class AgentSkillFrontmatterTests
@@ -93,7 +93,7 @@ public class AgentSkillFrontmatterTests
         // Sanity check that the enumeration actually found the tree; guards
         // against a path regression silently turning the Theory into a no-op.
         var slugs = SkillFolders().Select(o => (string)o[0]).ToHashSet();
-        Assert.Contains("job-api", slugs);
+        Assert.Contains("task-api", slugs);
         Assert.Contains("regenerate-readme", slugs);
         Assert.Contains("runtime-log-analysis", slugs);
     }

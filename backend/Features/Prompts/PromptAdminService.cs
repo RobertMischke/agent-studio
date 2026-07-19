@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Drift;
 
 namespace AgentStudio.Prompts;
 
@@ -130,11 +131,14 @@ public sealed class PromptAdminService
 
     /// <summary>
     /// The coverage surface: which prompt-source sites are template-backed
-    /// (registered) versus still assembling instruction text inline. The
-    /// inline-migration (T3a) cleared the four core runner/review files; the
-    /// pending entries are the deliberately-surfaced remaining sites a follow-up
-    /// guard task (T3b) is meant to close. Hand-curated, because a literal scan
-    /// can't reliably tell prose assembly from data assembly.
+    /// (covered) versus still assembling an inline instruction block (pending).
+    /// The "covered" rows document the core runner/review/drift files the
+    /// inline-migration (T3a) cleared - positive evidence a literal scan can't
+    /// reproduce. The "pending" rows are produced live by the prompt-coverage
+    /// guard (<see cref="PromptCoverageScanner"/>, T3b): every multi-line
+    /// instruction block still pasted into a <c>.cs</c> file shows up here, the
+    /// same findings that break the build. On the post-T3a tree this list is
+    /// empty, so the section reads as fully covered.
     /// </summary>
     public PromptCoverageResponse GetCoverage()
     {
@@ -148,11 +152,18 @@ public sealed class PromptAdminService
                 Detail = "Global boot prompt, self-modification note and task-snapshot block moved to runtime templates." },
             new() { Component = "backend/Features/Drift/CodePatternDriftAnalysisService.cs", Status = "covered",
                 Detail = "Code-pattern drift review prompt and canonical-sites block moved to runtime templates." },
-            new() { Component = "backend/Features/Runner/OrchestratorChat.cs", Status = "pending",
-                Detail = "Per-turn '=== CURRENT USER PREFERENCES ===' block is still assembled inline (AppendCurrentUserPreferences). T3b guard target." },
-            new() { Component = "agent-rules/core.md", Status = "pending",
-                Detail = "Static agent-rules core text is consumed via config CorePath and is not yet exposed through the runtime prompt registry." },
         };
+
+        foreach (var finding in ScanInlineFindings())
+        {
+            items.Add(new PromptCoverageItem
+            {
+                Component = $"{finding.File}:{finding.Line}",
+                Status = "pending",
+                Detail = $"Inline instruction block ('{finding.Signal}' …) not template-backed - move it to a runtime template: {finding.Snippet}",
+            });
+        }
+
         return new PromptCoverageResponse
         {
             Items = items,
@@ -160,6 +171,25 @@ public sealed class PromptAdminService
             CoveredSites = items.Count(i => string.Equals(i.Status, "covered", StringComparison.OrdinalIgnoreCase)),
             PendingSites = items.Count(i => string.Equals(i.Status, "pending", StringComparison.OrdinalIgnoreCase)),
         };
+    }
+
+    /// <summary>
+    /// Runs the build-breaking inline-prompt guard over the product source tree
+    /// so the coverage section shows the same findings the arch-test fails on.
+    /// Degrades to an empty result (no pending rows) when the source tree is not
+    /// reachable, e.g. a bin-only deployment.
+    /// </summary>
+    private IReadOnlyList<InlinePromptFinding> ScanInlineFindings()
+    {
+        try
+        {
+            return PromptCoverageScanner.ScanProductSource(DriftRepoRootLocator.Resolve());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "prompt-coverage-scan-failed");
+            return Array.Empty<InlinePromptFinding>();
+        }
     }
 
     /// <summary>Creates / replaces the override and records the default SHA it was based on.</summary>
@@ -420,6 +450,8 @@ internal static class PromptDescriptionCatalog
             "Generates a concise task title from the task prompt.", "Utility"),
         ["prompt-enhance.md"] = new("Prompt enhancement",
             "Expands / enhances a raw task prompt before it is queued.", "Utility"),
+        ["wiki-search-expand.md"] = new("Wiki search expansion",
+            "Expands a wiki search query with German/English synonyms for the semantic search layer.", "Utility"),
     };
 
     public static Meta Describe(string name)

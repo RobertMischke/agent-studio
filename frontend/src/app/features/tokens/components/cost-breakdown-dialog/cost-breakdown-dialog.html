@@ -1,0 +1,70 @@
+@if (breakdown.open()) {
+  <app-dialog eyebrow="Theoretical API cost"
+              [title]="breakdown.title()"
+              subtitle="Transparent calculation from the historical price entry in effect"
+              widthTier="lg"
+              testid="cost-breakdown-dialog"
+              (closeRequest)="breakdown.close()"
+              (backdropClick)="breakdown.close()">
+    <div class="cost-breakdown">
+      @if (breakdown.loading()) {
+        <p class="cost-breakdown__state" data-testid="cost-breakdown-loading">Loading calculation…</p>
+      } @else if (breakdown.error(); as error) {
+        <p class="cost-breakdown__state cost-breakdown__state--error" role="alert">{{ error }}</p>
+      } @else {
+        @for (item of breakdown.items(); track item.label + ':' + item.model) {
+          <section class="cost-breakdown__model" data-testid="cost-breakdown-model">
+            <header class="cost-breakdown__model-head">
+              <div>
+                @if (item.label) { <span class="cost-breakdown__label">{{ item.label }}</span> }
+                <code class="cost-breakdown__model-id">{{ item.estimate.modelId || item.model }}</code>
+              </div>
+              <strong class="cost-breakdown__model-total">
+                {{ item.estimate.modelKnown ? formatUsd(item.estimate.total) : 'Unknown' }}
+              </strong>
+            </header>
+
+            @if (item.estimate.priceBasis; as price) {
+              <div class="cost-breakdown__rates" aria-label="Prices per one million tokens">
+                <span><small>Input / 1M</small>{{ formatRate(price.inputPerMillion) }}</span>
+                <span><small>Output / 1M</small>{{ formatRate(price.outputPerMillion) }}</span>
+                <span><small>Cache read / 1M</small>{{ formatRate(price.cacheReadPerMillion) }}</span>
+                <span><small>Cache write / 1M</small>{{ formatRate(price.cacheWritePerMillion) }}</span>
+              </div>
+            }
+
+            <div class="cost-breakdown__tokens" aria-label="Actual token counters">
+              <span><small>Input</small>{{ formatNumber(item.inputTokens) }}</span>
+              <span><small>Output</small>{{ formatNumber(item.outputTokens) }}</span>
+              <span><small>Cache read</small>{{ formatNumber(item.cacheReadTokens) }}</span>
+              <span><small>Cache write</small>{{ formatNumber(item.cacheWriteTokens) }}</span>
+            </div>
+
+            <p class="cost-breakdown__formula" data-testid="cost-breakdown-formula">{{ formula(item) }}</p>
+
+            @if (item.estimate.priceBasis; as price) {
+              <dl class="cost-breakdown__provenance">
+                <div><dt>Price source</dt><dd>{{ price.source || breakdown.provider() }}</dd></div>
+                <div><dt>Price effective date</dt><dd>{{ formatDate(price.validFrom) }}</dd></div>
+                <div><dt>Usage calculation date</dt><dd>{{ formatDate(item.calculatedAt) }}</dd></div>
+              </dl>
+              @if (price.note) { <p class="cost-breakdown__note">{{ price.note }}</p> }
+              @if (price.unconfirmed) { <p class="cost-breakdown__warning">This catalog price is marked unconfirmed.</p> }
+            }
+          </section>
+        }
+
+        @if (breakdown.items().length > 1) {
+          <div class="cost-breakdown__grand-total" data-testid="cost-breakdown-total">
+            <span>Total{{ allPriced() ? '' : ' (priced models only)' }}</span>
+            <strong>{{ formatUsd(grandTotal()) }}</strong>
+          </div>
+        }
+      }
+    </div>
+    <div footer class="cost-breakdown__footer">
+      <span>Provider: {{ breakdown.provider() }}</span>
+      <button type="button" class="cost-breakdown__close" (click)="breakdown.close()">Close</button>
+    </div>
+  </app-dialog>
+}

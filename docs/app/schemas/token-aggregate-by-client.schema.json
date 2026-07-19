@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/token-aggregate-by-client.schema.json",
+  "title": "TokenAggregateByClient",
+  "description": "Per-client variant of token-aggregate.schema.json. Same rolling token totals over a time window, additionally keyed by clientId so the workspace timeline can render per-client legends in addition to per-project ones. Stored alongside the project-keyed aggregates under logs/tokens/by-client/<clientId>.jsonl. The Task Access Layer is the single writer; every mutation that records token usage carries the originating clientId.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["clientId", "project", "windowStart", "windowEnd", "cli", "model", "tokens"],
+  "properties": {
+    "clientId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 1,
+      "description": "References client-identity.id. The aggregator never invents this; the API rejects token-recording mutations from unregistered clients before they reach this writer."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name (same value used in the project-keyed aggregate)."
+    },
+    "windowStart": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Inclusive UTC start of the aggregation window."
+    },
+    "windowEnd": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Exclusive UTC end of the aggregation window."
+    },
+    "cli": {
+      "type": "string",
+      "enum": ["claude", "codex", "gemini"],
+      "description": "Which CLI produced the tokens. Aggregates are kept per CLI because pricing and budget windows differ."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Concrete model id used during the window, e.g. claude-opus-4-7."
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output"],
+      "properties": {
+        "input": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "cacheRead": { "type": "integer", "minimum": 0 },
+        "cacheWrite": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "dollars": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Optional dollar estimate for the window when pricing is known. Null when only token counts are available."
+    },
+    "jobIds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Job ids whose runs contributed to this window, ordered chronologically."
+    },
+    "jobsCompleted": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many jobs reached 4-review or 5-completed during the window."
+    }
+  }
+}

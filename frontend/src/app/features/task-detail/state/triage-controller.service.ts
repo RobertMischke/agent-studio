@@ -7,7 +7,7 @@ import { UndoController } from '../../../services/undo.service';
 import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { TaskSelectionService } from './task-selection.service';
 import { LanePagerService, LANE_LABELS } from './lane-pager.service';
-import { laneLabelFor } from './triage-actions.model';
+import { laneLabelFor, needsPlanningAcceptWarning } from './triage-actions.model';
 
 /**
  * Cycle 10c job-detail-feature controller: orchestrates the triage
@@ -71,13 +71,52 @@ export class TriageController {
    * series. With the lane-pager prefetch already warming the next
    * peer's detail, step 3 is now a synchronous signal flip.
    */
+  /**
+   * Lane-specific move. AGT-2069: accepting a planning task (move to
+   * 6-completed) first passes through the spawn-contract guard — if the task
+   * spawned no follow-up cards and carries no "no follow-up intended"
+   * declaration, a confirm dialog surfaces the AGT-1915 trap and the operator
+   * must explicitly accept anyway. Every other move goes straight through.
+   */
   move(info: TaskInfo, ev: { targetState: string; actionId: string }): void {
+    if (needsPlanningAcceptWarning(info, ev.targetState)) {
+      void this.confirmPlanningAcceptThenMove(info, ev);
+      return;
+    }
+    this.performMove(info, ev);
+  }
+
+  private async confirmPlanningAcceptThenMove(
+    info: TaskInfo,
+    ev: { targetState: string; actionId: string },
+  ): Promise<void> {
+    const ok = await this.confirmDialog.confirm({
+      title: 'Planning task without follow-up cards',
+      message:
+        'This planning task has not spawned any follow-up cards, and no "no follow-up intended" ' +
+        'declaration was made. Accepting it now risks the AGT-1915 trap — a plan approved with no ' +
+        'work ever created. Accept anyway?',
+      detail: info.title || info.id,
+      confirmLabel: 'Accept anyway',
+      cancelLabel: 'Keep in review',
+      kind: 'danger',
+    });
+    if (!ok) {
+      this.clearActing();
+      return;
+    }
+    this.performMove(info, ev);
+  }
+
+  private performMove(info: TaskInfo, ev: { targetState: string; actionId: string }): void {
     const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.jobSelection.triageLanePeers();
     // Capture prev lane + slot BEFORE the optimistic move so undo can
     // restore the card to its exact origin position.
     const prevState = info.state;
-    const prevIndex = this.jobService.findLaneIndex(info.id, info.watchPath, prevState);
+    const snapshotIndex = this.jobService.findLaneIndex(info.id, info.watchPath, prevState);
+    const peerIndex = peers.findIndex(peer => peer.taskKey === info.taskKey);
+    const prevIndex = snapshotIndex >= 0 ? snapshotIndex : Math.max(peerIndex, 0);
     this.jobSelection.markAcceptClick();
     const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, ev.targetState);
     this.jobService.beginOptimisticPersist();
@@ -99,24 +138,40 @@ export class TriageController {
       advanced = true;
     }
 
+    let persistResolve!: () => void;
+    let persistReject!: (reason: unknown) => void;
+    const persisted = new Promise<void>((resolve, reject) => {
+      persistResolve = resolve;
+      persistReject = reject;
+    });
+    void persisted.catch(() => undefined);
+
+    const actionLabel = ev.targetState === '6-completed'
+        ? 'Accepted'
+        : ev.targetState === '2-ready'
+          ? 'Requeued'
+          : ev.targetState === '7-archive' ? 'Archived' : 'Moved';
+    this.undo.offerLaneRevert({
+      jobId: info.id,
+      watchPath: info.watchPath,
+      jobLabel: info.title || info.id,
+      actionLabel,
+      targetLaneLabel: laneLabelFor(ev.targetState),
+      prevState,
+      prevIndex,
+      persisted,
+    });
+
     this.jobService.moveJob(info.id, ev.targetState, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
-        if (prevIndex >= 0) {
-          this.undo.offerLaneRevert({
-            jobId: info.id,
-            watchPath: info.watchPath,
-            jobLabel: info.title || info.id,
-            actionLabel: 'Moved',
-            targetLaneLabel: laneLabelFor(ev.targetState),
-            prevState,
-            prevIndex,
-          });
-        }
+        persistResolve();
         this.clearActing();
       },
       error: (err) => {
         this.jobService.endOptimisticPersist();
+        persistReject(err);
+        this.undo.cancelActive();
         if (snapshot) this.jobService.revertOptimisticMove(snapshot);
         // Optimistic navigation must roll back too: the user clicked
         // Accept on `info`, the move failed, the only sensible landing
@@ -263,25 +318,27 @@ export class TriageController {
    * Falls back to the live lane peers when no snapshot is available
    * (e.g. detail opened from a URL with no prior iteration).
    */
-  next(info: TaskInfo): void {
-    if (this.jobSelection.pagerStep(1)) return;
+  next(info: TaskInfo): boolean {
+    if (this.jobSelection.pagerStep(1)) return true;
     const peers = this.jobSelection.triageLanePeers();
-    if (peers.length === 0) return;
+    if (peers.length === 0) return false;
     const idx = peers.findIndex((p) => p.taskKey === info.taskKey);
     const nextIdx = idx < 0 ? 0 : Math.min(peers.length - 1, idx + 1);
-    if (nextIdx === idx) return;
+    if (nextIdx === idx) return false;
     this.jobSelection.openDetail(peers[nextIdx]);
+    return true;
   }
 
   /** k / ↑ / ← / pager-prev: see `next` - same snapshot semantics. */
-  prev(info: TaskInfo): void {
-    if (this.jobSelection.pagerStep(-1)) return;
+  prev(info: TaskInfo): boolean {
+    if (this.jobSelection.pagerStep(-1)) return true;
     const peers = this.jobSelection.triageLanePeers();
-    if (peers.length === 0) return;
+    if (peers.length === 0) return false;
     const idx = peers.findIndex((p) => p.taskKey === info.taskKey);
     const prevIdx = idx < 0 ? 0 : Math.max(0, idx - 1);
-    if (prevIdx === idx) return;
+    if (prevIdx === idx) return false;
     this.jobSelection.openDetail(peers[prevIdx]);
+    return true;
   }
 
   // ---------- auto-advance after mutation / external move ----------
@@ -323,11 +380,7 @@ export class TriageController {
       // Re-anchor lane to the new job's state (same lane unless poll drift).
       this.jobSelection.triageLaneState = candidate.state;
       const token = this.jobSelection.bumpOpenDetailToken();
-      history.replaceState(
-        null,
-        '',
-        `?job=${encodeURIComponent(candidate.id)}&watchPath=${encodeURIComponent(candidate.watchPath)}`,
-      );
+      this.jobSelection.syncTaskUrl(candidate, 'replace');
       // Optimistic-paint: serve a prefetched TaskDetail when available
       // so the panel re-renders without waiting for the GET roundtrip.
       // The follow-up fetch reconciles any drift on the eventual reply.

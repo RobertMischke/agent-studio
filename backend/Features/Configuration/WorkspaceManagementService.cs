@@ -256,6 +256,20 @@ public sealed class WorkspaceManagementService
             {
                 Directory.Delete(target, recursive: true);
                 folderRemoved = true;
+                var projectContainer = Directory.GetParent(target)?.FullName;
+                var taskRepository = _configuration["TaskRepository"];
+                var projectsRoot = string.IsNullOrWhiteSpace(taskRepository)
+                    ? null
+                    : Path.GetFullPath(Path.Combine(taskRepository, "projects"));
+                if (string.Equals(Path.GetFileName(target), "tasks", StringComparison.OrdinalIgnoreCase)
+                    && projectContainer != null
+                    && projectsRoot != null
+                    && string.Equals(Directory.GetParent(projectContainer)?.FullName, projectsRoot, StringComparison.OrdinalIgnoreCase)
+                    && Directory.Exists(projectContainer)
+                    && !Directory.EnumerateFileSystemEntries(projectContainer).Any())
+                {
+                    Directory.Delete(projectContainer);
+                }
             }
             catch (Exception ex)
             {
@@ -304,10 +318,8 @@ public sealed class WorkspaceManagementService
     }
 
     /// <summary>
-    /// F46 — add a WatchPaths entry for a newly-created registry project.
-    /// The registry owns the stable PROJ id and display metadata; this helper
-    /// only materialises the storage folder and makes the project visible to
-    /// the existing scanner until all consumers are registry-native.
+    /// Creates the central task-store folder for a registry project. Runtime
+    /// discovery is registry-backed, so this never edits WatchPaths settings.
     /// </summary>
     public WorkspaceManagementResult CreateProjectStorage(string displayName, string projectId)
     {
@@ -323,7 +335,7 @@ public sealed class WorkspaceManagementService
                 "TaskRepository is not configured; cannot create a new project.");
         }
 
-        var resolvedPath = Path.GetFullPath(Path.Combine(taskRepository, "projects", id));
+        var resolvedPath = Path.GetFullPath(Path.Combine(taskRepository, "projects", id, "tasks"));
         if (_scanner.GetWatchPaths().Any(e =>
                 string.Equals(NormalizePath(e.Path), NormalizePath(resolvedPath), StringComparison.OrdinalIgnoreCase)))
         {
@@ -349,20 +361,6 @@ public sealed class WorkspaceManagementService
             RootPath = "",
             RepositoryPath = "",
         };
-
-        lock (FileLock)
-        {
-            var root = ReadOrCreateRoot();
-            var array = (root["WatchPaths"] as JsonArray) ?? new JsonArray();
-            array.Add(new JsonObject
-            {
-                ["Name"] = name,
-                ["Path"] = resolvedPath,
-            });
-            root["WatchPaths"] = array;
-            WriteAtomic(root);
-            ReloadConfiguration();
-        }
 
         _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
         _logger.LogInformation(

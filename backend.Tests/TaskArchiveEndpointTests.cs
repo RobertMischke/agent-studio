@@ -154,6 +154,62 @@ public class TaskArchiveEndpointTests : IDisposable
     }
 
     [Fact]
+    public async Task Archive_Search_NoMatch_ReturnsEmptyItems_WithZeroTotal()
+    {
+        // The Archive view shows its "truly empty" state only on a genuine
+        // zero total, so a filter that matches nothing must report total=0
+        // (not the unfiltered archive size) and an empty page.
+        SeedThreeArchivedNewestLast();
+        using var factory = BuildFactory();
+        using var client = CreateClient(factory);
+
+        var body = await client.GetFromJsonAsync<ArchivedTasksResponse>(
+            $"/api/tasks/archive?watchPath={Uri.EscapeDataString(_watchPath)}&search=zzz-no-such-card");
+
+        Assert.NotNull(body);
+        Assert.Equal(0, body!.Total);
+        Assert.Empty(body.Items);
+    }
+
+    [Fact]
+    public async Task Archive_Limit_IsClampedToBounds()
+    {
+        SeedThreeArchivedNewestLast();
+        using var factory = BuildFactory();
+        using var client = CreateClient(factory);
+        var baseUrl = $"/api/tasks/archive?watchPath={Uri.EscapeDataString(_watchPath)}";
+
+        // Above the 200 ceiling clamps to 200 (still returns all three rows).
+        var high = await client.GetFromJsonAsync<ArchivedTasksResponse>($"{baseUrl}&limit=5000");
+        Assert.NotNull(high);
+        Assert.Equal(200, high!.Limit);
+        Assert.Equal(3, high.Items.Count);
+
+        // Below the floor clamps to 1 (a single newest-first row).
+        var low = await client.GetFromJsonAsync<ArchivedTasksResponse>($"{baseUrl}&limit=0");
+        Assert.NotNull(low);
+        Assert.Equal(1, low!.Limit);
+        Assert.Single(low.Items);
+        Assert.Equal("arch-new", low.Items[0].Id);
+        Assert.Equal(3, low.Total); // total stays the full unpaged count
+    }
+
+    [Fact]
+    public async Task Archive_OffsetBeyondTotal_ReturnsEmptyItems_KeepsFullTotal()
+    {
+        SeedThreeArchivedNewestLast();
+        using var factory = BuildFactory();
+        using var client = CreateClient(factory);
+
+        var body = await client.GetFromJsonAsync<ArchivedTasksResponse>(
+            $"/api/tasks/archive?watchPath={Uri.EscapeDataString(_watchPath)}&offset=99&limit=50");
+
+        Assert.NotNull(body);
+        Assert.Equal(3, body!.Total);
+        Assert.Empty(body.Items);
+    }
+
+    [Fact]
     public async Task Archive_HidesFixtures_ByDefault_OptInWithIncludeFixtures()
     {
         SeedThreeArchivedNewestLast();

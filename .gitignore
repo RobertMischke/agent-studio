@@ -18,11 +18,6 @@ tools/*
 # pre-flight before the backend boots. Tracked so stable picks it up via
 # update-stable.sh; everything else under tools/ stays local.
 !tools/check-cli-shims.sh
-# Whitelisted: perf measurement runner + HTML report generator. Tracked
-# so the perf overhaul (multi-cycle, before/after reports) is reproducible
-# from any checkout. Output files land under logs/perf/ and stay gitignored.
-!tools/perf-report/
-!tools/perf-report/**
 # Whitelisted: the ATB0001 silent-catch Roslyn analyzer. The backend csproj
 # references it as an Analyzer ProjectReference, so it must be tracked or the
 # build breaks on a fresh checkout.
@@ -77,6 +72,11 @@ frontend/.ng-serve-*.log
 frontend/.ng-serve-*.out.log
 frontend/.ng-serve-*.err.log
 frontend/.ng-serve-*.pid
+**/.ng.run.out
+**/.ng.run.err
+# Catch ad-hoc ng-serve capture files that don't use the .ng-serve-<port> prefix
+# (e.g. .develop-layout-compare-ng-serve.out.log) - still runtime noise, never commit.
+frontend/*ng-serve*.log
 frontend/mockup-chat.*.log
 .ng-serve-*.log
 .ng-serve-*.out.log
@@ -105,3 +105,23 @@ frontend/evidence-out/
 frontend/capture-evidence.mjs
 frontend/debug-styles.mjs
 frontend/proxy.stable.json
+
+# ── Repo-root cleanup: artifacts/logs/strays that must never be committed ──
+node_modules/
+.test-out/
+*.out.log
+*.err.log
+.api-direct.*
+frontend-server.*
+frontend/.frontend-dev.log
+*.zip
+/jobs-dump.json
+/mini-test-screenshot.png
+/presentation/
+/scenarios/
+/results/
+
+# Repo-root agent scratch scripts are diagnostic runtime artefacts, never
+# product source. Keep them out of broad platform-owned snapshot commits.
+/.tmp-*.mjs
+/tmp-*.mjs

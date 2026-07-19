@@ -6,8 +6,8 @@
   @for (item of items(); track item.key) {
     <button type="button"
             class="studio-ab__btn"
-            [class.studio-ab__btn--active]="activePanel() === item.key && sidebarVisible()"
-            [appTooltip]="item.label"
+            [class.studio-ab__btn--active]="activeKey() === item.key"
+            [cacTooltip]="item.label"
             [attr.data-panel]="item.key"
             [attr.data-testid]="'studio-ab-' + item.key"
             (click)="panelToggle.emit(item.key)">
@@ -37,37 +37,20 @@
       </svg>
       @if (badgeCounts()[item.key]; as count) {
         <span class="studio-ab__badge"
-              [appTooltip]="count + (count === 1 ? ' filter active' : ' filters active')"
+              [cacTooltip]="count + (count === 1 ? ' filter active' : ' filters active')"
               [attr.data-testid]="'studio-ab-badge-' + item.key"
               aria-hidden="true">{{ count }}</span>
       }
     </button>
   }
-  <!-- Dedicated backlog triage destination. The triage screen (route
-       #/backlog) opens via Ctrl+B as a toggle. The badge counts 0-backlog
-       jobs under the active project filter. -->
-  <button type="button"
-          class="studio-ab__btn studio-ab__btn--backlog"
-          [class.studio-ab__btn--active]="backlogActive()"
-          appTooltip="Open backlog triage (Ctrl+B)"
-          data-testid="studio-ab-backlog"
-          (click)="openBacklogRequest.emit()">
-    <app-studio-icon name="backlog" [size]="22"></app-studio-icon>
-    @if (backlogCount() > 0) {
-      <span class="studio-ab__badge studio-ab__badge--count"
-            data-testid="studio-ab-backlog-badge"
-            [appTooltip]="backlogCount() + (backlogCount() === 1 ? ' backlog task' : ' backlog tasks')"
-            aria-hidden="true">{{ backlogCount() }}</span>
-    }
-  </button>
   <!-- Epic overview destination. Hidden when no epics exist (hide-when-empty),
        so it never adds clutter for projects that don't use epics. Opens the
        read-only rollup as a normal editor tab. -->
   @if (hasEpics()) {
     <button type="button"
             class="studio-ab__btn studio-ab__btn--epics"
-            [class.studio-ab__btn--active]="epicsActive()"
-            appTooltip="Open epic overview"
+            [class.studio-ab__btn--active]="activeKey() === 'epics'"
+            cacTooltip="Open epic overview"
             data-testid="studio-ab-epics"
             (click)="openEpicsRequest.emit()">
       <app-studio-icon name="epic" [size]="22"></app-studio-icon>
@@ -78,8 +61,8 @@
        to the bottom with Settings — workspace-level config destinations. -->
   <button type="button"
           class="studio-ab__btn"
-          [class.studio-ab__btn--active]="activePanel() === 'admin' && sidebarVisible()"
-          appTooltip="Admin"
+          [class.studio-ab__btn--active]="activeKey() === 'admin'"
+          cacTooltip="Admin"
           data-testid="studio-ab-admin"
           (click)="panelToggle.emit('admin')">
     <svg class="studio-ab__svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
@@ -90,8 +73,8 @@
   </button>
   <button type="button"
           class="studio-ab__btn"
-          [class.studio-ab__btn--active]="activePanel() === 'settings' && sidebarVisible()"
-          appTooltip="Settings"
+          [class.studio-ab__btn--active]="activeKey() === 'settings'"
+          cacTooltip="Settings"
           data-testid="studio-ab-settings"
           (click)="panelToggle.emit('settings')">
     <svg class="studio-ab__svg" width="22" height="22" viewBox="0 0 24 24" fill="none"

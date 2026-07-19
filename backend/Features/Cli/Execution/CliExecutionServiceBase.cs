@@ -1,28 +1,51 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using LibOutcome = CodingAgentRunner.Model.RunOutcome;
 
 namespace AgentStudio.Cli;
 
 /// <summary>
-/// Shared process-orchestration logic for the slim non-Copilot CLI backends
-/// (Claude Code, Codex). Handles spawning, output streaming, persistence, and
-/// reattach. Subclasses provide the CLI-specific argument-building and
-/// session-name handling via <see cref="BuildStartInfo"/>.
-/// <para>
-/// CopilotCliService predates this base and keeps its own (heavily customised)
-/// implementation — it shares the public <see cref="ICliExecutionService"/>
-/// surface but not the code path. Refactoring it into this base would be a
-/// pure churn change with no behavioural win.
-/// </para>
+/// The single concrete process-orchestration engine for the slim CLI backends
+/// (Claude Code, Codex, Gemini). Handles spawning, output streaming,
+/// persistence, and reattach. Per-CLI behavior is supplied as a
+/// <see cref="CliBehavior"/> (delegates + data) rather than via subclass
+/// overrides; the per-CLI behaviors live in <see cref="BuiltInCliBehaviors"/>
+/// and are wired into a concrete engine instance via the
+/// <c>ForClaude</c> / <c>ForCodex</c> / <c>ForAntigravity</c> factory helpers.
 /// </summary>
-public abstract class CliExecutionServiceBase : ICliExecutionService
+public class GenericCliExecutionService : ICliExecutionService
 {
     protected readonly ILogger _logger;
     protected readonly IConfiguration _configuration;
-    protected readonly ConcurrentDictionary<string, ProcInfo> _processes = new();
+    internal readonly ConcurrentDictionary<string, ProcInfo> _processes = new();
+    private readonly CliBehavior _behavior;
 
-    public abstract string CliType { get; }
+    /// <summary>
+    /// Mutable per-instance CLI path override (set via <see cref="SetCliPath"/>).
+    /// Generic to all CLIs, so it lives on the engine; behaviors read it through
+    /// <see cref="CliPathOverride"/>.
+    /// </summary>
+    private string? _cliPathOverride;
+
+    public string CliType => _behavior.CliType;
+
+    // ── Engine-context accessors for behaviors (same assembly) ──────────
+    internal ILogger Logger => _logger;
+    internal IConfiguration Configuration => _configuration;
+    internal string? CliPathOverride => _cliPathOverride;
+    internal bool TryGetProc(string jobKey, out ProcInfo info) => _processes.TryGetValue(jobKey, out info!);
+
+    /// <summary>
+    /// Set the per-instance CLI path override (generic across all CLIs). The
+    /// per-CLI <see cref="CliBehavior.GetCliPath"/> reads
+    /// <see cref="CliPathOverride"/> first.
+    /// </summary>
+    public void SetCliPath(string path)
+    {
+        _cliPathOverride = string.IsNullOrWhiteSpace(path) ? null : path.Trim();
+        _logger.LogInformation("{Cli} CLI path set to: {Path}", CliType, GetCliPath());
+    }
 
     public event Action<string, CliOutputLine>? OnOutput;
     public event Action<string, CliExecution>? OnStarted;
@@ -30,7 +53,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     /// <summary>
     /// Typed lifecycle events from the CLI (ADR-0013). Subclasses with an
-    /// adapter (Claude / Codex / Gemini / Copilot) raise these alongside
+    /// adapter (Claude / Codex / Gemini) raise these alongside
     /// the legacy <see cref="OnOutput"/> stream so consumers can migrate
     /// incrementally. Subclasses without an adapter emit nothing here -
     /// the runner falls back to the silence-only watchdog in that case.
@@ -38,33 +61,81 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     public event Action<string, CliRunEvent>? OnRunEvent;
 
     /// <summary>
-    /// Subclass entry point for emitting typed events. Wraps the public
+    /// Engine entry point for emitting typed events. Wraps the public
     /// invocation with a per-subscriber try/catch so a buggy listener
-    /// cannot crash the read loop.
+    /// cannot crash the read loop. Internal so behaviors can raise events.
     /// </summary>
-    protected void RaiseRunEvent(string jobKey, CliRunEvent evt)
+    internal void RaiseRunEvent(string jobKey, CliRunEvent evt)
     {
         try { OnRunEvent?.Invoke(jobKey, evt); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
     }
 
-    protected CliExecutionServiceBase(ILogger logger, IConfiguration configuration)
+    internal GenericCliExecutionService(CliBehavior behavior, ILogger logger, IConfiguration configuration)
     {
+        _behavior = behavior;
         _logger = logger;
         _configuration = configuration;
     }
 
-    public abstract string GetCliPath();
+    /// <summary>
+    /// Quality-first default for the code-review grade pass: Claude Opus 4.8.
+    /// Lives on the engine (the old <c>ClaudeCliService.DefaultOpusModel</c>
+    /// home was deleted with the shim) so
+    /// <c>CodeReviewGradeModelSelector</c> + <c>TaskCodeReviewEndpoints</c>
+    /// keep a single named constant.
+    /// </summary>
+    public const string DefaultOpusModel = ModelIds.ClaudeOpus48;
+
+    // ── Built-in CLI factory helpers ────────────────────────────────────
+    //
+    // The thin per-CLI shim classes were deleted; production DI (Program.cs)
+    // and the test fixtures build a concrete engine per CLI through these
+    // factories. Each wires the per-CLI CliBehavior from BuiltInCliBehaviors.
+
+    /// <summary>Build a Claude-Code engine from the per-CLI dependencies.</summary>
+    internal static GenericCliExecutionService ForClaude(
+        ILogger logger,
+        IConfiguration configuration,
+        CliUsageParserRegistry? usageParsers = null,
+        ICliModelRegistry? modelRegistry = null,
+        ClaudeModelDiscovery? modelDiscovery = null)
+        => new GenericCliExecutionService(
+            BuiltInCliBehaviors.Claude(usageParsers, modelRegistry ?? new CliModelRegistry(), modelDiscovery),
+            logger, configuration);
+
+    /// <summary>Build a Codex engine from the per-CLI dependencies.</summary>
+    internal static GenericCliExecutionService ForCodex(
+        ILogger logger,
+        IConfiguration configuration,
+        CodexModelDiscovery modelDiscovery,
+        CliUsageParserRegistry usageParsers,
+        ICliModelRegistry modelRegistry)
+        => new GenericCliExecutionService(
+            BuiltInCliBehaviors.Codex(modelDiscovery, usageParsers, modelRegistry),
+            logger, configuration);
+
+    /// <summary>Build an Antigravity/Gemini engine (no extra dependencies).</summary>
+    internal static GenericCliExecutionService ForAntigravity(
+        ILogger logger,
+        IConfiguration configuration)
+        => new GenericCliExecutionService(BuiltInCliBehaviors.Antigravity(), logger, configuration);
+
+    public string GetCliPath() => _behavior.GetCliPath(this);
 
     /// <summary>
-    /// Default: accept any non-empty session name. Subclasses with strict
-    /// session-id formats (Claude requires UUIDs) override to reject names
-    /// that came from a different CLI's session store.
+    /// Default: accept any non-empty session name. Behaviors with strict
+    /// session-id formats (Claude requires UUIDs) supply a delegate that
+    /// rejects names that came from a different CLI's session store.
     /// </summary>
-    public virtual bool IsCompatibleSessionName(string? sessionName)
-        => !string.IsNullOrWhiteSpace(sessionName);
+    public bool IsCompatibleSessionName(string? sessionName)
+        => _behavior.IsCompatibleSessionName?.Invoke(this, sessionName)
+           ?? !string.IsNullOrWhiteSpace(sessionName);
 
-    public virtual (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+    public (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+        => _behavior.TestCliPath?.Invoke(this, path) ?? DefaultTestCliPath(path);
+
+    internal (bool Available, string? Version, string Path) DefaultTestCliPath(string? path = null)
     {
         var testPath = ResolveExecutable(path?.Trim() ?? GetCliPath());
         try
@@ -153,7 +224,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// remains the safety net if heal itself is failing repeatedly.
     /// </para>
     /// </summary>
-    protected virtual Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+    public Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+        => _behavior.EnsureCliHealthy?.Invoke(this, ct) ?? DefaultEnsureCliHealthyAsync(ct);
+
+    internal Task<(bool Ok, string? Error)> DefaultEnsureCliHealthyAsync(CancellationToken ct)
     {
         var probe = TestCliPath();
         return Task.FromResult(probe.Available
@@ -162,76 +236,75 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     }
 
     /// <summary>
-    /// Subclass hook: build the actual command-line for this CLI.
+    /// Build the actual command-line for this CLI via the behavior.
     /// <paramref name="permissionMode"/> is the resolved per-project permission
-    /// mode (one of <see cref="CliPermissionModes"/>); subclasses render it to
+    /// mode (one of <see cref="CliPermissionModes"/>); behaviors render it to
     /// concrete flags via <see cref="CliPermissionFlags.For"/>. Null normalizes
     /// to <see cref="CliPermissionModes.Yolo"/> so a caller that does not thread
     /// a mode keeps the historic maximum-autonomy behaviour.
     /// </summary>
-    protected abstract ProcessStartInfo BuildStartInfo(
+    internal ProcessStartInfo BuildStartInfo(
         string prompt,
         string workingDirectory,
         string? sessionName,
         bool resumeSession,
         string? model,
         string? thinkingLevel,
-        string? permissionMode);
+        string? permissionMode)
+        => _behavior.BuildStartInfo(this, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode);
 
     /// <summary>
-    /// Subclass hook: return the text the runner should write to the child's
-    /// stdin instead of (or after) closing it. Default null means "close
-    /// stdin immediately" - the legacy behavior. Claude overrides this so
-    /// the multi-KB rendered prompt gets piped through stdin instead of
-    /// embedded in argv, which on Windows is the difference between the
-    /// agent seeing the whole prompt and the agent seeing only the heading
-    /// (cmd.exe truncates long quoted args at the first newline / over the
-    /// length limit). When this returns non-null, BuildStartInfo MUST have
-    /// omitted the prompt from argv.
+    /// Return the text the runner should write to the child's stdin instead of
+    /// (or after) closing it. Default null means "close stdin immediately" -
+    /// the legacy behavior. Codex supplies a delegate so the multi-KB rendered
+    /// prompt gets piped through stdin instead of embedded in argv. When this
+    /// returns non-null, BuildStartInfo MUST have omitted the prompt from argv.
     /// </summary>
-    protected virtual string? GetPromptStdinPayload(
+    internal string? GetPromptStdinPayload(
         string prompt,
         string? sessionName,
         bool resumeSession,
-        string? model) => null;
+        string? model)
+        => _behavior.GetPromptStdinPayload?.Invoke(this, prompt, sessionName, resumeSession, model);
 
     /// <summary>
-    /// Subclass hook: normalize or replace a persisted job model before it
-    /// reaches argv, telemetry, or the synthetic started line. Most CLIs can
-    /// use the stored value verbatim; drivers with CLI-specific model
-    /// namespaces override this to prevent a stale model from another CLI
-    /// being passed through after the job's <c>cliType</c> changes.
+    /// Normalize or replace a persisted job model before it reaches argv,
+    /// telemetry, or the synthetic started line. Default: trim / null-if-blank.
+    /// Drivers with CLI-specific model namespaces supply a delegate to prevent a
+    /// stale model from another CLI being passed through after the job's
+    /// <c>cliType</c> changes.
     /// </summary>
-    protected virtual string? NormalizeModelForInvocation(string? model)
-        => string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+    public string? NormalizeModelForInvocation(string? model)
+        => _behavior.NormalizeModelForInvocation?.Invoke(this, model)
+           ?? (string.IsNullOrWhiteSpace(model) ? null : model.Trim());
 
-    /// <summary>Subclass hook: try to extract session metadata from a fresh output line.</summary>
-    protected virtual void OnOutputLine(ProcInfo info, CliOutputLine line) { }
+    /// <summary>Try to extract session metadata from a fresh output line (behavior hook; default no-op).</summary>
+    internal void OnOutputLine(ProcInfo info, CliOutputLine line)
+        => _behavior.OnOutputLine?.Invoke(this, info, line);
 
     /// <summary>
-    /// Subclass hook: map one raw stdout/stderr line to zero or more
-    /// <see cref="CliRunEvent"/> instances. Default: yield nothing (CLIs
-    /// without an adapter stay on the silence-only watchdog). Subclasses
-    /// with an adapter (Claude / Codex / Gemini) override and delegate
-    /// to the per-CLI mapping function.
+    /// Map one raw stdout/stderr line to zero or more <see cref="CliRunEvent"/>
+    /// instances. Default: yield nothing (CLIs without an adapter stay on the
+    /// silence-only watchdog). Behaviors with an adapter (Claude / Codex /
+    /// Gemini) supply a delegate to the per-CLI mapping function.
     ///
     /// <para>
-    /// The base class fires <see cref="OnRunEvent"/> for every event
-    /// returned here, in order, on the same read-loop thread. Adapters
-    /// must be pure functions and not throw - exceptions are swallowed
-    /// so a malformed frame cannot crash the read loop.
+    /// The engine fires <see cref="OnRunEvent"/> for every event returned here,
+    /// in order, on the same read-loop thread. Adapters must be pure functions
+    /// and not throw - exceptions are swallowed so a malformed frame cannot
+    /// crash the read loop.
     /// </para>
     /// </summary>
-    protected virtual IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
-        => Array.Empty<CliRunEvent>();
+    internal IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+        => _behavior.MapLineToRunEvents?.Invoke(this, jobKey, line) ?? Array.Empty<CliRunEvent>();
 
     /// <summary>
-    /// Subclass hook: arm a side-channel liveness watcher for a freshly
-    /// spawned run. Default: no-op. Subclasses that have a stdout-independent
-    /// activity signal (Claude watches <c>~/.claude/projects/&lt;cwd&gt;/&lt;uuid&gt;.jsonl</c>
-    /// mtime) override this to construct a watcher and store it on
-    /// <see cref="ProcInfo.SessionLiveness"/>; the base class disposes it
-    /// in <see cref="MonitorProcessAsync"/> when the process exits.
+    /// Arm a side-channel liveness watcher for a freshly spawned run. Default:
+    /// no-op. Behaviors that have a stdout-independent activity signal (Claude
+    /// watches <c>~/.claude/projects/&lt;cwd&gt;/&lt;uuid&gt;.jsonl</c> mtime) supply a
+    /// delegate that constructs a watcher and stores it on
+    /// <see cref="ProcInfo.SessionLiveness"/>; the engine disposes it in
+    /// <see cref="MonitorProcessAsync"/> when the process exits.
     ///
     /// <para>
     /// The watcher should reset the watchdog silence clock by raising a
@@ -242,25 +315,27 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// <paramref name="sessionName"/>) the session id is available at spawn,
     /// so the watcher can arm immediately - the case that matters most for
     /// SessionInitializing, where there is no stdout for the whole window.
-    /// For a fresh run the subclass typically arms once it captures the
+    /// For a fresh run the behavior typically arms once it captures the
     /// CLI-assigned session id from the first stdout frame.
     /// </para>
     /// </summary>
-    protected virtual void StartSessionLiveness(string jobKey, ProcInfo info, bool resumeSession, string? sessionName) { }
+    internal void StartSessionLiveness(string jobKey, ProcInfo info, bool resumeSession, string? sessionName)
+        => _behavior.StartSessionLiveness?.Invoke(this, info, resumeSession, sessionName);
 
     /// <summary>
-    /// Subclass hook: translate a single raw line read from the CLI's stdout
-    /// or stderr into one or more user-visible buffer lines. Default: pass
-    /// through unchanged. Used by <see cref="ClaudeCliService"/> to expand
-    /// stream-json NDJSON frames into the marker-line convention the
-    /// frontend's activity log parser already understands.
+    /// Translate a single raw line read from the CLI's stdout or stderr into
+    /// one or more user-visible buffer lines. Default: pass through unchanged.
+    /// Used by Claude / Codex / Gemini behaviors to expand stream-json NDJSON
+    /// frames into the marker-line convention the frontend's activity log parser
+    /// already understands.
     /// </summary>
-    public virtual IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
-    {
-        yield return raw;
-    }
+    public IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
+        => _behavior.TransformReadLine?.Invoke(this, raw) ?? new[] { raw };
 
-    public virtual Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+    public Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+        => _behavior.GetModelCatalog?.Invoke(this, forceRefresh, ct) ?? DefaultModelCatalogAsync();
+
+    internal Task<CliModelCatalog> DefaultModelCatalogAsync()
     {
         return Task.FromResult(new CliModelCatalog
         {
@@ -292,7 +367,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
 
         // Pre-spawn self-heal (infra-cli-broken category in
-        // docs/agent-contract-pattern.md). A racing auto-updater can put the
+        // docs/system/contracts/agent-contract-pattern.md). A racing auto-updater can put the
         // npm install into a half-rebuilt state minutes after the boot-time
         // check-cli-shims.sh pre-flight passed. Without this hook the next
         // pickup spawns into a 500-byte stub, gets 3 silent runs, lands the
@@ -446,6 +521,18 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
         var process = child.Process;
 
+        // Contain the whole run subtree in a kill-on-close process group so
+        // helpers the agent spawns and lets detach (Playwright capture server,
+        // a stray `node serve.cjs`) die with the run instead of leaking and
+        // holding the worktree open — which wedges the post-run
+        // `git worktree remove` and orphans the worktree (AGT-1791). Assigned
+        // here, immediately after spawn, so the CLI's later children inherit
+        // group membership. Best-effort + Windows-only; null leaves the
+        // existing tree-kill path in force.
+        var processReaper = OperatingSystem.IsWindows()
+            ? TaskProcessReaper.CreateForProcess(process, _logger)
+            : null;
+
         var execution = new CliExecution
         {
             JobId = jobId,
@@ -468,7 +555,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             ChildStdin = child.Stdin,
             PermissionMode = permissionMode,
             ContextMode = CliContextModes.Normalize(contextMode),
-            CleanContext = cleanContext
+            CleanContext = cleanContext,
+            ProcessReaper = processReaper
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", logDir); }
@@ -499,7 +587,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // ADR-0013: typed event channel. Subclasses with an adapter raise
         // their own events from the read loop; the base class always
         // raises RunStarted so the runner's phase tracker can initialize.
-        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, invocationModel) { TaskKey = jobKey });
+        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, invocationModel) { RunId = jobKey });
 
         // ADR-0030 follow-up: arm a stdout-independent liveness watcher so a
         // run whose stdout pipe is block-buffered (the Node-on-Windows
@@ -551,13 +639,23 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
            + (resumeSession ? " (resume)" : "");
 
     /// <summary>
-    /// Subclass hook: spawn the child process. Default uses
+    /// Spawn the child process. Default uses
     /// <see cref="System.Diagnostics.Process"/> with redirected pipes.
     /// CLIs whose stdout block-buffers when piped (Node-based ones on Windows:
-    /// Claude / Codex / Gemini) override to spawn through a pseudo-terminal so
-    /// stream-json frames flush per newline.
+    /// Claude / Codex / Gemini) can supply a behavior delegate to spawn through
+    /// a pseudo-terminal so stream-json frames flush per newline.
     /// </summary>
-    protected virtual Task<ChildHandle> SpawnChildAsync(
+    internal Task<ChildHandle> SpawnChildAsync(
+        ProcessStartInfo psi,
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        CancellationToken ct)
+        => _behavior.SpawnChild?.Invoke(this, psi, prompt, sessionName, resumeSession, model, ct)
+           ?? DefaultSpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
+
+    internal Task<ChildHandle> DefaultSpawnChildAsync(
         ProcessStartInfo psi,
         string prompt,
         string? sessionName,
@@ -674,8 +772,109 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     public SessionUsage? GetLastUsage(string jobKey) =>
         _processes.TryGetValue(jobKey, out var info) ? info.LastUsage : null;
 
+    /// <summary>The CLI-native session id captured for a run (from its init/thread frame), or null. Lifted to the base so the runner reads it without knowing which CLI ran.</summary>
+    public string? GetCapturedSessionId(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info) ? info.CapturedSessionId : null;
+
+    /// <summary>The most recent parsed per-turn usage snapshot for a run (+ when observed + run start), or null. Read-only over the run's tracking entry.</summary>
+    public (ParsedTurnUsage Usage, DateTime ObservedAt, DateTime StartedAt)? GetLastParsedTurnUsage(string jobKey)
+    {
+        if (!_processes.TryGetValue(jobKey, out var info)) return null;
+        if (info.LastParsedUsage == null || info.LastParsedUsageAt == null) return null;
+        return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
+    }
+
+    /// <summary>
+    /// Claude: latest <c>rate_limit_event</c> snapshot parsed from the
+    /// stream-json output, or null. Read-only over the run's tracking entry;
+    /// surfaced via <c>GET /api/tasks/{id}/claude/session-info</c>.
+    /// </summary>
+    public ClaudeRateLimitSnapshot? GetLastRateLimit(string jobKey)
+        => TryGetProc(jobKey, out var info) ? info.LastRateLimit : null;
+
+    /// <summary>
+    /// Codex: inputs the runner's per-tick silent-completion check needs.
+    /// Returns <c>null</c> when no <c>command_execution</c> <c>item.completed</c>
+    /// has been observed yet for this run. Pure read on top of the per-CLI
+    /// capture done inside the behavior's <c>MapLineToRunEvents</c>.
+    /// </summary>
+    public CodexLastCommandSnapshot? GetLastCommandExecution(string jobKey)
+    {
+        if (!TryGetProc(jobKey, out var info)) return null;
+        if (info.LastCommandObservedAt is null) return null;
+        return new CodexLastCommandSnapshot(
+            ExitCode: info.LastCommandExitCode,
+            Command: info.LastCommandLine,
+            OutputTail: info.LastCommandOutputTail,
+            ObservedAt: info.LastCommandObservedAt.Value);
+    }
+
+    /// <summary>Codex: true once the per-tick silent-completion detector tripped for this run.</summary>
+    public bool IsSilentCompletionTripped(string jobKey)
+        => TryGetProc(jobKey, out var info) && info.SilentCompletionTripped;
+
+    /// <summary>
+    /// Test hook: build the spawn <see cref="ProcessStartInfo"/> for this CLI
+    /// directly (no process). Mirrors the old per-shim
+    /// <c>BuildStartInfoForTest</c> helpers — model is normalized through the
+    /// behavior first, matching the live <see cref="StartAsync"/> path.
+    /// </summary>
+    internal ProcessStartInfo BuildStartInfoForTest(
+        string prompt,
+        string workingDirectory,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        string? thinkingLevel = null,
+        string? permissionMode = null)
+        => BuildStartInfo(
+            prompt,
+            workingDirectory,
+            sessionName,
+            resumeSession,
+            NormalizeModelForInvocation(model),
+            thinkingLevel,
+            permissionMode);
+
+    /// <summary>
+    /// Test hook: render the stdin payload this CLI would write (Codex pipes
+    /// the rendered prompt through stdin). Model is normalized first to match
+    /// the live path.
+    /// </summary>
+    internal string? BuildPromptStdinPayloadForTest(
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model)
+        => GetPromptStdinPayload(
+            prompt,
+            sessionName,
+            resumeSession,
+            NormalizeModelForInvocation(model));
+
+    /// <summary>Real CLIs emit a session id on every run; a behavior that does not sets this false.</summary>
+    public bool EmitsSessionId => _behavior.EmitsSessionId;
+
+    /// <summary>Whether the runner should reconstruct usage post-hoc when a run finished without a usage footer (Claude reads its session JSONL). Default false.</summary>
+    public bool NeedsPostHocUsageReconstruction => _behavior.NeedsPostHocUsageReconstruction;
+
     public bool IsRunningForProject(string rootPath) =>
         _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
+
+    public IReadOnlyList<(string JobKey, CliExecution Execution)> RunningExecutions()
+    {
+        var result = new List<(string, CliExecution)>();
+        foreach (var kv in _processes)
+        {
+            var info = kv.Value;
+            if (info.Process.HasExited) continue;
+            var exec = info.Execution;
+            if (exec == null) continue;
+            if (!string.Equals(exec.Status, "running", StringComparison.OrdinalIgnoreCase)) continue;
+            result.Add((kv.Key, exec));
+        }
+        return result;
+    }
 
     /// <summary>
     /// Default convention-based execution context (ASS-1739 / T1a): scalar
@@ -684,27 +883,32 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// richer self-report (Claude's init frame) override this and merge.
     /// Returns null when the run is unknown.
     /// </summary>
-    public virtual AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey)
+    public AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey)
+        => _behavior.DescribeContextSources?.Invoke(this, jobKey) ?? DefaultDescribeContextSources(jobKey);
+
+    internal AgentStudio.Shared.CliExecutionContext? DefaultDescribeContextSources(string jobKey)
         => _processes.TryGetValue(jobKey, out var info) ? BuildConventionContext(info) : null;
 
     /// <summary>
-    /// T1b (ASS-1742): shared-only by default. Claude / Codex override this to
-    /// true and provide a real <see cref="PrepareCleanContext"/>. Re-declared
-    /// here (not just inherited as a default interface member) so the base
-    /// <c>StartAsync</c> can read it through <c>this</c>.
+    /// T1b (ASS-1742): shared-only by default. Claude / Codex behaviors set this
+    /// true and provide a real <see cref="CliBehavior.PrepareCleanContext"/>.
+    /// Re-declared here (not just inherited as a default interface member) so the
+    /// engine <c>StartAsync</c> can read it through <c>this</c>.
     /// </summary>
-    public virtual bool SupportsCleanContext => false;
+    public bool SupportsCleanContext => _behavior.SupportsCleanContext;
 
     /// <inheritdoc cref="ICliExecutionService.PrepareCleanContext" />
-    public virtual CleanContextPreparation? PrepareCleanContext(string workingDirectory) => null;
+    public CleanContextPreparation? PrepareCleanContext(string workingDirectory)
+        => _behavior.PrepareCleanContext?.Invoke(this, workingDirectory);
 
     /// <summary>
-    /// Build the convention-only context for a tracked run. Shared by the base
-    /// <see cref="DescribeContextSources"/> and the Claude override (which adds
-    /// init-frame data on top). The scalar permission mode is the
+    /// Build the convention-only context for a tracked run. Shared by the engine
+    /// <see cref="DefaultDescribeContextSources"/> and the Claude behavior (which
+    /// adds init-frame data on top). The scalar permission mode is the
     /// platform mode the runner resolved, surfaced via its display name.
+    /// Internal so behaviors can call it.
     /// </summary>
-    protected AgentStudio.Shared.CliExecutionContext BuildConventionContext(ProcInfo info)
+    internal AgentStudio.Shared.CliExecutionContext BuildConventionContext(ProcInfo info)
     {
         var clean = info.CleanContext;
         // Under clean the home-rooted convention probes (~/.claude, ~/.codex)
@@ -733,7 +937,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// session inspectors use so the probed paths line up with what the CLIs
     /// actually read.
     /// </summary>
-    protected static string? ResolveUserHome()
+    internal static string? ResolveUserHome()
         => Environment.GetEnvironmentVariable("USERPROFILE")
            ?? Environment.GetEnvironmentVariable("HOME");
 
@@ -816,12 +1020,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// double-execution risk and lets the resume-prompt logic in
     /// <see cref="ProjectRunner"/> drive a clean fresh continuation.
     /// <para>
-    /// Subclasses that genuinely want re-attach semantics (Copilot today) can
-    /// override this — Copilot does so in its own service and never enters
-    /// this base implementation because it doesn't extend the base class.
+    /// Subclasses that genuinely want re-attach semantics can override this.
     /// </para>
     /// </summary>
-    public virtual void ReattachOnStartup() => ReapOrphans();
+    public void ReattachOnStartup() => ReapOrphans();
 
     /// <summary>
     /// Runs the canonical <see cref="AgentEnvironmentDetector"/> against a
@@ -1047,6 +1249,24 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
             int? exitCode = null;
             try { exitCode = process.ExitCode; } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:953"); }
+            // [crash-diag] orchestrator-only mid-run termination probe: when a child
+            // exits with a negative code and we never called Stop(), capture the read-task
+            // state + silence gap so we can tell an external/self termination apart from a
+            // pipe break. Both claude AND codex die this way only under the full backend
+            // (a minimal .NET Process.Start harness survives) - see runner-stability wiki.
+            if (exitCode is < 0 && info.StopReason == RunStopReason.None)
+            {
+                string So = info.StdoutReadTask is null ? "null"
+                    : info.StdoutReadTask.IsFaulted ? "FAULTED:" + (info.StdoutReadTask.Exception?.GetBaseException().Message ?? "?")
+                    : info.StdoutReadTask.Status.ToString();
+                string Se = info.StderrReadTask is null ? "null"
+                    : info.StderrReadTask.IsFaulted ? "FAULTED:" + (info.StderrReadTask.Exception?.GetBaseException().Message ?? "?")
+                    : info.StderrReadTask.Status.ToString();
+                double ago = info.LastStreamedAt == default ? -1 : (DateTime.UtcNow - info.LastStreamedAt).TotalSeconds;
+                _logger.LogWarning(
+                    "[crash-diag] {Cli} job {JobId} exited code={Exit} after {Dur:F1}s, StopReason=None (no Stop() called). stdoutRead={So} stderrRead={Se} lastStreamedAgo={Ago:F0}s",
+                    CliType, jobKey, exitCode, duration, So, Se, ago);
+            }
             var status = RunStatusClassifier.Classify(exitCode, info.StopReason);
             var terminalOutcome = TerminalRunOutcomeClassifier.Classify(
                 status,
@@ -1077,13 +1297,28 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             info.OutputLog.Append(exitLine);
             try { OnOutput?.Invoke(jobKey, exitLine); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:982"); }
 
-            // ADR-0013 typed events: emit ProcessExited (or Killed if the
-            // exit was a deliberate Stop) so the runner's phase tracker
-            // sees the terminal state on the typed channel too.
-            if (info.StopReason != RunStopReason.None)
-                RaiseRunEvent(jobKey, new CliRunEvent.Killed(info.StopReason.ToString()) { TaskKey = jobKey });
-            else
-                RaiseRunEvent(jobKey, new CliRunEvent.ProcessExited(exitCode, status, duration) { TaskKey = jobKey });
+            // ADR-0013 typed terminal event: one RunEnded (3-valued outcome) so the
+            // runner's phase tracker sees the terminal state on the typed channel.
+            var endOutcome = info.StopReason != RunStopReason.None
+                ? LibOutcome.Stopped
+                : string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ? LibOutcome.Completed : LibOutcome.Failed;
+            var endReason = info.StopReason != RunStopReason.None
+                ? info.StopReason.ToString()
+                : endOutcome == LibOutcome.Failed ? status : null;
+            RaiseRunEvent(jobKey, new CliRunEvent.RunEnded(endOutcome, endReason, exitCode, duration) { RunId = jobKey });
+
+            // Reap any helper the agent spawned and let detach (Playwright
+            // capture server, stray `node serve.cjs`) BEFORE the OnFinished
+            // subscriber runs its lane move + worktree cleanup. Tree-kill
+            // misses these — they break away from the CLI PID tree — but they
+            // are still members of this run's job object. Leaving them alive
+            // holds the worktree open, so `git worktree remove` fails "Device
+            // or resource busy" and orphans the worktree (AGT-1791).
+            if (OperatingSystem.IsWindows())
+            {
+                try { info.ProcessReaper?.Terminate(); }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: process-reaper terminate best-effort"); }
+            }
 
             try { OnFinished?.Invoke(jobKey, finalExecution); }
             catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }
@@ -1108,6 +1343,13 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                     // runs asynchronously after finish and must still see the
                     // temp paths intact (Exists=true) for the retention window.
                     try { removed.CleanContext?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
+                    // Backstop: close the job handle (kill-on-close reaps any
+                    // straggler Terminate() missed). Normally a no-op because
+                    // the run-finish path already terminated it.
+                    if (OperatingSystem.IsWindows())
+                    {
+                        try { removed.ProcessReaper?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: process-reaper dispose"); }
+                    }
                 }
             });
         }
@@ -1461,6 +1703,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// </summary>
     private void SafeKillReap(Process proc, ActiveJob entry)
     {
+        AgentStudio.Diagnostics.CliKillAudit.Trace(proc, $"SafeKillReap job={entry.JobId} cli={CliType}");
         try
         {
             proc.Kill(entireProcessTree: true);
@@ -1484,6 +1727,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     private void KillProcessTree(Process process, string jobKey)
     {
+        AgentStudio.Diagnostics.CliKillAudit.Trace(process, $"KillProcessTree job={jobKey} cli={CliType}");
         try
         {
             process.Kill(entireProcessTree: true);
@@ -1537,8 +1781,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
     }
 
-    /// <summary>Per-process bookkeeping shared with subclasses.</summary>
-    protected sealed class ProcInfo
+    /// <summary>Per-process bookkeeping. Internal so behavior factories in the same assembly can read/write its fields.</summary>
+    internal sealed class ProcInfo
     {
         public Process Process { get; }
         public CliExecution Execution { get; set; }
@@ -1595,9 +1839,21 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         public CleanContextPreparation? CleanContext { get; init; }
 
         /// <summary>
+        /// Process group holding this run's CLI process and every process it
+        /// spawns — including helpers that detach from the PID tree (the
+        /// agent's Playwright capture server, a stray <c>node serve.cjs</c>).
+        /// Terminated at run-finish so those detached holders die BEFORE the
+        /// worktree cleanup, otherwise they wedge <c>git worktree remove</c>
+        /// "Device or resource busy" and orphan the worktree (AGT-1791). Null
+        /// on non-Windows or when the OS refused the assignment (best-effort;
+        /// the tree-kill fallback still applies).
+        /// </summary>
+        internal TaskProcessReaper? ProcessReaper { get; init; }
+
+        /// <summary>
         /// For Claude: the parsed stream-json init frame (model, cwd,
         /// permission mode, MCP servers, ...). Populated by
-        /// <c>ClaudeCliService</c>'s output hook the moment the frame arrives;
+        /// the Claude behavior's output hook the moment the frame arrives;
         /// consumed by <c>DescribeContextSources</c> so the execution-context
         /// panel shows what the CLI itself reported it loaded. Null for other
         /// CLIs and before the init frame is seen.

@@ -10,7 +10,7 @@ public sealed class AntigravityQuotaProbe : QuotaProbeBase
     public AntigravityQuotaProbe(
         ILogger<AntigravityQuotaProbe> logger,
         CliRouter router,
-        CopilotCliEnvironment env)
+        CliEnvironment env)
         : base(logger, router, env) { }
 
     public override string CliType => CliTypes.Gemini;

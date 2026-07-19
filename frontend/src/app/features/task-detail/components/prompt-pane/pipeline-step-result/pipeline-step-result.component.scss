@@ -61,22 +61,27 @@
 
   // The "schöner HTML-Header": title + outcome + run meta on a tinted strip.
   &__header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--studio-bg-hover);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: var(--studio-spacing-3);
+    row-gap: var(--studio-spacing-1);
+    padding: var(--studio-spacing-2) var(--studio-spacing-3);
+    background: color-mix(in srgb, var(--studio-bg-hover) 54%, var(--studio-bg-elevated));
     border-bottom: 1px solid var(--studio-border);
 
-    // Outcome-tinted left accent so the header tone tracks the status.
-    &[data-status='passed'] { box-shadow: inset 3px 0 0 var(--severity-pass); }
-    &[data-status='failed'] { box-shadow: inset 3px 0 0 var(--severity-high); }
-    &[data-status='skipped'] { box-shadow: inset 3px 0 0 var(--studio-border); }
+    &[data-status='passed'] {
+      background: color-mix(in srgb, var(--severity-pass) 9%, var(--studio-bg-elevated));
+    }
+    &[data-status='failed'] {
+      background: color-mix(in srgb, var(--severity-high) 10%, var(--studio-bg-elevated));
+    }
+    &[data-status='skipped'] {
+      background: color-mix(in srgb, var(--studio-fg-muted) 7%, var(--studio-bg-elevated));
+    }
   }
 
   &__title {
-    flex: 1 1 auto;
     min-width: 0;
     font-size: 13px;
     font-weight: 700;
@@ -84,8 +89,15 @@
     word-break: break-word;
   }
 
+  &__outcome {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--studio-spacing-1);
+    min-width: 0;
+  }
+
   &__status {
-    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -95,66 +107,70 @@
   }
 
   &__verdict {
-    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    padding: 1px 8px;
+    padding: 0 var(--studio-spacing-1);
     border-radius: 999px;
-    background: var(--studio-bg-elevated);
     border: 1px solid var(--studio-border);
     color: var(--studio-fg-dim);
+    background: transparent;
 
     &[data-verdict='pass'],
     &[data-verdict='success'] {
       color: var(--severity-pass);
-      border-color: color-mix(in srgb, var(--severity-pass) 40%, transparent);
-      background: color-mix(in srgb, var(--severity-pass) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-pass) 34%, transparent);
     }
 
     &[data-verdict='concerns'],
     &[data-verdict='concern'],
     &[data-verdict='looping'] {
       color: var(--severity-warn);
-      border-color: color-mix(in srgb, var(--severity-warn) 40%, transparent);
-      background: color-mix(in srgb, var(--severity-warn) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-warn) 34%, transparent);
     }
 
     &[data-verdict='block'],
     &[data-verdict='blocked'],
     &[data-verdict='loop-detected'] {
       color: var(--severity-high);
-      border-color: color-mix(in srgb, var(--severity-high) 40%, transparent);
-      background: color-mix(in srgb, var(--severity-high) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-high) 34%, transparent);
     }
   }
 
   &__meta {
-    flex: 0 0 auto;
+    grid-column: 1 / -1;
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
+    gap: var(--studio-spacing-1);
+    min-width: 0;
+    color: var(--studio-fg-muted);
   }
 
   &__chip {
     display: inline-flex;
     align-items: center;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: var(--studio-bg-elevated);
-    border: 1px solid var(--studio-border);
-    color: var(--studio-fg-dim);
+    padding: 0;
+    border: 0;
+    color: inherit;
     font-family: var(--font-mono);
     font-size: 10.5px;
     line-height: 1.5;
 
+    & + .step-result__chip::before {
+      content: '·';
+      padding-right: var(--studio-spacing-1);
+      color: var(--studio-fg-muted);
+      font-family: inherit;
+    }
+
     &--model {
       font-family: inherit;
       font-weight: 600;
+      color: var(--studio-fg-dim);
     }
   }
 
@@ -181,5 +197,11 @@
       transform: none;
       width: min(520px, calc(100vw - 32px));
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-result__toggle {
+    transition-duration: 0s;
   }
 }

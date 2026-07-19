@@ -2,22 +2,67 @@ namespace AgentStudio.Shared;
 
 public record ProjectSettings
 {
+    /// <summary>
+    /// Per publish-target automation ladder. Keys are derived target ids
+    /// (<c>package:npm</c>, <c>package:nuget</c>, <c>website</c>); values are
+    /// <c>manual</c>, <c>suggest</c>, or <c>auto</c>. Missing entries resolve to
+    /// manual. Package targets never resolve above suggest.
+    /// </summary>
+    public Dictionary<string, string>? PublishAutomation { get; init; }
+
     /// <summary>When true, transition <c>3-progress → 4-auto-review</c> auto-commits and stamps the SHA on the job.</summary>
     public bool AutoCommit { get; init; } = true;
 
     /// <summary>
-    /// Controls when the platform pushes runner-owned commits. Default is
-    /// <see cref="AutoPushStrategies.OnCompleted"/> so only commits that have
-    /// passed human review and reached <c>6-completed</c> are pushed.
+    /// When true, the boot-time crash recovery sweep runs for this project.
+    /// Orphan working-tree commits still require operator confirmation.
     /// </summary>
-    public string AutoPushStrategy { get; init; } = AutoPushStrategies.OnCompleted;
+    public bool CrashRecoveryEnabled { get; init; } = true;
 
     /// <summary>
-    /// Last runner mode chosen by the user for this project ("manual", "auto-single",
-    /// "auto-continuous", "paused"). Restored at backend startup so the auto-pickup
-    /// toggle survives self-rebuild / restart. Null means "use the default (manual)".
+    /// Controls when the platform pushes runner-owned commits. Default is
+    /// <see cref="AutoPushStrategies.AlwaysImmediate"/> so every platform-owned
+    /// commit is made durable on origin without waiting for lane transitions.
+    /// </summary>
+    public string AutoPushStrategy { get; init; } = AutoPushStrategies.AlwaysImmediate;
+
+    /// <summary>
+    /// Last <i>live</i> runner mode for this project ("manual", "auto-single",
+    /// "auto-continuous", "paused"), updated on every mode change regardless of
+    /// who caused it (operator, circuit-breaker, supervisor, update-quiesce).
+    /// The supervisor meta-cycle reads this to detect runner-mode drift, so it
+    /// must keep mirroring the actual live mode. Null means "use the default
+    /// (manual)". Boot restore prefers <see cref="DesiredRunnerMode"/> over this
+    /// so a transient system flip does not become the restored mode (ASS-1753).
     /// </summary>
     public string? RunnerMode { get; init; }
+
+    /// <summary>
+    /// The operator's durable auto-pickup intent - the last mode set by a
+    /// <i>user</i>-sourced change (the API toggle), never overwritten by a
+    /// system-driven flip such as the update-service quiesce or a
+    /// circuit-breaker pause. This is what the backend restores at startup so
+    /// "auto-continuous" survives a self-rebuild / restart even when the runner
+    /// was sitting at a system-imposed manual when the process went down
+    /// (ASS-1753). Null falls back to <see cref="RunnerMode"/> for legacy
+    /// records written before this field existed.
+    /// </summary>
+    public string? DesiredRunnerMode { get; init; }
+
+    /// <summary>
+    /// Server-owned assignment for remote execution. A non-empty value names
+    /// the remote runner allowed to claim this project's ready cards. The local
+    /// in-process runner skips those cards while the project is remote-capable.
+    /// </summary>
+    public string? ExecutionRunner { get; init; }
+
+    /// <summary>
+    /// Whether this project's tasks may execute on a remote host. Defaults to
+    /// true; set false only for machine-bound suites such as UpdateService
+    /// Windows machinery or live-checkout drift scans. Headless UI and
+    /// screenshot work remains remote-capable.
+    /// </summary>
+    public bool RemoteExecutionEnabled { get; init; } = true;
 
     /// <summary>
     /// Model the orchestrator uses when it makes decisions on behalf of the
@@ -39,7 +84,7 @@ public record ProjectSettings
     /// <c>disabled</c>, <c>fewHours</c>, <c>daily</c>, <c>manualOnly</c>.
     /// Default null = "disabled" for every topic; reports never auto-run
     /// without an explicit opt-in. The contract for execution is documented
-    /// in <c>docs/analysis-reports.md</c>; this struct stores the user's
+    /// in <c>docs/system/reports/analysis-reports.md</c>; this struct stores the user's
     /// cadence choice only.
     /// </summary>
     public Dictionary<string, string>? AnalysisSchedules { get; init; }
@@ -194,6 +239,66 @@ public record ProjectSettings
     /// <c>project-settings.json</c>.
     /// </summary>
     public bool? EpicSubTasksToReady { get; init; }
+
+    /// <summary>
+    /// AGT-2028: per-project configuration for the opt-in <c>post-task-spawner</c>
+    /// pipeline step. When set (and the step is enabled via
+    /// <see cref="PipelineSteps"/>), a completed task whose change set the best
+    /// available model judges relevant spawns a follow-up card in
+    /// <see cref="TaskSpawnerConfig.TargetProject"/>. Null means "no spawn target
+    /// configured" - the step records a skipped row and never fires. Kept a
+    /// dedicated typed object (mirroring <see cref="BuildProfile"/> /
+    /// <see cref="EpicPlanningModel"/>) rather than overloading the shared
+    /// <see cref="PipelineStepSetting"/>, because the spawn target + lane + policy
+    /// are specific to this step. The step's enablement, model, and CLI still flow
+    /// through the standard <see cref="PipelineSteps"/> resolver. Persisted in
+    /// <c>project-settings.json</c>.
+    /// </summary>
+    public TaskSpawnerConfig? TaskSpawner { get; init; }
+}
+
+/// <summary>
+/// Per-project spawn target + policy for the <c>post-task-spawner</c> pipeline
+/// step (AGT-2028). Deliberately generic (not website-hardwired): any project's
+/// pipeline can point at any other project and phrase its own relevance
+/// question. The best available model evaluates relevance and generates the
+/// follow-up prompt; the spawned card is worked by the target project's default
+/// model.
+/// </summary>
+public record TaskSpawnerConfig
+{
+    /// <summary>
+    /// Where a relevant change spawns a follow-up card. A filesystem watch path
+    /// or a stable <c>PROJ-NNN</c> id (the id survives a folder move; both are
+    /// accepted by the create path). Null/blank disables the step for the
+    /// project even when the pipeline step itself is enabled.
+    /// </summary>
+    public string? TargetProject { get; init; }
+
+    /// <summary>
+    /// The operator's relevance question, injected into the evaluation prompt,
+    /// e.g. "Is this change relevant to the public website (new feature,
+    /// removed capability, changed behaviour)?". Null falls back to a generic
+    /// relevance framing in the template.
+    /// </summary>
+    public string? RelevanceQuestion { get; init; }
+
+    /// <summary>
+    /// Lane the spawned card lands in: <see cref="TaskStates.Backlog"/>
+    /// (default, triage - auto-pickup never reaches it) or
+    /// <see cref="TaskStates.Ready"/> (queued to auto-run). Any other value is
+    /// clamped to backlog (a freshly minted card must never land in a review
+    /// lane).
+    /// </summary>
+    public string? SpawnLane { get; init; }
+
+    /// <summary>
+    /// Dedup budget: the maximum number of cards this step spawns per source
+    /// task, across re-runs (default 1). The append-only spawn ledger in the
+    /// source job's <c>.metadata/spawned-tasks.jsonl</c> enforces it, so a task
+    /// re-processed by the reissue loop never double-spawns.
+    /// </summary>
+    public int? MaxPerSourceTask { get; init; }
 }
 
 /// <summary>
@@ -286,6 +391,13 @@ public record PipelineStepCondition
 public record PipelineStepSetting
 {
     /// <summary>
+    /// Opts this LLM-backed step into the TokenEconomy recommendation path.
+    /// An explicit per-step <see cref="Model"/> still wins. The runtime falls
+    /// back to its normal model when no qualified economy model is available.
+    /// </summary>
+    public bool? EconomyModel { get; init; }
+
+    /// <summary>
     /// When <c>false</c>, the step is skipped for this project. Null or
     /// <c>true</c> leaves the step enabled. Only honoured for steps the
     /// runtime can actually skip (today: the aspect post-steps and the
@@ -305,8 +417,8 @@ public record PipelineStepSetting
     /// selector vocabulary). Null falls back to the project
     /// <see cref="ProjectSettings.OrchestratorModel"/>, then the global
     /// default model, then the runtime default. Only meaningful for steps that
-    /// invoke an LLM (the aspect and drift post-steps); deterministic tool
-    /// steps ignore it.
+    /// invoke an LLM (including aspects, abort review, grade, and drift);
+    /// deterministic tool steps ignore it.
     /// </summary>
     public string? Model { get; init; }
 
@@ -562,12 +674,12 @@ public static class AutoPushStrategies
 
     public static string Normalize(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value)) return OnCompleted;
+        if (string.IsNullOrWhiteSpace(value)) return AlwaysImmediate;
         var v = value.Trim();
         foreach (var strategy in All)
             if (string.Equals(strategy, v, StringComparison.OrdinalIgnoreCase))
                 return strategy;
-        return OnCompleted;
+        return AlwaysImmediate;
     }
 }
 

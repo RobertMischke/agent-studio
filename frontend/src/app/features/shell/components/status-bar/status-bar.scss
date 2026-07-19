@@ -1,45 +1,36 @@
-// F50 follow-up (2026-05-29) — Status Bar Layout konsolidieren:
-// - all items share one height + radius + padding via local custom
-//   properties so chips / quota cards / pickers sit on the same
-//   baseline (left icons no longer "rutsch nach unten");
-// - container switches from raw flex to a 3-column grid so the
-//   center spacer reliably right-anchors the right cluster regardless
-//   of how the left cluster grows;
-// - quota card height is constrained to the item height (was 28 px
-//   in a 22 px bar — the source of the vertical mismatch);
-// - light-theme overrides in styles.scss continue to win on color
-//   without re-declaring layout.
+// Status bar layout:
+// - left side owns the live status + per-CLI quota strip and may use the
+//   middle space aggressively;
+// - the tiny center group only preserves the DOM contract from earlier
+//   tests and acts as a compact gutter;
+// - the right side is a fixed dock for actions + defaults.
 
-:host {
+app-status-bar {
   display: block;
   flex: 1 1 auto;
-  // Stretch across the projected studio-statusbar footer so the grid's
-  // center spacer can actually push the right cluster to the right
-  // edge. Without this the host stays intrinsic-width and the right
-  // cluster collapses next to the left one.
+  min-width: 0;
+  // Stretch across the projected studio-statusbar footer so the right
+  // dock can anchor to the actual edge. ViewEncapsulation.None leaves
+  // `:host` untransformed, so target the element explicitly.
   width: 100%;
 }
 
 .statusbar {
-  // -----------------------------------------------------------------
-  // Shared sizing tokens (component-scoped). One source of truth for
-  // every chip in the bar — quota cards, statusbar items, CLI picker,
-  // model picker. Mockup target (docs/mockups/vscode-layout/ui.html):
-  // 22 px bar, 11 px font.
-  // -----------------------------------------------------------------
-  --statusbar-bar-height: 22px;
-  --statusbar-item-height: 18px;
-  --statusbar-item-pad-x: 7px;
-  --statusbar-item-radius: 4px;
+  // Shared sizing tokens. One source of truth for every chip in the bar:
+  // status items, quota cards and the default CLI/model picker.
+  --statusbar-bar-height: 24px;
+  --statusbar-item-height: 20px;
+  --statusbar-item-pad-x: 8px;
+  --statusbar-item-radius: 5px;
   --statusbar-item-gap-inner: 5px;
   --statusbar-font-size: 11px;
-  --statusbar-icon-size: 11px;
+  --statusbar-icon-size: 12px;
 
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  container: statusbar / inline-size;
+  display: flex;
   align-items: center;
-  column-gap: 8px;
-  padding: 0 8px;
+  gap: var(--studio-spacing-1);
+  padding: 0 var(--studio-spacing-2);
   height: var(--statusbar-bar-height);
   background: var(--studio-bg-activitybar, #181825);
   border-top: 1px solid var(--studio-border, rgba(255, 255, 255, 0.06));
@@ -47,28 +38,63 @@
   line-height: 1;
   color: var(--studio-fg-dim, rgba(255, 255, 255, 0.70));
   letter-spacing: 0;
+  overflow: hidden;
 }
 
 .statusbar__group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--studio-spacing-1);
   min-width: 0;
   height: 100%;
 }
-.statusbar__group--left  { justify-self: start; }
-.statusbar__group--center {
-  // Pure spacer — the grid's `1fr` column already does the work; the
-  // empty flex stays for selector compatibility with the F50 spec.
-  justify-self: stretch;
+.statusbar__group--left  {
+  flex: 1 1 auto;
+  overflow: hidden;
 }
-.statusbar__group--spacer { min-width: 40px; }
+.statusbar__group--center {
+  flex: 0 0 var(--studio-spacing-1);
+  min-width: var(--studio-spacing-1);
+}
 .statusbar__group--right {
-  justify-self: end;
-  gap: 2px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: var(--studio-spacing-1);
 }
 
-.statusbar .statusbar__quota .hquota__card { cursor: pointer; }
+.statusbar__quota {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.statusbar__quota app-usage-hover-panel {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.statusbar__quota .uhp,
+.statusbar__quota .hquota {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.statusbar .statusbar__quota .hquota {
+  display: flex;
+  gap: var(--studio-spacing-1);
+}
+
+.statusbar .statusbar__quota .hquota__card {
+  cursor: pointer;
+  flex: 0 0 auto;
+  min-width: 0;
+  gap: var(--studio-spacing-1);
+  padding: 0 var(--studio-spacing-2);
+}
 
 .statusbar__item {
   display: inline-flex;
@@ -85,6 +111,7 @@
   font-size: var(--statusbar-font-size);
   line-height: 1;
   white-space: nowrap;
+  min-width: 0;
 }
 .statusbar__item--ro { color: rgba(255, 255, 255, 0.55); }
 .statusbar__item--btn {
@@ -136,14 +163,118 @@
 .statusbar__sep {
   display: inline-block;
   width: 1px;
-  height: 12px;
+  height: 14px;
   background: rgba(255, 255, 255, 0.10);
-  margin: 0 4px;
+  margin: 0 var(--studio-spacing-1);
   flex: 0 0 auto;
 }
 
-.statusbar__pickers {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
+.statusbar__defaults {
+  min-width: 0;
+}
+
+.statusbar__defaults .model-selector {
+  height: var(--statusbar-item-height);
+  padding: 0 var(--statusbar-item-pad-x);
+  border-radius: var(--statusbar-item-radius);
+  font-size: var(--statusbar-font-size);
+  line-height: 1;
+  color: inherit;
+}
+
+.statusbar__defaults .model-selector__icon {
+  font-size: 12px;
+}
+
+.statusbar__defaults .model-selector__name {
+  max-width: 15ch;
+}
+
+@container statusbar (width <= 1180px) {
+  .statusbar .hquota__bar {
+    display: none;
+  }
+
+  .statusbar .hquota__card {
+    gap: var(--studio-spacing-1);
+    padding-inline: var(--studio-spacing-1);
+  }
+
+  .statusbar .hquota__value {
+    min-width: auto;
+  }
+}
+
+@container statusbar (width <= 940px) {
+  .statusbar .hquota__label,
+  .statusbar .hquota__tag {
+    display: none;
+  }
+
+  .statusbar .hquota__metric {
+    gap: 0;
+  }
+
+  .statusbar__defaults .model-selector__name {
+    max-width: 10ch;
+  }
+}
+
+@container statusbar (width <= 760px) {
+  .statusbar__group--center {
+    flex-basis: var(--studio-spacing-1);
+    min-width: var(--studio-spacing-1);
+  }
+
+  .statusbar__group--right .statusbar__item {
+    width: var(--statusbar-item-height);
+    padding-inline: 0;
+  }
+
+  .statusbar__group--right .statusbar__item > span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .statusbar__defaults .model-selector__tags {
+    display: none;
+  }
+}
+
+@container statusbar (width <= 560px) {
+  .statusbar {
+    padding-inline: var(--studio-spacing-1);
+  }
+
+  .statusbar__group--left app-statusbar-item:nth-of-type(2),
+  .statusbar__group--left .statusbar__sep {
+    display: none;
+  }
+
+  .statusbar .hquota {
+    gap: var(--studio-spacing-1);
+  }
+
+  .statusbar .hquota__card {
+    padding-inline: var(--studio-spacing-1);
+  }
+
+  .statusbar__defaults .model-selector__name {
+    display: none;
+  }
+}
+
+@container statusbar (width <= 460px) {
+  .statusbar__item {
+    padding-inline: var(--studio-spacing-1);
+  }
+
+  .statusbar .hquota {
+    gap: 0;
+  }
 }

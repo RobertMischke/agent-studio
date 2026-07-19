@@ -49,11 +49,11 @@ public class SpecTaskDriftAnalysisServiceTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
         File.WriteAllText(Path.Combine(_repoRoot, "ROADMAP.md"), "# ROADMAP\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
-        File.WriteAllText(Path.Combine(_repoRoot, "docs", "design-principles.md"), "# DP\n", Encoding.UTF8);
+        WriteRepoFile("docs/quality/design-principles.md", "# DP\n");
         // README intentionally absent so we prove missing files are skipped.
 
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "drift-control"));
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "orchestrator-meta-cycle"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "drift-control"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "orchestrator-meta-cycle"));
 
         var svc = new SpecTaskDriftAnalysisService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
@@ -61,11 +61,11 @@ public class SpecTaskDriftAnalysisServiceTests : IDisposable
         var paths = scope.SpecDocs.Select(d => d.Path.Replace('\\', '/')).ToArray();
         Assert.Contains("ROADMAP.md", paths);
         Assert.Contains("AGENTS.md", paths);
-        Assert.Contains("docs/design-principles.md", paths);
+        Assert.Contains("docs/quality/design-principles.md", paths);
         Assert.DoesNotContain(paths, p => p.EndsWith("README.md", StringComparison.Ordinal));
         // Mockup folders surface as separate spec entries.
-        Assert.Contains("docs/mockups/drift-control/", paths);
-        Assert.Contains("docs/mockups/orchestrator-meta-cycle/", paths);
+        Assert.Contains("docs/concepts/mockups/drift-control/", paths);
+        Assert.Contains("docs/concepts/mockups/orchestrator-meta-cycle/", paths);
         // ROADMAP leads the list so the agent reads stated intent first.
         Assert.Equal("ROADMAP.md", scope.SpecDocs[0].Path.Replace('\\', '/'));
     }
@@ -468,6 +468,13 @@ public class SpecTaskDriftAnalysisServiceTests : IDisposable
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
+
+    private void WriteRepoFile(string relPath, string content)
+    {
+        var full = Path.Combine(_repoRoot, relPath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, content, Encoding.UTF8);
+    }
 
     private void WriteJob(
         string lane,

@@ -39,13 +39,13 @@ public sealed class ClaudeSessionHeartbeat : IDisposable
 
     public string? WatchedPath => _path;
 
-    public ClaudeSessionHeartbeat(string? sessionId, string workingDirectory, Action onActivity, ILogger? logger = null)
+    public ClaudeSessionHeartbeat(string? sessionId, string workingDirectory, Action onActivity, ILogger? logger = null, string? configDir = null)
     {
         _onActivity = onActivity;
 
         if (string.IsNullOrWhiteSpace(sessionId)) return;
 
-        var path = ResolveSessionFile(sessionId!, workingDirectory);
+        var path = ResolveSessionFile(sessionId!, workingDirectory, configDir);
         if (path == null) return;
 
         _path = path;
@@ -85,15 +85,33 @@ public sealed class ClaudeSessionHeartbeat : IDisposable
     /// hyphen. Case is preserved. The actual encoder is internal to
     /// claude-code; we replicate the visible-on-disk shape only.
     /// </summary>
-    public static string? ResolveSessionFile(string sessionId, string workingDirectory)
+    public static string? ResolveSessionFile(string sessionId, string workingDirectory, string? configDir = null)
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (string.IsNullOrEmpty(home)) return null;
+        string root;
+        if (!string.IsNullOrWhiteSpace(configDir))
+        {
+            // Clean-context run (the DEFAULT context): claude's CLAUDE_CONFIG_DIR
+            // redirect replaces ~/.claude wholesale, so sessions live directly
+            // under <CLAUDE_CONFIG_DIR>/projects/<encoded-cwd>/<uuid>.jsonl -
+            // there is NO .claude segment. Watching the default ~/.claude path
+            // here was the bug that made the liveness watcher see permanent
+            // silence on every clean run and kill the actively-working CLI
+            // mid-run (exit=-1) -> InfraCrash -> escalate: the "runs never
+            // complete / backlog never drains" incident
+            // (docs/concepts/process-termination-scenarios.html).
+            root = configDir!;
+        }
+        else
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrEmpty(home)) return null;
+            root = Path.Combine(home, ".claude");
+        }
 
         var encoded = EncodeProjectFolder(workingDirectory);
         if (string.IsNullOrEmpty(encoded)) return null;
 
-        return Path.Combine(home, ".claude", "projects", encoded, sessionId + ".jsonl");
+        return Path.Combine(root, "projects", encoded, sessionId + ".jsonl");
     }
 
     private static string EncodeProjectFolder(string cwd)

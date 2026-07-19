@@ -79,14 +79,59 @@ public class TaskMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        var normalizedModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        var previousModel = ModelMetadataRegistry.NormalizeForCli(info.CliType, info.Model);
+        var normalizedModel = ModelMetadataRegistry.NormalizeForCli(info.CliType, model);
         TaskJsonFile.UpdateField(info.FolderPath, "model", normalizedModel ?? "", _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "modelExplicit", !string.IsNullOrWhiteSpace(model), _logger);
         TaskJsonFile.UpdateField(
             info.FolderPath,
             "thinkingLevel",
-            CliThinkingLevels.Normalize(info.CliType, normalizedModel, info.ThinkingLevel) ?? "",
+            ModelMetadataRegistry.ResolveThinkingLevel(info.CliType, normalizedModel, info.ThinkingLevel) ?? "",
             _logger);
+        AppendModelChangeMarker(info, previousModel, normalizedModel);
         return Updated();
+    }
+
+    /// <summary>
+    /// Record an operator model switch as a <c>[taskboard] Model changed</c>
+    /// line on the <c>[system]</c> stream of <c>logs/cli-output.log</c> so the
+    /// conversation projection can surface it as a "Model changed: X → Y"
+    /// notice in the chat. Only writes when the normalized model actually
+    /// changed and the job already has a conversation log to annotate — a
+    /// pre-run config tweak on a never-run job has no chat to mark. Mirrors the
+    /// text line format the CLI-output parser consumes
+    /// (<c>[HH:mm:ss.fff] [system] …</c>); failures are swallowed so a log
+    /// write can never fail the model PUT.
+    /// </summary>
+    private void AppendModelChangeMarker(TaskInfo info, string? previousModel, string? newModel)
+    {
+        // Gate on the CANONICAL ids: NormalizeForCli trims but does not
+        // canonicalize aliases (e.g. "claude-opus-4.8" vs "claude-opus-4-8"),
+        // so comparing the raw spellings would fire a phantom "Model changed"
+        // notice for what is the same model. The human spelling is still what
+        // gets displayed in the line.
+        if (string.Equals(
+                ModelMetadataRegistry.NormalizeId(previousModel),
+                ModelMetadataRegistry.NormalizeId(newModel),
+                StringComparison.OrdinalIgnoreCase)) return;
+
+        var from = string.IsNullOrWhiteSpace(previousModel) ? "default" : previousModel;
+        var to = string.IsNullOrWhiteSpace(newModel) ? "default" : newModel;
+
+        try
+        {
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
+            // Only annotate an existing conversation; skip when the job never ran.
+            if (!File.Exists(logPath) || new FileInfo(logPath).Length == 0) return;
+
+            var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
+            var line = $"[{ts}] [system] [taskboard] Model changed from={from} to={to}";
+            File.AppendAllText(logPath, Environment.NewLine + line + Environment.NewLine, Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record model-change marker in CLI log for {JobId}", info.Id);
+        }
     }
 
     public bool SetJobThinkingLevel(string jobId, string? thinkingLevel, string? watchPath = null)
@@ -95,6 +140,7 @@ public class TaskMutationService
         if (info == null) return false;
         var normalized = CliThinkingLevels.Normalize(info.CliType, info.Model, thinkingLevel);
         TaskJsonFile.UpdateField(info.FolderPath, "thinkingLevel", normalized ?? "", _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "thinkingLevelExplicit", !string.IsNullOrWhiteSpace(thinkingLevel), _logger);
         return Updated();
     }
 
@@ -117,11 +163,13 @@ public class TaskMutationService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         var normalized = CliTypes.Normalize(cliType);
+        var normalizedModel = ModelMetadataRegistry.NormalizeForCli(normalized, info.Model);
         TaskJsonFile.UpdateField(info.FolderPath, "cliType", normalized, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "model", normalizedModel ?? "", _logger);
         TaskJsonFile.UpdateField(
             info.FolderPath,
             "thinkingLevel",
-            CliThinkingLevels.Normalize(normalized, info.Model, info.ThinkingLevel) ?? "",
+            ModelMetadataRegistry.ResolveThinkingLevel(normalized, normalizedModel, info.ThinkingLevel) ?? "",
             _logger);
         // Keep the parallel `agent` field in lockstep with `cliType`. The two
         // were originally meant to address different layers (which CLI vs.
@@ -245,6 +293,21 @@ public class TaskMutationService
     {
         try
         {
+            // No-wipe guard: never shrink a non-empty persisted chain to empty.
+            // A run that crashes seconds into a resume (before it re-derives the
+            // commit set) can reach this replace-all write with an empty chain;
+            // overwriting would erase the task's landed-commit metadata. An empty
+            // attribution result is never legitimate when commits already exist
+            // (the aggregator folds the persisted chain in), so refuse and log
+            // instead of silently wiping. ADR-0020 / crash-recovery hygiene.
+            if (chain.Count == 0 && ReadPersistedCommitCount(folderPath) > 0)
+            {
+                _logger.LogWarning(
+                    "Refused to wipe non-empty commit chain in {Folder}: incoming attribution was empty (likely a resume-crash race). Keeping existing commits.",
+                    folderPath);
+                return false;
+            }
+
             TaskJsonFile.UpdateField(folderPath, "commits", chain, _logger);
             TaskJsonFile.UpdateField(folderPath, "commit", chain.Count > 0 ? chain[^1] : null, _logger);
             // Drop the obsolete operator-override array (removed feature) so the
@@ -256,6 +319,52 @@ public class TaskMutationService
         {
             _logger.LogError(ex, "Failed to write commit state to {Folder}", folderPath);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Count of distinct commits currently persisted in a job's
+    /// <c>task.json</c> (the <c>commits</c> array, or the legacy singular
+    /// <c>commit</c> field). Used by the no-wipe guard in
+    /// <see cref="WriteCommitState"/>; a parse failure reports 0 so the guard
+    /// fails open to the normal write path.
+    /// </summary>
+    private static int ReadPersistedCommitCount(string folderPath)
+    {
+        try
+        {
+            var jobJsonPath = Path.Combine(folderPath, "task.json");
+            if (!File.Exists(jobJsonPath)) return 0;
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                File.ReadAllText(jobJsonPath), TaskJsonFile.ReadOpts);
+            if (doc == null) return 0;
+
+            // Mirror AppendJobCommitOnFolder's parsing (case-insensitive via
+            // ReadOpts) so the count matches what a reader would actually see.
+            if (doc.TryGetValue("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
+            {
+                var count = 0;
+                foreach (var item in commitsEl.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
+                    if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) count++;
+                }
+                return count;
+            }
+            if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
+            {
+                var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
+                return parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha) ? 1 : 0;
+            }
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            // Fail open to the normal write path: the guard is a safety net, not
+            // a gate. A read failure here must not block a legitimate write.
+            SilentCatch.Note(ex, "TaskMutationService: best-effort persisted-commit count for the no-wipe guard.");
+            return 0;
         }
     }
 
@@ -430,6 +539,8 @@ public class TaskMutationService
     {
         if (!Directory.Exists(folderPath)) return false;
         TaskJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
+        TaskJsonFile.UpdateField(folderPath, "phaseEnteredAt",
+            string.IsNullOrWhiteSpace(phase) ? "" : DateTime.UtcNow.ToString("o"), _logger);
         return Updated();
     }
 
@@ -449,12 +560,43 @@ public class TaskMutationService
         return Updated();
     }
 
-    public string? CreateJob(CreateJobRequest req)
+    /// <summary>
+    /// Application-owned write of the <c>externalCompletion</c> object on a
+    /// job's <c>task.json</c> (out-of-band task completion, §3 of
+    /// <c>docs/concepts/out-of-band-task-completion.md</c>). Replace-all write:
+    /// the external-completion endpoint owns the record and hands the finished
+    /// shape here. Invalidates the scanner cache so the "extern erledigt" badge
+    /// shows without waiting out the FileSystemWatcher debounce.
+    /// </summary>
+    public bool SetExternalCompletionOnFolder(string folderPath, ExternalCompletionInfo externalCompletion)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        TaskJsonFile.UpdateField(folderPath, "externalCompletion", externalCompletion, _logger);
+        return Updated();
+    }
+
+    public string? CreateJob(CreateTaskRequest req)
     {
         var watchPaths = _scanner.GetWatchPaths();
-        var entry = string.IsNullOrEmpty(req.WatchPath)
+        // D1: a caller addresses the target project by a path-free handle — a
+        // short code / Kürzel (e.g. ASS) or a stable PROJ-NNN id (both survive a
+        // folder move that a hard-coded path would not). The preferred `Project`
+        // field wins; `WatchPath` is the deprecated fallback for legacy callers
+        // and may itself carry a handle or a raw path. Resolution turns any of
+        // these into the project's storage location; a plain path passes
+        // through unchanged.
+        var requestedHandle = string.IsNullOrWhiteSpace(req.Project) ? req.WatchPath : req.Project;
+        var requestedPath = ResolveRequestedWatchPath(requestedHandle);
+        // Path-aware project resolution. The previous ordinal, case-sensitive
+        // `w.Path == req.WatchPath` compared the client's watchPath byte-for-byte
+        // against the RESOLVED entry path (Path.GetFullPath, back-slashed on
+        // Windows), so a create that posted the same directory with forward
+        // slashes / a trailing separator / different drive-letter case matched
+        // no entry and returned null → 409 "already exists or invalid input".
+        // See WatchPathComparison (AGT-1940).
+        var entry = string.IsNullOrEmpty(requestedPath)
             ? watchPaths.FirstOrDefault()
-            : watchPaths.FirstOrDefault(w => w.Path == req.WatchPath);
+            : watchPaths.FirstOrDefault(w => WatchPathComparison.PathsEqual(w.Path, requestedPath));
 
         if (entry == null) return null;
 
@@ -514,7 +656,7 @@ public class TaskMutationService
         // the same key, so tie-break would depend on filesystem scan order and
         // the user has no way to predict which one runs next.
         var existingMaxOrder = _scanner.ScanAllJobs()
-            .Where(j => j.WatchPath == entry.Path && j.State == targetState)
+            .Where(j => WatchPathComparison.PathsEqual(j.WatchPath, entry.Path) && j.State == targetState)
             .Select(j => (int?)j.Order)
             .Max();
         var resolvedOrder = req.Order != 999 ? req.Order : (existingMaxOrder ?? 0) + 10;
@@ -536,7 +678,8 @@ public class TaskMutationService
         var effectiveModel = !string.IsNullOrWhiteSpace(req.Model)
             ? req.Model.Trim()
             : ownerIdentity?.DefaultModel;
-        var effectiveThinkingLevel = CliThinkingLevels.Normalize(
+        effectiveModel = ModelMetadataRegistry.NormalizeForCli(effectiveCliType, effectiveModel);
+        var effectiveThinkingLevel = ModelMetadataRegistry.ResolveThinkingLevel(
             effectiveCliType,
             effectiveModel,
             !string.IsNullOrWhiteSpace(req.ThinkingLevel)
@@ -569,8 +712,10 @@ public class TaskMutationService
         };
         if (!string.IsNullOrWhiteSpace(effectiveModel))
             jobJson["model"] = effectiveModel;
+        jobJson["modelExplicit"] = req.ModelExplicit ?? !string.IsNullOrWhiteSpace(req.Model);
         if (!string.IsNullOrWhiteSpace(effectiveThinkingLevel))
             jobJson["thinkingLevel"] = effectiveThinkingLevel;
+        jobJson["thinkingLevelExplicit"] = req.ThinkingLevelExplicit ?? !string.IsNullOrWhiteSpace(req.ThinkingLevel);
         if (!string.IsNullOrWhiteSpace(effectiveCliType))
             jobJson["cliType"] = effectiveCliType;
         // Epics: card kind (task|epic) + optional parent epic (assignment way 1,
@@ -636,10 +781,80 @@ public class TaskMutationService
         return jobId;
     }
 
+    /// <summary>
+    /// Resolves the caller-supplied project handle to a filesystem watchPath.
+    /// The external API contract addresses projects by a stable, path-free
+    /// handle so the FS layout never leaks into the wire:
+    /// <list type="bullet">
+    /// <item><c>PROJ-NNN</c> — the stable project id (survives a folder move).</item>
+    /// <item>a short code / Kürzel (e.g. <c>ASS</c>) — the human handle.</item>
+    /// </list>
+    /// A value that is neither (an absolute path from a legacy/deprecated
+    /// caller) passes through unchanged so existing consumers keep working
+    /// during the watchPath-encapsulation migration.
+    /// </summary>
+    private string? ResolveRequestedWatchPath(string? requested)
+    {
+        if (string.IsNullOrWhiteSpace(requested)) return requested;
+        var trimmed = requested.Trim();
+
+        if (trimmed.StartsWith("PROJ-", StringComparison.OrdinalIgnoreCase))
+        {
+            var byId = _projectRegistry.FindById(trimmed);
+            if (byId is { StorageLocation: { Length: > 0 } storageById })
+            {
+                _logger.LogInformation(
+                    "create-by-project-id projectId={ProjectId} resolvedWatchPath={WatchPath}",
+                    trimmed, storageById);
+                return storageById;
+            }
+
+            _logger.LogWarning("create-by-project-id-unresolved projectId={ProjectId}", trimmed);
+            return requested;
+        }
+
+        // Short code (Kürzel) — only when the token cannot be a filesystem path.
+        // Codes are 2–6 chars of A–Z/0–9, so anything holding a path separator,
+        // drive colon, or dot is treated as a raw path and passed through.
+        if (LooksLikeShortCode(trimmed))
+        {
+            var byCode = _projectRegistry.FindByShortCode(trimmed);
+            if (byCode is { StorageLocation: { Length: > 0 } storageByCode })
+            {
+                _logger.LogInformation(
+                    "create-by-short-code shortCode={ShortCode} resolvedWatchPath={WatchPath}",
+                    trimmed, storageByCode);
+                return storageByCode;
+            }
+            // Not a known code: fall through and treat the value as a raw path.
+        }
+
+        return requested;
+    }
+
+    /// <summary>
+    /// True when <paramref name="value"/> has the shape of a project short code
+    /// (Kürzel): 2–6 chars of A–Z/0–9 and no filesystem-path markers. Used to
+    /// decide whether a create handle should be resolved via the registry
+    /// before falling back to treating it as an absolute watchPath.
+    /// </summary>
+    private static bool LooksLikeShortCode(string value)
+    {
+        if (value.Length is < 2 or > 6) return false;
+        foreach (var ch in value)
+        {
+            var isUpper = ch is >= 'A' and <= 'Z';
+            var isLower = ch is >= 'a' and <= 'z';
+            var isDigit = ch is >= '0' and <= '9';
+            if (!isUpper && !isLower && !isDigit) return false;
+        }
+        return true;
+    }
+
     private string EnsureUniqueJobId(string watchPath, string baseSlug)
     {
         var used = _scanner.ScanAllJobs()
-            .Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
+            .Where(j => WatchPathComparison.PathsEqual(j.WatchPath, watchPath))
             .Select(j => j.Id)
             .ToHashSet(StringComparer.Ordinal);
         if (!used.Contains(baseSlug)) return baseSlug;
@@ -945,7 +1160,8 @@ public class TaskMutationService
                 ? CliTypes.Normalize(dc)
                 : null;
             var model = owner.DefaultModel;
-            var thinkingLevel = CliThinkingLevels.Normalize(cliType, model, owner.DefaultThinkingLevel);
+            model = ModelMetadataRegistry.NormalizeForCli(cliType, model);
+            var thinkingLevel = ModelMetadataRegistry.ResolveThinkingLevel(cliType, model, owner.DefaultThinkingLevel);
 
             if (cliType == null && model == null && thinkingLevel == null) continue;
 

@@ -1,18 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { describe, expect, it } from 'vitest';
+import type { OrchestratorContextSession } from '../../models/orchestrator.model';
 import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.component';
 
-/**
- * F14 unit coverage for the context-chip computed signals and caching
- * state. Exercises the parts that the e2e suite cannot reach without a
- * full host-app stub (host-driven `activeJobId` input + cache reset on
- * project change).
- */
-describe('OrchestratorSideSheetComponent · context chip', () => {
+describe('OrchestratorSideSheetComponent context badge and menu', () => {
   async function makeFixture() {
     await TestBed.configureTestingModule({
       imports: [OrchestratorSideSheetComponent],
@@ -24,49 +19,61 @@ describe('OrchestratorSideSheetComponent · context chip', () => {
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(OrchestratorSideSheetComponent);
+    fixture.componentRef.setInput('projects', ['demo-project']);
+    fixture.componentInstance.activeProject.set('demo-project');
     return fixture;
   }
 
-  it('renders "Context: <project> · Board" when no task is open', async () => {
+  it('counts every distinct global, project and task context', async () => {
     const fixture = await makeFixture();
-    const c = fixture.componentInstance;
-    c.activeProject.set('demo-project');
-    expect(c.contextChipText()).toBe('Context: demo-project · Board');
-    expect(c.contextChipVisible()).toBe(true);
+    const session = (contextKey: string, kind: OrchestratorContextSession['kind']): OrchestratorContextSession => ({
+      contextKey,
+      kind,
+      projectId: kind === 'global' ? null : 'demo-project',
+      taskKey: kind === 'task' ? 'AGT-2087' : null,
+      updatedAt: '2026-07-11T10:00:00Z',
+      model: null,
+      cumulativeInputTokens: 0,
+      cumulativeOutputTokens: 0,
+      cumulativeCacheReadTokens: 0,
+      cumulativeCacheCreationTokens: 0,
+      runtimeStatus: 'idle',
+      queuePosition: 0,
+    });
+
+    fixture.componentInstance.contextSessions.set([
+      session('project:demo-project', 'project'),
+      session('task:demo-project/AGT-2087', 'task'),
+    ]);
+
+    expect(fixture.componentInstance.contextCount()).toBe(3);
   });
 
-  it('renders "Context: <project> · Task \'<title>\'" when a task is in scope', async () => {
+  it('keeps only picker and count badge in the collapsed header', async () => {
     const fixture = await makeFixture();
-    fixture.componentRef.setInput('activeJobId', 'bug-foo');
-    fixture.componentRef.setInput('activeJobTitle', 'Bug: foo broke');
-    const c = fixture.componentInstance;
-    c.activeProject.set('demo-project');
-    expect(c.contextChipText()).toBe(`Context: demo-project · Task 'Bug: foo broke'`);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="orch-context-badge"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="orch-context-count"]')?.textContent?.trim()).toBe('2');
+    expect(root.querySelector('[data-testid="orch-context-menu"]')).toBeNull();
+    expect(root.querySelector('[data-testid="orch-side-sheet-pin"]')).toBeNull();
+    expect(root.querySelector('[data-testid="orch-side-sheet-settings"]')).toBeNull();
+    expect(root.querySelector('[data-testid="orch-side-sheet-refresh"]')).toBeNull();
   });
 
-  it('returns null and hides the chip when no project is active', async () => {
+  it('opens the full context menu and moves header actions into it', async () => {
     const fixture = await makeFixture();
-    const c = fixture.componentInstance;
-    c.activeProject.set(null);
-    expect(c.contextChipText()).toBeNull();
-    expect(c.contextChipVisible()).toBe(false);
-  });
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
 
-  it('dismissContextChip hides the chip for the current picker state', async () => {
-    const fixture = await makeFixture();
-    const c = fixture.componentInstance;
-    c.activeProject.set('demo-project');
-    expect(c.contextChipVisible()).toBe(true);
-    c.dismissContextChip();
-    expect(c.contextChipVisible()).toBe(false);
-  });
+    (root.querySelector('[data-testid="orch-context-badge"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
 
-  it('subtitle tracks the active project (F14 sticky-subtitle bug fix)', async () => {
-    const fixture = await makeFixture();
-    const c = fixture.componentInstance;
-    c.activeProject.set('demo-project');
-    expect(c.subtitleText()).toBe('demo-project · canonical session');
-    c.activeProject.set('other-project');
-    expect(c.subtitleText()).toBe('other-project · canonical session');
+    expect(root.querySelector('[data-testid="orch-context-menu"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="chat-context-list"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="orch-side-sheet-pin"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="orch-side-sheet-settings"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="orch-side-sheet-refresh"]')).not.toBeNull();
   });
 });

@@ -225,7 +225,7 @@ public class PromptEnhancementService
 
         var psi = new ProcessStartInfo
         {
-            FileName = CliExecutionServiceBase.ResolveExecutable(claudePath),
+            FileName = GenericCliExecutionService.ResolveExecutable(claudePath),
             WorkingDirectory = Directory.GetCurrentDirectory(),
             RedirectStandardInput = true,
             RedirectStandardOutput = true,

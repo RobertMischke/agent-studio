@@ -1,0 +1,146 @@
+:host {
+  display: block;
+  padding: 28px 32px;
+  color: var(--studio-fg, #e2e8f0);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.gallery__head {
+  margin-bottom: 22px;
+
+  h1 {
+    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+}
+
+.gallery__sub {
+  margin: 0;
+  max-width: 720px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--studio-fg-dim, #94a3b8);
+
+  code {
+    color: #cbd5e1;
+  }
+}
+
+.gallery__row {
+  display: grid;
+  grid-template-columns: 360px 240px 1fr;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.gallery__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gallery__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.gallery__truth {
+  font-size: 11px;
+  color: var(--studio-fg-dim, #94a3b8);
+  line-height: 1.4;
+}
+
+.gallery__cell-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--studio-fg-dim, #94a3b8);
+  margin-bottom: 7px;
+}
+
+.gallery__none {
+  font-size: 11px;
+  font-style: italic;
+  color: #64748b;
+}
+
+/* A board-card-like surface so the pill reads on the same tinted background it
+   has on the kanban card. */
+.card-surface {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--studio-bg-elevated, #161b26);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+/* Tooltip preview — mirrors what the [cacTooltip] directive shows on hover so
+   the screenshot also captures Attempt N + last-error detail. */
+.tooltip-preview {
+  max-width: 460px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--studio-bg-titlebar, #0f1320);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  font-size: 12px;
+  line-height: 1.5;
+
+  &__title {
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  &__body {
+    color: var(--studio-fg-dim, #cbd5e1);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Pill rules copied VERBATIM from task-card.component.scss (base layout from
+   the shared `.task-card__*-pill` rule + the ASS-1751 run-activity variants)
+   so the harness paints the pill exactly like the board card and detail header.
+   --------------------------------------------------------------------------- */
+.task-card__run-activity-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1, 4px);
+  min-height: var(--studio-card-pill-height, 22px);
+  padding: 0 var(--studio-card-pill-padding-x, 8px);
+  border-radius: 999px;
+  font-size: var(--studio-card-meta-size, 11px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.task-card__run-activity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.task-card__run-activity-pill--active {
+  color: var(--studio-accent-3-strong, #7dd3fc);
+  background: color-mix(in srgb, var(--studio-accent-3, #38bdf8) 14%, var(--studio-bg-elevated, #161b26));
+  border-color: color-mix(in srgb, var(--studio-accent-3, #38bdf8) 34%, transparent);
+}
+
+.task-card__run-activity-pill--failed {
+  color: var(--studio-accent-6-strong, #fca5a5);
+  background: color-mix(in srgb, var(--studio-accent-6, #f87171) 12%, var(--studio-bg-elevated, #161b26));
+  border-color: color-mix(in srgb, var(--studio-accent-6, #f87171) 32%, transparent);
+}
+
+.task-card__run-activity-pill--idle {
+  color: var(--studio-fg-muted, #94a3b8);
+  background: color-mix(in srgb, var(--studio-fg-dim, #64748b) 10%, var(--studio-bg-elevated, #161b26));
+  border-color: color-mix(in srgb, var(--studio-fg-dim, #64748b) 26%, transparent);
+}

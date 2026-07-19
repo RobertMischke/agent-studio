@@ -103,6 +103,7 @@ public sealed class CodeReviewStepService
         OrchestratorTokenUsage? callUsage = null;
         var sw = Stopwatch.StartNew();
         var ok = true;
+        string? executionError = null;
         try
         {
             rawResponse = _thinkingAwareCliRunner is null
@@ -122,6 +123,7 @@ public sealed class CodeReviewStepService
         {
             sw.Stop();
             ok = false;
+            executionError = ex.Message;
             _logger.LogWarning(ex,
                 "code-review-step: CLI invocation failed for {Project}/{JobId}; defaulting to concerns",
                 request.Project, request.JobId);
@@ -174,7 +176,9 @@ public sealed class CodeReviewStepService
         }
 
         var fileNamePrefix = request.Mode == CodeReviewMode.Grade ? "code-review-grade" : "code-review";
-        var fileName = $"{fileNamePrefix}-{startedAt:yyyy-MM-ddTHH-mm-ssZ}.md";
+        // Milliseconds keep rapid operator-triggered retro grades append-only;
+        // a second invocation must never replace the previous report.
+        var fileName = $"{fileNamePrefix}-{startedAt:yyyy-MM-ddTHH-mm-ss-fffZ}.md";
         var filePath = Path.Combine(request.JobFolderPath, fileName);
 
         try
@@ -209,10 +213,22 @@ public sealed class CodeReviewStepService
         string? concernTagId;
         if (request.Mode == CodeReviewMode.Grade)
         {
-            // Authoritative single grade tag: drop any stale code-review:grade-*
-            // a prior run hung so a re-graded card carries exactly one grade.
-            concernTagId = CodeReviewGradeParsing.TagFor(grade!.Value);
-            ConcernTagWriter.ReplaceCodeReviewGradeTag(request.JobFolderPath, concernTagId, _logger);
+            // A transport/runtime failure did not produce an authoritative
+            // grade. Keep the diagnostic report, but do not turn the fallback
+            // C used for rendering into a durable grade tag.
+            concernTagId = executionError is null
+                ? CodeReviewGradeParsing.TagFor(grade!.Value)
+                : null;
+            if (concernTagId is not null)
+            {
+                // Authoritative single grade tag: drop any stale
+                // code-review:grade-* so a re-graded card carries exactly one.
+                ConcernTagWriter.ReplaceCodeReviewGradeTag(request.JobFolderPath, concernTagId, _logger);
+            }
+            else
+            {
+                ConcernTagWriter.ClearCodeReviewGradeTags(request.JobFolderPath, _logger);
+            }
         }
         else
         {
@@ -241,7 +257,8 @@ public sealed class CodeReviewStepService
             ConcernTagId: concernTagId,
             DurationMs: sw.ElapsedMilliseconds,
             StartedAt: startedAt,
-            Grade: grade);
+            Grade: grade,
+            ExecutionError: executionError);
     }
 
     /// <summary>Tag id for the given verdict, or null when no tag should be hung.</summary>
@@ -264,6 +281,12 @@ public sealed class CodeReviewStepService
             ["commit"] = request.Commit ?? "(HEAD)",
             ["diff"] = request.Diff,
             ["model"] = request.Model,
+            ["results_inventory"] = string.IsNullOrWhiteSpace(request.ResultsInventory)
+                ? "No results/ inventory available."
+                : request.ResultsInventory,
+            ["card_mode"] = string.IsNullOrWhiteSpace(request.CardMode)
+                ? AgentStudio.Runner.ReviewCardMode.Describe(null)
+                : request.CardMode,
         };
         var template = request.Mode == CodeReviewMode.Grade ? GradePromptTemplate : PromptTemplate;
         try
@@ -281,14 +304,24 @@ public sealed class CodeReviewStepService
 
     private static string BuildInlineFallbackPrompt(CodeReviewStepRequest request)
     {
+        var cardMode = string.IsNullOrWhiteSpace(request.CardMode)
+            ? AgentStudio.Runner.ReviewCardMode.Describe(null)
+            : request.CardMode;
+        var resultsInventory = string.IsNullOrWhiteSpace(request.ResultsInventory)
+            ? "No results/ inventory available."
+            : request.ResultsInventory;
+
         if (request.Mode == CodeReviewMode.Grade)
         {
             return
                 $"# Code review — quality grade\n\n" +
                 $"Grade the change set below for **{request.Project}/{request.JobId}** ({request.JobTitle}).\n" +
                 $"Commit: `{request.Commit ?? "(HEAD)"}`. Model: `{request.Model}`.\n\n" +
+                $"{cardMode}\n\n" +
                 $"## Task body\n\n```\n{request.TaskBody}\n```\n\n" +
-                $"## Diff\n\n```\n{request.Diff}\n```\n\n" +
+                $"## Diff (task branch vs base)\n\n```\n{request.Diff}\n```\n\n" +
+                $"## results/ folder inventory\n\n```\n{resultsInventory}\n```\n\n" +
+                "Treat deliverables as missing only when the diff has no branch changes, the results/ inventory is empty, and no external deliverable is documented.\n\n" +
                 "Assign a single quality grade using this rubric:\n" +
                 "- **A** — solves the goal clearly, complete, with tests / evidence.\n" +
                 "- **B** — solid, small gaps.\n" +
@@ -302,8 +335,11 @@ public sealed class CodeReviewStepService
             $"# Code review step\n\n" +
             $"Review the diff below for **{request.Project}/{request.JobId}** ({request.JobTitle}).\n" +
             $"Commit: `{request.Commit ?? "(HEAD)"}`. Model: `{request.Model}`.\n\n" +
+            $"{cardMode}\n\n" +
             $"## Task body\n\n```\n{request.TaskBody}\n```\n\n" +
-            $"## Diff\n\n```\n{request.Diff}\n```\n\n" +
+            $"## Diff (task branch vs base)\n\n```\n{request.Diff}\n```\n\n" +
+            $"## results/ folder inventory\n\n```\n{resultsInventory}\n```\n\n" +
+            "Treat deliverables as missing only when the diff has no branch changes, the results/ inventory is empty, and no external deliverable is documented. " +
             "Block clear task-goal misses, redundant reimplementations of already-present behavior, " +
             "regressions, broken types, and half-finished/stubbed work visible in the diff. " +
             "Use concerns only for shippable issues a human can review without another agent run.\n\n" +
@@ -470,6 +506,20 @@ public sealed record CodeReviewStepRequest(
     /// caller keeps its current behaviour unchanged.
     /// </summary>
     public CodeReviewMode Mode { get; init; } = CodeReviewMode.Verdict;
+
+    /// <summary>
+    /// Inventory of the job's <c>results/</c> folder (file list + short excerpts).
+    /// Completes the evidence source so the grade / verdict never reads an empty
+    /// diff as "deliverables missing" when the deliverable is a results/ artefact
+    /// (AGT-2022). Defaults to empty for existing callers.
+    /// </summary>
+    public string ResultsInventory { get; init; } = string.Empty;
+
+    /// <summary>
+    /// One-line framing of the card's execution mode so an empty code diff on a
+    /// read-only planning / research card is read as legitimate.
+    /// </summary>
+    public string CardMode { get; init; } = string.Empty;
 }
 
 /// <summary>Per-call report returned by <see cref="CodeReviewStepService.RunAsync"/>.</summary>
@@ -485,4 +535,5 @@ public sealed record CodeReviewStepReport(
     string? ConcernTagId,
     long DurationMs,
     DateTime StartedAt,
-    CodeReviewGrade? Grade = null);
+    CodeReviewGrade? Grade = null,
+    string? ExecutionError = null);

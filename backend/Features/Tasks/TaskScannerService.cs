@@ -24,6 +24,7 @@ public class TaskScannerService : ITaskScanner
     private readonly ILogger<TaskScannerService> _logger;
     private readonly SummaryGenerationService _summaryService;
     private readonly FileGenerationIndex? _fileGenerationIndex;
+    private readonly AgentStudio.Registry.ProjectRegistry? _projectRegistry;
 
     /// <summary>
     /// Optional in-memory snapshot cache. Wired by DI through
@@ -47,16 +48,25 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     private readonly ConcurrentDictionary<string, byte> _warnedMissingWatchPaths = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Invalid phase metadata is persisted until a mutation repairs the task.
+    /// A full index refresh may inspect that same task many times per second,
+    /// so warn once per task/state/value tuple instead of once per scan.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _warnedInvalidPhases = new(StringComparer.OrdinalIgnoreCase);
+
     public TaskScannerService(
         IConfiguration config,
         ILogger<TaskScannerService> logger,
         SummaryGenerationService summaryService,
-        FileGenerationIndex? fileGenerationIndex = null)
+        FileGenerationIndex? fileGenerationIndex = null,
+        AgentStudio.Registry.ProjectRegistry? projectRegistry = null)
     {
         _config = config;
         _logger = logger;
         _summaryService = summaryService;
         _fileGenerationIndex = fileGenerationIndex;
+        _projectRegistry = projectRegistry;
     }
 
     /// <summary>
@@ -91,8 +101,49 @@ public class TaskScannerService : ITaskScanner
         {
             resolved.Add(ResolveWatchPath(entry));
         }
+
+        // WatchPaths is bootstrap compatibility only. API-created projects are
+        // registry records and must be readable without a settings edit or restart.
+        if (_projectRegistry != null)
+        {
+            var registryProjects = _projectRegistry.List().Where(p => !p.Archived).ToList();
+            for (var i = 0; i < resolved.Count; i++)
+            {
+                var project = registryProjects.FirstOrDefault(p => string.Equals(
+                    NormalizeWatchPath(p.StorageLocation), NormalizeWatchPath(resolved[i].Path),
+                    StringComparison.OrdinalIgnoreCase));
+                if (project != null)
+                {
+                    resolved[i] = resolved[i] with
+                    {
+                        Name = project.DisplayName,
+                        RootPath = project.RootPath ?? resolved[i].RootPath,
+                        RepositoryPath = project.RepositoryPath ?? resolved[i].RepositoryPath,
+                    };
+                }
+            }
+
+            foreach (var project in registryProjects)
+            {
+                if (resolved.Any(entry => string.Equals(
+                        NormalizeWatchPath(entry.Path), NormalizeWatchPath(project.StorageLocation),
+                        StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                resolved.Add(new WatchPathEntry
+                {
+                    Name = project.DisplayName,
+                    Path = project.StorageLocation,
+                    RootPath = project.RootPath ?? "",
+                    RepositoryPath = project.RepositoryPath ?? "",
+                });
+            }
+        }
         return resolved;
     }
+
+    private static string NormalizeWatchPath(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? "" : path.Replace('\\', '/').TrimEnd('/');
 
     /// <summary>
     /// Resolves a watch path entry's effective task folder. Resolution order:
@@ -189,6 +240,32 @@ public class TaskScannerService : ITaskScanner
         return ScanAllJobsRaw()
             .Where(j => string.Equals(j.State, TaskStates.Archive, StringComparison.Ordinal))
             .ToList();
+    }
+
+    /// <summary>
+    /// AGT-2029 — the live board snapshot plus the terminal <c>7-archive</c>
+    /// lane, in one list. <see cref="ScanAllJobs"/> deliberately omits archive
+    /// (hundreds of terminal cards would bloat every poll), but a waits-on
+    /// dependency is fulfilled once its target reaches <c>6-completed</c> OR
+    /// <c>7-archive</c>, so cross-project fulfillment resolution must be able to
+    /// see archived targets. Cache-backed: O(1) read of the two partitions the
+    /// index cache already built; without a cache a single raw walk already
+    /// includes archive, so this avoids the double disk walk that
+    /// <c>ScanAllJobs().Concat(ScanArchivedJobs())</c> would cost in tests.
+    /// </summary>
+    public List<TaskInfo> ScanAllJobsWithArchive()
+    {
+        if (_indexCache != null)
+        {
+            var (live, archived) = _indexCache.GetSnapshotPartitions();
+            var combined = new List<TaskInfo>(live.Count + archived.Count);
+            combined.AddRange(live);
+            combined.AddRange(archived);
+            return combined;
+        }
+        // No cache (tests / recovery): the raw disk walk already slim-hydrates
+        // the 7-archive lane, so it is archive-inclusive by construction.
+        return ScanAllJobsRaw();
     }
 
     /// <summary>
@@ -369,7 +446,13 @@ public class TaskScannerService : ITaskScanner
                     ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), TaskJsonFile.ReadOpts)
                     : null,
                 Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null,
+                // Provenance was added with model qualification. Missing means
+                // legacy and is conservatively treated as an explicit pin.
+                ModelExplicit = !raw.TryGetProperty("modelExplicit", out var modelExplicit)
+                    || modelExplicit.ValueKind != JsonValueKind.False,
                 ThinkingLevel = raw.TryGetProperty("thinkingLevel", out var tl) ? tl.GetString() : null,
+                ThinkingLevelExplicit = !raw.TryGetProperty("thinkingLevelExplicit", out var thinkingExplicit)
+                    || thinkingExplicit.ValueKind != JsonValueKind.False,
                 CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
                 Kind = TaskKinds.Normalize(raw.TryGetProperty("kind", out var kd) ? kd.GetString() : null),
                 EpicId = raw.TryGetProperty("epicId", out var ep) && !string.IsNullOrWhiteSpace(ep.GetString()) ? ep.GetString() : null,
@@ -387,10 +470,17 @@ public class TaskScannerService : ITaskScanner
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
                 Phase = ReadPhase(raw, resolvedState, jobDir),
+                PhaseEnteredAt = raw.TryGetProperty("phaseEnteredAt", out var phaseEntered)
+                    && phaseEntered.TryGetDateTime(out var phaseEnteredAt)
+                        ? phaseEnteredAt.ToUniversalTime()
+                        : null,
+                SteerPendingSince = ReadSteerPendingSince(jobDir, resolvedState),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
-                Provenance = ReadProvenance(raw)
+                RelatedWikiPages = ReadRelatedWikiPages(raw, entry),
+                Provenance = ReadProvenance(raw),
+                ExternalCompletion = ReadExternalCompletion(raw)
             };
         }
         catch (Exception ex)
@@ -409,10 +499,19 @@ public class TaskScannerService : ITaskScanner
 
     public TaskInfo? FindJob(string jobId, string? watchPath = null)
     {
-        var matches = ScanAllJobs().Where(j => j.Id == jobId);
+        // Public task routes accept both the physical job id/slug and the
+        // stable project key shown on cards. Remote runners receive that key
+        // from the claim endpoint, so every subsequent prompt/log/completion
+        // lookup must resolve the same identity after a lane move.
+        var matches = ScanAllJobs().Where(j => MatchesTaskIdentity(j, jobId));
         if (!string.IsNullOrWhiteSpace(watchPath))
         {
-            matches = matches.Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase));
+            // Path-aware, OS-correct project match. A raw OrdinalIgnoreCase
+            // string compare 404'd a card whose stored WatchPath spelled the
+            // same directory differently (separator/trailing-slash) and, on
+            // Linux, matched the WRONG project when two paths differed only in
+            // case. See WatchPathComparison (AGT-1940).
+            matches = matches.Where(j => WatchPathComparison.PathsEqual(j.WatchPath, watchPath));
         }
 
         var resolved = matches.ToList();
@@ -450,7 +549,7 @@ public class TaskScannerService : ITaskScanner
         foreach (var entry in GetWatchPaths())
         {
             if (!string.IsNullOrWhiteSpace(watchPath)
-                && !string.Equals(entry.Path, watchPath, StringComparison.OrdinalIgnoreCase))
+                && !WatchPathComparison.PathsEqual(entry.Path, watchPath))
             {
                 continue;
             }
@@ -461,12 +560,17 @@ public class TaskScannerService : ITaskScanner
                 var info = ScanJobFolder(jobDir, entry, TaskStates.Archive);
                 if (info == null) continue;
                 if (!string.Equals(info.State, TaskStates.Archive, StringComparison.Ordinal)) continue;
-                if (string.Equals(info.Id, jobId, StringComparison.Ordinal)) matches.Add(info);
+                if (MatchesTaskIdentity(info, jobId)) matches.Add(info);
             }
         }
 
         return matches;
     }
+
+    private static bool MatchesTaskIdentity(TaskInfo info, string identity)
+        => string.Equals(info.Id, identity, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(info.TaskKey, identity, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(info.Key, identity, StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<string> EnumerateArchiveCandidateDirs(string watchPath)
     {
@@ -512,7 +616,7 @@ public class TaskScannerService : ITaskScanner
 
     /// <summary>
     /// Builds the pre-filled coding-task draft for "promote a finished
-    /// planning task" (see docs/research/planning-research-task-kinds-2026-05.md).
+    /// planning task" (see docs/concepts/planning-research-task-kinds-2026-05.md).
     /// Returns null when the job is not found. Title + prompt body come from
     /// the planning report (<c>status.md</c>); every image under the job's
     /// <c>results/</c> and <c>attachments/</c> folders is listed (deduped by
@@ -639,7 +743,7 @@ public class TaskScannerService : ITaskScanner
     /// field stays null when absent on disk; the frontend's lane projection
     /// then falls back to <see cref="LifecyclePhases.DefaultFor"/>. This is
     /// the compatibility contract from
-    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>: existing
+    /// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>: existing
     /// job folders that predate the field continue to render in the default
     /// lane of their state without a one-shot migration that rewrites every
     /// <c>task.json</c>. Unknown phase strings, or phase strings that do not
@@ -654,12 +758,16 @@ public class TaskScannerService : ITaskScanner
         if (string.IsNullOrWhiteSpace(value)) return null;
         if (!LifecyclePhases.All.Contains(value))
         {
-            _logger.LogWarning("Unknown phase '{Phase}' in {Dir}; ignoring", value, jobDir);
+            var warningKey = $"unknown\n{jobDir}\n{state}\n{value}";
+            if (_warnedInvalidPhases.TryAdd(warningKey, 0))
+                _logger.LogWarning("Unknown phase '{Phase}' in {Dir}; ignoring", value, jobDir);
             return null;
         }
         if (!LifecyclePhases.IsAllowed(state, value))
         {
-            _logger.LogWarning("Phase '{Phase}' is not allowed for state '{State}' in {Dir}; ignoring", value, state, jobDir);
+            var warningKey = $"state\n{jobDir}\n{state}\n{value}";
+            if (_warnedInvalidPhases.TryAdd(warningKey, 0))
+                _logger.LogWarning("Phase '{Phase}' is not allowed for state '{State}' in {Dir}; ignoring", value, state, jobDir);
             return null;
         }
         return value;
@@ -731,6 +839,30 @@ public class TaskScannerService : ITaskScanner
         }
     }
 
+    private static List<RelatedWikiPage> ReadRelatedWikiPages(JsonElement raw, WatchPathEntry entry)
+    {
+        if (!raw.TryGetProperty("relatedWikiPages", out var refs) || refs.ValueKind != JsonValueKind.Array)
+            return [];
+        try
+        {
+            var pages = JsonSerializer.Deserialize<List<RelatedWikiPage>>(refs.GetRawText(), TaskJsonFile.ReadOpts) ?? [];
+            var root = string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+            return pages
+                .Where(p => !string.IsNullOrWhiteSpace(p.RelPath))
+                .GroupBy(p => p.RelPath, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First() with
+                {
+                    Exists = !string.IsNullOrWhiteSpace(root)
+                        && File.Exists(Path.Combine(root!, g.First().RelPath.Replace('/', Path.DirectorySeparatorChar)))
+                })
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
     /// <summary>
     /// Reads the append-only <c>provenance</c> object (ASS-1724) if present.
     /// Returns null on legacy <c>task.json</c> files that predate the field.
@@ -742,6 +874,26 @@ public class TaskScannerService : ITaskScanner
         try
         {
             return JsonSerializer.Deserialize<TaskProvenance>(prov.GetRawText(), TaskJsonFile.ReadOpts);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the <c>externalCompletion</c> object written by the out-of-band
+    /// completion endpoint. Returns null on tasks finished through the normal
+    /// runner/review path (the common case). See
+    /// <see cref="ExternalCompletionInfo"/>.
+    /// </summary>
+    private static ExternalCompletionInfo? ReadExternalCompletion(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("externalCompletion", out var ext) || ext.ValueKind != JsonValueKind.Object)
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<ExternalCompletionInfo>(ext.GetRawText(), TaskJsonFile.ReadOpts);
         }
         catch
         {
@@ -766,6 +918,33 @@ public class TaskScannerService : ITaskScanner
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Run-Liveness Slice B: the UTC time a 3-progress card's steer-pending wait
+    /// started, read from the durable <c>steer-pending.json</c> marker. Only
+    /// 3-progress cards carry the wait, so the file probe is skipped otherwise.
+    /// The wait-start is read directly (not through the runner marker type) to
+    /// keep the scanner free of a Runner-layer dependency.
+    /// </summary>
+    private static DateTime? ReadSteerPendingSince(string jobFolder, string state)
+    {
+        if (!string.Equals(state, TaskStates.Progress, StringComparison.OrdinalIgnoreCase)) return null;
+        var path = Path.Combine(jobFolder, "steer-pending.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty("waitStartedAt", out var el)
+                && el.ValueKind == JsonValueKind.String
+                && el.TryGetDateTime(out var dt))
+                return dt.ToUniversalTime();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "TaskScannerService: torn / unreadable steer-pending.json - no wait pill");
+        }
+        return null;
     }
 
     private const int OutcomeIssueTailBytes = 16 * 1024;
@@ -1142,20 +1321,29 @@ public class TaskScannerService : ITaskScanner
         if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
             return null;
 
-        // Editable / always-known files plus any *.md file the agents / operators
-        // drop in the job root (surfaced by the Files tab).
+        // Editable / always-known files plus any supported document the agents
+        // or operators drop in the job root (surfaced by the Files tab).
+        // Structured aspect verdicts also ship as `aspect-*.json`; those are
+        // served too so the Files tab can fetch and render them structurally.
+        // HTML is interactive only inside the frontend's allow-scripts sandbox;
+        // allow-same-origin stays deliberately omitted there.
         var allowed = new[] { "prompt.md", "status.md", "task.json" };
         var isMarkdown = fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
-        if (!allowed.Contains(fileName) && !isMarkdown) return null;
+        var isHtml = fileName.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".htm", StringComparison.OrdinalIgnoreCase);
+        var isAspectJson = fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase)
+            && fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        if (!allowed.Contains(fileName) && !isMarkdown && !isHtml && !isAspectJson) return null;
 
         return ReadFileOrNull(Path.Combine(info.FolderPath, fileName));
     }
 
     /// <summary>
-    /// Lists every <c>.md</c> file directly in the job root, sorted for the
+    /// Lists every supported document directly in the job root, sorted for the
     /// Files tab (prompt first, then aspect-* alphabetical, then *_NOTE / *_NOTES
-    /// alphabetical, then everything else alphabetical). <c>status.md</c> is
-    /// excluded because it has its own Protocol tab. Subfolders
+    /// alphabetical, then everything else). Supported documents are Markdown,
+    /// HTML, and structured aspect JSON. <c>status.md</c> is excluded because it
+    /// has its own Protocol tab. Subfolders
     /// (<c>logs/</c>, <c>results/</c>, <c>attachments/</c>) are out of scope.
     /// </summary>
     public TaskArtifactsResponse? ListArtifacts(string jobId, string? watchPath = null)
@@ -1169,25 +1357,44 @@ public class TaskScannerService : ITaskScanner
         var generated = _fileGenerationIndex?.ReadForJob(dir)
             ?? new Dictionary<string, FileGenerationMeta>(StringComparer.OrdinalIgnoreCase);
         var artifacts = new List<TaskArtifact>();
+
+        // Structured aspect JSON is the preferred (source-of-truth) artefact:
+        // list it, and remember its stem so the markdown twin below is
+        // suppressed — one card per aspect, not two. Legacy runs that only
+        // wrote the markdown still surface it (their stem is never recorded).
+        var suppressedMdTwins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in Directory.EnumerateFiles(dir, "aspect-*.json", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(path);
+            var artifact = BuildArtifact(path, name, generated);
+            if (artifact is null) continue;
+            artifacts.Add(artifact);
+            suppressedMdTwins.Add(Path.GetFileNameWithoutExtension(name) + ".md"); // aspect-x.json -> aspect-x.md
+        }
+
         foreach (var path in Directory.EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly))
         {
             var name = Path.GetFileName(path);
             if (string.Equals(name, "status.md", StringComparison.OrdinalIgnoreCase)) continue;
+            if (suppressedMdTwins.Contains(name)) continue;
 
-            var (kind, aspectName) = ClassifyArtifact(name);
-            FileInfo fi;
-            try { fi = new FileInfo(path); }
-            catch { continue; }
+            var artifact = BuildArtifact(path, name, generated);
+            if (artifact is null) continue;
+            artifacts.Add(artifact);
+        }
 
-            artifacts.Add(new TaskArtifact
-            {
-                Name = name,
-                SizeBytes = fi.Length,
-                Mtime = fi.LastWriteTimeUtc,
-                Kind = kind,
-                AspectName = aspectName,
-                Generation = generated.GetValueOrDefault(name),
-            });
+        // Self-contained HTML artifacts use the same Files-tab card contract as
+        // Markdown. The frontend renders them with scripts enabled in an opaque
+        // origin, so they can be interactive without Studio DOM or state access.
+        foreach (var path in Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(path);
+            if (!name.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+                && !name.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var artifact = BuildArtifact(path, name, generated);
+            if (artifact is null) continue;
+            artifacts.Add(artifact);
         }
 
         artifacts.Sort(CompareArtifactsForFilesTab);
@@ -1195,16 +1402,44 @@ public class TaskScannerService : ITaskScanner
         return new TaskArtifactsResponse { JobId = jobId, Files = artifacts };
     }
 
+    private static TaskArtifact? BuildArtifact(
+        string path, string name, IReadOnlyDictionary<string, FileGenerationMeta> generated)
+    {
+        var (kind, aspectName) = ClassifyArtifact(name);
+        FileInfo fi;
+        try { fi = new FileInfo(path); }
+        catch { return null; }
+
+        return new TaskArtifact
+        {
+            Name = name,
+            SizeBytes = fi.Length,
+            Mtime = fi.LastWriteTimeUtc,
+            Kind = kind,
+            AspectName = aspectName,
+            Generation = generated.GetValueOrDefault(name),
+        };
+    }
+
     private static (TaskArtifactKind Kind, string? AspectName) ClassifyArtifact(string fileName)
     {
         if (string.Equals(fileName, "prompt.md", StringComparison.OrdinalIgnoreCase))
             return (TaskArtifactKind.Prompt, null);
 
-        if (fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase) &&
-            fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        // Aspect verdicts ship as a structured `.json` source of truth plus a
+        // human-readable `.md` twin; both classify as Aspect so the Files tab
+        // renders either shape (structured card for JSON, markdown for legacy).
+        if (fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase))
         {
-            var aspect = fileName.Substring("aspect-".Length, fileName.Length - "aspect-".Length - ".md".Length);
-            return (TaskArtifactKind.Aspect, aspect);
+            foreach (var ext in new[] { ".json", ".md" })
+            {
+                if (fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                {
+                    var aspect = fileName.Substring(
+                        "aspect-".Length, fileName.Length - "aspect-".Length - ext.Length);
+                    return (TaskArtifactKind.Aspect, aspect);
+                }
+            }
         }
 
         if (fileName.StartsWith("code-review-", StringComparison.OrdinalIgnoreCase) &&
@@ -1250,7 +1485,7 @@ public class TaskScannerService : ITaskScanner
     /// Read-only counterpart to <see cref="ResolveAttachment"/> for the
     /// <c>results/</c> folder where agents drop screenshots they want to keep
     /// in the protocol. Same path-traversal guards, same image content-type
-    /// mapping. See <c>docs/protocol-style.md</c> for the folder contract.
+    /// mapping. See <c>docs/system/contracts/protocol-style.md</c> for the folder contract.
     /// </summary>
     public (string? Path, string? ContentType) ResolveResult(string jobId, string fileName, string? watchPath = null)
         => ResolveJobBinaryFile(jobId, "results", fileName, watchPath);

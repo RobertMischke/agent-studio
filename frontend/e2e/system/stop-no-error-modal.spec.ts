@@ -66,7 +66,7 @@ test.describe('Stop -> stopped (no error modal)', () => {
       // Trigger the explicit-pause path through the API (same call shape
       // the toolbar Pause button issues). reason=user is the default.
       const stopRes = await page.request.post(
-        `${BACKEND}/api/jobs/${encodeURIComponent(created.id)}/stop?watchPath=${encodeURIComponent(watchPath)}`
+        `${BACKEND}/api/tasks/${encodeURIComponent(created.id)}/stop?watchPath=${encodeURIComponent(watchPath)}`
       );
       expect(stopRes.status()).toBe(200);
 
@@ -101,7 +101,7 @@ test.describe('Stop -> stopped (no error modal)', () => {
       });
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       ).catch(() => { /* best-effort cleanup */ });
     }
@@ -119,7 +119,7 @@ test.describe('Stop -> stopped (no error modal)', () => {
     // no live process). Any 4xx other than 404, or a 5xx, would mean the
     // reason parser threw - that's the real regression signal here.
     const fake = `e2e-nonexistent-${Date.now()}`;
-    const url = `/api/jobs/${encodeURIComponent(fake)}/stop?watchPath=${encodeURIComponent(watchPaths[0].path)}&reason=followup`;
+    const url = `/api/tasks/${encodeURIComponent(fake)}/stop?watchPath=${encodeURIComponent(watchPaths[0].path)}&reason=followup`;
     const res = await fetch(`${BACKEND}${url}`, { method: 'POST' });
     expect([200, 404]).toContain(res.status);
 

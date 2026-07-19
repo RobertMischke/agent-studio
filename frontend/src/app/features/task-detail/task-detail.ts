@@ -29,10 +29,12 @@ import type { CliModelInfo } from '../../features/cli';
 import { TaskService } from '../../services/task.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../services/error-dialog.service';
+import { ClientService } from '../../services/client.service';
 import { NowTickService } from '../../services/now-tick.service';
 import { LayoutPanesService } from './services/layout-panes.service';
 import { TaskArtifactsService } from './services/task-artifacts.service';
 import { LanePagerService } from './state/lane-pager.service';
+import { TaskSelectionService } from './state/task-selection.service';
 import { ClaudeSessionPollService } from '../polling/services/claude-session-poll.service';
 import { SessionEventsPollService } from '../polling/services/session-events-poll.service';
 import { RunTimelinePollService } from '../polling/services/run-timeline-poll.service';
@@ -51,8 +53,8 @@ import { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-roll
 import { EpicMembershipBannerComponent } from './components/epic-membership-banner/epic-membership-banner.component';
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
 import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
+import { EscalationSummaryComponent } from './components/escalation-summary/escalation-summary.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
-import { CliConfigCardComponent } from './components/cli-config-card/cli-config-card.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
 import { UndoController } from '../../services/undo.service';
@@ -62,7 +64,7 @@ import {
   gitToggleTooltip, isCliErrorMessage, rateLimitTooltip, stateLabel,
 } from './services/task-detail-formatters';
 
-import { TooltipDirective } from '../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 @Component({
   selector: 'app-task-detail, app-job-detail',
   standalone: true,
@@ -75,8 +77,8 @@ import { TooltipDirective } from '../../components/tooltip';
     EpicMembershipBannerComponent,
     LogOverlayComponent,
     ProtocolPaneComponent,
+    EscalationSummaryComponent,
     DetailHeaderComponent,
-    CliConfigCardComponent,
     PaneToggleBarComponent,
     TooltipDirective,
   ],
@@ -114,9 +116,13 @@ export class TaskDetailComponent implements OnDestroy {
   private jobService = inject(TaskService);
   private catalogStore = inject(CliCatalogStore);
   private errorDialog = inject(ErrorDialogService);
+  private clientService = inject(ClientService);
   private undo = inject(UndoController);
 
   readonly detail = input.required<TaskDetail>();
+  readonly defaultThinkingLevel = computed(() =>
+    this.clientService.resolve(this.detail().info.ownerClientId).defaultThinkingLevel ?? null
+  );
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /** Peers in the same on-disk lane as the current job, in kanban order. */
   readonly lanePeers = input<TaskInfo[]>([]);
@@ -176,6 +182,13 @@ export class TaskDetailComponent implements OnDestroy {
 
   /** Lane-pager snapshot state for the header (read-only facades). */
   private readonly lanePager = inject(LanePagerService);
+  private readonly jobSelection = inject(TaskSelectionService);
+  /**
+   * True while the selection is fetching the next/previous task without a
+   * warmed prefetch to paint instantly. Drives the header's small loading
+   * indicator so pager/cursor steps over not-yet-cached tasks show feedback.
+   */
+  readonly detailLoading = this.jobSelection.detailLoading;
   /**
    * Pager position for the current job. Returns the 1-based index when
    * the job is still part of the snapshot, or 0 when the job has left
@@ -209,6 +222,20 @@ export class TaskDetailComponent implements OnDestroy {
   readonly paneWeights = this.layout.paneWeights;
   readonly maximizedPane = this.layout.maximizedPane;
   readonly paneSplitterDragging = this.layout.paneSplitterDragging;
+  /**
+   * True when the open card is an escalation the operator must decide on, gating
+   * the prominent escalation summary panel. Mirrors the board's human-decision
+   * semantics (`buildHumanReviewBadge`): a card in the dedicated `5e-escalated`
+   * lane always qualifies, and an escalate-verdict card *parked in* 5-human-review
+   * qualifies too (the AGT-1994 case, where everything was merged but the
+   * escalation still blocked the delivery). Auto-review escalate verdicts are
+   * mid-decision and excluded until the card reaches a human-decision lane.
+   */
+  readonly isEscalated = computed(() => {
+    const info = this.detail().info;
+    if (info.state === TaskState.Escalated) return true;
+    return info.state === TaskState.HumanReview && info.orchestratorVerdict === 'escalate';
+  });
   readonly gitCommitCount = computed(() => gitCommitCount(this.detail().info));
   readonly gitToggleTooltip = computed(() => gitToggleTooltip(this.detail().info));
   // Live Claude session telemetry — owned by ClaudeSessionPollService
@@ -238,6 +265,17 @@ export class TaskDetailComponent implements OnDestroy {
   readonly commitMessage = this.git.commitMessage;
   readonly committing = this.git.committing;
   readonly generatingMsg = this.git.generatingMsg;
+  /** Live-derived landed position of the task's work; null while unknown/loading. */
+  readonly landedState = computed(() => this.git.provenance()?.landedState ?? null);
+  /**
+   * True while the graph-derived git provenance for the open job has not settled
+   * yet. Gates the detail-header's git-dependent acceptance primary so it cannot
+   * fire (or show a guessed "Merge into Develop" label) before the branch/merge
+   * truth is known (AGT-2006). Flips to `false` atomically with `landedState`
+   * resolving, so the button switches straight to its true label without a
+   * wrong -> right flicker.
+   */
+  readonly gitInfoLoading = computed(() => !this.git.provenanceLoaded());
   readonly commitActionsAvailable = computed(() => {
     const status = this.git.status();
     return this.git.viewMode() === 'worktree'
@@ -265,7 +303,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly thinkingLevelDraft = signal<string | null>(null);
   readonly availableModels = signal<CliModelInfo[]>([]);
   readonly cliTypes = CLI_TYPES;
-  readonly cliTypeDraft = signal<CliType>('copilot');
+  readonly cliTypeDraft = signal<CliType>('claude');
 
   modelMultiplier(id: string | null | undefined): number | null {
     if (!id) return null;
@@ -332,7 +370,7 @@ export class TaskDetailComponent implements OnDestroy {
   constructor() {
     // Load the initial catalog for whatever CLI the current job uses; the effect below
     // will re-trigger this when the user switches CLIs.
-    this.loadModelCatalog('copilot');
+    this.loadModelCatalog('claude');
     // Register the detail view as the bottom of the modal stack while it is
     // mounted. Any modal opened on top of it (Add Task, error dialog, verbose
     // debug, confirm-dialog) registers later and therefore wins Escape first.
@@ -437,7 +475,7 @@ export class TaskDetailComponent implements OnDestroy {
       this.modelDraft.set(def?.id ?? '');
     }
     this.thinkingLevelDraft.set(d.info.thinkingLevel ?? null);
-    const nextCliType = (d.info.cliType ?? 'copilot') as CliType;
+    const nextCliType = (d.info.cliType ?? 'claude') as CliType;
     if (nextCliType !== this.cliTypeDraft()) {
       this.cliTypeDraft.set(nextCliType);
       this.loadModelCatalog(nextCliType);
@@ -448,17 +486,12 @@ export class TaskDetailComponent implements OnDestroy {
       // refreshes for the same job (e.g. execution status changes) must
       // preserve the live CLI output and view state.
       this.showLogOverlay.set(false);
-      // Default tab:
-      //  • In-progress jobs always start on Activity — the live CLI output is
-      //    what the user wants to see; any existing protocol from a prior run
-      //    is stale until the current run finishes.
-      //  • Otherwise: Protocol if a summary exists, else Activity.
-      // The auto-switch effect below promotes Activity → Protocol once
-      // Haiku finishes, unless the user has manually picked a tab.
-      const isInProgress = d.info.state === TaskState.Progress;
-      this.activeInspectorTab.set(
-        isInProgress ? 'activity' : d.statusMarkdown ? 'protocol' : 'activity',
-      );
+      // Live/fresh work starts on Activity. Review/escalation starts on Result
+      // even without status.md so verdict-less CLI activity can be summarized;
+      // an existing summary keeps Result primary in every settled lane.
+      const opensOnResult = d.info.state !== TaskState.Progress &&
+        (!!d.statusMarkdown || d.info.state === TaskState.HumanReview || d.info.state === TaskState.Escalated);
+      this.activeInspectorTab.set(opensOnResult ? 'protocol' : 'activity');
       this.userTouchedInspectorTab = false;
       this.showCliConfig.set(false);
       this.cliTestResult.set(null);
@@ -1286,7 +1319,7 @@ export class TaskDetailComponent implements OnDestroy {
       .subscribe({
         next: () => {
           if (fileName === 'prompt.md') this.editingPrompt.set(false);
-          this.artifactsService.reload(this.detail()?.info ?? null);
+          this.artifactsService.refresh();
           this.fileSaved.emit();
         },
         error: (err) => this.showError(err),
@@ -1408,7 +1441,8 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   openCliConfig(): void {
-    if (this.cliTypeDraft() !== 'copilot') return;
+    // Copilot removed: no CLI exposes the inline path/token config card.
+    return;
     this.showCliConfig.set(true);
     this.cliTestResult.set(null);
     this.jobService.getCliSettings().subscribe({
@@ -1494,6 +1528,8 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   private canOpenCliConfigForCurrentJob(message: string | null | undefined): boolean {
-    return this.cliTypeDraft() === 'copilot' && isCliErrorMessage(message);
+    // Copilot removed: no CLI exposes the inline config card.
+    void message;
+    return false;
   }
 }

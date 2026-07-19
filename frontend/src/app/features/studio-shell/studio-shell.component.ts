@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   HostListener,
   ViewEncapsulation,
   computed,
@@ -11,36 +10,42 @@ import {
   output,
   signal,
   untracked,
-  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry } from '../../models/task.model';
+import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
+import { StudioSidebarHeaderComponent } from '../../components/studio-sidebar-header/studio-sidebar-header.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { StudioEmptyStateComponent } from './components/studio-empty-state/studio-empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
 import { CountBadgeComponent } from '../../components/count-badge/count-badge.component';
 import { ListRowComponent } from '../../components/list-row/list-row.component';
-import { SegmentedControlComponent, SegmentedOption } from '../../components/segmented-control/segmented-control.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
 import { TaskSelectionService } from '../task-detail';
 import { ProjectDetailComponent } from '../project-detail';
-import { UiPreferencesService } from '../shell';
-import { BoardFiltersService, BacklogTriageService, flattenGrouped } from '../board';
-import { UpdateClientService } from '../../services/update.service';
+import {
+  PROJECT_RAIL_ITEMS,
+  DEFAULT_PROJECT_RAIL_KEY,
+  isProjectRailKey,
+  type ProjectRailItem,
+} from '../project-detail/components/project-shell/project-shell.config';
+import type { StudioIconName } from '../../components/studio-icon/studio-icon.component';
+import { BoardFiltersService, flattenGrouped } from '../board';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
 import { copyTextToClipboard } from '../../services/clipboard.util';
-import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
-import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
+import { WorkspaceManagerService, ProjectDragDropService, WorkspaceOverlaysService, UiPreferencesService } from '../shell';
 import { ProjectLookupService } from '../../services/project-lookup.service';
+import { ThemeService } from './services/theme.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
-import { ExplorerWorkspaceTreeComponent } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
+import { resolveActiveActivityKey } from './components/studio-activity-bar/studio-activity-bar.active-key';
+import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
+import { deriveProjectPulseByName, type ProjectPulseState } from './studio-shell.pulse';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
-import { TooltipDirective } from '../../components/tooltip/tooltip.directive';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskStatusPopoverDirective } from '../../components/task-status-card';
 import { buildProjectPickerItems, buildTabCtxMenuItems } from './studio-shell.menu-builders';
 import { StudioTabStateService } from './services/studio-tab-state.service';
@@ -48,6 +53,7 @@ import { StudioPanelStateService } from './services/studio-panel-state.service';
 import { ExplorerSectionsService } from './services/explorer-sections.service';
 import { buildProjectSidebarRows, type ProjectSidebarRow } from './studio-shell.project-rows';
 import { StudioTab, studioTabKey } from './studio-shell.types';
+import { GlobalSearchComponent } from './components/global-search/global-search.component';
 
 /** Canonicalise project storage paths so titlebar workspace lookup survives
  * slash style, trailing separator, and case differences. */
@@ -62,11 +68,11 @@ function cliColorFor(cli: string): string {
   switch (cli) {
     case 'claude':  return '#d97757';
     case 'codex':   return '#569cd6';
-    case 'copilot': return '#4ec9b0';
     case 'gemini':  return '#c586c0';
     default:        return '#6e6e6e';
   }
 }
+
 
 /**
  * Top-level "Agent Software Studio" shell — the VS-Code-inspired chrome
@@ -83,7 +89,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent, ProjectDetailComponent],
+  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, ProjectDetailComponent, GlobalSearchComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -121,14 +127,13 @@ export class StudioShellComponent {
   private readonly jobSelection = inject(TaskSelectionService);
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
-  readonly backlogTriage = inject(BacklogTriageService);
-  readonly updateClient = inject(UpdateClientService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
+  private readonly workspaceOverlays = inject(WorkspaceOverlaysService);
   private readonly projectLookup = inject(ProjectLookupService);
-  readonly wsSettings = inject(WorkspaceSettingsService);
+  private readonly themeService = inject(ThemeService);
 
   /** Tab list + active selection re-exposed for the template. */
   readonly tabs = this.tabState.tabs;
@@ -141,18 +146,7 @@ export class StudioShellComponent {
   readonly sidebarVisible = this.panelState.visible;
   readonly sidebarWidth = this.panelState.sidebarWidth;
   readonly activityBarSide = this.panelState.activityBarSide;
-  readonly chatRailOpen = this.panelState.chatRailOpen;
-
-  /** Settings segmented-control option sets (label/value pairs). */
-  readonly themeOptions: readonly SegmentedOption<'dark' | 'light'>[] = [
-    { value: 'dark', label: 'Dark', testid: 'settings-theme-dark' },
-    { value: 'light', label: 'Light', testid: 'settings-theme-light' },
-  ];
-  readonly activityBarSideOptions: readonly SegmentedOption<'left' | 'right'>[] = [
-    { value: 'left', label: 'Left', testid: 'settings-activitybar-left' },
-    { value: 'right', label: 'Right', testid: 'settings-activitybar-right' },
-  ];
-
+  readonly globalSearchOpen = signal(false);
   /**
    * Which Explorer-tree project rows are expanded (showing Board / Project
    * Hub / Activity sub-items). Persists across reloads so the user's
@@ -197,13 +191,11 @@ export class StudioShellComponent {
   }
 
   /**
-   * Drives the "moon / sun" icon in the titlebar. Default is Light per the
-   * reference design — a missing storage key counts as "use the default";
-   * explicit user choice persists.
+   * Drives the "moon / sun" icon in the titlebar. Theme is owned by the global
+   * {@link ThemeService} (AGT-2035) so this quick-toggle and the Appearance
+   * settings row stay in sync; the shell just re-exposes the read signal.
    */
-  readonly theme = signal<'dark' | 'light'>(
-    (localStorage.getItem('atp.studio.theme') as 'dark' | 'light' | null) ?? 'light',
-  );
+  readonly theme = this.themeService.theme;
 
   /** Bubbles to app.ts so the parent can flip the orchestrator side
    *  sheet open without the shell needing a reference to it. */
@@ -251,7 +243,7 @@ export class StudioShellComponent {
     const tab = this.activeTab();
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
-    if (tab.kind === 'backlog' || tab.kind === 'epics') return tab.projectName;
+    if (tab.kind === 'epics') return tab.projectName;
     return this.currentProjectName();
   });
 
@@ -286,6 +278,12 @@ export class StudioShellComponent {
     return this.jobService.runnerStatus().projects[name]?.mode ?? 'manual';
   }
 
+  /** AGT-2031 — project name → auto-pickup pulse state for the Explorer tree's
+   *  subtle activity indicator (derivation lives in studio-shell.pulse). */
+  readonly projectPulseByName = computed<ReadonlyMap<string, ProjectPulseState>>(() =>
+    deriveProjectPulseByName(this.jobService.runnerStatus().projects, this.projectRows()),
+  );
+
   /** Short label for the auto-mode chip ("auto", "single", "paused", "manual"). */
   autoModeLabelFor(name: string): string {
     const mode = this.autoModeFor(name);
@@ -305,12 +303,6 @@ export class StudioShellComponent {
     return `Auto-pickup is paused for ${name} — click to enable.`;
   }
 
-  /** Reflects the theme onto the document root so the design tokens flip. */
-  private readonly themeFx = effect(() => {
-    const t = this.theme();
-    document.documentElement.dataset['studioTheme'] = t;
-    localStorage.setItem('atp.studio.theme', t);
-  });
 
   /**
    * F47 / ADR-0042 — registry-backed workspace list rendered by the
@@ -322,22 +314,26 @@ export class StudioShellComponent {
   readonly registryWorkspaces = signal<readonly RegistryWorkspaceListItem[]>([]);
   readonly registryWorkspacesLoading = signal(false);
   readonly registryWorkspacesError = signal<string | null>(null);
-  /** Workspace id currently waiting for a mutation response (disables its row buttons). */
+  /** Ids waiting on an Explorer-tree registry mutation (rename / delete), used
+   *  to disable the affected row while the request is in flight. Registry
+   *  *management* moved to the settings view; these stay for the tree's own
+   *  inline rename + delete handlers below. */
   readonly registryWorkspaceBusyId = signal<string | null>(null);
+  readonly registryProjectBusyId = signal<string | null>(null);
 
   /**
-   * Lazy-load the registry workspaces whenever a panel that renders them is
-   * visible, then re-pull on every re-open so a mutation from another tab is
-   * reflected without a full reload. Both the Settings panel (management) and
-   * the Explorer panel (F46 two-level workspace tree) need the registry; the
-   * Explorer is the default panel, so this also primes the tree on boot —
-   * without it the tree would fall back to the single legacy "Workspace"
-   * folder because `registryWorkspaces()` would stay empty.
+   * Lazy-load the registry workspaces whenever the Explorer panel (F46
+   * two-level workspace tree) is visible, then re-pull on every re-open so a
+   * mutation from another tab is reflected without a full reload. The Explorer
+   * is the default panel, so this also primes the tree on boot — without it the
+   * tree would fall back to the single legacy "Workspace" folder because
+   * `registryWorkspaces()` would stay empty. Registry *management* now lives in
+   * the consolidated settings view (AGT-2035), which loads its own copy.
    */
   private readonly loadRegistryWorkspacesFx = effect(() => {
     const panel = this.activePanel();
     const visible = this.sidebarVisible();
-    if (!visible || (panel !== 'settings' && panel !== 'explorer')) return;
+    if (!visible || panel !== 'explorer') return;
     this.reloadRegistryWorkspaces();
   });
 
@@ -349,10 +345,17 @@ export class StudioShellComponent {
     untracked(() => this.reloadRegistryWorkspaces());
   });
 
+  /** Retarget open project-keyed tabs before the registry refresh purges stale names. */
+  private readonly projectRenamedFx = effect(() => {
+    const rename = this.workspaceManager.projectRenamed();
+    if (!rename) return;
+    this.tabState.renameProject(rename.previousName, rename.currentName);
+  });
+
   reloadRegistryWorkspaces(): void {
     this.registryWorkspacesLoading.set(true);
     this.registryWorkspacesError.set(null);
-    this.jobService.getRegistryWorkspaces({ includeArchived: this.showArchivedProjects() }).subscribe({
+    this.jobService.getRegistryWorkspaces({ includeArchived: false }).subscribe({
       next: (ws) => {
         this.registryWorkspaces.set(ws ?? []);
         this.projectLookup.setWorkspaces(ws ?? []);
@@ -365,172 +368,9 @@ export class StudioShellComponent {
     });
   }
 
-  /** F45b — prompt for a new workspace name and create it. */
-  createRegistryWorkspace(): void {
-    const name = window.prompt('New workspace name')?.trim();
-    if (!name) return;
-    this.jobService.createRegistryWorkspace(name).subscribe({
-      next: () => this.reloadRegistryWorkspaces(),
-      error: (err: unknown) => this.registryWorkspacesError.set(this.errMsg(err)),
-    });
-  }
-
-  /**
-   * F66 / ADR-0048 — click-to-edit rename. The settings service owns the
-   * inline-edit state, validation, and PUT call; this shell method exists
-   * only as the click handler on the workspace-name button so the template
-   * binding does not have to know about the service.
-   */
-  renameRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
-    this.wsSettings.startRename(ws.id, ws.displayName);
-  }
-
-  /** ViewChild on the inline rename input — focus it the moment a row
-   *  enters edit mode. Avoids needing an autofocus directive. */
-  private readonly renameInputRef = viewChild<ElementRef<HTMLInputElement>>('renameInput');
-
-  private readonly focusRenameInputFx = effect(() => {
-    if (this.wsSettings.renamingId() === null) return;
-    const el = this.renameInputRef()?.nativeElement;
-    if (!el) return;
-    queueMicrotask(() => { el.focus(); el.select(); });
-  });
-
-  /** F45b — prompt for an accent color hex string. Empty input clears the color. */
-  editRegistryWorkspaceColor(ws: RegistryWorkspaceListItem): void {
-    const input = window.prompt(
-      `Workspace "${ws.displayName}" color (hex like #a78bfa, blank to clear)`,
-      ws.color ?? '');
-    if (input === null) return;
-    const color = input.trim();
-    const patch = color ? { color } : { clearColor: true };
-    this.registryWorkspaceBusyId.set(ws.id);
-    this.jobService.updateRegistryWorkspace(ws.id, patch).subscribe({
-      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
-      error: (err: unknown) => {
-        this.registryWorkspaceBusyId.set(null);
-        this.registryWorkspacesError.set(this.errMsg(err));
-      },
-    });
-  }
-
-  /** F45b — move a workspace one slot up or down. */
-  moveRegistryWorkspace(ws: RegistryWorkspaceListItem, direction: -1 | 1): void {
-    this.registryWorkspaceBusyId.set(ws.id);
-    this.jobService.reorderRegistryWorkspace(ws.id, direction).subscribe({
-      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
-      error: (err: unknown) => {
-        this.registryWorkspaceBusyId.set(null);
-        this.registryWorkspacesError.set(this.errMsg(err));
-      },
-    });
-  }
-
-  /**
-   * F66 — delete a workspace after a confirm dialog. Delete is only allowed
-   * once the workspace is empty: per ADR-0048 the operator must move every
-   * project out first (no auto-rehome). The button is disabled while projects
-   * remain, and the backend rejects a populated delete with a 409; this guard
-   * is the matching client-side defence.
-   */
-  deleteRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
-    if (!this.canDeleteWorkspace(ws)) return;
-    const ok = window.confirm(`Delete workspace "${ws.displayName}"?`);
-    if (!ok) return;
-    this.registryWorkspaceBusyId.set(ws.id);
-    this.jobService.deleteRegistryWorkspace(ws.id).subscribe({
-      next: () => {
-        this.registryWorkspaceBusyId.set(null);
-        this.reloadRegistryWorkspaces();
-      },
-      error: (err: unknown) => {
-        this.registryWorkspaceBusyId.set(null);
-        this.registryWorkspacesError.set(this.errMsg(err));
-      },
-    });
-  }
-
-  /** A workspace is deletable only when it is non-default and holds no
-   *  projects; the operator moves projects out first (no auto-rehome). */
-  canDeleteWorkspace(ws: RegistryWorkspaceListItem): boolean {
-    return !ws.isDefault && ws.projects.length === 0;
-  }
-
-  /** Tooltip explaining the delete button's enabled/disabled reason:
-   *  default workspace is never deletable, a populated one must be emptied
-   *  first, an empty non-default one is ready to delete. */
-  workspaceDeleteTooltip(ws: RegistryWorkspaceListItem): string {
-    if (ws.isDefault) return 'Default workspace cannot be deleted';
-    const count = ws.projects.length;
-    if (count > 0) {
-      return `Move all ${count} project${count === 1 ? '' : 's'} out of this workspace before it can be deleted.`;
-    }
-    return 'Delete this workspace';
-  }
-
-  /** Up arrow is disabled when the workspace is already at the top of the list. */
-  canMoveWorkspaceUp(ws: RegistryWorkspaceListItem): boolean {
-    const list = this.registryWorkspaces();
-    return list.length > 0 && list[0].id !== ws.id;
-  }
-
-  /** Down arrow is disabled when the workspace is already at the bottom of the list. */
-  canMoveWorkspaceDown(ws: RegistryWorkspaceListItem): boolean {
-    const list = this.registryWorkspaces();
-    return list.length > 0 && list[list.length - 1].id !== ws.id;
-  }
-
-  /** F45b — id of the project currently waiting for a mutation response. */
-  readonly registryProjectBusyId = signal<string | null>(null);
-
-  /** F45b — rename a project by prompt. */
-  renameRegistryProject(projId: string, currentDisplayName: string): void {
-    const name = window.prompt(`Rename project "${currentDisplayName}"`, currentDisplayName)?.trim();
-    if (!name || name === currentDisplayName) return;
-    this.runProjectPatch(projId, { displayName: name });
-  }
-
-  /** F45b — change the short code (2-6 chars A-Z 0-9). */
-  editRegistryProjectShortCode(projId: string, currentShortCode: string): void {
-    const code = window.prompt(
-      `Project ${projId} short code (2-6 chars, A-Z and 0-9)`, currentShortCode)?.trim();
-    if (!code || code.toUpperCase() === currentShortCode) return;
-    this.runProjectPatch(projId, { shortCode: code });
-  }
-
-  /** F45b — set or clear the project color. */
-  editRegistryProjectColor(projId: string, currentColor: string | null): void {
-    const input = window.prompt(
-      `Project ${projId} color (hex like #a78bfa, blank to clear)`, currentColor ?? '');
-    if (input === null) return;
-    const color = input.trim();
-    this.runProjectPatch(projId, color ? { color } : { clearColor: true });
-  }
-
-  /** F45b — reassign project to a different workspace via dropdown prompt. */
-  changeRegistryProjectWorkspace(projId: string, currentWorkspaceId: string): void {
-    const options = this.registryWorkspaces();
-    if (options.length < 2) {
-      window.alert('Create another workspace first via "+ New workspace" above.');
-      return;
-    }
-    const list = options
-      .map(w => `  ${w.id} — ${w.displayName}${w.id === currentWorkspaceId ? ' (current)' : ''}`)
-      .join('\n');
-    const choice = window.prompt(
-      `Move project ${projId} to which workspace? Enter id:\n\n${list}`, currentWorkspaceId)?.trim();
-    if (!choice || choice === currentWorkspaceId) return;
-    this.runProjectPatch(projId, { workspaceId: choice });
-  }
-
-  /** F45b — archive (or un-archive) a project. */
-  toggleRegistryProjectArchived(projId: string, archived: boolean): void {
-    const verb = archived ? 'Un-archive' : 'Archive';
-    const ok = window.confirm(`${verb} project ${projId}? Archived projects are hidden from the tree by default.`);
-    if (!ok) return;
-    this.runProjectPatch(projId, { archived: !archived });
-  }
-
+  /** Registry-only project patch used by the Explorer tree's inline handlers
+   *  (rename / short-code). Registry *management* lives in the settings view;
+   *  this stays for the tree's own edit affordances. */
   private runProjectPatch(projId: string, patch: {
     displayName?: string;
     shortCode?: string;
@@ -547,13 +387,6 @@ export class StudioShellComponent {
         this.registryWorkspacesError.set(this.errMsg(err));
       },
     });
-  }
-
-  /** Toggle whether archived projects are shown in the Settings panel. Off by default. */
-  readonly showArchivedProjects = signal(false);
-  toggleShowArchivedProjects(): void {
-    this.showArchivedProjects.update(v => !v);
-    this.reloadRegistryWorkspaces();
   }
 
   private errMsg(err: unknown): string {
@@ -607,6 +440,7 @@ export class StudioShellComponent {
 
   /** All jobs, grouped under their project for the Explorer panel. */
   readonly grouped = this.jobService.grouped;
+  readonly globalSearchTasks = computed(() => flattenGrouped(this.grouped()));
 
   /**
    * Concrete workspace shown in the titlebar breadcrumb. The breadcrumb no
@@ -657,10 +491,32 @@ export class StudioShellComponent {
     return map;
   });
 
+  /** Project display name → registry shortCode (e.g. "Agent Software Studio"
+   *  → "ASS"), used to keep project-scoped tab titles short and scannable. */
+  readonly projectShortCodeByName = computed<ReadonlyMap<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const ws of this.registryWorkspaces()) {
+      for (const p of ws.projects) {
+        if (p.displayName && p.shortCode) map.set(p.displayName, p.shortCode);
+      }
+    }
+    return map;
+  });
+
   /** Project name driving the currently open Board tab (or null when none). */
   readonly activeBoardProject = computed<string | null>(() => {
     const tab = this.activeTab();
     if (tab?.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
+    return null;
+  });
+
+  readonly activeProjectSurface = computed<ExplorerProjectSurface | null>(() => {
+    const tab = this.activeTab();
+    if (!tab) return null;
+    if (tab.kind === 'board') return tab.projectName === '__all__' ? null : 'board';
+    if (tab.kind === 'hub') return tab.section === 'wiki' ? 'wiki' : 'hub';
+    if (tab.kind === 'workbench') return 'workbench';
+    if (tab.kind === 'epics') return tab.projectName === null ? null : 'epics';
     return null;
   });
 
@@ -674,8 +530,9 @@ export class StudioShellComponent {
     const tab = this.activeTab();
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
-    if (tab.kind === 'backlog' || tab.kind === 'epics') return tab.projectName;
+    if (tab.kind === 'epics') return tab.projectName;
     if (tab.kind === 'hub') return tab.projectName;
+    if (tab.kind === 'workbench') return tab.projectName;
     if (tab.kind === 'task' || tab.kind === 'activity') {
       const job = this.findJob(tab.taskKey);
       return job?.projectName ?? null;
@@ -691,6 +548,22 @@ export class StudioShellComponent {
     { key: 'runbook', icon: 'runbook', label: 'Runbook' },
   ];
 
+  /**
+   * Single source of truth for the ActivityBar's active marker (AGT-2042).
+   * The sidebar toggle (`activePanel` + `sidebarVisible`) and the editor
+   * route (`activeTab().kind`) used to light up buttons independently, so
+   * two could be active at once. Funnelling both through one resolved key
+   * makes the marker exclusive by construction — a button is active iff its
+   * key equals this value.
+   */
+  readonly activeActivityKey = computed(() =>
+    resolveActiveActivityKey({
+      activeTabKind: this.activeTab()?.kind,
+      activePanel: this.activePanel(),
+      sidebarVisible: this.sidebarVisible(),
+    }),
+  );
+
   readonly activityBarBadgeCounts = computed<Record<string, number>>(() => ({
     filters: this.filterBadgeCount()
       ?? this.boardFilters.activeFilterCount(),
@@ -698,23 +571,6 @@ export class StudioShellComponent {
 
   openBoard(projectName: string): void {
     this.tabState.open({ kind: 'board', projectName });
-  }
-
-  /**
-   * Activity-bar Backlog button click. Toggles the dedicated backlog triage
-   * tab (a first-class editor tab, equivalent to Board / Epics) and keeps
-   * the `#/backlog` deep-link hash in sync. Mirrors the Ctrl+B accelerator
-   * so the two entry points stay in lock-step.
-   */
-  onActivityBarOpenBacklog(): void {
-    if (this.activeTab()?.kind === 'backlog') {
-      this.backlogTriage.closeTriage();
-      this.tabState.activateAllProjectsBoard();
-    } else {
-      const project = this.activeProjectName();
-      this.backlogTriage.openTriage(project);
-      this.tabState.open({ kind: 'backlog', projectName: project });
-    }
   }
 
   /**
@@ -734,17 +590,6 @@ export class StudioShellComponent {
     flattenGrouped(this.grouped()).some(t => t.kind === 'epic'),
   );
 
-  /**
-   * Backlog count under the contextual project (plus type + tag + owner).
-   * Drives the activity-bar Backlog badge so the operator can see at a
-   * glance how many tasks are waiting on triage.
-   */
-  readonly backlogCount = computed(() => {
-    const projectName = this.activeProjectName();
-    if (!projectName) return 0;
-    return this.boardFilters.filteredGroupedForProject(projectName).backlog?.length ?? 0;
-  });
-
   openTask(job: TaskInfo): void {
     this.tabState.open({ kind: 'task', taskKey: job.taskKey });
     // Keep the legacy TaskSelectionService in sync so the embedded
@@ -753,18 +598,34 @@ export class StudioShellComponent {
   }
 
   openHub(projectName: string): void {
-    this.tabState.open({ kind: 'hub', projectName });
+    // Clicking "Project" is an explicit request for the Overview rail, even
+    // when the Hub tab is already open on another section (e.g. Wiki). We
+    // pass section=overview rather than leaving it undefined so the intent is
+    // unambiguous and re-opening moves the rail back to Overview.
+    this.tabState.open({ kind: 'hub', projectName, section: 'overview' });
   }
 
   /**
-   * Explorer "Backlog" link for a single project (ASS-658). Scopes the
-   * board filter to that project so the triage list narrows to it, then
-   * opens the project-scoped backlog tab.
+   * AGT-2067 — open (or focus) a Project URL's embedded preview tab. Replaces
+   * the old `window.open` browser jump on the Explorer URL row: the URL now
+   * renders inside a sandboxed iframe as its own editor tab (one tab per URL),
+   * so it docks beside the Orchestrator side sheet like every other surface.
    */
-  openProjectBacklog(projectName: string): void {
-    this.boardFilters.setSoleProject(projectName);
-    this.backlogTriage.openTriage(projectName);
-    this.tabState.open({ kind: 'backlog', projectName });
+  openUrlPreview(e: { projectName: string; urlId: string }): void {
+    this.tabState.open({ kind: 'url-preview', projectName: e.projectName, urlId: e.urlId });
+  }
+
+  /**
+   * Explorer "Wiki" link for a single project. Opens (or focuses) the
+   * project's Project Hub tab deep-linked to its Wiki rail, so the wiki is
+   * reachable as a top-level sidebar item under Project Hub.
+   */
+  openWiki(projectName: string): void {
+    this.tabState.open({ kind: 'hub', projectName, section: 'wiki' });
+  }
+
+  openWorkbench(event: { projectName: string; workbench: { id: string; title: string } }): void {
+    this.tabState.open({ kind: 'workbench', projectName: event.projectName, workbenchId: event.workbench.id, title: event.workbench.title });
   }
 
   /**
@@ -782,12 +643,31 @@ export class StudioShellComponent {
   closeTab(key: string, event?: Event): void {
     event?.stopPropagation();
     this.tabState.close(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
   }
 
-  closeOthers(key: string): void { this.tabState.closeOthers(key); }
-  closeRight(key: string): void { this.tabState.closeRight(key); }
-  closeLeft(key: string): void { this.tabState.closeLeft(key); }
-  closeAll(): void { this.tabState.closeAll(); }
+  closeOthers(key: string): void {
+    this.tabState.closeOthers(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeRight(key: string): void {
+    this.tabState.closeRight(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeLeft(key: string): void {
+    this.tabState.closeLeft(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeAll(): void {
+    this.tabState.closeAll();
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+
+  private closeWorkspaceSettingsStateIfTabMissing(): void {
+    if (!this.tabs().some(tab => studioTabKey(tab) === 'workspace-settings')) {
+      this.workspaceOverlays.close();
+    }
+  }
 
   // ---- drag-reorder ---------------------------------------------------
   // Tracks which tab is currently being dragged and which tab the
@@ -1033,27 +913,34 @@ export class StudioShellComponent {
   }
 
   togglePanel(panel: StudioActivityPanelKey | 'settings' | 'admin'): void {
+    // The gear ('settings') no longer toggles a sidebar panel — it opens the
+    // one consolidated Settings view as an editor tab (AGT-2035).
+    if (panel === 'settings') {
+      this.toggleWorkspaceSettingsTab();
+      return;
+    }
     this.panelState.toggle(panel);
   }
 
+  /** Open the consolidated Settings view, or close it if it is already the
+   *  active editor tab (mirrors the status-bar "Settings" pill toggle). */
+  toggleWorkspaceSettingsTab(): void {
+    const active = this.tabState.activeTab()?.kind === 'workspace-settings';
+    if (active) {
+      this.tabState.close(studioTabKey({ kind: 'workspace-settings' }));
+      this.workspaceOverlays.close();
+      return;
+    }
+    this.openWorkspaceSettingsTab();
+  }
+
+  openWorkspaceSettingsTab(): void {
+    this.workspaceOverlays.open(this.workspaceOverlays.section());
+    this.tabState.open({ kind: 'workspace-settings' });
+  }
+
   toggleTheme(): void {
-    this.theme.update(t => (t === 'dark' ? 'light' : 'dark'));
-  }
-
-  setTheme(value: 'dark' | 'light'): void {
-    this.theme.set(value);
-  }
-
-  setActivityBarSide(side: 'left' | 'right'): void {
-    this.panelState.setActivityBarSide(side);
-  }
-
-  toggleChatRail(): void {
-    this.panelState.toggleChatRail();
-  }
-
-  toggleCompactCards(): void {
-    this.uiPrefs.toggleCompactCards();
+    this.themeService.toggle();
   }
 
   clearAllFilters(): void {
@@ -1084,33 +971,6 @@ export class StudioShellComponent {
     this.writeExpandedProjects(new Set<string>());
   }
 
-  /**
-   * Click handler for the Settings panel "Update stable now" /
-   * "Check for updates" button. The label flips based on `behindBy()`:
-   *
-   *   - behindBy > 0   → "Update stable now"  → actually run the update
-   *   - behindBy === 0 → "Check for updates"  → only POLL origin/main,
-   *                                              don't kick off a stable
-   *                                              re-checkout / restart.
-   *
-   * Previously this always called `trigger()`, so clicking "Check for
-   * updates" immediately ran the full stable update pipeline — a
-   * destructive action triggered by a button label that read like a
-   * safe poll.
-   */
-  triggerUpdate(force = false): void {
-    this.updateClient.openCenter();
-    if (force || this.updateClient.behindBy() > 0) {
-      void this.updateClient.trigger(null, force);
-    } else {
-      void this.updateClient.refreshNow();
-    }
-  }
-
-  openUpdateCenter(): void {
-    this.updateClient.openCenter();
-    void this.updateClient.refreshNow();
-  }
 
   /** Visible CLI types observed across the loaded jobs (for the CLI sidebar panel). */
   readonly cliRows = computed(() => {
@@ -1144,37 +1004,66 @@ export class StudioShellComponent {
     window.addEventListener('mouseup', onUp);
   }
 
+  /** Project's registry shortCode (e.g. "ASS") when known, else the full
+   *  display name. Keeps project-scoped tab titles short and scannable while
+   *  degrading cleanly for projects without a registry shortCode. */
+  private projectShortLabel(projectName: string): string {
+    return this.projectShortCodeByName().get(projectName) ?? projectName;
+  }
+
+  /** Resolve a hub tab's `section` to its rail item (label, icon). A missing
+   *  or unknown section falls back to the default rail (`overview`). */
+  private railItemForSection(section: string | undefined): ProjectRailItem {
+    const key = isProjectRailKey(section) ? section : DEFAULT_PROJECT_RAIL_KEY;
+    return (
+      PROJECT_RAIL_ITEMS.find(i => i.key === key) ??
+      PROJECT_RAIL_ITEMS.find(i => i.key === DEFAULT_PROJECT_RAIL_KEY)!
+    );
+  }
+
   /** Map a tab to its displayable label so the template stays terse. */
   tabLabel(tab: StudioTab): string {
     switch (tab.kind) {
       case 'board':
-        return tab.projectName === '__all__' ? 'All projects · Board' : `${tab.projectName} · Board`;
-      case 'backlog':
-        return tab.projectName === null ? 'All projects · Backlog' : `${tab.projectName} · Backlog`;
+        return tab.projectName === '__all__' ? 'All projects · Board' : `${this.projectShortLabel(tab.projectName)} · Board`;
       case 'epics':
-        return tab.projectName === null ? 'All projects · Epics' : `${tab.projectName} · Epics`;
+        return tab.projectName === null ? 'All projects · Epics' : `${this.projectShortLabel(tab.projectName)} · Epics`;
       case 'epic': {
         const labelKey = tab.viewTaskKey ?? tab.epicKey;
         const job = this.findJob(labelKey);
-        return job?.title || job?.id || labelKey;
+        return job?.title || job?.key || job?.id || this.taskIdFromKey(labelKey);
       }
       case 'task': {
         const job = this.findJob(tab.taskKey);
-        return job?.title || job?.id || tab.taskKey;
+        return job?.title || job?.key || job?.id || this.taskIdFromKey(tab.taskKey);
       }
       case 'hub':
-        return `${tab.projectName} · Hub`;
+        return `${this.projectShortLabel(tab.projectName)} · ${this.railItemForSection(tab.section).label}`;
+      case 'workbench':
+        return tab.title || tab.workbenchId;
       case 'diff':
         return tab.commitSha;
       case 'activity': {
         const job = this.findJob(tab.taskKey);
-        return `Activity · ${job?.title || tab.taskKey}`;
+        return `Activity · ${job?.title || job?.key || job?.id || this.taskIdFromKey(tab.taskKey)}`;
       }
+      case 'url-preview':
+        return this.findProjectUrl(tab.projectName, tab.urlId)?.label || tab.urlId;
+      case 'workspace-settings':
+        return 'Workspace settings';
       case 'welcome':
         return 'Welcome';
       default:
         return '';
     }
+  }
+
+  /** A task key is persisted as `<watchPath>::<jobId>`. During shell restore
+   * the tab can render before board data resolves, so its safe fallback must
+   * be the user-facing job id rather than the filesystem-bearing key. */
+  private taskIdFromKey(taskKey: string): string {
+    const separator = taskKey.lastIndexOf('::');
+    return separator >= 0 ? taskKey.slice(separator + 2) : taskKey;
   }
 
   /** Marker for the tab list — used for the small chip on the left
@@ -1191,11 +1080,89 @@ export class StudioShellComponent {
     return null;
   }
 
+  /** Leading icon for the tab strip. Hub tabs show their active section's
+   *  rail icon (e.g. `book` for Wiki); other kinds render none here (the
+   *  epic tab keeps its own dedicated glyph in the template). */
+  tabIcon(tab: StudioTab): StudioIconName | null {
+    if (tab.kind === 'hub') {
+      return this.railItemForSection(tab.section).railIcon ?? null;
+    }
+    if (tab.kind === 'url-preview') return 'link';
+    if (tab.kind === 'workbench') return 'eye';
+    return null;
+  }
+
+  /**
+   * AGT-2034 — resolve the owning project name for a tab so the tab strip
+   * can paint the project's colour dot and keep the full name in the
+   * tooltip. Returns `null` for tabs that do not belong to a single project
+   * (All-projects board/epics, workspace settings, welcome, diff),
+   * so no dot renders there.
+   */
+  private tabProjectName(tab: StudioTab): string | null {
+    switch (tab.kind) {
+      case 'board':
+        return tab.projectName === '__all__' ? null : tab.projectName;
+      case 'epics':
+      case 'hub':
+      case 'workbench':
+      case 'url-preview':
+        return tab.projectName;
+      case 'task':
+      case 'activity':
+        return this.findJob(tab.taskKey)?.projectName ?? null;
+      case 'epic':
+        return this.findJob(tab.viewTaskKey ?? tab.epicKey)?.projectName ?? null;
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * AGT-2034 — project-identity colour for the tab's leading dot, or `null`
+   * when the tab is not tied to a single project (so no dot renders). Reuses
+   * the shared `projectIdentity()` palette — the same hue the Explorer tree
+   * and board cards use — so a project's colour reads consistently across the
+   * whole shell. No new colour source. The dot only encodes origin; the
+   * shortCode (Board/Hub tabs) or task key (Task tabs) beside it stays the
+   * primary text label, so colour is never the sole carrier (A11y).
+   */
+  tabDotColor(tab: StudioTab): string | null {
+    const name = this.tabProjectName(tab);
+    return name ? projectIdentity(name).color : null;
+  }
+
+  /**
+   * AGT-2034 — native tooltip text for a tab. The visible label is shortened
+   * to `SHORTCODE · Board` to save room; the hover restores the full project
+   * name so the origin is never lost. Falls back to the plain label for tabs
+   * with no owning project.
+   */
+  tabTooltip(tab: StudioTab): string {
+    const name = this.tabProjectName(tab);
+    const label = this.tabLabel(tab);
+    return name ? `${name} — ${label}` : label;
+  }
+
   private findJob(taskKey: string): TaskInfo | null {
     const grouped = this.grouped();
     for (const lane of Object.values(grouped)) {
       for (const job of lane as TaskInfo[]) {
         if (job.taskKey === taskKey) return job;
+      }
+    }
+    return null;
+  }
+
+  /** AGT-2067 — resolve a Project URL record (for the preview tab's label)
+   *  from the already-loaded registry workspaces. Returns null until the
+   *  registry has loaded or when the URL was removed from the project. */
+  private findProjectUrl(projectName: string, urlId: string): RegistryProjectUrl | null {
+    for (const ws of this.registryWorkspaces()) {
+      for (const p of ws.projects) {
+        if (p.displayName !== projectName) continue;
+        const url = p.urls?.find(u => u.id === urlId);
+        if (url) return url;
       }
     }
     return null;

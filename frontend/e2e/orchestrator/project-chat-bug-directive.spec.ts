@@ -4,7 +4,7 @@ import { test, expect, Page, Route } from '@playwright/test';
  * Slice E: chat-input directive `/bug <description>`.
  *
  * Posting `/bug <description>` in the project chat should:
- *   1. Hit `POST /api/jobs` with `taskType=bug`, `targetState=0-backlog`,
+ *   1. Hit `POST /api/tasks` with `taskType=bug`, `targetState=0-backlog`,
  *      a meaningful title derived from the first line, and the original
  *      description body with a `Reported via /bug from project chat`
  *      trailer. Hashtag patterns `#tag1 #tag2` at the start of any line
@@ -16,7 +16,7 @@ import { test, expect, Page, Route } from '@playwright/test';
  *      severity=`error` and the error text — never a JS toast.
  *
  * The spec stubs both the orchestrator-chat history endpoint and the
- * `POST /api/jobs` create call so it can run without a live backend.
+ * `POST /api/tasks` create call so it can run without a live backend.
  */
 
 interface CapturedRequest {
@@ -44,7 +44,7 @@ async function captureCreateJob(
   responder: (req: CapturedRequest, route: Route) => Promise<void>
 ): Promise<{ requests: CapturedRequest[] }> {
   const requests: CapturedRequest[] = [];
-  await page.route(/\/api\/jobs(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/tasks(?:\?.*)?$/, async (route) => {
     if (route.request().method() !== 'POST') {
       await route.continue();
       return;
@@ -100,7 +100,7 @@ test.describe('Project chat — Slice E /bug directive', () => {
     await expect(send).toBeEnabled();
 
     const createCallPromise = page.waitForRequest(
-      (req) => req.method() === 'POST' && /\/api\/jobs(?:\?.*)?$/.test(req.url()),
+      (req) => req.method() === 'POST' && /\/api\/tasks(?:\?.*)?$/.test(req.url()),
       { timeout: 5_000 }
     );
     await send.click();
@@ -124,23 +124,19 @@ test.describe('Project chat — Slice E /bug directive', () => {
     // the request body itself does not need to carry the field.
     expect((captured.headers['x-client-id'] || '').length).toBeGreaterThan(0);
 
-    // Inline event card appears at the user's turn position.
-    const card = page.getByTestId('chat-event-task').first();
+    // The task confirmation is projected into the canonical conversation.
+    const card = page.locator('[data-testid="conversation-system-status"][data-category="task"]').first();
     await expect(card).toBeVisible({ timeout: 5_000 });
-    await expect(card).not.toHaveClass(/chat__event--error/);
-    await expect(card.locator('.chat__event-summary')).toContainText('0-backlog');
-    await expect(card.locator('.chat__event-summary')).toContainText('Frontend chips overlap on narrow viewport');
+    await expect(card).toHaveAttribute('data-severity', 'info');
+    await expect(card).toContainText('0-backlog');
+    await expect(card).toContainText('Frontend chips overlap on narrow viewport');
 
-    // Expand the card and confirm it cites the new job id.
-    await card.locator('button.chat__event-head').click();
-    const detail = card.locator('[data-testid="chat-event-detail"]');
-    await expect(detail).toBeVisible();
-    await expect(detail).toContainText('fixture-bug-12345');
-    await expect(detail).toContainText('bug');
+    await expect(card).toContainText('fixture-bug-12345');
+    await expect(card).toContainText('bug');
 
     // Click-through: the action button opens the kanban detail panel
     // in the same tab via the existing `?job=...&watchPath=...` URL flow.
-    const action = card.locator('[data-testid^="chat-event-action-"]');
+    const action = page.locator('[data-testid^="orch-conversation-event-action-"]').first();
     await expect(action).toBeVisible();
     // Screenshot the side sheet with the confirmation card visible so a
     // reviewer can eyeball the rendering (also harvested into the job
@@ -166,7 +162,7 @@ test.describe('Project chat — Slice E /bug directive', () => {
     }, { timeout: 5_000 }).toBe('fixture-bug-12345');
   });
 
-  test('renders an error card with severity=error when POST /api/jobs fails — no JS toast', async ({ page }) => {
+  test('renders an error card with severity=error when POST /api/tasks fails — no JS toast', async ({ page }) => {
     await stubOrchestratorChat(page);
     await captureCreateJob(page, async (_req, route) => {
       await route.fulfill({
@@ -183,20 +179,19 @@ test.describe('Project chat — Slice E /bug directive', () => {
     await expect(send).toBeEnabled();
 
     const createCallPromise = page.waitForRequest(
-      (req) => req.method() === 'POST' && /\/api\/jobs(?:\?.*)?$/.test(req.url()),
+      (req) => req.method() === 'POST' && /\/api\/tasks(?:\?.*)?$/.test(req.url()),
       { timeout: 5_000 }
     );
     await send.click();
     await createCallPromise;
 
-    // The failure surfaces in the chat as an event card with severity=error.
-    const errorCard = page.locator('[data-testid="chat-event-task"].chat__event--error').first();
+    // The failure surfaces in the conversation as an error status row.
+    const errorCard = page.locator(
+      '[data-testid="conversation-system-status"][data-category="task"][data-severity="error"]'
+    ).first();
     await expect(errorCard).toBeVisible({ timeout: 5_000 });
-    await expect(errorCard.locator('.chat__event-summary')).toContainText('Bug not filed');
-    await errorCard.locator('button.chat__event-head').click();
-    await expect(errorCard.locator('[data-testid="chat-event-detail"]')).toContainText(
-      'Job already exists or invalid input'
-    );
+    await expect(errorCard).toContainText('Bug not filed');
+    await expect(errorCard).toContainText('Job already exists or invalid input');
 
     // Hard rule: no toast — bug reporting must never feel like a side-channel.
     // The toast surface in this app uses [data-testid^="toast-"]; no such

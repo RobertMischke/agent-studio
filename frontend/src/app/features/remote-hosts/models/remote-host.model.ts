@@ -1,0 +1,236 @@
+import type { CliType } from '../../../models/task.model';
+
+/**
+ * Remote-hosts registry model (AGT-1921).
+ *
+ * The "Remote Hosts" settings page shows every execution location - the
+ * operator's local machine and each remote runner host - in one list, so the
+ * whole fleet reads as a single picture (see
+ * docs/research/remote-ready-kickoff-2026-07.md). Host definitions are seeded
+ * from configuration and their liveness is hydrated from the Task Server client
+ * registry, whose LastSeen timestamp is refreshed by real runner requests.
+ */
+
+/** Where a host sits relative to the operator. */
+export type HostRole = 'local' | 'remote';
+
+/**
+ * Heartbeat-derived liveness. Ordered loosely from healthiest to gone:
+ *   online   - heartbeat fresh, ready to pick up work
+ *   idle     - reachable but nothing assigned
+ *   degraded - heartbeat late or a probe reported trouble (acute)
+ *   offline  - no heartbeat within the expected window (acute)
+ *   draining - operator asked it to finish current work and stop taking more
+ *   retired  - permanently removed from the pool (settled history, renders calm)
+ */
+export type HostHeartbeatStatus =
+  | 'online'
+  | 'idle'
+  | 'degraded'
+  | 'offline'
+  | 'draining'
+  | 'retired';
+
+/** Operator actions offered per host row. */
+export type HostActionKind = 'reprobe' | 'drain' | 'retire' | 'revive' | 'delete';
+
+/**
+ * Per-CLI quota window lifted from the runner's quota probe. One row per CLI
+ * window the host reported (Claude 5h, Codex weekly, ...). Mirrors the shape of
+ * {@link QuotaWindow} but flattened to a single window so the host row can list
+ * "Claude · 5h · 63%".
+ */
+export interface HostCliQuota {
+  cliType: CliType;
+  plan: string | null;
+  windowLabel: string;
+  usedPct: number | null;
+  resetLabel: string | null;
+}
+
+/**
+ * Host system properties (Robert addendum 2026-07-09): RAM, CPU, disk. The
+ * remote runner reports these in its heartbeat; the backend exposes the local
+ * machine's own values so the local entry carries the same shape. Memory is in
+ * MB, disk in GB, load and usage are 0-100 percentages.
+ */
+export interface HostSystemStats {
+  ramTotalMb: number;
+  ramFreeMb: number;
+  cpuCores: number;
+  cpuModel: string;
+  cpuLoadPct: number;
+  diskTotalGb: number;
+  diskFreeGb: number;
+}
+
+export interface HostTelemetryPoint {
+  timestamp: string;
+  cpuPercent: number | null;
+  load1: number | null;
+  load5: number | null;
+  load15: number | null;
+  memoryUsedBytes: number | null;
+  memoryTotalBytes: number | null;
+  swapInBytesPerSecond: number | null;
+  swapOutBytesPerSecond: number | null;
+  cpuStealPercent: number | null;
+  ioWaitPercent: number | null;
+  cpuCores: number;
+  activeSlots: number;
+}
+
+export interface HostTelemetryFinding {
+  kind: 'vm-throttled' | 'oversubscribed' | 'memory-pressure';
+  label: string;
+  since: string;
+  until: string;
+}
+
+export interface HostTelemetrySeries {
+  clientId: string;
+  window: string;
+  points: readonly HostTelemetryPoint[];
+  findings: readonly HostTelemetryFinding[];
+}
+
+/** A single execution location in the registry. */
+export interface RemoteHost {
+  id: string;
+  /** Display name / hostname. */
+  name: string;
+  role: HostRole;
+  /** SSH target for remote hosts; null for the local machine. */
+  address: string | null;
+  /** Task-server client identity used as X-Client-Id by this host. */
+  clientId: string;
+  status: HostHeartbeatStatus;
+  os: string;
+  /** ISO timestamp of the last heartbeat, or null if never seen. */
+  lastHeartbeatAt: string | null;
+  /** Human uptime label reported by the host (e.g. "2d 9h"). */
+  uptimeLabel: string | null;
+  /** General capability chips: OS, runtimes, features. */
+  capabilities: readonly string[];
+  /** Per-CLI quota windows from the runner probes. */
+  cliQuotas: readonly HostCliQuota[];
+  /** Live system stats, or null when the host reports none (e.g. retired). */
+  stats: HostSystemStats | null;
+  telemetry?: HostTelemetrySeries | null;
+  /** Latest daemon startup proof of origin write access. */
+  gitPushStatus?: 'ready' | 'read-only' | null;
+  gitPushDetail?: string | null;
+  gitPushCheckedAt?: string | null;
+  daemonState?: 'running' | 'read-only' | 'stopped';
+  lastClaimAt?: string | null;
+  activeTaskCount?: number;
+  availableSlots?: number;
+  retireRequestedAt?: string | null;
+  /** Transient: an action currently in flight for this host. */
+  busyAction?: HostActionKind | null;
+}
+
+// ---------------------------------------------------------------------------
+// Pure display helpers - co-located with the types so the component and its
+// spec share one source of truth. Side-effect free.
+// ---------------------------------------------------------------------------
+
+/** Format a MB value as GB with one decimal ("41.0 GB"), or "-" if unknown. */
+export function formatMemory(mb: number | null | undefined): string {
+  if (mb === null || mb === undefined || Number.isNaN(mb)) return '-';
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+/** Format a GB value ("180 GB"), or "-" if unknown. */
+export function formatDisk(gb: number | null | undefined): string {
+  if (gb === null || gb === undefined || Number.isNaN(gb)) return '-';
+  return `${Math.round(gb)} GB`;
+}
+
+/** Clamp a percentage into the 0-100 range for a bar width. */
+export function clampPct(pct: number | null | undefined): number {
+  if (pct === null || pct === undefined || Number.isNaN(pct)) return 0;
+  return Math.max(0, Math.min(100, pct));
+}
+
+/** Utilisation tone for a meter bar. Acute red only past 90% (R4). */
+export type MeterTone = 'ok' | 'warn' | 'high';
+export function meterTone(pct: number | null | undefined): MeterTone {
+  const v = clampPct(pct);
+  if (v >= 90) return 'high';
+  if (v >= 70) return 'warn';
+  return 'ok';
+}
+
+/** Human label for a status value. */
+export function hostStatusLabel(status: HostHeartbeatStatus): string {
+  switch (status) {
+    case 'online': return 'Online';
+    case 'idle': return 'Idle';
+    case 'degraded': return 'Degraded';
+    case 'offline': return 'Offline';
+    case 'draining': return 'Draining';
+    case 'retired': return 'Retired';
+  }
+}
+
+/**
+ * Status tone drives the dot colour, the badge tint, and whether the whole
+ * card takes an acute background wash. Only `degraded` / `offline` are acute
+ * (R4): they get a loud warn / error tone. Healthy, idle, draining, and retired
+ * all render calm so settled/quiet states do not shout.
+ */
+export type HostStatusTone = 'ok' | 'idle' | 'warn' | 'error' | 'calm';
+export function hostStatusTone(status: HostHeartbeatStatus): HostStatusTone {
+  switch (status) {
+    case 'online': return 'ok';
+    case 'idle': return 'idle';
+    case 'degraded': return 'warn';
+    case 'offline': return 'error';
+    case 'draining': return 'idle';
+    case 'retired': return 'calm';
+  }
+}
+
+/** Human label for a host role. */
+export function hostRoleLabel(role: HostRole): string {
+  return role === 'local' ? 'Local' : 'Remote';
+}
+
+/** Used RAM as a rounded 0-100 percentage, or null when stats are unknown. */
+export function ramUsedPct(stats: HostSystemStats | null | undefined): number | null {
+  if (!stats || !stats.ramTotalMb) return null;
+  return Math.round(clampPct(((stats.ramTotalMb - stats.ramFreeMb) / stats.ramTotalMb) * 100));
+}
+
+/** Used disk as a rounded 0-100 percentage, or null when stats are unknown. */
+export function diskUsedPct(stats: HostSystemStats | null | undefined): number | null {
+  if (!stats || !stats.diskTotalGb) return null;
+  return Math.round(clampPct(((stats.diskTotalGb - stats.diskFreeGb) / stats.diskTotalGb) * 100));
+}
+
+/**
+ * Relative age of a heartbeat ("just now", "2m ago", "3h ago", "2d ago"), or
+ * "never" when the host has no heartbeat. `nowMs` is injected so the helper is
+ * pure and deterministically testable.
+ */
+export function relativeHeartbeat(iso: string | null | undefined, nowMs: number): string {
+  if (!iso) return 'never';
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return 'never';
+  const deltaSec = Math.max(0, Math.round((nowMs - then) / 1000));
+  if (deltaSec < 45) return 'just now';
+  const min = Math.round(deltaSec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hrs = Math.round(min / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
+}
+
+/** Metrics older than the liveness window are history, never live values. */
+export function hostIsStale(iso: string | null | undefined, nowMs: number, thresholdMs = 5 * 60_000): boolean {
+  if (!iso) return true;
+  const seen = Date.parse(iso);
+  return Number.isNaN(seen) || nowMs - seen > thresholdMs;
+}

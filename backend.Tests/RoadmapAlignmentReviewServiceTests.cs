@@ -100,11 +100,10 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
         File.WriteAllText(Path.Combine(_repoRoot, "ROADMAP.md"), "# ROADMAP\n", Encoding.UTF8);
         // README intentionally absent for this run.
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        File.WriteAllText(
-            Path.Combine(_repoRoot, "docs", "design-principles.md"), "# DP\n", Encoding.UTF8);
+        WriteRepoFile("docs/quality/design-principles.md", "# DP\n");
         // Two mockup folders so the action picks them up by directory walk.
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "alpha-mockup"));
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "beta-mockup"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "alpha-mockup"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "beta-mockup"));
 
         var svc = new RoadmapAlignmentReviewService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
@@ -112,7 +111,7 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
         var paths = scope.Docs.Select(d => d.Path.Replace('\\', '/')).ToArray();
         Assert.Contains("AGENTS.md", paths);
         Assert.Contains("ROADMAP.md", paths);
-        Assert.Contains("docs/design-principles.md", paths);
+        Assert.Contains("docs/quality/design-principles.md", paths);
         Assert.DoesNotContain(paths, p => p.EndsWith("README.md", StringComparison.Ordinal));
         Assert.Contains(paths, p => p.EndsWith("alpha-mockup", StringComparison.Ordinal));
         Assert.Contains(paths, p => p.EndsWith("beta-mockup", StringComparison.Ordinal));
@@ -374,6 +373,13 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
+
+    private void WriteRepoFile(string relPath, string content)
+    {
+        var full = Path.Combine(_repoRoot, relPath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, content, Encoding.UTF8);
+    }
 
     private void WriteJob(string lane, string jobId, string title)
     {

@@ -7,7 +7,7 @@ namespace AgentStudio.Tests;
 
 /// <summary>
 /// Epics foundation: card kind (task|epic) + the task-to-epic assignment ways.
-///   Way 1 - at create time via CreateJobRequest.EpicId / Kind.
+///   Way 1 - at create time via CreateTaskRequest.EpicId / Kind.
 ///   Way 2 - post-hoc via TaskMutationService.SetJobEpic (PUT /api/tasks/{id}/epic).
 ///   Way 3 - an epic's decomposition run reuses way 1 (create sub-tasks with EpicId).
 /// Round-trips through task.json + the scanner so persistence is covered.
@@ -46,7 +46,7 @@ public class EpicAssignmentTests : IDisposable
     public void CreateJob_DefaultKindIsTask_NoEpicId()
     {
         var (_, scanner, mutations) = Build();
-        mutations.CreateJob(new CreateJobRequest { Id = "plain", Title = "Plain", WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "plain", Title = "Plain", WatchPath = _watchPath, TargetState = TaskStates.Ready });
 
         var info = scanner.FindJob("plain", _watchPath);
         Assert.NotNull(info);
@@ -58,7 +58,7 @@ public class EpicAssignmentTests : IDisposable
     public void CreateJob_WithKindEpic_IsPersistedAndScanned()
     {
         var (_, scanner, mutations) = Build();
-        mutations.CreateJob(new CreateJobRequest { Id = "the-epic", Title = "Epic", Kind = TaskKinds.Epic, WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "the-epic", Title = "Epic", Kind = TaskKinds.Epic, WatchPath = _watchPath, TargetState = TaskStates.Ready });
 
         var info = scanner.FindJob("the-epic", _watchPath);
         Assert.NotNull(info);
@@ -69,7 +69,7 @@ public class EpicAssignmentTests : IDisposable
     public void CreateJob_WithEpicId_AssignsAtCreateTime_Way1()
     {
         var (_, scanner, mutations) = Build();
-        mutations.CreateJob(new CreateJobRequest { Id = "sub-1", Title = "Sub", EpicId = "the-epic", WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "sub-1", Title = "Sub", EpicId = "the-epic", WatchPath = _watchPath, TargetState = TaskStates.Ready });
 
         var info = scanner.FindJob("sub-1", _watchPath);
         Assert.NotNull(info);
@@ -81,7 +81,7 @@ public class EpicAssignmentTests : IDisposable
     public void SetJobEpic_AssignsAndDetaches_PostHoc_Way2()
     {
         var (_, scanner, mutations) = Build();
-        mutations.CreateJob(new CreateJobRequest { Id = "sub-2", Title = "Sub", WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "sub-2", Title = "Sub", WatchPath = _watchPath, TargetState = TaskStates.Ready });
         Assert.Null(scanner.FindJob("sub-2", _watchPath)!.EpicId);
 
         Assert.True(mutations.SetJobEpic("sub-2", "the-epic", _watchPath));
@@ -143,6 +143,25 @@ public class EpicAssignmentTests : IDisposable
         Assert.Equal(4, rollup.SubTasks.Count);
         Assert.Equal(1, rollup.ByState[TaskStates.Progress]);    // raw per-lane count preserved
         Assert.Equal("s-backlog", rollup.SubTasks[0].Id);        // ordered by Order
+    }
+
+    [Fact]
+    public void BuildRollup_TreatsArchivedSubTasksAsCompletedHistory()
+    {
+        var epic = new TaskInfo { Id = "epic-history", Title = "Historical Epic", Kind = TaskKinds.Epic, State = TaskStates.Archive };
+        var all = new List<TaskInfo>
+        {
+            epic,
+            Sub("s-completed", epic.Id, TaskStates.Completed, 1),
+            Sub("s-archived", epic.Id, TaskStates.Archive, 2),
+        };
+
+        var rollup = EpicEndpoints.BuildRollup(epic, all);
+
+        Assert.Equal(2, rollup.SubTaskTotal);
+        Assert.Equal(2, rollup.Completed);
+        Assert.Equal(0, rollup.InProgress);
+        Assert.Equal(0, rollup.Open);
     }
 
     [Fact]

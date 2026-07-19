@@ -11,7 +11,7 @@ namespace AgentStudio.Tests;
 /// Regression coverage for the periodic stale-orphan reaper added to fix the
 /// "folder move fails — file in use by another process" wedge. The startup
 /// reaper alone let a long-lived backend accumulate orphan codex/node trees
-/// from finished runs; <see cref="CliExecutionServiceBase.ReapStaleOrphans"/>
+/// from finished runs; <see cref="GenericCliExecutionService.ReapStaleOrphans"/>
 /// is the timer-safe sweep that reaps them without touching a live run.
 /// </summary>
 public sealed class CliExecutionStaleOrphanReaperTests : IDisposable
@@ -170,20 +170,21 @@ public sealed class CliExecutionStaleOrphanReaperTests : IDisposable
     }
 
     /// <summary>
-    /// Minimal concrete <see cref="CliExecutionServiceBase"/> for exercising the
-    /// shared active-jobs reaper. Spawn/argument hooks throw because the reaper
-    /// path never calls them.
+    /// Minimal concrete <see cref="GenericCliExecutionService"/> for exercising
+    /// the shared active-jobs reaper. Spawn/argument hooks throw because the
+    /// reaper path never calls them.
     /// </summary>
-    private sealed class TestCliService : CliExecutionServiceBase
+    private sealed class TestCliService : GenericCliExecutionService
     {
         public const string Type = "claude";
-        public TestCliService(IConfiguration config) : base(NullLogger.Instance, config) { }
-        public override string CliType => Type;
-        public override string GetCliPath() => "claude";
-        protected override ProcessStartInfo BuildStartInfo(
-            string prompt, string workingDirectory, string? sessionName, bool resumeSession,
-            string? model, string? thinkingLevel, string? permissionMode)
-            => throw new NotSupportedException();
+        public TestCliService(IConfiguration config) : base(Behavior, NullLogger.Instance, config) { }
+
+        private static readonly CliBehavior Behavior = new()
+        {
+            CliType = Type,
+            GetCliPath = _ => "claude",
+            BuildStartInfo = (_, _, _, _, _, _, _, _) => throw new NotSupportedException(),
+        };
 
         /// <summary>Seed the in-memory live-process map so the reaper treats this run as in-flight.</summary>
         public void TrackLive(string jobKey, Process proc)

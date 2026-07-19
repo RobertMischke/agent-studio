@@ -173,9 +173,8 @@
     .prt__domain-row {
       display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
       padding: 4px 6px; border-radius: 4px; font-size: 0.80rem;
-      border-left: 2px solid transparent;
     }
-    .prt__domain-row--bad { border-left-color: rgba(248,113,113,0.65); background: rgba(248,113,113,0.05); }
+    .prt__domain-row--bad { background: color-mix(in srgb, var(--severity-high) 8%, transparent); }
     .prt__domain-time {
       color: var(--studio-fg-muted); font-variant-numeric: tabular-nums; white-space: nowrap;
       min-width: 132px;
@@ -218,4 +217,3 @@
       display: inline-block; margin-right: 4px; padding: 1px 6px; border-radius: 3px;
       background: rgba(255,255,255,0.05); color: var(--studio-fg-muted); font-size: 0.72rem;
     }
-  

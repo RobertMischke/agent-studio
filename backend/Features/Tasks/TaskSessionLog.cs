@@ -183,6 +183,19 @@ public class TaskSessionLog
         return MutateLatestSessionEvent(jobId, watchPath, evt => evt with { ExecutionContext = context });
     }
 
+    /// <summary>
+    /// S2 (AGT-1784): correct the latest event's <see cref="SessionEvent.Resumed"/>
+    /// to the EFFECTIVE resume decision. The start-of-run event is written from
+    /// <c>plan.ResumeFlag</c> before the cwd-binding guard runs, so a run that the
+    /// guard turned into a fresh start would otherwise lie as <c>Resumed:true</c>.
+    /// Optionally records why it was downgraded.
+    /// </summary>
+    public bool BackfillLatestSessionEventResumed(string jobId, bool resumed, string? reason = null, string? watchPath = null)
+    {
+        return MutateLatestSessionEvent(jobId, watchPath,
+            evt => evt with { Resumed = resumed, Reason = reason ?? evt.Reason });
+    }
+
     private bool MutateLatestSessionEvent(string jobId, string? watchPath, Func<SessionEvent, SessionEvent> mutate)
     {
         var info = _scanner.FindJob(jobId, watchPath);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   deriveProtocolVerdict,
+  isAcceptedStand,
   parseDuration,
   scanForBlockers,
   stripStatusHeader,
@@ -354,6 +355,132 @@ describe('deriveProtocolVerdict', () => {
       expect(scanForBlockers(null)).toBeNull();
       expect(scanForBlockers('')).toBeNull();
       expect(scanForBlockers('# Status\n- Result: Success')).toBeNull();
+    });
+  });
+
+  // BEFUND 1: the reason was cut mid-word ("…ts' rendering 5 canonical
+  // states…") because the sentence scanner treated the dot in a file
+  // extension / decimal as a sentence boundary, and the sentinel reason
+  // regex stopped at the first special character.
+  describe('robust blocker reason parsing (BEFUND 1)', () => {
+    it('does not cut the reason at a file-extension dot', () => {
+      const md = [
+        '# Status',
+        '- Result: Success',
+        '',
+        '## What Was Done',
+        '- Rewrote `protocol-verdict.ts` rendering 5 canonical states, but could not verify the banner.',
+      ].join('\n');
+      const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: md }));
+      expect(v.kind).toBe('problem');
+      expect(v.label).toBe('Blocked');
+      expect(v.detail).toContain('Rewrote');
+      expect(v.detail).toContain('could not verify the banner');
+      // The old bug surfaced the tail "ts' rendering 5 canonical states…".
+      expect(v.detail).not.toMatch(/:\s*ts['`]/);
+    });
+
+    it('keeps decimals and extensions intact in scanForBlockers', () => {
+      const hit = scanForBlockers('## Notes\n- Upgrade to 5.1 was blocked by config.sys lock.');
+      expect(hit?.sentence).toContain('Upgrade to 5.1 was blocked by config.sys lock');
+    });
+
+    it('keeps a single ] inside the TASK_BLOCKED sentinel reason', () => {
+      const v = deriveProtocolVerdict(
+        baseInputs({ statusMarkdown: '[[TASK_BLOCKED:cannot parse arr[0] without schema]]' }),
+      );
+      expect(v.label).toBe('Blocked');
+      expect(v.detail).toContain('cannot parse arr[0] without schema');
+    });
+
+    it('keeps quotes and colons in the TASK_BLOCKED sentinel reason', () => {
+      const v = deriveProtocolVerdict(
+        baseInputs({ statusMarkdown: '[[TASK_BLOCKED:missing "API key": see docs]]' }),
+      );
+      expect(v.detail).toContain('missing "API key": see docs');
+    });
+  });
+
+  // BEFUND 2: one precedence rule — the current lane / review decision leads
+  // the head verdict; a Blocked from a superseded run is demoted to collapsed
+  // history and must never be the head banner after an accepted stand.
+  describe('leading-state precedence demotes a superseded blocker (BEFUND 2)', () => {
+    const blockedMd = '[[TASK_BLOCKED:sandbox denied write to /etc]]';
+
+    it('leads with Blocked when no accepted stand is present', () => {
+      const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: blockedMd }));
+      expect(v.kind).toBe('problem');
+      expect(v.label).toBe('Blocked');
+      expect(v.superseded).toBeNull();
+    });
+
+    it('demotes Blocked to history when orchestratorVerdict is accept', () => {
+      const v = deriveProtocolVerdict(
+        baseInputs({ statusMarkdown: blockedMd, orchestratorVerdict: 'accept' }),
+      );
+      expect(v.kind).toBe('ok');
+      expect(v.label).toBe('Accepted');
+      expect(v.superseded).not.toBeNull();
+      expect(v.superseded?.label).toBe('Blocked');
+      expect(v.superseded?.detail).toContain('sandbox denied write to /etc');
+    });
+
+    it('demotes Blocked to history when the card lives in 6-completed', () => {
+      const v = deriveProtocolVerdict(
+        baseInputs({ statusMarkdown: blockedMd, laneState: '6-completed' }),
+      );
+      expect(v.kind).toBe('ok');
+      expect(v.superseded?.label).toBe('Blocked');
+    });
+
+    it('demotes a Result: Failed run outcome as well', () => {
+      const v = deriveProtocolVerdict(
+        baseInputs({ statusMarkdown: '# Status\n- Result: Failed\n', orchestratorVerdict: 'accept' }),
+      );
+      expect(v.kind).toBe('ok');
+      expect(v.superseded?.label).toBe('Failed');
+    });
+
+    it('does NOT demote under a reissue / escalate / pending decision', () => {
+      for (const decision of ['reissue', 'escalate', 'pending'] as const) {
+        const v = deriveProtocolVerdict(
+          baseInputs({ statusMarkdown: blockedMd, orchestratorVerdict: decision }),
+        );
+        expect(v.kind, decision).toBe('problem');
+        expect(v.superseded, decision).toBeNull();
+      }
+    });
+
+    it('does NOT demote a summary-failed problem (orthogonal to acceptance)', () => {
+      const v = deriveProtocolVerdict(
+        baseInputs({ summaryStatus: 'failed', statusMarkdown: null, orchestratorVerdict: 'accept' }),
+      );
+      expect(v.kind).toBe('problem');
+      expect(v.label).toBe('Summary failed');
+      expect(v.superseded).toBeNull();
+    });
+
+    it('leaves an OK verdict untouched under an accepted stand', () => {
+      const v = deriveProtocolVerdict(
+        baseInputs({ statusMarkdown: '[[TASK_DONE]]', orchestratorVerdict: 'accept' }),
+      );
+      expect(v.kind).toBe('ok');
+      expect(v.label).toBe('Done');
+      expect(v.superseded).toBeNull();
+    });
+  });
+
+  describe('isAcceptedStand', () => {
+    it('is true for an accept verdict and completed / archive lanes', () => {
+      expect(isAcceptedStand(baseInputs({ orchestratorVerdict: 'accept' }))).toBe(true);
+      expect(isAcceptedStand(baseInputs({ laneState: '6-completed' }))).toBe(true);
+      expect(isAcceptedStand(baseInputs({ laneState: '7-archive' }))).toBe(true);
+    });
+
+    it('is false for in-flight lanes and non-accept decisions', () => {
+      expect(isAcceptedStand(baseInputs())).toBe(false);
+      expect(isAcceptedStand(baseInputs({ laneState: '4-auto-review' }))).toBe(false);
+      expect(isAcceptedStand(baseInputs({ orchestratorVerdict: 'reissue' }))).toBe(false);
     });
   });
 });

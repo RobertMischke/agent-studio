@@ -1,4 +1,11 @@
-@if (overlays.settingsOpen()) {
+@if (inline()) {
+  <section class="ws-settings ws-settings--inline"
+           role="region"
+           aria-labelledby="ws-settings-title"
+           data-testid="workspace-settings-inline">
+    <ng-container [ngTemplateOutlet]="settingsContent"></ng-container>
+  </section>
+} @else if (overlays.settingsOpen()) {
   <div class="ws-settings__backdrop"
        appOverlayPortal="modal"
        data-testid="workspace-settings-overlay"
@@ -14,84 +21,160 @@
              tabindex="0"
              (keydown.enter)="$event.stopPropagation()"
              (keydown.space)="$event.stopPropagation()">
-      <header class="ws-settings__head">
-        <div class="ws-settings__title-row">
-          <h1 id="ws-settings-title"
-              class="ws-settings__title"
-              data-testid="workspace-settings-title">Workspace settings</h1>
-          <span class="ws-settings__chip">global</span>
-          <span class="ws-settings__spacer"></span>
-          <button class="ws-settings__close"
-                  type="button"
-                  data-testid="workspace-settings-close"
-                  [appTooltip]="'Close settings'"
-                  (click)="overlays.close()">✕</button>
-        </div>
-      </header>
-
-      <div class="ws-settings__body">
-        <aside class="ws-settings__rail"
-               data-testid="workspace-settings-rail"
-               aria-label="Workspace settings sections">
-          <div class="ws-settings__rail-group">Workspace</div>
-          @for (item of railItems; track item.key) {
-            <button class="ws-settings__rail-item"
-                    type="button"
-                    [class.ws-settings__rail-item--active]="item.key === overlays.section()"
-                    [attr.data-testid]="'workspace-settings-rail-' + item.key"
-                    [attr.aria-current]="item.key === overlays.section() ? 'page' : null"
-                    (click)="overlays.select(item.key)">
-              <span class="ws-settings__rail-icon" aria-hidden="true">{{ item.icon }}</span>
-              <span class="ws-settings__rail-label">{{ item.label }}</span>
-            </button>
-          }
-        </aside>
-
-        <main class="ws-settings__panel"
-              [class.ws-settings__panel--wide]="overlays.section() !== 'overview'"
-              [attr.data-testid]="panelTestid()"
-              [attr.data-section]="overlays.section()">
-          @switch (overlays.section()) {
-            @case ('overview') {
-              <header class="ws-settings__panel-head">
-                <h2 class="ws-settings__panel-title">Workspace settings</h2>
-                <p class="ws-settings__panel-desc">
-                  Global defaults and usage surfaces, in one place. Each card opens a
-                  section; project-level views can override these defaults.
-                </p>
-              </header>
-              <div class="ws-settings__cards" data-testid="workspace-settings-overview">
-                @for (item of contentItems; track item.key) {
-                  <button class="ws-settings__card"
-                          type="button"
-                          [attr.data-testid]="'workspace-settings-card-' + item.key"
-                          (click)="overlays.select(item.key)">
-                    <span class="ws-settings__card-icon" aria-hidden="true">{{ item.icon }}</span>
-                    <span class="ws-settings__card-title">{{ item.label }}</span>
-                    <span class="ws-settings__card-desc">{{ item.description }}</span>
-                  </button>
-                }
-              </div>
-            }
-            @case ('caps') {
-              <app-cli-admin-panel (openProjectSettings)="openProjectSettings.emit($event)"
-                                   (openJobDetail)="openJobDetail.emit($event)" />
-            }
-            @case ('prompts') {
-              <app-prompt-admin-panel />
-            }
-            @case ('tokens') {
-              <app-workspace-token-timeline />
-            }
-            @case ('screenshots') {
-              <app-workspace-screenshots (openTask)="openTask.emit($event)" />
-            }
-            @case ('summary') {
-              <app-workspace-summary />
-            }
-          }
-        </main>
-      </div>
+      <ng-container [ngTemplateOutlet]="settingsContent"></ng-container>
     </section>
   </div>
 }
+
+<ng-template #settingsContent>
+  <header class="ws-settings__head">
+    <div class="ws-settings__title-row">
+      <h1 id="ws-settings-title"
+          class="ws-settings__title"
+          data-testid="workspace-settings-title">Settings</h1>
+      <span class="ws-settings__chip">global &amp; workspace</span>
+      <span class="ws-settings__spacer"></span>
+      @if (!inline()) {
+        <button class="ws-settings__close"
+                type="button"
+                data-testid="workspace-settings-close"
+                [cacTooltip]="'Close settings'"
+                (click)="overlays.close()">✕</button>
+      }
+    </div>
+  </header>
+
+  <div class="ws-settings__body">
+    <aside class="ws-settings__rail"
+           data-testid="workspace-settings-rail"
+           aria-label="Settings sections">
+      @for (item of railItems; track item.key; let i = $index) {
+        @if (isGroupStart(i)) {
+          <div class="ws-settings__rail-group">{{ groupLabels[item.group] }}</div>
+        }
+        <button class="ws-settings__rail-item"
+                type="button"
+                [class.ws-settings__rail-item--active]="item.key === overlays.section()"
+                [attr.data-testid]="'workspace-settings-rail-' + item.key"
+                [attr.aria-current]="item.key === overlays.section() ? 'page' : null"
+                (click)="overlays.select(item.key)">
+          <span class="ws-settings__rail-icon" aria-hidden="true">{{ item.icon }}</span>
+          <span class="ws-settings__rail-label">{{ item.label }}</span>
+        </button>
+      }
+    </aside>
+
+    <main class="ws-settings__panel"
+          [class.ws-settings__panel--wide]="overlays.section() !== 'overview'"
+          [attr.data-testid]="panelTestid()"
+          [attr.data-section]="overlays.section()">
+      @switch (overlays.section()) {
+        @case ('overview') {
+          <header class="ws-settings__panel-head">
+            <h2 class="ws-settings__panel-title">Settings</h2>
+            <p class="ws-settings__panel-desc">
+              Everything in one place. <strong>Global</strong> preferences apply
+              to you across every workspace; <strong>Workspace</strong> sections
+              are defaults applied across the workspace's projects.
+            </p>
+          </header>
+          <div class="ws-settings__cards" data-testid="workspace-settings-overview">
+            @for (item of contentItems; track item.key) {
+              <button class="ws-settings__card"
+                      type="button"
+                      [attr.data-testid]="'workspace-settings-card-' + item.key"
+                      (click)="overlays.select(item.key)">
+                <span class="ws-settings__card-icon" aria-hidden="true">{{ item.icon }}</span>
+                <span class="ws-settings__card-title">{{ item.label }}</span>
+                <span class="ws-settings__card-desc">{{ item.description }}</span>
+              </button>
+            }
+          </div>
+        }
+        @case ('appearance') {
+          <app-appearance-settings />
+        }
+        @case ('updates') {
+          <app-updates-settings />
+        }
+        @case ('workspaces') {
+          <app-workspace-management />
+        }
+        @case ('task-server') {
+          <app-task-server-panel />
+        }
+        @case ('remote-hosts') {
+          <app-remote-hosts-panel [workspaces]="watchPaths()" (openTask)="openJobDetail.emit($event)" />
+        }
+        @case ('orchestrator') {
+          <section class="ws-settings__section" data-testid="workspace-orchestrator">
+            <header class="ws-settings__section-head">
+              <h2 class="ws-settings__panel-title">Orchestrator</h2>
+              <p class="ws-settings__panel-desc">
+                Platform-global runtime flags for the orchestrator, supervisor,
+                meta-cycle, and auto-intervention loops. These gate whole hosted
+                loops for this backend, so they are a single instance-wide value
+                (not a per-workspace default). Per-workspace orchestrator
+                <strong>model</strong> and <strong>autonomy</strong> defaults live
+                on each project's Settings → Workspace defaults instead.
+              </p>
+            </header>
+            <app-orchestrator-logic-panel />
+          </section>
+        }
+        @case ('caps') {
+          <app-cli-admin-panel />
+        }
+        @case ('cli-sessions') {
+          <section class="ws-settings__section" data-testid="workspace-cli-sessions">
+            <header class="ws-settings__section-head">
+              <h2 class="ws-settings__panel-title">CLI sessions</h2>
+              <p class="ws-settings__panel-desc">
+                The per-CLI, per-project inventory of native CLI sessions on this
+                host. This is a lazy read-only view; the larger session revamp is
+                tracked separately.
+              </p>
+            </header>
+            <app-cli-sessions-panel (openJobDetail)="openJobDetail.emit($event)" />
+          </section>
+        }
+        @case ('cli-paths') {
+          <section class="ws-settings__section" data-testid="workspace-cli-paths">
+            <header class="ws-settings__section-head">
+              <h2 class="ws-settings__panel-title">CLI paths</h2>
+              <p class="ws-settings__panel-desc">
+                Where each CLI lives on this host: the discovered executable path
+                and the project roots it holds session state for. Read-only.
+              </p>
+            </header>
+            <app-cli-paths-panel />
+          </section>
+        }
+        @case ('working-memory') {
+          <section class="ws-settings__section" data-testid="workspace-working-memory">
+            <header class="ws-settings__section-head">
+              <h2 class="ws-settings__panel-title">Working memory</h2>
+              <p class="ws-settings__panel-desc">
+                Per-CLI memory and session state you can inspect and clear. Auth
+                and config are protected and never listed as deletable.
+              </p>
+            </header>
+            <app-cli-working-memory-panel />
+          </section>
+        }
+        @case ('prompts') {
+          <app-prompt-admin-panel />
+        }
+        @case ('tokens') {
+          <app-token-usage-section
+            [page]="overlays.tokenUsagePage()"
+            (pageChange)="overlays.selectTokenUsagePage($event)"
+            (openProjectSettings)="openProjectSettings.emit($event)" />
+        }
+        @case ('screenshots') {
+          <app-workspace-screenshots (openTask)="openTask.emit($event)" />
+        }
+      }
+    </main>
+  </div>
+</ng-template>

@@ -12,7 +12,7 @@
  * row in the explorer while the scoped epic list stays empty, drives the UI
  * create flow, and asserts the freshly created epic appears. Routes are
  * `/api/tasks*`; the task helpers are inlined so this does not depend on the
- * still-`/api/jobs` shared helpers.
+ * still-`/api/tasks` shared helpers.
  */
 import { test, expect, type Page } from '@playwright/test';
 import { api, BACKEND } from '../helpers/api';
@@ -112,12 +112,14 @@ test.describe('Epics empty-state + create dialog (per project)', () => {
     await page.screenshot({ path: emptyShot, fullPage: false });
     await testInfo.attach('epics-empty-invite', { path: emptyShot, contentType: 'image/png' });
 
-    // Open the dialog from the invitation and fill in a title.
+    // Open the dialog and provide both required intent fields. Requiring a
+    // concrete goal prevents unexplained empty placeholder epics.
     await page.getByTestId('epic-overview-create').click();
     const dialog = page.getByTestId('epic-create-dialog');
     await expect(dialog).toBeVisible({ timeout: 5_000 });
     const title = `${PREFIX}Checkout revamp`;
     await page.getByTestId('epic-create-title').fill(title);
+    await page.getByTestId('epic-create-description').fill('Split checkout work into reviewable delivery tasks.');
 
     const dialogShot = testInfo.outputPath('epic-create-dialog.png');
     await page.screenshot({ path: dialogShot, fullPage: false });

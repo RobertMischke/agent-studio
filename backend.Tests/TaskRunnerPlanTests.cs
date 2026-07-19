@@ -29,7 +29,7 @@ public class TaskRunnerPlanTests
         new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
     private static bool ClaudeCompat(string? n) =>
         !string.IsNullOrWhiteSpace(n) && UuidRegex.IsMatch(n!);
-    // Permissive base predicate (Copilot / Gemini / Codex default): non-empty.
+    // Permissive base predicate (Gemini / Codex default): non-empty.
     private static bool PermissiveCompat(string? n) => !string.IsNullOrWhiteSpace(n);
 
     private const string ValidUuid       = "a1b2c3d4-e5f6-4789-abcd-ef0123456789";
@@ -280,16 +280,16 @@ public class TaskRunnerPlanTests
     }
 
     /// <summary>
-    /// On a permissive-compat CLI (Copilot), the placeholder slug passes the
+    /// On a permissive-compat CLI (e.g. Gemini), the placeholder slug passes the
     /// "is non-empty" compat check, so the planner's dedicated placeholder
     /// branch fires and the reason text identifies it as a legacy slug. This
     /// is the path that the placeholder regex was actually written for.
     /// </summary>
     [Fact]
-    public void Continue_WithPlaceholderSlug_OnCopilot_RoutesToRecoveryWithPlaceholderReason()
+    public void Continue_WithPlaceholderSlug_OnPermissiveCli_RoutesToRecoveryWithPlaceholderReason()
     {
         var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: PlaceholderSlug,
-                     cliType: CliTypes.Copilot, compat: PermissiveCompat, followup: "go on");
+                     cliType: CliTypes.Gemini, compat: PermissiveCompat, followup: "go on");
 
         Assert.Equal("recovery", p.EventKind);
         Assert.False(p.ResumeFlag);
@@ -298,7 +298,7 @@ public class TaskRunnerPlanTests
     }
 
     /// <summary>
-    /// Foreign-CLI handle (e.g. Copilot's slug under a Claude job): not UUID-
+    /// Foreign-CLI handle (e.g. a Gemini slug under a Claude job): not UUID-
     /// shaped, so the Claude compat predicate rejects it. Planner routes to
     /// recovery with the cli-specific reason text so the session-events log
     /// explains why.
@@ -452,25 +452,6 @@ public class TaskRunnerPlanTests
         Assert.True(p.ClearStaleSessionName);
         Assert.False(p.MarkSessionChainRecovery);
         Assert.Equal(RuntimePromptService.RunnerFreshStart, p.PromptTemplate);
-    }
-
-    /// <summary>
-    /// Copilot-specific: Copilot uses the persisted session name as the
-    /// `--resume` handle, so the planner must pre-generate a slug on a fresh
-    /// start and signal PersistSessionName so the runner writes it back to
-    /// task.json. Other CLIs leave SessionName null until they capture a real
-    /// UUID during streaming.
-    /// </summary>
-    [Fact]
-    public void Start_Copilot_PreGeneratesSessionSlug()
-    {
-        var p = Plan(RunIntent.ManualStart, TaskStates.Ready, sessionName: null,
-                     cliType: CliTypes.Copilot, compat: PermissiveCompat);
-
-        Assert.NotNull(p.PersistSessionName);
-        Assert.NotNull(p.SessionToResume);
-        Assert.Equal(p.PersistSessionName, p.SessionToResume);
-        Assert.StartsWith("taskboard-fix-bug-", p.PersistSessionName);
     }
 
     /// <summary>
@@ -721,32 +702,58 @@ public class TaskRunnerPlanTests
         Assert.Equal("Pick up where you left off please.", Var(p, "user_followup"));
     }
 
+    [Fact]
+    public void MissingCodexRollout_FallsBackBeforeRender_WithFullRecoveryContext()
+    {
+        var resume = Plan(
+            RunIntent.UserContinue,
+            TaskStates.Progress,
+            sessionName: ValidUuid,
+            cliType: CliTypes.Codex,
+            compat: ClaudeCompat,
+            followup: "Inspect the successful run and continue.");
+
+        var fallback = RunPlanner.FallBackToRecovery(
+            resume,
+            promptPath: @"C:\jobs\fix-bug\prompt.md",
+            jobFolder: @"C:\jobs\fix-bug",
+            followupPrompt: "Inspect the successful run and continue.",
+            reason: "Codex rollout is absent from the current CODEX_HOME");
+
+        Assert.False(fallback.ResumeFlag);
+        Assert.Null(fallback.SessionToResume);
+        Assert.Equal("recovery", fallback.EventKind);
+        Assert.Equal(RuntimePromptService.RunnerRecoveryContinuation, fallback.PromptTemplate);
+        Assert.Equal(@"C:\jobs\fix-bug\prompt.md", Var(fallback, "prompt_path"));
+        Assert.Equal(@"C:\jobs\fix-bug", Var(fallback, "job_folder"));
+        Assert.Equal("Inspect the successful run and continue.", Var(fallback, "user_followup"));
+        Assert.True(fallback.MarkSessionChainRecovery);
+        Assert.True(fallback.WriteCutMarker);
+    }
+
     /// <summary>
-    /// A Copilot session whose persisted slug DOESN'T match the
+    /// A permissive-compat session whose persisted slug DOESN'T match the
     /// <c>taskboard-...-NNNNNNNNNNNN</c> placeholder shape (e.g. a slug from
     /// a previous version of the app or one entered manually). Continue
-    /// must resume via the slug. This is the only Copilot continue shape
-    /// that actually resumes today — the auto-generated slug from
+    /// must resume via the slug — the auto-generated slug from
     /// <see cref="RunPlanner.BuildSessionName"/> is treated as a legacy
-    /// placeholder and routes to recovery (see
-    /// <see cref="Continue_WithPlaceholderSlug_OnCopilot_RoutesToRecoveryWithPlaceholderReason"/>).
-    /// That asymmetry is intentional today: when we changed Copilot's
-    /// resume semantics, the placeholder guard kept old jobs from
-    /// resuming with a slug that was never a real session on Copilot's
-    /// side. If Copilot's CLI surfaces a real session ID, it should be
-    /// stored under a non-placeholder shape and follow this path.
+    /// placeholder and routes to recovery instead (see
+    /// <see cref="Continue_WithPlaceholderSlug_OnPermissiveCli_RoutesToRecoveryWithPlaceholderReason"/>).
+    /// That asymmetry keeps old jobs from resuming with a slug that was
+    /// never a real session. A real session ID stored under a
+    /// non-placeholder shape follows this resume path.
     /// </summary>
     [Fact]
-    public void Continue_CopilotNonPlaceholderSlugSession_ResumesViaSlug()
+    public void Continue_PermissiveCliNonPlaceholderSlugSession_ResumesViaSlug()
     {
-        const string copilotSlug = "user-named-session-2026";  // doesn't match placeholder regex
-        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: copilotSlug,
-                     cliType: CliTypes.Copilot, compat: PermissiveCompat,
+        const string slug = "user-named-session-2026";  // doesn't match placeholder regex
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: slug,
+                     cliType: CliTypes.Gemini, compat: PermissiveCompat,
                      followup: "Try running the tests.");
 
         Assert.Equal("continue", p.EventKind);
         Assert.True(p.ResumeFlag);
-        Assert.Equal(copilotSlug, p.SessionToResume);
+        Assert.Equal(slug, p.SessionToResume);
         Assert.False(p.MarkSessionChainRecovery);
     }
 

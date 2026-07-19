@@ -178,7 +178,7 @@ async function seedThreeCardsIn(state: string, watchPath: string, prefix: string
   const startState = createTarget ?? state;
   const createState = startState === '0-backlog' ? '0-backlog' : startState === '2-ready' ? '2-ready' : '0-backlog';
   // fixture: false so the seeded cards are visible on the kanban. The
-  // backend's /api/jobs/grouped endpoint hides fixture jobs by default,
+  // backend's /api/tasks/grouped endpoint hides fixture jobs by default,
   // and the frontend never passes ?includeFixtures=true, so a fixture
   // job would be invisible to the UI assertions below. Cleanup in the
   // surrounding test deletes the trio whether the test passes or fails.

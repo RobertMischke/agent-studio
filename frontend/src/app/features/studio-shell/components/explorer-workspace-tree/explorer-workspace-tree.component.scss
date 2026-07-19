@@ -2,12 +2,71 @@
   display: block;
 }
 
+/* Project URL rows carry a small running/offline status dot in place of the
+   count badge. Grey by default (unknown), green when the probe reaches the
+   server, dim grey when it does not. */
+.studio-url-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--studio-fg-muted);
+}
+
+.studio-url-status-dot--running {
+  background: var(--studio-accent-success);
+}
+
+.studio-url-status-dot--offline {
+  background: var(--studio-fg-muted);
+  opacity: 0.6;
+}
+
+/* AGT-2067: hover-revealed "open in external browser" fallback on a URL row.
+   The primary click embeds the URL as a preview tab; this keeps the always-
+   available browser-jump escape hatch without stealing the primary target. */
+.studio-tree-row__url-ext {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+
+  &:hover {
+    background: var(--studio-bg-hover);
+    color: var(--studio-accent);
+  }
+}
+
+.tree-row:hover .studio-tree-row__url-ext,
+.studio-tree-row__url-ext:focus-visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-tree-row__url-ext {
+    transition-duration: 0s;
+  }
+}
+
 /* Workspace folder header sits between the panel section header and the
    project rows; a small top gap separates one workspace group from the
    next so the two-level hierarchy reads at a glance. */
 .studio-explorer-tree__ws-head {
   display: block;
   margin-top: var(--studio-spacing-1);
+  position: relative;
+}
+
+.studio .studio-explorer-tree__ws-head .tree-row {
+  padding-right: calc(var(--studio-rail-trailing-gutter) + 28px);
 }
 
 /* Each workspace group (header + its project rows) is the drop zone for the
@@ -53,61 +112,35 @@
   outline: none;
 }
 
-.studio-explorer-tree__add-project {
-  width: calc(100% - var(--studio-spacing-4));
-  margin: var(--studio-spacing-1) var(--studio-spacing-2) var(--studio-spacing-2);
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border: 1px dashed var(--studio-border);
-  border-radius: 6px;
+.studio-explorer-tree__row-action {
+  position: absolute;
+  top: 50%;
+  right: var(--studio-rail-trailing-gutter);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
   background: transparent;
   color: var(--studio-fg-muted);
-  text-align: left;
   cursor: pointer;
+  opacity: 0.72;
+  transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
+  transform: translateY(-50%);
 }
 
-.studio-explorer-tree__add-project:hover,
-.studio-explorer-tree__add-project:focus-visible {
+.studio-explorer-tree__row-action:hover,
+.studio-explorer-tree__row-action:focus-visible {
   background: var(--studio-bg-hover);
-  color: var(--studio-fg);
+  color: var(--studio-accent);
+  opacity: 1;
+  outline: none;
 }
 
-.studio-board-lane-counts {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--studio-spacing-1);
-  flex: 0 0 auto;
-}
-
-.studio-board-lane-count {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 var(--studio-spacing-1);
-  border: 1px solid var(--studio-board-nav-lane-border);
-  border-radius: 999px;
-  background: var(--studio-board-nav-lane-bg);
-  color: var(--studio-board-nav-lane-fg);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 14px;
-  letter-spacing: 0;
-  text-align: center;
-
-  &--ready {
-    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-ready-fg);
-    --studio-board-nav-lane-bg: var(--studio-board-nav-lane-ready-bg);
-    --studio-board-nav-lane-border: var(--studio-board-nav-lane-ready-border);
-  }
-
-  &--progress {
-    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-progress-fg);
-    --studio-board-nav-lane-bg: var(--studio-board-nav-lane-progress-bg);
-    --studio-board-nav-lane-border: var(--studio-board-nav-lane-progress-border);
-  }
-
-  &--human-review {
-    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-human-review-fg);
-    --studio-board-nav-lane-bg: var(--studio-board-nav-lane-human-review-bg);
-    --studio-board-nav-lane-border: var(--studio-board-nav-lane-human-review-border);
-  }
+.studio-explorer-tree__ws-head:hover .studio-explorer-tree__row-action,
+.studio-explorer-tree__ws-head:focus-within .studio-explorer-tree__row-action {
+  opacity: 1;
 }

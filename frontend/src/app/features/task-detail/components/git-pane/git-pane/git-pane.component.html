@@ -6,28 +6,45 @@
   <header class="pane__header">
     <h3 class="pane__title">{{ paneTitle() }}</h3>
     @if (git.viewMode() === 'worktree' && isActiveJob()) {
-      <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" [appTooltip]="'Refresh git status'">↻</button>
+      <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" [cacTooltip]="'Refresh git status'">↻</button>
     }
     <button class="pane__maximize"
             data-testid="pane-maximize-git"
             (click)="maximizeToggle.emit()"
-            [appTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
+            [cacTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
       {{ maximized() ? '⤡' : '⤢' }}
     </button>
-    <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">×</button>
+    <button class="pane__hide" (click)="hide.emit()" [cacTooltip]="'Hide panel'">×</button>
   </header>
   <div class="pane__body git-view"
        [class.git-view--split]="maximized()"
        data-testid="git-view-body">
     @if (git.viewMode() === 'commit') {
+      @if (git.provenance() || git.commitChain().length > 1 || git.commitDetail()?.commit) {
+        <div class="git-view__head"
+             [class.git-view__head--collapsed]="headCollapsed()"
+             data-testid="git-commit-head">
+          <button type="button"
+                  class="git-view__head-toggle"
+                  data-testid="git-head-collapse-toggle"
+                  [attr.aria-expanded]="!headCollapsed()"
+                  [cacTooltip]="headCollapsed() ? 'Show commit details' : 'Hide commit details'"
+                  (click)="toggleHeadCollapsed()">
+            <span class="git-view__head-caret">{{ headCollapsed() ? '▾' : '▴' }}</span>
+            <span class="git-view__head-title">{{ headTitle() }}</span>
+            @if (headCollapsed()) {
+              <span class="git-view__head-summary" data-testid="git-head-summary">{{ selectedCommitSummary() }}</span>
+            }
+          </button>
+          @if (!headCollapsed()) {
       @if (git.provenance(); as prov) {
         <section class="git-view__landed" data-testid="git-landed-ladder">
-          <div class="git-view__landed-head">
-            <span class="git-view__landed-state"
-                  data-testid="git-landed-state"
-                  [attr.data-state]="prov.landedState"
-                  [appTooltip]="landedStateTooltip(prov)">{{ landedStateLabel(prov.landedState) }}</span>
-          </div>
+          <!--
+            Single on-develop status line for the task (UI-feedback 2026-07-09).
+            The former "Merged to develop" pill above the ladder and the
+            per-commit "on develop" membership chips below it were redundant
+            with these rungs, so both were removed; the ladder is now the one
+            place the develop-merged / main-pending state is shown. -->
           <ol class="git-view__ladder" role="list" aria-label="Landed ladder (task branch to develop to main)">
             <li class="git-view__ladder-rung git-view__ladder-rung--reached"
                 data-testid="git-ladder-branch">
@@ -37,9 +54,7 @@
             <li class="git-view__ladder-rung"
                 [class.git-view__ladder-rung--reached]="prov.ladder.mergedToIntegration"
                 data-testid="git-ladder-integration"
-                [appTooltip]="prov.ladder.mergedToIntegration
-                  ? 'Merged into ' + prov.ladder.integrationBranch + ' (HEAD now ' + short(prov.ladder.integrationHead) + ')'
-                  : 'Not yet merged into ' + prov.ladder.integrationBranch + ' (HEAD now ' + short(prov.ladder.integrationHead) + ')'">
+                [cacTooltip]="integrationRungTooltip(prov.ladder)">
               <span class="git-view__ladder-arrow">→</span>
               <span class="git-view__ladder-name">{{ prov.ladder.integrationBranch }}</span>
               <span class="git-view__ladder-sha">{{ short(prov.ladder.integrationHead) }}</span>
@@ -48,33 +63,28 @@
             <li class="git-view__ladder-rung"
                 [class.git-view__ladder-rung--reached]="prov.ladder.releasedToRelease"
                 data-testid="git-ladder-release"
-                [appTooltip]="prov.ladder.releasedToRelease
-                  ? 'Released into ' + prov.ladder.releaseBranch + ' (HEAD now ' + short(prov.ladder.releaseHead) + ')'
-                  : 'Not yet released into ' + prov.ladder.releaseBranch + ' (HEAD now ' + short(prov.ladder.releaseHead) + ')'">
+                [cacTooltip]="releaseRungTooltip(prov.ladder)">
               <span class="git-view__ladder-arrow">→</span>
               <span class="git-view__ladder-name">{{ prov.ladder.releaseBranch }}</span>
               <span class="git-view__ladder-sha">{{ short(prov.ladder.releaseHead) }}</span>
               <span class="git-view__ladder-flag">{{ prov.ladder.releasedToRelease ? 'released' : 'pending' }}</span>
             </li>
           </ol>
-          @if (prov.commits.length) {
-            <ul class="git-view__membership"
-                data-testid="git-commit-membership"
-                role="list"
-                aria-label="Per-commit branch membership">
-              @for (m of prov.commits; track m.sha) {
-                <li class="git-view__membership-item"
-                    [attr.data-sha]="m.sha"
-                    [attr.data-membership]="membershipLabel(m)">
-                  <span class="git-view__membership-sha"
-                        [appTooltip]="membershipTooltip(m, prov)">{{ m.shortSha }}</span>
-                  <span class="git-view__membership-where"
-                        [attr.data-membership]="membershipLabel(m)">{{ membershipLabel(m) }}</span>
-                  <span class="git-view__membership-subject">{{ m.message.split('\n')[0] }}</span>
-                </li>
-              }
-            </ul>
-          }
+        </section>
+      } @else if (!git.provenanceLoaded()) {
+        <!--
+          AGT-2006: while the graph-derived landed status is still loading, show
+          an explicit skeleton in the same slot instead of an empty gap, so the
+          git-status area reads as "loading" consistently with the header's
+          gated acceptance primary. Replaced atomically by the real ladder once
+          provenance resolves. -->
+        <section class="git-view__landed git-view__landed--loading"
+                 data-testid="git-landed-ladder-loading"
+                 role="status"
+                 aria-live="polite">
+          <span class="git-view__ladder-skeleton" aria-hidden="true"></span>
+          <span class="git-view__ladder-skeleton git-view__ladder-skeleton--wide" aria-hidden="true"></span>
+          <span class="visually-hidden">Loading landed status…</span>
         </section>
       }
       @if (git.commitChain().length > 1) {
@@ -85,7 +95,7 @@
                   class="git-view__commit-group-toggle"
                   data-testid="git-commit-group-toggle"
                   [attr.aria-expanded]="!commitGroupCollapsed()"
-                  [appTooltip]="commitGroupCollapsed() ? 'Show task commits' : 'Hide task commits'"
+                  [cacTooltip]="commitGroupCollapsed() ? 'Show task commits' : 'Hide task commits'"
                   (click)="toggleCommitGroupCollapsed()">
             <span class="git-view__commit-group-caret">{{ commitGroupCollapsed() ? '▾' : '▴' }}</span>
             <span class="git-view__commit-group-title">{{ git.commitChain().length }} task commits</span>
@@ -102,7 +112,7 @@
                 <button type="button"
                         class="git-view__commit-chain-button"
                         [attr.aria-pressed]="git.selectedCommitSha() === null"
-                        [appTooltip]="'Combined diff across all ' + git.commitChain().length + ' task commits'"
+                        [cacTooltip]="'Combined diff across all ' + git.commitChain().length + ' task commits'"
                         (click)="git.selectAllCommits()">
                   <span class="git-view__commit-chain-step">∑</span>
                   <span class="git-view__commit-chain-subject">All {{ git.commitChain().length }} commits</span>
@@ -116,16 +126,11 @@
                   <button type="button"
                           class="git-view__commit-chain-button"
                           [attr.aria-pressed]="git.selectedCommitSha() === entry.sha"
-                          [appTooltip]="commitChainTooltip(entry, i)"
+                          [cacTooltip]="commitChainTooltip(entry, i)"
                           (click)="git.selectChainCommit(entry.sha)">
                     <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
                     <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
                     <span class="git-view__commit-chain-subject">{{ entry.message.split('\n')[0] }}</span>
-                    @if (confidencePercent(entry); as pct) {
-                      <span class="git-view__commit-confidence"
-                            data-testid="git-commit-confidence"
-                            [appTooltip]="attributionTooltip(entry)">{{ pct }}</span>
-                    }
                     <span class="git-view__commit-chain-meta"
                           data-testid="git-commit-chain-meta">{{ entry.filesChanged }}f · {{ commitChainTimestamp(entry) }}</span>
                   </button>
@@ -148,17 +153,23 @@
               <span class="git-view__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
             }
             <span class="git-view__commit-when">{{ c.at | date:'medium' }}</span>
-            @if (confidencePercent(c); as pct) {
-              <span class="git-view__commit-confidence"
-                    data-testid="git-commit-header-confidence"
-                    [appTooltip]="attributionTooltip(c)">{{ pct }}</span>
+            @if (git.commitReview(); as review) {
+              <button type="button"
+                      class="git-view__commit-review git-view__commit-review--{{ reviewTone(review.verdict) }}"
+                      data-testid="git-commit-review-badge"
+                      [attr.data-verdict]="reviewTone(review.verdict)"
+                      [cacTooltip]="reviewTooltip(review)"
+                      (click)="openCodeReview()">
+                <span class="git-view__commit-review-glyph" aria-hidden="true">{{ reviewGlyph(review.verdict) }}</span>
+                <span class="git-view__commit-review-label">{{ reviewLabel(review.verdict) }}</span>
+              </button>
             }
             <button type="button"
                     class="git-view__commit-collapse"
                     data-testid="git-commit-collapse-toggle"
                     [attr.aria-expanded]="!commitHeaderCollapsed()"
                     [attr.aria-label]="commitHeaderCollapsed() ? 'Expand commit message' : 'Collapse commit message'"
-                    [appTooltip]="commitHeaderCollapsed() ? 'Expand commit message' : 'Collapse commit message'"
+                    [cacTooltip]="commitHeaderCollapsed() ? 'Expand commit message' : 'Collapse commit message'"
                     (click)="toggleCommitHeaderCollapsed()">
               {{ commitHeaderCollapsed() ? '▾' : '▴' }}
             </button>
@@ -168,9 +179,12 @@
           }
         </div>
       }
+          }
+        </div>
+      }
       @if (git.isAggregate() || git.commitDetail()?.commit) {
         @if (git.commitFiles().length) {
-          <div class="git-view__split-body">
+          <div class="git-view__split-body" [style.--git-tree-width.px]="treeColWidth()">
             <div class="git-view__tree-col" data-testid="git-tree-col">
               <app-git-file-tree
                 [files]="git.commitFiles()"
@@ -179,46 +193,21 @@
                 (selectRequest)="git.selectDiffPath($event)" />
             </div>
 
+            <div class="git-view__splitter"
+                 data-testid="git-tree-splitter"
+                 role="separator"
+                 aria-orientation="vertical"
+                 aria-label="Resize file tree column"
+                 tabindex="0"
+                 [class.git-view__splitter--dragging]="treeResizing()"
+                 (pointerdown)="startTreeResize($event)"
+                 (pointermove)="onTreeResizeMove($event)"
+                 (pointerup)="endTreeResize($event)"
+                 (pointercancel)="endTreeResize($event)"
+                 (keydown)="onTreeResizeKey($event)"></div>
+
             @if (git.selectedDiffPath()) {
-              <div class="git-view__diff-col" data-testid="git-diff-col">
-                <div class="git-view__diff-wrap"
-                     [class.git-view__diff-wrap--maximized]="diffMaximized()"
-                     [class.git-view__diff-wrap--inline]="maximized()"
-                     data-testid="git-diff-wrap">
-                  <div class="git-view__diff-toolbar">
-                    <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
-                    <span class="git-view__diff-mode">{{ (maximized() || diffMaximized()) ? 'side-by-side' : 'line-by-line' }}</span>
-                    @if (!maximized()) {
-                      <button class="pane__maximize"
-                              data-testid="git-diff-maximize"
-                              (click)="toggleDiffMaximize()"
-                              [appTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
-                        {{ diffMaximized() ? '⤡' : '⤢' }}
-                      </button>
-                    }
-                  </div>
-                  @if (diffGated()) {
-                    <div class="git-view__diff git-view__diff--gated" data-testid="git-diff-gated">
-                      <div class="git-view__gated-meta">
-                        @if (selectedFileStatus(); as st) {
-                          <span class="git-view__gated-status" [attr.data-status]="st">{{ st }}</span>
-                        }
-                        <span class="git-view__gated-name">{{ git.selectedDiffPath() }}</span>
-                        <span class="git-view__gated-size">{{ diffSizeLabel() }}</span>
-                      </div>
-                      <p class="git-view__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
-                      <div class="git-view__gated-actions">
-                        <button type="button" class="btn-sm" data-testid="git-diff-show" (click)="revealCurrentDiff()">Show diff</button>
-                        <button type="button" class="btn-sm" data-testid="git-diff-show-all" (click)="revealAll()">Show all large diffs</button>
-                      </div>
-                    </div>
-                  } @else if (diffHtml(); as dh) {
-                    <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
-                  } @else {
-                    <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
-                  }
-                </div>
-              </div>
+              <ng-container [ngTemplateOutlet]="diffPanel" />
             } @else if (maximized()) {
               <div class="git-view__diff-col git-view__diff-col--empty" data-testid="git-diff-col">
                 <div class="git-view__empty">Select a file on the left to view its diff.</div>
@@ -250,7 +239,7 @@
           <span class="git-view__location"
                 data-testid="git-run-location"
                 [class.git-view__location--worktree]="g.isWorktree"
-                [appTooltip]="g.isWorktree
+                [cacTooltip]="g.isWorktree
                   ? 'Live changes read from the task worktree.'
                   : 'Live changes read from the main checkout.'">
             {{ g.isWorktree ? '(Worktree)' : '(Haupt-Checkout)' }}
@@ -261,7 +250,7 @@
         @if (g.files.length === 0) {
           <div class="git-view__empty">Working tree clean.</div>
         } @else {
-          <div class="git-view__split-body">
+          <div class="git-view__split-body" [style.--git-tree-width.px]="treeColWidth()">
             <div class="git-view__tree-col" data-testid="git-tree-col">
               <app-git-file-tree
                 [files]="g.files"
@@ -270,46 +259,21 @@
                 (selectRequest)="git.selectDiffPath($event)" />
             </div>
 
+            <div class="git-view__splitter"
+                 data-testid="git-tree-splitter"
+                 role="separator"
+                 aria-orientation="vertical"
+                 aria-label="Resize file tree column"
+                 tabindex="0"
+                 [class.git-view__splitter--dragging]="treeResizing()"
+                 (pointerdown)="startTreeResize($event)"
+                 (pointermove)="onTreeResizeMove($event)"
+                 (pointerup)="endTreeResize($event)"
+                 (pointercancel)="endTreeResize($event)"
+                 (keydown)="onTreeResizeKey($event)"></div>
+
             @if (git.selectedDiffPath()) {
-              <div class="git-view__diff-col" data-testid="git-diff-col">
-                <div class="git-view__diff-wrap"
-                     [class.git-view__diff-wrap--maximized]="diffMaximized()"
-                     [class.git-view__diff-wrap--inline]="maximized()"
-                     data-testid="git-diff-wrap">
-                  <div class="git-view__diff-toolbar">
-                    <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
-                    <span class="git-view__diff-mode">{{ (maximized() || diffMaximized()) ? 'side-by-side' : 'line-by-line' }}</span>
-                    @if (!maximized()) {
-                      <button class="pane__maximize"
-                              data-testid="git-diff-maximize"
-                              (click)="toggleDiffMaximize()"
-                              [appTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
-                        {{ diffMaximized() ? '⤡' : '⤢' }}
-                      </button>
-                    }
-                  </div>
-                  @if (diffGated()) {
-                    <div class="git-view__diff git-view__diff--gated" data-testid="git-diff-gated">
-                      <div class="git-view__gated-meta">
-                        @if (selectedFileStatus(); as st) {
-                          <span class="git-view__gated-status" [attr.data-status]="st">{{ st }}</span>
-                        }
-                        <span class="git-view__gated-name">{{ git.selectedDiffPath() }}</span>
-                        <span class="git-view__gated-size">{{ diffSizeLabel() }}</span>
-                      </div>
-                      <p class="git-view__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
-                      <div class="git-view__gated-actions">
-                        <button type="button" class="btn-sm" data-testid="git-diff-show" (click)="revealCurrentDiff()">Show diff</button>
-                        <button type="button" class="btn-sm" data-testid="git-diff-show-all" (click)="revealAll()">Show all large diffs</button>
-                      </div>
-                    </div>
-                  } @else if (diffHtml(); as dh) {
-                    <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
-                  } @else {
-                    <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
-                  }
-                </div>
-              </div>
+              <ng-container [ngTemplateOutlet]="diffPanel" />
             } @else if (maximized()) {
               <div class="git-view__diff-col git-view__diff-col--empty" data-testid="git-diff-col">
                 <div class="git-view__empty">Select a file on the left to view its diff.</div>
@@ -324,3 +288,94 @@
     }
   </div>
 </section>
+
+<!--
+  Shared diff / preview panel for the selected file. Rendered in both the
+  commit-mode and worktree-mode split bodies via [ngTemplateOutlet] so the
+  toolbar + diff + preview markup lives in exactly one place. For .md/.html
+  files a Preview toggle swaps the diff for a rendered view (AGT-2008):
+  markdown through the shared <cac-markdown> surface, html through a
+  script-enabled, opaque-origin sandboxed iframe.
+-->
+<ng-template #diffPanel>
+  <div class="git-view__diff-col" data-testid="git-diff-col">
+    <div class="git-view__diff-wrap"
+         [class.git-view__diff-wrap--maximized]="diffMaximized()"
+         [class.git-view__diff-wrap--inline]="maximized()"
+         data-testid="git-diff-wrap">
+      <div class="git-view__diff-toolbar">
+        <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
+        @if (selectedIsPreviewable()) {
+          <button type="button"
+                  class="git-view__diff-mode-toggle git-view__preview-toggle"
+                  data-testid="git-preview-toggle"
+                  [attr.aria-pressed]="previewActive()"
+                  [cacTooltip]="previewActive() ? 'Show the raw diff' : 'Show a rendered preview of this file'"
+                  (click)="togglePreview()">
+            {{ previewActive() ? 'Diff' : 'Preview' }}
+          </button>
+        }
+        @if (!previewActive()) {
+          <button type="button"
+                  class="git-view__diff-mode-toggle"
+                  data-testid="git-diff-mode-toggle"
+                  [attr.aria-pressed]="diffViewMode() === 'side-by-side'"
+                  [cacTooltip]="diffViewMode() === 'side-by-side' ? 'Switch to unified (inline) diff' : 'Switch to side-by-side diff'"
+                  (click)="toggleDiffViewMode()">
+            {{ diffViewMode() === 'side-by-side' ? 'Side-by-side' : 'Unified' }}
+          </button>
+        }
+        @if (!maximized()) {
+          <button class="pane__maximize"
+                  data-testid="git-diff-maximize"
+                  (click)="toggleDiffMaximize()"
+                  [cacTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+            {{ diffMaximized() ? '⤡' : '⤢' }}
+          </button>
+        }
+      </div>
+      @if (previewActive()) {
+        <div class="git-view__preview" data-testid="git-preview">
+          @if (git.previewLoading()) {
+            <div class="git-view__diff--placeholder">(loading preview…)</div>
+          } @else if (git.previewError(); as err) {
+            <div class="git-view__preview-note" data-testid="git-preview-error">{{ err }}</div>
+          } @else if (git.previewIsBinary()) {
+            <div class="git-view__preview-note">Binary file — no text preview available.</div>
+          } @else if (previewKind() === 'markdown') {
+            <cac-markdown class="git-view__preview-body"
+                          data-testid="git-preview-markdown"
+                          [source]="git.previewContent()" />
+          } @else if (previewKind() === 'html' && previewHtmlDoc(); as doc) {
+            <iframe class="git-view__preview-frame"
+                    data-testid="git-preview-html"
+                    title="HTML preview"
+                    sandbox="allow-scripts"
+                    [srcdoc]="doc"></iframe>
+          } @else {
+            <div class="git-view__diff--placeholder">(loading preview…)</div>
+          }
+        </div>
+      } @else if (diffGated()) {
+        <div class="git-view__diff git-view__diff--gated" data-testid="git-diff-gated">
+          <div class="git-view__gated-meta">
+            @if (selectedFileStatus(); as st) {
+              <span class="git-view__gated-status" [attr.data-status]="st">{{ st }}</span>
+            }
+            <span class="git-view__gated-name">{{ git.selectedDiffPath() }}</span>
+            <span class="git-view__gated-size">{{ diffSizeLabel() }}</span>
+          </div>
+          <p class="git-view__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
+          <div class="git-view__gated-actions">
+            <button type="button" class="btn-sm" data-testid="git-diff-show" (click)="revealCurrentDiff()">Show diff</button>
+            <button type="button" class="btn-sm" data-testid="git-diff-show-all" (click)="revealAll()">Show all large diffs</button>
+          </div>
+        </div>
+      } @else if (diffHtml(); as dh) {
+        <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
+      } @else {
+        <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
+      }
+    </div>
+  </div>
+</ng-template>

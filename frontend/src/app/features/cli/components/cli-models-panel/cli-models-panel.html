@@ -1,0 +1,94 @@
+<div class="cli-models" data-testid="cli-models-panel">
+  @for (g of groups(); track g.cliType) {
+    <article class="cli-models__row"
+             [class.cli-models__row--open]="isExpanded(g.cliType)"
+             [attr.data-cli]="g.cliType"
+             [attr.data-testid]="'cli-models-card-' + g.cliType">
+      <div class="cli-models__head">
+        <button class="cli-models__toggle"
+                type="button"
+                [attr.aria-expanded]="isExpanded(g.cliType)"
+                [attr.data-testid]="'cli-models-toggle-' + g.cliType"
+                (click)="toggle(g.cliType)">
+          <span class="cli-models__caret" aria-hidden="true">{{ isExpanded(g.cliType) ? '▾' : '▸' }}</span>
+          <span class="cli-models__icon" aria-hidden="true">{{ g.icon }}</span>
+          <span class="cli-models__name">{{ g.label }}</span>
+          <span class="cli-models__count">{{ g.models.length }} model{{ g.models.length === 1 ? '' : 's' }}</span>
+          <span class="cli-models__summary">
+            <span class="cli-models__summary-primary"
+                  [attr.data-testid]="'cli-models-primary-summary-' + g.cliType">{{ primaryModelLabel(g.cliType) }}</span>
+            <span class="cli-models__summary-fallback"
+                  [class.cli-models__summary-fallback--none]="!hasFallback(g.cliType)">{{ fallbackSummary(g.cliType) }}</span>
+          </span>
+        </button>
+        <button class="cli-models__refresh"
+                type="button"
+                [attr.data-testid]="'cli-models-refresh-' + g.cliType"
+                (click)="refresh(g.cliType)"
+                [attr.aria-label]="'Refresh ' + g.label + ' model catalog'">↻</button>
+      </div>
+
+      @if (isExpanded(g.cliType)) {
+        <div class="cli-models__body">
+          @if (g.defaultModel) {
+            <div class="cli-models__route" [attr.data-testid]="'cli-models-default-' + g.cliType">
+              <label class="cli-models__route-line cli-models__route-line--primary">
+                <span class="cli-models__default-tag">primary</span>
+                <select [value]="primaryModel(g.cliType)"
+                        [attr.data-testid]="'cli-primary-' + g.cliType"
+                        (change)="setPrimary(g.cliType, $any($event.target).value)">
+                  @for (m of g.models; track m.id) { <option [value]="m.id">{{ m.label }}</option> }
+                </select>
+              </label>
+              <div class="cli-models__route-line cli-models__route-line--fallback">
+                <span class="cli-models__fallback-tag">fallback</span>
+                <select [value]="fallbackCli(g.cliType)"
+                        [attr.aria-label]="'Fallback CLI for ' + g.label"
+                        (change)="setFallbackCli(g.cliType, $any($event.target).value)">
+                  @for (t of cliTypes; track t) {
+                    <option [value]="t">{{ t }}</option>
+                  }
+                </select>
+                <select [value]="routes()[g.cliType]?.fallbackModel ?? ''"
+                        [attr.data-testid]="'cli-fallback-' + g.cliType"
+                        (change)="setFallbackModel(g.cliType, $any($event.target).value)">
+                  <option value="">Disabled</option>
+                  @for (m of fallbackModels(g.cliType); track m.id) { <option [value]="m.id">{{ m.label }}</option> }
+                </select>
+                @if (fallbackThinkingLevels(g.cliType).length) {
+                  <select [value]="routes()[g.cliType]?.fallbackThinkingLevel ?? ''"
+                          aria-label="Fallback thinking level"
+                          (change)="setFallbackThinking(g.cliType, $any($event.target).value)">
+                    <option value="">Model default</option>
+                    @for (level of fallbackThinkingLevels(g.cliType); track level) { <option [value]="level">{{ level }}</option> }
+                  </select>
+                }
+                @if (savingCli() === g.cliType) { <span class="cli-models__saving">saving...</span> }
+              </div>
+              <p class="cli-models__route-help">Quota fallback is recorded on the task timeline and applies to this run only.</p>
+            </div>
+          } @else {
+            <div class="cli-models__empty">No catalog loaded yet.</div>
+          }
+
+          @if (g.models.length) {
+            <ul class="cli-models__list">
+              @for (m of g.models; track m.id) {
+                <li class="cli-models__model"
+                    [class.cli-models__model--default]="m.isDefault"
+                    [class.cli-models__model--deprecated]="m.deprecated">
+                  <span class="cli-models__model-label">{{ m.label }}</span>
+                  @if (m.vendor) { <span class="cli-models__model-vendor">{{ m.vendor }}</span> }
+                  @if (m.multiplier !== null) { <span class="cli-models__model-mult">{{ m.multiplier }}×</span> }
+                  @if (thinkingSummary(m); as th) { <span class="cli-models__model-thinking">{{ th }}</span> }
+                  @if (m.available === false) { <span class="cli-models__model-flag">unavailable</span> }
+                  @if (m.deprecated) { <span class="cli-models__model-flag">deprecated</span> }
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+    </article>
+  }
+</div>

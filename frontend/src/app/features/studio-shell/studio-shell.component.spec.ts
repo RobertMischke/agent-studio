@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -8,6 +8,11 @@ import { StudioShellComponent } from './studio-shell.component';
 import type { RegistryProjectSummary, RegistryWorkspaceListItem, TaskInfo } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { StudioTabStateService } from './services/studio-tab-state.service';
+import { projectIdentity } from '../../services/project-identity.util';
+
+// AGT-2035: the workspace-delete gating helpers (`canDeleteWorkspace` /
+// `workspaceDeleteTooltip`) moved to WorkspaceManagementComponent; their unit
+// coverage moved with them to workspace-management.component.spec.ts.
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -48,95 +53,6 @@ describe('StudioShellComponent (smoke)', () => {
   });
 });
 
-/**
- * F66 — workspace-delete gating. Delete is blocked while a workspace still
- * holds projects (no auto-rehome per ADR-0048); the operator must move every
- * project out first. These cover the two pure helpers that drive the delete
- * button's disabled state and tooltip, exercised directly on a component
- * instance (no render path needed).
- */
-describe('StudioShellComponent workspace-delete gating', () => {
-  let component: StudioShellComponent;
-
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [StudioShellComponent],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-      ],
-    });
-    component = TestBed.createComponent(StudioShellComponent).componentInstance;
-  });
-
-  function project(id: string): RegistryProjectSummary {
-    return {
-      id,
-      displayName: id,
-      shortCode: id,
-      workspaceId: 'ws-1',
-      color: null,
-      cliDefault: null,
-      modelDefault: null,
-      sortOrder: 0,
-      storageLocation: `C:/proj/${id}`,
-      archived: false,
-      createdAt: '2026-01-01T00:00:00Z',
-    };
-  }
-
-  function workspace(over: Partial<RegistryWorkspaceListItem>): RegistryWorkspaceListItem {
-    return {
-      id: 'ws-1',
-      displayName: 'Workspace One',
-      sortOrder: 0,
-      isDefault: false,
-      color: null,
-      createdAt: '2026-01-01T00:00:00Z',
-      projects: [],
-      ...over,
-    };
-  }
-
-  describe('canDeleteWorkspace', () => {
-    it('is false for the default workspace even when empty', () => {
-      expect(component.canDeleteWorkspace(workspace({ isDefault: true, projects: [] }))).toBe(false);
-    });
-
-    it('is false for a non-default workspace that still holds projects', () => {
-      expect(component.canDeleteWorkspace(workspace({ projects: [project('PROJ-1')] }))).toBe(false);
-    });
-
-    it('is true for an empty non-default workspace', () => {
-      expect(component.canDeleteWorkspace(workspace({ projects: [] }))).toBe(true);
-    });
-  });
-
-  describe('workspaceDeleteTooltip', () => {
-    it('explains the default workspace can never be deleted', () => {
-      expect(component.workspaceDeleteTooltip(workspace({ isDefault: true })))
-        .toBe('Default workspace cannot be deleted');
-    });
-
-    it('tells the operator to move projects out first (plural)', () => {
-      expect(component.workspaceDeleteTooltip(workspace({ projects: [project('PROJ-1'), project('PROJ-2')] })))
-        .toBe('Move all 2 projects out of this workspace before it can be deleted.');
-    });
-
-    it('uses the singular form for a single project', () => {
-      expect(component.workspaceDeleteTooltip(workspace({ projects: [project('PROJ-1')] })))
-        .toBe('Move all 1 project out of this workspace before it can be deleted.');
-    });
-
-    it('offers the ready-to-delete hint for an empty non-default workspace', () => {
-      expect(component.workspaceDeleteTooltip(workspace({ projects: [] })))
-        .toBe('Delete this workspace');
-    });
-  });
-});
-
 describe('StudioShellComponent titlebar breadcrumb', () => {
   function project(id: string): RegistryProjectSummary {
     return {
@@ -149,6 +65,11 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
       modelDefault: null,
       sortOrder: 0,
       storageLocation: `C:/proj/${id}`,
+      repositoryPath: null,
+      rootPath: null,
+      repositoryUrl: null,
+      sourceType: 'local-folder',
+      urls: [],
       archived: false,
       createdAt: '2026-01-01T00:00:00Z',
     };
@@ -252,6 +173,31 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
   });
 });
 
+describe('StudioShellComponent global search', () => {
+  it('renders the search input after the titlebar trigger is clicked', () => {
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioShellComponent);
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const trigger = root.querySelector<HTMLButtonElement>('[data-testid="studio-global-search-trigger"]');
+    expect(trigger).not.toBeNull();
+
+    trigger!.click();
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="global-search-input"]')).not.toBeNull();
+  });
+});
+
 describe('StudioShellComponent project lane counts', () => {
   function configure(): { component: StudioShellComponent; taskService: TaskService } {
     localStorage.removeItem('atp.studio.tabs.v1');
@@ -346,6 +292,139 @@ describe('StudioShellComponent project lane counts', () => {
     expect(component.projectRows().find(row => row.name === 'Project A')?.laneCounts)
       .toEqual({ ready: 0, progress: 2, humanReview: 0 });
   });
+
+  it('folds escalated cards into the green Human Review chip', () => {
+    const { component, taskService } = configure();
+    taskService.grouped.set({
+      backlog: [],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [],
+      progress: [],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: [],
+      humanReview: [
+        task({ id: 'a-review-1', taskKey: 'watch::a-review-1', projectName: 'Project A', state: '5-human-review' }),
+      ],
+      escalated: [
+        task({ id: 'a-esc-1', taskKey: 'watch::a-esc-1', projectName: 'Project A', state: '5e-escalated' }),
+        task({ id: 'a-esc-2', taskKey: 'watch::a-esc-2', projectName: 'Project A', state: '5e-escalated' }),
+      ],
+      review: [],
+      completed: [],
+      archive: [],
+    });
+
+    const projectA = component.projectRows().find(row => row.name === 'Project A');
+    // 1 human-review + 2 escalated -> the green chip counts all three.
+    expect(projectA?.laneCounts.humanReview).toBe(3);
+    expect(projectA?.totalJobs).toBe(3);
+  });
+
+  it('keeps Delivered/Completed and Backlog out of every counter', () => {
+    const { component, taskService } = configure();
+    taskService.grouped.set({
+      backlog: [
+        task({ id: 'a-backlog-1', taskKey: 'watch::a-backlog-1', projectName: 'Project A', state: '0-backlog' }),
+      ],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [
+        task({ id: 'a-ready-1', taskKey: 'watch::a-ready-1', projectName: 'Project A', state: '2-ready' }),
+      ],
+      progress: [],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: [],
+      humanReview: [],
+      escalated: [],
+      review: [],
+      completed: [
+        task({ id: 'a-done-1', taskKey: 'watch::a-done-1', projectName: 'Project A', state: '6-completed' }),
+        task({ id: 'a-done-2', taskKey: 'watch::a-done-2', projectName: 'Project A', state: '6-completed' }),
+      ],
+      archive: [],
+    });
+
+    const projectA = component.projectRows().find(row => row.name === 'Project A');
+    // Only the single Ready card is active work; 2 delivered + 1 backlog count nowhere.
+    expect(projectA?.laneCounts).toEqual({ ready: 1, progress: 0, humanReview: 0 });
+    expect(projectA?.totalJobs).toBe(1);
+  });
+
+  it('does not double-count auto-review cards through the legacy `review` alias', () => {
+    const { component, taskService } = configure();
+    const autoReviewCards = [
+      task({ id: 'a-auto-1', taskKey: 'watch::a-auto-1', projectName: 'Project A', state: '4-auto-review' }),
+      task({ id: 'a-auto-2', taskKey: 'watch::a-auto-2', projectName: 'Project A', state: '4-auto-review' }),
+    ];
+    taskService.grouped.set({
+      backlog: [],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [
+        task({ id: 'a-ready-1', taskKey: 'watch::a-ready-1', projectName: 'Project A', state: '2-ready' }),
+      ],
+      progress: [],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: autoReviewCards,
+      humanReview: [],
+      escalated: [],
+      // GroupedJobs.review is the legacy alias === autoReview; the same cards appear here.
+      review: autoReviewCards,
+      completed: [],
+      archive: [],
+    });
+
+    const projectA = component.projectRows().find(row => row.name === 'Project A');
+    // Auto-review is not a board chip; the alias must not inflate the total either.
+    expect(projectA?.laneCounts).toEqual({ ready: 1, progress: 0, humanReview: 0 });
+    expect(projectA?.totalJobs).toBe(1);
+  });
+
+  it('keeps the project total equal to the sum of the three visible board chips (sum-invariant)', () => {
+    const { component, taskService } = configure();
+    taskService.grouped.set({
+      backlog: [
+        task({ id: 'a-backlog-1', taskKey: 'watch::a-backlog-1', projectName: 'Project A', state: '0-backlog' }),
+      ],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [
+        task({ id: 'a-ready-1', taskKey: 'watch::a-ready-1', projectName: 'Project A', state: '2-ready' }),
+        task({ id: 'a-ready-2', taskKey: 'watch::a-ready-2', projectName: 'Project A', state: '2-ready' }),
+      ],
+      progress: [
+        task({ id: 'a-progress-1', taskKey: 'watch::a-progress-1', projectName: 'Project A', state: '3-progress' }),
+      ],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: [
+        task({ id: 'a-auto-1', taskKey: 'watch::a-auto-1', projectName: 'Project A', state: '4-auto-review' }),
+      ],
+      humanReview: [
+        task({ id: 'a-review-1', taskKey: 'watch::a-review-1', projectName: 'Project A', state: '5-human-review' }),
+      ],
+      escalated: [
+        task({ id: 'a-esc-1', taskKey: 'watch::a-esc-1', projectName: 'Project A', state: '5e-escalated' }),
+      ],
+      review: [],
+      completed: [
+        task({ id: 'a-done-1', taskKey: 'watch::a-done-1', projectName: 'Project A', state: '6-completed' }),
+      ],
+      archive: [],
+    });
+
+    const projectA = component.projectRows().find(row => row.name === 'Project A');
+    const counts = projectA!.laneCounts;
+    // The one defining rule: the aggregate equals the sum of the numbers shown
+    // one level below it. Ready(2) + Progress(1) + Human(1 review + 1 escalated).
+    expect(counts).toEqual({ ready: 2, progress: 1, humanReview: 2 });
+    expect(projectA?.totalJobs).toBe(counts.ready + counts.progress + counts.humanReview);
+    expect(projectA?.totalJobs).toBe(5);
+  });
 });
 
 describe('StudioShellComponent epic tabs', () => {
@@ -427,6 +506,29 @@ describe('StudioShellComponent epic tabs', () => {
     })).toBe('Task One');
   });
 
+  it('never exposes a watch path when task data has not resolved yet', () => {
+    const { component } = configure();
+    const taskKey = 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard::ASS-1766';
+
+    expect(component.tabLabel({ kind: 'task', taskKey })).toBe('ASS-1766');
+    expect(component.tabLabel({ kind: 'activity', taskKey })).toBe('Activity · ASS-1766');
+    expect(component.tabLabel({ kind: 'epic', epicKey: taskKey })).toBe('ASS-1766');
+  });
+
+  it('puts the complete tab name on the tab and truncated title hover targets', () => {
+    const { fixture, taskService, tabState } = configure();
+    seedJobs(taskService);
+    tabState.open({ kind: 'task', taskKey: 'watch::task-a' });
+
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const tab = root.querySelector<HTMLElement>('[data-tab-key="task:watch::task-a"]');
+    const title = tab?.querySelector<HTMLElement>('.studio-tab__title');
+    expect(tab?.getAttribute('title')).toContain('Task One');
+    expect(title?.getAttribute('title')).toContain('Task One');
+  });
+
   it('renders the Epic icon inside an epic detail tab', () => {
     const { fixture, taskService, tabState } = configure();
     seedJobs(taskService);
@@ -438,5 +540,131 @@ describe('StudioShellComponent epic tabs', () => {
     const epicTab = root.querySelector<HTMLElement>('[data-tab-key="epic:watch::epic-a"]');
     expect(epicTab?.querySelector('app-studio-icon')).not.toBeNull();
     expect(epicTab?.textContent).toContain('Epic One');
+  });
+});
+
+describe('StudioShellComponent hub tab label + icon', () => {
+  function project(over: Partial<RegistryProjectSummary>): RegistryProjectSummary {
+    return {
+      id: 'proj-ass',
+      displayName: 'Agent Software Studio',
+      shortCode: 'ASS',
+      workspaceId: 'ws-1',
+      color: null,
+      cliDefault: null,
+      modelDefault: null,
+      sortOrder: 0,
+      storageLocation: 'C:/proj/ass',
+      urls: [],
+      archived: false,
+      createdAt: '2026-01-01T00:00:00Z',
+      ...over,
+      sourceType: over.sourceType ?? 'local-folder',
+      repositoryPath: over.repositoryPath ?? null,
+      rootPath: over.rootPath ?? null,
+      repositoryUrl: over.repositoryUrl ?? null,
+    };
+  }
+
+  function workspace(over: Partial<RegistryWorkspaceListItem>): RegistryWorkspaceListItem {
+    return {
+      id: 'ws-1',
+      displayName: 'Workspace One',
+      sortOrder: 0,
+      isDefault: false,
+      color: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      projects: [],
+      ...over,
+    };
+  }
+
+  function makeComponent(): StudioShellComponent {
+    localStorage.removeItem('atp.studio.tabs.v1');
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const component = TestBed.createComponent(StudioShellComponent).componentInstance;
+    component.registryWorkspaces.set([workspace({ projects: [project({})] })]);
+    return component;
+  }
+
+  it('shows shortCode + section name for a hub tab (e.g. "ASS · Wiki")', () => {
+    const component = makeComponent();
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'wiki' }))
+      .toBe('ASS · Wiki');
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'drift' }))
+      .toBe('ASS · Drift');
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'settings' }))
+      .toBe('ASS · Settings');
+  });
+
+  it('falls back to the Overview rail when section is missing or unknown', () => {
+    const component = makeComponent();
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio' }))
+      .toBe('ASS · Overview');
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'nonsense' }))
+      .toBe('ASS · Overview');
+  });
+
+  it('falls back to the full project name when no shortCode is registered', () => {
+    const component = makeComponent();
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Unknown Project', section: 'wiki' }))
+      .toBe('Unknown Project · Wiki');
+  });
+
+  it('applies the shortCode to other project-scoped tabs for consistency', () => {
+    const component = makeComponent();
+    expect(component.tabLabel({ kind: 'board', projectName: 'Agent Software Studio' }))
+      .toBe('ASS · Board');
+    expect(component.tabLabel({ kind: 'epics', projectName: 'Agent Software Studio' }))
+      .toBe('ASS · Epics');
+  });
+
+  it('returns the section rail icon for a hub tab and null for other kinds', () => {
+    const component = makeComponent();
+    expect(component.tabIcon({ kind: 'hub', projectName: 'Agent Software Studio', section: 'wiki' }))
+      .toBe('book');
+    expect(component.tabIcon({ kind: 'hub', projectName: 'Agent Software Studio', section: 'drift' }))
+      .toBe('diff');
+    // Missing section → default overview rail icon.
+    expect(component.tabIcon({ kind: 'hub', projectName: 'Agent Software Studio' }))
+      .toBe('layout');
+    expect(component.tabIcon({ kind: 'board', projectName: 'Agent Software Studio' }))
+      .toBeNull();
+  });
+
+  it('paints the project-identity colour dot for project-scoped tabs (AGT-2034)', () => {
+    const component = makeComponent();
+    const expected = projectIdentity('Agent Software Studio').color;
+    expect(component.tabDotColor({ kind: 'board', projectName: 'Agent Software Studio' }))
+      .toBe(expected);
+    expect(component.tabDotColor({ kind: 'hub', projectName: 'Agent Software Studio', section: 'wiki' }))
+      .toBe(expected);
+    // Reuses the shared palette — no bespoke colour source.
+    expect(expected).toBe(projectIdentity('Agent Software Studio').color);
+  });
+
+  it('renders no dot for tabs without a single owning project (AGT-2034)', () => {
+    const component = makeComponent();
+    expect(component.tabDotColor({ kind: 'board', projectName: '__all__' })).toBeNull();
+    expect(component.tabDotColor({ kind: 'epics', projectName: null })).toBeNull();
+    expect(component.tabDotColor({ kind: 'workspace-settings' })).toBeNull();
+    expect(component.tabDotColor({ kind: 'welcome' })).toBeNull();
+  });
+
+  it('keeps the full project name in the tab tooltip while the label stays short (AGT-2034)', () => {
+    const component = makeComponent();
+    expect(component.tabTooltip({ kind: 'board', projectName: 'Agent Software Studio' }))
+      .toBe('Agent Software Studio — ASS · Board');
+    // Tabs with no owning project fall back to the plain label.
+    expect(component.tabTooltip({ kind: 'board', projectName: '__all__' }))
+      .toBe('All projects · Board');
   });
 });

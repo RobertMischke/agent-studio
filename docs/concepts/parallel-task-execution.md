@@ -1,6 +1,6 @@
 # Concept — Parallel Task Execution: worktrees, branch model (`develop`), git as pre/post pipeline steps, merge/PR
 
-**Status.** Concept (sharpened design + slicing plan). This is the "full design" home that [ADR-0052](../architecture-decisions.md#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31) points to. It is a design deliverable, not an implementation. Implementation is sliced in §8 and is gated on the crash-safe-pickup task.
+**Status.** Concept (sharpened design + slicing plan). This is the "full design" home that [ADR-0052](../system/architecture/decisions/adr-archive.md#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31) points to. It is a design deliverable, not an implementation. Implementation is sliced in §8 and is gated on the crash-safe-pickup task.
 
 **Source card.** `konzept-parallele-task-verarbeitung---worktrees-branch-modell-develop-git-als-prepost-agent-steps-mergepr` (ASS-589). Discussion with the operator on 2026-05-31.
 
@@ -12,7 +12,7 @@
 
 The source card frames the intra-project-parallelism non-goal as a *hard product boundary that this concept must reverse*, citing `IntakeRunner.cs:243` and `OrchestratorPrepRules.cs:107` as the enforcing guards. **That reversal already landed.** Recording it here so no slice re-does it:
 
-- **The policy is already reversed.** [ADR-0052](../architecture-decisions.md#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31) (Accepted, 2026-05-31) supersedes [ADR-0001](../architecture-decisions.md#adr-0001---sequential-per-project-parallel-across-projects-2026-04-15)'s "no intra-project parallelism, no worktrees, no branch-per-task". Bounded intra-project parallelism is now an opt-in, orchestrator-gated capability.
+- **The policy is already reversed.** [ADR-0052](../system/architecture/decisions/adr-archive.md#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31) (Accepted, 2026-05-31) supersedes [ADR-0001](../system/architecture/decisions/adr-archive.md#adr-0001---sequential-per-project-parallel-across-projects-2026-04-15)'s "no intra-project parallelism, no worktrees, no branch-per-task". Bounded intra-project parallelism is now an opt-in, orchestrator-gated capability.
 - **The intake/prep guards are already gone.** `IntakeRunner.CheckBlocked` now `return null;` (the "worktree"/"parallel coding"/"branch-per-task" phrase blockers were removed) and `OrchestratorPrepRules.HasOutOfScopeToken` now `return false;`. The cited line numbers no longer point at a guard — they point at the *removed-guard* comments referencing ADR-0052. **No slice should "remove the guard"; it is done.**
 - **`maxParallelism` is referenced but not implemented.** It exists today only in comments/ADR text. It is not a field on `ProjectSettings`, not read by the runner, and the runner still enforces one active job per project (see §1).
 
@@ -24,10 +24,10 @@ The product already has most of the scaffolding. Each item below is a docking po
 
 | Capability | Where it lives | How this concept uses it |
 |---|---|---|
-| **Pre/core/post pipeline** (first-class steps, per-job `pipeline-execution.json`) | [ADR-0045](../architecture-decisions.md#adr-0045---task-processing-as-a-first-class-pipeline-of-pre--core--and-post-steps-2026-05-29); `backend/Services/Pipeline/PipelineCatalogue.cs` (`StepKind` = Module/Core/Aspect/Orchestrator/Tool) | Git steps are new pipeline steps, not new infrastructure. Worktree-create is a **pre** step; commit/integration/cleanup are **post** steps. |
+| **Pre/core/post pipeline** (first-class steps, per-job `pipeline-execution.json`) | [ADR-0045](../system/architecture/decisions/adr-archive.md#adr-0045---task-processing-as-a-first-class-pipeline-of-pre--core--and-post-steps-2026-05-29); `backend/Services/Pipeline/PipelineCatalogue.cs` (`StepKind` = Module/Core/Aspect/Orchestrator/Tool) | Git steps are new pipeline steps, not new infrastructure. Worktree-create is a **pre** step; commit/integration/cleanup are **post** steps. |
 | **Per-project pipeline config** (reorder, enable, per-step model/mode) | ADR-0051 (proposed) + card `prepost-processing-steps-project-level-config…`; `ProjectSettings.PipelineSteps`, `ProjectSettingsService.SetPipelineStep`, `PipelineStepConfigResolver` | Home of the step definitions + the new `integrationStrategy` field. The git steps appear here as configurable steps. |
-| **Deterministic commit attribution** (commit-to-task binding, `scripted` post-step) | [ADR-0050](../architecture-decisions.md#adr-0050---commit-attribution-regel-deterministic-commit-to-task-binding-2026-05-29); card `feature-post-step-git-commit-attribution-deterministic-commit-to-task-binding` | The Commit+Push agent step (§4) is the LLM-message sibling of this deterministic binding. They share attribution; do not fork it. |
-| **Unified timeline ledger** (`timeline.jsonl`, `*_step_started/finished` kinds) | [ADR-0049](../architecture-decisions.md#adr-0049---self-contained-tasks-and-a-unified-timelinejsonl-ledger-2026-05-29) (ASS-560); card `architecture-self-contained-tasks--unified-timeline-view…` | Every git step + the pick decision render here (§6). No new event store. |
+| **Deterministic commit attribution** (commit-to-task binding, `scripted` post-step) | [ADR-0050](../system/architecture/decisions/adr-archive.md#adr-0050---commit-attribution-regel-deterministic-commit-to-task-binding-2026-05-29); card `feature-post-step-git-commit-attribution-deterministic-commit-to-task-binding` | The Commit+Push agent step (§4) is the LLM-message sibling of this deterministic binding. They share attribution; do not fork it. |
+| **Unified timeline ledger** (`timeline.jsonl`, `*_step_started/finished` kinds) | [ADR-0049](../system/architecture/decisions/adr-archive.md#adr-0049---self-contained-tasks-and-a-unified-timelinejsonl-ledger-2026-05-29) (ASS-560); card `architecture-self-contained-tasks--unified-timeline-view…` | Every git step + the pick decision render here (§6). No new event store. |
 | **Completion loop** (retry-until-done, budgeted) | ASS-566; card `epic-orchestrator-completion-loop…` | An `orchestratorReaction: review` integration step that returns `reopen` ticks the loop budget. The loop *wraps* the pipeline (ADR-0051 §7). |
 | **Git plumbing** | `backend/Services/GitService.cs` | Has `status`/`diff`/`Commit` (`add -A` + `commit -F -`)/`AutoCommitAsync`/`GenerateCommitMessageAsync` (Haiku) /`PushShaAsync`/commit-attribution helpers. Slice A/B added worktree add/remove, rebase, branch FF-merge, branch-parameterized push, retry, and best-effort remote cleanup for merged `task/<id>` branches. **Missing:** PR creation. |
 | **Per-project serialization gate** | `ProjectRunner.cs:461` — `if (_processing || _activeJobId != null) return;` (comment at 472–474: "one coding CLI per project at a time") | This single `_activeJobId` latch is the thing `maxParallelism` generalizes into N slots. |
@@ -41,14 +41,14 @@ New `ProjectSettings` fields (alongside `OrchestratorModel`, `AutoCommit`, `Pipe
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `maxParallelism` | int (1–N) | **1** | Concurrent worker slots for this project. `1` = today's serial behaviour, byte-for-byte. |
-| `integrationBranch` | string | **`develop`** | Branch tasks branch from and integrate into. `main` stays released/protected. Per-user override keyed on `OwnerClientId` (see open decision D3). |
+| `integrationBranch` | string | **`develop`**, with repository default fallback | Branch tasks branch from and integrate into. If the configured branch does not exist, the runner falls back to the repository default branch, for example `main` in a main-only repo. Per-user override keyed on `OwnerClientId` (see open decision D3). |
 | `integrationStrategy` | enum | `direct-merge` | `direct-merge` \| `pull-request` (§5). |
 
 "Slot / worker / lane" is a **runner** concept. Git only knows repo / branch / commit / worktree. The runner owns N slots; each occupied slot maps to one worktree + one `task/<id>` branch.
 
 ## 3. Branch model + isolation
 
-- **Integration line = `integrationBranch`** (default `develop`). `main` = released.
+- **Integration line = resolved `integrationBranch`** (configured branch when present, otherwise repository default branch). In the original default this is `develop`; main-only repositories resolve to `main`.
 - **Serial (`maxParallelism = 1`):** work proceeds exactly as today. *Optionally* directly on `integrationBranch`, no task branch. Zero new worktree I/O when a project never opts in — this keeps ADR-0001's original "don't triplicate I/O for sequential work" objection answered.
 - **Parallel (`maxParallelism ≥ 2`):** per concurrently-running task, an **ephemeral** branch `task/<id>` cut fresh from `integrationBranch`, checked out in its **own `git worktree`** (shared `.git` object store, no full clone). The branch lives for exactly one run and is deleted on cleanup. This is throwaway plumbing, **not** a feature-branch workflow.
 - **Why worktree ⇒ branch-per-task:** git forbids two worktrees on the same branch, and two agents must never write the same working tree or race the same ref. Worktree-per-task therefore forces branch-per-task. Short branches keep merges small and conflict-rare.
@@ -75,14 +75,14 @@ Receives the worktree diff + task context, **writes the commit message** (this i
 
 ### 4.2 Integration / Merge agent (LLM step)
 
-Merges `task/<id>` → `integrationBranch` (or opens a PR, §5). On merge conflicts it **resolves them with judgement** — that is the whole reason it is an LLM step and not a bare `git merge`. The mechanical git calls (`worktree add/remove`, `rebase`, FF-`merge`, `push`, PR API) are deterministic tooling in `GitService`; *what* gets committed / how a conflict is resolved is the agent's decision via prompt. Bounded by [ADR-0032](../architecture-decisions.md#adr-0032) (agent classifies/produces a schema-validated result; the rule engine decides halt/reopen/escalate).
+Merges `task/<id>` → `integrationBranch` (or opens a PR, §5). On merge conflicts it **resolves them with judgement** — that is the whole reason it is an LLM step and not a bare `git merge`. The mechanical git calls (`worktree add/remove`, `rebase`, FF-`merge`, `push`, PR API) are deterministic tooling in `GitService`; *what* gets committed / how a conflict is resolved is the agent's decision via prompt. Bounded by [ADR-0032](../system/architecture/decisions/adr-archive.md#adr-0032) (agent classifies/produces a schema-validated result; the rule engine decides halt/reopen/escalate).
 
 ## 5. Parallelisability gate (the "smart orchestrator", not "always parallel")
 
 Two cheap stages, both rendered on the timeline (§6):
 
 1. **Preparation step (once per task, stored on the task):** `exclusive?` (too big / cross-cutting ⇒ runs alone — the exception) + `predictedScope` (which paths/areas it will touch). Default is parallelisable; `exclusive` is rare. Reuses the existing prep loop (`OrchestratorPrepRules` / `OrchestratorPrepHostedService`).
-2. **Pick-gate (runner, when a slot frees, cheap + fast):** `exclusive` ⇒ run alone; else compare this task's stored `predictedScope` against the scopes of the **currently running** tasks ⇒ `parallel-ok` / `serialize`. This is the gate added at `ProjectRunner.cs:461`: the single `_activeJobId` latch becomes "N slots, admit only if the pick-gate says `parallel-ok`".
+2. **Pick-gate (runner, when a slot frees, cheap + fast):** `exclusive` ⇒ run alone; else compare this task's stored `predictedScope` against the scopes of the **currently running** tasks ⇒ `parallel-ok` / `serialize`. Only two declared, overlapping scopes serialize. An unknown scope is admitted optimistically because every coding run has its own worktree; any real overlap is contained and becomes an integration conflict rather than shared-checkout corruption. This is the gate added at `ProjectRunner.cs:461`: the single `_activeJobId` latch becomes "N slots, admit only if the pick-gate says `parallel-ok`".
 
 ## 6. Integration strategies
 
@@ -113,9 +113,18 @@ Dependency-ordered. Each slice is independently shippable/verifiable and names i
 
 ### 8.2C Multi-system follow-up: task leases, shared store, and origin distribution
 
+**Implemented daemon slice (2026-07-10).** The standalone runner now polls an
+assignment-aware server claim endpoint and fills bounded host slots (default 2).
+The project record owns `executionRunner` and `remoteExecutionEnabled`; the
+remote claim path and local in-process pickup read those same fields. Each claim
+receives a fenced run lease, moves from `2-ready` to `3-progress`, and runs in a
+task-specific linked worktree. This delivers continuous single-server pickup;
+the stronger durable shared-store and stale-token-on-every-write requirements
+below remain the target for multi-server/high-availability operation.
+
 This is deliberately later than the local worktree/slot slices. Do **not** start a multi-system runner or "agent builder" from this concept without a reviewed design task and close operator supervision. The local slice proves slot admission and worktree isolation inside one backend. Multi-system execution changes the source-of-truth model and must be treated as a separate critical checkpoint.
 
-**Hard prerequisite: one authoritative Task Server.** A local task-folder repository is not a distribution protocol. In multi-system mode, task state, lane transitions, run records, leases, heartbeats, timeline events, and durable log/artifact references live behind a shared Task Store owned by the Task Server. Local folders can exist only as runner caches/projections. There must not be two authoritative writers, and there must not be a "best effort sync" between local file repos. This aligns with the Server/Runner split in [Task Execution & Log Architecture](task-execution-and-log-architecture.md).
+**Hard prerequisite: one authoritative Task Server.** A local task-folder repository is not a distribution protocol. In multi-system mode, task state, lane transitions, run records, leases, heartbeats, timeline events, and durable log/artifact references live behind a shared Task Store owned by the Task Server. Local folders can exist only as runner caches/projections. There must not be two authoritative writers, and there must not be a "best effort sync" between local file repos. This aligns with the Server/Runner split in [Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md).
 
 **Lease contract.** Lease acquisition is a transactional store operation, not a filesystem lock:
 

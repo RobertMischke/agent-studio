@@ -4,32 +4,11 @@
 // which made this rail drift from the full-bleed data panels.
 :host { display: block; }
 .proj-detail { display: flex; flex-direction: column; gap: 2px; }
-.proj-detail__head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.10);
-}
-.proj-detail__title { margin: 0; color: var(--studio-fg-strong, #f8fafc); font-size: 1.1rem; }
-.proj-detail__feed {
-  margin-left: auto;
-  background: rgba(249, 226, 175, 0.14);
-  color: var(--studio-accent-warn);
-  border: 1px solid rgba(249, 226, 175, 0.40);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.78rem;
-  cursor: pointer;
-}
-.proj-detail__feed:hover { background: rgba(249, 226, 175, 0.22); }
 
 .proj-detail__banner {
   margin: 0 0 16px;
   padding: 10px 12px;
   border: 1px solid rgba(249, 226, 175, 0.40);
-  border-left-width: 3px;
   background: rgba(249, 226, 175, 0.10);
   border-radius: 6px;
   color: var(--studio-fg);
@@ -71,7 +50,6 @@
   margin: 0 0 16px;
   padding: 14px 16px;
   border: 1px solid rgba(248, 113, 113, 0.55);
-  border-left-width: 4px;
   border-radius: 10px;
   background: linear-gradient(180deg, rgba(248,113,113,0.18) 0%, rgba(248,113,113,0.08) 100%);
   box-shadow: 0 6px 18px rgba(248,113,113,0.12);
@@ -178,6 +156,19 @@
 .proj-detail__paths dt { color: var(--studio-fg-muted); }
 .proj-detail__paths dd { margin: 0; color: var(--studio-fg); font-family: var(--font-mono, monospace); word-break: break-all; }
 
+@media (max-width: 56.25rem) {
+  .proj-detail__paths {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--studio-spacing-1);
+  }
+  .proj-detail__paths > div { display: block; }
+  .proj-detail__paths dt { margin-bottom: var(--studio-spacing-1); }
+  .proj-detail__paths dd {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+}
+
 /*
  * Section spacing: was 18px (tight, "super technisch" per user
  * feedback). Bump to 28px so each group reads as its own thought
@@ -187,6 +178,10 @@
  * panel.
  */
 .proj-detail__group { margin-bottom: 28px; }
+
+/* PUB-1: publish badges - "NuGet 0.3.1 -> 4 tasks pending". Green for a
+   normal pending delta (something is ready to ship), violet for a website
+   delta, amber for a package that has never had a first publish. */
 .proj-detail__group h3 {
   margin: 0 0 12px;
   padding-bottom: 6px;
@@ -229,6 +224,7 @@
 }
 
 .proj-detail__model-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+
 .proj-detail__model-select {
   background: var(--studio-bg-overlay);
   color: var(--studio-fg);
@@ -408,47 +404,6 @@
   font-weight: 600;
 }
 
-.proj-detail__counts { display: flex; gap: 8px; flex-wrap: wrap; }
-.proj-detail__count {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 64px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.10);
-}
-.proj-detail__count-num { color: var(--studio-fg); font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.proj-detail__count-state { color: var(--studio-fg-muted); font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.04em; }
-
-.proj-detail__status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-}
-.proj-detail__status-cell {
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 6px;
-  background: rgba(255,255,255,0.035);
-}
-.proj-detail__status-label,
-.proj-detail__status-note {
-  display: block;
-  color: var(--studio-fg-muted);
-  font-size: 0.72rem;
-}
-.proj-detail__status-cell strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--studio-fg, #e2e8f0);
-  font-size: 0.9rem;
-  overflow-wrap: anywhere;
-}
-.proj-detail__status-note { margin-top: 3px; }
-
 .proj-detail__health {
   display: flex;
   align-items: center;
@@ -516,14 +471,9 @@
 .proj-detail__entry {
   padding: 0;
   border: none;
-  border-left: 2px solid rgba(255,255,255,0.10);
   padding-left: 12px;
   background: none;
 }
-.proj-detail__entry--decision { border-left-color: rgba(196,181,253,0.50); }
-.proj-detail__entry--action { border-left-color: rgba(125,211,252,0.50); }
-.proj-detail__entry--observation { border-left-color: rgba(148,163,184,0.40); }
-.proj-detail__entry--intervention { border-left-color: rgba(249,226,175,0.55); }
 .proj-detail__entry p { margin: 0 0 6px; color: var(--studio-fg, #e2e8f0); font-size: 0.92rem; line-height: 1.5; }
 .proj-detail__entry header {
   display: flex;

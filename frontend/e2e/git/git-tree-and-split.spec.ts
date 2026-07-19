@@ -21,7 +21,7 @@ async function waitForDetailVisible(jobId: string, watchPath: string): Promise<v
   let lastError: unknown = null;
   while (Date.now() < deadline) {
     try {
-      await api(`/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`);
+      await api(`/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`);
       return;
     } catch (err) {
       lastError = err;
@@ -102,10 +102,10 @@ test.describe('Git pane — tree view and split layout', () => {
           })
         });
       });
-      await page.route('**/api/jobs/*/git/status**', async (route) => {
+      await page.route('**/api/tasks/*/git/status**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(STATUS_PAYLOAD) });
       });
-      await page.route('**/api/jobs/*/git/diff**', async (route) => {
+      await page.route('**/api/tasks/*/git/diff**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'text/plain', body: SAMPLE_DIFF });
       });
 
@@ -167,7 +167,7 @@ test.describe('Git pane — tree view and split layout', () => {
       await expect(tree.locator('[data-testid="git-tree-file"]').filter({ hasText: 'foo.ts' })).toHaveCount(0);
       await expect(tree.locator('[data-testid="git-tree-file"]').filter({ hasText: 'README.md' })).toBeVisible();
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

@@ -113,9 +113,10 @@ public sealed class QuotaService
         }
         try
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(45));
-            var snap = await probe.ProbeAsync(cts.Token);
+            _cache.TryGetValue(cliType, out var previous);
+            var snap = await ProbeOnceAsync(probe, ct);
+            snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
+            snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -123,12 +124,96 @@ public sealed class QuotaService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Quota probe for {Cli} threw", cliType);
-            var snap = new QuotaSnapshot { CliType = cliType, Error = ex.Message };
+            // Latch a prior suspicious flag onto the error snapshot. A probe that
+            // fails right after a ground-truth invalidation (AGT-2064) must not
+            // silently drop the block and re-open the admission gate.
+            _cache.TryGetValue(cliType, out var prior);
+            var snap = new QuotaSnapshot
+            {
+                CliType = cliType,
+                Error = ex.Message,
+                Suspicious = prior?.Suspicious ?? false,
+                SuspiciousReason = prior?.Suspicious == true ? prior.SuspiciousReason : null
+            };
             _cache[cliType] = snap;
             PersistCache();
             return snap;
         }
         finally { sem.Release(); }
+    }
+
+    private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(45));
+        return await probe.ProbeAsync(cts.Token);
+    }
+
+    /// <summary>
+    /// AGT-2064 plausibility gate. A single probe that shows a window jumping
+    /// DOWN by more than the threshold with no reset to explain it is not
+    /// trusted on its own: re-probe immediately and only accept the drop when a
+    /// second, independent measurement agrees. If the confirmation disagrees,
+    /// the first reading was a transient glitch - keep the previous
+    /// (still-blocking) value and flag it suspicious so the admission gate stays
+    /// conservative until a clean reading arrives.
+    /// </summary>
+    private async Task<QuotaSnapshot> ReconcileSuspiciousDropAsync(
+        string cliType, IQuotaProbe probe, QuotaSnapshot? previous, QuotaSnapshot candidate, CancellationToken ct)
+    {
+        var suspicion = QuotaPlausibilityGate.Evaluate(previous, candidate, DateTime.UtcNow);
+        if (!suspicion.Suspicious) return candidate;
+
+        _logger.LogWarning(
+            "quota_snapshot_suspicious cli={Cli} reason={Reason}: re-probing to confirm before trusting the drop",
+            cliType, suspicion.Reason);
+
+        var confirm = await ProbeOnceAsync(probe, ct);
+        if (QuotaPlausibilityGate.AreConsistent(candidate, confirm))
+        {
+            _logger.LogInformation(
+                "quota_snapshot_confirmed cli={Cli}: two consistent probes agree, accepting the new value", cliType);
+            return confirm;
+        }
+
+        _logger.LogWarning(
+            "quota_snapshot_glitch_discarded cli={Cli} reason={Reason}: confirmation probe disagreed, holding prior snapshot (suspicious) so admission stays conservative",
+            cliType, suspicion.Reason);
+        return (previous ?? candidate) with
+        {
+            Suspicious = true,
+            SuspiciousReason = suspicion.Reason,
+            FetchedAt = DateTime.UtcNow
+        };
+    }
+
+    /// <summary>
+    /// Ground-truth override (AGT-2064): a live launch just died with a
+    /// usage-limit error, which is proof the cached snapshot is wrong no matter
+    /// how green it looks - the error text is the evidence. Flag the cached
+    /// snapshot suspicious immediately so the admission gate stops trusting it,
+    /// then re-probe right now instead of waiting out the (10-minute) TTL.
+    /// Returns the re-probe task so callers that care (tests) can await it;
+    /// the runner fires it and forgets.
+    /// </summary>
+    public Task InvalidateForGroundTruthLimit(string cliType, string reason, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return Task.CompletedTask;
+
+        var existing = _cache.TryGetValue(cliType, out var s) ? s : new QuotaSnapshot { CliType = cliType };
+        _cache[cliType] = existing with
+        {
+            CliType = cliType,
+            Suspicious = true,
+            SuspiciousReason = reason,
+            FetchedAt = DateTime.UtcNow
+        };
+        PersistCache();
+        _logger.LogWarning(
+            "quota_snapshot_invalidated cli={Cli} reason={Reason}: launch hit a usage limit, re-probing now (bypassing TTL)",
+            cliType, reason);
+
+        return RefreshAsync(cliType, ct);
     }
 
     /// <summary>

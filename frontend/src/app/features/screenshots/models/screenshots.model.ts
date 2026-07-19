@@ -19,6 +19,19 @@ export interface TaskScreenshot {
   caption: string;
   /** `passed` | `failed` | `skipped` | `unknown` | null. */
   status: string | null;
+  /**
+   * Provenance label derived from the filename suffix: `real` (captured
+   * against a live backend), `mocked` (e2e run with mocked API routes),
+   * `composite` (a stitched image), or `unlabeled` (no recognised suffix).
+   * Rendered text-only next to the caption so a reviewer can tell a
+   * live-backend shot from a mocked-route one.
+   */
+  source: string;
+  /**
+   * For a `composite` source, the source of each stitched part
+   * (e.g. `['real', 'mocked']`). Empty for every other source.
+   */
+  compositeParts: string[];
   localPath: string;
   timestampUtc: string;
 }

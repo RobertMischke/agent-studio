@@ -37,4 +37,19 @@ describe('ProjectOverlaysComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('keeps Agent Docs as a dedicated steering-docs panel', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectOverlaysComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProjectOverlaysComponent);
+    expect(fixture.componentInstance.hasCustomPanel('audits')).toBe(false);
+    expect(fixture.componentInstance.hasCustomPanel('steering')).toBe(true);
+  });
 });

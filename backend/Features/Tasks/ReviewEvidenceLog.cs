@@ -1,12 +1,13 @@
 using System.Text;
 using System.Text.Json;
+using System.Collections.Concurrent;
 
 namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Reader / appender for <c>results/review-evidence.jsonl</c>: the
 /// task-level review-evidence file documented in
-/// <c>docs/filesystem-contract.md</c>.
+/// <c>docs/system/contracts/filesystem.md</c>.
 ///
 /// The file is JSON-Lines, append-only, and per-job. Each line is one
 /// <see cref="ReviewEvidenceEntry"/>. The parser is defensively permissive:
@@ -20,6 +21,7 @@ namespace AgentStudio.Tasks;
 /// </summary>
 internal static class ReviewEvidenceLog
 {
+    private static readonly ConcurrentDictionary<string, object> AppendLocks = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions WriteOpts = new()
     {
         WriteIndented = false,
@@ -123,7 +125,32 @@ internal static class ReviewEvidenceLog
         Directory.CreateDirectory(dir);
         var path = TaskPaths.ReviewEvidenceLog(jobFolder);
         var json = JsonSerializer.Serialize(entry, WriteOpts);
-        File.AppendAllText(path, json + "\n", Encoding.UTF8);
+        // Acknowledgements can arrive from task detail and Project Overview at
+        // the same time. Keep each JSONL record intact while retaining the
+        // append-only/latest-per-id contract.
+        lock (AppendLocks.GetOrAdd(path, _ => new object()))
+        {
+            // The API can run in more than one process during a handover or
+            // deploy. The in-process lock keeps local records intact; the
+            // exclusive writer plus bounded retry also serializes with a
+            // writer from another process on Windows.
+            const int maxAttempts = 20;
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    using var stream = new FileStream(
+                        path, FileMode.Append, FileAccess.Write, FileShare.Read);
+                    using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+                    writer.WriteLine(json);
+                    break;
+                }
+                catch (IOException) when (attempt < maxAttempts)
+                {
+                    Thread.Sleep(10);
+                }
+            }
+        }
     }
 
     private static string? ReadString(JsonElement doc, string name)

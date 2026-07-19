@@ -6,7 +6,7 @@ interface WatchPath { name: string; path: string; rootPath: string; }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
   await api(
-    `/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`,
+    `/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`,
     { method: 'DELETE' },
   ).catch(() => {});
 }

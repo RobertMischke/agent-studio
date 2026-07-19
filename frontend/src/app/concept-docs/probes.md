@@ -1,7 +1,7 @@
 ---
 concept: probes
 title: Probes
-learnMore: docs/cli-skills/cli-overview.md
+learnMore: docs/system/cli/skills/cli-overview.md
 learnMoreLabel: CLI Skills Overview
 ---
 

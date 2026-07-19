@@ -1,4 +1,4 @@
-<ul class="git-tree" role="tree" aria-label="Changed files" data-testid="git-files" (keydown)="onKeydown($event)">
+<ul class="git-tree" role="tree" aria-label="Changed files" data-testid="git-files" tabindex="0" (keydown)="onKeydown($event)">
   @for (node of visibleRows(); track node.path) {
     <li class="git-tree__row"
         role="treeitem"
@@ -12,14 +12,21 @@
         [attr.data-testid]="node.isFile ? 'git-tree-file' : 'git-tree-folder'"
         [attr.data-path]="node.path"
         [attr.tabindex]="rovingPath() === node.path ? 0 : -1"
-        (click)="onClick(node)">
+        (click)="onClick(node)"
+        (keydown.enter)="onClick(node)"
+        (keydown.space)="onClick(node); $event.preventDefault()">
       @if (!node.isFile) {
         <span class="git-tree__chevron">{{ expanded().has(node.path) ? '▾' : '▸' }}</span>
         <span class="git-tree__label git-tree__label--folder">{{ node.label }}/</span>
         <span class="git-tree__count">{{ node.count }}</span>
       } @else {
-        <span class="git-tree__status" [appTooltip]="node.status">{{ (node.status || '').trim() || '·' }}</span>
-        <span class="git-tree__label">{{ node.label }}</span>
+        <span class="git-tree__status" [cacTooltip]="node.status">{{ (node.status || '').trim() || '·' }}</span>
+        <span class="git-tree__label" [cacTooltip]="fileTooltip(node)">{{ node.label }}</span>
+        @if (dirHint(node); as hint) {
+          <span class="git-tree__dir-hint"
+                data-testid="git-tree-dir-hint"
+                [cacTooltip]="fileTooltip(node)">{{ hint }}</span>
+        }
       }
       @if (node.added || node.removed) {
         <span class="git-tree__stat">+{{ node.added }}/−{{ node.removed }}</span>

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import type { GitFileChange } from '../../../../../features/git';
 
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 interface TreeNode {
   /** Full path from repo root for files; folder path with trailing names joined for directories. */
   path: string;
@@ -61,6 +61,46 @@ export class GitFileTreeComponent {
   private readonly activePath = signal<string | null>(null);
 
   readonly tree = computed<TreeNode[]>(() => buildTree(this.files()));
+
+  /**
+   * Basenames that appear on more than one changed file (e.g. two
+   * `README.md` in different folders). Drives the visible directory hint +
+   * makes the collision case obvious at a glance. Pure derivation off
+   * `files()`; the full path is always available via {@link fileTooltip}.
+   */
+  private readonly collidingNames = computed<Set<string>>(() => {
+    const counts = new Map<string, number>();
+    for (const f of this.files()) {
+      const name = baseName(f.path);
+      if (!name) continue;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const out = new Set<string>();
+    for (const [name, n] of counts) if (n > 1) out.add(name);
+    return out;
+  });
+
+  /** Full repo-relative path for a file row's hover tooltip. */
+  fileTooltip(node: TreeNode): string {
+    return node.path;
+  }
+
+  /**
+   * Compact directory disambiguator shown only when a file's basename
+   * collides with another changed file. Uses the immediate parent folder
+   * ("docs/") - or "root" for a top-level file - so the two `README.md`
+   * rows read as distinct without the full path eating the row width.
+   * Returns '' when the name is unique (no hint needed).
+   */
+  dirHint(node: TreeNode): string {
+    if (!node.isFile) return '';
+    if (!this.collidingNames().has(baseName(node.path))) return '';
+    const slash = node.path.lastIndexOf('/');
+    if (slash <= 0) return 'root';
+    const parent = node.path.slice(0, slash);
+    const parentSlash = parent.lastIndexOf('/');
+    return `${parentSlash >= 0 ? parent.slice(parentSlash + 1) : parent}/`;
+  }
 
   /**
    * Default expansion: small change sets fully expand so the tree is
@@ -198,6 +238,14 @@ export class GitFileTreeComponent {
     if (on) next.add(path); else next.delete(path);
     this.userExpanded.set({ files, set: next });
   }
+}
+
+/** Basename of a repo-relative path (segment after the last forward/back slash). */
+function baseName(path: string): string {
+  if (!path) return '';
+  const normalized = path.replace(/\\/g, '/');
+  const slash = normalized.lastIndexOf('/');
+  return slash >= 0 ? normalized.slice(slash + 1) : normalized;
 }
 
 /** Index of the nearest preceding shallower row (the folder that contains `index`). */

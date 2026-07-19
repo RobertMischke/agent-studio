@@ -9,11 +9,9 @@ export { BoardFiltersService, type ActiveFilterPill } from './state/board-filter
 export { LaneCollapseService } from './state/lane-collapse.service';
 export { CreateTaskFormService } from './state/create-task-form.service';
 export { BoardMutationsService } from './state/board-mutations.service';
-export { BacklogTriageService, type BacklogSortMode } from './state/backlog-triage.service';
 export { EpicOverviewService } from './state/epic-overview.service';
 
 // components
-export { BacklogTriageScreenComponent } from './components/backlog-triage-screen/backlog-triage-screen.component';
 export { EpicOverviewScreenComponent, type EpicOverviewScope } from './components/epic-overview-screen/epic-overview-screen.component';
 export { BoardSearchIconComponent } from './components/board-search-icon/board-search-icon.component';
 export { CreateTaskDialogComponent, type PendingAttachment } from './components/create-task-dialog/create-task-dialog.component';
@@ -33,6 +31,14 @@ export {
   projectAutoInfo,
   projectRunnerIndicator,
 } from './components/project-tabs/project-chip-view-model';
+export {
+  buildGitStateBadge,
+  buildMergeSignal,
+  type GitStateBadge,
+  type GitStateBadgeKind,
+  type MergeSignalView,
+  type MergeSignalSegment,
+} from './components/task-card/task-card-view-model';
 
 // utilities
 export { splitReadyByPhase } from './components/ready-lane-split.util';

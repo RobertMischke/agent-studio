@@ -13,5 +13,6 @@ export type {
   PipelineStepKindKey,
   PipelineKindDayCell,
   PipelineKindSeries,
+  PipelineStepCostSeries,
   ProjectPipelineCostTimeline,
 } from './models/project-token-usage.model';

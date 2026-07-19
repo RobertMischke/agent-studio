@@ -154,7 +154,7 @@ public static partial class CliOutputLogParser
             {
                 Timestamp = fallbackDateUtc,
                 Stream = "stdout",
-                Text = line
+                Text = AnsiText.Strip(line)
             };
         }
 
@@ -168,7 +168,7 @@ public static partial class CliOutputLogParser
         {
             Timestamp = DateTime.SpecifyKind(timestamp, DateTimeKind.Utc),
             Stream = match.Groups["stream"].Value,
-            Text = match.Groups["text"].Value
+            Text = AnsiText.Strip(match.Groups["text"].Value)
         };
     }
 

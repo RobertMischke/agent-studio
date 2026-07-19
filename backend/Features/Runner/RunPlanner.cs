@@ -63,6 +63,34 @@ public sealed record RunPlan(
 public static class RunPlanner
 {
     /// <summary>
+    /// Replace a planned resume with the same full-context recovery plan used
+    /// when a stored session is absent. Callers use this when an execution-time
+    /// precondition (for example a missing Codex rollout in the effective
+    /// CODEX_HOME) proves that the otherwise valid session id cannot be opened.
+    /// </summary>
+    public static RunPlan FallBackToRecovery(
+        RunPlan plan,
+        string promptPath,
+        string jobFolder,
+        string? followupPrompt,
+        string reason)
+        => plan with
+        {
+            PromptTemplate = RuntimePromptService.RunnerRecoveryContinuation,
+            PromptVariables = PromptVariables(promptPath, jobFolder, followupPrompt ?? string.Empty),
+            PromptOverride = null,
+            SessionToResume = null,
+            ResumeFlag = false,
+            EventKind = "recovery",
+            EventReason = reason,
+            EventInputSessionId = null,
+            MarkSessionChainRecovery = true,
+            WriteCutMarker = true,
+            CutMarkerReason = reason,
+            PersistSessionName = null,
+        };
+
+    /// <summary>
     /// Maps a trigger + observed state to a fully-described <see cref="RunPlan"/>.
     /// Called from <see cref="ProjectRunner.RunCliAsync"/>; never throws, never
     /// returns null - the contract is "always produces a runnable plan", which
@@ -174,14 +202,8 @@ public static class RunPlanner
         }
         var resume = !string.IsNullOrWhiteSpace(startSession);
         string? persistSessionName = null;
-        if (!resume && cliType == CliTypes.Copilot)
-        {
-            // Copilot uses the persisted name as the resume handle - pre-generate
-            // a slug now so the next run can find it. Other CLIs capture a real
-            // UUID during streaming and leave SessionName null until then.
-            startSession = BuildSessionName(jobId);
-            persistSessionName = startSession;
-        }
+        // Claude / Codex / Gemini capture a real session UUID during streaming and
+        // leave SessionName null until then; nothing to pre-generate here.
 
         var promptTemplate = SelectStartPromptTemplate(initialState, resume, sessionDropped);
 
@@ -340,9 +362,10 @@ public static class RunPlanner
         new(@"^taskboard-[A-Za-z0-9_-]+-\d{12}$", RegexOptions.Compiled);
 
     /// <summary>
-    /// Copilot uses the persisted name as a stable handle for <c>--resume</c>;
-    /// keep it short, deterministic, and unique per start. Other CLIs capture
-    /// a real UUID during streaming and never need this.
+    /// Builds the short, deterministic placeholder session slug some legacy runs
+    /// persisted before the surviving CLIs (Claude / Codex / Gemini) captured a
+    /// real streaming UUID. Retained so <see cref="IsPlaceholderSessionSlug"/> can
+    /// still recognise and drop those slugs on resume.
     /// </summary>
     public static string BuildSessionName(string jobId)
     {

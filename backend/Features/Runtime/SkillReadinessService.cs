@@ -5,13 +5,13 @@ namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Validates whether a watched project exposes the Agent Software Studio
-/// skill lookup section described in <c>docs/skills-architecture.md</c>
+/// skill lookup section described in <c>docs/concepts/skills-architecture.md</c>
 /// and surfaces the catalog of standard + project-specific skills the
 /// task processor knows about. The check is deliberately naive in v1:
 /// stable heading detection plus a small set of required phrases is
 /// enough to tell pass / warning / fail apart, and the fix path queues a
 /// normal task in the watched project rather than auto-editing its docs
-/// (per ADR-0005 / docs/skills-architecture.md "First Product Step").
+/// (per ADR-0005 / docs/concepts/skills-architecture.md "First Product Step").
 ///
 /// The agent owns README content; this service only inspects it and
 /// builds the prompt for a follow-up task. No file under the watched
@@ -58,7 +58,7 @@ public class SkillReadinessService
     ///   warning  - heading + at least 1 phrase hit, but not all
     ///   fail     - no heading (file may exist or not)
     /// The phrases are intentionally narrow: the canonical lookup
-    /// snippet from <c>docs/skills-architecture.md</c> contains every
+    /// snippet from <c>docs/concepts/skills-architecture.md</c> contains every
     /// one, and a hand-written variant that drops them all is almost
     /// always stale rather than a deliberate format choice.
     /// </summary>
@@ -165,7 +165,7 @@ public class SkillReadinessService
         if (matched == null)
         {
             status = SkillReadinessStatus.Fail;
-            summary = "No skill lookup heading found in README, AGENTS, or the Copilot shim. Add the section described in docs/skills-architecture.md.";
+            summary = "No skill lookup heading found in README, AGENTS, or the Copilot shim. Add the section described in docs/concepts/skills-architecture.md.";
         }
         else if (missingPhrases.Count == 0)
         {
@@ -192,7 +192,7 @@ public class SkillReadinessService
     }
 
     /// <summary>
-    /// Builds (without persisting) the <see cref="CreateJobRequest"/>
+    /// Builds (without persisting) the <see cref="CreateTaskRequest"/>
     /// payload used by the fix path. Surfaced separately from
     /// <see cref="CreateFixTask"/> so the frontend can preview the
     /// proposed title and prompt before queueing the task.
@@ -228,14 +228,14 @@ public class SkillReadinessService
         var preview = PreviewFixTask(projectName);
         if (preview == null) return null;
 
-        var req = new CreateJobRequest
+        var req = new CreateTaskRequest
         {
             Title = preview.Title,
             WatchPath = preview.WatchPath,
             PromptMarkdown = preview.PromptMarkdown,
             TargetState = preview.TargetState,
             TaskType = preview.TaskType,
-            Agent = "copilot",
+            Agent = "claude",
             OwnerClientId = string.IsNullOrWhiteSpace(ownerClientId) ? null : ownerClientId,
         };
 
@@ -471,7 +471,7 @@ public class SkillReadinessService
         sb.AppendLine();
         sb.AppendLine("## Why");
         sb.AppendLine();
-        sb.AppendLine("This watched project should expose a small skill lookup section so direct CLI work in Codex, Claude Code, Copilot, or Gemini can find the same standard skills the orchestrator attaches during managed task runs. The contract is documented in `docs/skills-architecture.md` (in the Agent Software Studio repo).");
+        sb.AppendLine("This watched project should expose a small skill lookup section so direct CLI work in Codex, Claude Code, Copilot, or Gemini can find the same standard skills the orchestrator attaches during managed task runs. The contract is documented in `docs/concepts/skills-architecture.md` (in the Agent Software Studio repo).");
         sb.AppendLine();
         sb.AppendLine("## Current state");
         sb.AppendLine();

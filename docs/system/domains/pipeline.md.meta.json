@@ -1,0 +1,122 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Pipeline domain metadata",
+  "source": {
+    "path": "docs/system/domains/pipeline.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "3e238709da1e096d3a46ac1a42509dbab36503712e0f3b72091aead0a4f89b12",
+      "sizeBytes": 8696,
+      "lineCount": 143,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/system/domains/pipeline.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "pipeline",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "implemented"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "sample metadata pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "3e238709da1e096d3a46ac1a42509dbab36503712e0f3b72091aead0a4f89b12",
+      "sizeBytes": 8696,
+      "lineCount": 143,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "B",
+    "hasDrift": true,
+    "score": 0.22,
+    "summary": "Terminology is close, but recent UI wording around core agent work and post steps should be kept synchronized.",
+    "rationale": [
+      "The pre, core, and post-step distinction is still valid.",
+      "Recent card and pipeline display polishing changed operator-facing labels.",
+      "The concept is current, the presentation needs a light refresh."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "medium",
+    "freshness": "medium",
+    "operatorUsefulness": "high"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Terminology is close, but recent UI wording around core agent work and post steps should be kept synchronized.",
+      "rationale": [
+        "The pre, core, and post-step distinction is still valid.",
+        "Recent card and pipeline display polishing changed operator-facing labels.",
+        "The concept is current, the presentation needs a light refresh."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The pre, core, and post-step distinction is still valid.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Recent card and pipeline display polishing changed operator-facing labels.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The concept is current, the presentation needs a light refresh.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Refresh examples after the current board-card terminology is finalized.",
+  "relatedTasks": [
+    {
+      "key": "AGT-2022",
+      "title": "Review-/Aspect-Evidenz: results/ \u002B Task-Branch-Diff statt nur Working-Diff (read-only-Tasks)",
+      "linkedAt": "2026-07-10T15:11:35.547485Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-1943",
+      "title": "BUG: Post-Build-Test-Gate baut im geteilten Checkout - kollidiert mit laufendem Dev-Backend",
+      "linkedAt": "2026-07-10T23:55:16.7118693Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-1987",
+      "title": "EW-2: Engineering Workstream - Collector als Pipeline-Step",
+      "linkedAt": "2026-07-11T00:17:57.9295611Z",
+      "source": "auto"
+    }
+  ]
+}

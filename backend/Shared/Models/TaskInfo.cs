@@ -38,14 +38,24 @@ public record TaskInfo
     /// when the job has had no orchestrator LLM activity yet.
     /// </summary>
     public TaskTokenSummary? TokenSummary { get; init; }
-    /// <summary>Name passed to Copilot CLI via <c>--name</c> on first start; reused with <c>--resume</c> for follow-ups.</summary>
+    /// <summary>CLI-native session identifier captured during streaming; reused on resume for follow-ups.</summary>
     public string? SessionName { get; init; }
     /// <summary>Preferred model for this job (e.g. <c>claude-sonnet-4.5</c>); passed via <c>--model</c> when supported.</summary>
     public string? Model { get; init; }
+    /// <summary>
+    /// True when the model was explicitly pinned on the card. Legacy tasks
+    /// without provenance default to true so an upgrade never changes their
+    /// execution model unexpectedly.
+    /// </summary>
+    public bool ModelExplicit { get; init; } = true;
     /// <summary>Optional thinking / reasoning effort level for the selected CLI model.</summary>
     public string? ThinkingLevel { get; init; }
-    /// <summary>Which CLI backend executes this job: <c>copilot</c>, <c>claude</c>, or <c>codex</c>. Defaults to <c>copilot</c>.</summary>
+    /// <summary>True when the card explicitly pins its reasoning level.</summary>
+    public bool ThinkingLevelExplicit { get; init; } = true;
+    /// <summary>Which CLI backend executes this job: <c>claude</c>, <c>codex</c>, or <c>gemini</c>. Defaults to <c>claude</c>.</summary>
     public string? CliType { get; init; }
+    /// <summary>Effective fallback for the current run; null outside a quota-routed run.</summary>
+    public QuotaFallbackStatus? QuotaFallback { get; init; }
     /// <summary>
     /// Card kind: <c>task</c> (default, a runnable unit of work) or <c>epic</c>
     /// (a container grouping sub-tasks under one overarching goal). An epic is
@@ -67,7 +77,7 @@ public record TaskInfo
     /// <summary>
     /// Whether the agent may use web search / fetch for this run. Default off for
     /// coding/planning, on for research (set at create time). See decision 2 in
-    /// docs/research/planning-research-task-kinds-2026-05.md.
+    /// docs/concepts/planning-research-task-kinds-2026-05.md.
     /// </summary>
     public bool AllowWebAccess { get; init; }
     /// <summary>
@@ -207,7 +217,7 @@ public record TaskInfo
     /// Optional lifecycle substate, read from the <c>"phase"</c> field in
     /// <c>job.json</c>. Drives the kanban board's lane projection in the
     /// expanded-lifecycle-lanes model (see
-    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>).
+    /// <c>docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md</c>).
     /// Application-owned: agents must not write to this field. Values come
     /// from <see cref="LifecyclePhases"/> and are constrained per state by
     /// <see cref="LifecyclePhases.AllowedByState"/>. Null means "no explicit
@@ -217,6 +227,19 @@ public record TaskInfo
     /// without rewriting every <c>job.json</c>.
     /// </summary>
     public string? Phase { get; init; }
+
+    /// <summary>UTC timestamp written whenever <see cref="Phase"/> changes.</summary>
+    public DateTime? PhaseEnteredAt { get; init; }
+
+    /// <summary>
+    /// Run-Liveness Slice B (concept Rule 2): when this <c>3-progress</c> card is
+    /// waiting on an unanswered steer / NeedsInput question, the UTC time the wait
+    /// started - read from the durable <c>steer-pending.json</c> marker. Null when
+    /// the card is not steer-pending. Drives the board's "waiting for answer since
+    /// mm:ss" pill so the wait is visible instead of an invisible hang. Paired
+    /// with <see cref="Phase"/> == <see cref="LifecyclePhases.SteerPending"/>.
+    /// </summary>
+    public DateTime? SteerPendingSince { get; init; }
 
     /// <summary>
     /// Structural classification of the task. One of <see cref="TaskTypes.Bug"/>,
@@ -250,6 +273,26 @@ public record TaskInfo
     public TaskReferences References { get; init; } = new();
 
     /// <summary>
+    /// Wiki pages associated with this task. The list is append-only and
+    /// deliberately survives deletion of a target page; <c>Exists</c> is a
+    /// read-time rendering hint and is never required for persistence.
+    /// </summary>
+    public List<RelatedWikiPage> RelatedWikiPages { get; init; } = [];
+
+    /// <summary>
+    /// AGT-2029 — read-time "waits-on" projection derived from
+    /// <see cref="References"/>.<c>DependsOn</c> against the whole workspace
+    /// (all projects, all lanes including archive). Tells the card which
+    /// dependencies are fulfilled vs still open, whether the card is blocked,
+    /// and whether it sits on a dependency cycle. Never persisted to
+    /// <c>task.json</c>; folded on by the endpoint read overlay
+    /// (<c>TaskEndpointHelpers.WithRuntime</c>) and computed independently by
+    /// the runner pickup gate. Null when the task has no dependsOn edges. See
+    /// <see cref="WaitsOnEvaluator"/>.
+    /// </summary>
+    public WaitsOnStatus? WaitsOn { get; init; }
+
+    /// <summary>
     /// Append-only commit-provenance record (ASS-1724): the task's worktree
     /// branch, its fork-point base, the per-lane-transition anchors, and the
     /// develop-merge block. Written by the single recording hook in
@@ -258,6 +301,125 @@ public record TaskInfo
     /// legacy <c>task.json</c> files that predate the field.
     /// </summary>
     public TaskProvenance? Provenance { get; init; }
+
+    /// <summary>
+    /// AGT-2046 — compact, always-on board merge signal: is this task's work
+    /// folded into the integration branch (develop) and/or the release branch
+    /// (main)? Computed batched + cached per repository by
+    /// <c>BoardMergeStatusService</c> (O(repos) git spawns, never per card) and
+    /// folded onto the board payload so the kanban card renders a two-segment
+    /// [develop|main] indicator without a per-card graph query. Never persisted
+    /// to <c>task.json</c>; null on cards with no committed/merged anchor yet.
+    /// </summary>
+    public TaskMergeSignal? MergeSignal { get; init; }
+
+    /// <summary>
+    /// PUB-1 — read-time "publishable to" projection for accepted (6-completed)
+    /// tasks: which publish targets (npm / NuGet / website) this task's merged work
+    /// touches, so the card / task-detail renders a "publishable: npm, website"
+    /// chip. Computed batched per project by <c>TaskPublishableService</c> by
+    /// set-membership of the task's mainline anchor against each target's pending
+    /// commit set (O(projects), never per card) and folded onto the board payload.
+    /// Never persisted to <c>task.json</c>; null on non-accepted cards and on cards
+    /// whose work touches no derived publish target.
+    /// </summary>
+    public TaskPublishSignal? PublishSignal { get; init; }
+
+    /// <summary>
+    /// Read-time visibility projection (ASS-1751) for <c>3-progress</c> tasks
+    /// that disambiguates a live run, a failed run waiting out the rapid-crash
+    /// backoff, and an orphaned run killed by a backend restart. Folded on by
+    /// <c>WithRuntime</c> only when <see cref="State"/> is
+    /// <see cref="TaskStates.Progress"/>; null otherwise. Never persisted to
+    /// <c>job.json</c>; carries no behavior. See <see cref="TaskRunActivity"/>.
+    /// </summary>
+    public TaskRunActivity? RunActivity { get; init; }
+
+    /// <summary>
+    /// Set when the task was completed out-of-band (operator chat, external
+    /// agent, remote host) and reconciled through
+    /// <c>POST /api/tasks/{id}/external-completion</c> instead of a runner run.
+    /// Persisted as the <c>"externalCompletion"</c> object in <c>task.json</c>;
+    /// null on every task that finished through the normal runner/review path.
+    /// Drives the "extern erledigt" badge on the kanban card. See
+    /// <c>docs/concepts/out-of-band-task-completion.md</c> §3.
+    /// </summary>
+    public ExternalCompletionInfo? ExternalCompletion { get; init; }
+
+    /// <summary>
+    /// AGT-2003 — read-time projection of the runner holding this task's active
+    /// <b>run lease</b> (ADR-0060, <see cref="AgentStudio.Runner.RunLeaseService"/>).
+    /// Folded on by <c>TaskEndpointHelpers.WithRuntime</c> only while the task is
+    /// in <see cref="TaskStates.Progress"/> and a lease is held; null otherwise.
+    /// Never persisted to <c>task.json</c>. A remote runner acquires the run
+    /// lease before it spawns a CLI (the local in-process runner still uses the
+    /// disk pickup-lock and holds no run lease), so a non-null value with
+    /// <see cref="TaskRunnerInfo.IsRemote"/> is the signal the board card uses to
+    /// show "executed by &lt;runner&gt;" instead of a plain local run. Drives the
+    /// runner badge next to the CLI badge and the task-detail run header.
+    /// </summary>
+    public TaskRunnerInfo? Runner { get; init; }
+
+    /// <summary>
+    /// AGT-2069 — read-time spawn-visibility + spawn-contract projection for a
+    /// planning task (<c>Mode == planning</c>): which follow-up cards it spawned
+    /// (AGT-2028 ledger), whether the operator declared "no follow-up intended",
+    /// and whether the spawn contract is satisfied. Folded on by
+    /// <c>TaskEndpointHelpers.WithRuntime</c> only for planning-mode tasks (two
+    /// small sidecar reads, gated so the perf contract holds); null on every
+    /// coding / research / epic card. Never persisted to <c>task.json</c>. Drives
+    /// the "spawnt: AGT-xxxx" chips, the "no follow-up cards" warning, and the
+    /// accept-dialog guard against the AGT-1915 trap.
+    /// </summary>
+    public PlanningSpawnSummary? PlanningSpawn { get; init; }
+}
+
+/// <summary>
+/// Card-renderable projection of the runner that holds a task's active run lease
+/// (AGT-2003). Sourced from the in-memory run-lease record; the fencing token and
+/// lease id ride along for the tooltip / audit trail but the card only needs
+/// <see cref="RunnerName"/> and <see cref="IsRemote"/>.
+/// </summary>
+public record TaskRunnerInfo
+{
+    /// <summary>Stable runner id that acquired the lease (e.g. <c>dev@host</c> or a remote runner id).</summary>
+    public string RunnerId { get; init; } = "";
+    /// <summary>Human-facing runner name shown on the badge (e.g. <c>agent-runner-01</c>). Falls back to the id when unset.</summary>
+    public string RunnerName { get; init; } = "";
+    /// <summary>Host the runner runs on. Empty when the lease did not carry one.</summary>
+    public string Hostname { get; init; } = "";
+    /// <summary>Backend-name the lease owner reported (dev / stable / a remote backend name).</summary>
+    public string BackendName { get; init; } = "";
+    /// <summary>
+    /// True when the lease owner is a different runner than this backend's own
+    /// identity — i.e. the task is executing on a remote host, not in-process.
+    /// The card shows the remote runner name only when this is true.
+    /// </summary>
+    public bool IsRemote { get; init; }
+    /// <summary>Opaque lease id of the active grant (audit / tooltip only).</summary>
+    public string LeaseId { get; init; } = "";
+    /// <summary>Monotonic fencing token of the active grant (audit / tooltip only).</summary>
+    public long FencingToken { get; init; }
+    /// <summary>UTC instant the active lease was acquired.</summary>
+    public DateTime AcquiredAt { get; init; }
+}
+
+/// <summary>
+/// Provenance of an out-of-band task completion. Written by the external
+/// completion endpoint into <c>task.json</c> so the board can render an
+/// "extern erledigt" badge and attribute who/what finished the work. The
+/// canonical narrative lives in <c>results/deliverables.md</c> and the
+/// <c>external_completion</c> timeline event; this record is the small,
+/// card-renderable summary.
+/// </summary>
+public record ExternalCompletionInfo
+{
+    /// <summary>Who or which channel completed the task (operator name, agent id, "chat", ...).</summary>
+    public string Source { get; init; } = "";
+    /// <summary>One-line result summary shown in the badge tooltip; may be empty.</summary>
+    public string? Summary { get; init; }
+    /// <summary>UTC instant the external completion was recorded.</summary>
+    public DateTime CompletedAt { get; init; }
 }
 
 public record TaskOutcomeIssue

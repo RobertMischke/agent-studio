@@ -7,7 +7,7 @@ import { TaskBackgroundPoller } from './task-background-poller';
 /**
  * Polls the per-job run timeline (`/api/tasks/{id}/runs`) every 5 s
  * while a job is open. The timeline is the unit-of-conversation surface
- * documented in `docs/design-principles.md` - one card per CLI
+ * documented in `docs/quality/design-principles.md` - one card per CLI
  * invocation between user inputs - so the cadence has to keep up with
  * a user starting / stopping a run, not with per-frame log streaming.
  *

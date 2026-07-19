@@ -35,7 +35,7 @@ public static class LogIngestionEndpoints
             var logPath = Path.Combine(logsDir, "cli-output.log");
 
             var rendered = string.Join(Environment.NewLine,
-                req.Lines.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {l.Text}"));
+                req.Lines.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {AnsiText.Strip(l.Text)}"));
 
             try
             {
@@ -63,7 +63,8 @@ public static class LogIngestionEndpoints
         if (string.IsNullOrWhiteSpace(taskKey)) return null;
         var task = scanner.ScanAllJobs().FirstOrDefault(t =>
             string.Equals(t.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase));
+            || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t.Key, taskKey, StringComparison.OrdinalIgnoreCase));
         return string.IsNullOrWhiteSpace(task?.FolderPath) ? null : task!.FolderPath;
     }
 }

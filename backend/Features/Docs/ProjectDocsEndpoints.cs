@@ -66,15 +66,115 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(ov);
         });
 
-        // The physical docs/ folder hierarchy (folders + .md/.html files) that
-        // backs the wiki navigation tree. No git is touched here so loading it
-        // stays cheap; per-doc commit metadata is fetched lazily via /history.
-        app.MapGet("/api/projects/{projectName}/wiki/tree", (string projectName, ProjectDocsService docs) =>
+        // Repository-owned style-guide family. The same applicability result
+        // is consumed by intake prompt enrichment, so the Wiki never advertises
+        // a guide that the coding run cannot discover.
+        app.MapGet("/api/projects/{projectName}/style-guides", (string projectName, ProjectStyleGuideService guides, bool refresh = false) =>
         {
-            var tree = docs.GetWikiTree(projectName);
-            return tree == null
+            var catalogue = guides.GetCatalogue(projectName, refresh);
+            return catalogue == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(tree);
+                : Results.Ok(catalogue);
+        });
+
+        // Repository-owned experiment Workbenches. The catalogue is discovered by
+        // scanning docs/ recursively for workbench.json descriptors (post-2026-07
+        // migration the workbench folders are theme-distributed, e.g. under
+        // operations/ and quality/); HTML is returned as data and is never
+        // executed by the backend origin.
+        app.MapGet("/api/projects/{projectName}/workbenches", (string projectName, bool? history, WorkbenchCatalogueService workbenches) =>
+        {
+            var catalogue = workbenches.List(projectName, history == true);
+            return catalogue == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(catalogue);
+        });
+
+        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, WorkbenchCatalogueService workbenches) =>
+        {
+            var document = workbenches.Read(projectName, id);
+            return document == null
+                ? Results.NotFound(new { error = "Workbench not found, invalid, or path rejected" })
+                : Results.Ok(document);
+        });
+
+        // The physical docs/ folder hierarchy (folders + .md/.html/.json files)
+        // that backs the wiki navigation tree. No git is touched here, and a warm
+        // cache serves it without opening a file (AGT-2013); the ETag lets a
+        // frontend reload skip the payload entirely with a 304. Per-doc commit
+        // metadata is still fetched lazily via /history.
+        app.MapGet("/api/projects/{projectName}/wiki/tree", (string projectName, ProjectDocsService docs, HttpContext http) =>
+        {
+            var res = docs.GetWikiTreeResult(projectName);
+            return res == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : ConditionalOk(http, res.ETag, res.Tree);
+        });
+
+        // Recently-edited wiki pages (page / git author / timestamp), newest
+        // first, for the dashboard landing surface. Touches git (one log walk),
+        // memoized on the wiki branch HEAD so a warm request skips the walk
+        // (AGT-2013); `limit` is clamped server-side. Sits before the /files
+        // catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/recent", (string projectName, ProjectDocsService docs, GitService git, HttpContext http, int? limit) =>
+        {
+            var n = Math.Clamp(limit ?? 12, 1, 50);
+            var res = docs.GetWikiRecentEditsResult(projectName, git, n);
+            return res == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : ConditionalOk(http, res.ETag, res.Edits);
+        });
+
+        // The generated wiki Pulse landing view: change feed + inbox + drift,
+        // PULSE-2 warnings/live docs work, and maintenance-run summaries. It is
+        // composed server-side so the landing
+        // surface costs two git walks instead of the tree + recent + per-doc
+        // history fan-out. Sits before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, WorkbenchCatalogueService workbenches, int? feedLimit) =>
+        {
+            var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
+            return pulse == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(pulse with { Workbenches = workbenches.List(projectName) });
+        });
+
+        // One directory level of the wiki for the folder-overview surface:
+        // direct children (folders first, then pages, each alphabetical) with
+        // sniffed titles, plain-text summaries, and folder child counts. An
+        // empty relPath lists the wiki root. Sits before the /files catch-all
+        // for path precedence, like its sibling routes.
+        app.MapGet("/api/projects/{projectName}/wiki/folder/{**relPath}", (string projectName, string? relPath, ProjectDocsService docs) =>
+        {
+            var folder = docs.GetWikiFolder(projectName, relPath);
+            return folder == null
+                ? Results.NotFound(new { error = "Folder not found or path rejected" })
+                : Results.Ok(folder);
+        });
+
+        // Lexical wiki search (BM25 over title/headings/body) with an optional
+        // fail-open semantic query-expansion layer (semantic=true). The limit
+        // is clamped server-side; a blank query is a 400, an unknown project a
+        // 404. Sits before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/search", async (string projectName, string? q, bool? semantic, int? limit, WikiSearchService search, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return Results.BadRequest(new { error = "q is required" });
+            var res = await search.SearchAsync(projectName, q.Trim(), semantic == true, Math.Clamp(limit ?? 20, 1, 50), ct);
+            return res == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(res);
+        });
+
+        // Curated wiki home sections from docs/app/config/home.json. Missing or
+        // malformed file degrades to empty sections; configured links are kept
+        // and annotated with an exists flag instead of being dropped. Sits
+        // before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/home", (string projectName, ProjectDocsService docs) =>
+        {
+            var home = docs.GetWikiHome(projectName);
+            return home == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(home);
         });
 
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
@@ -83,6 +183,30 @@ public static class ProjectDocsEndpoints
             return file == null
                 ? Results.NotFound(new { error = "File not found or path rejected" })
                 : Results.Ok(file);
+        });
+
+        app.MapPut("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, WikiSaveRequest body, ProjectDocsService docs, GitService git) =>
+        {
+            var rel = Normalize(relPath);
+            if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+            if (body.Content == null) return Results.BadRequest(new { error = "content field required" });
+
+            var result = docs.WriteWikiFile(projectName, rel, body.Content);
+            if (!result.Success) return Results.BadRequest(new { error = result.Error });
+
+            var repoRoot = git.ResolveRepoRootForProject(projectName);
+            if (string.IsNullOrWhiteSpace(repoRoot))
+                return Results.BadRequest(new { error = "Repository not found" });
+
+            var branch = git.GetStatusForRepoRoot(repoRoot).Branch;
+            if (!result.Changed)
+                return Results.Ok(new { relPath = rel, saved = true, changed = false, sha = (string?)null, branch });
+
+            var repoRel = Path.GetRelativePath(repoRoot, result.FullPath!).Replace('\\', '/');
+            var commit = git.CommitPaths(repoRoot, $"wiki: update {rel}", new[] { repoRel });
+            return commit.Success
+                ? Results.Ok(new { relPath = rel, saved = true, changed = true, sha = commit.Sha, branch })
+                : Results.BadRequest(new { error = commit.Error, branch });
         });
 
         // Serves images/diagrams referenced from wiki docs so relative
@@ -98,59 +222,42 @@ public static class ProjectDocsEndpoints
 
         // Per-doc provenance + history: which model last touched it (frontmatter
         // `model:` wins, else the latest commit's Co-authored-by trailer), plus
-        // the file's git log (when / why / who, newest first). `history/` sits
-        // before the catch-all so it isn't swallowed by /wiki/files/{**relPath}.
-        app.MapGet("/api/projects/{projectName}/wiki/history/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
+        // the file's git log (when / why / who, newest first). Memoized on HEAD
+        // so a re-open costs no git spawn (AGT-2013); the ETag lets a reload 304.
+        // `history/` sits before the catch-all so it isn't swallowed by
+        // /wiki/files/{**relPath}.
+        app.MapGet("/api/projects/{projectName}/wiki/history/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git, HttpContext http) =>
         {
-            var full = docs.ResolveWikiDocFullPath(projectName, relPath);
-            if (full == null || !File.Exists(full))
-                return Results.NotFound(new { error = "File not found or path rejected" });
-
-            var repoRoot = git.ResolveRepoRootForProject(projectName);
-            List<GitCommitInfo> commits = [];
-            string? trailerModel = null;
-            if (!string.IsNullOrWhiteSpace(repoRoot))
-            {
-                var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
-                commits = git.GetFileHistory(repoRoot, repoRel, 50);
-                trailerModel = git.GetLatestModelForPath(repoRoot, repoRel);
-            }
-
-            var meta = ProjectDocsService.ParseWikiMetadata(File.ReadAllText(full));
-            var model = !string.IsNullOrWhiteSpace(meta.Model) ? meta.Model : trailerModel;
-            return Results.Ok(new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits));
+            var res = docs.GetWikiHistory(projectName, relPath, git);
+            return res == null
+                ? Results.NotFound(new { error = "File not found or path rejected" })
+                : ConditionalOk(http, res.ETag, res.History);
         });
 
         // Content of a wiki doc as it existed at an earlier commit, so the
-        // history panel can preview an old revision. Sits before the /files
-        // catch-all for the same precedence reason as /history.
-        app.MapGet("/api/projects/{projectName}/wiki/revisions/{sha}/{**relPath}", (string projectName, string sha, string relPath, ProjectDocsService docs, GitService git) =>
+        // history panel can preview an old revision. The bytes are content-
+        // addressed, so the read is cached permanently and the ETag is the sha
+        // (AGT-2013). Sits before the /files catch-all for the same precedence
+        // reason as /history.
+        app.MapGet("/api/projects/{projectName}/wiki/revisions/{sha}/{**relPath}", (string projectName, string sha, string relPath, ProjectDocsService docs, GitService git, HttpContext http) =>
         {
-            var full = docs.ResolveWikiDocFullPath(projectName, relPath);
-            if (full == null)
-                return Results.NotFound(new { error = "File not found or path rejected" });
-            var repoRoot = git.ResolveRepoRootForProject(projectName);
-            if (string.IsNullOrWhiteSpace(repoRoot))
-                return Results.NotFound(new { error = "Repository not found" });
-
-            var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
-            var content = git.GetFileAtCommit(repoRoot, sha, repoRel);
-            return content == null
-                ? Results.NotFound(new { error = "Revision not found" })
-                : Results.Ok(new { relPath = relPath.Replace('\\', '/'), sha, content });
+            var res = docs.GetWikiRevision(projectName, sha, relPath, git);
+            return res == null
+                ? Results.NotFound(new { error = "Revision not found or path rejected" })
+                : ConditionalOk(http, res.ETag, res.Revision);
         });
 
         // ---- Wiki mutations (commit-backed create / move / delete) ----
 
-        // Create a new wiki page (.md/.html). The file is written to disk then
-        // committed into the project repo so it shows up in git history.
+        // Create a new wiki page (.md/.html/.json). The file is written to disk
+        // then committed into the project repo so it shows up in git history.
         app.MapPost("/api/projects/{projectName}/wiki/pages", (string projectName, WikiCreatePageRequest body, ProjectDocsService docs, GitService git) =>
         {
             var rel = Normalize(body.RelPath);
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
             var result = docs.CreateWikiPage(projectName, rel, body.Content);
             if (!result.Success) return Results.BadRequest(new { error = result.Error });
-            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create {rel}");
+            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create {rel}", result.ExtraPaths);
         });
 
         app.MapPost("/api/projects/{projectName}/wiki/folders", (string projectName, WikiCreateFolderRequest body, ProjectDocsService docs, GitService git) =>
@@ -181,6 +288,21 @@ public static class ProjectDocsEndpoints
             return commit.Success
                 ? Results.Ok(new { from, to, sha = commit.Sha })
                 : Results.BadRequest(new { error = commit.Error });
+        });
+
+        // Persist the sibling display order of category folders (consumed by the
+        // wiki tree and the folder overview). Stored beside the other wiki
+        // metadata in docs/app/config/wiki-order.json and committed like every other wiki
+        // mutation; folders missing from the list sort behind alphabetically.
+        app.MapPut("/api/projects/{projectName}/wiki/folder-order", (string projectName, WikiFolderOrderRequest body, ProjectDocsService docs, GitService git) =>
+        {
+            if (body.OrderedNames == null)
+                return Results.BadRequest(new { error = "orderedNames field required" });
+            var parent = Normalize(body.ParentRelPath) ?? string.Empty;
+            var result = docs.SetWikiFolderOrder(projectName, parent, body.OrderedNames);
+            if (!result.Success) return Results.BadRequest(new { error = result.Error });
+            return CommitWikiChange(git, projectName, result.FullPath!,
+                $"wiki: reorder categories under {(parent.Length == 0 ? "root" : parent)}");
         });
 
         // Delete a wiki node (file or folder) via git rm + commit.
@@ -217,6 +339,28 @@ public static class ProjectDocsEndpoints
         });
     }
 
+    /// <summary>
+    /// Emits an <c>ETag</c> + <c>Cache-Control: no-cache</c> response, honouring a
+    /// matching <c>If-None-Match</c> with <c>304 Not Modified</c> so a frontend
+    /// reload of an unchanged wiki payload skips the body entirely (AGT-2013).
+    /// The ETag is a strong validator derived from the docs signature / HEAD sha /
+    /// commit sha, so a match provably means the client already holds the current
+    /// version. <c>no-cache</c> tells the browser to store the response but always
+    /// revalidate, which is what turns the next reload into a conditional GET.
+    /// </summary>
+    internal static IResult ConditionalOk(HttpContext http, string etag, object payload)
+    {
+        http.Response.Headers.ETag = etag;
+        http.Response.Headers.CacheControl = "no-cache";
+
+        foreach (var candidate in http.Request.Headers.IfNoneMatch)
+        {
+            if (candidate == "*" || candidate == etag)
+                return Results.StatusCode(StatusCodes.Status304NotModified);
+        }
+        return Results.Ok(payload);
+    }
+
     /// <summary>Trims and forward-slashes a client path; null when blank.</summary>
     private static string? Normalize(string? relPath)
     {
@@ -229,14 +373,19 @@ public static class ProjectDocsEndpoints
     /// the git outcome to an HTTP result. Resolving the repo root or a failed
     /// commit both surface as a 400 so the UI can show the reason.
     /// </summary>
-    private static IResult CommitWikiChange(GitService git, string projectName, string fullPath, string message)
+    private static IResult CommitWikiChange(
+        GitService git, string projectName, string fullPath, string message, IReadOnlyList<string>? extraPaths = null)
     {
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
             return Results.BadRequest(new { error = "Repository not found" });
 
         var repoRel = Path.GetRelativePath(repoRoot, fullPath).Replace('\\', '/');
-        var commit = git.CommitPaths(repoRoot, message, new[] { repoRel });
+        var paths = new List<string> { repoRel };
+        if (extraPaths != null)
+            foreach (var extra in extraPaths)
+                paths.Add(Path.GetRelativePath(repoRoot, extra).Replace('\\', '/'));
+        var commit = git.CommitPaths(repoRoot, message, paths);
         return commit.Success
             ? Results.Ok(new { relPath = repoRel, sha = commit.Sha })
             : Results.BadRequest(new { error = commit.Error });
@@ -246,3 +395,5 @@ public static class ProjectDocsEndpoints
 public record WikiCreatePageRequest(string RelPath, string? Content);
 public record WikiCreateFolderRequest(string RelPath);
 public record WikiMoveRequest(string FromRelPath, string ToRelPath);
+public record WikiFolderOrderRequest(string? ParentRelPath, List<string>? OrderedNames);
+public record WikiSaveRequest(string? Content);

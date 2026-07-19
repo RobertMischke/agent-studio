@@ -11,7 +11,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { TaskService } from '../../../../services/task.service';
 import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectPipelineCostTimeline, ProjectTokenCategory, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary, PipelineStepKindKey } from '../../../../features/project-token-usage';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 interface CardSpec {
   testid: string;
   label: string;

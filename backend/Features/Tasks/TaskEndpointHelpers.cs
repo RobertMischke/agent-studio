@@ -10,6 +10,72 @@ namespace AgentStudio.Tasks;
 /// </summary>
 internal static class TaskEndpointHelpers
 {
+    /// <summary>
+    /// Phase 2b of the watchPath-encapsulation cleanup (ASS-1760): the external
+    /// API addresses a project by a path-free handle — a short code / Kürzel
+    /// (e.g. <c>ASS</c>), a stable <c>PROJ-NNN</c> id, or the display name used
+    /// by project-scoped UI tabs — and the server resolves
+    /// it to the project's storage watchPath here, so the filesystem layout never
+    /// has to travel over the wire as a query parameter. The deprecated
+    /// <paramref name="watchPath"/> query param is still honoured for legacy
+    /// callers during the migration; when <paramref name="project"/> is set it
+    /// wins. An unknown handle falls through to <paramref name="watchPath"/>
+    /// (usually null), so the read/mutation lands on its own not-found path
+    /// rather than silently targeting the wrong project.
+    /// </summary>
+    internal static string? ResolveWatchPath(
+        AgentStudio.Registry.ProjectRegistry projects,
+        string? project,
+        string? watchPath)
+    {
+        if (string.IsNullOrWhiteSpace(project)) return watchPath;
+
+        var handle = project.Trim();
+        var record = projects.FindByShortCode(handle)
+            ?? projects.FindByIdOrDisplayName(handle);
+
+        return record is { StorageLocation: { Length: > 0 } storage } ? storage : watchPath;
+    }
+
+    /// <summary>
+    /// Resolves a scanned task back to its immutable registry identity and its
+    /// canonical watch-path entry. Display names are deliberately not used:
+    /// they are mutable and are not unique, while storage location is the
+    /// registry-backed identity bridge used by task scanning.
+    /// </summary>
+    internal static TaskProjectContext? ResolveProjectContext(
+        AgentStudio.Registry.ProjectRegistry projects,
+        TaskScannerService scanner,
+        TaskInfo task)
+    {
+        var project = projects.FindByStorageLocation(task.WatchPath);
+        if (project == null) return null;
+        var entry = scanner.GetWatchPaths().FirstOrDefault(candidate =>
+            SameWatchPath(candidate.Path, project.StorageLocation));
+        return entry == null ? null : new TaskProjectContext(project, entry);
+    }
+
+    private static bool SameWatchPath(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+        catch
+        {
+            return string.Equals(
+                left.Replace('\\', '/').TrimEnd('/'),
+                right.Replace('\\', '/').TrimEnd('/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    internal sealed record TaskProjectContext(ProjectRecord Project, WatchPathEntry Entry);
+
     internal static IResult MoveResult(MoveJobOutcome outcome) => outcome.Status switch
     {
         MoveJobStatus.Success => Results.Ok(),
@@ -29,13 +95,21 @@ internal static class TaskEndpointHelpers
         CliRouter router,
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId)
-        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null);
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null, waitsOnByJobKey: null);
+
+    internal static TaskInfo WithRuntime(
+        TaskInfo job,
+        CliRouter router,
+        TaskRunnerService runners,
+        IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
+        IReadOnlyDictionary<string, string>? verdictsByJobKey)
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null);
 
     /// <summary>
-    /// Overlay variant that also folds in per-job orchestrator token totals
-    /// and the latest orchestrator-review verdict. The caller is expected
-    /// to have built both lookups once per request, so this stays O(1) per
-    /// job — the perf contract locked by
+    /// Overlay variant that also folds in per-job orchestrator token totals,
+    /// the latest orchestrator-review verdict, and the AGT-2029 waits-on
+    /// status. The caller is expected to have built the lookups once per
+    /// request, so this stays O(1) per job — the perf contract locked by
     /// <c>JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond</c>
     /// still holds.
     /// </summary>
@@ -44,7 +118,8 @@ internal static class TaskEndpointHelpers
         CliRouter router,
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
-        IReadOnlyDictionary<string, string>? verdictsByJobKey)
+        IReadOnlyDictionary<string, string>? verdictsByJobKey,
+        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey)
     {
         // Lane is the single source of truth for "is this card live". A job
         // outside 3-progress has finished or been moved on; surfacing a stale
@@ -76,6 +151,15 @@ internal static class TaskEndpointHelpers
         {
             verdict = v;
         }
+        // AGT-2029: fold in the pre-computed waits-on status (which dependsOn
+        // targets are fulfilled / open, blocked, or on a cycle) so the kanban
+        // card can render a state-aware, navigable dependency chip. Only cards
+        // with dependsOn edges get an entry; the rest carry null.
+        WaitsOnStatus? waitsOn = null;
+        if (waitsOnByJobKey != null && waitsOnByJobKey.TryGetValue(job.TaskKey, out var w))
+        {
+            waitsOn = w;
+        }
         // Reconcile a stale Warn-class outcome chip against the final verdict: an
         // accepted card must not surface a classifier-unknown/heuristic-done/
         // missing-terminal-sentinel chip that contradicts its accept (ASS-775).
@@ -85,10 +169,40 @@ internal static class TaskEndpointHelpers
             job.OutcomeIssue, verdictAccepted: string.Equals(verdict, "accept", StringComparison.Ordinal))
             ? null
             : job.OutcomeIssue;
+        // ASS-1751: classify why a 3-progress card looks "untouched" — a live
+        // run, a failed run waiting out the rapid-crash backoff, or an orphan
+        // killed by a backend restart. Gated on the Progress lane (same O(1)
+        // runner lookup as the auto-loop snapshot above) so the perf contract
+        // holds; pure visibility, no behavior. Null on every other lane.
+        TaskRunActivity? runActivity = job.State == TaskStates.Progress
+            ? TaskRunActivityClassifier.Classify(
+                runners.GetRunActivityForJob(job.Id, job.ProjectName),
+                exec,
+                outcomeIssue,
+                DateTime.UtcNow)
+            : null;
+        // AGT-2003: project the active run-lease owner onto the card while the
+        // task is in-progress. Same Progress-lane gate + O(1) in-memory peek as
+        // RunActivity above, so the JobsEndpointPerfTests contract still holds. A
+        // remote runner acquires this lease; a plain local in-process run holds
+        // none, so this stays null and the card shows the quiet local presentation.
+        TaskRunnerInfo? runner = job.State == TaskStates.Progress
+            ? runners.ResolveRunnerBadge(job.TaskKey)
+            : null;
+        // AGT-2069: spawn-visibility + spawn-contract projection for planning
+        // tasks. Gated strictly on planning mode (rare) so the two small sidecar
+        // reads never touch the coding-card common case and the
+        // JobsEndpointPerfTests contract holds. Null on every non-planning card.
+        var planningSpawn = BuildPlanningSpawnSummary(job);
         return job with
         {
             Execution = exec,
+            QuotaFallback = job.State == TaskStates.Progress
+                ? runners.GetQuotaFallbackForJob(job.Id, job.ProjectName)
+                : null,
             OutcomeIssue = outcomeIssue,
+            RunActivity = runActivity,
+            Runner = runner,
             AutoLoop = loop == null ? null : new AutoLoopSnapshot
             {
                 Iteration = loop.IterationCount,
@@ -103,8 +217,102 @@ internal static class TaskEndpointHelpers
             },
             SummaryState = summary != null && summary.Status != TaskSummaryStatus.None ? summary : null,
             TokenSummary = tokens,
-            OrchestratorVerdict = verdict
+            OrchestratorVerdict = verdict,
+            WaitsOn = waitsOn,
+            PlanningSpawn = planningSpawn
         };
+    }
+
+    /// <summary>
+    /// AGT-2069 — build the read-time spawn-visibility + spawn-contract summary
+    /// for a planning task from its two app-owned sidecars: the AGT-2028 spawn
+    /// ledger (<c>.metadata/spawned-tasks.jsonl</c>) and the no-follow-up
+    /// declaration (<c>.metadata/planning-closure.json</c>). Returns null for any
+    /// non-planning task so the field stays absent on the coding-card common
+    /// case; the two reads only ever run for the rare planning card, keeping the
+    /// per-job overlay O(1) for the board.
+    /// </summary>
+    internal static PlanningSpawnSummary? BuildPlanningSpawnSummary(TaskInfo job)
+    {
+        if (!PlanningCompletionGate.Applies(job.Mode)) return null;
+        if (string.IsNullOrWhiteSpace(job.FolderPath)) return new PlanningSpawnSummary();
+
+        var spawned = SpawnedTaskLedger.Read(job.FolderPath)
+            .Select(r => new PlanningSpawnRef
+            {
+                TargetKey = r.TargetKey,
+                TargetJobId = r.TargetJobId,
+                TargetProject = r.TargetProject,
+                Reason = r.Reason,
+                At = r.At,
+            })
+            .ToList();
+
+        var closure = PlanningClosureStore.Read(job.FolderPath);
+        return new PlanningSpawnSummary
+        {
+            Spawned = spawned,
+            NoFollowUpDeclared = closure?.NoFollowUpDeclared ?? false,
+            NoFollowUpReason = closure?.Reason,
+            DeclaredAt = closure?.DeclaredAt,
+        };
+    }
+
+    /// <summary>
+    /// AGT-2046 — folds the batched board merge signal onto each job. The lookup
+    /// is built ONCE per request by <see cref="BoardMergeStatusService"/> (O(repos)
+    /// git spawns, never per card), so this stays an O(1) dictionary hit per job,
+    /// preserving the <c>JobsEndpointPerfTests</c> contract. Jobs without a signal
+    /// (no committed/merged anchor) are passed through untouched.
+    /// </summary>
+    internal static IEnumerable<TaskInfo> WithMergeSignal(
+        this IEnumerable<TaskInfo> jobs,
+        IReadOnlyDictionary<string, TaskMergeSignal> mergeByJobKey)
+        => jobs.Select(job =>
+            mergeByJobKey.TryGetValue(job.TaskKey, out var signal)
+                ? job with { MergeSignal = signal }
+                : job);
+
+    /// <summary>
+    /// PUB-1 — folds the batched per-task publish signal onto each accepted card.
+    /// The lookup is built ONCE per request by <see cref="TaskPublishableService"/>
+    /// (O(projects), never per card), so this stays an O(1) dictionary hit per job.
+    /// Jobs without a signal (not accepted, or touching no derived target) pass
+    /// through untouched.
+    /// </summary>
+    internal static IEnumerable<TaskInfo> WithPublishSignal(
+        this IEnumerable<TaskInfo> jobs,
+        IReadOnlyDictionary<string, TaskPublishSignal> publishByJobKey)
+        => jobs.Select(job =>
+            publishByJobKey.TryGetValue(job.TaskKey, out var signal)
+                ? job with { PublishSignal = signal }
+                : job);
+
+    /// <summary>
+    /// AGT-2029 — builds a per-TaskKey lookup of waits-on status for the jobs
+    /// that actually carry dependsOn edges. Resolution is <b>archive-inclusive</b>
+    /// (a dependency is fulfilled when its target reaches 6-completed OR
+    /// 7-archive, and the board snapshot omits archive), so the key index is
+    /// built from <see cref="TaskScannerService.ScanAllJobsWithArchive"/> once
+    /// per request. Cards without dependencies are skipped, keeping the common
+    /// case free.
+    /// </summary>
+    internal static Dictionary<string, WaitsOnStatus> BuildWaitsOnLookup(
+        IEnumerable<TaskInfo> jobs,
+        TaskScannerService scanner)
+    {
+        var result = new Dictionary<string, WaitsOnStatus>(StringComparer.Ordinal);
+        var withDeps = jobs.Where(j => j.References?.DependsOn.Count > 0).ToList();
+        if (withDeps.Count == 0) return result;
+
+        // One archive-inclusive index for the whole request; keys are globally
+        // unique across projects, so this resolves cross-project targets too.
+        var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
+        foreach (var job in withDeps)
+        {
+            result[job.TaskKey] = index.EvaluateWaitsOn(job);
+        }
+        return result;
     }
 
     /// <summary>
@@ -123,29 +331,20 @@ internal static class TaskEndpointHelpers
         var workspace = configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace)) return verdicts;
 
-        // Read each (workspace, project) journal at most once per request.
-        var byProject = new Dictionary<string, IReadOnlyList<ReviewDecisionRecord>>(StringComparer.OrdinalIgnoreCase);
+        // Resolve each (workspace, project) journal index at most once per
+        // request. ReviewDecisionLog validates a tiny fingerprint and parses
+        // only appended bytes, so a board poll never rehydrates the full JSONL.
+        var byProject = new Dictionary<string, IReadOnlyDictionary<string, ReviewDecisionRecord>>(StringComparer.OrdinalIgnoreCase);
         foreach (var job in jobs)
         {
             if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
-            if (!byProject.TryGetValue(job.ProjectName, out var records))
+            if (!byProject.TryGetValue(job.ProjectName, out var latestByJob))
             {
-                try { records = ReviewDecisionLog.ReadAll(workspace!, job.ProjectName); }
-                catch { records = Array.Empty<ReviewDecisionRecord>(); }
-                byProject[job.ProjectName] = records;
+                try { latestByJob = ReviewDecisionLog.ReadLatestByJob(workspace!, job.ProjectName); }
+                catch { latestByJob = new Dictionary<string, ReviewDecisionRecord>(StringComparer.Ordinal); }
+                byProject[job.ProjectName] = latestByJob;
             }
-            // Latest record wins. The journal is append-only; the last
-            // entry for this jobId reflects the most recent decision.
-            ReviewDecisionRecord? latest = null;
-            for (int i = records.Count - 1; i >= 0; i--)
-            {
-                if (records[i].JobId == job.Id)
-                {
-                    latest = records[i];
-                    break;
-                }
-            }
-            if (latest == null) continue;
+            if (!latestByJob.TryGetValue(job.Id, out var latest)) continue;
             var verdict = latest.Kind switch
             {
                 ReviewDecisionKind.Reissue      => "reissue",
@@ -207,5 +406,14 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
-        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey) };
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null) };
+
+    internal static TaskDetail WithRuntime(
+        TaskDetail detail,
+        CliRouter router,
+        TaskRunnerService runners,
+        IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
+        IReadOnlyDictionary<string, string>? verdictsByJobKey,
+        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey)
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey) };
 }

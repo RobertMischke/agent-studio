@@ -44,12 +44,30 @@
   text-transform: uppercase; color: var(--studio-fg-dim); font-weight: 600;
 }
 .cli-admin__hint { font-size: 10px; color: var(--studio-fg-dim); }
+// Read-only explainer sitting above the completion-contracts registry.
+.cli-admin__explainer {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--studio-fg-dim);
+  background: var(--studio-bg-elevated);
+  border-radius: 2px;
+  max-width: 72ch;
+}
 .cli-admin__empty {
   font-size: 12px; color: var(--studio-fg-dim);
   padding: 12px 14px;
   border: 1px dashed var(--studio-border);
   border-radius: 8px;
 }
+.cli-admin__seealso {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--studio-fg-dim);
+}
+.cli-admin__seealso strong { color: var(--studio-fg); font-weight: 600; }
 .cli-card {
   border: 1px solid var(--studio-border);
   background: var(--studio-bg-hover);
@@ -125,14 +143,5 @@
   height: 10px;
   background: var(--severity-pending);
   transform: translateX(-1px);
-}
-.cli-admin__section--placeholder .cli-admin__placeholder {
-  margin: 0;
-  padding: 10px 14px;
-  font-size: 12px;
-  color: var(--studio-fg-muted);
-  background: var(--studio-bg-hover);
-  border: 1px dashed var(--studio-border);
-  border-radius: 8px;
 }
 

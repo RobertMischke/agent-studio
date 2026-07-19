@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/pickup-failure.schema.json",
+  "title": "PickupFailureRecord",
+  "description": "One row appended to <workspace>/logs/pickup-failures.jsonl. The per-project pickup loop walks every 3-progress folder oldest-first by mtime before considering 2-ready, and a folder whose run finished without producing a CLI output line for several attempts in a row is over budget. Row shapes share the file, disambiguated by the 'kind' field. ADR-0051 (failed-pickup elimination, supersedes ADR-0028/0029): an over-budget folder is no longer dead-lettered to 3a-failed-pickup; it routes by cause - 'requeued-ready' (spawn failure: the CLI never started, so the task returns to 2-ready and the runner pauses until the CLI is fixed) or 'escalated-human-review' (the CLI did spawn but never produced output, or a session-less zombie exhausted its resume budget, so the task moves to 5-human-review). 'pickup-failed' is the legacy dead-letter kind kept for old on-disk rows. 'pickup-restored' records an operator (or the boot drain) lifting a folder out of the retired 3a-failed-pickup lane via POST /api/tasks/{id}/restore-from-failed-pickup. The trail makes the over-budget -> reroute / restore lifecycle reviewable per-slug.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "kind", "projectName", "slug", "destinationSlug", "attempts", "threshold", "outputDeadlineSeconds", "reason"],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp at which the dead-letter move happened."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["pickup-failed", "requeued-ready", "escalated-human-review"],
+          "description": "Over-budget row. 'requeued-ready' (spawn failure -> 2-ready + runner paused) and 'escalated-human-review' (task-shaped / zombie -> 5-human-review) are the ADR-0051 routings. 'pickup-failed' is the legacy dead-letter-to-3a-failed-pickup kind, retained for old on-disk rows."
+        },
+        "projectName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project name as it appears in WatchPaths and runner status."
+        },
+        "slug": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Original folder slug under 3-progress at the time of the dead-letter."
+        },
+        "jobId": {
+          "type": ["string", "null"],
+          "description": "Job id read from job.json when present; usually equal to the folder slug. Null when the folder lacked a parseable job.json."
+        },
+        "destinationSlug": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Folder slug after the move. For 'requeued-ready' / 'escalated-human-review' (ADR-0051) the folder keeps its original slug as it moves to 2-ready / 5-human-review, so this equals 'slug'. For the legacy 'pickup-failed' kind it was the renamed '<original>-pickup-failed-<yyyy-mm-dd>' slug under 3a-failed-pickup."
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of consecutive autopickup runs that finished without producing a CLI output line before the dead-letter fired."
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Configured maximum-attempts threshold (default 3). Attempts at or above this trigger the dead-letter."
+        },
+        "outputDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Configured per-attempt output deadline in seconds (default 60). Each attempt counts as failed when no CLI output line arrives within this window after spawn."
+        },
+        "attemptHistory": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["at", "durationSeconds", "outputLines"],
+            "properties": {
+              "at": { "type": "string", "format": "date-time" },
+              "durationSeconds": { "type": "number", "minimum": 0 },
+              "outputLines": { "type": "integer", "minimum": 0 },
+              "executionStatus": { "type": ["string", "null"] }
+            }
+          },
+          "description": "Per-attempt diagnostics (most recent last) recorded since the runner last reset the counter for this slug. Bounded by <threshold>; older entries are dropped."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Human-readable explanation of the dead-letter; surfaces in the structured backend log line and in the chat-log note dropped on the archived folder."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "kind", "projectName", "slug", "sourceSlug", "restoredAs", "targetState"],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp at which the restore happened."
+        },
+        "kind": {
+          "type": "string",
+          "const": "pickup-restored",
+          "description": "Restore row. An operator lifted a folder from 3a-failed-pickup back into a live lane."
+        },
+        "projectName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project name (same shape as on the pickup-failed row)."
+        },
+        "slug": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Original (pre-dead-letter) slug. Matches the 'slug' field on the corresponding pickup-failed row so a per-slug history is reconstructable."
+        },
+        "sourceSlug": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Slug the folder lived under in 3a-failed-pickup before the restore. Format: '<original>-pickup-failed-<yyyy-mm-dd>' (with optional numeric collision suffix)."
+        },
+        "restoredAs": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Slug the folder now lives under in the target lane. Equal to 'slug' unless 'keepDeadLetterSlug=true' was passed on the restore call, in which case it equals 'sourceSlug'."
+        },
+        "targetState": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Lane the folder was restored into. Today always '2-ready'; encoded as a free-form string so future restore targets do not require a schema change."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Human-readable explanation of the restore."
+        }
+      }
+    }
+  ]
+}

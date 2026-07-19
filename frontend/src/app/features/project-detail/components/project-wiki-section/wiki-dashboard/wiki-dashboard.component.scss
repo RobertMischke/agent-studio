@@ -1,0 +1,194 @@
+// Wiki landing dashboard: head row (title + quick actions + stat tiles) above
+// a responsive card grid. Lives on the wiki paper reading surface, so all ink
+// comes from the --pwiki-paper-* tokens the parent section defines; the cards
+// themselves are the child components (shared recipe: m.knowledge-card).
+:host {
+  display: block;
+  padding: var(--studio-spacing-4);
+}
+
+.wdash {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-4);
+  min-width: 0;
+}
+
+/* ---- head: title, actions, stat tiles ---- */
+
+.wdash__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-3);
+}
+
+.wdash__head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--studio-spacing-3);
+  flex-wrap: wrap;
+}
+
+.wdash__title-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.wdash__title {
+  margin: 0;
+  color: var(--pwiki-paper-fg);
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.wdash__subtitle {
+  max-width: 44rem;
+  margin: var(--studio-spacing-1) 0 0;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.wdash__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  flex: 0 0 auto;
+}
+
+.wdash__action {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  padding: 0 var(--studio-spacing-3);
+  border: 1px solid var(--pwiki-paper-border);
+  border-radius: 6px;
+  background: var(--pwiki-paper-bg);
+  color: var(--pwiki-paper-fg);
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.wdash__action:hover {
+  border-color: color-mix(in srgb, var(--studio-accent) 38%, var(--pwiki-paper-border));
+  background: var(--pwiki-paper-soft);
+}
+
+/* Stat tiles: numbers prominent in paper ink, labels muted. Status (overall
+ * drift) rides along as a small dot + label only - never a coloured number. */
+.wdash__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+}
+
+.wdash__stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--studio-spacing-1);
+  min-width: 88px;
+  min-height: 56px;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid var(--pwiki-paper-border);
+  border-radius: 9px;
+  background: var(--pwiki-paper-bg);
+}
+
+.wdash__stat-value {
+  color: var(--pwiki-paper-fg);
+  font-size: 1.12rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.wdash__stat-value--text {
+  font-size: 0.92rem;
+}
+
+.wdash__stat-label {
+  color: var(--pwiki-paper-muted);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.wdash__stat--drift {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--studio-spacing-4);
+}
+
+.wdash__drift-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.wdash__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding-left: var(--studio-spacing-3);
+  border-left: 1px solid var(--pwiki-paper-border);
+  color: var(--pwiki-paper-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.wdash__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pwiki-paper-border);
+}
+
+.wdash__status-dot[data-tone='good'] { background: var(--studio-success); }
+.wdash__status-dot[data-tone='warn'] { background: var(--studio-warn); }
+.wdash__status-dot[data-tone='bad'] { background: var(--studio-error); }
+
+/* ---- card grid ---- */
+
+// auto-fit tracks follow the actual pane width (the wiki pane shrinks with the
+// tree and meta rails), so the grid lands on 2-3 columns on normal widths and
+// collapses to a single column on narrow panes without a viewport media query.
+.wdash__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--studio-spacing-3);
+  align-items: stretch;
+}
+
+// Full-width rows: style guides and the grading trigger carry controls and
+// wide lists; they read better as bands than as columns.
+.wdash__grid > app-project-style-guides-panel,
+.wdash__grid > app-wiki-grade-panel {
+  grid-column: 1 / -1;
+}
+
+// Hosts that are themselves grid items stretch their single card child.
+.wdash__grid > app-wiki-starred-panel,
+.wdash__grid > app-project-style-guides-panel,
+.wdash__grid > app-wiki-grade-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+@media (max-width: 680px) {
+  :host {
+    padding: var(--studio-spacing-3);
+  }
+
+  .wdash__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

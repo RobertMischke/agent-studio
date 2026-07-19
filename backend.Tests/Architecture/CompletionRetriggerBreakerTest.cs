@@ -38,7 +38,7 @@ public class CompletionRetriggerBreakerTest
     [Fact]
     public void DefaultBudget_HasExpectedValue()
     {
-        // Pin the default documented in docs/loop-inventory.md
+        // Pin the default documented in docs/system/contracts/loop-inventory.md
         // (completion.retrigger-transient-abort-per-job). Change both in the
         // same commit when tuning the budget.
         Assert.Equal(2, CompletionRetriggerDecider.DefaultBudget);
@@ -51,6 +51,15 @@ public class CompletionRetriggerBreakerTest
         // - the runner falls through to human-review escalation.
         Assert.False(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.WatchdogTimeout, budgetRemaining: 0));
         Assert.False(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.WatchdogTimeout, budgetRemaining: -1));
+        Assert.False(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.InfraCrash, budgetRemaining: 0));
+    }
+
+    [Fact]
+    public void InfraCrashBudget_AllowsOneRetryThenEscalation()
+    {
+        Assert.Equal(1, CompletionRetriggerDecider.InfraCrashBudget);
+        Assert.True(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.InfraCrash, 1));
+        Assert.False(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.InfraCrash, 0));
     }
 
     [Fact]

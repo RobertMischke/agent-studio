@@ -8,7 +8,7 @@
  * verbose-debug) are a different shape and keep their own components
  * — see the docstring on SidesheetComponent for the rationale.
  *
- * Tokens come from studio-shell (see docs/frontend-scss-quality.md).
+ * Tokens come from studio-shell (see docs/quality/frontend/audits/scss-quality.md).
  * Light theme inherits the var() flip automatically.
  *
  * ViewEncapsulation is None so the inner BEM survives content

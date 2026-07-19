@@ -366,17 +366,26 @@ public sealed class RoadmapAlignmentReviewService
         AddIfExists(docs, repoRoot, "README.md", "README");
         AddIfExists(docs, repoRoot, "ROADMAP.md", "ROADMAP");
         AddIfExists(docs, repoRoot, "AGENTS.md", "AGENTS");
-        AddIfExists(docs, repoRoot, "docs/architecture-decisions.md", "Architecture decisions");
-        AddIfExists(docs, repoRoot, "docs/design-principles.md", "Design principles");
-        AddIfExists(docs, repoRoot, "docs/agent-message-bus.md", "Agent Message Bus");
-        AddIfExists(docs, repoRoot, "docs/analysis-reports.md", "Analysis reports contract");
+        AddIfExists(docs, repoRoot, "docs/system/architecture/decisions/adr-archive.md", "Architecture decisions");
+        AddIfExists(docs, repoRoot, "docs/quality/design-principles.md", "Design principles");
+        AddIfExists(docs, repoRoot, "docs/system/architecture/bus/agent-message-bus.md", "Agent Message Bus");
+        AddIfExists(docs, repoRoot, "docs/system/reports/analysis-reports.md", "Analysis reports contract");
 
-        // Mockup folders: list one entry per direct subfolder so the agent can
-        // drill into the relevant one without the prompt swelling with copies
-        // of every mockup body.
-        var mockupsDir = Path.Combine(repoRoot, "docs", "mockups");
+        // Mockups: list one entry per page/folder so the agent can drill into
+        // the relevant one without the prompt swelling with copies of every
+        // mockup body. After the 2026-07 docs migration, standalone mockups
+        // live under docs/concepts/mockups/ (loose HTML or nested subfolders)
+        // and the active families were promoted to top-level
+        // docs/concepts/<family>/ folders.
+        var mockupsDir = Path.Combine(repoRoot, "docs", "concepts", "mockups");
         if (Directory.Exists(mockupsDir))
         {
+            foreach (var file in Directory.EnumerateFiles(mockupsDir, "*.html").OrderBy(f => f, StringComparer.Ordinal))
+            {
+                docs.Add(new DocReference(
+                    Path: Path.GetRelativePath(repoRoot, file).Replace('\\', '/'),
+                    Label: $"Mockup: {Path.GetFileNameWithoutExtension(file)}"));
+            }
             foreach (var dir in Directory.EnumerateDirectories(mockupsDir).OrderBy(d => d, StringComparer.Ordinal))
             {
                 docs.Add(new DocReference(
@@ -385,8 +394,27 @@ public sealed class RoadmapAlignmentReviewService
             }
         }
 
+        foreach (var family in PromotedMockupFamilies)
+        {
+            var dir = Path.Combine(repoRoot, "docs", "concepts", family);
+            if (Directory.Exists(dir))
+                docs.Add(new DocReference(
+                    Path: Path.GetRelativePath(repoRoot, dir).Replace('\\', '/'),
+                    Label: $"Mockup: {family}"));
+        }
+
         return docs;
     }
+
+    // Active mockup families promoted to top-level concept folders during the
+    // 2026-07 docs migration (former docs/mockups/<family>/ -> docs/concepts/<family>/).
+    private static readonly string[] PromotedMockupFamilies =
+    {
+        "project-urls",
+        "project-overview-dashboard",
+        "task-processing-pipeline",
+        "task-detail-header-state-actions",
+    };
 
     private static void AddIfExists(List<DocReference> docs, string repoRoot, string relativePath, string label)
     {

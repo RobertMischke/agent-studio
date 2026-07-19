@@ -42,7 +42,7 @@
              data-testid="media-lightbox-image"
              [src]="media.src"
              [alt]="media.alt"
-             [appTooltip]="zoomed() ? 'Fit image to viewer' : 'Show original size'"
+             [cacTooltip]="zoomed() ? 'Fit image to viewer' : 'Show original size'"
              role="button"
              tabindex="0"
              (click)="toggleZoom($event)"
@@ -59,7 +59,7 @@
             <button type="button"
                     class="media-lightbox__action"
                     [attr.data-testid]="'media-lightbox-action-' + action.id"
-                    [appTooltip]="action.tooltip"
+                    [cacTooltip]="action.tooltip"
                     (click)="runAction(action); $event.stopPropagation()">
               {{ action.label }}
             </button>

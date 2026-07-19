@@ -1658,9 +1658,9 @@
       transform: translateY(-1px);
     }
     .task-nav__item--active {
-      background: rgba(99,102,241,0.16);
-      border-color: rgba(99,102,241,0.45);
-      box-shadow: 0 0 0 1px rgba(99,102,241,0.15);
+      background: var(--studio-nav-active-bg);
+      border-color: color-mix(in srgb, var(--studio-accent) 45%, transparent);
+      box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
     }
     .task-nav__item-title {
       font-size: 14px;

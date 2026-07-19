@@ -6,7 +6,7 @@
  * no console.time, no signal cost. The instrumentation is intentionally
  * pull-only: leaving it shipped costs nothing on a normal session.
  *
- * Spans (per docs/perf-baseline-2026-05-28.md and the task prompt):
+ * Spans (per docs/quality/frontend/perf-baseline-2026-05-28.md and the task prompt):
  *
  * | id                           | start hook                | end hook                          |
  * |------------------------------|---------------------------|-----------------------------------|

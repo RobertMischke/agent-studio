@@ -44,6 +44,16 @@ public static class CompletionGate
         @"^(?:\[[^\]]*\]\s*)*\s*\d{1,6}[:\t]\s*\S.*[(){};]",
         RegexOptions.Compiled);
 
+    // An echoed line from the durable pipeline history, usually produced by
+    // rg/Get-Content while investigating a prior completion-gate verdict. The
+    // JSON can contain the gate's own old "Build FAILED" finding; treating that
+    // copy as fresh run evidence makes every subsequent success reissue itself.
+    // Keep this precise to pipeline-execution.json line-number output so real
+    // compiler diagnostics with file paths remain visible (AGT-2148).
+    private static readonly Regex PipelineHistoryEchoRegex = new(
+        @"^(?:\[[^\]]*\]\s*)*.*(?:^|[\\/])pipeline-execution\.json:\d+:",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // The build / compile / test-failure vocabulary. Kept as one fragment so the
     // generic incomplete-work scan and the "claims success but build failed"
     // contradiction check (see BuildErrorEvidenceRegex) share exactly one
@@ -94,6 +104,10 @@ public static class CompletionGate
         @"^(?:success|succeeded|done|complete|completed|pass|passed)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex CliExitRegex = new(
+        @"\[taskboard\].*?CLI\s+exited:\s*status=(?<status>\w+).*?exitCode=(?<code>-?\d+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // A no-op open-item declaration: the agent's close-out lists "nothing open"
     // rather than an actual unfinished item. Matched against the FIRST sentence
     // of the extracted item text (everything up to the first '.'), so a phantom
@@ -117,7 +131,7 @@ public static class CompletionGate
 
     // A non-actionable "the platform owns the commit/push" open item. In a
     // managed run the agent is contractually forbidden from committing or
-    // pushing (docs/commit-push-doctrine.md - the platform owns that boundary),
+    // pushing (docs/operations/git/commit-push-doctrine.md - the platform owns that boundary),
     // so an open item that merely defers the commit / push / merge of the
     // leftover working tree to the platform or managed run can NEVER be closed
     // by the agent. Treating it as unfinished work reissues the card forever on
@@ -138,6 +152,52 @@ public static class CompletionGate
             left\s+in\s+(?:the\s+)?working\s+tree |
             changes?\s+awaiting\s+(?:managed[-\s]?run\s+)?(?:commit|push|merge)
         )",
+        RegexOptions.Compiled);
+
+    // An explicitly pre-existing / out-of-scope disclaimer the run attached to a
+    // status line, saying the item is NOT work this change is responsible for.
+    // The completion gate must not count these as unfinished work: doing so
+    // escalated fully-merged runs that had honestly annotated a pre-existing
+    // failure as such (AGT-1986; the run marked an item "Pre-existing (not caused
+    // by this change)" and the static scan treated it as open work).
+    //
+    // Defined marker syntax (kept deliberately explicit so a genuine actionable
+    // item that merely uses the adjective - e.g. "Fix the pre-existing bug in X"
+    // - is NOT suppressed):
+    //   - a bracketed / parenthesised tag: "[pre-existing]", "(out of scope)",
+    //     "(pre-existing, not caused by this change)";
+    //   - an inline disclaimer: "... not caused by this change",
+    //     "... not introduced by these changes";
+    //   - a labelled prefix: "Pre-existing: ...", "Out-of-scope: ...".
+    private static readonly Regex PreExistingOutOfScopeRegex = new(
+        @"(?ix)
+        (?: [\[(] \s* (?: pre[-\s]?existing | out[-\s]?of[-\s]?scope | not \s+ (?:caused|introduced) ) [^\])]* [\])] )
+      | \b not \s+ (?: caused | introduced ) \s+ by \s+ (?: this | these | the ) \s+ change(?:s)? \b
+      | ^ \s* (?: pre[-\s]?existing | out[-\s]?of[-\s]?scope ) \b [^:]* :",
+        RegexOptions.Compiled);
+
+    // A build/test-failure phrase that the close-out explicitly identifies as a
+    // false positive is diagnostic history, not current unfinished work. Keep
+    // the relationship on the same line and explicit; broad words such as
+    // "resolved", "earlier", or an unrelated false-positive mention must not
+    // hide a real failure.
+    private static readonly Regex ExplicitFalsePositiveRegex = new(
+        @"(?ix)\b(?:" + BuildErrorEvidence + @")\b.{0,80}\b(?:as|was|is|diagnosed\s+as|identified\s+as|confirmed\s+as)\s+(?:a\s+)?false[-\s]?positive\b",
+        RegexOptions.Compiled);
+
+    // A successful close-out may describe the defect it just fixed. A quoted
+    // failure token explicitly labelled stale/superseded is historical input,
+    // not a current build result. Keep the qualifier and failure phrase on the
+    // same line so an unqualified current "Build FAILED" still blocks.
+    private static readonly Regex SupersededBuildEvidenceRegex = new(
+        @"(?ix)\b(?:stale|superseded|already\s+(?:fixed|resolved|cleared))\b.{0,100}\b(?:" + BuildErrorEvidence + @")\b",
+        RegexOptions.Compiled);
+
+    // Negative evidence statements such as "no unfinished evidence" describe
+    // a clean gate. Matching the bare word "unfinished" reopens a completed
+    // task when that sentence is echoed by rg or appears in a close-out.
+    private static readonly Regex NegatedIncompleteEvidenceRegex = new(
+        @"(?ix)\b(?:no|without)\s+(?:remaining\s+)?(?:unfinished|incomplete|pending)\s+(?:work|items?|evidence)\b",
         RegexOptions.Compiled);
 
     public enum CompletionGateAction
@@ -162,7 +222,37 @@ public static class CompletionGate
     /// spin independently of NEEDS_INPUT / NOOP / aspect-block recovery.
     /// </summary>
     public static Decision Evaluate(string? statusMarkdown, string? recentLog, int priorReissues, int maxReissues)
+        => Evaluate(statusMarkdown, recentLog, priorReissues, maxReissues, hasResultsArtifacts: false);
+
+    /// <summary>
+    /// Evaluate the gate with run-bound non-commit evidence. A clean DONE/exit-0
+    /// closure backed by API delivery, results artefacts, or documented
+    /// verification is complete even when it creates no fresh commit. This
+    /// decision is made before scanning the accumulated log for historical
+    /// failure words, while explicit current open items still block.
+    /// </summary>
+    public static Decision Evaluate(
+        string? statusMarkdown,
+        string? recentLog,
+        int priorReissues,
+        int maxReissues,
+        bool hasResultsArtifacts)
     {
+        var completionEvidence = CompletionEvidencePolicy.Decide(new CompletionEvidencePolicy.Inputs(
+            HasTaskDoneSentinel: recentLog?.Contains("[[TASK_DONE]]", StringComparison.Ordinal) == true,
+            ExitCode: ExtractLatestExitCode(recentLog),
+            RunStatusCompleted: ExtractLatestRunCompleted(recentLog),
+            StatusResultToken: ExtractResultToken(statusMarkdown),
+            HasOpenItems: ExtractOpenItemsSection(statusMarkdown ?? string.Empty).Any(),
+            HasBuildFailureInStatus: FirstBuildErrorLine(statusMarkdown ?? string.Empty) is not null,
+            HasApiDelivery: CompletionEvidencePolicy.DetectApiDelivery(statusMarkdown) || CompletionEvidencePolicy.DetectApiDelivery(recentLog),
+            HasResultsArtifacts: hasResultsArtifacts,
+            HasDocumentedVerification: CompletionEvidencePolicy.DetectDocumentedVerification(statusMarkdown)));
+        if (completionEvidence.AcceptAsCompleted)
+        {
+            return new Decision { Reason = completionEvidence.Reason };
+        }
+
         var findings = ExtractFindings(statusMarkdown, recentLog);
         if (findings.Count == 0)
         {
@@ -233,6 +323,21 @@ public static class CompletionGate
     /// </summary>
     public static bool IsSuccessResultToken(string? resultToken)
         => resultToken is not null && SuccessResultRegex.IsMatch(resultToken.Trim());
+
+    public static int? ExtractLatestExitCode(string? recentLog)
+    {
+        if (string.IsNullOrWhiteSpace(recentLog)) return null;
+        var matches = CliExitRegex.Matches(recentLog);
+        if (matches.Count == 0) return null;
+        return int.TryParse(matches[^1].Groups["code"].Value, out var code) ? code : null;
+    }
+
+    public static bool ExtractLatestRunCompleted(string? recentLog)
+    {
+        if (string.IsNullOrWhiteSpace(recentLog)) return false;
+        var matches = CliExitRegex.Matches(recentLog);
+        return matches.Count > 0 && matches[^1].Groups["status"].Value.Equals("completed", StringComparison.OrdinalIgnoreCase);
+    }
 
     public static IReadOnlyList<string> ExtractFindings(string? statusMarkdown, string? recentLog)
     {
@@ -348,6 +453,23 @@ public static class CompletionGate
             // are identifiers/comments in printed source, not the run's own
             // close-out claims. See ToolSourceEchoRegex.
             if (ToolSourceEchoRegex.IsMatch(line)) continue;
+            // Drop items the run explicitly disclaimed as pre-existing /
+            // out-of-scope: they are not unfinished work this change owns
+            // (AGT-1986). See PreExistingOutOfScopeRegex.
+            if (PreExistingOutOfScopeRegex.IsMatch(line)) continue;
+            // Drop durable pipeline-history output that repeats a prior gate
+            // verdict. It is an artifact echo, not this run's build output.
+            if (PipelineHistoryEchoRegex.IsMatch(line)) continue;
+            // Drop only explicitly disclaimed false-positive failure signals.
+            // Genuine current or merely historical failures remain evidence.
+            if (ExplicitFalsePositiveRegex.IsMatch(line)) continue;
+            // Drop a fixed-problem narrative only when it explicitly calls the
+            // build signal stale/superseded. This covers a successful status
+            // overview without weakening current failure detection.
+            if (SupersededBuildEvidenceRegex.IsMatch(line)) continue;
+            // "No unfinished evidence" is evidence of completion, not an
+            // unfinished-work finding.
+            if (NegatedIncompleteEvidenceRegex.IsMatch(line)) continue;
             yield return line;
         }
     }
@@ -373,6 +495,10 @@ public static class CompletionGate
         if (string.IsNullOrWhiteSpace(text)) return false;
         var firstSentence = text.Split('.', 2)[0];
         if (NoOpOpenItemRegex.IsMatch(firstSentence)) return true;
+        // Explicitly pre-existing / out-of-scope items are not work this change
+        // owns, so they can never be "closed" by the run - treat them as no-op so
+        // the gate does not escalate a fully-merged run over them (AGT-1986).
+        if (PreExistingOutOfScopeRegex.IsMatch(text)) return true;
         // Non-actionable commit/push delegation: the platform owns the commit
         // boundary, so the agent can never close such an item. Scanned over the
         // full text (the delegation clause may be the second sentence).

@@ -24,7 +24,7 @@ async function waitForDetailVisible(jobId: string, watchPath: string): Promise<v
   let lastError: unknown = null;
   while (Date.now() < deadline) {
     try {
-      await api(`/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`);
+      await api(`/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`);
       return;
     } catch (err) {
       lastError = err;
@@ -97,7 +97,7 @@ test('git file tree renders without NG0600 (signal write inside computed)', asyn
       });
     });
 
-    await page.route('**/api/jobs/*/git/status**', async (route) => {
+    await page.route('**/api/tasks/*/git/status**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(STATUS_PAYLOAD) });
     });
 
@@ -121,6 +121,6 @@ test('git file tree renders without NG0600 (signal write inside computed)', asyn
     expect(ng0600, `Unexpected NG0600 pageerror(s):\n${ng0600.join('\n---\n')}`).toEqual([]);
     expect(pageErrors, `Unexpected pageerror(s):\n${pageErrors.join('\n---\n')}`).toEqual([]);
   } finally {
-    await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+    await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
   }
 });

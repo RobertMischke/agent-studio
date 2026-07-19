@@ -1,52 +1,164 @@
 <section class="pwiki" data-testid="project-wiki-section">
   <header class="pwiki__head">
-    <h3 class="pwiki__title-h"><span class="pwiki__icon" aria-hidden="true">📚</span> Wiki / Docs</h3>
     @if (tree()) {
-      <span class="pwiki__count" data-testid="project-wiki-count">{{ docCount() }} docs</span>
+      <button class="pwiki__chrome-btn"
+              type="button"
+              data-testid="project-wiki-toggle-nav"
+              [cacTooltip]="navCollapsed() ? 'Show categories' : 'Hide categories'"
+              (click)="toggleNav()">
+        <app-studio-icon name="panelLeft" [size]="14"></app-studio-icon>
+      </button>
+    }
+    <div class="pwiki__title-block">
+      <span class="pwiki__icon" aria-hidden="true">
+        <app-studio-icon name="book" [size]="16"></app-studio-icon>
+      </span>
+      <div class="pwiki__title-copy">
+        <h3 class="pwiki__title-h">Knowledge</h3>
+        @if (tree()) {
+          <span class="pwiki__count" data-testid="project-wiki-count">{{ docCount() }} pages</span>
+        }
+      </div>
+    </div>
+    @if (tree()) {
+      <div class="pwiki__top-meta">
+        @if (openedRel(); as rel) {
+          <span>{{ openedTitle() }}</span>
+          <code>{{ rel }}</code>
+        } @else {
+          <span>Root folder</span>
+          <code>{{ tree()!.baseDir }}</code>
+        }
+      </div>
     }
     @if (busy()) {
-      <span class="pwiki__saving" data-testid="project-wiki-saving">Saving…</span>
+      <span class="pwiki__saving" data-testid="project-wiki-saving">Saving...</span>
     }
     <span class="pwiki__spacer"></span>
     @if (tree()) {
+      <button class="pwiki__new-group pwiki__new-group--accent" type="button"
+              data-testid="project-wiki-drift-open"
+              cacTooltip="Prepare a page drift prompt, copy it, or create and start a CLI task"
+              (click)="openDriftModal()">
+        <app-studio-icon name="diff" [size]="12"></app-studio-icon>
+        <span>Drift</span>
+      </button>
       <button class="pwiki__new-group" type="button"
               (click)="promptNewPage('')"
-              data-testid="project-wiki-new-page">+ New page</button>
+              data-testid="project-wiki-new-page">
+        <app-studio-icon name="plus" [size]="12"></app-studio-icon>
+        <span>Page</span>
+      </button>
       <button class="pwiki__new-group" type="button"
               (click)="promptNewFolder('')"
-              data-testid="project-wiki-new-folder">+ New folder</button>
+              data-testid="project-wiki-new-folder">
+        <app-studio-icon name="folder" [size]="12"></app-studio-icon>
+        <span>Category</span>
+      </button>
     }
   </header>
 
+  @if (deepLinkMissing(); as missing) {
+    <div class="pwiki__deeplink-hint" role="status" data-testid="project-wiki-deeplink-missing">
+      <app-studio-icon name="warn" [size]="13"></app-studio-icon>
+      <span>{{ missing.kind === 'folder' ? 'Der verlinkte Ordner' : 'Die verlinkte Seite' }} <code>{{ missing.relPath }}</code> wurde nicht gefunden.</span>
+      <button class="pwiki__deeplink-dismiss" type="button"
+              data-testid="project-wiki-deeplink-dismiss"
+              aria-label="Hinweis schließen"
+              (click)="dismissDeepLinkHint()">
+        <app-studio-icon name="close" [size]="12"></app-studio-icon>
+      </button>
+    </div>
+  }
+
   @if (loading()) {
-    <p class="studio-empty">Loading…</p>
+    <p class="studio-empty">Loading...</p>
   } @else if (!tree()) {
     <p class="studio-empty">No data.</p>
   } @else if (docCount() === 0) {
     <p class="studio-empty">
-      No documents under <code>{{ tree()!.baseDir }}</code> yet.
+      No pages under <code>{{ tree()!.baseDir }}</code> yet.
     </p>
   } @else {
-    <div class="pwiki__body">
-      <nav class="pwiki__tree" data-testid="project-wiki-tree" aria-label="Wiki documents">
-        <input class="pwiki__filter"
-               type="search"
-               [ngModel]="filter()"
-               (ngModelChange)="filter.set($event)"
-               placeholder="Filter docs…"
-               data-testid="project-wiki-filter">
+    <div class="pwiki__body"
+         [class.pwiki__body--nav-collapsed]="navCollapsed()"
+         [class.pwiki__body--resizing]="resizingPanel() === 'nav'"
+         [style.--pwiki-nav-width]="navWidthStyle()">
+      @if (!navCollapsed()) {
+      <nav class="pwiki__tree" id="project-wiki-tree" data-testid="project-wiki-tree" aria-label="Knowledge categories">
+        <label class="pwiki__filter-wrap">
+          <app-studio-icon name="search" [size]="13"></app-studio-icon>
+          <input class="pwiki__filter"
+                 type="search"
+                 [ngModel]="searchQuery()"
+                 (ngModelChange)="onSearchQueryChange($event)"
+                 (keydown.enter)="openTopSearchResult()"
+                 (keydown.escape)="clearSearch()"
+                 placeholder="Wiki durchsuchen…"
+                 data-testid="project-wiki-search">
+        </label>
+        <div class="pwiki__tree-top">
+          <span>Categories</span>
+          <span>{{ docCount() }}</span>
+        </div>
+        <div class="pwiki__root-strip" data-testid="project-wiki-root-path">
+          <app-studio-icon name="folder" [size]="13"></app-studio-icon>
+          <span>Root folder</span>
+          <code>{{ rootFolderLabel() }}</code>
+          <button class="pwiki__tree-tool"
+                  type="button"
+                  data-testid="project-wiki-filter-toggle"
+                  [class.pwiki__tree-tool--active]="filterOpen() || filter()"
+                  cacTooltip="Show page filter"
+                  (click)="toggleFilter()">
+            <app-studio-icon name="search" [size]="13"></app-studio-icon>
+          </button>
+        </div>
+        @if (filterOpen() || filter()) {
+          <label class="pwiki__filter-wrap">
+            <app-studio-icon name="search" [size]="13"></app-studio-icon>
+            <input class="pwiki__filter"
+                   type="search"
+                   [ngModel]="filter()"
+                   (ngModelChange)="filter.set($event)"
+                   placeholder="Filter pages..."
+                   data-testid="project-wiki-filter">
+          </label>
+        }
 
-        <div class="pwiki__rows" role="tree">
-          @for (row of rows(); track nodeId(row.node)) {
+        <button class="pwiki__overview-node"
+                type="button"
+                data-testid="project-wiki-overview-node"
+                [class.pwiki__overview-node--active]="overviewActive()"
+                [attr.aria-pressed]="overviewActive()"
+                cacTooltip="Open the knowledge dashboard"
+                (click)="openOverview()">
+          <span class="pwiki__chevron-spacer"></span>
+          <app-studio-icon name="layout" [size]="13"></app-studio-icon>
+          <span class="pwiki__overview-label">Overview</span>
+        </button>
+        <div class="pwiki__rows"
+             role="tree"
+             aria-label="Knowledge document tree">
+          @for (row of rows(); track nodeId(row.node); let index = $index) {
             <div class="pwiki__row"
+                 role="treeitem"
+                 [attr.tabindex]="rowTabIndex(row, index)"
                  [class.pwiki__row--group]="row.node.type === 'folder'"
                  [class.pwiki__row--doc]="row.node.type !== 'folder'"
-                 [class.pwiki__row--active]="openedRel() === row.node.relPath"
+                 [class.pwiki__row--active]="openedRel() === row.node.relPath || selectedFolderRel() === row.node.relPath"
                  [class.pwiki__row--drop]="dropTargetId() === nodeId(row.node)"
                  [style.padding-left.px]="rowPad(row.depth)"
+                 [attr.aria-level]="row.depth + 1"
+                 [attr.aria-expanded]="treeItemExpanded(row)"
+                 [attr.aria-selected]="openedRel() === row.node.relPath ? 'true' : null"
                  [attr.data-testid]="'project-wiki-node-' + nodeId(row.node)"
-                 [draggable]="row.node.type !== 'folder'"
-                 (dragstart)="onFileDragStart($event, row.node)"
+                 [attr.data-wiki-row-id]="nodeId(row.node)"
+                 [draggable]="true"
+                 (focusin)="focusTreeRow(row.node)"
+                 (click)="focusTreeRowElement($event, row.node)"
+                 (keydown)="onTreeKeydown($event)"
+                 (dragstart)="onNodeDragStart($event, row.node)"
                  (dragend)="onDragEnd()"
                  (dragover)="onFolderDragOver($event, row.node)"
                  (dragleave)="onFolderDragLeave(row.node)"
@@ -55,10 +167,11 @@
 
               @if (row.node.type === 'folder' && row.hasChildren) {
                 <button class="pwiki__chevron" type="button"
+                        tabindex="-1"
                         (click)="toggleExpand(nodeId(row.node))"
                         [attr.aria-label]="row.expanded ? 'Collapse' : 'Expand'"
                         [attr.data-testid]="'project-wiki-chevron-' + nodeId(row.node)">
-                  <span class="pwiki__chevron-glyph" [class.pwiki__chevron-glyph--open]="row.expanded">▸</span>
+                  <app-studio-icon [name]="row.expanded ? 'chevronDown' : 'chevronRight'" [size]="11"></app-studio-icon>
                 </button>
               } @else {
                 <span class="pwiki__chevron-spacer"></span>
@@ -75,97 +188,741 @@
                        [attr.data-testid]="'project-wiki-rename-' + nodeId(row.node)">
               } @else if (row.node.type === 'folder') {
                 <button class="pwiki__label pwiki__label--group" type="button"
-                        (click)="toggleExpand(nodeId(row.node))">
-                  <span class="pwiki__label-text">{{ row.node.title }}</span>
+                        tabindex="-1"
+                        [attr.data-testid]="'project-wiki-folder-label-' + nodeId(row.node)"
+                        (click)="selectFolder(row.node)">
+                  <app-studio-icon name="folder" [size]="13"></app-studio-icon>
+                  <span class="pwiki__label-copy">
+                    <span class="pwiki__label-text">{{ row.node.title }}</span>
+                  </span>
                   <span class="pwiki__group-count">{{ row.node.children.length }}</span>
                 </button>
               } @else {
-                <button class="pwiki__label pwiki__label--doc" type="button"
-                        (click)="openFile(row.node.relPath!, row.node.type)"
-                        [attr.title]="row.node.relPath"
-                        [attr.data-testid]="'project-wiki-file-' + row.node.relPath">
-                  <span class="pwiki__label-text">{{ row.node.title }}</span>
-                  @if (row.node.type === 'html') {
-                    <span class="pwiki__kind" data-testid="project-wiki-kind-html">HTML</span>
-                  }
-                </button>
+                <div class="pwiki__label pwiki__label--doc"
+                     role="button"
+                     tabindex="-1"
+                     (click)="openFile(row.node.relPath!, row.node.type)"
+                     [attr.title]="row.node.relPath"
+                     [attr.data-testid]="'project-wiki-file-' + row.node.relPath">
+                  <span class="pwiki__file-type"
+                        [attr.aria-label]="fileTypeLabel(row.node)"
+                        [attr.data-file-type]="row.node.type">
+                    @if (row.node.type === 'html') {
+                      <app-studio-icon name="code" [size]="13"></app-studio-icon>
+                    } @else if (row.node.type === 'json') {
+                      <app-studio-icon name="code" [size]="13"></app-studio-icon>
+                    } @else {
+                      <app-studio-icon name="file" [size]="13"></app-studio-icon>
+                    }
+                  </span>
+                  <span class="pwiki__label-copy">
+                    <span class="pwiki__label-text">{{ row.node.title }}</span>
+                    <span class="pwiki__metric-strip"
+                          [attr.data-testid]="'project-wiki-ratings-' + row.node.relPath">
+                      @for (chip of documentMetricChips(row.node); track chip.key) {
+                        <button class="pwiki__metric"
+                                type="button"
+                                [disabled]="!chip.reportAnchor"
+                                [attr.data-tone]="chip.tone"
+                                [attr.data-kind]="chip.key"
+                                [attr.data-testid]="'project-wiki-metric-' + row.node.relPath + '-' + chip.key"
+                                [attr.aria-label]="chip.label"
+                                [cacTooltip]="chip.tooltip"
+                                (click)="openReportSection($event, row.node, chip.reportAnchor)">
+                          <span class="pwiki__metric-value">
+                            <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
+                            <span>{{ chip.display }}</span>
+                          </span>
+                        </button>
+                      }
+                    </span>
+                    @if (classificationBadges(row.node.classification).length) {
+                      <span class="pwiki__class-strip"
+                            [attr.data-testid]="'project-wiki-class-' + row.node.relPath">
+                        @for (badge of classificationBadges(row.node.classification); track badge.key) {
+                          <span class="pwiki__class-chip"
+                                [attr.data-kind]="badge.key"
+                                [attr.data-tone]="badge.tone"
+                                [attr.data-testid]="'project-wiki-class-' + row.node.relPath + '-' + badge.key"
+                                [cacTooltip]="badge.tooltip">{{ badge.label }}</span>
+                        }
+                      </span>
+                    }
+                  </span>
+                </div>
               }
+
             </div>
           }
           @if (rows().length === 0) {
-            <p class="studio-empty" data-testid="project-wiki-no-match">No docs match “{{ filter() }}”.</p>
+            <p class="studio-empty" data-testid="project-wiki-no-match">No pages match "{{ filter() }}".</p>
           }
         </div>
       </nav>
+      <div class="pwiki__splitter pwiki__splitter--nav"
+           role="separator"
+           tabindex="0"
+           aria-controls="project-wiki-tree"
+           aria-orientation="vertical"
+           data-testid="project-wiki-nav-splitter"
+           [class.pwiki__splitter--active]="resizingPanel() === 'nav'"
+           [attr.aria-label]="'Resize categories'"
+           [attr.aria-valuemin]="navMinWidth"
+           [attr.aria-valuemax]="navMaxWidth"
+           [attr.aria-valuenow]="navWidth()"
+           cacTooltip="Drag to resize the categories"
+           (pointerdown)="startPanelResize($event, 'nav')"
+           (pointermove)="resizePanel($event)"
+           (pointerup)="finishPanelResize($event)"
+           (pointercancel)="finishPanelResize($event)"
+           (keydown)="onPanelSplitterKeydown($event, 'nav')">
+        <span aria-hidden="true"></span>
+      </div>
+      }
 
       <div class="pwiki__viewer">
-        @if (openedRel(); as rel) {
+        @if (searchActive()) {
+          <app-wiki-search-results
+              [projectName]="projectName()"
+              [query]="searchQuery()"
+              [response]="searchResponse()"
+              [loading]="searchLoading()"
+              [semanticLoading]="semanticLoading()"
+              [semanticRequested]="semanticRequested()"
+              [error]="searchError()"
+              (openResult)="openSearchResult($event)"
+              (expandSemantic)="expandSearchSemantically()" />
+        } @else if (openedRel(); as rel) {
           <header class="pwiki__viewer-head">
-            <div class="pwiki__tabs" role="tablist">
+            <div class="pwiki__tabs" role="tablist" aria-label="Page view modes">
               <button class="pwiki__tab" type="button"
                       role="tab"
                       [class.pwiki__tab--active]="viewerTab() === 'doc'"
                       [attr.aria-selected]="viewerTab() === 'doc'"
                       (click)="selectTab('doc')"
-                      data-testid="project-wiki-tab-doc">Document</button>
+                      data-testid="project-wiki-tab-doc">
+                <app-studio-icon name="file" [size]="13"></app-studio-icon>
+                <span>Document</span>
+              </button>
               <button class="pwiki__tab" type="button"
                       role="tab"
-                      [class.pwiki__tab--active]="viewerTab() === 'history'"
-                      [attr.aria-selected]="viewerTab() === 'history'"
-                      (click)="selectTab('history')"
-                      data-testid="project-wiki-tab-history">History</button>
+                      [class.pwiki__tab--active]="viewerTab() === 'report'"
+                      [attr.aria-selected]="viewerTab() === 'report'"
+                      cacTooltip="Open the metadata reasoning report for this document"
+                      (click)="selectTab('report')"
+                      data-testid="project-wiki-tab-report">
+                <app-studio-icon name="book" [size]="13"></app-studio-icon>
+                <span>Report</span>
+              </button>
+              <button class="pwiki__tab" type="button"
+                      role="tab"
+                      [class.pwiki__tab--active]="viewerTab() === 'source'"
+                      [attr.aria-selected]="viewerTab() === 'source'"
+                      (click)="selectTab('source')"
+                      data-testid="project-wiki-tab-source">
+                <app-studio-icon name="code" [size]="13"></app-studio-icon>
+                <span>Source</span>
+              </button>
             </div>
-            <code data-testid="project-wiki-viewer-path">{{ rel }}</code>
+            <button class="pwiki__viewer-action" type="button"
+                    [disabled]="!canEditDoc() || saveBusy()"
+                    [cacTooltip]="editDisabledReason() || 'Edit this Markdown page'"
+                    (click)="selectTab('edit')"
+                    data-testid="project-wiki-edit">
+              <app-studio-icon name="code" [size]="12"></app-studio-icon>
+              <span>Edit</span>
+            </button>
+            <button class="pwiki__copy-link" type="button"
+                    data-testid="project-wiki-copy-link"
+                    cacTooltip="Link zu dieser Seite kopieren"
+                    aria-label="Link zu dieser Seite kopieren"
+                    (click)="copyOpenedPageLink()">
+              <app-studio-icon name="link" [size]="13"></app-studio-icon>
+            </button>
+            <button class="pwiki__star-toggle" type="button"
+                    data-testid="project-wiki-star-toggle"
+                    [class.pwiki__star-toggle--active]="openedStarred()"
+                    [attr.aria-pressed]="openedStarred()"
+                    [cacTooltip]="openedStarred() ? 'Stern entfernen' : 'Starren'"
+                    (click)="toggleOpenedStar($event)">
+              <app-studio-icon [name]="openedStarred() ? 'starFilled' : 'star'" [size]="13"></app-studio-icon>
+            </button>
             <button class="pwiki__viewer-close" type="button" (click)="closeFile()"
-                    data-testid="project-wiki-close">Close</button>
+                    data-testid="project-wiki-close">
+              <app-studio-icon name="close" [size]="12"></app-studio-icon>
+              <span>Close</span>
+            </button>
           </header>
 
-          @if (viewerTab() === 'doc') {
-            @if (!revisionSha() && lastCommit(); as last) {
-              <div class="pwiki__doc-meta" data-testid="project-wiki-last-modified">
-                <span class="pwiki__doc-meta-label">Last modified</span>
-                <span data-testid="project-wiki-last-modified-when">{{ formatTimestamp(last.authorDateUtc) }}</span>
-                <span class="pwiki__doc-meta-dot" aria-hidden="true">·</span>
-                <span data-testid="project-wiki-last-modified-author">{{ last.author }}</span>
-                <span class="pwiki__doc-meta-dot" aria-hidden="true">·</span>
-                <span class="pwiki__doc-meta-subject" data-testid="project-wiki-last-modified-subject">{{ last.subject }}</span>
+          <div class="pwiki__workspace"
+               [class.pwiki__workspace--aside-collapsed]="contextCollapsed()"
+               [class.pwiki__workspace--resizing]="resizingPanel() === 'context'"
+               [style.--pwiki-context-width]="contextWidthStyle()">
+            <article class="pwiki__reader" data-testid="project-wiki-reader">
+              <header class="pwiki__reader-head">
+                <div class="pwiki__doc-id">
+                  <span class="pwiki__doc-kind">{{ openedKindLabel() }}</span>
+                  <h2 class="pwiki__doc-title">{{ openedTitle() }}</h2>
+                </div>
+                <code class="pwiki__path" data-testid="project-wiki-viewer-path">{{ rel }}</code>
+              </header>
+
+              @if (revisionSha(); as sha) {
+                <div class="pwiki__rev-banner" data-testid="project-wiki-rev-banner">
+                  Viewing revision <code>{{ sha }}</code>
+                  <button type="button" (click)="backToCurrent()"
+                          data-testid="project-wiki-rev-back">Back to current</button>
+                </div>
+              }
+              @if (viewerTab() === 'report') {
+                <div class="pwiki__report-view" data-testid="project-wiki-report">
+                  @if (loadingReport()) {
+                    <p class="studio-empty pwiki__reader-empty">Loading report...</p>
+                  } @else if (reportError(); as error) {
+                    <div class="pwiki__report-empty" data-testid="project-wiki-report-empty">
+                      <app-studio-icon name="book" [size]="20"></app-studio-icon>
+                      <p>{{ error }}</p>
+                    </div>
+                  } @else {
+                    <iframe class="pwiki__html-frame pwiki__report-frame"
+                            data-testid="project-wiki-report-frame"
+                            sandbox="allow-scripts"
+                            [srcdoc]="trustedReportHtml()"
+                    title="Document metadata reasoning report"></iframe>
+                  }
+                </div>
+              } @else if (viewerTab() === 'edit') {
+                @if (canEditDoc()) {
+                  <div class="pwiki__edit-shell" data-testid="project-wiki-editor-shell">
+                    <app-markdown-rich-editor class="pwiki__editor"
+                                              data-testid="project-wiki-editor"
+                                              [value]="openedContent()"
+                                              [autoSave]="false"
+                                              [readOnly]="saveBusy()"
+                                              [readOnlyReason]="'Saving this document...'"
+                                              (save)="saveWikiContent($event)">
+                      <div bar-prefix class="pwiki__edit-prefix">
+                        <span>Editing</span>
+                        <code>{{ rel }}</code>
+                        @if (saveBusy()) {
+                          <span>Saving...</span>
+                        } @else if (saveResult(); as saved) {
+                          <span data-testid="project-wiki-save-result">
+                            {{ saved.changed ? 'Committed' : 'Saved' }}
+                            @if (saved.branch) { on {{ saved.branch }} }
+                            @if (saved.sha) { at {{ saved.sha.slice(0, 7) }} }
+                          </span>
+                        }
+                      </div>
+                    </app-markdown-rich-editor>
+                    @if (saveError(); as error) {
+                      <p class="pwiki__save-error" data-testid="project-wiki-save-error">{{ error }}</p>
+                    }
+                  </div>
+                } @else {
+                  <div class="pwiki__report-empty" data-testid="project-wiki-edit-empty">
+                    <app-studio-icon name="code" [size]="20"></app-studio-icon>
+                    <p>{{ editDisabledReason() }}</p>
+                  </div>
+                }
+              } @else if (viewerTab() === 'source') {
+                <div class="pwiki__source-editor" data-testid="project-wiki-source-editor" aria-label="Read-only document source">
+                  @if (loadingDoc()) {
+                    <p class="studio-empty pwiki__reader-empty">Loading document...</p>
+                  } @else {
+                    <ol class="pwiki__source-lines">
+                      @for (line of displayContent().split('\n'); track $index) {
+                        <li class="pwiki__source-line" data-testid="project-wiki-source-line">
+                          <span class="pwiki__line-number" aria-hidden="true">{{ $index + 1 }}</span>
+                          <code>{{ line }}</code>
+                        </li>
+                      }
+                    </ol>
+                  }
+                </div>
+              } @else if (loadingDoc()) {
+                <p class="studio-empty pwiki__reader-empty">Loading document...</p>
+              } @else if (openedType() === 'html') {
+                <iframe class="pwiki__html-frame"
+                        data-testid="project-wiki-html-frame"
+                        sandbox="allow-scripts"
+                        [srcdoc]="trustedHtml()"
+                title="HTML knowledge page"></iframe>
+              } @else if (openedType() === 'json') {
+                <div class="pwiki__json-preview" data-testid="project-wiki-json-preview">
+                  <pre>{{ displayJson() }}</pre>
+                </div>
+              } @else {
+                <cac-markdown class="pwiki__viewer-body pwiki__reader-body"
+                              data-testid="project-wiki-viewer"
+                              [source]="displayContent()"
+                              [resolveImageSrc]="imageResolver()" />
+              }
+            </article>
+
+            <div class="pwiki__splitter pwiki__splitter--context"
+                 role="separator"
+                 aria-controls="project-wiki-context"
+                 aria-orientation="vertical"
+                 data-testid="project-wiki-context-splitter"
+                 [class.pwiki__splitter--active]="resizingPanel() === 'context'"
+                 [class.pwiki__splitter--hidden]="contextCollapsed()"
+                 [attr.tabindex]="contextCollapsed() ? -1 : 0"
+                 [attr.aria-hidden]="contextCollapsed() ? 'true' : null"
+                 [attr.aria-label]="'Resize page context panels'"
+                 [attr.aria-valuemin]="contextMinWidth"
+                 [attr.aria-valuemax]="contextMaxWidth"
+                 [attr.aria-valuenow]="contextWidth()"
+                 cacTooltip="Drag to resize the page context panels"
+                 (pointerdown)="startPanelResize($event, 'context')"
+                 (pointermove)="resizePanel($event)"
+                 (pointerup)="finishPanelResize($event)"
+                 (pointercancel)="finishPanelResize($event)"
+                 (keydown)="onPanelSplitterKeydown($event, 'context')">
+              <span aria-hidden="true"></span>
+            </div>
+            <aside class="pwiki__aside"
+                   [class.pwiki__aside--collapsed]="contextCollapsed()"
+                   id="project-wiki-context"
+                   data-testid="project-wiki-context-panel"
+                   aria-label="Page meta">
+              <button class="pwiki__meta-toggle" type="button"
+                      data-testid="project-wiki-meta-toggle"
+                      [attr.aria-expanded]="!contextCollapsed()"
+                      aria-controls="project-wiki-meta-body"
+                      [cacTooltip]="contextCollapsed() ? 'Show page meta' : 'Hide page meta'"
+                      (click)="toggleContext()">
+                <span class="pwiki__meta-toggle-chevron" aria-hidden="true">
+                  <app-studio-icon [name]="contextCollapsed() ? 'chevronLeft' : 'chevronRight'" [size]="15"></app-studio-icon>
+                </span>
+                <span class="pwiki__meta-toggle-label">Meta</span>
+                <span class="pwiki__meta-toggle-spacer"></span>
+                @if (metaGradeBadge(); as badge) {
+                  <span class="pwiki__meta-grade"
+                        [attr.data-tone]="badge.tone"
+                        data-testid="project-wiki-meta-grade"
+                        [cacTooltip]="badge.label">{{ badge.display }}</span>
+                } @else {
+                  <span class="pwiki__meta-grade pwiki__meta-grade--empty"
+                        data-tone="muted"
+                        data-testid="project-wiki-meta-grade"
+                        aria-hidden="true">·</span>
+                }
+              </button>
+              <div class="pwiki__meta-body" id="project-wiki-meta-body" [hidden]="contextCollapsed()">
+              <section class="pwiki__panel" data-testid="project-wiki-meta-panel">
+                <div class="pwiki__panel-head">
+                  <span>Page info</span>
+                </div>
+                <dl class="pwiki__info-list">
+                  <div>
+                    <dt>Category</dt>
+                    <dd>{{ openedFolder() }}</dd>
+                  </div>
+                  <div>
+                    <dt>Words</dt>
+                    <dd>{{ wordCount() }}</dd>
+                  </div>
+                  @if (!revisionSha() && lastCommit(); as last) {
+                    <div data-testid="project-wiki-last-modified">
+                      <dt>Last modified</dt>
+                      <dd>
+                        <span data-testid="project-wiki-last-modified-when">{{ formatTimestamp(last.authorDateUtc) }}</span>
+                        <span data-testid="project-wiki-last-modified-author">{{ last.author }}</span>
+                        <span class="pwiki__meta-subject" data-testid="project-wiki-last-modified-subject">{{ last.subject }}</span>
+                      </dd>
+                    </div>
+                  }
+                </dl>
+                <div class="pwiki__panel-actions">
+                  <button class="pwiki__panel-action"
+                          type="button"
+                          data-testid="project-wiki-drift-open-doc"
+                          cacTooltip="Open the drift analysis modal for this page"
+                          (click)="openDriftModal()">
+                    <app-studio-icon name="diff" [size]="12"></app-studio-icon>
+                    <span>Analyze drift</span>
+                  </button>
+                </div>
+              </section>
+
+              @if (openedClassification(); as cls) {
+                <section class="pwiki__panel" data-testid="project-wiki-classification-panel">
+                  <div class="pwiki__panel-head">
+                    <span>Klassifikation</span>
+                  </div>
+                  <dl class="pwiki__info-list">
+                    @if (cls.status; as status) {
+                      <div data-testid="project-wiki-classification-status">
+                        <dt>Status</dt>
+                        <dd class="pwiki__class-status">
+                          <span class="pwiki__class-chip"
+                                [attr.data-tone]="status.tone"
+                                data-testid="project-wiki-classification-status-chip">{{ status.label }}</span>
+                          @if (status.supersededBy; as successor) {
+                            <button class="pwiki__class-successor"
+                                    type="button"
+                                    data-testid="project-wiki-classification-superseded-link"
+                                    [cacTooltip]="'Nachfolger-Seite öffnen: ' + successor"
+                                    (click)="openSupersededBy(successor)">{{ successor }}</button>
+                          }
+                        </dd>
+                      </div>
+                    }
+                    @if (cls.typeLabel; as typeLabel) {
+                      <div data-testid="project-wiki-classification-type">
+                        <dt>Typ</dt>
+                        <dd>{{ typeLabel }}</dd>
+                      </div>
+                    }
+                    @if (cls.analyzedAt; as analyzedAt) {
+                      <div data-testid="project-wiki-classification-analyzed">
+                        <dt>Analyse</dt>
+                        <dd>{{ analyzedAt }}</dd>
+                      </div>
+                    }
+                  </dl>
+                </section>
+              }
+
+              <section class="pwiki__panel pwiki__panel--history" data-testid="project-wiki-history-panel">
+                <div class="pwiki__panel-head">
+                  <span>History</span>
+                  @if (history(); as h) {
+                    <span>{{ h.commits.length }}</span>
+                  }
+                </div>
+                <app-wiki-doc-history class="pwiki__history"
+                                      data-testid="project-wiki-history"
+                                      [history]="history()"
+                                      [loading]="loadingHistory()"
+                                      (viewRevision)="onViewRevision($event)" />
+              </section>
+
+              <section class="pwiki__panel" data-testid="project-wiki-drift-meta-panel">
+                <div class="pwiki__panel-head">
+                  <span>Drift metadata</span>
+                  @if (latestDriftReport(); as report) {
+                    <span>{{ report.scoreBand }}</span>
+                  }
+                </div>
+                @if (latestDriftReport(); as report) {
+                  <dl class="pwiki__info-list">
+                    <div>
+                      <dt>Last report</dt>
+                      <dd>{{ formatTimestamp(report.createdAt) }}</dd>
+                    </div>
+                    <div>
+                      <dt>Report id</dt>
+                      <dd><code>{{ report.reportId }}</code></dd>
+                    </div>
+                    @if (report.markdownPath) {
+                      <div>
+                        <dt>Artifact</dt>
+                        <dd><code>{{ report.markdownPath }}</code></dd>
+                      </div>
+                    }
+                  </dl>
+                } @else {
+                  <p class="pwiki__panel-empty">
+                    No drift metadata loaded for this page yet. Open Drift to prepare the first report or CLI task.
+                  </p>
+                }
+              </section>
+
+              <section class="pwiki__panel" data-testid="project-wiki-linked-elements">
+                <div class="pwiki__panel-head">
+                  <span>Linked elements</span>
+                  <span>{{ docLinks().length }}</span>
+                </div>
+                @if (history()?.metadata; as meta) {
+                  <div class="pwiki__chips">
+                    @if (meta.taskKey) {
+                      <span class="pwiki__chip">Task {{ meta.taskKey }}</span>
+                    }
+                    @if (meta.status) {
+                      <span class="pwiki__chip">{{ meta.status }}</span>
+                    }
+                    @if (history()?.model) {
+                      <span class="pwiki__chip">{{ history()!.model }}</span>
+                    }
+                  </div>
+                }
+                @if (docLinks().length > 0) {
+                  <ul class="pwiki__links">
+                    @for (link of docLinks(); track link.target + link.label) {
+                      <li>
+                        <span class="pwiki__link-kind">{{ linkKindLabel(link.kind) }}</span>
+                        <span class="pwiki__link-label">{{ link.label }}</span>
+                        <code>{{ link.target }}</code>
+                      </li>
+                    }
+                  </ul>
+                } @else {
+                  <p class="pwiki__panel-empty">No page links detected.</p>
+                }
+              </section>
               </div>
-            }
-            @if (revisionSha(); as sha) {
-              <div class="pwiki__rev-banner" data-testid="project-wiki-rev-banner">
-                Viewing revision <code>{{ sha }}</code>
-                <button type="button" (click)="backToCurrent()"
-                        data-testid="project-wiki-rev-back">Back to current</button>
-              </div>
-            }
-            @if (loadingDoc()) {
-              <p class="studio-empty">Loading document…</p>
-            } @else if (openedType() === 'html') {
-              <iframe class="pwiki__html-frame"
-                      data-testid="project-wiki-html-frame"
-                      sandbox=""
-                      [srcdoc]="trustedHtml()"
-                      title="Wiki HTML document"></iframe>
-            } @else {
-              <app-markdown class="pwiki__viewer-body"
-                            data-testid="project-wiki-viewer"
-                            [source]="displayContent()"
-                            [resolveImageSrc]="imageResolver()" />
-            }
-          } @else {
-            <app-wiki-doc-history class="pwiki__history"
-                                  data-testid="project-wiki-history"
-                                  [history]="history()"
-                                  [loading]="loadingHistory()"
-                                  (viewRevision)="onViewRevision($event)" />
-          }
+            </aside>
+          </div>
+        } @else if (selectedFolderRel(); as folderRel) {
+          <app-wiki-folder-view
+              [projectName]="projectName()"
+              [relPath]="folderRel"
+              [reloadNonce]="folderReloadNonce()"
+              (openFolder)="openFolderOverview($event)"
+              (openPage)="openFile($event.relPath, $event.type)"
+              (copyLink)="copyFolderLink($event)"
+              (openRoot)="showWikiLanding()" />
         } @else {
-          <p class="studio-empty pwiki__viewer-empty" data-testid="project-wiki-viewer-empty">
-            Select a document to read it here.
-          </p>
+          <header class="pwiki__viewer-head" data-testid="project-wiki-tabs-empty">
+            <div class="pwiki__tabs" role="tablist" aria-label="Root page modes">
+              <button class="pwiki__tab pwiki__tab--active" type="button"
+                      role="tab"
+                      aria-selected="true"
+                      data-testid="project-wiki-tab-home">
+                <app-studio-icon name="activity" [size]="13"></app-studio-icon>
+                <span>Pulse</span>
+                <small>Generated</small>
+              </button>
+            </div>
+          </header>
+          <div class="pwiki__workspace pwiki__workspace--landing"
+               [class.pwiki__workspace--aside-collapsed]="contextCollapsed()"
+               [class.pwiki__workspace--resizing]="resizingPanel() === 'context'"
+               [style.--pwiki-context-width]="contextWidthStyle()">
+            <article class="pwiki__reader pwiki__landing" data-testid="project-wiki-viewer-empty">
+              <app-wiki-dashboard
+                  [projectName]="projectName()"
+                  [docCount]="docCount()"
+                  [pulse]="pulse()"
+                  [loading]="pulseLoading()"
+                  [hasStarred]="hasStarred()"
+                  [gradingStatus]="gradingStatus()"
+                  [gradeModel]="gradeModel()"
+                  [gradeLevel]="gradeLevel()"
+                  [gradeModels]="gradeModelOptions()"
+                  (openPage)="onPulseOpen($event)"
+                  (openWorkbench)="openWorkbench.emit($event)"
+                  (openFirst)="openFirstDoc()"
+                  (openDrift)="openDriftModal()"
+                  (startGrading)="startWikiGrading()"
+                  (abortGrading)="abortWikiGrading()"
+                  (gradeModelChange)="onGradeModelChange($event)"
+                  (gradeLevelChange)="onGradeLevelChange($event)"
+                  (openReport)="openReportPage($event)"
+                  (openGuide)="openFile($event, 'md')" />
+            </article>
+
+            <div class="pwiki__splitter pwiki__splitter--context"
+                 role="separator"
+                 aria-controls="project-wiki-context"
+                 aria-orientation="vertical"
+                 data-testid="project-wiki-context-splitter"
+                 [class.pwiki__splitter--active]="resizingPanel() === 'context'"
+                 [class.pwiki__splitter--hidden]="contextCollapsed()"
+                 [attr.tabindex]="contextCollapsed() ? -1 : 0"
+                 [attr.aria-hidden]="contextCollapsed() ? 'true' : null"
+                 [attr.aria-label]="'Resize root context panels'"
+                 [attr.aria-valuemin]="contextMinWidth"
+                 [attr.aria-valuemax]="contextMaxWidth"
+                 [attr.aria-valuenow]="contextWidth()"
+                 cacTooltip="Drag to resize the root context panels"
+                 (pointerdown)="startPanelResize($event, 'context')"
+                 (pointermove)="resizePanel($event)"
+                 (pointerup)="finishPanelResize($event)"
+                 (pointercancel)="finishPanelResize($event)"
+                 (keydown)="onPanelSplitterKeydown($event, 'context')">
+              <span aria-hidden="true"></span>
+            </div>
+            <aside class="pwiki__aside pwiki__aside--landing"
+                   [class.pwiki__aside--collapsed]="contextCollapsed()"
+                   id="project-wiki-context"
+                   data-testid="project-wiki-context-panel"
+                   aria-label="Root meta">
+              <button class="pwiki__meta-toggle" type="button"
+                      data-testid="project-wiki-meta-toggle"
+                      [attr.aria-expanded]="!contextCollapsed()"
+                      aria-controls="project-wiki-meta-body"
+                      [cacTooltip]="contextCollapsed() ? 'Show project meta' : 'Hide project meta'"
+                      (click)="toggleContext()">
+                <span class="pwiki__meta-toggle-chevron" aria-hidden="true">
+                  <app-studio-icon [name]="contextCollapsed() ? 'chevronLeft' : 'chevronRight'" [size]="15"></app-studio-icon>
+                </span>
+                <span class="pwiki__meta-toggle-label">Meta</span>
+                <span class="pwiki__meta-toggle-spacer"></span>
+              </button>
+              <div class="pwiki__meta-body" id="project-wiki-meta-body" [hidden]="contextCollapsed()">
+                <section class="pwiki__panel" data-testid="project-wiki-workspace-meta">
+                  <div class="pwiki__panel-head">
+                    <span>Root folder</span>
+                    <span>{{ docCount() }}</span>
+                  </div>
+                  <dl class="pwiki__info-list">
+                    <div>
+                      <dt>Path</dt>
+                      <dd><code>{{ tree()!.baseDir }}</code></dd>
+                    </div>
+                    <div>
+                      <dt>Supported pages</dt>
+                      <dd>Markdown and sandboxed HTML</dd>
+                    </div>
+                    <div>
+                      <dt>Navigation</dt>
+                      <dd>Categories, search, drag move &amp; reorder, context actions</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section class="pwiki__panel" data-testid="project-wiki-drift-default-panel">
+                  <div class="pwiki__panel-head">
+                    <span>Drift control</span>
+                  </div>
+                  <p class="pwiki__panel-empty">
+                    Use the Drift action to prepare an architecture comparison prompt, create a durable report,
+                    or start a CLI task with an explicit model.
+                  </p>
+                  <div class="pwiki__panel-actions">
+                    <button class="pwiki__panel-action" type="button"
+                            (click)="openDriftModal()">
+                      <app-studio-icon name="diff" [size]="12"></app-studio-icon>
+                      <span>Open drift modal</span>
+                    </button>
+                  </div>
+              </section>
+              </div>
+            </aside>
+          </div>
         }
       </div>
     </div>
+  }
+
+  @if (driftModalOpen()) {
+    <section class="pwiki__drift-modal"
+             appOverlayPortal="modal"
+             data-testid="project-wiki-drift-modal"
+             (click)="closeDriftModal($event)"
+             tabindex="0"
+             (keydown.escape)="closeDriftModal()">
+      <article class="pwiki__drift-card"
+               (click)="stopModal($event)"
+               (keydown)="stopModal($event)"
+               tabindex="0">
+        <header class="pwiki__drift-head">
+          <div>
+            <span class="pwiki__doc-kind">Drift analysis</span>
+            <h3>{{ openedRel() ? openedTitle() : 'Root folder' }}</h3>
+            <p>
+              Prepare a page-focused architecture drift prompt, store an evidence report,
+              or create and start a visible CLI task.
+            </p>
+          </div>
+          <button class="pwiki__viewer-close"
+                  type="button"
+                  data-testid="project-wiki-drift-close"
+                  (click)="closeDriftModal()">
+            <app-studio-icon name="close" [size]="12"></app-studio-icon>
+            <span>Close</span>
+          </button>
+        </header>
+
+        <div class="pwiki__drift-grid">
+          <section class="pwiki__drift-config" aria-label="Drift run configuration">
+            <label>
+              <span>CLI</span>
+              <select [ngModel]="driftCli()"
+                      (ngModelChange)="onDriftCliChange($event)"
+                      data-testid="project-wiki-drift-cli">
+                @for (cli of cliTypes; track cli) {
+                  <option [value]="cli">{{ cli }}</option>
+                }
+              </select>
+            </label>
+
+            <label>
+              <span>Model</span>
+              <select [ngModel]="driftModel()"
+                      (ngModelChange)="onDriftModelChange($event)"
+                      data-testid="project-wiki-drift-model">
+                <option value="">CLI default</option>
+                @for (model of modelOptions(); track model.id) {
+                  <option [value]="model.id">{{ model.label || model.id }}</option>
+                }
+              </select>
+            </label>
+
+            <dl class="pwiki__drift-facts">
+              <div>
+                <dt>Target</dt>
+                <dd><code>{{ openedRel() ?? 'root' }}</code></dd>
+              </div>
+              <div>
+                <dt>Model selection</dt>
+                <dd>{{ driftCli() }} / {{ selectedModelLabel() }}</dd>
+              </div>
+              @if (latestDriftReport(); as report) {
+                <div>
+                  <dt>Last report</dt>
+                  <dd>{{ formatTimestamp(report.createdAt) }}</dd>
+                </div>
+                <div>
+                  <dt>Result</dt>
+                  <dd>{{ report.scoreBand }} · {{ report.summary }}</dd>
+                </div>
+              } @else {
+                <div>
+                  <dt>Last report</dt>
+                  <dd>No report loaded yet</dd>
+                </div>
+              }
+            </dl>
+
+            @if (driftMessage(); as msg) {
+              <p class="pwiki__drift-msg" data-testid="project-wiki-drift-message">{{ msg }}</p>
+            }
+            @if (driftError(); as err) {
+              <p class="pwiki__drift-error" data-testid="project-wiki-drift-error">{{ err }}</p>
+            }
+          </section>
+
+          <section class="pwiki__drift-result" aria-label="Drift prompt or result">
+            <div class="pwiki__drift-result-head">
+              <span>{{ driftReportDetail() ? 'Report markdown' : 'CLI prompt' }}</span>
+              @if (driftPromptLoading()) {
+                <span>Loading prompt...</span>
+              }
+            </div>
+            <pre data-testid="project-wiki-drift-result">{{ driftModalText() }}</pre>
+          </section>
+        </div>
+
+        <footer class="pwiki__drift-actions">
+          <button class="pwiki__new-group" type="button"
+                  data-testid="project-wiki-drift-copy"
+                  (click)="copyDriftResult()">
+            {{ driftCopyLabel() }}
+          </button>
+          <span class="pwiki__spacer"></span>
+          <button class="pwiki__new-group" type="button"
+                  data-testid="project-wiki-drift-prepare"
+                  [disabled]="driftBusy()"
+                  cacTooltip="Create an evidence-only Software / Architecture Drift report without running a CLI"
+                  (click)="prepareDriftEvidenceReport()">
+            <app-studio-icon name="file" [size]="12"></app-studio-icon>
+            <span>Prepare report</span>
+          </button>
+          <button class="pwiki__new-group pwiki__new-group--accent" type="button"
+                  data-testid="project-wiki-drift-start-cli"
+                  [disabled]="driftBusy()"
+                  cacTooltip="Create a normal task and immediately start it with the selected CLI and model"
+                  (click)="startDriftCliTask()">
+            <app-studio-icon name="play" [size]="12"></app-studio-icon>
+            <span>Start CLI task</span>
+          </button>
+        </footer>
+      </article>
+    </section>
   }
 
   <app-menu
@@ -173,7 +930,7 @@
     [open]="menuOpen()"
     [position]="menuPos()"
     testIdPrefix="wiki-ctx"
-    ariaLabel="Wiki item actions"
+    ariaLabel="Page actions"
     (itemClick)="onMenuItemClick($event)"
     (closeRequest)="closeMenu()" />
 </section>

@@ -19,7 +19,7 @@
                   aria-label="More activity actions"
                   aria-haspopup="menu"
                   [attr.aria-expanded]="toolbarMenuOpen()"
-                  [appTooltip]="'More activity actions'"
+                  [cacTooltip]="'More activity actions'"
                   (click)="openToolbarMenu($event)">⋯</button>
           <app-menu
             [items]="toolbarMenuItems()"
@@ -85,7 +85,7 @@
                       <span class="convo-turn__role">Agent</span>
                       <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </header>
-                    <app-markdown class="convo-turn__body convo-turn__body--agent"
+                    <cac-markdown class="convo-turn__body convo-turn__body--agent"
                                   [source]="item.turn.text"
                                   [dense]="true" />
                   }
@@ -171,7 +171,7 @@
                       @if (item.toolDuration) {
                         <span class="convo-tools__duration"
                               data-testid="convo-tools-duration"
-                              [appTooltip]="'Tool activity took ' + item.toolDuration">{{ item.toolDuration }}</span>
+                              [cacTooltip]="'Tool activity took ' + item.toolDuration">{{ item.toolDuration }}</span>
                       }
                       <span class="convo-tools__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </button>
@@ -225,10 +225,21 @@
                     @for (line of group.lines; track $index) {
                       <div class="trace-line"
                            [class.trace-line--stderr]="line.stream === 'stderr'"
-                           [class.trace-line--user]="line.stream === 'user'">
+                           [class.trace-line--user]="line.stream === 'user'"
+                           [class.trace-line--internal]="internalDetailOf(line)">
                         <span class="trace-line__time">{{ formatTime(line.timestamp) }}</span>
                         <span class="trace-line__stream">{{ streamLabel(line.stream) }}</span>
-                        <span class="trace-line__text">{{ line.text }}</span>
+                        @if (internalDetailOf(line); as detail) {
+                          <!-- Redacted stream-json transport frame: the readable
+                               chat never shows raw JSON, but the Trace view can
+                               disclose the original frame on demand. -->
+                          <details class="trace-line__internal">
+                            <summary class="trace-line__text">{{ line.text }}</summary>
+                            <pre class="trace-line__internal-detail">{{ detail }}</pre>
+                          </details>
+                        } @else {
+                          <span class="trace-line__text">{{ line.text }}</span>
+                        }
                       </div>
                     }
                   </div>
@@ -259,7 +270,7 @@
             @if (formatSince(ls.sinceMs); as since) {
               <span class="live-status__since"
                     data-testid="activity-log-live-since"
-                    [appTooltip]="'Time since the last activity-log line'">{{ since }}</span>
+                    [cacTooltip]="'Time since the last activity-log line'">{{ since }}</span>
             }
           </div>
         }

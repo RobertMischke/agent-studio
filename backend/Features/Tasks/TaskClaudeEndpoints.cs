@@ -1,4 +1,4 @@
-
+using static AgentStudio.Tasks.TaskEndpointHelpers;
 
 namespace AgentStudio.Tasks;
 
@@ -16,8 +16,16 @@ public static class TaskClaudeEndpoints
         // Claude-specific live session telemetry: reads the CLI's JSONL file
         // directly so we can show live tokens / model without spawning a PTY
         // or interrupting the running process.
-        group.MapGet("/{jobId}/claude/session-info", (string jobId, string? watchPath, TaskScannerService scanner, ClaudeSessionInspector inspector, ClaudeCliService claude) =>
+        group.MapGet("/{jobId}/claude/session-info", (
+            string jobId,
+            string? project,
+            string? watchPath,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
+            ClaudeSessionInspector inspector,
+            [Microsoft.Extensions.DependencyInjection.FromKeyedServices(CliTypes.Claude)] GenericCliExecutionService claude) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 

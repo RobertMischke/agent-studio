@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runtime Prompt Usage Audit</title>
+<style>
+  :root {
+    --green: #1a7f37;
+    --green-bg: #dafbe1;
+    --amber: #9a6700;
+    --amber-bg: #fff8c5;
+    --red: #cf222e;
+    --red-bg: #ffebe9;
+    --grey: #57606a;
+    --grey-bg: #eaeef2;
+    --ink: #1f2328;
+    --muted: #57606a;
+    --line: #d0d7de;
+    --accent: #0969da;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .container {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 36px 28px 72px;
+  }
+  header.report-head {
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 18px;
+    margin-bottom: 24px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 38px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 15px;
+    margin: 22px 0 8px;
+    color: var(--ink);
+  }
+  p { margin: 10px 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #24292f;
+    white-space: nowrap;
+  }
+  /* TOC */
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 0 0 26px;
+    font-size: 14px;
+  }
+  nav.toc strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 20px;
+  }
+  nav.toc a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  nav.toc a:hover { text-decoration: underline; }
+
+  /* Verdict callout */
+  .verdict {
+    background: var(--green-bg);
+    border: 1px solid #aceebb;
+    border-left: 4px solid var(--green);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0 8px;
+    font-size: 15px;
+  }
+  .verdict strong { color: var(--green); }
+
+  /* Count cards */
+  .cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 18px 0 8px;
+  }
+  .card {
+    flex: 1 1 130px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+    background: var(--bg);
+  }
+  .card .num {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .card .lbl {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .card.active { border-top: 3px solid var(--green); }
+  .card.active .num { color: var(--green); }
+  .card.conditional { border-top: 3px solid var(--amber); }
+  .card.conditional .num { color: var(--amber); }
+  .card.dead { border-top: 3px solid var(--red); }
+  .card.dead .num { color: var(--red); }
+  .card.uncertain { border-top: 3px solid var(--grey); }
+  .card.uncertain .num { color: var(--grey); }
+  .card.total { border-top: 3px solid var(--accent); }
+  .card.total .num { color: var(--accent); }
+
+  /* Status pills */
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .pill.active { background: var(--green-bg); color: var(--green); border: 1px solid #aceebb; }
+  .pill.conditional { background: var(--amber-bg); color: var(--amber); border: 1px solid #f5e08a; }
+  .pill.dead { background: var(--red-bg); color: var(--red); border: 1px solid #ffc1bd; }
+  .pill.uncertain { background: var(--grey-bg); color: var(--grey); border: 1px solid #c9d1d9; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 8px;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    background: var(--panel);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    border-bottom: 2px solid var(--line);
+  }
+  tr.group-head td {
+    background: #eef2f6;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+  }
+  td.prompt code { white-space: normal; }
+  td.reach { color: var(--ink); }
+  td.consumer code { white-space: normal; }
+  .rec-keep { color: var(--green); font-weight: 600; }
+  .rec-remove { color: var(--red); font-weight: 600; }
+
+  /* Removal panel */
+  .removal {
+    background: var(--red-bg);
+    border: 1px solid #ffc1bd;
+    border-left: 4px solid var(--red);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 14px 0;
+  }
+  .removal h3 { margin-top: 0; color: var(--red); }
+  .removal code { background: #fff; }
+  .removal ul { margin: 8px 0 0; padding-left: 20px; }
+  .removal li { margin: 5px 0; }
+
+  .note-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 10px 0;
+  }
+  ul.tight { margin: 8px 0; padding-left: 22px; }
+  ul.tight li { margin: 6px 0; }
+
+  footer.report-foot {
+    margin-top: 44px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 8px 0 0;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .sw-green { background: var(--green); }
+  .sw-amber { background: var(--amber); }
+  .sw-red { background: var(--red); }
+  .sw-grey { background: var(--grey); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header class="report-head">
+    <h1>Runtime Prompt Usage Audit</h1>
+    <p class="subtitle">Reachability classification of all 42 prompt templates against their live consumers in the backend. Source of truth: <code>backend/Features/Prompts/PromptUsageCatalog.cs</code> cross-checked against actual call sites.</p>
+  </header>
+
+  <nav class="toc">
+    <strong>Contents</strong>
+    <ol>
+      <li><a href="#summary">Executive summary</a></li>
+      <li><a href="#removal">Removal candidates</a></li>
+      <li><a href="#table">Full prompt-to-consumer table (42)</a></li>
+      <li><a href="#notes">Notes on conditional prompts</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1. EXECUTIVE SUMMARY -->
+  <h2 id="summary">1. Executive summary</h2>
+
+  <div class="cards">
+    <div class="card total"><div class="num">42</div><div class="lbl">Total prompts</div></div>
+    <div class="card active"><div class="num">19</div><div class="lbl">Active</div></div>
+    <div class="card conditional"><div class="num">22</div><div class="lbl">Conditional</div></div>
+    <div class="card dead"><div class="num">1</div><div class="lbl">Dead / orphaned</div></div>
+    <div class="card uncertain"><div class="num">0</div><div class="lbl">Uncertain</div></div>
+  </div>
+
+  <div class="verdict">
+    <strong>Verdict:</strong> Almost all prompts are still in use. Of 42 prompts, <strong>41 are reachable</strong> (19 on a default/normal run path or a running hosted service, 22 genuinely used but only on opt-in, on-demand, or edge paths) and exactly <strong>1 is orphaned</strong> and safe to consider for removal: <code>recurring-output-pattern-review.md</code>. Nothing is uncertain.
+  </div>
+
+  <p>
+    The audit traced each prompt from the catalog entry to its rendering call site. A prompt counts as <strong>active</strong> when its consumer runs on a normal/default run (the core opening prompt, a default-on pipeline post-step, a mapped endpoint, or a registered hosted service that is on by default). It counts as <strong>conditional</strong> when the consumer is real and wired but only fires opt-in or on demand: resume and reissue paths, epic decomposition, crash recovery, drift post-steps (off by default), on-demand report endpoints, parallel-only conflict resolution, user-triggered code-review / title / enhance actions, and the soft-reasoning hosted service which is registered but disabled by default. It counts as <strong>dead-or-orphaned</strong> only when there is no DI registration, no endpoint mapping, and no hosted or scheduled runner.
+  </p>
+
+  <p>
+    One correction was made against an earlier per-group pass: <code>code-review-step.md</code> (the <em>Verdict</em> mode of <code>CodeReviewStepService</code>) was provisionally flagged for removal, but it is in fact a live mapped endpoint, <code>POST /api/tasks/{jobId}/code-review</code> (wired at <code>backend/Host/EndpointMapping.cs:25</code> via <code>MapTaskCodeReviewEndpoints</code>; service registered at <code>backend/Host/Program.cs:366</code>). It is user-triggered rather than automatic, so it is classified <strong>conditional / keep</strong>, not dead.
+  </p>
+
+  <div class="legend">
+    <span><span class="swatch sw-green"></span> active</span>
+    <span><span class="swatch sw-amber"></span> conditional</span>
+    <span><span class="swatch sw-red"></span> dead / orphaned</span>
+    <span><span class="swatch sw-grey"></span> uncertain</span>
+  </div>
+
+  <!-- 2. REMOVAL CANDIDATES -->
+  <h2 id="removal">2. Removal candidates</h2>
+
+  <p>Exactly one prompt has no live consumer and is a candidate for removal.</p>
+
+  <div class="removal">
+    <h3><span class="pill dead">dead</span>&nbsp; recurring-output-pattern-review.md</h3>
+    <p>Consumer: <code>RecurringOutputPatternService.BuildPrompt</code>. The prompt is never rendered on any live path. Verified:</p>
+    <ul>
+      <li>NO DI registration for <code>RecurringOutputPatternService</code> in <code>backend/Host/Program.cs</code>.</li>
+      <li>NO endpoint mapping. The service is absent from <code>AnalysisReportEndpoints.cs</code> and every other <code>*Endpoints.cs</code> file.</li>
+      <li>NO hosted service and NO scheduled runner invoking it.</li>
+      <li>The only references anywhere are: the class definition itself, a documentation <code>&lt;see cref&gt;</code> in <code>SteeringDocsSummaryDriftService</code>, and the <code>PromptUsageCatalog</code> entry.</li>
+    </ul>
+    <p style="margin-bottom:0;"><strong>Recommendation:</strong> review for removal. Removing the prompt plus the orphaned service is safe; only the catalog entry and the stale <code>&lt;see cref&gt;</code> need to be cleaned up alongside it.</p>
+  </div>
+
+  <p>All other 41 prompts are recommended to <span class="rec-keep">keep</span>. The 22 conditional ones are explained in section 4 so the operator can see why a prompt may look idle on a default deployment yet still be required.</p>
+
+  <!-- 3. FULL TABLE -->
+  <h2 id="table">3. Full prompt-to-consumer table</h2>
+
+  <p>Grouped by family. Status color: <span class="pill active">active</span> on a default path, <span class="pill conditional">conditional</span> opt-in or on-demand, <span class="pill dead">dead</span> orphaned, <span class="pill uncertain">uncertain</span> undetermined.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:20%">Prompt</th>
+        <th style="width:24%">Consumer</th>
+        <th style="width:8%">Status</th>
+        <th style="width:38%">Reachability</th>
+        <th style="width:10%">Rec.</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <!-- RUN LIFECYCLE -->
+      <tr class="group-head"><td colspan="5">Run lifecycle</td></tr>
+
+      <tr>
+        <td class="prompt"><code>runner-fresh-start.md</code></td>
+        <td class="consumer"><code>RunPlanner.PlanRun</code> + <code>ProjectRunner.RenderRunPrompt</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Default fresh-start template on every new task run with no resume. <code>RunPlanner.cs:270</code>; rendered <code>ProjectRunner.cs:5469</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>runner-resume-interrupted.md</code></td>
+        <td class="consumer"><code>RunPlanner.SelectStartPromptTemplate</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Only when resuming an in-flight interrupted job (Progress + resume, or session dropped). <code>RunPlanner.cs:267</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>runner-resume-restart.md</code></td>
+        <td class="consumer"><code>RunPlanner.SelectStartPromptTemplate</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Only when re-starting an already-finished task (AutoReview/HumanReview/Escalated/Completed) on the same session. <code>RunPlanner.cs:269</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>runner-recovery-continuation.md</code></td>
+        <td class="consumer"><code>RunPlanner.PlanRun</code> (recovery branch)</td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Crash/recovery only: <code>RunIntent==UserContinue</code> and the candidate cannot be resumed. EventKind <code>recovery</code>. <code>RunPlanner.cs:128</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>runner-reissue-change.md</code></td>
+        <td class="consumer"><code>ProjectRunner.BuildReissueChangePlan</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Auto-review reissue loop only: fires when reissue has open items from the prior run. <code>ProjectRunner.cs:5476</code>, called at <code>:1956</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>epic-decomposition.md</code></td>
+        <td class="consumer"><code>ProjectRunner.RunCliAsync</code> (<code>EpicRunPolicy.IsPlanningRun</code>)</td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Epic-typed tasks on a planning/decomposition run only; epic user-continues excluded. <code>ProjectRunner.cs:1774</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+
+      <!-- REVIEW / ASPECT / GRADE -->
+      <tr class="group-head"><td colspan="5">Review, aspect and grade</td></tr>
+
+      <tr>
+        <td class="prompt"><code>code-review-step.md</code></td>
+        <td class="consumer"><code>CodeReviewStepService.BuildPrompt</code> (Verdict)</td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Live user-triggered endpoint <code>POST /api/tasks/{jobId}/code-review</code> (<code>EndpointMapping.cs:25</code>, DI <code>Program.cs:366</code>). On-demand, not in the automatic pipeline. Corrected from an earlier remove flag.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>code-review-grade.md</code></td>
+        <td class="consumer"><code>CodeReviewStepService.BuildPrompt</code> (Grade)</td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Automatic post-code-review-grade step (DefaultEnabled=true) in <code>ProcessDoneAsync</code> for every DONE task. <code>PipelineCatalogue.cs:575-594</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>review-aspect-code-quality.md</code></td>
+        <td class="consumer"><code>AspectRunnerService.RenderAspectPrompt</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Default-on parallel aspect post-step on every DONE task via <code>ProcessDoneAsync &rarr; RunReadOnlyReviewPoolAsync</code>. <code>PipelineCatalogue.cs:46-52</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>review-aspect-requirement-fit.md</code></td>
+        <td class="consumer"><code>AspectRunnerService.RenderAspectPrompt</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Default-on parallel aspect post-step on every DONE task. <code>AspectRunnerService.cs:117-122</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>review-aspect-tests-and-evidence.md</code></td>
+        <td class="consumer"><code>AspectRunnerService.RenderAspectPrompt</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Default-on parallel aspect post-step on every DONE task. <code>AspectRunnerService.cs:135-140</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>review-aspect-documentation-impact.md</code></td>
+        <td class="consumer"><code>AspectRunnerService.RenderAspectPrompt</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Default-on parallel aspect post-step on every DONE task. <code>AspectRunnerService.cs:129-134</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>post-abort-review.md</code></td>
+        <td class="consumer"><code>PostAbortReviewStepService.BuildPrompt</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Abort-triggered and opt-in (DefaultEnabled=false). Fires only on a non-clean abort when enabled and budget remains. <code>ProjectRunner.cs:4985-5028</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+
+      <!-- AUTO-REVIEW DECISION -->
+      <tr class="group-head"><td colspan="5">Auto-review decision orchestrator</td></tr>
+
+      <tr>
+        <td class="prompt"><code>orchestrator-review-decision.md</code></td>
+        <td class="consumer"><code>ReviewDecisionOrchestrator.BuildPrompt</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Primary NEEDS_INPUT decision template in the orchestrator hosted service (registered ~<code>Program.cs:372</code>, ticks ~30s) when Enabled. <code>ReviewDecisionOrchestrator.cs:4386</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>orchestrator-review-decision-fallback.md</code></td>
+        <td class="consumer"><code>ReviewDecisionOrchestrator.BuildPrompt</code> (catch)</td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Resilience fallback rendered only when the primary template throws inside the try/catch. <code>ReviewDecisionOrchestrator.cs:4384-4391</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>orchestrator-reissue-followup.md</code></td>
+        <td class="consumer"><code>ReviewDecisionOrchestrator.BuildReissueFollowUp</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Only when the decision parses a Reissue verdict and writes a follow-up back to 2-ready. <code>ReviewDecisionOrchestrator.cs:4577-4581</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>orchestrator-no-completion-signal.md</code></td>
+        <td class="consumer"><code>ReviewDecisionOrchestrator.BuildNoCompletionSignalPrompt</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Only when a run lands in 4-auto-review with no completion sentinel AND rate limit allows AND reissues &lt; max; else deterministic reissue without the prompt. <code>ReviewDecisionOrchestrator.cs:1060</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+
+      <!-- ORCHESTRATOR (PROJECT + GLOBAL) -->
+      <tr class="group-head"><td colspan="5">Orchestrator (project and global)</td></tr>
+
+      <tr>
+        <td class="prompt"><code>orchestrator-decision-oneshot.md</code></td>
+        <td class="consumer"><code>ProjectRunner.BuildOrchestratorPrompt</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Auto-continuous / auto-single mode + agent emitted NEEDS_INPUT, when no orchestrator session exists (first turn). Fire-and-forget in Phase E. <code>ProjectRunner.cs:3044</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>orchestrator-decision-resume.md</code></td>
+        <td class="consumer"><code>ProjectRunner.BuildOrchestratorResumePrompt</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Auto-mode + NEEDS_INPUT, when a persisted orchestrator session exists (2nd+ turns). Fire-and-forget in Phase E. <code>ProjectRunner.cs:3061</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>orchestrator-decision-attachments-oneshot.md</code></td>
+        <td class="consumer"><code>ProjectRunner.BuildOrchestratorPrompt</code> (attachments)</td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Sub-block of the oneshot prompt, only when the task has attached files. Same parent gate. <code>ProjectRunner.cs:3327-3330</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>orchestrator-decision-attachments-resume.md</code></td>
+        <td class="consumer"><code>ProjectRunner.BuildOrchestratorResumePrompt</code> (attachments)</td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Sub-block of the resume prompt, only when the task has attached files. Same parent gate. <code>ProjectRunner.cs:3297-3300</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>orchestrator-project-boot.md</code></td>
+        <td class="consumer"><code>ProjectRunner.BuildOrchestratorBootPrompt</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach"><code>BootOrchestratorSessionAsync</code> from <code>TaskRunnerService.ExecuteAsync</code> at startup for every watched project; re-boots only if session file missing. <code>ProjectRunner.cs:2849</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>orchestrator-conflict-resolution.md</code></td>
+        <td class="consumer"><code>ProjectRunner.BuildConflictResolutionPrompt</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Parallel-mode only (maxParallelism&gt;1): fires when a worktree merge returns <code>IntegrationOutcome.Conflict</code>. Sequential runs never reach it. <code>ProjectRunner.cs:1377</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>global-orchestrator-boot.md</code></td>
+        <td class="consumer"><code>GlobalOrchestratorBootstrap.BuildBootPrompt</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach"><code>BootAsync</code> from <code>TaskRunnerService.ExecuteAsync</code> at startup (one global session); re-boots only if missing. <code>GlobalOrchestratorBootstrap.cs:63</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>global-orchestrator-self-mod-note.md</code></td>
+        <td class="consumer"><code>GlobalOrchestratorBootstrap.BuildWatchedProjectsBlock</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Sub-block of global boot, rendered only for watched projects where <code>IsSelfModificationTarget</code> is true. <code>GlobalOrchestratorBootstrap.cs:131-132</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>global-orchestrator-task-snapshot.md</code></td>
+        <td class="consumer"><code>GlobalOrchestratorBootstrap.BuildTaskSnapshotBlock</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Sub-block of global boot; per-project snapshot inside try/catch so boot still renders if it fails. Attempted within the active boot path, content-conditional. <code>GlobalOrchestratorBootstrap.cs:143-163</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+
+      <!-- DRIFT & ANALYSIS -->
+      <tr class="group-head"><td colspan="5">Drift and analysis reports</td></tr>
+
+      <tr>
+        <td class="prompt"><code>adr-code-drift.md</code></td>
+        <td class="consumer"><code>DriftPostStepRunner.BuildDimension</code> + <code>DriftReportEndpoints</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Opt-in drift post-step (DefaultEnabled=false; runs automatically only when enabled) + on-demand <code>/api/drift/{project}/actions/adr-code-drift</code>. <code>DriftPostStepRunner.cs:289-300</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>software-architecture-drift.md</code></td>
+        <td class="consumer"><code>DriftPostStepRunner.BuildDimension</code> + <code>DriftReportEndpoints</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Opt-in drift post-step (DefaultEnabled=false) + on-demand <code>/api/drift/{project}/actions/software-architecture-drift</code>. <code>DriftPostStepRunner.cs:303-315</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>docs-marketing-drift.md</code></td>
+        <td class="consumer"><code>DriftPostStepRunner.BuildDimension</code> + <code>DriftReportEndpoints</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Opt-in drift post-step (DefaultEnabled=false) + on-demand <code>/api/drift/{project}/actions/docs-marketing-drift</code>. <code>DriftPostStepRunner.cs:318-330</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>spec-task-job-drift.md</code></td>
+        <td class="consumer"><code>DriftPostStepRunner.BuildDimension</code> + <code>DriftReportEndpoints</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Opt-in drift post-step (DefaultEnabled=false) + on-demand <code>/api/drift/{project}/actions/spec-task-job-drift</code>. <code>DriftPostStepRunner.cs:333-344</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>code-pattern-drift-review.md</code></td>
+        <td class="consumer"><code>CodePatternDriftAnalysisService.BuildLlmPrompt</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Optional Phase-2 LLM verdict via <code>/api/drift/actions/code-pattern-drift?withLlmVerdict=true</code>. Rule-based analysis always runs; LLM prompt on-demand only. <code>DriftReportEndpoints.cs:623-655</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>code-pattern-drift-canonical-sites.md</code></td>
+        <td class="consumer"><code>CodePatternDriftAnalysisService.BuildLlmPrompt</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Sub-block used only when code-pattern drift has findings AND <code>withLlmVerdict=true</code> on the manual endpoint. <code>CodePatternDriftAnalysisService.cs:46</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>steering-docs-summary-and-drift.md</code></td>
+        <td class="consumer"><code>SteeringDocsSummaryDriftService.BuildPrompt</code> + <code>AnalysisReportEndpoints</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">On-demand <code>/api/analysis/{project}/actions/steering-docs-drift</code> (or scheduled if configured). No automatic core trigger. <code>AnalysisReportEndpoints.cs:320-476</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>roadmap-alignment-review.md</code></td>
+        <td class="consumer"><code>RoadmapAlignmentReviewService.BuildPrompt</code> + <code>AnalysisReportEndpoints</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">On-demand <code>/api/analysis/{project}/actions/roadmap-alignment</code> (or scheduled if configured). No automatic core trigger. <code>AnalysisReportEndpoints.cs:149-302</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>recurring-output-pattern-review.md</code></td>
+        <td class="consumer"><code>RecurringOutputPatternService.BuildPrompt</code></td>
+        <td><span class="pill dead">dead</span></td>
+        <td class="reach">Orphaned. No DI registration, no endpoint mapping, no hosted/scheduled runner. Only references are the class, a doc <code>&lt;see cref&gt;</code>, and the catalog entry. Never rendered on any live path.</td>
+        <td><span class="rec-remove">remove</span></td>
+      </tr>
+
+      <!-- MISC SERVICES -->
+      <tr class="group-head"><td colspan="5">Miscellaneous services</td></tr>
+
+      <tr>
+        <td class="prompt"><code>summary-protocol.md</code></td>
+        <td class="consumer"><code>SummaryGenerationService.GenerateAsync</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Fire-and-forget on successful CLI completion in <code>OnCliCompletedAsync</code> after terminal classification. Singleton (<code>Program.cs:275</code>). Normal success path. <code>ProjectRunner.cs:4686</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>commit-message.md</code></td>
+        <td class="consumer"><code>GitService.GenerateCommitMessageAsync</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Live on both the user endpoint <code>POST /api/tasks/{jobId}/git/generate-message</code> and the internal auto-commit path during state transitions. <code>GitService.cs:994-1077</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>mode-framing-readonly.md</code></td>
+        <td class="consumer"><code>RuntimePromptService.RenderModeFraming</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Rendered into <code>{{mode_framing}}</code> on every fresh run via <code>RenderRunPrompt</code>; emits the read-only block whenever <code>TaskModes.IsReadOnly(mode)</code>. <code>RuntimePromptService.cs:66-75</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>mode-framing-web.md</code></td>
+        <td class="consumer"><code>RuntimePromptService.RenderModeFraming</code></td>
+        <td><span class="pill active">active</span></td>
+        <td class="reach">Same <code>RenderModeFraming</code> call on every run; appends the web block whenever <code>AllowWebAccess=true</code>. Default code path, content gated by the flag. <code>RuntimePromptService.cs:66-75</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>title-generate.md</code></td>
+        <td class="consumer"><code>TitleGenerationService.GenerateAsync</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">On-demand user action only: <code>POST /api/title/generate</code> from the Create-task dialog Generate button. No auto-invocation; short-circuits on empty input. <code>TitleGenerationEndpoints.cs:16-33</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>prompt-enhance.md</code></td>
+        <td class="consumer"><code>PromptEnhancementService.EnhanceAsync</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">On-demand user action only: <code>POST /api/prompt/enhance</code> from the Create-task dialog Enhance button. No auto-invocation; short-circuits on empty input. <code>PromptEnhancementService.cs:57-85</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+      <tr>
+        <td class="prompt"><code>supervisor-soft-reasoning.md</code></td>
+        <td class="consumer"><code>SoftReasoningHostedService.BuildPrompt</code></td>
+        <td><span class="pill conditional">conditional</span></td>
+        <td class="reach">Background hosted service (registered <code>Program.cs:350</code>) but DISABLED by default: only fires when <code>Supervisor:SoftReasoningEnabled=true</code>, on an interval, rate-limited. Off on a default deployment. <code>SoftReasoningHostedService.cs:103</code>.</td>
+        <td><span class="rec-keep">keep</span></td>
+      </tr>
+
+    </tbody>
+  </table>
+
+  <!-- 4. NOTES -->
+  <h2 id="notes">4. Notes on conditional prompts</h2>
+
+  <p>
+    The 22 conditional prompts are not waste. Each one is wired to a real consumer but only fires under a specific trigger, so on a default deployment with a single sequential pickup you may never see it render. They fall into a handful of recognizable categories. Keeping them is correct; they back features that must work the moment the trigger occurs.
+  </p>
+
+  <div class="note-box">
+    <h3>Resume, recovery and reissue (run lifecycle)</h3>
+    <ul class="tight">
+      <li><code>runner-resume-interrupted.md</code>, <code>runner-resume-restart.md</code>, <code>runner-recovery-continuation.md</code>: only when a run is resumed, restarted on the same session, or recovered after a crash. A normal start uses <code>runner-fresh-start.md</code> instead.</li>
+      <li><code>runner-reissue-change.md</code>: only inside the auto-review reissue loop when the prior run left open items.</li>
+      <li><code>epic-decomposition.md</code>: only for epic-typed tasks on their planning run.</li>
+    </ul>
+  </div>
+
+  <div class="note-box">
+    <h3>On-demand and user-triggered actions</h3>
+    <ul class="tight">
+      <li><code>code-review-step.md</code>: live mapped endpoint, invoked when the operator runs a manual code review.</li>
+      <li><code>title-generate.md</code>, <code>prompt-enhance.md</code>: the Generate and Enhance buttons in the Create-task dialog. No auto-invocation.</li>
+      <li><code>commit-message.md</code>: dual path. Active because the internal auto-commit also uses it, but the user endpoint is on-demand.</li>
+    </ul>
+  </div>
+
+  <div class="note-box">
+    <h3>Opt-in pipeline post-steps and report endpoints</h3>
+    <ul class="tight">
+      <li><code>post-abort-review.md</code>: DefaultEnabled=false; only on a non-clean abort when the operator has enabled the step.</li>
+      <li>Drift dimensions (<code>adr-code-drift.md</code>, <code>software-architecture-drift.md</code>, <code>docs-marketing-drift.md</code>, <code>spec-task-job-drift.md</code>): DefaultEnabled=false post-steps, plus on-demand <code>/api/drift/...</code> endpoints.</li>
+      <li>Code-pattern drift (<code>code-pattern-drift-review.md</code>, <code>code-pattern-drift-canonical-sites.md</code>): only the optional <code>withLlmVerdict=true</code> enrichment renders the prompt; the rule-based analysis always runs without it.</li>
+      <li>Analysis reports (<code>steering-docs-summary-and-drift.md</code>, <code>roadmap-alignment-review.md</code>): on-demand <code>/api/analysis/...</code> endpoints, or scheduled if configured. No automatic core trigger.</li>
+    </ul>
+  </div>
+
+  <div class="note-box">
+    <h3>Orchestrator decision and boot sub-blocks</h3>
+    <ul class="tight">
+      <li>Decision prompts (<code>orchestrator-decision-oneshot.md</code>, <code>-resume.md</code> and their <code>-attachments-</code> sub-blocks): only in auto-continuous / auto-single mode after the agent emits NEEDS_INPUT, gated on whether a session already exists and whether the task has attachments.</li>
+      <li>Review-decision variants (<code>orchestrator-review-decision-fallback.md</code>, <code>orchestrator-reissue-followup.md</code>, <code>orchestrator-no-completion-signal.md</code>): the exception-fallback, the reissue-verdict follow-up, and the no-sentinel path. The primary <code>orchestrator-review-decision.md</code> is active.</li>
+      <li>Boot sub-blocks (<code>global-orchestrator-self-mod-note.md</code>, <code>global-orchestrator-task-snapshot.md</code>): rendered inside the active global boot only for self-modification targets, or as a best-effort snapshot wrapped in try/catch.</li>
+      <li><code>orchestrator-conflict-resolution.md</code>: parallel-mode only (maxParallelism&gt;1) when a worktree merge conflicts. Never reached on sequential runs.</li>
+    </ul>
+  </div>
+
+  <div class="note-box">
+    <h3>Registered but off by default</h3>
+    <ul class="tight">
+      <li><code>supervisor-soft-reasoning.md</code>: its hosted service is registered and ticks, but the prompt only renders when <code>Supervisor:SoftReasoningEnabled=true</code>. Disabled by default to avoid surprise token spend. This is why it is conditional rather than active even though the service is running.</li>
+    </ul>
+  </div>
+
+  <footer class="report-foot">
+    <p>Audit basis: 42 prompt-to-consumer pairs from <code>backend/Features/Prompts/PromptUsageCatalog.cs</code>, each traced to its rendering call site. Counts: 19 active, 22 conditional, 1 dead, 0 uncertain. Single removal candidate: <code>recurring-output-pattern-review.md</code>. File paths cite the backend source as read during the audit.</p>
+  </footer>
+
+</div>
+</body>
+</html>

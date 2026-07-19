@@ -52,7 +52,7 @@ test.describe('Filter-active badge (F59)', () => {
     await expect(badge).toHaveText('1');
   });
 
-  test('project scope and compact visibility do not count as active filters', async ({ page }) => {
+  test('project scope does not count as an active filter', async ({ page }) => {
     const trigger = page.getByTestId('studio-project-picker-trigger');
     await expect(trigger).toBeVisible();
     await trigger.click();
@@ -66,12 +66,8 @@ test.describe('Filter-active badge (F59)', () => {
     await projectItems.first().click();
     await expect(page.getByTestId('studio-board')).toBeVisible({ timeout: 10_000 });
 
-    const compactToggle = page.getByTestId('studio-board-compact-toggle');
-    await expect(compactToggle).toBeVisible();
-    if (await compactToggle.getAttribute('aria-pressed') !== 'true') {
-      await compactToggle.click();
-    }
-
+    // AGT-2035: the compact-visibility toggle was removed (card density abolished);
+    // project scope alone must still not register as an active filter.
     await expect(page.getByTestId('studio-ab-badge-filters')).toHaveCount(0);
 
     await page.getByTestId('studio-ab-filters').click();
@@ -92,7 +88,7 @@ test.describe('Filter-active badge (F59)', () => {
     await expect(badge).toBeVisible();
 
     await badge.hover();
-    const tooltip = page.getByTestId('app-tooltip');
+    const tooltip = page.getByTestId('cac-tooltip');
     await expect(tooltip).toBeVisible({ timeout: 3000 });
     await expect(tooltip).toContainText('filter');
     await expect(tooltip).toContainText('active');

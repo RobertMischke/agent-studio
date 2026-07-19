@@ -1,15 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import type { CliType, TaskInfo, TaskPromptHistoryEntry } from '../../../../../models/task.model';
-import type { CliContextSource, CliExecutionContext, RunCommitInfo, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
+import type { RunCommitInfo, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
 import { TaskService } from '../../../../../services/task.service';
 import { cliTypeIcon, cliTypeLabel, formatTime as formatTimeValue, formatTokens } from '../../../../../services/format.util';
 
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
+import { RunExecutionContextComponent } from './run-execution-context/run-execution-context.component';
 /**
  * Run timeline panel rendered above the activity log in the protocol
  * pane. Each card represents one CLI invocation between user inputs
  * (one "run" - the unit of conversation defined in
- * `docs/design-principles.md`). The collapsed card shows:
+ * `docs/quality/design-principles.md`). The collapsed card shows:
  *
  * - intent badge (start / continue / recovery / restart)
  * - status badge (running / completed / failed / cancelled)
@@ -30,7 +31,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
 @Component({
   selector: 'app-run-timeline',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, RunExecutionContextComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-timeline.component.html',
   styleUrl: './run-timeline.component.scss'
@@ -224,51 +225,6 @@ export class RunTimelineComponent {
     }
   }
 
-  /**
-   * The run's execution-context snapshot grouped by source kind for display
-   * (ASS-1739 / T1a). Returns an empty list when nothing was captured so the
-   * template can hide the panel. Order follows a fixed kind priority so the
-   * panel reads consistently across runs.
-   */
-  executionGroups(r: RunRecord): { kind: string; label: string; sources: CliContextSource[] }[] {
-    const ctx = r.executionContext;
-    if (!ctx || ctx.sources.length === 0) return [];
-    const order = ['memory', 'instruction-file', 'mcp', 'session', 'global-config', 'env'];
-    const byKind = new Map<string, CliContextSource[]>();
-    for (const s of ctx.sources) {
-      const list = byKind.get(s.kind) ?? [];
-      list.push(s);
-      byKind.set(s.kind, list);
-    }
-    return [...byKind.keys()]
-      .sort((a, b) => {
-        const ia = order.indexOf(a), ib = order.indexOf(b);
-        return (ia < 0 ? order.length : ia) - (ib < 0 ? order.length : ib);
-      })
-      .map(kind => ({ kind, label: this.kindLabel(kind), sources: byKind.get(kind)! }));
-  }
-
-  hasExecutionContext(r: RunRecord): boolean {
-    const ctx = r.executionContext;
-    return !!ctx && (ctx.sources.length > 0 || !!ctx.model || !!ctx.permissionMode || !!ctx.cwd);
-  }
-
-  executionSourceLabel(ctx: CliExecutionContext | null | undefined): string {
-    return ctx?.source === 'init-frame' ? 'reported by CLI init frame' : 'derived from config conventions';
-  }
-
-  kindLabel(kind: string): string {
-    switch (kind) {
-      case 'memory': return 'Memory';
-      case 'instruction-file': return 'Instruction files';
-      case 'session': return 'Session store';
-      case 'global-config': return 'Global config';
-      case 'mcp': return 'MCP servers';
-      case 'env': return 'Environment';
-      default: return kind || 'Other';
-    }
-  }
-
   cliIcon(cli: string | null): string {
     const type = this.cliType(cli);
     return type ? cliTypeIcon(type) : 'CLI';
@@ -281,6 +237,56 @@ export class RunTimelineComponent {
 
   emitFilter(r: RunRecord): void {
     this.runFilter.emit(r);
+  }
+
+  /**
+   * AGT-2003 — which runner executed a run, for the run-detail header. The
+   * reliable signals are the live run lease (a remote runner holds it while it
+   * works; ADR-0060) and, historically, the out-of-band completion source a
+   * remote runner records when it hands a finished task back. Both attribute to
+   * the task's latest run, so earlier runs return null rather than guess. A
+   * local in-process run holds no lease and posts no external completion -> the
+   * latest still-running/just-finished run reads as "lokal".
+   */
+  runnerAttribution(r: RunRecord): { kind: 'remote' | 'local'; glyph: string; label: string; tooltip: string } | null {
+    const job = this.job();
+    if (!job) return null;
+    const runs = this.visibleRuns();
+    const isLatest = runs.length > 0 && runs[runs.length - 1].index === r.index;
+    if (!isLatest) return null;
+
+    const runner = job.runner ?? null;
+    if (runner && runner.isRemote) {
+      const name = (runner.runnerName || runner.runnerId || 'remote runner').trim();
+      const host = (runner.hostname || '').trim();
+      return {
+        kind: 'remote',
+        glyph: '⇥',
+        label: name,
+        tooltip: `Executed by remote runner ${name}${host ? ` on ${host}` : ''} (holds the run lease).`,
+      };
+    }
+
+    const ext = job.externalCompletion ?? null;
+    if (!runner && ext && (ext.source ?? '').trim()) {
+      const source = ext.source.trim();
+      return {
+        kind: 'remote',
+        glyph: '⇥',
+        label: source,
+        tooltip: `Handed back out-of-band by ${source} (remote runner / external source).`,
+      };
+    }
+
+    if (r.status === 'running' || runner) {
+      return {
+        kind: 'local',
+        glyph: '',
+        label: 'lokal',
+        tooltip: 'Executed in-process on the local backend (no remote run lease held).',
+      };
+    }
+    return null;
   }
 
   intentLabel(intent: string): string {
@@ -364,8 +370,7 @@ export class RunTimelineComponent {
 
   private cliType(cli: string | null): CliType | null {
     const normalized = (cli ?? '').trim().toLowerCase();
-    return normalized === 'copilot' ||
-      normalized === 'claude' ||
+    return normalized === 'claude' ||
       normalized === 'codex' ||
       normalized === 'gemini'
         ? normalized

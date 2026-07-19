@@ -1,6 +1,6 @@
 # Codex CLI fixtures
 
-Captured `--json` frames from `codex exec --json ...`. See [`docs/cli-skills/cli-codex.md`](../../../../docs/cli-skills/cli-codex.md).
+Captured `--json` frames from `codex exec --json ...`. See [`docs/system/cli/skills/cli-codex.md`](../../../../docs/system/cli/skills/cli-codex.md).
 
 The Codex driver currently passes frames through unchanged (no `TransformReadLine` translation yet — known gap). When the transform lands, the regression-test base lives here.
 

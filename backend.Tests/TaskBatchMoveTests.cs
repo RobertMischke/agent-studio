@@ -93,7 +93,7 @@ public class TaskBatchMoveTests : IDisposable
             });
 
         using var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/jobs/batch-move")
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/tasks/batch-move")
         {
             Content = JsonContent.Create(new BatchMoveRequest
             {

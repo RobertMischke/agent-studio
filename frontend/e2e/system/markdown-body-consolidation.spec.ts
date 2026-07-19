@@ -77,11 +77,11 @@ async function plantJob(): Promise<{ id: string; watchPath: string }> {
 interface ListedJob { id: string; watchPath: string }
 
 async function pickJobWithStatus(): Promise<{ id: string; watchPath: string } | null> {
-  const jobs = await api<ListedJob[]>('/api/jobs');
+  const jobs = await api<ListedJob[]>('/api/tasks');
   for (const j of jobs.slice(0, 60)) {
     try {
       const detail = await api<JobDetail>(
-        `/api/jobs/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(j.watchPath)}`
+        `/api/tasks/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(j.watchPath)}`
       );
       if ((detail.statusMarkdown ?? '').length > 80) {
         return { id: j.id, watchPath: j.watchPath };
@@ -93,7 +93,7 @@ async function pickJobWithStatus(): Promise<{ id: string; watchPath: string } | 
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch { /* best-effort */ }

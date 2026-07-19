@@ -1,12 +1,13 @@
 
 
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Merge / consolidation API for the
 /// <c>api-consolidationmerge-api--completed-lane-audit--agent-claimed-done-but-isnt-re-evaluation</c>
-/// task. Five routes mounted under both <c>/api/tasks</c> and the
-/// operator-facing <c>/api/jobs</c> alias:
+/// task. Five routes mounted under <c>/api/tasks</c>:
 ///
 /// <list type="bullet">
 /// <item><c>GET /{id}/merge/candidates</c> - heuristic wrapper detection.</item>
@@ -25,23 +26,26 @@ public static class TaskMergeEndpoints
     public static void MapTaskMergeEndpoints(this RouteGroupBuilder group)
     {
         group.MapGet("/{primaryId}/merge/candidates",
-            (string primaryId, string? watchPath, MergeService merges) =>
+            (string primaryId, string? project, string? watchPath, MergeService merges, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var result = merges.FindCandidates(primaryId, watchPath);
             return Results.Ok(result);
         });
 
         group.MapPost("/{primaryId}/merge/preview",
-            (string primaryId, string? watchPath, MergeRequest req, MergeService merges) =>
+            (string primaryId, string? project, string? watchPath, MergeRequest req, MergeService merges, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             if (req == null) return Results.BadRequest(new { error = "request body required" });
             var outcome = merges.Preview(primaryId, watchPath, req);
             return MapPreview(outcome);
         });
 
         group.MapPost("/{primaryId}/merge",
-            (string primaryId, string? watchPath, MergeRequest req, HttpContext ctx, MergeService merges) =>
+            (string primaryId, string? project, string? watchPath, MergeRequest req, HttpContext ctx, MergeService merges, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             if (req == null) return Results.BadRequest(new { error = "request body required" });
             var who = ctx.Request.Headers["X-Client-Id"].FirstOrDefault() ?? "unknown";
             var outcome = merges.Merge(primaryId, watchPath, req, who);
@@ -58,8 +62,9 @@ public static class TaskMergeEndpoints
         });
 
         group.MapPost("/{jobId}/re-evaluate",
-            (string jobId, string? watchPath, HttpContext ctx, CompletedLaneAuditService audit) =>
+            (string jobId, string? project, string? watchPath, HttpContext ctx, CompletedLaneAuditService audit, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var who = ctx.Request.Headers["X-Client-Id"].FirstOrDefault() ?? "system";
             var outcome = audit.ReEvaluate(jobId, watchPath, who);
             return outcome.Status switch

@@ -37,7 +37,7 @@ public class TaskAccessServiceTests : IDisposable
         var (taskAccess, machine, mutations, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        var jobId = mutations.CreateJob(new CreateJobRequest
+        var jobId = mutations.CreateJob(new CreateTaskRequest
         {
             Id = "alpha",
             Title = "Alpha task",
@@ -75,7 +75,7 @@ public class TaskAccessServiceTests : IDisposable
         var result = await taskAccess.MutateAsync(new TaskMutationRequest
         {
             Kind = TaskMutationKind.Create,
-            CreateRequest = new CreateJobRequest
+            CreateRequest = new CreateTaskRequest
             {
                 Id = "beta",
                 Title = "Beta task",
@@ -99,7 +99,7 @@ public class TaskAccessServiceTests : IDisposable
     {
         var (taskAccess, machine, mutations, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "gamma",
             Title = "Gamma task",
@@ -133,7 +133,7 @@ public class TaskAccessServiceTests : IDisposable
     {
         var (taskAccess, machine, mutations, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "delta",
             Title = "Delta",
@@ -174,7 +174,7 @@ public class TaskAccessServiceTests : IDisposable
     {
         var (taskAccess, machine, mutations, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "epsilon",
             Title = "Epsilon",
@@ -203,7 +203,7 @@ public class TaskAccessServiceTests : IDisposable
     {
         var (taskAccess, machine, mutations, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "zeta",
             Title = "Zeta",
@@ -280,7 +280,7 @@ public class TaskAccessServiceTests : IDisposable
         machine.EnsureStateFoldersAndMigrate();
         for (int i = 0; i < 5; i++)
         {
-            mutations.CreateJob(new CreateJobRequest
+            mutations.CreateJob(new CreateTaskRequest
             {
                 Id = $"job-{i}",
                 Title = $"Job {i}",
@@ -305,7 +305,7 @@ public class TaskAccessServiceTests : IDisposable
         machine.EnsureStateFoldersAndMigrate();
         for (int i = 0; i < 200; i++)
         {
-            mutations.CreateJob(new CreateJobRequest
+            mutations.CreateJob(new CreateTaskRequest
             {
                 Id = $"job-{i:000}",
                 Title = $"Job {i}",

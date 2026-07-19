@@ -347,6 +347,103 @@ public sealed class TaskProvenanceServiceTests : IDisposable
         Assert.Contains(afterTeardown.Provenance!.Transitions, t => t.BranchTip == taskTip);
     }
 
+    // --- Batch membership: rev-list set == per-commit ancestry (AGT-2007) -
+
+    [Fact]
+    public void GetReachableShaSet_MatchesPerCommitAncestry_BeforeAndAfterMerge()
+    {
+        // The provenance perf fix replaces one `merge-base --is-ancestor` spawn
+        // per commit with a single `rev-list base..branch` set lookup. This
+        // pins the equivalence the substitution relies on: for every commit,
+        // set.Contains(sha) must equal IsAncestor(sha, branch) - before and
+        // after the branch is folded in.
+        var repo = SeedRepo("reachable-parity");
+        var git = BuildGitService(("Fixture", repo));
+        RunGit(repo, "checkout -q -b develop");
+        var baseSha = RunGit(repo, "rev-parse develop").Out.Trim();
+        RunGit(repo, "checkout -q -b task/300");
+        File.WriteAllText(Path.Combine(repo, "a.txt"), "a");
+        Commit(repo, "feat: a");
+        var shaA = RunGit(repo, "rev-parse task/300").Out.Trim();
+        File.WriteAllText(Path.Combine(repo, "b.txt"), "b");
+        Commit(repo, "feat: b");
+        var shaB = RunGit(repo, "rev-parse task/300").Out.Trim();
+
+        // The range set is exactly the branch commits ahead of the fork point.
+        var branchSet = git.GetReachableShaSet(repo, baseSha, "task/300");
+        Assert.Contains(shaA, branchSet);
+        Assert.Contains(shaB, branchSet);
+        Assert.DoesNotContain(baseSha, branchSet);
+
+        // Before merge: develop's set excludes the task commits, and the batch
+        // answer agrees with per-commit merge-base --is-ancestor for each.
+        var devBefore = git.GetReachableShaSet(repo, baseSha, "develop");
+        foreach (var sha in new[] { shaA, shaB })
+            Assert.Equal(git.IsAncestor(repo, sha, "develop"), devBefore.Contains(sha));
+        Assert.DoesNotContain(shaA, devBefore);
+
+        // After merge: the same commits are now reachable from develop; batch
+        // and per-commit answers still agree.
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge -q --no-ff --no-edit task/300");
+        var devAfter = git.GetReachableShaSet(repo, baseSha, "develop");
+        foreach (var sha in new[] { shaA, shaB })
+            Assert.Equal(git.IsAncestor(repo, sha, "develop"), devAfter.Contains(sha));
+        Assert.Contains(shaA, devAfter);
+        Assert.Contains(shaB, devAfter);
+    }
+
+    [Fact]
+    public void GetReachableShaSet_MissingRef_ReturnsEmpty()
+    {
+        var repo = SeedRepo("reachable-missing");
+        var git = BuildGitService(("Fixture", repo));
+        var baseSha = RunGit(repo, "rev-parse main").Out.Trim();
+
+        // A ref that does not exist must resolve to "not contained" (empty set),
+        // matching the conservative fallback of the per-commit ancestry checks.
+        Assert.Empty(git.GetReachableShaSet(repo, baseSha, "no-such-branch"));
+    }
+
+    [Fact]
+    public void BuildView_MultiCommitTask_BatchMembershipTracksMergeState()
+    {
+        // End-to-end over the batched membership path: a live task branch with
+        // TWO commits, walked from the recorded fork point. Membership must read
+        // "branch only" before the merge and "merged to develop" after, proving
+        // the rev-list set path classifies every commit correctly - the behaviour
+        // the removed per-commit merge-base fan-out used to provide.
+        var (repoRoot, watchPath) = SeedWorktreeRepo("multi-1");
+        File.WriteAllText(Path.Combine(repoRoot, "work2.txt"), "more task work");
+        Commit(repoRoot, "feat: more task work");
+
+        var prov = BuildProvenanceService(repoRoot, watchPath, "demo");
+        var info = Scan(repoRoot, watchPath, "multi-1");
+        Assert.NotNull(info);
+        // Record a transition so provenance.Base (the fork point) is captured -
+        // that base is what the batch membership walks from.
+        prov.RecordTransition(info!, TaskStates.AutoReview);
+        info = Scan(repoRoot, watchPath, "multi-1");
+
+        var before = prov.BuildView(info!);
+        Assert.Equal(LandedStates.OnBranchOnly, before.LandedState);
+        Assert.Equal(2, before.Commits.Count);
+        Assert.All(before.Commits, c => Assert.True(c.OnTaskBranch));
+        Assert.All(before.Commits, c => Assert.False(c.AlsoOnIntegration));
+        Assert.All(before.Commits, c => Assert.False(c.AlsoOnRelease));
+
+        // Fold the branch into develop; the batch membership must now report
+        // both commits as merged-to-develop while main stays clean.
+        RunGit(repoRoot, "checkout -q develop");
+        RunGit(repoRoot, "merge -q --no-ff --no-edit task/multi-1");
+
+        var after = prov.BuildView(info!);
+        Assert.Equal(LandedStates.MergedToDevelop, after.LandedState);
+        Assert.Equal(2, after.Commits.Count);
+        Assert.All(after.Commits, c => Assert.True(c.AlsoOnIntegration));
+        Assert.All(after.Commits, c => Assert.False(c.AlsoOnRelease));
+    }
+
     // --- Helpers (shared shape with GitWorktreePrimitivesTests) -----------
 
     /// <summary>

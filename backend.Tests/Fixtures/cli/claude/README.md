@@ -1,6 +1,6 @@
 # Claude CLI fixtures
 
-Captured `stream-json` frames from `claude -p ... --output-format stream-json --verbose`. See [`docs/cli-skills/cli-claude.md`](../../../../docs/cli-skills/cli-claude.md) for the frame catalogue.
+Captured `stream-json` frames from `claude -p ... --output-format stream-json --verbose`. See [`docs/system/cli/skills/cli-claude.md`](../../../../docs/system/cli/skills/cli-claude.md) for the frame catalogue.
 
 Existing inline fixtures live in [`backend.Tests/ClaudeCliServiceTests.cs`](../../../ClaudeCliServiceTests.cs) for the common shapes. Use this folder when:
 

@@ -255,7 +255,8 @@ public class AgentOutcomeAnalyzerTests
         var lines = Lines("hestrator)");
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 0.0);
         Assert.Equal(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
-        Assert.NotEqual(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.InfraCrash, outcome.IssueKind);
         Assert.False(outcome.MatchedSentinel);
     }
 
@@ -284,25 +285,82 @@ public class AgentOutcomeAnalyzerTests
 
     // ---- Case (b): failed run WITH a real agent turn ----------------------
     // A run that produced a genuine, substantial agent turn before failing is
-    // NOT a launch failure - it is an unclassifiable agent reply. It stays
-    // ClassifierUnknown so the policy re-issues with context (never a
-    // terminal FAILURE), but the analyzer must not swallow it into the
-    // launch-failure bucket.
+    // NOT a launch failure - it is an unclassifiable agent reply. With no hard
+    // process-death signal (exitCode not < 0) it is OrchestratorInconclusive,
+    // so the policy stops and hands the task to the user (never a CLI launch
+    // failure), and the analyzer must not swallow it into the launch bucket.
 
     [Fact]
-    public void FailedRun_WithRealAgentText_StaysClassifierUnknown_NotCliLaunchFailed()
+    public void FailedRun_WithRealAgentText_IsOrchestratorInconclusive_NotCliLaunchFailed()
     {
         var prose = new string('x', 400) + " I made several edits and ran a long investigation across the module.";
         var lines = Lines(prose);
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 120.0);
-        Assert.Equal(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+        Assert.Equal(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
         Assert.NotEqual(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+    }
+
+    // ---- Case (b'): failed run WITH a real agent turn AND hard process death
+    // The same substantial agent turn, but the CLI process was killed
+    // (exitCode < 0, e.g. Windows Process.Kill returns -1) before reaching a
+    // terminal verdict. That is infrastructure death, not an inconclusive
+    // reply, so it discriminates to InfraCrash.
+
+    [Fact]
+    public void FailedRun_WithRealAgentText_AndNegativeExitCode_IsInfraCrash()
+    {
+        var prose = new string('x', 400) + " I made several edits and ran a long investigation across the module.";
+        var lines = Lines(prose);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 120.0, exitCode: -1);
+        Assert.Equal(RunIssueKind.InfraCrash, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
+    }
+
+    // ---- AGT-2066 WÄCHTER: OAuth-refresh launch failure -------------------
+    // The exact incident signature: a claude launch dies with "OAuth session
+    // expired and could not be refreshed". This is a dead/rotated shared token
+    // no re-issue can revive, so it must be the typed, NON-RETRYABLE
+    // AuthRefreshFailed - NOT the generic CliLaunchFailed, which would rebuild
+    // from disk and RETRY (burning a launch budget per card, 17 cards in the
+    // 2026-07-10 incident).
+
+    [Fact]
+    public void FailedLaunch_OAuthSessionExpired_IsAuthRefreshFailed_NotCliLaunchFailed()
+    {
+        var lines = Lines("OAuth session expired and could not be refreshed");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 0.4);
+        Assert.Equal(RunIssueKind.AuthRefreshFailed, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void FailedLaunch_CouldNotBeRefreshedNeedle_IsAuthRefreshFailed_RegardlessOfDuration()
+    {
+        // The needle is definitive even when the run did not die near-instantly,
+        // so it wins over the generic launch-failure duration heuristic.
+        var lines = Lines("Refreshing credentials...", "Error: the credentials could not be refreshed.");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 8.0);
+        Assert.Equal(RunIssueKind.AuthRefreshFailed, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void HealthyRun_MentioningRefresh_IsNotAuthRefreshFailed()
+    {
+        // Gating on `failed` keeps a completed run that merely discusses token
+        // refresh in its prose from tripping the breaker.
+        var lines = Lines("I checked how the CLI handles a token that could not be refreshed and documented it. [[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 42.0);
+        Assert.NotEqual(RunIssueKind.AuthRefreshFailed, outcome.IssueKind);
+        Assert.True(outcome.MatchedSentinel);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
     }
 
     // ---- Case (c): successful run, no sentinel, inconclusive text ---------
     // A clean exit whose text the heuristic cannot map to any shape stays
     // MissingTerminalSentinel so the orchestrator drives it to a structured
-    // close-out, never a terminal classifier-unknown FAILURE.
+    // close-out, never a terminal inconclusive FAILURE.
 
     [Fact]
     public void SuccessfulRun_InconclusiveText_IsMissingTerminalSentinel()
@@ -311,7 +369,7 @@ public class AgentOutcomeAnalyzerTests
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 18.0);
         Assert.Equal(AgentOutcomeKind.Unknown, outcome.Kind);
         Assert.Equal(RunIssueKind.MissingTerminalSentinel, outcome.IssueKind);
-        Assert.NotEqual(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
     }
 
     // ---- Tolerant sentinel recognition (ASS-643) --------------------------
@@ -462,6 +520,101 @@ public class AgentOutcomeAnalyzerTests
         var lines = Lines("I shortened the prompt because the prompt was too long for the test fixture.", "[[TASK_DONE]]");
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 20.0);
         Assert.NotEqual(RunIssueKind.ContextOverflow, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
+
+    [Theory]
+    // The exact codex ChatGPT-account signature (AGT-1928/1929/1930/1936):
+    // codex-cli 0.143 rejects -m gpt-5-codex with a 400 invalid_request.
+    [InlineData("● Turn failed: {\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.\"}}")]
+    [InlineData("Error: model_not_found")]
+    [InlineData("The model `gpt-9` does not exist or you do not have access to it.")]
+    [InlineData("unsupported model: foo-bar")]
+    public void ModelInvalid_OnFailedRun_TypesAsModelInvalid(string reply)
+    {
+        // A wrong/unsupported model must type as model-invalid (non-retryable)
+        // instead of the orchestrator-inconclusive catch-all, so the escalation
+        // reason tells a human to change the model (AGT-1941).
+        var lines = Lines(reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 4.9, exitCode: 1);
+        Assert.Equal(RunIssueKind.ModelInvalid, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void ModelInvalid_PhraseOnSuccessfulRun_IsNotTyped()
+    {
+        // An agent discussing a model-support error mid-success must not be
+        // hijacked; the detection is gated on a failed run.
+        var lines = Lines("I noted that the old model is not supported, then switched the config.", "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 20.0);
+        Assert.NotEqual(RunIssueKind.ModelInvalid, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
+
+    [Theory]
+    // The exact AGT-1918/1919/1920 signature: claude-sonnet-5 five-hour
+    // session-limit rejection on 2026-07-07.
+    [InlineData("You've hit your session limit · resets 8:10pm (Europe/Berlin)")]
+    [InlineData("● Rate limit · five-hour · rejected · reset in 3,6 h  [window=five_hour status=rejected resetsAt=1783447800 overage=rejected usingOverage=false]")]
+    [InlineData("Error: rate_limit_exceeded")]
+    [InlineData("You've reached your usage limit for this model.")]
+    public void QuotaExhausted_OnFailedRun_TypesAsQuotaExhausted(string reply)
+    {
+        // A usage/session/rate-limit exhaustion must type as quota-exhausted
+        // (transient) instead of the orchestrator-inconclusive catch-all so the
+        // escalation reason is honest and re-queue-after-reset is the clear next
+        // step (AGT-1918/1919/1920).
+        var lines = Lines(reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 5.1, exitCode: 1);
+        Assert.Equal(RunIssueKind.QuotaExhausted, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void QuotaExhausted_BenignRateLimitTelemetryOnSuccess_IsNotTyped()
+    {
+        // Claude prints a benign `Rate limit ... allowed` telemetry marker on
+        // healthy runs. It must NOT be read as exhaustion: detection matches
+        // only the rejected/exhausted shapes and is gated on a failed run.
+        var lines = Lines(
+            "● Rate limit · five-hour · allowed  [window=five_hour status=allowed resetsAt=1783447800 overage=none usingOverage=false]",
+            "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 25.0);
+        Assert.NotEqual(RunIssueKind.QuotaExhausted, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
+
+    [Theory]
+    // Host file-lock family (MSB302x copy-lock): a build output was momentarily
+    // locked by a lingering process. The lock releases on its own, so this is a
+    // transient environmental fault, not a code failure (AGT-1944).
+    [InlineData("error MSB3027: Could not copy \"obj\\Api.dll\" to \"bin\\Api.dll\". Exceeded retry count of 10. Failed.")]
+    [InlineData("error MSB3021: Unable to copy file \"a.dll\" to \"b.dll\". The process cannot access the file 'b.dll' because it is being used by another process.")]
+    [InlineData("The process cannot access the file because it is being used by another process.")]
+    // Network glitches: DNS failure, reset/timed-out sockets, transient gateways.
+    [InlineData("fatal: unable to access 'https://github.com/x.git/': Could not resolve host: github.com")]
+    [InlineData("Error: connect ECONNRESET 140.82.113.3:443")]
+    [InlineData("dial tcp: lookup api.example.com: Temporary failure in name resolution")]
+    [InlineData("HTTP 503 Service Unavailable")]
+    public void EnvironmentalTransient_OnFailedRun_TypesAsEnvironmentalTransient(string reply)
+    {
+        // A transient host file lock / network glitch must type as
+        // environmental-transient so the runner retries it with backoff instead
+        // of escalating it as a code failure.
+        var lines = Lines("Running the post-build test gate...", reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 42.0, exitCode: 1);
+        Assert.Equal(RunIssueKind.EnvironmentalTransient, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void EnvironmentalTransient_PhraseOnSuccessfulRun_IsNotTyped()
+    {
+        // An agent that merely mentions a lock/network phrase in a healthy turn
+        // must not be hijacked; detection is gated on a failed run.
+        var lines = Lines(
+            "I retried the copy after the file was being used by another process, then it succeeded.",
+            "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 30.0);
+        Assert.NotEqual(RunIssueKind.EnvironmentalTransient, outcome.IssueKind);
         Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
     }
 }

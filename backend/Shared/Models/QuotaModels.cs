@@ -19,6 +19,14 @@ public record QuotaWindow
     public string? Unit { get; init; }
     /// <summary>UTC timestamp when this window resets, when computable.</summary>
     public DateTime? ResetAt { get; init; }
+    /// <summary>
+    /// Start of the active window as established by the first trusted snapshot.
+    /// Projection keeps this anchor until its expected reset has actually passed,
+    /// so a later parser glitch cannot move the start forward and inflate burn rate.
+    /// </summary>
+    public DateTime? ObservedStartAt { get; init; }
+    /// <summary>Why this window must not currently be used for projection.</summary>
+    public string? ProjectionSuspiciousReason { get; init; }
     /// <summary>Original human-readable reset string from the CLI ("3:40am (Europe/Berlin)" / "Mar 1").</summary>
     public string? ResetLabel { get; init; }
 }
@@ -41,6 +49,20 @@ public record QuotaSnapshot
     public string? RawSample { get; init; }
     /// <summary>Set when probing failed; <see cref="Plan"/>/<see cref="Windows"/> may still hold partial data.</summary>
     public string? Error { get; init; }
+
+    /// <summary>
+    /// True when this snapshot is not yet trusted: either a single probe showed
+    /// an implausible downward jump that no reset explains and a confirmation
+    /// re-probe has not agreed yet, or a live launch died with a usage-limit
+    /// error that contradicts these numbers (AGT-2064). Admission treats a
+    /// suspicious snapshot conservatively - it keeps blocking until a re-probe
+    /// confirms - so a transient glitch can never open the launch gate on a CLI
+    /// that is really at its limit.
+    /// </summary>
+    public bool Suspicious { get; init; }
+
+    /// <summary>Human-readable reason a snapshot was flagged <see cref="Suspicious"/>.</summary>
+    public string? SuspiciousReason { get; init; }
 }
 
 public record QuotaReport

@@ -64,6 +64,66 @@ public class ClaudeQuotaProbeTests
         Assert.False(ClaudeQuotaProbe.LooksLikeParserDrift("   \r\n  ", Array.Empty<QuotaWindow>()));
     }
 
+    /// <summary>
+    /// Live capture from claude 2.1.201 on 2026-07-07: with hasCompletedOnboarding
+    /// missing from ~/.claude.json the CLI opens the first-run THEME picker instead
+    /// of the ready REPL. The old probe matched the welcome banner and fired /usage
+    /// into this wizard, so windows came back empty for a reason that is NOT a
+    /// /usage format drift.
+    /// </summary>
+    private const string ThemeWizardSnapshotV2_1_201 =
+        "WelcometoClaudeCodev2.1.201\r\n" +
+        "Let'sgetstarted.ChoosethetextstylethatlooksbestwithyourterminalTochangethislater,run/theme" +
+        "1.Auto(matchterminal)❯2.Darkmode✔3.Lightmode4.Darkmode(colorblind-friendly)\r\n";
+
+    /// <summary>
+    /// Live capture from claude 2.1.201 on 2026-07-07: after onboarding was seeded the
+    /// CLI still interposed a feature upsell ("Try the new fullscreen renderer?") in
+    /// front of the ready prompt, again swallowing /usage. plan parsed ("Max") but
+    /// windows stayed empty.
+    /// </summary>
+    private const string FullscreenUpsellSnapshotV2_1_201 =
+        "Trythenewfullscreenrenderer?·Flicker-freeoutput—fixestheflashingyouseeduringlongresponses" +
+        "·Mousesupport—clicktomoveyourcursor❯1.Yes,tryit2.NotnowEntertoconfirm·Esctocancel\r\n";
+
+    [Fact]
+    public void LooksLikeOnboardingWizard_FlagsThemePicker()
+    {
+        Assert.True(ClaudeQuotaProbe.LooksLikeOnboardingWizard(ThemeWizardSnapshotV2_1_201),
+            "the 2.1.201 first-run theme picker should be detected as an onboarding wizard");
+    }
+
+    [Fact]
+    public void LooksLikeOnboardingWizard_FlagsFullscreenUpsell()
+    {
+        Assert.True(ClaudeQuotaProbe.LooksLikeOnboardingWizard(FullscreenUpsellSnapshotV2_1_201),
+            "the 'Try the new fullscreen renderer?' upsell should be detected as an onboarding wizard");
+    }
+
+    [Fact]
+    public void LooksLikeOnboardingWizard_DoesNotFlag_ParserDriftOrUsageOrEmpty()
+    {
+        // The genuine v2.1.140 parser-drift snapshot is a real ready-REPL screen, NOT a
+        // wizard — it must NOT be misclassified, otherwise the two self-diagnosis paths blur.
+        Assert.False(ClaudeQuotaProbe.LooksLikeOnboardingWizard(BrokenSnapshotV2_1_140));
+        Assert.False(ClaudeQuotaProbe.LooksLikeOnboardingWizard("Currentsession██100%usedResets3:40am(Europe/Berlin)"));
+        Assert.False(ClaudeQuotaProbe.LooksLikeOnboardingWizard(""));
+        Assert.False(ClaudeQuotaProbe.LooksLikeOnboardingWizard("   \r\n  "));
+    }
+
+    [Fact]
+    public void OnboardingWizard_And_ParserDrift_AreDistinct()
+    {
+        // A wizard snapshot carries the welcome banner too, so LooksLikeParserDrift alone
+        // would also fire — which is exactly why ProbeAsync checks the wizard FIRST. Pin the
+        // precedence contract: the wizard predicate is true here, so the drift branch is dead.
+        Assert.True(ClaudeQuotaProbe.LooksLikeOnboardingWizard(ThemeWizardSnapshotV2_1_201));
+        // ...while the real drift snapshot is the mirror image: drift true, wizard false.
+        var driftWindows = ClaudeQuotaProbe.ParseUsageWindows(BrokenSnapshotV2_1_140);
+        Assert.True(ClaudeQuotaProbe.LooksLikeParserDrift(BrokenSnapshotV2_1_140, driftWindows));
+        Assert.False(ClaudeQuotaProbe.LooksLikeOnboardingWizard(BrokenSnapshotV2_1_140));
+    }
+
     [Fact]
     public void ParseUsageWindows_ReadsCompactCurrentWeekWithoutDate()
     {
@@ -108,6 +168,6 @@ public class ClaudeQuotaProbeTests
     [InlineData("gpt-5.5",                "gpt-5.5")]            // non-Claude unchanged
     public void NormalizeModelId_FixesDottedClaudeIdsLeavesOthers(string? input, string? expected)
     {
-        Assert.Equal(expected, ClaudeCliService.NormalizeModelId(input));
+        Assert.Equal(expected, BuiltInCliBehaviors.NormalizeModelId(input));
     }
 }

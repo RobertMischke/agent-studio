@@ -8,6 +8,11 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
+import { TooltipDirective } from 'coding-agent-chat/shared';
+import { PromptNavSplitterDirective } from './prompt-nav-splitter.directive';
 import {
   PromptAdminService,
   PromptCatalogItem,
@@ -37,7 +42,7 @@ interface PromptDiffLine {
 @Component({
   selector: 'app-prompt-admin-panel',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, SectionHeaderComponent, StudioIconComponent, TreeRowComponent, TooltipDirective, PromptNavSplitterDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './prompt-admin-panel.component.html',
   styleUrl: './prompt-admin-panel.component.scss',
@@ -53,6 +58,8 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly draft = signal<string>('');
   readonly busy = signal(false);
   readonly actionError = signal<string | null>(null);
+  readonly collapsedGroups = signal<ReadonlySet<string>>(new Set());
+  readonly onlyOverrides = signal(false);
   /** Toggles the read-only "shipped default" comparison block. */
   readonly showDefault = signal(false);
 
@@ -75,6 +82,22 @@ export class PromptAdminPanelComponent implements OnInit {
     for (const item of cat.items) if (!seen.includes(item.group)) seen.push(item.group);
     return seen.map((name) => ({ name, items: buckets.get(name)! }));
   });
+
+  readonly visibleGroups = computed<PromptGroup[]>(() => {
+    const groups = this.groups();
+    if (!this.onlyOverrides()) return groups;
+    return groups
+      .map((group) => ({ ...group, items: group.items.filter((item) => item.hasOverride) }))
+      .filter((group) => group.items.length > 0);
+  });
+
+  readonly overrideCount = computed(() =>
+    this.catalog()?.items.filter((item) => item.hasOverride).length ?? 0
+  );
+
+  readonly inheritedCount = computed(() =>
+    (this.catalog()?.items.length ?? 0) - this.overrideCount()
+  );
 
   readonly dirty = computed(() => {
     const d = this.detail();
@@ -105,7 +128,7 @@ export class PromptAdminPanelComponent implements OnInit {
     this.previewResult.set(null);
     this.slotValues.set({});
     try {
-      const detail = await this.api.getDetail(name);
+      const detail = this.withRegistryArrays(await this.api.getDetail(name));
       this.selectedName.set(name);
       this.detail.set(detail);
       this.draft.set(detail.effectiveContent);
@@ -114,6 +137,21 @@ export class PromptAdminPanelComponent implements OnInit {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  isGroupCollapsed(name: string): boolean {
+    return this.collapsedGroups().has(name);
+  }
+
+  setGroupCollapsed(name: string, collapsed: boolean): void {
+    const next = new Set(this.collapsedGroups());
+    if (collapsed) next.add(name);
+    else next.delete(name);
+    this.collapsedGroups.set(next);
+  }
+
+  overrideTooltip(item: PromptCatalogItem): string {
+    return item.defaultChangedSinceOverride ? 'Local override active. The shipped default changed since this override was created.' : 'Local override active.';
   }
 
   setSlotValue(slot: string, value: string): void {
@@ -173,7 +211,7 @@ export class PromptAdminPanelComponent implements OnInit {
     this.busy.set(true);
     this.actionError.set(null);
     try {
-      const detail = await op();
+      const detail = this.withRegistryArrays(await op());
       this.detail.set(detail);
       this.draft.set(detail.effectiveContent);
       await this.api.loadCatalog();
@@ -287,6 +325,17 @@ export class PromptAdminPanelComponent implements OnInit {
 
   private splitLines(text: string): string[] {
     return text.replace(/\r\n/g, '\n').split('\n');
+  }
+
+  /** Older prompt registries did not return these read-only metadata arrays.
+   *  Normalize at the API boundary so opening System prompts cannot escape as
+   *  a global template error while a backend and frontend version overlap. */
+  private withRegistryArrays(detail: PromptDetail): PromptDetail {
+    return {
+      ...detail,
+      slots: Array.isArray(detail.slots) ? detail.slots : [],
+      usages: Array.isArray(detail.usages) ? detail.usages : [],
+    };
   }
 
   private describe(err: unknown, fallback: string): string {

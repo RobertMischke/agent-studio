@@ -1,0 +1,66 @@
+<section class="cwa" [attr.data-testid]="'cli-window-analysis-' + cliType()">
+  <header class="cwa__header">
+    <div>
+      <span class="cwa__eyebrow">CLI account level</span>
+      <h2>{{ label() }} usage windows</h2>
+      <p>Provider quota windows, resets, and burn rate for the signed-in {{ label() }} account.</p>
+    </div>
+    <button type="button" data-testid="cli-window-refresh" [disabled]="refreshing()" (click)="refresh.emit()">
+      {{ refreshing() ? 'Refreshing...' : 'Refresh probe' }}
+    </button>
+  </header>
+
+  <div class="cwa__levels" data-testid="cli-usage-levels">
+    <article><span>Account</span><strong>{{ row()?.plan ?? 'Plan not reported' }}</strong><small>Identity exposed by the local CLI probe</small></article>
+    <article><span>Quota windows</span><strong>{{ row()?.windows?.length ?? 0 }} reported</strong><small>Provider units, not raw token totals</small></article>
+    <article><span>Recorded attribution</span><strong>{{ formatTokens(capturedTokens()) }}</strong><small>Workspace events mapped to {{ label() }} models</small></article>
+  </div>
+
+  <section class="cwa__panel" data-testid="cli-window-cards">
+    <div class="cwa__section-head"><div><h3>Window progression</h3><p>Reported use is projected at its current average burn rate until reset.</p></div></div>
+    <div class="cwa__windows">
+      @for (window of row()?.windows ?? []; track window.label) {
+        <article class="cwa__window">
+          <header><strong>{{ window.label }}</strong><span>{{ window.usedPct === null ? 'Usage unavailable' : window.usedPct + '% used' }}</span></header>
+          <div class="cwa__meter"><span [style.width.%]="window.usedPct ?? 0"></span>
+            @if (projected(window, windowHours(window.label)); as projection) {
+              <i [style.left.%]="projection > 100 ? 100 : projection" [attr.title]="projection.toFixed(0) + '% projected at reset'"></i>
+            }
+          </div>
+          <dl><div><dt>Reset</dt><dd>{{ window.resetLabel ?? 'Unknown' }}</dd></div><div><dt>Burn rate</dt><dd>{{ formatPct(windowBurn(window, windowHours(window.label))) }}</dd></div><div><dt>Projected</dt><dd>{{ projected(window, windowHours(window.label)) === null ? 'Unavailable' : projected(window, windowHours(window.label))!.toFixed(0) + '%' }}</dd></div></dl>
+        </article>
+      } @empty { <p class="cwa__empty">No quota windows were reported by the {{ label() }} probe.</p> }
+    </div>
+  </section>
+
+  <section class="cwa__panel" data-testid="cli-window-trend">
+    <div class="cwa__section-head">
+      <div><h3>Captured token trend</h3><p>Workspace event baseline for plausibility. The current timeline API does not identify CLI per bucket.</p></div>
+      <div class="cwa__periods" role="group" aria-label="Analysis period">
+        @for (item of periods; track item) { <button type="button" [class.cwa__period--active]="period() === item" [attr.aria-pressed]="period() === item" [attr.data-testid]="'cli-window-period-' + item" (click)="period.set(item)">{{ item }}</button> }
+      </div>
+    </div>
+    <div class="cwa__trend" [attr.aria-label]="'Captured token trend for ' + period()">
+      @for (point of trend(); track point.label) { <span [style.height.%]="point.height" [attr.title]="point.label + ': ' + formatTokens(point.total)"></span> }
+    </div>
+  </section>
+
+  <div class="cwa__lower">
+    <section class="cwa__panel" data-testid="cli-effort-split">
+      <div class="cwa__section-head"><div><h3>Effort split</h3><p>Reasoning effort is not present in the current aggregate contract.</p></div></div>
+      <div class="cwa__effort"><span></span></div>
+      <div class="cwa__legend"><strong>Unattributed 100%</strong><span>No inferred effort labels</span></div>
+      <h4>Recorded token streams</h4>
+      @for (part of streamParts(); track part.label) { <div class="cwa__stream"><span>{{ part.label }}</span><div><i [style.width.%]="part.pct"></i></div><strong>{{ formatTokens(part.tokens) }}</strong></div> }
+    </section>
+    <section class="cwa__panel" data-testid="cli-plausibility">
+      <div class="cwa__section-head"><div><h3>Plausibility</h3><p>Keep unlike measurement levels visibly separate.</p></div></div>
+      <ul>
+        <li><strong>Quota:</strong> provider-reported account window units.</li>
+        <li><strong>Tokens:</strong> locally captured workspace events mapped by model name.</li>
+        <li><strong>Trend:</strong> workspace-wide until the timeline contract carries CLI attribution.</li>
+      </ul>
+      <div class="cwa__future"><span>Future integration point</span><strong>Per-task cap forecast (TE-4)</strong><small>Placeholder only. No forecast is calculated yet.</small></div>
+    </section>
+  </div>
+</section>

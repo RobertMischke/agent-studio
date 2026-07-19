@@ -2,10 +2,12 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import type { OrchestratorLogEntry } from '../../../../features/orchestrator';
 import { TaskService } from '../../../../services/task.service';
-import { TokenSummaryBlockComponent } from '../../../tokens';
+import { projectIdentity } from '../../../../services/project-identity.util';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
+import { LoadDistributionComponent } from '../load-distribution/load-distribution.component';
+import { taskNavigationHref } from '../../../task-detail/state/task-url';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Per-project orchestrator log feed. Reads
  * `/api/runner/{projectName}/orchestrator-log` on init and every 10s
@@ -22,7 +24,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
-  imports: [FormsModule, TokenSummaryBlockComponent, GlobalOrchestratorCardComponent, TooltipDirective],
+  imports: [FormsModule, GlobalOrchestratorCardComponent, LoadDistributionComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-feed.html',
   styleUrl: './orchestrator-feed.scss'
@@ -34,8 +36,10 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   readonly entries = signal<OrchestratorLogEntry[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly kindFilter = signal<string>('all');
+  readonly kindFilter = signal<string>('signal');
+  readonly projectFilter = signal<string>('all');
   readonly selectedEntry = signal<OrchestratorLogEntry | null>(null);
+  readonly activeView = signal<'activity' | 'load'>('activity');
   /** Timestamp of the entry currently being overridden (one at a time). */
   readonly overridingTs = signal<string | null>(null);
   /** Submit-in-flight flag so the user cannot double-send. */
@@ -45,19 +49,39 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly kindFilters = [
-    { id: 'all', label: 'All' },
+    { id: 'signal', label: 'Signal' },
     { id: 'decision', label: 'Decisions' },
     { id: 'action', label: 'Actions' },
     { id: 'observation', label: 'Observations' },
-    { id: 'intervention', label: 'Interventions' }
+    { id: 'intervention', label: 'Interventions' },
+    { id: 'all', label: 'All activity' }
   ];
 
   /** UI shows newest entries first; the on-disk log is oldest first. */
-  readonly reversed = computed(() => [...this.entries()].reverse());
+  readonly projects = computed(() => [...new Set(this.entries().map(entry => entry.project).filter(Boolean) as string[])].sort());
+  readonly reversed = computed(() => [...this.entries()].sort((a, b) => b.ts.localeCompare(a.ts)));
   readonly visibleEntries = computed(() => {
     const filter = this.kindFilter();
-    const items = this.reversed();
-    return filter === 'all' ? items : items.filter(e => e.kind === filter);
+    const project = this.projectFilter();
+    return this.reversed().filter(entry =>
+      (project === 'all' || entry.project === project)
+      && (filter === 'all' || (filter === 'signal' ? entry.kind !== 'observation' : entry.kind === filter))
+    );
+  });
+  readonly groupedEntries = computed(() => {
+    const groups: { key: string; day: string; project: string; entries: OrchestratorLogEntry[] }[] = [];
+    for (const entry of this.visibleEntries()) {
+      const day = this.formatDay(entry.ts);
+      const project = entry.project || this.projectName();
+      const key = `${day}\u0000${project}`;
+      let group = groups.find(item => item.key === key);
+      if (!group) {
+        group = { key, day, project, entries: [] };
+        groups.push(group);
+      }
+      group.entries.push(entry);
+    }
+    return groups;
   });
   readonly countsByKind = computed(() => {
     const counts = new Map<string, number>();
@@ -77,7 +101,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
 
   refresh(silent = false): void {
     if (!silent) this.loading.set(true);
-    this.jobService.getOrchestratorLog(this.projectName()).subscribe({
+    this.jobService.getGlobalOrchestratorFeed().subscribe({
       next: (resp) => {
         const entries = resp.entries ?? [];
         this.entries.set(entries);
@@ -108,6 +132,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
 
   filterCount(kind: string): number {
     if (kind === 'all') return this.entries().length;
+    if (kind === 'signal') return this.entries().filter(entry => entry.kind !== 'observation').length;
     return this.countsByKind().get(kind) ?? 0;
   }
 
@@ -119,6 +144,21 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
 
   selectEntry(entry: OrchestratorLogEntry): void {
     this.selectedEntry.set(entry);
+  }
+
+  selectProject(project: string): void {
+    this.projectFilter.set(project);
+    this.selectedEntry.set(this.visibleEntries()[0] ?? null);
+  }
+
+  navigateToTask(entry: OrchestratorLogEntry): void {
+    if (!entry.jobId || !entry.watchPath) return;
+    this.jobService.getDetail(entry.jobId, entry.watchPath).subscribe({
+      next: (detail) => {
+        const href = taskNavigationHref(detail.info);
+        if (href) window.location.assign(href);
+      },
+    });
   }
 
   isSelected(entry: OrchestratorLogEntry): boolean {
@@ -137,6 +177,25 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     }
   }
 
+  formatDay(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    const today = new Date();
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  /**
+   * Project colour-dot hue. Delegates to the shared project-identity util
+   * (the AGT-2034 convention, an 11-hue curated palette) so a project's dot
+   * in the feed matches the exact same hue it gets on board cards, studio
+   * tabs, and task micro-cards. The former local hash produced an
+   * off-palette hue that drifted from the rest of the app.
+   */
+  projectHue(project: string): number {
+    return projectIdentity(project).hue;
+  }
+
   startOverride(entry: OrchestratorLogEntry): void {
     this.overridingTs.set(entry.ts);
     this.overrideDraft = '';
@@ -151,7 +210,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     const direction = (this.overrideDraft ?? '').trim();
     if (!direction || !entry.jobId) return;
     this.submittingOverride.set(true);
-    this.jobService.overrideOrchestratorEntry(this.projectName(), {
+    this.jobService.overrideOrchestratorEntry(entry.project || this.projectName(), {
       originalTs: entry.ts,
       jobId: entry.jobId,
       newDirection: direction

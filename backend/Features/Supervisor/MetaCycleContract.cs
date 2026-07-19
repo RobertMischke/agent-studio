@@ -88,7 +88,7 @@ public sealed record MetaCycleFinding(
 /// One report from the per-project meta-cycle. Append-only; one file per
 /// cycle under <c>logs/meta/&lt;project&gt;/meta-cycle/&lt;timestamp&gt;.json</c>.
 /// Field-level rules live in
-/// <c>docs/schemas/meta-cycle-report.schema.json</c>; this record is the
+/// <c>docs/app/schemas/meta-cycle-report.schema.json</c>; this record is the
 /// in-process projection.
 /// </summary>
 public sealed record MetaCycleReport(

@@ -388,11 +388,11 @@ public class SoftwareArchitectureDriftAnalysisServiceTests : IDisposable
     {
         WriteArchitectureModel(buildElevenElements: false);
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
-        File.WriteAllText(Path.Combine(_repoRoot, "docs", "architecture-decisions.md"), "# ADR\n", Encoding.UTF8);
+        WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend", "Services", "Drift"));
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "schemas"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "app", "schemas"));
         File.WriteAllText(
-            Path.Combine(_repoRoot, "docs", "schemas", "drift-report.schema.json"), "{}", Encoding.UTF8);
+            Path.Combine(_repoRoot, "docs", "app", "schemas", "drift-report.schema.json"), "{}", Encoding.UTF8);
         Directory.CreateDirectory(Path.Combine(_repoRoot, "backend.Tests"));
         Directory.CreateDirectory(Path.Combine(_repoRoot, "frontend", "e2e"));
         WriteJob("6-completed", "shipped-task", "Shipped");
@@ -445,9 +445,9 @@ public class SoftwareArchitectureDriftAnalysisServiceTests : IDisposable
         Assert.Contains("agent-taskboard-test", rendered);
         Assert.Contains("frontend-shell", rendered);
         Assert.Contains("backend-api", rendered);
-        Assert.Contains("docs/architecture-decisions.md", rendered);
+        Assert.Contains("docs/system/architecture/decisions/adr-archive.md", rendered);
         Assert.Contains("backend/Services/Drift/", rendered);
-        Assert.Contains("docs/schemas/drift-report.schema.json", rendered);
+        Assert.Contains("docs/app/schemas/drift-report.schema.json", rendered);
         Assert.Contains("backend.Tests/", rendered);
         Assert.Contains("6-completed/shipped-task", rendered);
         Assert.Contains("do not modify any source file", rendered);
@@ -457,6 +457,13 @@ public class SoftwareArchitectureDriftAnalysisServiceTests : IDisposable
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
+
+    private void WriteRepoFile(string relPath, string content)
+    {
+        var full = Path.Combine(_repoRoot, relPath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, content, Encoding.UTF8);
+    }
 
     private void WriteArchitectureModel(bool buildElevenElements)
     {

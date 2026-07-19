@@ -2,6 +2,15 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import type { QuotaReport, QuotaSnapshot } from '../models/quota.model';
 
+export interface CliModelRouteProfile {
+  cliType: string;
+  primaryModel: string | null;
+  primaryThinkingLevel: string | null;
+  fallbackCliType: string | null;
+  fallbackModel: string | null;
+  fallbackThinkingLevel: string | null;
+}
+
 /**
  * Cycle 10d API client for the per-CLI quota / rate-limit endpoints.
  * Lifted out of the TaskService god-service per ADR-0034 so the per-feature
@@ -64,5 +73,17 @@ export class QuotaApiService {
       defaultCapPct: number;
       caps: Record<string, Record<string, number>>;
     }>(`${this.baseUrl}/cli/quota/caps`, { cliType, windowLabel, capPct });
+  }
+
+  getModelRoutes() {
+    return this.http.get<{ profiles: Record<string, CliModelRouteProfile> }>(
+      `${this.baseUrl}/cli/quota/model-routes`,
+    );
+  }
+
+  setModelRoute(profile: CliModelRouteProfile) {
+    return this.http.put<CliModelRouteProfile>(
+      `${this.baseUrl}/cli/quota/model-routes`, profile,
+    );
   }
 }

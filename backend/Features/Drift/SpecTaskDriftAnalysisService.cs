@@ -423,24 +423,48 @@ public sealed class SpecTaskDriftAnalysisService
         AddIfExists(docs, repoRoot, "ROADMAP.md", "ROADMAP");
         AddIfExists(docs, repoRoot, "README.md", "README");
         AddIfExists(docs, repoRoot, "AGENTS.md", "AGENTS");
-        AddIfExists(docs, repoRoot, "docs/design-principles.md", "Design principles");
-        AddIfExists(docs, repoRoot, "docs/agent-task-contract.md", "Agent task contract");
-        AddIfExists(docs, repoRoot, "docs/filesystem-contract.md", "Filesystem contract");
-        AddIfExists(docs, repoRoot, "docs/architecture-decisions.md", "Architecture decisions (ADR archive)");
+        AddIfExists(docs, repoRoot, "docs/quality/design-principles.md", "Design principles");
+        AddIfExists(docs, repoRoot, "docs/system/contracts/agent-task.md", "Agent task contract");
+        AddIfExists(docs, repoRoot, "docs/system/contracts/filesystem.md", "Filesystem contract");
+        AddIfExists(docs, repoRoot, "docs/system/architecture/decisions/adr-archive.md", "Architecture decisions (ADR archive)");
 
-        // Mockup folders carry per-project specs; surface each direct subfolder.
-        var mockups = Path.Combine(repoRoot, "docs", "mockups");
+        // Mockups carry per-project specs. After the 2026-07 docs migration
+        // standalone mockups live under docs/concepts/mockups/ (loose HTML or
+        // nested subfolders) and the active families were promoted to
+        // top-level docs/concepts/<family>/ folders.
+        var mockups = Path.Combine(repoRoot, "docs", "concepts", "mockups");
         if (Directory.Exists(mockups))
         {
+            foreach (var file in Directory.EnumerateFiles(mockups, "*.html").OrderBy(f => f, StringComparer.Ordinal))
+            {
+                var name = Path.GetFileName(file);
+                docs.Add(new DriftRef($"docs/concepts/mockups/{name}", $"Mockup / spec: {Path.GetFileNameWithoutExtension(file)}"));
+            }
             foreach (var dir in Directory.EnumerateDirectories(mockups).OrderBy(d => d, StringComparer.Ordinal))
             {
                 var name = Path.GetFileName(dir);
-                docs.Add(new DriftRef($"docs/mockups/{name}/", $"Mockup / spec: {name}"));
+                docs.Add(new DriftRef($"docs/concepts/mockups/{name}/", $"Mockup / spec: {name}"));
             }
+        }
+
+        foreach (var family in PromotedMockupFamilies)
+        {
+            if (Directory.Exists(Path.Combine(repoRoot, "docs", "concepts", family)))
+                docs.Add(new DriftRef($"docs/concepts/{family}/", $"Mockup / spec: {family}"));
         }
 
         return docs;
     }
+
+    // Active mockup families promoted to top-level concept folders during the
+    // 2026-07 docs migration (former docs/mockups/<family>/ -> docs/concepts/<family>/).
+    private static readonly string[] PromotedMockupFamilies =
+    {
+        "project-urls",
+        "project-overview-dashboard",
+        "task-processing-pipeline",
+        "task-detail-header-state-actions",
+    };
 
     private static IReadOnlyList<ActiveJobRef> BuildActiveJobs(string projectRoot)
     {

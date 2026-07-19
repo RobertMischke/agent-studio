@@ -141,9 +141,37 @@ public sealed class WorktreeTaskLifecycle
         // 2) Branch exists but is detached from any worktree -> re-attach it.
         if (_git.BranchExists(repoRoot, branch))
         {
-            // A stale dir at the canonical path (registered-but-orphaned, or a
-            // leftover from a partial teardown) would block the attach; clear it.
-            ClearStaleCanonicalWorktreePath(repoRoot, taskId, branch, path);
+            // A stale dir/registration at the canonical path (registered-but-
+            // orphaned, or a leftover from a partial teardown) would block the
+            // attach. Clear it AND verify it is actually free — a busy holder
+            // (leftover capture server) means reject cleanly here instead of
+            // letting the add throw a confusing "already exists" (AGT-1785).
+            if (!ClearStaleCanonicalWorktreePath(repoRoot, taskId, branch, path))
+                return new WorktreePreparation(false, null, branch, $"Orphan worktree dir busy at {path}; deferring task {taskId}.");
+
+            // S11: a stale branch that is folded into the integration branch AND
+            // strictly BEHIND its current tip (a leftover from a failed/escalated
+            // run) would be re-attached onto OLD commits instead of cutting fresh.
+            // When it is merged-and-stale and not checked out anywhere, delete it
+            // and fresh-cut so the rerun gets the latest code.
+            //  - MERGED-AND-STALE only: an unmerged branch carries real in-progress
+            //    work and is preserved (re-attached below) — same invariant as
+            //    TeardownIfIntegrated.
+            //  - A branch already AT the integration tip has nothing to gain from a
+            //    recut, so it is re-attached as before (no behavior change).
+            var checkedOut = _git.WorktreePathForBranch(repoRoot, branch);
+            var notCheckedOut = string.IsNullOrEmpty(checkedOut) || !Directory.Exists(checkedOut);
+            var mergedButStale = _git.IsAncestor(repoRoot, branch, integrationBranch)
+                                 && !_git.IsAncestor(repoRoot, integrationBranch, branch);
+            if (notCheckedOut && mergedButStale)
+            {
+                _git.DeleteBranch(repoRoot, branch, force: true);
+                _logger.LogInformation(
+                    "Recut: deleted merged stale branch {Branch} for task {TaskId}; cutting fresh off {Integration}.",
+                    branch, taskId, integrationBranch);
+                return PrepareWithRetry(repoRoot, taskId, integrationBranch, worktreeRoot, branch, path);
+            }
+
             var attach = _git.WorktreeAddExisting(repoRoot, path, branch);
             if (attach.Success)
             {
@@ -157,9 +185,37 @@ public sealed class WorktreeTaskLifecycle
         // 3) First run for this task -> fresh cut off the integration branch.
         //    A stale dir at the canonical path (leftover from a crashed/partial
         //    run whose branch was already pruned/deleted) makes `git worktree
-        //    add` fail with "already exists"; clear it so the fresh cut succeeds.
+        //    add` fail with "already exists"; clear it (and verify free) so the
+        //    fresh cut succeeds.
+        if (!ClearStaleCanonicalWorktreePath(repoRoot, taskId, branch, path))
+            return new WorktreePreparation(false, null, branch, $"Orphan worktree dir busy at {path}; deferring task {taskId}.");
+        return PrepareWithRetry(repoRoot, taskId, integrationBranch, worktreeRoot, branch, path);
+    }
+
+    /// <summary>
+    /// S11: fresh-cut with one bounded retry. If <see cref="Prepare"/>'s
+    /// <c>git worktree add -b</c> still reports a path/branch collision (a rare
+    /// race where git re-materialised the registration between the prune and the
+    /// add), re-prune once and retry exactly once. No infinite retry — a second
+    /// collision returns the failure for the caller's existing reject path.
+    /// </summary>
+    private WorktreePreparation PrepareWithRetry(string repoRoot, string taskId, string integrationBranch, string worktreeRoot, string branch, string path)
+    {
+        var first = Prepare(repoRoot, taskId, integrationBranch, worktreeRoot);
+        if (first.Success || !LooksLikeWorktreeCollision(first.Error))
+            return first;
+
+        _git.WorktreePrune(repoRoot);
         ClearStaleCanonicalWorktreePath(repoRoot, taskId, branch, path);
+        _logger.LogInformation("Retrying fresh worktree cut for task {TaskId} after collision: {Error}", taskId, first.Error);
         return Prepare(repoRoot, taskId, integrationBranch, worktreeRoot);
+    }
+
+    private static bool LooksLikeWorktreeCollision(string? error)
+    {
+        if (string.IsNullOrEmpty(error)) return false;
+        var e = error.ToLowerInvariant();
+        return e.Contains("already exists") || e.Contains("already registered") || e.Contains("already checked out") || e.Contains("missing but already registered");
     }
 
     /// <summary>
@@ -337,6 +393,22 @@ public sealed class WorktreeTaskLifecycle
     /// branch is already gone, is a clean no-op. This is the deferred counterpart
     /// to <see cref="Teardown"/>: the runner no longer tears down per run so a
     /// resume/reissue can reuse the worktree (<see cref="PrepareOrReuse"/>).
+    ///
+    /// <para>
+    /// AGT-1945 invariant: a worktree that still carries UNCOMMITTED work must
+    /// never be torn down. A run whose auto-commit failed or was skipped leaves
+    /// its deliverable only as dirty/untracked files in the worktree; the branch
+    /// tip then still equals <paramref name="integrationBranch"/>, so the
+    /// merge-ancestor gate below reads it as "already folded in" and the
+    /// force-remove would wipe the work irreversibly. So we snapshot any
+    /// uncommitted work onto <c>task/&lt;id&gt;</c> as a platform WIP commit
+    /// FIRST (commit-push-doctrine: the platform owns the commit boundary). That
+    /// commit puts the branch ahead of the integration branch, which then trips
+    /// the same merged-ancestor gate into deferring teardown so a reissue / human
+    /// review can still reach the work. If the snapshot itself fails we refuse to
+    /// remove the worktree and report the failure rather than silently dropping
+    /// the deliverable.
+    /// </para>
     /// </summary>
     public TeardownResult TeardownIfIntegrated(string repoRoot, string taskId, string integrationBranch, string worktreeRoot)
     {
@@ -347,6 +419,24 @@ public sealed class WorktreeTaskLifecycle
         if (!_git.BranchExists(repoRoot, branch))
             return new TeardownResult(true, null); // never isolated / already cleaned
 
+        var path = _git.WorktreePathForBranch(repoRoot, branch)
+                   ?? Path.Combine(worktreeRoot, WorktreeDirName(taskId));
+
+        // Preserve uncommitted work BEFORE any merge-state check: the check only
+        // looks at committed history, so a dirty worktree on a branch that reads
+        // as "merged" would otherwise be force-removed and lost (AGT-1945).
+        if (Directory.Exists(path) && _git.RepoHasUncommittedChanges(path))
+        {
+            if (!PreserveUncommittedWork(taskId, branch, path))
+            {
+                var error = $"Refusing teardown for task {taskId}: worktree at {path} still carries "
+                          + $"uncommitted work that could not be snapshotted onto {branch}; kept intact "
+                          + "so the deliverable is not lost.";
+                _logger.LogWarning("{Message}", error);
+                return new TeardownResult(false, error);
+            }
+        }
+
         if (!_git.IsAncestor(repoRoot, branch, integrationBranch))
         {
             _logger.LogInformation(
@@ -355,9 +445,49 @@ public sealed class WorktreeTaskLifecycle
             return new TeardownResult(true, null);
         }
 
-        var path = _git.WorktreePathForBranch(repoRoot, branch)
-                   ?? Path.Combine(worktreeRoot, WorktreeDirName(taskId));
         return Teardown(repoRoot, path, branch, deleteBranch: true, force: true, deleteRemoteBranch: true);
+    }
+
+    /// <summary>
+    /// AGT-1945 safety net: snapshot a worktree's uncommitted changes onto its
+    /// <c>task/&lt;id&gt;</c> branch as a platform WIP commit before teardown
+    /// removes the worktree. The commit is platform-owned (a run inside a managed
+    /// slot never commits for itself) and carries the durable
+    /// <see cref="GitService.WorktreeRunCommitTrailer"/> so per-task history
+    /// reconstruction still finds it. Returns <c>true</c> when the worktree is
+    /// clean afterwards - either the snapshot committed, or a benign race had
+    /// already left nothing to commit - and <c>false</c> only when a real git
+    /// failure means the work is still uncommitted and must not be discarded.
+    /// </summary>
+    private bool PreserveUncommittedWork(string taskId, string branch, string worktreePath)
+    {
+        var message =
+            "chore(wip): preserve uncommitted task work before teardown\n\n"
+            + "Platform WIP safety commit (AGT-1945): the worktree still carried "
+            + $"uncommitted changes at terminal teardown; snapshotting onto {branch} "
+            + "so a reissue or human review never loses the deliverable.\n\n"
+            + GitService.WorktreeRunCommitTrailer(taskId);
+
+        var commit = _git.WorktreeRunCommit(taskId, worktreePath, message);
+        if (commit.Success)
+        {
+            _logger.LogWarning(
+                "Preserved uncommitted work for task {TaskId} as WIP safety commit {Sha} on {Branch} before teardown.",
+                taskId, commit.Sha ?? "<unknown>", branch);
+            return true;
+        }
+
+        // WorktreeRunCommit reports a clean tree as a non-success "Nothing to
+        // commit"; treat that as already-safe (the dirt was committed between the
+        // status probe and here).
+        if (!string.IsNullOrEmpty(commit.Error)
+            && commit.Error.Contains("Nothing to commit", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        _logger.LogWarning(
+            "Could not preserve uncommitted work for task {TaskId} on {Branch}: {Error}",
+            taskId, branch, commit.Error);
+        return false;
     }
 
     /// <summary>
@@ -397,22 +527,46 @@ public sealed class WorktreeTaskLifecycle
         return sane[..24] + "-" + hash;
     }
 
-    private void ClearStaleCanonicalWorktreePath(string repoRoot, string taskId, string branch, string path)
+    /// <summary>
+    /// S11 self-heal: ensure the canonical worktree path is FREE for a fresh
+    /// <c>git worktree add</c>. Removes a stale dir (git worktree remove, then a
+    /// reparse-safe manual delete if it survives), then RE-PRUNES so any admin
+    /// registration whose dir is now gone is dropped. Returns <c>true</c> iff
+    /// the path is actually clear afterwards; <c>false</c> means a holder still
+    /// has it busy (e.g. a leftover capture server) and the caller must reject
+    /// cleanly rather than collide on the add.
+    /// </summary>
+    private bool ClearStaleCanonicalWorktreePath(string repoRoot, string taskId, string branch, string path)
     {
         if (!Directory.Exists(path))
-            return;
+        {
+            // The top-of-PrepareOrReuse prune already drops registrations whose
+            // dir is gone, so an absent path is clean.
+            return true;
+        }
 
         var remove = _git.WorktreeRemove(repoRoot, path);
-        if (!Directory.Exists(path))
-            return;
-
-        try
+        if (Directory.Exists(path))
         {
-            DeleteDirectoryWithoutFollowingReparsePoints(path);
-            if (!Directory.Exists(path))
+            try
             {
-                _logger.LogInformation(
-                    "Deleted stale worktree directory for task {TaskId}: branch {Branch} at {Path} after git worktree remove returned {RemoveSuccess} ({RemoveError})",
+                DeleteDirectoryWithoutFollowingReparsePoints(path);
+                if (!Directory.Exists(path))
+                {
+                    _logger.LogInformation(
+                        "Deleted stale worktree directory for task {TaskId}: branch {Branch} at {Path} after git worktree remove returned {RemoveSuccess} ({RemoveError})",
+                        taskId,
+                        branch,
+                        path,
+                        remove.Success,
+                        remove.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to delete stale worktree directory for task {TaskId}: branch {Branch} at {Path} after git worktree remove returned {RemoveSuccess} ({RemoveError})",
                     taskId,
                     branch,
                     path,
@@ -420,17 +574,18 @@ public sealed class WorktreeTaskLifecycle
                     remove.Error);
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to delete stale worktree directory for task {TaskId}: branch {Branch} at {Path} after git worktree remove returned {RemoveSuccess} ({RemoveError})",
-                taskId,
-                branch,
-                path,
-                remove.Success,
-                remove.Error);
-        }
+
+        // S11 prune-order fix (AGT-1785): the prune at the top of PrepareOrReuse
+        // ran while this orphan dir still existed, so `git worktree prune` (which
+        // only drops entries whose dir is GONE) could not clear its registration.
+        // Re-prune now that the dir is removed, otherwise the next
+        // `git worktree add` collides with the surviving registration
+        // ("<path> is already registered") → pick-reverted-no-run loop (AGT-1791).
+        _git.WorktreePrune(repoRoot);
+
+        // Verify: a detached holder (leftover Playwright capture server) may still
+        // hold the dir busy so the manual delete threw and the path is occupied.
+        return !Directory.Exists(path);
     }
 
     private static void DeleteDirectoryWithoutFollowingReparsePoints(string path)

@@ -1,310 +1,18 @@
+// Specs for the app-side activity-log helpers. Coverage for the canonical
+// grouper (`parseActivityLog`) and turn builder (`buildConversationTurns`)
+// moved to the coding-agent-chat library together with the implementations.
 import { describe, expect, it } from 'vitest';
 import {
   binToolBurstByKind,
-  buildChatMessages,
   buildConversationTurns,
-  defaultActivityLogFilters,
   deriveLiveStatus,
-  filterActivityGroups,
-  flattenActivityLines,
   formatBurstDuration,
   formatLiveSince,
+  INTERNAL_EVENT_MARKER,
   parseActivityLog,
-  parseOrchestratorSteer,
   summarizeToolBurst
 } from './activity-log.parser';
 import { CliOutputLine } from '../../../models/task.model';
-
-describe('parseActivityLog', () => {
-  it('compresses adjacent read entries into a single expandable group', () => {
-    const groups = parseActivityLog([
-      line('* Read prompt.md'),
-      line('  | prompt.md'),
-      line('* Read status.md'),
-      line('  | status.md'),
-      line('* Read job-detail.ts'),
-      line('  | frontend/src/app/components/job-detail.ts')
-    ]);
-
-    expect(groups).toHaveLength(1);
-    expect(groups[0].kind).toBe('read');
-    expect(groups[0].title).toBe('Reading files ×3');
-    expect(groups[0].collapsedByDefault).toBe(true);
-    expect(groups[0].lines).toHaveLength(6);
-  });
-
-  it('compresses adjacent edit and command bursts so trace view stays readable', () => {
-    // The trace view used to show every Edit / Run as its own row; long
-    // refactor sessions made it a wall of repeated entries that drowned out
-    // the substantive output. All tool kinds now collapse the same way.
-    const groups = parseActivityLog([
-      line('* Edit src/a.ts'),
-      line('  | a.ts'),
-      line('* Edit src/b.ts'),
-      line('  | b.ts'),
-      line('* Run npm test (shell)'),
-      line('  | running tests'),
-      line('* Run npm run lint (shell)'),
-      line('  | linting')
-    ]);
-
-    expect(groups.map((g) => g.kind)).toEqual(['edit', 'command']);
-    expect(groups[0].title).toBe('Edits ×2');
-    expect(groups[1].title).toBe('Commands ×2');
-    expect(groups[0].collapsedByDefault).toBe(true);
-    expect(groups[1].collapsedByDefault).toBe(true);
-  });
-
-  it('classifies shell output and failed tool calls', () => {
-    const groups = parseActivityLog([
-      line('* Baseline frontend build (shell)'),
-      line('  | npm run build'),
-      line('x Read prompt.md'),
-      line('  | Path does not exist')
-    ]);
-
-    expect(groups[0].kind).toBe('command');
-    expect(groups[0].status).toBe('ok');
-    expect(groups[1].kind).toBe('error');
-    expect(groups[1].status).toBe('error');
-  });
-
-  it('uses the same filters for raw and parsed output', () => {
-    const groups = parseActivityLog([
-      line('* Read prompt.md'),
-      line('  | prompt.md'),
-      line('* Edit'),
-      line('  | Edit frontend/src/app/components/job-detail.ts')
-    ]);
-    const filters = { ...defaultActivityLogFilters, read: false };
-    const visible = filterActivityGroups(groups, filters);
-
-    expect(visible.map((group) => group.kind)).toEqual(['edit']);
-    expect(flattenActivityLines(visible).map((entry) => entry.text)).toEqual([
-      '* Edit',
-      '  | Edit frontend/src/app/components/job-detail.ts'
-    ]);
-  });
-  it('treats [user] stream lines as their own message group, never folded into adjacent agent output', () => {
-    const groups = parseActivityLog([
-      line('* Read prompt.md'),
-      line('  | prompt.md'),
-      line('please switch to dark mode', 'user'),
-      line('* Edit', 'stdout'),
-      line('  | Edit src/styles.css')
-    ]);
-
-    // The user line must be its own group sandwiched between the read and the edit.
-    const kinds = groups.map(g => g.kind);
-    expect(kinds).toEqual(['read', 'message', 'edit']);
-    expect(groups[1].lines).toHaveLength(1);
-    expect(groups[1].lines[0].stream).toBe('user');
-    expect(groups[1].title).toBe('please switch to dark mode');
-  });
-
-  it('buildChatMessages assigns role="user" with author "You" for [user]-stream lines', () => {
-    const groups = parseActivityLog([
-      line('please switch to dark mode', 'user')
-    ]);
-    const messages = buildChatMessages(groups);
-
-    expect(messages).toHaveLength(1);
-    expect(messages[0].role).toBe('user');
-    expect(messages[0].author).toBe('You');
-    expect(messages[0].title).toBe('please switch to dark mode');
-  });
-
-  it('parseOrchestratorSteer recovers Need / Why / Options from a [steer] line', () => {
-    // The backend writes the steer line as
-    //   "[steer] [orchestrator] **Need:** X **Why:** Y **Options:** A) ... | B) ..."
-    // The parser strips both bracketed tags and pulls out structured fields
-    // so the chat row can render dedicated controls.
-    const text = '[steer] [orchestrator] **Need:** screenshot of the affected column **Why:** the agent referenced an image we cannot see **Options:** A) rerun the build | B) check the dev console';
-    const parsed = parseOrchestratorSteer(text);
-    expect(parsed).not.toBeNull();
-    expect(parsed!.need).toBe('screenshot of the affected column');
-    expect(parsed!.why).toBe('the agent referenced an image we cannot see');
-    expect(parsed!.options).toEqual(['rerun the build', 'check the dev console']);
-    expect(parsed!.needsScreenshot).toBe(true);
-  });
-
-  it('parseOrchestratorSteer returns null for non-steer orchestrator lines', () => {
-    expect(parseOrchestratorSteer('[reissue] something')).toBeNull();
-    expect(parseOrchestratorSteer('[decision] [orchestrator] Auto-mode decision: do X')).toBeNull();
-    expect(parseOrchestratorSteer('')).toBeNull();
-  });
-
-  it('parseOrchestratorSteer returns null when Need is missing', () => {
-    // Malformed steer (no Need:) is treated as not-a-steer so the caller
-    // falls back to the generic orchestrator pill rather than rendering
-    // an empty card.
-    const parsed = parseOrchestratorSteer('[steer] **Why:** some reason');
-    expect(parsed).toBeNull();
-  });
-
-  it('parseOrchestratorSteer needsScreenshot toggles on screenshot keywords', () => {
-    expect(parseOrchestratorSteer('[steer] **Need:** a screenshot of the modal')!.needsScreenshot).toBe(true);
-    expect(parseOrchestratorSteer('[steer] **Need:** an image of the page')!.needsScreenshot).toBe(true);
-    expect(parseOrchestratorSteer('[steer] **Need:** pick option A or B')!.needsScreenshot).toBe(false);
-  });
-
-  it('keeps [orchestrator] stream lines as their own group with role "orchestrator"', () => {
-    const groups = parseActivityLog([
-      line('* Read prompt.md'),
-      line('  | prompt.md'),
-      line('[reissue] Session was lost and the agent exited without acting on your follow-up.', 'orchestrator'),
-      line('* Edit', 'stdout'),
-      line('  | Edit src/styles.css')
-    ]);
-
-    const kinds = groups.map(g => g.kind);
-    expect(kinds).toContain('orchestrator');
-    const orchestrator = groups.find(g => g.kind === 'orchestrator');
-    expect(orchestrator?.lines[0].stream).toBe('orchestrator');
-
-    const messages = buildChatMessages(groups);
-    const orchMsg = messages.find(m => m.role === 'orchestrator');
-    expect(orchMsg).toBeDefined();
-    expect(orchMsg?.author).toBe('Orchestrator');
-  });
-
-  it('parses Codex JSONL agent messages and command executions without raw JSON titles', () => {
-    const groups = parseActivityLog(codexJsonlSample());
-
-    expect(groups.map((g) => g.kind)).toEqual(['other', 'message', 'command']);
-    expect(groups[0].title).toBe('Codex turn.started');
-    expect(groups[0].lines[0].text).toContain('{"type":"turn.started"}');
-    expect(groups[1].title).toBe('I will make the frontend change.');
-    expect(groups[1].lines[0].text).toBe('I will make the frontend change.');
-    expect(groups[2].title).toBe('git status --short');
-    expect(groups[2].subtitle).toContain('git status --short');
-    expect(groups.some((group) => group.title.includes('"type"'))).toBe(false);
-    expect(flattenActivityLines(groups).filter((entry) => entry.text.includes('{"type"'))).toHaveLength(1);
-  });
-
-  it('marks failed Codex command executions as error-status command groups', () => {
-    const groups = parseActivityLog([
-      line('{"type":"item.completed","item":{"id":"item_9","type":"command_execution","command":"npm test","aggregated_output":"FAIL parser spec","exit_code":1,"status":"failed"}}')
-    ]);
-
-    expect(groups).toHaveLength(1);
-    expect(groups[0].kind).toBe('command');
-    expect(groups[0].status).toBe('error');
-    expect(groups[0].title).toBe('npm test');
-    expect(groups[0].subtitle).toContain('exit 1');
-    expect(groups[0].lines.map((entry) => entry.text)).toEqual([
-      '$ npm test [failed] [exit 1]',
-      'FAIL parser spec'
-    ]);
-  });
-
-  it('summarizes in-progress Codex command executions when no completion frame has arrived yet', () => {
-    const groups = parseActivityLog([
-      line('{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"Get-Content frontend\\\\AGENTS.md","aggregated_output":"","exit_code":null,"status":"in_progress"}}')
-    ]);
-
-    expect(groups).toHaveLength(1);
-    expect(groups[0].kind).toBe('command');
-    expect(groups[0].status).toBe('ok');
-    expect(groups[0].title).toBe('Get-Content frontend\\AGENTS.md');
-    expect(groups[0].lines.map((entry) => entry.text)).toEqual([
-      '$ Get-Content frontend\\AGENTS.md [in_progress]'
-    ]);
-  });
-
-  it('keeps unknown Codex JSON frames as collapsed trace-only debug groups', () => {
-    const groups = parseActivityLog([
-      line('{"type":"session.created","session_id":"abc123"}')
-    ]);
-
-    expect(groups).toHaveLength(1);
-    expect(groups[0].kind).toBe('other');
-    expect(groups[0].title).toBe('Codex session.created');
-    expect(groups[0].collapsedByDefault).toBe(true);
-    expect(groups[0].lines[0].text).toContain('"session.created"');
-  });
-});
-
-describe('buildConversationTurns', () => {
-  it('groups consecutive tool actions into a single tool burst with counts', () => {
-    const groups = parseActivityLog([
-      line('* Read prompt.md'),
-      line('  | prompt.md'),
-      line('* Read status.md'),
-      line('  | status.md'),
-      line('* Read job.json'),
-      line('  | job.json'),
-      line('Looks good — fix is small.'),
-      line('Will adjust spacing.')
-    ]);
-    const turns = buildConversationTurns(groups);
-
-    // The 3 reads compress into one batch group, then the agent text becomes
-    // its own turn. Result: 2 turns in alternation (tools, agent).
-    expect(turns.map((t) => t.kind)).toEqual(['tools', 'agent']);
-    expect(turns[0].toolSummary?.total).toBeGreaterThanOrEqual(3);
-    expect(turns[0].toolSummary?.counts.read).toBeGreaterThanOrEqual(3);
-    expect(turns[1].text).toContain('Looks good');
-    expect(turns[1].text).toContain('Will adjust spacing');
-  });
-
-  it('keeps user messages as their own turn between agent runs', () => {
-    const groups = parseActivityLog([
-      line('* Read prompt.md'),
-      line('  | prompt.md'),
-      line('please continue', 'user'),
-      line('Done — committed.', 'stdout')
-    ]);
-    const turns = buildConversationTurns(groups);
-
-    expect(turns.map((t) => t.kind)).toEqual(['tools', 'user', 'agent']);
-    expect(turns[1].text).toBe('please continue');
-    expect(turns[2].text).toContain('Done');
-  });
-
-  it('filters [taskboard] runtime markers out of the Conversation view', () => {
-    const groups = parseActivityLog([
-      line('[taskboard] Started claude CLI (PID 1234), model=claude-opus-4-7', 'system'),
-      line('Hello, working on it now.', 'stdout'),
-      line('[taskboard] claude CLI exited: status=completed, exitCode=0, duration=12,3s', 'system')
-    ]);
-    const turns = buildConversationTurns(groups);
-
-    // The two [taskboard] system markers must not produce conversation
-    // turns; only the agent reply does. They still live in the raw
-    // groups for the Trace view.
-    expect(turns).toHaveLength(1);
-    expect(turns[0].kind).toBe('agent');
-    expect(turns[0].text).toContain('Hello, working on it now.');
-  });
-
-  it('treats unattached errors as system turns so they are not buried', () => {
-    const groups = parseActivityLog([
-      line('Build started.'),
-      line('x Some failure', 'stderr'),
-      line('Recovered.', 'stdout')
-    ]);
-    const turns = buildConversationTurns(groups);
-
-    expect(turns.map((t) => t.kind)).toContain('system');
-    const sys = turns.find((t) => t.kind === 'system');
-    expect(sys?.status).toBe('error');
-  });
-
-  it('keeps Codex JSONL raw frames out of Conversation text while preserving tool turns', () => {
-    const groups = parseActivityLog(codexJsonlSample());
-    const turns = buildConversationTurns(groups);
-    const conversationText = turns.map((turn) => turn.text).join('\n');
-
-    expect(turns.map((turn) => turn.kind)).toEqual(['agent', 'tools']);
-    expect(turns[0].text).toBe('I will make the frontend change.');
-    expect(conversationText).not.toContain('{"type"');
-    expect(turns[1].toolSummary?.counts.command).toBe(1);
-
-    const defaultVisibleTurns = turns.filter((turn) => turn.kind !== 'tools');
-    expect(defaultVisibleTurns.map((turn) => turn.kind)).toEqual(['agent']);
-  });
-});
 
 describe('summarizeToolBurst', () => {
   it('counts batched groups by their batch size, not by group count', () => {
@@ -473,6 +181,57 @@ describe('formatLiveSince', () => {
   });
 });
 
+describe('parseActivityLog raw-JSON guard (host wrapper)', () => {
+  // These frames used to leak through the library's fallback branch, which
+  // turns any unrecognised stdout line into a `message` group whose title is
+  // the raw text. The host wrapper redacts them before the library sees them.
+  const rawFrames = [
+    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}',
+    '{"type":"thinking","thinking":"reasoning","signature":"Er8BCkg=="}',
+    '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"body"}]}}',
+    '{"type":"some_new_frame_type","message":{"role":"assistant","content":[]}}',
+  ];
+
+  it('never surfaces raw stream-json in any group title, subtitle, or line text', () => {
+    const groups = parseActivityLog(rawFrames.map((raw) => line(raw)));
+    for (const group of groups) {
+      expect(group.title).not.toContain('"type"');
+      expect(group.subtitle).not.toContain('"type"');
+      for (const l of group.lines) {
+        expect(l.text).not.toContain('"type"');
+      }
+    }
+    // The redaction is visible as the compact marker, and the original frame is
+    // still recoverable for the Trace / debug disclosure.
+    // The library's `ActivityLogGroup.lines` element type is structurally the
+    // same as the app model but does not declare the host-only `internalDetail`
+    // field the projection guard attaches, so read it through the app shape.
+    const markerLine = groups
+      .flatMap((g) => g.lines as CliOutputLine[])
+      .find((l) => l.text === INTERNAL_EVENT_MARKER);
+    expect(markerLine).toBeTruthy();
+    expect(markerLine?.internalDetail).toContain('"type"');
+  });
+
+  it('never surfaces raw stream-json in the conversation turns', () => {
+    const turns = buildConversationTurns(parseActivityLog(rawFrames.map((raw) => line(raw))));
+    for (const turn of turns) {
+      expect(turn.text ?? '').not.toContain('"type"');
+    }
+  });
+
+  it('leaves genuine agent prose and tool actions untouched', () => {
+    const groups = parseActivityLog([
+      line('Here is my plan for the change.'),
+      line('* Read prompt.md'),
+      line('  | prompt.md'),
+    ]);
+    const titles = groups.map((g) => g.title);
+    expect(titles.some((t) => t.includes('Here is my plan'))).toBe(true);
+    expect(groups.every((g) => g.title !== INTERNAL_EVENT_MARKER)).toBe(true);
+  });
+});
+
 function line(text: string, stream = 'stdout', timestamp = '2026-04-26T12:00:00.000Z'): CliOutputLine {
   return {
     timestamp,
@@ -481,11 +240,3 @@ function line(text: string, stream = 'stdout', timestamp = '2026-04-26T12:00:00.
   };
 }
 
-function codexJsonlSample(): CliOutputLine[] {
-  return [
-    line('{"type":"turn.started"}'),
-    line('{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I will make the frontend change."}}'),
-    line('{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"git status --short","aggregated_output":"","exit_code":null,"status":"in_progress"}}'),
-    line('{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"git status --short","aggregated_output":"","exit_code":0,"status":"completed"}}')
-  ];
-}

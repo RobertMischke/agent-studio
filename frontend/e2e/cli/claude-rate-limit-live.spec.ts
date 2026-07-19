@@ -48,7 +48,7 @@ test.describe('Claude — live rate-limit capture @billable', () => {
 
     // The CLI emits at least one rate_limit_event per turn; ProcInfo retains
     // the last snapshot until the next run on the same jobKey replaces it.
-    const url = `/api/jobs/${encodeURIComponent(created.id)}/claude/session-info?watchPath=${encodeURIComponent(WATCH_PATH)}`;
+    const url = `/api/tasks/${encodeURIComponent(created.id)}/claude/session-info?watchPath=${encodeURIComponent(WATCH_PATH)}`;
     const res = await api<SessionResp>(url);
 
     expect(res.rateLimit, 'rateLimit should be populated after a Claude run').not.toBeNull();
@@ -64,6 +64,6 @@ test.describe('Claude — live rate-limit capture @billable', () => {
     expect(rl.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
     // Cleanup: the test job is now in 4-review.
-    await api(`/api/jobs/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(WATCH_PATH)}`, { method: 'DELETE' });
+    await api(`/api/tasks/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(WATCH_PATH)}`, { method: 'DELETE' });
   });
 });

@@ -39,6 +39,7 @@ export const TIMELINE_KIND = {
   postStepFinished: 'post_step_finished',
   orchestratorEscalated: 'orchestrator_escalated',
   orchestratorSteered: 'orchestrator_steered',
+  steerTimeoutResolved: 'steer_timeout_resolved',
   orchestratorVerdictAccepted: 'orchestrator_verdict_accepted',
   qualityLoopReopened: 'quality_loop_reopened',
   humanReviewDecided: 'human_review_decided',
@@ -46,6 +47,7 @@ export const TIMELINE_KIND = {
   epicDecomposed: 'epic_decomposed',
   mergedIn: 'merged_in',
   readOnlyContainmentViolation: 'read_only_containment_violation',
+  externalCompletion: 'external_completion',
 } as const;
 
 /** The three terminals of the completion loop. */

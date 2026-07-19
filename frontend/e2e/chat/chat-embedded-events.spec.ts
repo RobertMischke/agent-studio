@@ -16,8 +16,8 @@ import { test, expect } from '@playwright/test';
  * touching the backend.
  */
 
-test.describe('Project chat — Slice B embedded events', () => {
-  test('renders tool-call / watchdog / rate-limit cards and expands them', async ({ page }) => {
+test.describe('Project chat next-gen semantic events', () => {
+  test('projects tool-call, watchdog and rate-limit cards into conversation rows', async ({ page }) => {
     // Stub orchestrator-chat history with no turns so the test focuses on
     // the event cards. The seeded demo events still render via the URL flag.
     await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
@@ -42,44 +42,29 @@ test.describe('Project chat — Slice B embedded events', () => {
     const sheet = page.getByTestId('orch-side-sheet');
     await expect(sheet).toBeVisible();
 
-    const chatBody = page.getByTestId('chat-body');
-    await expect(chatBody).toBeVisible();
+    const conversation = page.getByTestId('conversation-view');
+    await expect(conversation).toBeVisible();
 
     // Three event kinds must render, in chronological order.
-    const toolCall = chatBody.locator('[data-testid="chat-event-tool-call"]');
-    const watchdog = chatBody.locator('[data-testid="chat-event-watchdog"]');
-    const rateLimit = chatBody.locator('[data-testid="chat-event-rate-limit"]');
+    const toolCall = conversation.getByTestId('conversation-tool-burst').first();
+    const watchdog = conversation.getByTestId('conversation-supervisor-wait').first();
+    const rateLimit = conversation.locator(
+      '[data-testid="conversation-system-status"][data-category="rate-limit"]'
+    );
 
     await expect(toolCall).toBeVisible();
     await expect(watchdog).toBeVisible();
     await expect(rateLimit).toBeVisible();
 
-    // Watchdog and rate-limit are warn-severity; their card chrome should
-    // pick up the warn class. Tool-call is informational.
-    await expect(watchdog).toHaveClass(/chat__event--warn/);
-    await expect(rateLimit).toHaveClass(/chat__event--warn/);
-    await expect(toolCall).not.toHaveClass(/chat__event--warn/);
+    await expect(rateLimit).toHaveAttribute('data-severity', 'warn');
+    await expect(watchdog).toContainText('silent for 90s');
 
-    // Each card starts collapsed; clicking the head expands the detail.
-    await expect(toolCall).toHaveAttribute('data-expanded', 'false');
-    await expect(toolCall.locator('[data-testid="chat-event-detail"]')).toHaveCount(0);
-
-    await toolCall.locator('button.chat__event-head').click();
-    await expect(toolCall).toHaveAttribute('data-expanded', 'true');
-    await expect(toolCall.locator('[data-testid="chat-event-detail"]')).toBeVisible();
-    // Detail body should contain a rendered <pre> from the markdown fence.
-    await expect(toolCall.locator('[data-testid="chat-event-detail"] pre')).toBeVisible();
-
-    // Watchdog detail uses a heading + a code fence; expand and assert
-    // both render through the same markdown renderer agent turns use.
-    await watchdog.locator('button.chat__event-head').click();
-    const watchdogDetail = watchdog.locator('[data-testid="chat-event-detail"]');
-    await expect(watchdogDetail).toBeVisible();
-    await expect(watchdogDetail.locator('strong')).toContainText('Phase');
-
-    // Click watchdog head again -> collapses.
-    await watchdog.locator('button.chat__event-head').click();
-    await expect(watchdog).toHaveAttribute('data-expanded', 'false');
+    const burst = toolCall.getByTestId('tool-burst-chip');
+    const burstToggle = burst.getByTestId('tool-burst-row');
+    await expect(burstToggle).toHaveAttribute('aria-expanded', 'false');
+    await burstToggle.click();
+    await expect(burstToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(burst.getByTestId('tool-burst-details')).toBeVisible();
 
     // Capture a screenshot tightly cropped to the side sheet for review.
     const box = await sheet.boundingBox();

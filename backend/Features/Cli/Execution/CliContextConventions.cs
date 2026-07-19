@@ -11,7 +11,7 @@ namespace AgentStudio.Cli;
 /// execution-context surface (ASS-1739 / T1a) can report which of them actually
 /// exist on disk for a given run.
 /// <para>
-/// This is the only source of truth for Codex / Copilot / Gemini (they emit no
+/// This is the only source of truth for Codex / Gemini (they emit no
 /// init frame). For Claude these convention sources are merged <i>under</i> the
 /// richer init-frame data the CLI itself reports. Probing never mutates: it only
 /// calls <see cref="File.Exists"/> / <see cref="Directory.Exists"/>.
@@ -41,7 +41,6 @@ public static class CliContextConventions
         {
             CliTypes.Claude => Claude(cwd, home),
             CliTypes.Codex => Codex(cwd, home),
-            CliTypes.Copilot => Copilot(cwd, home),
             CliTypes.Gemini => Gemini(cwd, home),
             _ => [],
         };
@@ -87,19 +86,6 @@ public static class CliContextConventions
         return sources;
     }
 
-    private static List<CliContextSource> Copilot(string? cwd, string? home)
-    {
-        var sources = new List<CliContextSource>();
-        AddInstructionChain(sources, cwd, Path.Combine(".github", "copilot-instructions.md"), "Copilot instructions");
-        AddMemoryChain(sources, cwd, "AGENTS.md", "Project memory");
-        if (!string.IsNullOrWhiteSpace(home))
-        {
-            AddGlobalConfig(sources, Path.Combine(home, ".copilot", "config.json"), "Global config");
-            AddGlobalConfig(sources, Path.Combine(home, ".copilot", "settings.json"), "Global settings");
-        }
-        return sources;
-    }
-
     private static List<CliContextSource> Gemini(string? cwd, string? home)
     {
         var sources = new List<CliContextSource>();
@@ -117,9 +103,6 @@ public static class CliContextConventions
 
     private static void AddMemoryChain(List<CliContextSource> sources, string? cwd, string fileName, string label)
         => AddUpwardChain(sources, cwd, fileName, label, CliContextSourceKinds.Memory);
-
-    private static void AddInstructionChain(List<CliContextSource> sources, string? cwd, string relPath, string label)
-        => AddUpwardChain(sources, cwd, relPath, label, CliContextSourceKinds.InstructionFile);
 
     /// <summary>
     /// Walk from <paramref name="cwd"/> up to the filesystem root adding a

@@ -106,6 +106,9 @@ test('create workspace via "+" button persists to registry and shows in settings
     // project rows and can be tall), so scroll it into view first.
     const settingsTab = page.getByTestId('studio-ab-settings');
     await settingsTab.click();
+    // AGT-2035: workspace management moved into the Workspaces section of the
+    // consolidated Settings view.
+    await page.getByTestId('workspace-settings-rail-workspaces').click({ timeout: 10_000 });
     const wsList = page.getByTestId('settings-workspaces-list');
     await expect(wsList).toBeVisible({ timeout: 5_000 });
     const wsRow = wsList.getByTestId('settings-workspace-rename').filter({ hasText: newName });
@@ -118,6 +121,7 @@ test('create workspace via "+" button persists to registry and shows in settings
     await page.reload();
     await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 10_000 });
     await page.getByTestId('studio-ab-settings').click();
+    await page.getByTestId('workspace-settings-rail-workspaces').click({ timeout: 10_000 });
     const wsListAfter = page.getByTestId('settings-workspaces-list');
     await expect(wsListAfter).toBeVisible({ timeout: 5_000 });
     const wsRowAfter = wsListAfter.getByTestId('settings-workspace-rename').filter({ hasText: newName });
@@ -176,7 +180,7 @@ test('delete is blocked + tooltipped while the workspace still has jobs', async 
   let busyName: string | null = null;
   for (const wp of allPaths) {
     type Job = { projectName: string };
-    const jobs = await api<Job[]>('/api/jobs');
+    const jobs = await api<Job[]>('/api/tasks');
     const count = jobs.filter(j => j.projectName === wp.name).length;
     if (count > 0) { busyName = wp.name; break; }
   }

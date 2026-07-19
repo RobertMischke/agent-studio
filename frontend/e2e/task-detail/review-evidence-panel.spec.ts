@@ -6,7 +6,7 @@ import * as path from 'path';
 
 /**
  * Verifies the task-evidence contract documented in
- * docs/filesystem-contract.md `results/review-evidence.jsonl`:
+ * docs/system/contracts/filesystem.md `results/review-evidence.jsonl`:
  *
  *   - the panel renders findings stored in the file (`high` and `info`),
  *   - the panel resolves linked artifacts (a real PNG copied next to it),
@@ -43,7 +43,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
@@ -125,7 +125,7 @@ test.describe('Review evidence panel', () => {
       // Direct API check: the JobDetail endpoint must surface the two
       // valid findings and drop the malformed line without erroring.
       const detail = await api<{ reviewEvidence: Array<{ id: string; severity: string }> }>(
-        `/api/jobs/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`
+        `/api/tasks/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`
       );
       expect(detail.reviewEvidence.length).toBe(2);
       expect(detail.reviewEvidence.map((e) => e.id).sort()).toEqual(['high-token-leak', 'info-style-nit']);
@@ -145,6 +145,18 @@ test.describe('Review evidence panel', () => {
       await expect(page.getByTestId('review-evidence-severity-high-token-leak')).toContainText('HIGH');
       await expect(page.getByTestId('review-evidence-fileref-high-token-leak'))
         .toContainText('AuthService.cs:142');
+
+      // The PNG artifact renders inline as a thumbnail (not a bare path) and
+      // decodes from the served /api URL. Clicking it opens the shared media
+      // lightbox instead of the old text-only reference.
+      const thumb = page.getByTestId('review-evidence-thumb-high-token-leak').first();
+      await expect(thumb).toBeVisible();
+      const thumbImg = thumb.locator('img');
+      await expect(thumbImg).toHaveAttribute('loading', 'lazy');
+      await expect(thumbImg).toHaveJSProperty('naturalWidth', 1);
+      await thumb.click();
+      await expect(page.getByTestId('media-lightbox')).toBeVisible({ timeout: 5_000 });
+      await page.keyboard.press('Escape');
 
       // Info-severity row also renders.
       await expect(page.getByTestId('review-evidence-row-info-style-nit')).toBeVisible();
@@ -187,7 +199,7 @@ test.describe('Review evidence panel', () => {
 
       // The source finding now has its followupJobId stamped.
       const detailAfter = await api<{ reviewEvidence: Array<{ id: string; followupJobId: string | null }> }>(
-        `/api/jobs/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`
+        `/api/tasks/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`
       );
       const stamped = detailAfter.reviewEvidence.find((e) => e.id === 'info-style-nit');
       expect(stamped?.followupJobId).toBe(followupId);

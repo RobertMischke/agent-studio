@@ -9,10 +9,10 @@ namespace AgentStudio.Tests;
 
 public class AntigravityCliServiceTests
 {
-    private static AntigravityCliService NewService()
+    private static GenericCliExecutionService NewService()
     {
         var cfg = new ConfigurationBuilder().Build();
-        return new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, cfg);
+        return GenericCliExecutionService.ForAntigravity(NullLogger<GenericCliExecutionService>.Instance, cfg);
     }
 
     [Fact]

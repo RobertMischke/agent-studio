@@ -23,7 +23,7 @@
       @if (statusIcon(); as si) {
         <span class="radar__overall-badge"
               [class]="'radar__overall-badge--' + si.tone"
-              [appTooltip]="si.label"
+              [cacTooltip]="si.label"
               data-testid="regression-radar-badge">
           {{ si.label }}
         </span>
@@ -57,12 +57,12 @@
     <div class="radar__meta" data-testid="regression-radar-meta">
       @if (shaRange(); as range) {
         <span class="radar__meta-item radar__meta-sha"
-              [appTooltip]="fullShaRange()"
+              [cacTooltip]="fullShaRange()"
               data-testid="regression-radar-sha-range">{{ range }}</span>
       }
       @if (durationLabel(); as dur) {
         <span class="radar__meta-item"
-              [appTooltip]="generatedAtTooltip()"
+              [cacTooltip]="generatedAtTooltip()"
               data-testid="regression-radar-duration">
           generated in {{ dur }}@if (generatedAtLabel(); as ago) { · {{ ago }} }
         </span>

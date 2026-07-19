@@ -1,0 +1,203 @@
+// Result view: metric head + overview-first + layered detail. All colour
+// comes from --studio-* / --severity-* semantic tokens, which flip per theme,
+// so no separate light-mode bridge is needed (same contract as
+// protocol-verdict-banner).
+:host { display: block; }
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  // Tone accent resolved once per case, consumed by the badge + overview.
+  --result-tone: var(--studio-fg-muted);
+
+  &[data-case] { /* data-case is a testing/styling hook; tone drives visuals. */ }
+}
+
+// --- 1. Metric head ---------------------------------------------------------
+.result__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.result__case {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--result-tone) 45%, transparent);
+  background: color-mix(in srgb, var(--result-tone) 12%, transparent);
+  color: var(--studio-fg-strong, var(--studio-fg));
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: help;
+
+  &[data-tone="accent"]  { --result-tone: var(--studio-accent); }
+  &[data-tone="warn"]    { --result-tone: var(--studio-accent-warn); }
+  &[data-tone="info"]    { --result-tone: var(--studio-accent-3); }
+  &[data-tone="neutral"] { --result-tone: var(--studio-fg-muted); }
+}
+
+.result__case-glyph { font-size: 12px; line-height: 1; }
+.result__case-label { line-height: 1.4; }
+
+.result__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.result__metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.12));
+  background: var(--studio-bg-elevated, rgba(120, 120, 140, 0.08));
+  color: var(--studio-fg-dim, var(--studio-fg));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: help;
+
+  &[data-tone="ok"]      { border-color: color-mix(in srgb, var(--studio-accent-success) 45%, transparent); }
+  &[data-tone="warn"]    { border-color: color-mix(in srgb, var(--studio-accent-warn) 45%, transparent); }
+  &[data-tone="problem"] { border-color: color-mix(in srgb, var(--severity-high) 45%, transparent); }
+}
+
+.result__metric-icon { font-size: 12px; line-height: 1; opacity: 0.9; }
+.result__metric-value {
+  line-height: 1.4;
+  color: var(--studio-fg-strong, var(--studio-fg));
+  font-weight: 600;
+}
+
+// --- 2. Overview ------------------------------------------------------------
+// One card, four per-case arrangements (concept doc §8.3). The tone accent and
+// the outer card are shared; `data-layout` reshapes the inner flow so a bugfix
+// (sequence), a UI cleanup (before -> after), and a blocked run (warn callout)
+// read as visibly different templates, not the same stacked pair.
+.result__overview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--result-tone) 6%, var(--studio-bg-elevated, transparent));
+
+  &[data-tone="accent"]  { --result-tone: var(--studio-accent); }
+  &[data-tone="warn"]    { --result-tone: var(--studio-accent-warn); }
+  &[data-tone="info"]    { --result-tone: var(--studio-accent-3); }
+  &[data-tone="neutral"] { --result-tone: var(--studio-fg-muted); }
+}
+
+// Rows + connector live in the flow wrapper so the layout switch is one rule.
+.result__overview-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result__overview-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.result__overview-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--result-tone);
+}
+
+.result__overview-text {
+  margin: 0;
+  color: var(--studio-fg-strong, var(--studio-fg));
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.result__overview-row--solution .result__overview-text {
+  font-weight: 600;
+}
+
+// The connector arrow between the two lines. Hidden by default; the sequence
+// and before-after layouts opt it in (and orient it) below.
+.result__overview-connector {
+  display: none;
+  align-self: center;
+  color: var(--result-tone);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.result__overview-blurb {
+  margin: 0;
+  color: var(--studio-fg-dim, var(--studio-fg-muted));
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.result__overview-hint {
+  margin: 0;
+  color: var(--studio-fg-muted);
+  font-size: 10.5px;
+  font-style: italic;
+}
+
+// --- 2a. Per-case layouts ---------------------------------------------------
+// sequence: a stepped "A leads to B" flow with a downward connector arrow.
+.result__overview[data-layout="sequence"] {
+  .result__overview-connector { display: block; transform: rotate(90deg); }
+}
+
+// before-after: two side-by-side columns with a horizontal arrow between them,
+// wrapping back to stacked when the pane is too narrow to hold both.
+.result__overview[data-layout="before-after"] .result__overview-flow {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+
+  .result__overview-row { flex: 1 1 140px; }
+  .result__overview-connector { display: block; align-self: center; }
+}
+
+// blocker: lead with where the run stopped. The solution line becomes a warn
+// callout so a partial/blocked run never reads like a clean landing.
+.result__overview[data-layout="blocker"] {
+  .result__overview-row--solution {
+    padding: 6px 8px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--result-tone) 12%, transparent);
+  }
+}
+
+// --- 3. Detail --------------------------------------------------------------
+.result__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.result__detail-title {
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--studio-border, rgba(255, 255, 255, 0.1));
+  color: var(--studio-fg-dim, var(--studio-fg));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}

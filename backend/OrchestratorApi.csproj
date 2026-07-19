@@ -7,8 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.10.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
     <PackageReference Include="Porta.Pty" Version="1.0.7" />
     <PackageReference Include="Markdig" Version="0.42.0" />
     <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
@@ -27,6 +29,53 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="OrchestratorApi.Tests" />
+  </ItemGroup>
+
+  <!-- Block 6: the extracted public library, consumed as the published NuGet
+       package. For co-development against a local checkout, temporarily swap
+       back to the ProjectReference:
+       ..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj
+
+       0.5.0 is CAR-2's extended thinking-level ladder (AGT-2025 coordination):
+       it teaches the ladder the gpt-5.6-* family (sol/terra/luna) and adds the
+       new `ultra` top level, so codex reasoning-effort flags for gpt-5.6 emit
+       xhigh/ultra instead of being normalized down to medium. This card
+       (detection + default + UI) builds on that ladder. -->
+  <ItemGroup>
+    <PackageReference Include="CodingAgentRunner" Version="0.5.0" />
+  </ItemGroup>
+
+  <!-- TokenEconomy integration seam (AGT-2146). Local co-development follows
+       the same file-reference pattern as CAR. The production pipeline calls
+       IModelEconomyAdvisor through PipelineStepEconomyAdvisor; a TokenEconomy
+       package adapter can replace the registered catalogue implementation
+       without changing runner or settings contracts. -->
+  <ItemGroup Condition="Exists('..\..\..\token-economy\src\TokenEconomy\TokenEconomy.csproj')">
+    <ProjectReference Include="..\..\..\token-economy\src\TokenEconomy\TokenEconomy.csproj" />
+  </ItemGroup>
+
+  <!-- Block 6: adopt the library's types by aliasing them to the names the app
+       already uses, so call-sites resolve to the library after the duplicated
+       app type is deleted. Each alias = one type now sourced from the package. -->
+  <ItemGroup>
+    <Using Include="CodingAgentRunner.Model.CliTypes" Alias="CliTypes" />
+    <Using Include="CodingAgentRunner.Model.CliPermissionModes" Alias="CliPermissionModes" />
+    <Using Include="CodingAgentRunner.Model.CliPermissionFlags" Alias="CliPermissionFlags" />
+    <Using Include="CodingAgentRunner.Model.CliContextModes" Alias="CliContextModes" />
+    <Using Include="CodingAgentRunner.Model.CliThinkingLevels" Alias="CliThinkingLevels" />
+    <Using Include="CodingAgentRunner.Model.CliOutputLine" Alias="CliOutputLine" />
+    <Using Include="CodingAgentRunner.Model.CliModelInfo" Alias="CliModelInfo" />
+    <Using Include="CodingAgentRunner.Model.CliModelCatalog" Alias="CliModelCatalog" />
+    <Using Include="CodingAgentRunner.Model.RunStopReason" Alias="RunStopReason" />
+    <Using Include="CodingAgentRunner.Events.CliRunEvent" Alias="CliRunEvent" />
+    <Using Include="CodingAgentRunner.Events.RunPhase" Alias="RunPhase" />
+    <Using Include="CodingAgentRunner.Events.RunPhaseTransitions" Alias="RunPhaseTransitions" />
+    <Using Include="CodingAgentRunner.Events.PlanFrameItem" Alias="PlanFrameItem" />
+    <Using Include="CodingAgentRunner.Events.PlanItemId" Alias="PlanItemId" />
+    <Using Include="CodingAgentRunner.Events.PlanItemStatus" Alias="PlanItemStatus" />
+    <Using Include="CodingAgentRunner.Adapters.ClaudeEventAdapter" Alias="ClaudeEventAdapter" />
+    <Using Include="CodingAgentRunner.Adapters.CodexEventAdapter" Alias="CodexEventAdapter" />
+    <Using Include="CodingAgentRunner.Adapters.GeminiEventAdapter" Alias="GeminiEventAdapter" />
   </ItemGroup>
 
   <ItemGroup>
@@ -52,12 +101,15 @@
     <Using Include="AgentStudio.GeneratedFiles" />
     <Using Include="AgentStudio.Git" />
     <Using Include="AgentStudio.Host" />
+    <Using Include="AgentStudio.Orchestrator" />
     <Using Include="AgentStudio.Persistence" />
     <Using Include="AgentStudio.Pipeline" />
     <Using Include="AgentStudio.ProjectChat" />
     <Using Include="AgentStudio.Projection" />
     <Using Include="AgentStudio.Projects" />
+    <Using Include="AgentStudio.ProjectGraph" />
     <Using Include="AgentStudio.Prompts" />
+    <Using Include="AgentStudio.Publishing" />
     <Using Include="AgentStudio.Registry" />
     <Using Include="AgentStudio.RegressionRadar" />
     <Using Include="AgentStudio.Review" />

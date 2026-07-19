@@ -12,3 +12,20 @@ namespace AgentStudio.Shared;
 public sealed record LogIngestRequest(string TaskKey, List<CliOutputLine> Lines);
 
 public sealed record LogIngestResponse(string TaskKey, int Appended, string? Message = null);
+
+/// <summary>
+/// Wire contract for Runner -> Server artifact ingestion. Remote runners upload
+/// durable review evidence such as screenshots and Playwright output, and the
+/// server writes it under the task's <c>results/</c> folder.
+/// </summary>
+public sealed record ArtifactIngestRequest(string TaskKey, List<RunnerArtifactUpload> Artifacts);
+
+public sealed record RunnerArtifactUpload(string Path, string ContentBase64);
+
+public sealed record ArtifactIngestResponse(
+    string TaskKey,
+    int Uploaded,
+    List<string> Files,
+    string? Message = null,
+    string? CommitSha = null,
+    string? CommitStatus = null);

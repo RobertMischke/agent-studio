@@ -80,11 +80,13 @@ async function stubAggregate(page: import('@playwright/test').Page, project: str
   );
 }
 
-/** Open the CLI-Management usage detail via the workspace-settings home. */
+/** Open the usage detail via the consolidated Settings view. AGT-2035 moved the
+ *  usage-detail displays out of "Usage caps" into the single "Token usage"
+ *  section, so the by-project rows now live there. */
 async function openUsageDetail(page: import('@playwright/test').Page) {
   await page.getByTestId('status-bar-settings').click();
-  await page.getByTestId('workspace-settings-rail-caps').click();
-  await expect(page.getByTestId('cli-admin-overlay')).toBeVisible();
+  await page.getByTestId('workspace-settings-rail-tokens').click();
+  await expect(page.getByTestId('token-usage-section')).toBeVisible();
   await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
 }
 
@@ -128,7 +130,7 @@ test('hovering a project usage row shows the compact peek without navigating', a
   await row.hover();
 
   // The instant HTML tooltip is the compact peek.
-  const tip = page.getByTestId('app-tooltip');
+  const tip = page.getByTestId('cac-tooltip');
   await expect(tip).toBeVisible();
   await expect(tip).toContainText(projectName);
 

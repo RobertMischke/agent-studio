@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, signal } from '@angular/core';
 
-import { ConversationViewComponent } from '../../../app/components/chat/conversation-view/conversation-view.component';
-import type { ConversationEvent } from '../../../app/components/chat/conversation-event';
+import { ConversationViewComponent } from 'coding-agent-chat/conversation';
+import type { ConversationEvent } from 'coding-agent-chat/core';
 
 /**
  * Standalone screenshot harness for the real `ConversationViewComponent`.

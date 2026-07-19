@@ -7,7 +7,10 @@ namespace AgentStudio.Runner;
 /// commit SHAs to push) plus the project's normalized auto-push strategy as it
 /// was at enqueue time.
 /// </summary>
-public sealed record CompletedPushRequest(TaskInfo Job, string Strategy);
+public sealed record CompletedPushRequest(
+    TaskInfo Job,
+    string Strategy,
+    bool RequireCompletedState = true);
 
 /// <summary>
 /// Hand-off point that lifts the completed-job <c>git fetch</c> + <c>git push</c>

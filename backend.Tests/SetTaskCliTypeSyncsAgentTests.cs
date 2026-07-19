@@ -13,6 +13,7 @@ namespace AgentStudio.Tests;
 /// next to the old text label (from <c>agent</c>), producing a "Claude
 /// label, Codex icon" visual drift. The fix keeps both fields in lockstep.
 /// </summary>
+[Collection(CodexDetectedDefaultCollection.Name)]
 public class SetJobCliTypeSyncsAgentTests : IDisposable
 {
     private readonly string _workspace;
@@ -21,6 +22,8 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
 
     public SetJobCliTypeSyncsAgentTests()
     {
+        // No gpt-5.6 detected here: codex defaults resolve to the gpt-5.5 baseline.
+        ModelMetadataRegistry.SetDetectedCodexDefault(null);
         _workspace = Path.Combine(Path.GetTempPath(), "rdo-clitype-sync-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
         Directory.CreateDirectory(_watchPath);
@@ -28,21 +31,20 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
 
     public void Dispose()
     {
+        ModelMetadataRegistry.SetDetectedCodexDefault(null);
         try { Directory.Delete(_workspace, recursive: true); } catch { /* best-effort */ }
     }
 
     [Theory]
     [InlineData("claude", "codex")]
     [InlineData("codex", "claude")]
-    [InlineData("claude", "copilot")]
-    [InlineData("copilot", "gemini")]
     [InlineData("gemini", "claude")]
     public void SetJobCliType_AlsoUpdatesAgentField(string startAgent, string newCliType)
     {
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "drift",
             Title = "Drift",
@@ -96,6 +98,67 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         Assert.NotNull(info);
         Assert.Equal("codex", info!.CliType);
         Assert.Equal("codex", info.Agent);
+    }
+
+    [Fact]
+    public void SetJobCliType_RemapsForeignModelToNewCliDefault()
+    {
+        var (machine, scanner, mutations) = Build();
+        machine.EnsureStateFoldersAndMigrate();
+
+        mutations.CreateJob(new CreateTaskRequest
+        {
+            Id = "model-drift",
+            Title = "Model drift",
+            WatchPath = _watchPath,
+            Agent = "claude",
+            CliType = "claude",
+            Model = "claude-opus-4-8",
+            TargetState = TaskStates.Ready
+        });
+
+        Assert.True(mutations.SetJobCliType("model-drift", "codex", _watchPath));
+
+        var info = scanner.FindJob("model-drift", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.CliType);
+        Assert.Equal("codex", info.Agent);
+        // Codex CLI default is now gpt-5.5 (AGT-1941: gpt-5-codex is rejected by
+        // codex-cli 0.143 on a ChatGPT account), so a foreign-model remap lands
+        // on the new default rather than the retired gpt-5-codex.
+        Assert.Equal(ModelIds.Gpt55, info.Model);
+        Assert.Equal("high", info.ThinkingLevel);
+    }
+
+    [Fact]
+    public void SetJobModel_ForeignModelForCurrentCli_RemapsToCliDefault()
+    {
+        var (machine, scanner, mutations) = Build();
+        machine.EnsureStateFoldersAndMigrate();
+
+        mutations.CreateJob(new CreateTaskRequest
+        {
+            Id = "bad-model-update",
+            Title = "Bad model update",
+            WatchPath = _watchPath,
+            Agent = "codex",
+            CliType = "codex",
+            Model = ModelIds.Gpt5Codex,
+            TargetState = TaskStates.Ready
+        });
+
+        Assert.True(mutations.SetJobModel("bad-model-update", "claude-opus-4-8", _watchPath));
+
+        var info = scanner.FindJob("bad-model-update", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.CliType);
+        // Remapping a foreign model back to the codex CLI default now yields
+        // gpt-5.5 (the account-valid default), not the retired gpt-5-codex.
+        Assert.Equal(ModelIds.Gpt55, info.Model);
+        // The task was created on codex/gpt-5-codex, whose ladder tops at high,
+        // so the create-time default reasoning is high (AGT-2025 top-of-ladder);
+        // the model remap keeps that valid level on gpt-5.5.
+        Assert.Equal("high", info.ThinkingLevel);
     }
 
     private (TaskStateMachine machine, TaskScannerService scanner, TaskMutationService mutations) Build()

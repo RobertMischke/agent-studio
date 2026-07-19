@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, model } from '@angular/core';
 import type { TaskMode } from '../../../../models/task.model';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 interface ModeOption {
   readonly value: TaskMode;
@@ -18,7 +18,7 @@ interface ModeOption {
  *
  * Extracted into its own component so the create-task-dialog stays inside
  * its size budget. Both values flow up via `model()` and the dialog sends
- * them as `CreateJobRequest.mode` / `CreateJobRequest.allowWebAccess`.
+ * them as `CreateTaskRequest.mode` / `CreateTaskRequest.allowWebAccess`.
  */
 @Component({
   selector: 'app-create-mode-picker',

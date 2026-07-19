@@ -86,28 +86,107 @@ public class ProjectWikiEnhancementsTests : IDisposable
         var docsDir = Path.Combine(projectRoot, "docs");
         Directory.CreateDirectory(Path.Combine(docsDir, "01-concepts"));
         File.WriteAllText(Path.Combine(docsDir, "README.md"), "# Index\n");
+        // Wiki home configuration lives in the docs/app/ code-contract area, not a
+        // page: the whole app/ subtree must never surface as a tree node.
+        Directory.CreateDirectory(Path.Combine(docsDir, "app", "config"));
+        File.WriteAllText(Path.Combine(docsDir, "app", "config", "home.json"), "{ \"sections\": [] }");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md"), "# Overview\n");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.html"), "<h1>HTML page</h1>");
+        File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.metadata.json"),
+            "{ \"title\": \"Page metadata\", \"drift\": { \"grade\": \"B\" } }");
+        File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md.report.html"),
+            "<h1>Overview report</h1>");
+        File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md.meta.json"),
+            """
+            {
+              "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+              "schemaVersion": "wiki-document-companion/v1",
+              "title": "Concept overview metadata",
+              "source": {
+                "path": "docs/01-concepts/10-overview.md",
+                "type": "markdown",
+                "fingerprint": {
+                  "algorithm": "sha256",
+                  "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "sizeBytes": 1,
+                  "lineCount": 1,
+                  "capturedAt": "2026-06-12T08:30:00Z"
+                }
+              },
+              "report": {
+                "path": "docs/01-concepts/10-overview.md.report.html",
+                "generatedAt": "2026-06-12T08:30:00Z",
+                "generator": "scripts/wiki/generate-companion-metadata.mjs",
+                "template": "wiki-document-companion-report/v1"
+              },
+              "classification": {
+                "owner": "architecture",
+                "documentMode": "documentation",
+                "temporalState": "present",
+                "implementationState": "implemented"
+              },
+              "review": {
+                "date": "2026-06-12",
+                "method": "unit test",
+                "model": "codex",
+                "sourceFingerprint": {
+                  "algorithm": "sha256",
+                  "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "sizeBytes": 1,
+                  "lineCount": 1,
+                  "capturedAt": "2026-06-12T08:30:00Z"
+                },
+                "sourceChangedSinceReview": false
+              },
+              "drift": { "grade": "B", "hasDrift": true, "score": 0.24, "summary": "Light sample drift." },
+              "axes": {
+                "architectureAlignment": "high",
+                "implementationAlignment": "medium",
+                "freshness": "medium",
+                "operatorUsefulness": "high"
+              },
+              "duplicates": { "suspected": false, "groupSize": 1, "similarTo": [] },
+              "findings": [
+                { "id": "drift-summary", "severity": "warn", "axis": "drift", "summary": "Light sample drift." }
+              ],
+              "nextAction": "Refresh if source changes."
+            }
+            """);
 
         var docs = BuildDocsService(("Tree", projectRoot));
         var tree = docs.GetWikiTree("Tree");
 
         Assert.NotNull(tree);
         Assert.True(tree!.Exists);
-        // Folder sorts before the loose README file.
+        // Folders sort before the loose README file; home.json (config) is hidden.
         Assert.Equal(2, tree.Root.Count);
         Assert.Equal("folder", tree.Root[0].Type);
         Assert.Equal("concepts", tree.Root[0].Title); // NN- prefix stripped
         Assert.Equal("01-concepts", tree.Root[0].Name);
         Assert.Equal("README.md", tree.Root[1].Name);
+        Assert.DoesNotContain(tree.Root, n => n.Name == "home.json");
+        Assert.DoesNotContain(tree.Root, n => n.Name == "app"); // docs/app/ subtree stays hidden
 
         var folder = tree.Root[0];
-        Assert.Equal(2, folder.Children.Count);
-        // Both md and html surface; md '10-overview' sorts by its numeric prefix.
+        Assert.Equal(3, folder.Children.Count);
+        // Markdown, HTML, and JSON surface; md '10-overview' sorts by its numeric prefix.
         var types = folder.Children.Select(c => c.Type).ToHashSet();
         Assert.Contains("md", types);
         Assert.Contains("html", types);
+        Assert.Contains("json", types);
         Assert.Equal("01-concepts/page.html", folder.Children.Single(c => c.Type == "html").RelPath);
+        Assert.Equal("Page metadata", folder.Children.Single(c => c.Type == "json").Title);
+        var overview = folder.Children.Single(c => c.Name == "10-overview.md");
+        Assert.NotNull(overview.Metadata);
+        Assert.Equal("implemented", overview.Metadata!.ImplementationState);
+        Assert.True(overview.Metadata.HasDrift);
+        Assert.Equal("B", overview.Metadata.DriftGrade);
+        Assert.Equal("medium", overview.Metadata.Quality);
+        Assert.False(overview.Metadata.DuplicateSuspected);
+        Assert.Equal("01-concepts/10-overview.md.report.html", overview.Metadata.ReportPath);
+        Assert.Equal("01-concepts/10-overview.md.meta.json", overview.Metadata.CompanionPath);
+        Assert.True(overview.Metadata.SourceChangedSinceReview);
+        Assert.Equal(1, overview.Metadata.FindingsCount);
     }
 
     [Fact]
@@ -129,6 +208,116 @@ public class ProjectWikiEnhancementsTests : IDisposable
     {
         var docs = BuildDocsService(("Known", Path.Combine(_tempDir, "known")));
         Assert.Null(docs.GetWikiTree("Nope"));
+    }
+
+    // ---- Classification (sidecar `classification` block + folder defaults) ----
+
+    [Fact]
+    public void GetWikiTree_ClassificationComesFromSidecar_WithFolderDefaultTypeFallback()
+    {
+        var projectRoot = Path.Combine(_tempDir, "class-proj");
+        var docsDir = Path.Combine(projectRoot, "docs");
+        Directory.CreateDirectory(Path.Combine(docsDir, "concepts"));
+        Directory.CreateDirectory(Path.Combine(docsDir, "system", "domains"));
+        File.WriteAllText(Path.Combine(docsDir, "concepts", "old.md"), "# Old concept\n");
+        File.WriteAllText(Path.Combine(docsDir, "concepts", "old.md.meta.json"),
+            """
+            {
+              "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+              "schemaVersion": "wiki-document-companion/v1",
+              "source": { "path": "docs/concepts/old.md" },
+              "classification": {
+                "owner": "concepts",
+                "status": "ueberholt",
+                "supersededBy": "concepts/new.md",
+                "type": "konzept",
+                "analyzedAt": "2026-07-18"
+              }
+            }
+            """);
+        // Sidecar without a `type`: the folder default (system/domains -> domain-map) fills it.
+        File.WriteAllText(Path.Combine(docsDir, "system", "domains", "aging.md"), "# Aging analysis\n");
+        File.WriteAllText(Path.Combine(docsDir, "system", "domains", "aging.md.meta.json"),
+            """
+            {
+              "source": { "path": "docs/system/domains/aging.md" },
+              "classification": { "status": "veraltet", "analyzedAt": "2026-07-18" }
+            }
+            """);
+
+        var tree = BuildDocsService(("Class", projectRoot)).GetWikiTree("Class");
+
+        var concept = tree!.Root.Single(n => n.Name == "concepts").Children.Single(n => n.Name == "old.md");
+        Assert.NotNull(concept.Classification);
+        Assert.Equal("ueberholt", concept.Classification!.Status);
+        Assert.Equal("concepts/new.md", concept.Classification.SupersededBy);
+        Assert.Equal("konzept", concept.Classification.Type);
+        Assert.Equal("2026-07-18", concept.Classification.AnalyzedAt);
+
+        var aging = tree.Root.Single(n => n.Name == "system")
+            .Children.Single(n => n.Name == "domains")
+            .Children.Single(n => n.Name == "aging.md");
+        Assert.NotNull(aging.Classification);
+        Assert.Equal("veraltet", aging.Classification!.Status);
+        Assert.Null(aging.Classification.SupersededBy);
+        Assert.Equal("domain-map", aging.Classification.Type);
+    }
+
+    [Fact]
+    public void GetWikiTree_ClassificationFolderDefaults_ApplyWithoutSidecar()
+    {
+        var projectRoot = Path.Combine(_tempDir, "class-default-proj");
+        var docsDir = Path.Combine(projectRoot, "docs");
+        Directory.CreateDirectory(Path.Combine(docsDir, "proposals", "2026-07-11"));
+        Directory.CreateDirectory(Path.Combine(docsDir, "architecture", "decisions", "proposed"));
+        Directory.CreateDirectory(Path.Combine(docsDir, "operations"));
+        File.WriteAllText(Path.Combine(docsDir, "proposals", "2026-07-11", "finding.md"), "# Finding\n");
+        File.WriteAllText(
+            Path.Combine(docsDir, "architecture", "decisions", "proposed", "adr-0099-example.md"), "# ADR\n");
+        File.WriteAllText(Path.Combine(docsDir, "operations", "runbook.md"), "# Runbook\n");
+
+        var tree = BuildDocsService(("ClassDefault", projectRoot)).GetWikiTree("ClassDefault");
+
+        var proposal = tree!.Root.Single(n => n.Name == "proposals")
+            .Children.Single(n => n.Name == "2026-07-11").Children.Single(n => n.Name == "finding.md");
+        Assert.NotNull(proposal.Classification);
+        Assert.Equal("proposal", proposal.Classification!.Type);
+        Assert.Null(proposal.Classification.Status);
+
+        var adr = tree.Root.Single(n => n.Name == "architecture")
+            .Children.Single(n => n.Name == "decisions")
+            .Children.Single(n => n.Name == "proposed")
+            .Children.Single(n => n.Name == "adr-0099-example.md");
+        Assert.Equal("adr", adr.Classification!.Type);
+
+        // No sidecar + no folder default -> no classification at all.
+        var runbook = tree.Root.Single(n => n.Name == "operations").Children.Single(n => n.Name == "runbook.md");
+        Assert.Null(runbook.Classification);
+        // Folder nodes never carry a classification.
+        Assert.Null(tree.Root.Single(n => n.Name == "proposals").Classification);
+    }
+
+    [Theory]
+    [InlineData("operations/common-problems/x/main.md", "generiert")]
+    [InlineData("concepts/proposals/2026-07-11/a.md", "proposal")]
+    [InlineData("system/domains/tasks.md", "domain-map")]
+    [InlineData("system/contracts/filesystem.md", "contract")]
+    [InlineData("system/architecture/decisions/adr-archive.md", "adr")]
+    [InlineData("concepts/mockups/decoupled-lifecycles.html", "mockup")]
+    // Promoted mockup families keep the mockup type despite losing the /mockups/ segment.
+    [InlineData("concepts/project-urls/ui.html", "mockup")]
+    [InlineData("concepts/project-overview-dashboard/README.md", "mockup")]
+    [InlineData("concepts/task-processing-pipeline/task-timeline.md", "mockup")]
+    [InlineData("concepts/task-detail-header-state-actions/README.md", "mockup")]
+    [InlineData("system/architecture/model.md", null)]
+    [InlineData("concepts/idea.md", null)]
+    // Workbench pages are no longer folder-typed (discovered via workbench.json,
+    // theme-distributed); research folder is dissolved - both fall through to null.
+    [InlineData("operations/haertung-verteilte-ausfuehrung/index.html", null)]
+    [InlineData("quality/agent-eval-set-split-measurement-2026-06.md", null)]
+    public void DefaultClassificationType_MapsAgreedFolders(string relPath, string? expected)
+    {
+        Assert.Equal(expected, ProjectDocsService.DefaultClassificationType(relPath));
     }
 
     // ---- CreateWikiPage / CreateWikiFolder + commit ----
@@ -167,6 +356,26 @@ public class ProjectWikiEnhancementsTests : IDisposable
 
         Assert.False(docs.CreateWikiPage("Reject", "exists.md", null).Success);
         Assert.False(docs.CreateWikiPage("Reject", "notes.txt", null).Success);
+        Assert.True(docs.CreateWikiPage("Reject", "meta.json", null).Success);
+    }
+
+    [Fact]
+    public void WriteWikiFile_UpdatesExistingDoc_AndReportsNoop()
+    {
+        var projectRoot = Path.Combine(_tempDir, "write-proj");
+        var docPath = Path.Combine(projectRoot, "docs", "guide.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(docPath)!);
+        File.WriteAllText(docPath, "# Guide\n");
+        var docs = BuildDocsService(("Write", projectRoot));
+
+        var changed = docs.WriteWikiFile("Write", "guide.md", "# Guide\n\nUpdated.\n");
+        Assert.True(changed.Success);
+        Assert.True(changed.Changed);
+        Assert.Equal("# Guide\n\nUpdated.\n", File.ReadAllText(docPath));
+
+        var unchanged = docs.WriteWikiFile("Write", "guide.md", "# Guide\n\nUpdated.\n");
+        Assert.True(unchanged.Success);
+        Assert.False(unchanged.Changed);
     }
 
     [Fact]
@@ -269,7 +478,7 @@ public class ProjectWikiEnhancementsTests : IDisposable
     public void GetFileHistory_ReturnsCommitsNewestFirst_AndModelFromTrailer()
     {
         var repoRoot = Path.Combine(_tempDir, "repo");
-        var docPath = Path.Combine(repoRoot, "docs", "wiki", "note.md");
+        var docPath = Path.Combine(repoRoot, "docs", "note.md");
         Directory.CreateDirectory(Path.GetDirectoryName(docPath)!);
 
         RunGit(repoRoot, "init -q -b main");
@@ -287,12 +496,12 @@ public class ProjectWikiEnhancementsTests : IDisposable
 
         var git = BuildGitService(("Repo", repoRoot));
 
-        var history = git.GetFileHistory(repoRoot, "docs/wiki/note.md");
+        var history = git.GetFileHistory(repoRoot, "docs/note.md");
         Assert.Equal(2, history.Count);
         Assert.Equal("update note", history[0].Subject); // newest first
         Assert.Equal("create note", history[1].Subject);
 
-        var model = git.GetLatestModelForPath(repoRoot, "docs/wiki/note.md");
+        var model = git.GetLatestModelForPath(repoRoot, "docs/note.md");
         Assert.Equal("Claude Opus 4.8", model);
     }
 
@@ -312,10 +521,88 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Empty(git.GetFileHistory(repoRoot, "docs/does-not-exist.md"));
     }
 
+    // ---- ParseRecentEdits (pure) ----
+
+    [Fact]
+    public void ParseRecentEdits_DedupesByPath_NewestCommitWins_RespectsLimit()
+    {
+        const char RS = '\x1e';
+        const char US = '\x1f';
+        // Two records (newest first). docs/a.md appears in both; it must be
+        // attributed to the newer commit only. docs/b.md only in the older one.
+        var output =
+            $"{RS}sha2{US}s2{US}2026-06-20T10:00:00Z{US}Alice{US}update a\ndocs/a.md\n" +
+            $"{RS}sha1{US}s1{US}2026-06-10T09:00:00Z{US}Bob{US}seed\ndocs/a.md\ndocs/b.md\n";
+
+        var edits = GitService.ParseRecentEdits(output, limit: 10);
+
+        Assert.Equal(2, edits.Count);
+        Assert.Equal("docs/a.md", edits[0].RepoRelPath);
+        Assert.Equal("sha2", edits[0].Sha);
+        Assert.Equal("Alice", edits[0].Author);
+        Assert.Equal("docs/b.md", edits[1].RepoRelPath);
+        Assert.Equal("Bob", edits[1].Author);
+
+        var capped = GitService.ParseRecentEdits(output, limit: 1);
+        Assert.Single(capped);
+        Assert.Equal("docs/a.md", capped[0].RepoRelPath);
+    }
+
+    // ---- GetWikiRecentEdits (real git) ----
+
+    [Fact]
+    public void GetWikiRecentEdits_ReturnsNewestFirst_WithAuthorAndTitle_FiltersNonDocsAndDeletions()
+    {
+        var repoRoot = Path.Combine(_tempDir, "recent");
+        var docsDir = Path.Combine(repoRoot, "docs");
+        Directory.CreateDirectory(docsDir);
+
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+
+        // Commit 1 (oldest): two docs + a companion sidecar + a non-doc file.
+        File.WriteAllText(Path.Combine(docsDir, "alpha.md"), "# Alpha Title\nbody");
+        File.WriteAllText(Path.Combine(docsDir, "beta.md"), "# Beta Title\nbody");
+        File.WriteAllText(Path.Combine(docsDir, "alpha.md.meta.json"), "{}");
+        File.WriteAllText(Path.Combine(repoRoot, "notes.txt"), "ignore me");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "seed docs");
+
+        // Commit 2: add a doc that we then delete (must not appear).
+        File.WriteAllText(Path.Combine(docsDir, "ghost.md"), "# Ghost\n");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "add ghost");
+        File.Delete(Path.Combine(docsDir, "ghost.md"));
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "remove ghost");
+
+        // Commit 3 (newest): touch beta.md so it sorts first.
+        File.WriteAllText(Path.Combine(docsDir, "beta.md"), "# Beta Title\nupdated");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "update beta");
+
+        var docs = BuildDocsService(("Recent", repoRoot));
+        var git = BuildGitService(("Recent", repoRoot));
+
+        var recent = docs.GetWikiRecentEdits("Recent", git, 10);
+
+        Assert.NotNull(recent);
+        Assert.True(recent!.Exists);
+        Assert.Equal(2, recent.Edits.Count); // alpha + beta; no companion, txt, ghost
+        Assert.Equal("beta.md", recent.Edits[0].RelPath); // newest first
+        Assert.Equal("Beta Title", recent.Edits[0].Title);
+        Assert.Equal("test", recent.Edits[0].Author);
+        Assert.Equal("alpha.md", recent.Edits[1].RelPath);
+        Assert.Equal("Alpha Title", recent.Edits[1].Title);
+    }
+
     // ---- helpers ----
 
     private ProjectDocsService BuildDocsService(params (string Name, string RootPath)[] entries)
-        => new(BuildScanner(entries), NullLogger<ProjectDocsService>.Instance);
+        => new(BuildScanner(entries),
+               new ProjectRegistry(BuildConfig(entries), NullLogger<ProjectRegistry>.Instance),
+               NullLogger<ProjectDocsService>.Instance);
 
     private GitService BuildGitService(params (string Name, string RootPath)[] entries)
         => new(NullLogger<GitService>.Instance, BuildScanner(entries), BuildConfig(entries));

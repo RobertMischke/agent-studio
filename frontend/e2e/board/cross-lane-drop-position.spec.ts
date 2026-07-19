@@ -31,7 +31,7 @@ async function deleteJob(jobId: string, watchPath: string): Promise<void> {
   // Route through api() so the X-Client-Id header is set; the raw fetch
   // form silently 401s and the next createJob then 409s on the leftover
   // slug, masking the real test outcome.
-  await api(`/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await api(`/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
@@ -40,7 +40,7 @@ async function cleanup(prefix: string, watchPath: string): Promise<void> {
   // includeFixtures so prior runs that seeded as fixtures (or any
   // mid-rename leftover) still get swept; otherwise a stale slug from a
   // previous failed run would surface as a 409 on the next createJob.
-  const all = await api<Job[]>('/api/jobs?includeFixtures=true');
+  const all = await api<Job[]>('/api/tasks?includeFixtures=true');
   const stale = all.filter(j => j.watchPath === watchPath && j.id.startsWith(prefix));
   await Promise.all(stale.map(j => deleteJob(j.id, j.watchPath).catch(() => {})));
 }
@@ -165,11 +165,11 @@ test.describe('Cross-lane drop preserves drop position', () => {
     // Pin Backlog to [b1, b2, b3] regardless of leftover jobs in the lane.
     // Seed `src` with an order value that, without the fix, would make it
     // land at the BOTTOM of Backlog after the move (large order).
-    const all = await api<Job[]>('/api/jobs?includeFixtures=true');
+    const all = await api<Job[]>('/api/tasks?includeFixtures=true');
     const backlogOthers = all
       .filter(j => j.state === '0-backlog' && ![b1.id, b2.id, b3.id].includes(j.id))
       .map(j => ({ jobId: j.id, watchPath: j.watchPath }));
-    await api('/api/jobs/reorder', {
+    await api('/api/tasks/reorder', {
       method: 'POST',
       body: JSON.stringify({
         jobs: [
@@ -207,7 +207,7 @@ test.describe('Cross-lane drop preserves drop position', () => {
       // exactly there, not at the bottom (the pre-fix symptom) and not
       // snapped to some other slot.
       const movePost = page.waitForResponse(
-        r => r.url().includes(`/api/jobs/${encodeURIComponent(src.id)}/move`) && r.request().method() === 'POST'
+        r => r.url().includes(`/api/tasks/${encodeURIComponent(src.id)}/move`) && r.request().method() === 'POST'
       );
       await dispatchCrossLaneDropBefore(page, 'Ready', titleSrc, 'Backlog', titleB3);
       const resp = await movePost;
@@ -219,7 +219,7 @@ test.describe('Cross-lane drop preserves drop position', () => {
         return titles.join('|');
       }, { timeout: 10_000 }).toBe([titleB1, titleB2, titleSrc, titleB3].join('|'));
 
-      // Reload to prove the position survives a fresh /api/jobs/grouped.
+      // Reload to prove the position survives a fresh /api/tasks/grouped.
       await page.reload();
       await expect(page.locator('.column__title').first()).toBeVisible({ timeout: 10_000 });
       await expect.poll(async () => {
@@ -229,7 +229,7 @@ test.describe('Cross-lane drop preserves drop position', () => {
 
       // Persistence assertion at the backend layer: the moved card must
       // sort between b2 and b3 by its rewritten `order` field.
-      const after = await api<Job[]>("/api/jobs?includeFixtures=true");
+      const after = await api<Job[]>("/api/tasks?includeFixtures=true");
       const ob1 = (after.find(j => j.id === b1.id) as any).order;
       const ob2 = (after.find(j => j.id === b2.id) as any).order;
       const osrc = (after.find(j => j.id === src.id) as any).order;
@@ -259,11 +259,11 @@ test.describe('Cross-lane drop preserves drop position', () => {
     const b2 = await createJob({ id: `${PREFIX}b2`, title: titleB2, watchPath, targetState: '0-backlog', fixture: false });
     const src = await createJob({ id: `${PREFIX}src`, title: titleSrc, watchPath, targetState: '2-ready', fixture: false });
 
-    const all = await api<Job[]>('/api/jobs?includeFixtures=true');
+    const all = await api<Job[]>('/api/tasks?includeFixtures=true');
     const backlogOthers = all
       .filter(j => j.state === '0-backlog' && ![b1.id, b2.id].includes(j.id))
       .map(j => ({ jobId: j.id, watchPath: j.watchPath }));
-    await api('/api/jobs/reorder', {
+    await api('/api/tasks/reorder', {
       method: 'POST',
       body: JSON.stringify({
         jobs: [
@@ -288,7 +288,7 @@ test.describe('Cross-lane drop preserves drop position', () => {
       // The persistence assertion below proves the rewritten order makes
       // src sort before B1 and B2 — independent of other Backlog cards.
       const movePost = page.waitForResponse(
-        r => r.url().includes(`/api/jobs/${encodeURIComponent(src.id)}/move`) && r.request().method() === 'POST'
+        r => r.url().includes(`/api/tasks/${encodeURIComponent(src.id)}/move`) && r.request().method() === 'POST'
       );
       await dispatchCrossLaneDropBefore(page, 'Ready', titleSrc, 'Backlog', titleB1);
       await movePost;
@@ -298,7 +298,7 @@ test.describe('Cross-lane drop preserves drop position', () => {
         return titles.join('|');
       }, { timeout: 10_000 }).toBe([titleSrc, titleB1, titleB2].join('|'));
 
-      const after = await api<Job[]>("/api/jobs?includeFixtures=true");
+      const after = await api<Job[]>("/api/tasks?includeFixtures=true");
       const osrc = (after.find(j => j.id === src.id) as any).order;
       const ob1 = (after.find(j => j.id === b1.id) as any).order;
       const ob2 = (after.find(j => j.id === b2.id) as any).order;

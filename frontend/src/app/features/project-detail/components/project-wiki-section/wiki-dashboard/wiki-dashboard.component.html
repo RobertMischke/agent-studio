@@ -1,0 +1,91 @@
+<section class="wdash" data-testid="project-wiki-pulse">
+  <header class="wdash__head" data-testid="project-wiki-dash-head">
+    <div class="wdash__head-row">
+      <div class="wdash__title-copy">
+        <h2 class="wdash__title">Wiki</h2>
+        <p class="wdash__subtitle">
+          Generated Pulse view over this wiki - curated entry points, recent
+          changes, unfiled pages, and drift grading. Not a wiki page.
+        </p>
+      </div>
+      <div class="wdash__actions">
+        <button class="wdash__action" type="button"
+                data-testid="project-wiki-open-first"
+                (click)="openFirst.emit()">
+          <app-studio-icon name="book" [size]="13"></app-studio-icon>
+          <span>Open first page</span>
+        </button>
+        <button class="wdash__action" type="button"
+                data-testid="project-wiki-drift-open-empty"
+                (click)="openDrift.emit()">
+          <app-studio-icon name="diff" [size]="13"></app-studio-icon>
+          <span>Start drift analysis</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="wdash__stats" data-testid="project-wiki-dash-stats">
+      <div class="wdash__stat" data-testid="project-wiki-stat-pages">
+        <span class="wdash__stat-value">{{ docCount() }}</span>
+        <span class="wdash__stat-label">Seiten</span>
+      </div>
+      <div class="wdash__stat" data-testid="project-wiki-stat-edited">
+        <span class="wdash__stat-value wdash__stat-value--text">{{ lastEditedLabel() }}</span>
+        <span class="wdash__stat-label">Zuletzt geändert</span>
+      </div>
+      <div class="wdash__stat wdash__stat--drift" data-testid="project-wiki-stat-drift">
+        <span class="wdash__drift-col">
+          <span class="wdash__stat-value">{{ driftCounts()?.fresh ?? '–' }}</span>
+          <span class="wdash__stat-label">Fresh</span>
+        </span>
+        <span class="wdash__drift-col">
+          <span class="wdash__stat-value">{{ driftCounts()?.aging ?? '–' }}</span>
+          <span class="wdash__stat-label">Aging</span>
+        </span>
+        <span class="wdash__drift-col">
+          <span class="wdash__stat-value">{{ driftCounts()?.stale ?? '–' }}</span>
+          <span class="wdash__stat-label">Stale</span>
+        </span>
+        @if (overallDrift(); as overall) {
+          <span class="wdash__status" data-testid="project-wiki-pulse-overall">
+            <i class="wdash__status-dot" [attr.data-tone]="overall.tone" aria-hidden="true"></i>
+            <span>Drift {{ overall.grade }}</span>
+          </span>
+        }
+      </div>
+    </div>
+  </header>
+
+  <div class="wdash__grid" data-testid="project-wiki-dash-grid">
+    <!-- @if-guarded so an empty star list leaves no card in the grid. -->
+    @if (hasStarred()) {
+      <app-wiki-starred-panel
+          [projectName]="projectName()"
+          (openEntry)="openPage.emit($event)" />
+    }
+    <app-wiki-home-links
+        [projectName]="projectName()"
+        (openLink)="openPage.emit($event)" />
+    <app-wiki-pulse
+        [pulse]="pulse()"
+        [loading]="loading()"
+        (openPage)="openPage.emit($event)"
+        (openWorkbench)="openWorkbench.emit($event)" />
+    <app-project-style-guides-panel
+        class="wdash__span"
+        [projectName]="projectName()"
+        (openGuide)="openGuide.emit($event)" />
+    <app-wiki-grade-panel
+        class="wdash__span"
+        [gradingStatus]="gradingStatus()"
+        [gradeModel]="gradeModel()"
+        [gradeLevel]="gradeLevel()"
+        [gradeModels]="gradeModels()"
+        [critical]="pulse()?.critical ?? null"
+        (startGrading)="startGrading.emit()"
+        (abortGrading)="abortGrading.emit()"
+        (gradeModelChange)="gradeModelChange.emit($event)"
+        (gradeLevelChange)="gradeLevelChange.emit($event)"
+        (openReport)="openReport.emit($event)" />
+  </div>
+</section>

@@ -81,7 +81,7 @@ const GROUPED_PAYLOAD = {
 async function installRoutes(page: Page) {
   await page.route('**/api/**', (route) => {
     const url = route.request().url();
-    if (url.endsWith('/api/tasks') || url.endsWith('/api/jobs')) {
+    if (url.endsWith('/api/tasks') || url.endsWith('/api/tasks')) {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       return;
     }
@@ -90,7 +90,7 @@ async function installRoutes(page: Page) {
 
   const grouped = { status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED_PAYLOAD) };
   await page.route('**/api/tasks/grouped**', (route) => route.fulfill(grouped));
-  await page.route('**/api/jobs/grouped**', (route) => route.fulfill(grouped));
+  await page.route('**/api/tasks/grouped**', (route) => route.fulfill(grouped));
 
   await page.route('**/api/watch-paths**', (route) =>
     route.fulfill({
@@ -189,7 +189,7 @@ test('commit-pill tooltip clips long file rows inside the box', async ({ page })
   await chosen!.scrollIntoViewIfNeeded();
   await chosen!.hover();
 
-  const tip = page.getByTestId('app-tooltip');
+  const tip = page.getByTestId('cac-tooltip');
   await expect(tip).toBeVisible({ timeout: 1_000 });
 
   // The tooltip must actually contain a <ul> file list to exercise the fix.

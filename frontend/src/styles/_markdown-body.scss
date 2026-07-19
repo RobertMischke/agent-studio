@@ -146,10 +146,10 @@
 .markdown-body blockquote {
   margin: 0.9em 0;
   padding: 0.5em 1em;
-  border-left: 4px solid var(--md-marker);
+  border: 1px solid var(--md-border-soft);
   background: var(--md-surface-soft);
   color: var(--md-fg-muted);
-  border-radius: 0 4px 4px 0;
+  border-radius: 4px;
   font-style: italic;
 }
 .markdown-body blockquote > :first-child { margin-top: 0; }
@@ -234,38 +234,6 @@
 }
 .markdown-body pre.md-code[data-lang]:hover::before {
   opacity: 1;
-}
-
-/* Per-language accent — picks up a 2 px left rail in the language's
- * canonical color so the eye can distinguish a JSON block from a
- * shell block from a diff at a glance, without committing to a full
- * tokenizer. Colors come from the studio accent palette so they flip
- * with light theme automatically. */
-.markdown-body pre.md-code--lang-ts,
-.markdown-body pre.md-code--lang-js {
-  border-left: 2px solid var(--studio-accent-3, #569cd6);
-}
-.markdown-body pre.md-code--lang-py {
-  border-left: 2px solid var(--studio-accent-2, #4ec9b0);
-}
-.markdown-body pre.md-code--lang-bash,
-.markdown-body pre.md-code--lang-powershell {
-  border-left: 2px solid var(--studio-fg-muted, #64748b);
-}
-.markdown-body pre.md-code--lang-json,
-.markdown-body pre.md-code--lang-yaml {
-  border-left: 2px solid var(--studio-accent-warn, #cca700);
-}
-.markdown-body pre.md-code--lang-diff {
-  border-left: 2px solid var(--studio-accent-4, #c586c0);
-}
-.markdown-body pre.md-code--lang-csharp {
-  border-left: 2px solid var(--studio-accent-4, #c586c0);
-}
-.markdown-body pre.md-code--lang-html,
-.markdown-body pre.md-code--lang-scss,
-.markdown-body pre.md-code--lang-css {
-  border-left: 2px solid var(--studio-accent, #d97757);
 }
 
 /* Diff-only line tinting. We don't tokenize languages, but diff has
@@ -359,7 +327,7 @@
   border: 1px solid var(--md-border-soft);
 }
 
-/* Images decorated by `appMarkdownLightbox` become clickable to open
+/* Images decorated by `cacMarkdownLightbox` become clickable to open
  * the shared media lightbox. The directive adds `tabindex="0"` and
  * `role="button"`; these rules make the affordance visible. */
 .markdown-body img.md-image-zoomable {

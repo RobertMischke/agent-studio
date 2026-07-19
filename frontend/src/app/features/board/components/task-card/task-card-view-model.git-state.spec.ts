@@ -70,6 +70,25 @@ describe('buildGitStateBadge — lifecycle ground truth (ASS-1752)', () => {
   });
 
   describe('State A — active task/<id> worktree', () => {
+    it('names a prepared/ready task branch before the first commit exists', () => {
+      const job = makeJob({
+        state: TaskState.Ready,
+        commit: null,
+        commits: [],
+        provenance: provenance({
+          branch: 'task/ready-before-first-commit',
+          transitions: [anchor({ lane: TaskState.Ready, branchTip: 'bbbbbbb1' })],
+        }),
+      });
+
+      const badge = buildGitStateBadge(job);
+
+      expect(badge).not.toBeNull();
+      expect(badge!.kind).toBe('pre-merge');
+      expect(badge!.label).toBe('task/ready-before-first-commit');
+      expect(badge!.tooltip).toContain('bbbbbbb');
+    });
+
     it('names the task branch while a run is live in its worktree', () => {
       const job = makeJob({
         state: TaskState.Progress,

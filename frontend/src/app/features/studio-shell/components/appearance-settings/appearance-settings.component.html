@@ -1,0 +1,36 @@
+<section class="appearance" data-testid="appearance-settings">
+  <header class="appearance__head">
+    <h2 class="appearance__title">Appearance</h2>
+    <p class="appearance__desc">
+      Theme and layout preferences. These apply to you across every workspace.
+    </p>
+  </header>
+
+  <app-section-header title="Theme" />
+  <div class="appearance__row">
+    <span class="appearance__label" id="appearance-theme-label">Theme</span>
+    <app-segmented-control
+      ariaLabel="Theme"
+      [options]="themeOptions"
+      [value]="theme()"
+      (valueChange)="setTheme($event)" />
+  </div>
+
+  <app-section-header title="Layout" [divider]="true" />
+  <div class="appearance__row">
+    <span class="appearance__label" id="appearance-activitybar-label">Activity bar</span>
+    <app-segmented-control
+      ariaLabel="Activity bar"
+      [options]="activityBarSideOptions"
+      [value]="activityBarSide()"
+      (valueChange)="setActivityBarSide($event)" />
+  </div>
+  <div class="appearance__row">
+    <span class="appearance__label" id="appearance-tree-metrics-label">Tree view</span>
+    <app-segmented-control
+      ariaLabel="Tree view: active work visualization"
+      [options]="treeMetricViewOptions"
+      [value]="uiPrefs.treeMetricView()"
+      (valueChange)="setTreeMetricView($event)" />
+  </div>
+</section>

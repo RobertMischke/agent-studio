@@ -1,0 +1,30 @@
+<span class="task-ref" [class.task-ref--ghost]="!status().exists" [style.--task-ref-project]="color()"
+      data-testid="task-reference-microcard">
+  @if (status().exists) {
+    <a class="task-ref__link" [href]="'#task:' + status().key" (click)="open($event)"
+       [attr.aria-label]="'Open task ' + status().key + ': ' + status().title">
+      <i class="task-ref__project" aria-hidden="true"></i>
+      <strong>{{ status().key }}</strong>
+      <span class="task-ref__lane" [attr.data-tone]="laneTone()" aria-hidden="true">{{ laneIcon() }}</span>
+      @if (status().merge; as merge) {
+        <span class="task-ref__merge" role="img"
+              [attr.aria-label]="mergeLabel()">
+          <i [class.task-ref__merge-on]="merge.inIntegration" aria-hidden="true">d</i>
+          <i [class.task-ref__merge-on]="merge.inRelease" aria-hidden="true">m</i>
+        </span>
+      }
+    </a>
+  } @else {
+    <span class="task-ref__link" aria-label="Unknown or deleted task reference">
+      <i class="task-ref__project" aria-hidden="true"></i><strong>{{ status().key }}</strong><span aria-hidden="true">◇</span>
+    </span>
+  }
+  <span class="task-ref__popover" role="tooltip">
+    <strong>{{ status().title || 'Unknown or deleted task' }}</strong>
+    <span>{{ laneLabel() }} · {{ status().projectName }}</span>
+    @if (status().merge) {
+      <span>{{ mergePopoverLabel() }}</span>
+    }
+    @if (status().reviewGrade) { <span>Review grade {{ status().reviewGrade }}</span> }
+  </span>
+</span>

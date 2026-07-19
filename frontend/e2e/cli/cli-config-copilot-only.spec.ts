@@ -23,7 +23,7 @@ test.describe('CLI configuration card', () => {
     });
 
     try {
-      await page.route('**/api/jobs/*/start**', async (route) => {
+      await page.route('**/api/tasks/*/start**', async (route) => {
         await route.fulfill({
           status: 400,
           contentType: 'application/json',
@@ -41,7 +41,7 @@ test.describe('CLI configuration card', () => {
       await expect(page.getByText('GitHub Token')).toHaveCount(0);
       await page.screenshot({ path: 'e2e/_baselines/cli-config-hidden-for-claude.png', fullPage: true });
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -57,7 +57,7 @@ test.describe('CLI configuration card', () => {
     });
 
     try {
-      await page.route('**/api/jobs/*/start**', async (route) => {
+      await page.route('**/api/tasks/*/start**', async (route) => {
         await route.fulfill({
           status: 400,
           contentType: 'application/json',
@@ -72,7 +72,7 @@ test.describe('CLI configuration card', () => {
       await expect(page.getByRole('heading', { name: 'Task action failed' })).toBeVisible();
       await expect(page.getByRole('button', { name: /Configure CLI/ })).toBeVisible();
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

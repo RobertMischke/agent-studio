@@ -13,7 +13,7 @@ import { ErrorDialogService } from '../../../../services/error-dialog.service';
 import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Drawer-style overlay opened from the version badge. Three sections:
  *
@@ -65,6 +65,24 @@ export class UpdateCenterComponent implements OnDestroy {
 
   close(): void {
     this.client.closeCenter();
+  }
+
+  shortSha(value: string | null | undefined): string {
+    return value?.slice(0, 8) || 'unknown';
+  }
+
+  formatDate(value: string | null | undefined): string {
+    if (!value) return 'Time unknown';
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium', timeStyle: 'short',
+    }).format(new Date(value));
+  }
+
+  deltaLabel(ahead: number | null | undefined, behind: number | null | undefined): string {
+    const parts: string[] = [];
+    if (behind) parts.push(`${behind} ahead of running`);
+    if (ahead) parts.push(`${ahead} behind running`);
+    return parts.length ? parts.join(' · ') : 'Same commit as running';
   }
 
   async refreshStatus(): Promise<void> {

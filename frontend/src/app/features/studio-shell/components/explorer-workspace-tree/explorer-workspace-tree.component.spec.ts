@@ -9,11 +9,13 @@ import {
   ExplorerWorkspaceTreeComponent,
   type ExplorerProjectRow,
 } from './explorer-workspace-tree.component';
-import { TooltipDirective } from '../../../../components/tooltip';
+import type { ProjectPulseState } from '../../studio-shell.pulse';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../../../models/task.model';
 
 function project(displayName: string, workspaceId: string, storage: string): RegistryProjectSummary {
   return {
+    sourceType: 'local-folder',
     id: `PROJ-${displayName}`,
     displayName,
     shortCode: displayName.slice(0, 3).toUpperCase(),
@@ -23,6 +25,10 @@ function project(displayName: string, workspaceId: string, storage: string): Reg
     modelDefault: null,
     sortOrder: 0,
     storageLocation: storage,
+    repositoryPath: null,
+    rootPath: null,
+    repositoryUrl: null,
+    urls: [],
     archived: false,
     createdAt: '2026-01-01T00:00:00Z',
   };
@@ -152,7 +158,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(review?.textContent?.trim()).toBe('5');
   });
 
-  it('attaches a lane-explaining appTooltip to each Board lane counter', () => {
+  it('attaches a lane-explaining cacTooltip to each Board lane counter', () => {
     const fixture = mount();
     fixture.componentRef.setInput('registryWorkspaces', []);
     fixture.componentRef.setInput('projectRows', [
@@ -171,6 +177,187 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(tipFor('studio-explorer-project-board-count-ready-Alpha')).toMatchObject({ title: 'Ready' });
     expect(tipFor('studio-explorer-project-board-count-progress-Alpha')).toMatchObject({ title: 'In Progress' });
     expect(tipFor('studio-explorer-project-board-count-human-review-Alpha')).toMatchObject({ title: 'Human Review' });
+  });
+
+  it('renders a capped, stably ordered dot dashboard with numeric a11y text', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [
+      row('Alpha', { totalJobs: 20, laneCounts: { ready: 4, progress: 3, humanReview: 13 } }),
+    ]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.componentRef.setInput('metricView', 'dots');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const dashboard = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-dots-Alpha"]');
+    const dots = Array.from(dashboard?.querySelectorAll<HTMLElement>('[data-lane]') ?? []);
+
+    expect(root.querySelector('[data-testid="studio-explorer-project-board-counts-Alpha"]')).toBeNull();
+    expect(dashboard?.getAttribute('aria-label')).toBe('4 ready, 3 in progress, 13 human review');
+    expect(dots).toHaveLength(15);
+    expect(dots.map(dot => dot.dataset['lane'])).toEqual([
+      ...Array(4).fill('ready'),
+      ...Array(3).fill('progress'),
+      ...Array(8).fill('humanReview'),
+    ]);
+    expect(dashboard?.querySelector('.studio-board-lane-dots__overflow')?.textContent?.trim()).toBe('+5');
+  });
+
+  it('renders create workspace as a compact Workspaces header action', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    const emitted: void[] = [];
+    cmp.onboardWorkspaceRequest.subscribe(v => emitted.push(v));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const add = root.querySelector<HTMLButtonElement>('[data-testid="studio-explorer-add-workspace"]');
+    expect(add?.classList.contains('studio-sidebar-header__action')).toBe(true);
+    expect(add?.querySelector('app-studio-icon')).toBeTruthy();
+
+    add?.click();
+
+    expect(emitted).toHaveLength(1);
+    expect(cmp.isCollapsed('workspace')).toBe(false);
+  });
+
+  it('renders create project as a compact workspace-row icon action', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    cmp.setCollapsed('ws:ws-default', false);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    const emitted: string[] = [];
+    cmp.onboardProjectRequest.subscribe(v => emitted.push(v));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const add = root.querySelector<HTMLButtonElement>('[data-testid="studio-workspace-ws-default-add-project"]');
+    expect(add?.tagName.toLowerCase()).toBe('button');
+    expect(add?.classList.contains('tree-row')).toBe(false);
+    expect(add?.querySelector('app-studio-icon')).toBeTruthy();
+    expect(root.textContent).not.toContain('New project');
+
+    add?.click();
+
+    expect(emitted).toEqual(['ws-default']);
+    expect(cmp.isCollapsed('ws:ws-default')).toBe(false);
+  });
+
+  it('highlights the active project subnavigation row', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.componentRef.setInput('activeProjectSurface', 'hub');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const board = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-Alpha"]');
+    const hub = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-hub-Alpha"]');
+
+    expect(board?.classList.contains('tree-row--active')).toBe(false);
+    expect(board?.getAttribute('aria-current')).toBeNull();
+    expect(hub?.classList.contains('tree-row--active')).toBe(true);
+    expect(hub?.getAttribute('aria-current')).toBe('page');
+    // The destinations are the third tree level: they render as `tree-row--child`
+    // (one indent step below the project row), never flush `--root`. Guards the
+    // AGT-2057 regression where AGT-2037 flattened them to `--root`.
+    expect(board?.classList.contains('tree-row--child')).toBe(true);
+    expect(hub?.classList.contains('tree-row--child')).toBe(true);
+    expect(root.querySelector('.studio-tree-children .tree-row--root')).toBeNull();
+  });
+
+  it('insets every project destination one level below the project row (AGT-2057 regression)', () => {
+    // Explorer hierarchy is workspace -> project -> destinations. The project
+    // row is `level="root"`; its Board / Project Hub / Wiki / Epics (+ URL)
+    // destinations must be `level="child"` so they nest visibly one step in and
+    // the project reads as clearly superordinate. AGT-2037 flattened them to
+    // `level="root"`, so they rendered flush beside the project ("Kuddelmuddel",
+    // looked like siblings). A unit test that had been updated to assert the
+    // flat layout let the regression ship; this locks the correct nesting.
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [
+      row('Alpha', { isActive: true }),
+    ]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+
+    // The project row itself stays at the root level.
+    const projectRow = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-Alpha"]');
+    expect(projectRow?.classList.contains('tree-row--root')).toBe(true);
+    expect(projectRow?.classList.contains('tree-row--child')).toBe(false);
+
+    // Every destination under the expanded project is indented one level.
+    for (const surface of ['board', 'hub', 'wiki', 'epics']) {
+      const dest = root.querySelector<HTMLElement>(`[data-testid="studio-explorer-project-${surface}-Alpha"]`);
+      expect(dest, surface).toBeTruthy();
+      expect(dest?.classList.contains('tree-row--child'), surface).toBe(true);
+      expect(dest?.classList.contains('tree-row--root'), surface).toBe(false);
+    }
+
+    // Nothing inside the children container may render at the flat root level.
+    expect(root.querySelector('.studio-tree-children .tree-row--root')).toBeNull();
+    expect(
+      root.querySelectorAll('.studio-tree-children .tree-row--child').length,
+    ).toBeGreaterThanOrEqual(4);
+  });
+
+  it('renders a Wiki row under Project Hub that emits openWikiRequest', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.detectChanges();
+
+    const emitted: string[] = [];
+    cmp.openWikiRequest.subscribe(name => emitted.push(name));
+
+    const root: HTMLElement = fixture.nativeElement;
+    const rows = Array.from(
+      root.querySelectorAll<HTMLElement>('.studio-tree-children .tree-row[data-testid^="studio-explorer-project-"]'),
+    ).map(el => el.getAttribute('data-testid'));
+    // Wiki sits directly after Project Hub in the per-project child list.
+    expect(rows).toEqual([
+      'studio-explorer-project-board-Alpha',
+      'studio-explorer-project-hub-Alpha',
+      'studio-explorer-project-wiki-Alpha',
+      'studio-explorer-project-epics-Alpha',
+    ]);
+
+    const wiki = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-wiki-Alpha"]');
+    wiki?.click();
+    expect(emitted).toEqual(['Alpha']);
+  });
+
+  it('highlights only the Wiki row when the active surface is the wiki rail', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.componentRef.setInput('activeProjectSurface', 'wiki');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const hub = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-hub-Alpha"]');
+    const wiki = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-wiki-Alpha"]');
+
+    expect(hub?.classList.contains('tree-row--active')).toBe(false);
+    expect(wiki?.classList.contains('tree-row--active')).toBe(true);
+    expect(wiki?.getAttribute('aria-current')).toBe('page');
   });
 
   it('right-click opens a text-only Rename menu that starts the inline rename', () => {
@@ -276,6 +463,113 @@ describe('ExplorerWorkspaceTreeComponent', () => {
 
     expect(cmp.projectActions.contextMenu()).toBeNull();
     expect(emitted).toEqual([{ projectId: 'PROJ-Alpha', displayName: 'Alpha', shortCode: 'ALP' }]);
+  });
+});
+
+describe('ExplorerWorkspaceTreeComponent — AGT-2031 auto-pickup pulse', () => {
+  const pulse = (entries: [string, ProjectPulseState][]) =>
+    new Map<string, ProjectPulseState>(entries);
+
+  it('renders a per-project pulse dot reflecting idle / active / off state', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    cmp.setCollapsed('ws:__all__', false);
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta'), row('Gamma')]);
+    fixture.componentRef.setInput('projectPulseByName', pulse([
+      ['Alpha', 'auto-idle'],
+      ['Beta', 'auto-active'],
+    ]));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const dot = (name: string) =>
+      root.querySelector<HTMLElement>(`[data-testid="studio-explorer-project-pulse-${name}"]`);
+
+    expect(dot('Alpha')?.getAttribute('data-pulse')).toBe('auto-idle');
+    expect(dot('Alpha')?.classList.contains('studio-auto-pulse--idle')).toBe(true);
+    expect(dot('Alpha')?.getAttribute('aria-label')).toBe('Auto-pickup on');
+
+    expect(dot('Beta')?.getAttribute('data-pulse')).toBe('auto-active');
+    expect(dot('Beta')?.classList.contains('studio-auto-pulse--active')).toBe(true);
+    expect(dot('Beta')?.getAttribute('aria-label')).toBe('Auto-pickup running');
+
+    // Not on auto → the slot still renders (reserved width, no reflow) but is
+    // marked off with no accessible label.
+    expect(dot('Gamma')?.getAttribute('data-pulse')).toBe('off');
+    expect(dot('Gamma')?.classList.contains('studio-auto-pulse--idle')).toBe(false);
+    expect(dot('Gamma')?.classList.contains('studio-auto-pulse--active')).toBe(false);
+    expect(dot('Gamma')?.getAttribute('aria-label')).toBeNull();
+  });
+
+  it('rolls child pulses into the active-wins aggregate with the on-auto names', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [
+        project('Alpha', 'ws-default', '/repos/Alpha'),
+        project('Beta', 'ws-default', '/repos/Beta'),
+        project('Gamma', 'ws-default', '/repos/Gamma'),
+      ]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta'), row('Gamma')]);
+    fixture.componentRef.setInput('projectPulseByName', pulse([
+      ['Alpha', 'auto-idle'],
+      ['Beta', 'auto-active'],
+    ]));
+
+    const agg = cmp.wsPulseAggregate(cmp.groups()[0]);
+    // active beats idle; the off project (Gamma) drops out of the name list.
+    expect(agg).toEqual({ state: 'auto-active', autoProjects: ['Alpha', 'Beta'] });
+    expect(cmp.aggregatePulseTooltip(agg)).toBe('Auto-pickup running: Alpha, Beta');
+  });
+
+  it('shows the aggregate dot on a collapsed workspace header, hides it when expanded', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    fixture.componentRef.setInput('projectPulseByName', pulse([['Alpha', 'auto-idle']]));
+
+    const root: HTMLElement = fixture.nativeElement;
+    const wsDot = () => root.querySelector<HTMLElement>('[data-testid="studio-explorer-ws-pulse-ws-default"]');
+
+    cmp.setCollapsed('ws:ws-default', false);
+    fixture.detectChanges();
+    expect(wsDot()).toBeNull(); // expanded → per-project dots carry the signal
+
+    cmp.setCollapsed('ws:ws-default', true);
+    fixture.detectChanges();
+    expect(wsDot()?.getAttribute('data-pulse')).toBe('auto-idle');
+    expect(wsDot()?.getAttribute('aria-label')).toBe('Auto-pickup on: Alpha');
+  });
+
+  it('surfaces the whole-tree aggregate on the panel header only when collapsed', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta')]);
+    fixture.componentRef.setInput('projectPulseByName', pulse([
+      ['Alpha', 'auto-idle'],
+      ['Beta', 'auto-active'],
+    ]));
+
+    expect(cmp.allPulseAggregate()).toEqual({ state: 'auto-active', autoProjects: ['Alpha', 'Beta'] });
+
+    const root: HTMLElement = fixture.nativeElement;
+    const panelDot = () => root.querySelector<HTMLElement>('[data-testid="studio-explorer-workspace-pulse"]');
+
+    cmp.setCollapsed('workspace', false);
+    fixture.detectChanges();
+    expect(panelDot()).toBeNull();
+
+    cmp.setCollapsed('workspace', true);
+    fixture.detectChanges();
+    expect(panelDot()?.getAttribute('data-pulse')).toBe('auto-active');
   });
 });
 

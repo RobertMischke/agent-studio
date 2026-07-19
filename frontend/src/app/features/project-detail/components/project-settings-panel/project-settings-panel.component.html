@@ -5,18 +5,24 @@
       <span class="ps-settings__chip">this project</span>
     </div>
     <p class="ps-settings__desc" data-testid="project-settings-desc">
-      Global defaults from Workspace settings, surfaced here so you can see what
-      this project inherits. Per-project overrides below win over them.
+      Edit this project's onboarding values and execution behavior, then review
+      the workspace defaults it inherits.
     </p>
   </header>
+
+  <section class="ps-settings__section" aria-label="Project basics">
+    <app-project-basics-card [projectName]="projectName()" />
+  </section>
 
   <section class="ps-settings__section" aria-labelledby="ps-settings-inherited">
     <header class="ps-settings__section-head">
       <h3 id="ps-settings-inherited" class="ps-settings__section-title">Workspace defaults</h3>
       <p class="ps-settings__section-desc">
-        Inherited from the global Workspace settings. No per-project override
-        exists for these yet, so they are read-only — open the Workspace
-        settings to change the global value.
+        Defaults that apply to every project in this workspace. The Orchestrator
+        card is editable here and writes the workspace default (a per-project
+        override in the section below still wins). Default agent and usage caps
+        remain read-only here. The default agent is the workspace fallback;
+        a project-specific agent selected in Project basics wins over it.
       </p>
     </header>
 
@@ -25,10 +31,10 @@
         <div class="ps-settings__card-head">
           <span class="ps-settings__card-icon" aria-hidden="true">◈</span>
           <span class="ps-settings__card-title">Default agent</span>
-          <span class="ps-settings__badge" data-testid="project-settings-default-agent-inherited">Inherited</span>
+          <span class="ps-settings__badge" data-testid="project-settings-default-agent-inherited">Workspace fallback</span>
         </div>
         <p class="ps-settings__card-desc">
-          The CLI and model new tasks start from unless a task overrides them.
+          Used when Project basics does not set a project-specific agent and the task has no override.
         </p>
         <div class="ps-settings__card-value">
           <app-cli-model-selector
@@ -44,7 +50,7 @@
         <button type="button"
                 class="ps-settings__link"
                 data-testid="project-settings-open-workspace"
-                [appTooltip]="'Open the global Workspace settings home.'"
+                [cacTooltip]="'Open the global Workspace settings home.'"
                 (click)="openWorkspaceSettings()">Open Workspace settings →</button>
       </article>
 
@@ -82,9 +88,52 @@
         <button type="button"
                 class="ps-settings__link"
                 data-testid="project-settings-open-caps"
-                [appTooltip]="'Open the global usage-caps section to edit caps.'"
+                [cacTooltip]="'Open the global usage-caps section to edit caps.'"
                 (click)="openUsageCaps()">Manage usage caps →</button>
       </article>
+
+      @if (workspaceId(); as wsId) {
+        <article class="ps-settings__card" data-testid="project-settings-orchestrator">
+          <div class="ps-settings__card-head">
+            <span class="ps-settings__card-icon" aria-hidden="true">◆</span>
+            <span class="ps-settings__card-title">Orchestrator</span>
+            <span class="ps-settings__badge ps-settings__badge--editable"
+                  data-testid="project-settings-orchestrator-editable">Workspace default</span>
+          </div>
+          <p class="ps-settings__card-desc">
+            The model and autonomy the orchestrator uses by default across
+            <strong>{{ workspaceName() }}</strong>. A per-project override in the
+            section below wins over these.
+          </p>
+          <div class="ps-settings__orch-controls">
+            <label class="ps-settings__field">
+              <span class="ps-settings__field-label">Model</span>
+              <select class="ps-settings__select"
+                      data-testid="project-settings-orchestrator-model"
+                      [disabled]="orchSaving()"
+                      (change)="onWorkspaceModelChange($any($event.target).value)">
+                @for (opt of orchModelOptions(); track opt.id) {
+                  <option [value]="opt.id" [selected]="opt.id === orchModel()">{{ opt.label }}</option>
+                }
+              </select>
+            </label>
+            <label class="ps-settings__field">
+              <span class="ps-settings__field-label">Autonomy</span>
+              <select class="ps-settings__select"
+                      data-testid="project-settings-orchestrator-autonomy"
+                      [disabled]="orchSaving()"
+                      (change)="onWorkspaceAutonomyChange(+$any($event.target).value)">
+                <option [value]="-1" [selected]="orchAutonomy() < 0">Platform default (Balanced)</option>
+                @for (stop of autonomyStops; track stop.level) {
+                  <option [value]="stop.level" [selected]="stop.level === orchAutonomy()">
+                    {{ stop.level }} · {{ stop.name }}
+                  </option>
+                }
+              </select>
+            </label>
+          </div>
+        </article>
+      }
     </div>
   </section>
 
@@ -96,7 +145,9 @@
         defaults above.
       </p>
     </header>
-    <article class="ps-settings__card" data-testid="project-settings-parallel">
+    <div class="ps-settings__execution-grid">
+      <app-execution-assignment-card [projectName]="projectName()" />
+      <article class="ps-settings__card" data-testid="project-settings-parallel">
       <div class="ps-settings__card-head">
         <span class="ps-settings__card-icon" aria-hidden="true">⇉</span>
         <span class="ps-settings__card-title">Parallel execution</span>
@@ -116,7 +167,8 @@
           }
         </select>
       </label>
-    </article>
+      </article>
+    </div>
 
     <app-project-detail [projectName]="projectName()" view="settings" />
   </section>

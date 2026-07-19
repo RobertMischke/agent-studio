@@ -12,13 +12,13 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * use this component instead of Unicode glyphs or emoji.
  */
 export type StudioIconName =
-  | 'folder' | 'file' | 'list' | 'filter' | 'search' | 'cli'
+  | 'folder' | 'file' | 'code' | 'list' | 'filter' | 'search' | 'cli'
   | 'activity' | 'runbook' | 'settings' | 'plus' | 'close' | 'dot'
   | 'check' | 'expand' | 'collapse' | 'play' | 'pause' | 'branch'
   | 'refresh' | 'more' | 'bell' | 'warn' | 'diff' | 'book' | 'eye'
   | 'panelLeft' | 'panelRight' | 'layout' | 'sliders' | 'bot'
   | 'grid' | 'archive' | 'send' | 'sun' | 'moon' | 'pin'
-  | 'epic' | 'backlog'
+  | 'epic' | 'backlog' | 'link' | 'star' | 'starFilled'
   | 'chevronRight' | 'chevronDown' | 'chevronLeft';
 
 @Component({

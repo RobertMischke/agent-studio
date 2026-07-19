@@ -1,0 +1,34 @@
+<div class="harness">
+  <header class="harness__bar">
+    <h1 class="harness__title">AGT-2020 — Delete: Hover-Icon → Kontextmenü (real TaskCardComponent)</h1>
+    <div class="harness__themes" role="group" aria-label="Theme">
+      <button type="button"
+              class="harness__theme"
+              data-testid="harness-theme-dark"
+              [class.harness__theme--active]="theme() === 'dark'"
+              (click)="setTheme('dark')">Dark</button>
+      <button type="button"
+              class="harness__theme"
+              data-testid="harness-theme-light"
+              [class.harness__theme--active]="theme() === 'light'"
+              (click)="setTheme('light')">Light</button>
+    </div>
+  </header>
+
+  <p class="harness__hint">
+    Right-click a card (or focus it and press the Menu key / Shift+F10) — the
+    delete action now lives at the end of the context menu, destructively
+    styled behind a separator. No hover trash button remains on the card.
+  </p>
+
+  <div class="harness__stage">
+    <div class="harness__col">
+      <span class="harness__label">Task card</span>
+      <app-task-card [job]="task()"></app-task-card>
+    </div>
+    <div class="harness__col">
+      <span class="harness__label">Epic card</span>
+      <app-task-card [job]="epic()"></app-task-card>
+    </div>
+  </div>
+</div>

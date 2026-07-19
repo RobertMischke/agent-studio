@@ -137,93 +137,8 @@
   font-weight: 700;
 }
 
-// Compact verdict banner ("Last run completed successfully" / "Unclear"
-// / "Last run failed"). Re-toned per user feedback: the dark-only
-// pastel text was unreadable on the light shell and over-loud overall.
-// Uses a thin left accent stripe (semantic colour) + neutral text on
-// a near-transparent surface so the banner stays calm.
-.protocol-verdict {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  // Inset horizontally to share the inspector's 10px content edge so the
-  // verdict bar, the model/provenance line, and the "What Was Done" body
-  // all line up on one left edge (req: linke Balken bündig).
-  margin: 6px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--studio-border, rgba(255,255,255,0.08));
-  border-left: 3px solid var(--studio-fg-muted, #6e6e6e);
-  background: var(--studio-bg-elevated, rgba(120, 120, 140, 0.08));
-  color: var(--studio-fg, #cccccc);
-  font-size: 12px;
-
-  &[data-kind="ok"] {
-    border-left-color: var(--studio-accent-success);
-    background: var(--notify-success-tint);
-  }
-  &[data-kind="problem"] {
-    border-left-color: var(--severity-high);
-    background: color-mix(in srgb, var(--severity-high) 8%, transparent);
-  }
-  &[data-kind="unclear"] {
-    border-left-color: var(--severity-warn);
-    background: color-mix(in srgb, var(--severity-warn) 8%, transparent);
-  }
-
-  &__emoji {
-    font-size: 14px;
-    line-height: 1;
-    flex: 0 0 auto;
-  }
-
-  &__label {
-    font-weight: 600;
-    flex: 0 0 auto;
-    color: var(--studio-fg-strong, var(--studio-fg-strong));
-  }
-
-  &__detail {
-    flex: 1 1 auto;
-    min-width: 0;
-    color: var(--studio-fg-dim, var(--lane-backlog));
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  // Duration lifted from the (now-collapsed) "## Status" markdown section
-  // into the pill itself. Stays on the right as a compact icon + value
-  // chip — same line as label/detail so the verdict pill still reads as
-  // a single row.
-  &__duration {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    padding-left: 8px;
-    margin-left: auto;
-    border-left: 1px solid var(--studio-border, rgba(255, 255, 255, 0.12));
-    color: var(--studio-fg-dim, var(--lane-backlog));
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    cursor: help;
-  }
-
-  &__duration-icon {
-    font-size: 12px;
-    line-height: 1;
-    opacity: 0.85;
-  }
-
-  &__duration-value {
-    line-height: 1;
-  }
-}
-
-// Protocol-verdict reads --studio-* / --severity-* tokens that flip
-// per theme — no separate `[data-studio-theme='light']` bridge needed.
+// The compact verdict banner + its superseded-history strip moved into
+// `<app-protocol-verdict-banner>` (protocol-verdict-banner.component.scss).
 
 .pane__interim-btn {
   display: inline-flex;
@@ -1061,4 +976,25 @@
   margin: 0;
   flex: 0 1 auto;
   min-width: 0;
+}
+
+/*
+ * `<cac-conversation-view>` ships `:host { display: block }` with no sizing
+ * of its own (the library leaves scroll ownership to the host, see its
+ * `bodyMaxHeight` doc comment). With `[virtualised]="true"` the component's
+ * inner `.conv` root caps itself at `[style.max-height]="bodyMaxHeight()"`
+ * (default 100%) and scrolls internally — that only bounds correctly if this
+ * host resolves to a definite height. `.activity-panel` (task-detail.scss)
+ * is already `flex; flex-direction: column; min-height: 0`, so turning this
+ * host into a flex:1 min-height:0 item there gives it that definite height,
+ * the same pattern `app-activity-log-view` and `cac-chat` use for their own
+ * self-scrolling body. Without this the ancestor `.pane__body` (overflow:
+ * auto) stays the only scroller and the virtualised windowing math never
+ * gets a stable scrollTop/clientHeight.
+ */
+cac-conversation-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }

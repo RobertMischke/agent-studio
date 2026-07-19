@@ -93,9 +93,68 @@ public class CompletionGateTests
     }
 
     [Theory]
+    // AGT-1986: the run honestly annotated an item as pre-existing / out-of-scope
+    // (not work this change owns). The gate must NOT count these as unfinished
+    // work, or it escalates a fully-merged run over a failure it did not cause.
+    [InlineData("- [ ] Flaky auth test fails intermittently (pre-existing, not caused by this change).")]
+    [InlineData("- [ ] [pre-existing] Lint warnings in the legacy module.")]
+    [InlineData("- [ ] Broken snapshot in the shared package (out of scope for this task).")]
+    [InlineData("- [ ] Pre-existing: the e2e suite is red on main.")]
+    [InlineData("- [ ] The build warning is not introduced by these changes.")]
+    [InlineData("- The vendored bundle mismatch is not caused by this change.")]
+    public void ExtractFindings_PreExistingOrOutOfScopeItem_IsNotReported(string openItemLine)
+    {
+        var status = string.Join('\n', "## Open Items", openItemLine);
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_PreExistingEvidenceLine_IsNotReported()
+    {
+        // A build/test-failure evidence line the run disclaimed as pre-existing
+        // must not surface as a finding (it would otherwise match the
+        // build-failure vocabulary and escalate the run).
+        var status = "## Notes\nThe integration tests fail, but that is pre-existing and not caused by this change.";
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_GenuinePreExistingWork_StillReported()
+    {
+        // Guard the guard: a genuine actionable item that merely uses the
+        // adjective "pre-existing" (with no disclaimer marker) must still be
+        // reported - the run chose to note it as work to do.
+        var status = "## Open Items\n- [ ] Fix the pre-existing null-check bug in the parser as part of this task.";
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Contains(findings, f => f.Contains("null-check bug", System.StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ExtractFindings_PreExistingItem_DoesNotTriggerReissueOrEscalate()
+    {
+        // AGT-1986 end to end: a pre-existing-marked item must pass the gate at
+        // both ends of the reissue budget so a fully-merged run is not escalated.
+        var status = "## Summary\nDone.\n\nResult: Success\n\n## Open Items\n- [ ] Flaky auth test (pre-existing, not caused by this change).\n";
+
+        var fresh = CompletionGate.Evaluate(status, recentLog: null, priorReissues: 0, maxReissues: MaxReissues);
+        var spent = CompletionGate.Evaluate(status, recentLog: null, priorReissues: MaxReissues, maxReissues: MaxReissues);
+
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, fresh.Action);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, spent.Action);
+    }
+
+    [Theory]
     // The reissue loop's own trigger: a commit/push-delegation follow-up the
     // agent can never close because the platform owns the commit boundary
-    // (docs/commit-push-doctrine.md). Each variant must NOT become a finding,
+    // (docs/operations/git/commit-push-doctrine.md). Each variant must NOT become a finding,
     // or the managed run ping-pongs back to 2-ready forever / escalates grundlos.
     [InlineData("- [ ] Working tree changes awaiting managed-run commit/push (platform owns merge).")]
     [InlineData("- [ ] Changes left in the working tree for the platform to commit.")]
@@ -215,6 +274,93 @@ public class CompletionGateTests
 
         Assert.DoesNotContain(findings, f =>
             f.Contains("build/test failure evidence", System.StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ExtractFindings_SuccessResult_ExplicitFalsePositiveBuildFailure_IsNotReported()
+    {
+        // AGT-2148 reissue regression: an early --no-restore probe failed only
+        // because project.assets.json did not exist yet. The final close-out
+        // explicitly disclaimed that signal as a false positive after a clean
+        // restored build, so it is historical context rather than open work.
+        var status = string.Join('\n',
+            "Result: Success",
+            "## What Was Done",
+            "- Identified earlier \"Build FAILED\" as a false positive: `dotnet build --no-restore` ran before `project.assets.json` was created.",
+            "- Rebuilt with restore and all tests passed.",
+            "## Open Items",
+            "None.");
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_UnresolvedBuildFailure_StillReported()
+    {
+        // Guard the guard: "earlier" alone does not disclaim a failure. Only an
+        // explicit false-positive diagnosis may suppress build-failure text.
+        var status = "Result: Success\n## Notes\nThe earlier build FAILED and has not been rerun.";
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Contains(findings, f =>
+            f.Contains("build FAILED", System.StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ExtractFindings_UnrelatedFalsePositivePhrase_DoesNotHidePendingWork()
+    {
+        var status = "Result: Success\n## Notes\nThe false-positive detector wiring is still pending.";
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Contains(findings, f =>
+            f.Contains("still pending", System.StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ExtractFindings_EchoedPipelineExecutionFinding_IsNotReported()
+    {
+        // AGT-2148 reissue regression: an rg/Get-Content result from the
+        // pipeline history repeated the gate's own old "Build FAILED" reason.
+        // It is artifact content, not fresh build/test output from this run.
+        var status = "Result: Success\n## Open Items\nNone.";
+        var log = string.Join('\n',
+            "[20:48:40.074] [stderr] C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard\\tasks\\002\\AGT-2148\\pipeline-execution.json:41:     \"reason\": \"2 open item(s): [19:26:29.151] [stderr] Build FAILED.; Status result is Success but build/test failure evidence was found\"",
+            "[20:48:41.000] [stdout] [[TASK_DONE]]");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_SuccessfulFixedProblemAndNegatedSourceEcho_AreNotReported()
+    {
+        // AGT-2148 second reissue regression: the successful status described
+        // the stale failure that was fixed, while rg echoed source containing
+        // the phrase "no unfinished evidence". Neither is an open item.
+        var status = string.Join('\n',
+            "Result: Success",
+            "## Overview",
+            "- Problem: Completion-gate was incorrectly re-opening tasks by retaining stale \"Build FAILED\" evidence from early pre-restore attempts as unresolved open items.",
+            "- Solution: Later restored verification passed.",
+            "## What Was Done",
+            "- Verified: targeted suite 67/67 tests passed.",
+            "## Open Items",
+            "None.");
+        var log = string.Join('\n',
+            "[20:57:08.894] [stderr] .\\frontend\\e2e\\task-detail\\pipeline-orchestrator-review-distinct.spec.ts:121: verdictSummary: 'Post-core completeness check: no unfinished evidence in the close-out.',",
+            "[21:04:52.418] [stdout] [[TASK_DONE]]",
+            "[21:04:52.980] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=492.0s");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+        var decision = CompletionGate.Evaluate(status, log, priorReissues: 3, maxReissues: 3);
+
+        Assert.Empty(findings);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
     }
 
     [Fact]

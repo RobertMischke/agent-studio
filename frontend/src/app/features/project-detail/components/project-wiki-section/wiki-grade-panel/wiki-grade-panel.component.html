@@ -1,0 +1,101 @@
+<section class="wgrade" data-testid="project-wiki-pulse-grading" aria-label="Wiki grading">
+  <div class="wgrade__head">
+    <div class="wgrade__copy">
+      <h4>Grade pages</h4>
+      <p>Walk every page with a strong model and write an assessment into each sidecar.</p>
+    </div>
+    <div class="wgrade__controls">
+      <label class="wgrade__field">
+        <span>Maintenance model</span>
+        <select class="wgrade__select" data-testid="project-wiki-pulse-grade-model"
+                [disabled]="gradingRunning()"
+                (change)="onModelSelect($event)">
+          @if (gradeModels().length === 0) {
+            <option value="" selected>CLI default</option>
+          }
+          @for (m of gradeModels(); track m.id) {
+            <option [value]="m.id" [selected]="m.id === gradeModel()">{{ m.label }}</option>
+          }
+        </select>
+      </label>
+      @if (gradeLevelOptions().length > 1) {
+        <label class="wgrade__field">
+          <span>Level</span>
+          <select class="wgrade__select" data-testid="project-wiki-pulse-grade-level"
+                  [disabled]="gradingRunning()"
+                  (change)="onLevelSelect($event)">
+            @for (lvl of gradeLevelOptions(); track lvl) {
+              <option [value]="lvl" [selected]="lvl === gradeLevel()">{{ lvl }}</option>
+            }
+          </select>
+        </label>
+      }
+    </div>
+    @if (gradingRunning()) {
+      <button type="button" class="wgrade__btn wgrade__btn--stop"
+              data-testid="project-wiki-pulse-grade-abort"
+              (click)="abortGrading.emit()">
+        <app-studio-icon name="close" [size]="13"></app-studio-icon>Abort
+      </button>
+    } @else {
+      <button type="button" class="wgrade__btn"
+              data-testid="project-wiki-pulse-grade-start"
+              (click)="startGrading.emit()">
+        <app-studio-icon name="play" [size]="13"></app-studio-icon>Grade all pages
+      </button>
+    }
+  </div>
+
+  @if (grading(); as g) {
+    <div class="wgrade__progress" data-testid="project-wiki-pulse-grade-progress"
+         [attr.data-state]="g.state">
+      <div class="wgrade__track" role="progressbar"
+           [attr.aria-valuenow]="gradingProgressPct()" aria-valuemin="0" aria-valuemax="100">
+        <span class="wgrade__fill" [style.width.%]="gradingProgressPct()"></span>
+      </div>
+      <span class="wgrade__state" data-testid="project-wiki-pulse-grade-state">{{ gradingStateLabel() }}</span>
+      @if (g.currentRelPath && gradingRunning()) {
+        <code class="wgrade__current">{{ g.currentRelPath }}</code>
+      }
+    </div>
+  }
+
+  <!-- Critical pages: the LLM grade supplements the deterministic drift bar -->
+  <div class="wgrade__critical" data-testid="project-wiki-pulse-critical">
+    <header class="wgrade__critical-head">
+      <app-studio-icon name="warn" [size]="13"></app-studio-icon>
+      <h4>Critical pages</h4>
+      <span class="wgrade__badge"
+            [attr.data-tone]="(critical()?.count ?? 0) > 0 ? 'bad' : 'good'">{{ critical()?.count ?? 0 }}</span>
+    </header>
+    @if (critical(); as c) {
+      @if (c.count > 0) {
+        <ul class="wgrade__list">
+          @for (item of c.items; track item.relPath) {
+            <li>
+              <button type="button" class="wgrade__row"
+                      [attr.data-testid]="'project-wiki-pulse-critical-open-' + item.relPath"
+                      (click)="openCritical(item)">
+                <span class="wgrade__row-top">
+                  <span class="wgrade__cgrade" [attr.data-tone]="criticalTone(item.grade)">{{ item.grade }}</span>
+                  @if (item.areaTitle) {
+                    <span class="wgrade__area"><app-studio-icon name="folder" [size]="9"></app-studio-icon>{{ item.areaTitle }}</span>
+                  }
+                  @if (item.model) { <span class="wgrade__model">{{ item.model }}</span> }
+                </span>
+                <strong class="wgrade__row-title">{{ item.title }}</strong>
+                @if (item.assessment) { <span class="wgrade__reason">{{ item.assessment }}</span> }
+                <code class="wgrade__path">{{ item.relPath }}</code>
+              </button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="wgrade__healthy" data-testid="project-wiki-pulse-critical-empty">
+          <app-studio-icon name="check" [size]="16"></app-studio-icon>
+          <p>{{ c.reason || 'No critical pages.' }}</p>
+        </div>
+      }
+    }
+  </div>
+</section>

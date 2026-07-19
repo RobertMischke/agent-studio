@@ -5,7 +5,7 @@ import { QuotaApiService } from '../../../../features/quota';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
 import { cliTypeIcon } from '../../../../services/format.util';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Compact strip surfacing each installed CLI's subscription quota / rate-limit
  * status — designed to live at the top of the CLI Sessions sidesheet so the
@@ -36,7 +36,6 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
   readonly refreshingAll = signal(false);
   // Per-CLI in-flight refresh flags so each card's spinner is independent.
   readonly refreshing = signal<Record<CliType, boolean>>({
-    copilot: false,
     claude: false,
     codex: false,
     gemini: false,
@@ -119,8 +118,6 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
 
   cliLabel(t: CliType): string {
     switch (t) {
-      case 'copilot':
-        return 'Copilot';
       case 'claude':
         return 'Claude Code';
       case 'codex':

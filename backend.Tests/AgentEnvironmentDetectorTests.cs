@@ -9,7 +9,7 @@ namespace AgentStudio.Tests;
 /// Adding a new pattern is a one-line append in
 /// <see cref="AgentEnvironmentDetector.Patterns"/>; this test pins the
 /// existing pattern set so a regex regression cannot silently break the
-/// runtime hook in <c>CliExecutionServiceBase.CheckEnvironmentBlocker</c>.
+/// runtime hook in <c>GenericCliExecutionService.CheckEnvironmentBlocker</c>.
 /// </summary>
 public class AgentEnvironmentDetectorTests
 {

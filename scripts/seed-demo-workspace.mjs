@@ -132,6 +132,9 @@ function writeTask(root, task, index) {
       Changes: '+128 -34',
       Requests: '2 Premium (3m 54s)',
     };
+    if (task.key === 'DEMO-5') {
+      json.tags = ['demo', 'frontend', 'code-review:concerns', 'code-review:grade-b'];
+    }
   }
 
   writeJson(join(dir, 'task.json'), json);
@@ -141,6 +144,34 @@ function writeTask(root, task, index) {
   );
 
   if (task.hist) writeHistory(dir, task, id, index);
+  if (task.key === 'DEMO-5') writeReviewEvidence(dir);
+}
+
+function writeReviewEvidence(dir) {
+  writeText(
+    join(dir, 'code-review-2026-06-01T12-00-00.md'),
+    `---
+type: code-review-grade
+runAt: ${iso(260)}
+model: claude-haiku-4-5
+cliType: claude
+commit: demo000000000000000000000000000000000000
+grade: B
+verdict: concerns
+summary: Export flow is ready for human review; add one empty-state assertion before release.
+tag: code-review:grade-b
+---
+
+# Code Review - Quality Grade: B
+
+> Export flow is ready for human review; add one empty-state assertion before release.
+
+## Findings
+
+- **Medium:** Add an assertion for exporting an empty report table.
+- **Verified:** CSV escaping and timezone formatting have deterministic coverage.
+`
+  );
 }
 
 function writeHistory(dir, task, id, index) {
@@ -232,6 +263,24 @@ function writeWorkspaceRootFiles(root) {
   );
 }
 
+function writePresentationStory(root) {
+  const demoApp = join(root, 'projects', 'demo-app');
+  writeText(
+    join(demoApp, 'README.md'),
+    '# Demo App\n\nA deterministic sample product used only for Agent Studio demonstrations.\n'
+  );
+  writeText(
+    join(demoApp, 'docs', 'architecture.md'),
+    '# Architecture\n\nThe demo has an Angular client, an API boundary, and a review pipeline. Agent Studio keeps tasks, execution evidence, and project knowledge in one operator workspace.\n'
+  );
+  writeJsonl(join(demoApp, '.orchestrator', 'orchestrator-chat.jsonl'), [
+    { id: 'demo-chat-01', ts: iso(210), role: 'user', text: 'What should we show in the MVP walkthrough?' },
+    { id: 'demo-chat-02', ts: iso(211), role: 'orchestrator', text: 'Start with the cross-lane board, open DEMO-5 to connect execution with review evidence, then finish in project knowledge and token usage.' },
+    { id: 'demo-chat-03', ts: iso(212), role: 'user', text: 'Keep the demo safe and repeatable.' },
+    { id: 'demo-chat-04', ts: iso(213), role: 'orchestrator', text: 'Confirmed. This workspace contains seeded demo data only and can be reset before every capture.' },
+  ]);
+}
+
 // ---- Idempotent reset + run --------------------------------------------
 
 function reset(root) {
@@ -255,6 +304,7 @@ function main() {
 
   TASKS.forEach((task, i) => writeTask(root, task, i));
   writeWorkspaceRootFiles(root);
+  writePresentationStory(root);
 
   const perLane = TASKS.reduce((acc, t) => ((acc[t.state] = (acc[t.state] || 0) + 1), acc), {});
   console.log(`Seeded demo store at: ${root}`);

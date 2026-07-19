@@ -27,7 +27,7 @@
               [class.studio-pill--active]="true"
               [style.--studio-pill-color]="activeProjectColor()"
               data-testid="studio-project-picker-trigger"
-              [appTooltip]="activeProjectPickerLabel() + ' — click to switch project'"
+              [cacTooltip]="activeProjectPickerLabel() + ' — click to switch project'"
               (click)="togglePickerMenu($event)">
         @if (activeProjectName(); as name) {
           <span class="studio-pill__glyph"
@@ -45,7 +45,7 @@
                 tabindex="0"
                 [class.studio-auto-toggle--on]="autoModeFor(name) !== 'manual' && autoModeFor(name) !== 'paused'"
                 data-testid="studio-titlebar-auto-toggle"
-                [appTooltip]="autoToggleTooltip(name)"
+                [cacTooltip]="autoToggleTooltip(name)"
                 (click)="toggleAuto.emit(name); $event.stopPropagation()"
                 (keydown.enter)="toggleAuto.emit(name); $event.stopPropagation()"
                 (keydown.space)="toggleAuto.emit(name); $event.stopPropagation()">
@@ -76,29 +76,34 @@
 
     <span class="studio-titlebar__spacer"></span>
 
-    <button type="button" class="studio-titlebar__search" disabled
-            appTooltip="Search tasks, commits, files (coming soon)">
+    <button type="button" class="studio-titlebar__search" data-testid="studio-global-search-trigger"
+            cacTooltip="Search tasks, commits, files (Ctrl+K)" (click)="globalSearchOpen.set(true)">
       <app-studio-icon name="search" [size]="13"></app-studio-icon>
       <span class="studio-titlebar__search-label">Search tasks, commits, files…</span>
-      <span class="studio-titlebar__kbd">⌘P</span>
+      <span class="studio-titlebar__kbd">Ctrl K</span>
     </button>
+
+    <app-global-search
+      [tasks]="globalSearchTasks()"
+      [open]="globalSearchOpen()"
+      (openChange)="globalSearchOpen.set($event)"></app-global-search>
 
     <div class="studio-titlebar__actions" data-testid="studio-titlebar-actions">
       <button type="button"
               class="studio-titlebar__chatbtn"
               data-testid="studio-titlebar-chat"
-              appTooltip="Open project chat (orchestrator side sheet)"
+              cacTooltip="Open project chat (orchestrator side sheet)"
               (click)="chatToggle.emit()">
         <app-studio-icon name="bot" [size]="14"></app-studio-icon>
         <span>Project Chat</span>
       </button>
       <button type="button"
               class="studio-titlebar__iconbtn"
-              [appTooltip]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
+              [cacTooltip]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
               (click)="toggleTheme()">
         <app-studio-icon [name]="theme() === 'light' ? 'moon' : 'sun'" [size]="14"></app-studio-icon>
       </button>
-      <button type="button" class="studio-titlebar__iconbtn" appTooltip="Notifications">
+      <button type="button" class="studio-titlebar__iconbtn" cacTooltip="Notifications">
         <app-studio-icon name="bell" [size]="14"></app-studio-icon>
       </button>
     </div>
@@ -127,15 +132,10 @@
     <!-- Activity bar -->
     <app-studio-activity-bar
       [items]="activityBarItems"
-      [activePanel]="activePanel()"
-      [sidebarVisible]="sidebarVisible()"
+      [activeKey]="activeActivityKey()"
       [badgeCounts]="activityBarBadgeCounts()"
-      [backlogActive]="activeTab()?.kind === 'backlog'"
-      [backlogCount]="backlogCount()"
-      [epicsActive]="activeTab()?.kind === 'epics'"
       [hasEpics]="hasEpics()"
       (panelToggle)="togglePanel($event)"
-      (openBacklogRequest)="onActivityBarOpenBacklog()"
       (openEpicsRequest)="onActivityBarOpenEpics()" />
 
     <!-- Sidebar host -->
@@ -150,44 +150,46 @@
              [attr.data-active-panel]="activePanel()"
              data-testid="studio-sidebar">
         <!-- Header per panel -->
-        <div class="studio-sidebar__header">
-          <span class="studio-sidebar__title">{{ activePanel() }}</span>
-          <span class="studio-sidebar__spacer"></span>
+        <app-studio-sidebar-header [title]="activePanel()" testid="studio-sidebar-header">
           @if (activePanel() === 'explorer') {
-            <button type="button"
-                    class="studio-sidebar__action"
+            <button actions
+                    type="button"
+                    class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-add-workspace"
-                    appTooltip="Add a project to the workspace"
-                    aria-label="Add a project to the workspace"
+                    cacTooltip="Create workspace"
+                    aria-label="Create workspace"
                     (click)="onAddWorkspace()">
               <app-studio-icon name="plus" [size]="14"></app-studio-icon>
             </button>
-            <button type="button"
-                    class="studio-sidebar__action"
+            <button actions
+                    type="button"
+                    class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-refresh"
-                    appTooltip="Refresh project list"
+                    cacTooltip="Refresh project list"
                     aria-label="Refresh project list"
                     (click)="onRefreshWorkspace()">
               <app-studio-icon name="refresh" [size]="14"></app-studio-icon>
             </button>
-            <button type="button"
-                    class="studio-sidebar__action"
+            <button actions
+                    type="button"
+                    class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-collapse-all"
-                    appTooltip="Collapse all projects"
+                    cacTooltip="Collapse all projects"
                     aria-label="Collapse all projects"
                     (click)="onCollapseAllProjects()">
               <app-studio-icon name="collapse" [size]="14"></app-studio-icon>
             </button>
           }
           @if (activePanel() === 'filters' && boardFilters.hasActiveFiltersOrSearch()) {
-            <button type="button"
-                    class="studio-sidebar__action studio-sidebar__action--text"
+            <button actions
+                    type="button"
+                    class="studio-sidebar-header__action studio-sidebar-header__action--text"
                     data-testid="studio-sidebar-filter-clear-all"
-                    appTooltip="Clear all active filters"
+                    cacTooltip="Clear all active filters"
                     aria-label="Clear all filters"
                     (click)="boardFilters.clearSearchAndFilters()">Clear all</button>
           }
-        </div>
+        </app-studio-sidebar-header>
         <div class="studio-sidebar__body">
           @switch (activePanel()) {
             @case ('explorer') {
@@ -204,13 +206,19 @@
                   [projectStorageByName]="projectStorageByName()"
                   [expandedProjects]="expandedProjects()"
                   [showAllActive]="activeProjectName() === null && activeTab()?.kind === 'board'"
+                  [activeProjectSurface]="activeProjectSurface()"
+                  [metricView]="uiPrefs.treeMetricView()"
+                  [projectPulseByName]="projectPulseByName()"
                   (showAll)="pickProject(null)"
                   (toggleExpanded)="toggleProjectExpanded($event)"
                   (openBoardRequest)="openBoard($event)"
                   (openHubRequest)="openHub($event)"
-                  (openBacklogRequest)="openProjectBacklog($event)"
+                  (openUrlPreviewRequest)="openUrlPreview($event)"
+                  (openWikiRequest)="openWiki($event)"
+                  (openWorkbenchRequest)="openWorkbench($event)"
                   (openEpicsRequest)="openProjectEpics($event)"
                   (onboardProjectRequest)="onAddProjectToWorkspace($event)"
+                  (onboardWorkspaceRequest)="onAddWorkspace()"
                   (renameWorkspace)="onTreeRenameWorkspace($event)"
                   (renameProject)="onTreeRenameProject($event)"
                   (deleteProject)="onTreeDeleteProject($event)"
@@ -377,266 +385,6 @@
                 </button>
               </section>
             }
-            @case ('settings') {
-              <section class="studio-settings">
-                <app-section-header title="Appearance" />
-                <div class="studio-setting">
-                  <span class="studio-setting__label" id="studio-setting-theme">Theme</span>
-                  <app-segmented-control
-                    ariaLabel="Theme"
-                    [options]="themeOptions"
-                    [value]="theme()"
-                    (valueChange)="setTheme($event)" />
-                </div>
-                <app-section-header title="Layout" [divider]="true" />
-                <div class="studio-setting">
-                  <span class="studio-setting__label" id="studio-setting-activitybar">Activity bar</span>
-                  <app-segmented-control
-                    ariaLabel="Activity bar"
-                    [options]="activityBarSideOptions"
-                    [value]="activityBarSide()"
-                    (valueChange)="setActivityBarSide($event)" />
-                </div>
-                <div class="studio-setting">
-                  <span class="studio-setting__label">Project chat rail</span>
-                  <button type="button"
-                          class="studio-setting__toggle"
-                          [class.studio-setting__toggle--on]="chatRailOpen()"
-                          (click)="toggleChatRail()">
-                    {{ chatRailOpen() ? 'On' : 'Off' }}
-                  </button>
-                </div>
-                <app-section-header title="Cards" [divider]="true" />
-                <div class="studio-setting">
-                  <span class="studio-setting__label">Density</span>
-                  <button type="button"
-                          class="studio-setting__toggle"
-                          [class.studio-setting__toggle--on]="uiPrefs.compactCards()"
-                          (click)="toggleCompactCards()">
-                    {{ uiPrefs.compactCards() ? 'Compact' : 'Full' }}
-                  </button>
-                </div>
-
-                <app-section-header title="Updates" [divider]="true" />
-                @if (updateClient.status(); as st) {
-                  <div class="studio-update">
-                    <div class="studio-update__row">
-                      <span class="studio-update__label">Current</span>
-                      <span class="studio-update__value mono" data-testid="settings-update-head">{{ st.headLocal }}</span>
-                    </div>
-                    <div class="studio-update__row">
-                      <span class="studio-update__label">Phase</span>
-                      <span class="studio-update__value studio-update__value--phase"
-                            [class.studio-update__value--running]="st.isRunning"
-                            [class.studio-update__value--failed]="st.phase === 'failed'"
-                            [class.studio-update__value--done]="st.phase === 'done'"
-                            data-testid="settings-update-phase">{{ st.phase }}</span>
-                    </div>
-                    <div class="studio-update__row">
-                      <span class="studio-update__label">Behind</span>
-                      <span class="studio-update__value mono" data-testid="settings-update-behind">
-                        {{ updateClient.behindBy() }} {{ updateClient.behindBy() === 1 ? 'commit' : 'commits' }}
-                      </span>
-                    </div>
-                    @if (st.message) {
-                      <div class="studio-update__msg" data-testid="settings-update-msg">{{ st.message }}</div>
-                    }
-                  </div>
-                } @else {
-                  <div class="studio-empty studio-empty--note">
-                    Update service status not yet polled.
-                  </div>
-                }
-                <button type="button"
-                        class="studio-button studio-button--primary"
-                        data-testid="settings-update-trigger"
-                        [disabled]="updateClient.status()?.isRunning"
-                        (click)="triggerUpdate()">
-                  {{ updateClient.status()?.isRunning ? 'Update running…' : (updateClient.behindBy() > 0 ? 'Update stable now' : 'Check for updates') }}
-                </button>
-                <button type="button"
-                        class="studio-button studio-button--ghost"
-                        data-testid="settings-update-open-center"
-                        (click)="openUpdateCenter()">
-                  Open update history
-                </button>
-
-                <app-section-header title="Workspaces" [divider]="true"
-                                    testid="settings-workspaces-head" />
-                <div class="studio-settings-workspaces"
-                     data-testid="settings-workspaces"
-                     [attr.aria-busy]="registryWorkspacesLoading() ? 'true' : null">
-                  @if (registryWorkspacesError(); as err) {
-                    <div class="studio-empty studio-empty--note"
-                         data-testid="settings-workspaces-error">{{ err }}</div>
-                  }
-                  @if (registryWorkspacesLoading() && registryWorkspaces().length === 0) {
-                    <div class="studio-empty studio-empty--note">Loading workspaces…</div>
-                  } @else if (registryWorkspaces().length === 0) {
-                    <div class="studio-empty studio-empty--note"
-                         data-testid="settings-workspaces-empty">
-                      No workspaces registered yet. Use "+ New workspace" below or add a
-                      <code>WatchPaths</code> entry to <code>backend/appsettings.Local.json</code>
-                      and restart the backend; the first boot will seed the default workspace and
-                      one project per entry.
-                    </div>
-                  } @else {
-                    <ul class="studio-settings-workspaces__list"
-                        data-testid="settings-workspaces-list">
-                      @for (ws of registryWorkspaces(); track ws.id) {
-                        <li class="studio-settings-workspace-row"
-                            data-testid="settings-workspace-row"
-                            [attr.data-workspace-id]="ws.id"
-                            [class.studio-settings-workspace-row--busy]="registryWorkspaceBusyId() === ws.id"
-                            [class.studio-settings-workspace-row--drop-target]="wsSettings.isDragOver(ws.id)"
-                            (dragover)="wsSettings.onWorkspaceDragOver($event, ws.id)"
-                            (dragleave)="wsSettings.onWorkspaceDragLeave(ws.id)"
-                            (drop)="wsSettings.onWorkspaceDrop($event, ws.id, ws.displayName)">
-                          <span class="studio-settings-workspace-color"
-                                [style.background]="ws.color || 'var(--studio-fg-muted)'"
-                                aria-hidden="true"></span>
-                          @if (wsSettings.isRenaming(ws.id)) {
-                            <input #renameInput
-                                   type="text"
-                                   class="studio-settings-workspace-name studio-settings-workspace-name--input"
-                                   data-testid="settings-workspace-rename-input"
-                                   [attr.maxlength]="64"
-                                   [attr.aria-invalid]="wsSettings.renameError() ? 'true' : null"
-                                   [attr.aria-label]="'Rename workspace ' + ws.displayName"
-                                   [ngModel]="wsSettings.renameDraft()"
-                                   (ngModelChange)="wsSettings.updateRenameDraft($event)"
-                                   (keydown.enter)="wsSettings.commitRename(ws.displayName); $event.preventDefault()"
-                                   (keydown.escape)="wsSettings.cancelRename(); $event.preventDefault()"
-                                   (blur)="wsSettings.commitRename(ws.displayName)" />
-                            @if (wsSettings.renameError(); as err) {
-                              <span class="studio-settings-workspace-name-error"
-                                    data-testid="settings-workspace-rename-error"
-                                    role="alert">{{ err }}</span>
-                            }
-                          } @else {
-                            <button type="button"
-                                    class="studio-settings-workspace-name studio-settings-workspace-name--btn"
-                                    data-testid="settings-workspace-rename"
-                                    [appTooltip]="'Click to rename'"
-                                    (click)="renameRegistryWorkspace(ws)">{{ ws.displayName }}</button>
-                          }
-                          <span class="studio-settings-workspace-id mono">{{ ws.id }}</span>
-                          <span class="studio-settings-workspace-count">
-                            {{ ws.projects.length }} {{ ws.projects.length === 1 ? 'project' : 'projects' }}
-                          </span>
-                          <div class="studio-settings-workspace-actions">
-                            <button type="button"
-                                    class="studio-settings-workspace-action"
-                                    data-testid="settings-workspace-edit-color"
-                                    [appTooltip]="'Set color'"
-                                    [disabled]="registryWorkspaceBusyId() === ws.id"
-                                    (click)="editRegistryWorkspaceColor(ws)">🎨</button>
-                            <button type="button"
-                                    class="studio-settings-workspace-action"
-                                    data-testid="settings-workspace-move-up"
-                                    [appTooltip]="'Move up'"
-                                    [disabled]="!canMoveWorkspaceUp(ws) || registryWorkspaceBusyId() === ws.id"
-                                    (click)="moveRegistryWorkspace(ws, -1)">▲</button>
-                            <button type="button"
-                                    class="studio-settings-workspace-action"
-                                    data-testid="settings-workspace-move-down"
-                                    [appTooltip]="'Move down'"
-                                    [disabled]="!canMoveWorkspaceDown(ws) || registryWorkspaceBusyId() === ws.id"
-                                    (click)="moveRegistryWorkspace(ws, 1)">▼</button>
-                            <span class="studio-settings-workspace-action-wrap"
-                                  [appTooltip]="workspaceDeleteTooltip(ws)">
-                              <button type="button"
-                                      class="studio-settings-workspace-action studio-settings-workspace-action--danger"
-                                      data-testid="settings-workspace-delete"
-                                      [attr.aria-disabled]="!canDeleteWorkspace(ws)"
-                                      [disabled]="!canDeleteWorkspace(ws) || registryWorkspaceBusyId() === ws.id"
-                                      (click)="deleteRegistryWorkspace(ws)">×</button>
-                            </span>
-                          </div>
-                          @if (ws.projects.length > 0) {
-                            <ul class="studio-settings-projects"
-                                data-testid="settings-projects-list"
-                                [attr.data-workspace-id]="ws.id">
-                              @for (p of ws.projects; track p.id) {
-                                <li class="studio-settings-project-row"
-                                    data-testid="settings-project-row"
-                                    [attr.data-project-id]="p.id"
-                                    [attr.draggable]="true"
-                                    [class.studio-settings-project-row--busy]="registryProjectBusyId() === p.id"
-                                    [class.studio-settings-project-row--archived]="p.archived"
-                                    [class.studio-settings-project-row--dragging]="wsSettings.draggingProjectId() === p.id"
-                                    (dragstart)="wsSettings.onProjectDragStart($event, p.id, ws.id)"
-                                    (dragend)="wsSettings.onProjectDragEnd()">
-                                  <span class="studio-settings-project-color"
-                                        [style.background]="p.color || 'var(--studio-fg-muted)'"
-                                        aria-hidden="true"></span>
-                                  <span class="studio-settings-project-id mono">{{ p.id }}</span>
-                                  <span class="studio-settings-project-code mono">{{ p.shortCode }}</span>
-                                  <span class="studio-settings-project-name">{{ p.displayName }}</span>
-                                  @if (p.archived) { <span class="studio-settings-project-tag">archived</span> }
-                                  <div class="studio-settings-project-actions">
-                                    <button type="button"
-                                            class="studio-settings-workspace-action"
-                                            data-testid="settings-project-rename"
-                                            [appTooltip]="'Rename project'"
-                                            [disabled]="registryProjectBusyId() === p.id"
-                                            (click)="renameRegistryProject(p.id, p.displayName)">✎</button>
-                                    <button type="button"
-                                            class="studio-settings-workspace-action"
-                                            data-testid="settings-project-short-code"
-                                            [appTooltip]="'Edit short code'"
-                                            [disabled]="registryProjectBusyId() === p.id"
-                                            (click)="editRegistryProjectShortCode(p.id, p.shortCode)">#</button>
-                                    <button type="button"
-                                            class="studio-settings-workspace-action"
-                                            data-testid="settings-project-color"
-                                            [appTooltip]="'Set project color'"
-                                            [disabled]="registryProjectBusyId() === p.id"
-                                            (click)="editRegistryProjectColor(p.id, p.color)">🎨</button>
-                                    <button type="button"
-                                            class="studio-settings-workspace-action"
-                                            data-testid="settings-project-workspace"
-                                            [appTooltip]="'Change workspace'"
-                                            [disabled]="registryProjectBusyId() === p.id"
-                                            (click)="changeRegistryProjectWorkspace(p.id, p.workspaceId)">⇄</button>
-                                    <button type="button"
-                                            class="studio-settings-workspace-action studio-settings-workspace-action--danger"
-                                            data-testid="settings-project-archive"
-                                            [appTooltip]="p.archived ? 'Un-archive' : 'Archive'"
-                                            [disabled]="registryProjectBusyId() === p.id"
-                                            (click)="toggleRegistryProjectArchived(p.id, p.archived)">
-                                      {{ p.archived ? '↺' : '🗄' }}
-                                    </button>
-                                  </div>
-                                </li>
-                              }
-                            </ul>
-                          }
-                        </li>
-                      }
-                    </ul>
-                  }
-                  <div class="studio-settings-workspaces__footer">
-                    <button type="button"
-                            class="studio-button studio-button--ghost studio-settings-workspaces__create"
-                            data-testid="settings-workspace-create"
-                            (click)="createRegistryWorkspace()">+ New workspace</button>
-                    <button type="button"
-                            class="studio-setting__toggle"
-                            data-testid="settings-workspace-show-archived"
-                            [class.studio-setting__toggle--on]="showArchivedProjects()"
-                            (click)="toggleShowArchivedProjects()">
-                      Archived: {{ showArchivedProjects() ? 'shown' : 'hidden' }}
-                    </button>
-                  </div>
-                  <p class="studio-settings-workspaces__note"
-                     data-testid="settings-workspaces-note">
-                    F45b mutation surface (ADR-0042). Click a workspace or project name to rename;
-                    use the action buttons for color, reorder, workspace move, archive, and delete.
-                  </p>
-                </div>
-              </section>
-            }
             @default {
               <app-empty-state>Panel not implemented.</app-empty-state>
             }
@@ -651,7 +399,6 @@
 
     <!-- Editor area with tabs -->
     <section class="studio-editor"
-             [class.studio-editor--chat-open]="chatRailOpen()"
              data-testid="studio-editor">
       <div class="studio-tabbar">
         <div class="studio-tabbar__list"
@@ -673,6 +420,8 @@
                  [class.studio-tab--drop-before]="dragOverTabKey() === tabKey(t) && draggingTabKey() !== tabKey(t)"
                  [attr.aria-selected]="activeKey() === tabKey(t) ? 'true' : 'false'"
                  [attr.aria-label]="tabLabel(t)"
+                 [attr.title]="tabTooltip(t)"
+                 [attr.data-testid]="'studio-tab-' + tabKey(t)"
                  [attr.data-tab-key]="tabKey(t)"
                  (click)="selectTab(tabKey(t))"
                  (keydown.enter)="selectTab(tabKey(t))"
@@ -682,14 +431,23 @@
                  (dragover)="onTabDragOver($event, tabKey(t))"
                  (dragleave)="onTabDragLeave($event, tabKey(t))"
                  (drop)="onTabDrop($event, tabKey(t))"
-                 (dragend)="onTabDragEnd($event)" (keydown.enter)="selectTab(tabKey(t))" (keydown.space)="selectTab(tabKey(t)); $event.preventDefault()">
+                 (dragend)="onTabDragEnd($event)">
+              @if (tabDotColor(t); as dot) {
+                <span class="studio-tab__dot"
+                      [style.background]="dot"
+                      [attr.data-testid]="'studio-tab-dot'"
+                      aria-hidden="true"></span>
+              }
               @if (tabNum(t); as n) {
                 <span class="studio-tab__num">{{ n }}</span>
               }
               @if (t.kind === 'epic') {
                 <app-studio-icon name="epic" [size]="13"></app-studio-icon>
               }
-              <span class="studio-tab__title">{{ tabLabel(t) }}</span>
+              @if (tabIcon(t); as icon) {
+                <app-studio-icon [name]="icon" [size]="13"></app-studio-icon>
+              }
+              <span class="studio-tab__title" [attr.title]="tabTooltip(t)">{{ tabLabel(t) }}</span>
               <button type="button"
                       class="studio-tab__close"
                       aria-label="Close tab"
@@ -764,35 +522,6 @@
           </div>
         }
         </div>
-        @if (chatRailOpen()) {
-          <aside class="studio-chat-rail" data-testid="studio-chat-rail">
-            <div class="studio-chat-rail__head">
-              <span class="studio-chat-rail__title">Project Chat</span>
-              <button type="button"
-                      class="studio-chat-rail__close"
-                      aria-label="Hide chat rail"
-                      (click)="toggleChatRail()">×</button>
-            </div>
-            <div class="studio-chat-rail__body">
-              <p class="studio-empty studio-empty--note">
-                The collapsible right rail surfaces project chat at a glance. Until the inline
-                composer lands, the full chat surface lives in the orchestrator side sheet —
-                click below to open it.
-              </p>
-              <button type="button"
-                      class="studio-button studio-button--primary"
-                      data-testid="studio-chat-rail-open-side-sheet"
-                      (click)="chatToggle.emit()">
-                Open project chat
-              </button>
-              <button type="button"
-                      class="studio-button studio-button--ghost"
-                      (click)="openOrchFeed.emit()">
-                Open project feed
-              </button>
-            </div>
-          </aside>
-        }
       </div>
     </section>
 

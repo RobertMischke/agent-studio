@@ -93,6 +93,7 @@ public sealed class ProjectPipelineCostService
 
         var perKindDay = new Dictionary<(StepKind Kind, string Day), Acc>();
         var perKind = new Dictionary<StepKind, Acc>();
+        var perStep = new Dictionary<string, StepAcc>(StringComparer.Ordinal);
         long grandTokens = 0;
         decimal grandCost = 0m;
         var grandUnknown = false;
@@ -112,10 +113,11 @@ public sealed class ProjectPipelineCostService
                 var stepTokens = s.InputTokens + s.OutputTokens + s.CacheReadTokens + s.CacheCreationTokens;
                 if (stepTokens <= 0) continue;
                 var est = TokenPricing.Estimate(
-                    s.Model, s.InputTokens, s.OutputTokens, s.CacheReadTokens, s.CacheCreationTokens);
+                    s.Model, s.InputTokens, s.OutputTokens, s.CacheReadTokens, s.CacheCreationTokens, ts);
 
                 Add(perKindDay, (s.Kind, dayKey), stepTokens, est);
                 Add(perKind, s.Kind, stepTokens, est);
+                AddStep(perStep, s.StepId, s.Kind, stepTokens, est);
                 grandTokens += stepTokens;
                 if (est.ModelKnown) grandCost += est.Total; else grandUnknown = true;
                 contributed = true;
@@ -144,11 +146,26 @@ public sealed class ProjectPipelineCostService
                 Cells: cells));
         }
 
+        // Per-step rollup over the whole window, most-expensive first so the
+        // panel can surface the priciest steps at a glance. Tie-break on the
+        // step id for a stable order on equal spend.
+        var steps = perStep
+            .Select(kv => new PipelineStepCostSeries(
+                StepId: kv.Key,
+                Kind: KindKey(kv.Value.Kind),
+                TotalTokens: kv.Value.Tokens,
+                TotalCostUsd: Round(kv.Value.Cost),
+                AnyModelUnknown: kv.Value.AnyUnknown))
+            .OrderByDescending(s => s.TotalTokens)
+            .ThenBy(s => s.StepId, StringComparer.Ordinal)
+            .ToList();
+
         return new ProjectPipelineCostTimeline(
             Project: projectName,
             Days: dayList,
             WindowDays: d,
             Kinds: series,
+            Steps: steps,
             TotalTokens: grandTokens,
             TotalCostUsd: Round(grandCost),
             AnyModelUnknown: grandUnknown,
@@ -188,6 +205,21 @@ public sealed class ProjectPipelineCostService
         if (est.ModelKnown) acc.Cost += est.Total; else acc.AnyUnknown = true;
     }
 
+    private static void AddStep(
+        Dictionary<string, StepAcc> map, string stepId, StepKind kind, long tokens, TokenCostEstimate est)
+    {
+        // Steps with no id are runtime noise; fold them under their kind key so
+        // they still contribute to the project totals without a blank row.
+        var key = string.IsNullOrWhiteSpace(stepId) ? KindKey(kind) : stepId.Trim();
+        if (!map.TryGetValue(key, out var acc))
+        {
+            acc = new StepAcc { Kind = kind };
+            map[key] = acc;
+        }
+        acc.Tokens += tokens;
+        if (est.ModelKnown) acc.Cost += est.Total; else acc.AnyUnknown = true;
+    }
+
     private static decimal Round(decimal value) => Math.Round(value, 6, MidpointRounding.AwayFromZero);
 
     private static DateTime AlignDay(DateTime ts)
@@ -198,6 +230,14 @@ public sealed class ProjectPipelineCostService
 
     private sealed class Acc
     {
+        public long Tokens;
+        public decimal Cost;
+        public bool AnyUnknown;
+    }
+
+    private sealed class StepAcc
+    {
+        public StepKind Kind;
         public long Tokens;
         public decimal Cost;
         public bool AnyUnknown;
@@ -216,12 +256,29 @@ public sealed record ProjectPipelineCostTimeline(
     IReadOnlyList<string> Days,
     int WindowDays,
     IReadOnlyList<PipelineKindSeries> Kinds,
+    IReadOnlyList<PipelineStepCostSeries> Steps,
     long TotalTokens,
     decimal TotalCostUsd,
     bool AnyModelUnknown,
     int TaskCount,
     bool HasData,
     string FetchedAt);
+
+/// <summary>
+/// One pipeline step's token + cost rollup over the whole window, folded
+/// across every task run in the project. Keyed by <see cref="StepId"/> so the
+/// Pipeline configuration page can show, per step, how many tokens it has
+/// spent in the window. <see cref="Kind"/> is the lowercase wire token of the
+/// step kind (for colour coding); <see cref="AnyModelUnknown"/> is true when at
+/// least one contributing run used a model with no price on file, so the cost
+/// is a lower bound.
+/// </summary>
+public sealed record PipelineStepCostSeries(
+    string StepId,
+    string Kind,
+    long TotalTokens,
+    decimal TotalCostUsd,
+    bool AnyModelUnknown);
 
 /// <summary>
 /// One step-kind's series over the window. <see cref="Kind"/> is the

@@ -165,15 +165,14 @@
 .ev-card {
   background: var(--studio-bg-editor);
   border: 1px solid var(--studio-border);
-  border-left: 2px solid var(--studio-border);
   border-radius: 4px;
   padding: 8px 12px;
   font-size: 12px;
   color: var(--studio-fg-strong);
 
-  &--high { border-left-color: var(--severity-high); }
-  &--warn { border-left-color: var(--severity-warn); }
-  &--info { border-left-color: var(--severity-info); }
+  &--high { background: color-mix(in srgb, var(--severity-high) 10%, transparent); }
+  &--warn { background: color-mix(in srgb, var(--severity-warn) 10%, transparent); }
+  &--info { background: color-mix(in srgb, var(--severity-info) 10%, transparent); }
   &--acked { opacity: 0.78; }
 }
 

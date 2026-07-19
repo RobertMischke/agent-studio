@@ -46,4 +46,36 @@ public class ClaudeSessionHeartbeatTests
         Assert.NotNull(path);
         Assert.EndsWith(".jsonl", path);
     }
+
+    [Fact]
+    public void ResolveSessionFile_CleanContext_WatchesConfigDir_NotDefaultHome()
+    {
+        // Regression guard for the "runs never complete / backlog never drains"
+        // incident. Clean context is the DEFAULT: claude redirects its session
+        // transcript to CLAUDE_CONFIG_DIR (a per-run temp dir). The liveness
+        // watcher must resolve the session file UNDER that dir; watching the
+        // default ~/.claude makes it see permanent silence on every clean run
+        // and the watchdog kills the actively-working CLI mid-run (exit=-1 ->
+        // InfraCrash -> escalate). See process-termination-scenarios.html.
+        var configDir = Path.Combine(Path.GetTempPath(), "atp-clean-context", "claude-abc123");
+
+        var path = ClaudeSessionHeartbeat.ResolveSessionFile("sess-1", @"C:\foo\bar", configDir);
+
+        Assert.NotNull(path);
+        Assert.StartsWith(configDir, path!);
+        Assert.Contains(Path.Combine("projects", "C--foo-bar"), path!);
+        Assert.EndsWith("sess-1.jsonl", path!);
+        // CLAUDE_CONFIG_DIR replaces ~/.claude wholesale: no .claude segment.
+        Assert.DoesNotContain(".claude", path!);
+    }
+
+    [Fact]
+    public void ResolveSessionFile_DefaultContext_StillWatchesDotClaude()
+    {
+        var path = ClaudeSessionHeartbeat.ResolveSessionFile("sess-2", @"C:\foo\bar", configDir: null);
+
+        Assert.NotNull(path);
+        Assert.Contains(Path.Combine(".claude", "projects", "C--foo-bar"), path!);
+        Assert.EndsWith("sess-2.jsonl", path!);
+    }
 }

@@ -67,7 +67,7 @@ test.describe('Task detail layout polish', () => {
       expect(styles.border).toMatch(/\b0px\b/);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }
@@ -109,7 +109,7 @@ test.describe('Task detail layout polish', () => {
       expect(geometry.hitWidth).toBeGreaterThanOrEqual(8);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }
@@ -173,7 +173,7 @@ test.describe('Task detail layout polish', () => {
       expect(Number.isNaN(aw) ? 700 : aw).toBeGreaterThanOrEqual(600);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }
@@ -229,7 +229,7 @@ test.describe('Task detail layout polish', () => {
         localStorage.removeItem('taskboard.paneWeights');
       });
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }
@@ -268,7 +268,7 @@ test.describe('Task detail layout polish', () => {
       await expect(overviewTab).not.toHaveClass(/pane-tab--active/);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }

@@ -45,12 +45,14 @@ namespace AgentStudio.Supervisor;
 public sealed class OrchestratorPrepHostedService : BackgroundService
 {
     /// <summary>
-    /// Last-resort model when neither the per-step override nor the project
-    /// <see cref="ProjectSettings.OrchestratorModel"/> sets one. Prep is a
-    /// cheap pass, so this fallback is a small model; the project's selection
-    /// still wins via <see cref="PipelineStepConfigResolver.ResolveModel(ProjectSettings?, PipelineStep, string)"/>.
+    /// Last-resort model recorded when neither the per-step override nor the
+    /// project <see cref="ProjectSettings.OrchestratorModel"/> sets one. Prep
+    /// is currently heuristic-only, but its pipeline telemetry follows the
+    /// same bounded Codex support-model default as the other review steps.
+    /// The project's selection still wins via
+    /// <see cref="PipelineStepConfigResolver.ResolveModel(ProjectSettings?, PipelineStep, string)"/>.
     /// </summary>
-    public const string PrepFallbackModel = ModelIds.ClaudeHaiku45;
+    public const string PrepFallbackModel = PipelineStepModelDefaults.SupportModel;
 
     /// <summary>The catalogue prep step, resolved once for config + recording.</summary>
     private static readonly PipelineStep PrepStep =
@@ -59,6 +61,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _states;
     private readonly ProjectSettingsService _settings;
+    private readonly AgentStudio.Registry.OrchestratorDefaultsProvider _orchestratorDefaults;
     private readonly OrchestratorChatLog _chatLog;
     private readonly PipelineExecutionLog _pipelineLog;
     private readonly IConfiguration _configuration;
@@ -71,6 +74,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         TaskScannerService scanner,
         TaskStateMachine states,
         ProjectSettingsService settings,
+        AgentStudio.Registry.OrchestratorDefaultsProvider orchestratorDefaults,
         OrchestratorChatLog chatLog,
         PipelineExecutionLog pipelineLog,
         IConfiguration configuration,
@@ -79,6 +83,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         _scanner = scanner;
         _states = states;
         _settings = settings;
+        _orchestratorDefaults = orchestratorDefaults;
         _chatLog = chatLog;
         _pipelineLog = pipelineLog;
         _configuration = configuration;
@@ -141,7 +146,10 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
     private void ProcessProject(string projectName, string watchPath, int maxIterations, int queueFloor, int maxPerHour)
     {
         var settings = _settings.Get(projectName);
-        var level = settings.AutonomyLevel ?? 2;
+        // AGT-1812: autonomy resolves project override -> workspace default ->
+        // platform default (2). Falls through to the project-only value when no
+        // workspace default is set, so behaviour is unchanged until one is.
+        var level = _orchestratorDefaults.ResolveAutonomyLevel(projectName);
         if (level == 0) return; // manual: never moves a task forward
 
         var allJobs = _scanner.ScanAllJobs().Where(j => j.WatchPath == watchPath).ToList();

@@ -114,12 +114,21 @@ public class PipelineStepConditionTests
         };
 
     [Fact]
-    public void ShouldRun_DisabledByDefault_AbortReviewDoesNotRun()
+    public void ShouldRun_EnabledByDefault_AbortReviewRuns()
     {
-        // Abort review defaults off; with no override ShouldRun is false even
-        // when the condition (none) would otherwise pass.
-        Assert.False(PipelineStepConfigResolver.ShouldRun(
+        // Abort review defaults on (since 2026-07-05); with no override
+        // ShouldRun is true when the condition (aborted) passes.
+        Assert.True(PipelineStepConfigResolver.ShouldRun(
             null, PipelineCatalogue.AbortReviewStep, Ctx(aborted: true)));
+    }
+
+    [Fact]
+    public void ShouldRun_ExplicitlyDisabled_AbortReviewDoesNotRun()
+    {
+        // A project can still opt out even though the default is now on.
+        var settings = SettingsWith(PipelineCatalogue.PostAbortReviewStepId, new PipelineStepSetting { Enabled = false });
+        Assert.False(PipelineStepConfigResolver.ShouldRun(
+            settings, PipelineCatalogue.AbortReviewStep, Ctx(aborted: true)));
     }
 
     [Fact]
@@ -292,6 +301,26 @@ public class PipelineStepConditionTests
             // Clearing every dimension removes the override entirely.
             svc.SetPipelineStep("Proj", PipelineCatalogue.PostAbortReviewStepId, new PipelineStepSetting());
             Assert.Null(svc.Get("Proj").PipelineSteps);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SetPipelineStep_EconomyModelOnly_PersistsAsOptIn()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "atp-economy-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var svc = NewService(dir);
+            svc.SetPipelineStep("Proj", "aspect-code-quality", new PipelineStepSetting { EconomyModel = true });
+
+            var stored = svc.Get("Proj").PipelineSteps!["aspect-code-quality"];
+            Assert.True(stored.EconomyModel);
+            Assert.True(NewService(dir).Get("Proj").PipelineSteps!["aspect-code-quality"].EconomyModel);
         }
         finally
         {

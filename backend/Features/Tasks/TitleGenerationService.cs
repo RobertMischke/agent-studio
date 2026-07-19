@@ -157,7 +157,7 @@ public class TitleGenerationService
         var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
         var psi = new ProcessStartInfo
         {
-            FileName = CliExecutionServiceBase.ResolveExecutable(claudePath),
+            FileName = GenericCliExecutionService.ResolveExecutable(claudePath),
             WorkingDirectory = Directory.GetCurrentDirectory(),
             RedirectStandardInput = true,
             RedirectStandardOutput = true,

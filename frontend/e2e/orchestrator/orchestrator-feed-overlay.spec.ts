@@ -24,7 +24,6 @@ import { contrastRatio } from '../helpers/contrast';
  * Light + dark screenshots are dropped into the job results/ folder.
  */
 
-const SLUG = 'runbook';
 const PROJECT = 'Runbook';
 
 const SESSION = {
@@ -44,25 +43,26 @@ const SESSION = {
 
 const LOG_ENTRIES = [
   {
-    ts: '2026-06-04T09:10:00Z',
+    ts: new Date(Date.now() - 55 * 60_000).toISOString(),
     kind: 'observation',
     topic: 'board/scan',
     summary: 'Scanned 7 lanes; 2 tasks idle in review for >2h.',
     reasoning: null,
     jobId: null,
-    tokenUsage: { model: 'claude-haiku-4-5', inputTokens: 1200, outputTokens: 340, cacheReadTokens: 8000, cacheCreationTokens: 0 },
+    tokenUsage: { model: 'claude-haiku-4-5', thinkingLevel: 'medium', inputTokens: 1200, outputTokens: 340, cacheReadTokens: 8000, cacheCreationTokens: 0 },
   },
   {
-    ts: '2026-06-04T09:20:00Z',
+    ts: new Date(Date.now() - 42 * 60_000).toISOString(),
     kind: 'decision',
-    topic: 'review/escalate',
-    summary: 'Escalate the stalled auth-refactor task to a human reviewer rather than auto-accepting it.',
+    topic: 'budget/switch',
+    summary: 'Switch auth-refactor from Opus to Sonnet to preserve the five-hour window.',
     reasoning: 'The diff touches session-token storage which legal flagged; auto-accept policy excludes compliance-sensitive paths.',
     jobId: 'task-auth-refactor-42',
-    tokenUsage: { model: 'claude-opus-4-8', inputTokens: 9400, outputTokens: 1820, cacheReadTokens: 41000, cacheCreationTokens: 2200 },
+    watchPath: 'C:/Projects/Runbook',
+    tokenUsage: { model: 'claude-opus-4-8', thinkingLevel: 'high', inputTokens: 9400, outputTokens: 1820, cacheReadTokens: 41000, cacheCreationTokens: 2200 },
   },
   {
-    ts: '2026-06-04T09:31:00Z',
+    ts: new Date(Date.now() - 31 * 60_000).toISOString(),
     kind: 'action',
     topic: 'followup/queue',
     summary: 'Queued a Steer follow-up asking the agent to add an integration test before re-review.',
@@ -71,7 +71,7 @@ const LOG_ENTRIES = [
     tokenUsage: { model: 'claude-opus-4-8', inputTokens: 5100, outputTokens: 640, cacheReadTokens: 22000, cacheCreationTokens: 0 },
   },
   {
-    ts: '2026-06-04T09:40:00Z',
+    ts: new Date(Date.now() - 20 * 60_000).toISOString(),
     kind: 'intervention',
     topic: 'watchdog/kill',
     summary: 'Killed a runaway run that exceeded the per-task token budget twice in a row.',
@@ -81,9 +81,14 @@ const LOG_ENTRIES = [
   },
 ];
 
+const GLOBAL_LOG_ENTRIES = LOG_ENTRIES.map((entry, index) => ({
+  ...entry,
+  project: index === 3 ? 'Agent Task Processor' : PROJECT,
+}));
+
 const EMPTY_GROUPED = {
   archive: [], autoReview: [], backlog: [], codeNotComplete: [], completed: [],
-  humanReview: [], preparation: [], progress: [], ready: [],
+  failedPickup: [], humanReview: [], orchestratorPrep: [], preparation: [], progress: [], ready: [], review: [],
 };
 
 async function mockBackend(page: Page): Promise<void> {
@@ -102,6 +107,37 @@ async function mockBackend(page: Page): Promise<void> {
   // app throws `jobs is not iterable` and the dev error dialog buries the UI.
   await page.route('**/api/tasks/grouped', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(EMPTY_GROUPED) }),
+  );
+  await page.route('**/api/tasks/archive**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], total: 0 }) }),
+  );
+  await page.route('**/api/cli/usage**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }),
+  );
+  await page.route('**/api/cli/quota**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      ttlSeconds: 600,
+      snapshots: [{ cliType: 'claude', fetchedAt: new Date().toISOString(), plan: 'Max', source: 'probe', error: null, windows: [
+        { label: '5h', usedPct: 68, used: null, limit: null, unit: null, resetAt: new Date(Date.now() + 90 * 60_000).toISOString(), resetLabel: 'in 1h 30m' },
+        { label: '7d', usedPct: 42, used: null, limit: null, unit: null, resetAt: new Date(Date.now() + 4 * 86400_000).toISOString(), resetLabel: 'in 4 days' },
+      ] }],
+    }) }),
+  );
+
+  await page.route('**/api/runner/token-summary-aggregate**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      projects: 2, orchestratorEntries: 4, orchestratorLlmCalls: 3,
+      totalInputTokens: 15700, totalOutputTokens: 2800, totalCacheReadTokens: 71000, totalCacheCreationTokens: 2200,
+      estimatedApiCostUsd: 1.24, allModelsPriced: true, byProject: [], fetchedAt: new Date().toISOString(), disclaimer: 'Estimated list pricing.',
+      byModel: [{ model: 'claude-opus-4-8', calls: 2, inputTokens: 14500, outputTokens: 2460, cacheReadTokens: 63000, cacheCreationTokens: 2200, estimatedApiCostUsd: 1.1, modelPriced: true }],
+    }) }),
+  );
+  await page.route('**/api/workspace/tokens/timeline**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      windowStart: new Date(Date.now() - 86400_000).toISOString(), windowEnd: new Date().toISOString(), windowHours: 24,
+      bucketMinutes: 60, bucketCount: 24, projects: [], fetchedAt: new Date().toISOString(), disclaimer: 'Captured usage.',
+      cells: [{ project: PROJECT, bucketStart: new Date(Date.now() - 40 * 60_000).toISOString(), bucketEnd: new Date().toISOString(), calls: 3, input: 15700, output: 2800, cacheRead: 71000, cacheWrite: 2200, total: 91700, dollars: 1.24, allModelsPriced: true, agentTokens: 0, supportingTokens: 0, orchestratorTokens: 91700 }],
+    }) }),
   );
 
   await page.route('**/api/watch-paths', (route) =>
@@ -129,6 +165,10 @@ async function mockBackend(page: Page): Promise<void> {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ project: PROJECT, entries: LOG_ENTRIES }) }),
   );
 
+  await page.route('**/api/runner/orchestrator-feed', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ entries: GLOBAL_LOG_ENTRIES }) }),
+  );
+
   await page.route('**/api/runner/*/token-summary', (route) =>
     route.fulfill({
       status: 200,
@@ -154,34 +194,40 @@ const RESULTS_DIR = process.env.JOB_RESULTS_DIR
   ? join(process.env.JOB_RESULTS_DIR, 'orch-feed-overlay')
   : join(process.cwd(), 'test-results', 'orch-feed-overlay');
 
-test('orchestrator-feed overlay: deep-link opens it, scopes are labelled, layout + contrast hold on both themes', async ({ page }) => {
+test('global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes', async ({ page }) => {
   mkdirSync(RESULTS_DIR, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 960 });
   await mockBackend(page);
 
   // Requirement #4 — deep-link anchor. A cold navigation straight to the
   // feed hash must reproduce the open overlay (bookmark / reload parity).
-  await page.goto(`/#/project/${SLUG}/feed`);
+  await page.goto('/');
+  await dismissDevErrorDialog(page);
+  await page.getByTestId('status-bar-feed').click({ force: true });
 
   const feed = page.getByTestId('orchestrator-feed');
   await expect(feed).toBeVisible({ timeout: 15_000 });
   await dismissDevErrorDialog(page);
   await expect(feed).toBeVisible();
 
-  // The URL anchor survives the round-trip.
-  expect(await page.evaluate(() => location.hash)).toBe(`#/project/${SLUG}/feed`);
-
   // Requirement #3 — scope separation is explicit and labelled.
   const projectScope = page.getByTestId('orchestrator-feed-scope');
   const globalScope = page.getByTestId('global-orchestrator-scope');
   await expect(projectScope).toBeVisible();
-  await expect(projectScope).toHaveText(/project scope/i);
+  await expect(projectScope).toHaveText(/workspace scope/i);
   await expect(globalScope).toBeVisible();
   await expect(globalScope).toHaveText(/global scope/i);
 
   // Feed actually rendered the mocked entries.
   const entries = page.locator('.orch-feed__entry');
   await expect(entries.first()).toBeVisible();
+  // The project deep-link starts scoped to Runbook, and the quiet default
+  // hides observations until the operator explicitly asks for all activity.
+  expect(await entries.count()).toBe(3);
+  await feed.getByRole('button', { name: 'Runbook' }).click();
+  expect(await entries.count()).toBe(2);
+  await page.getByTestId('feed-project-all').click();
+  await page.getByTestId('feed-kind-all').click();
   expect(await entries.count()).toBe(LOG_ENTRIES.length);
 
   // Requirement #1 — three-pane layout lays out side by side (non-zero,
@@ -206,7 +252,7 @@ test('orchestrator-feed overlay: deep-link opens it, scopes are labelled, layout
 
     // (selector, nth, minRatio). Body text -> 4.5; bold uppercase pills are
     // small but decorative scope markers -> 3.0 (still comfortably legible).
-    const probes: Array<[string, number, number]> = [
+    const probes: [string, number, number][] = [
       ['.orch-feed__title', 0, 4.5],
       ['.orch-feed__sub', 0, 4.5],
       ['.orch-feed__refresh', 0, 4.5],
@@ -222,7 +268,26 @@ test('orchestrator-feed overlay: deep-link opens it, scopes are labelled, layout
     }
 
     await page.locator('.overlay__panel--orch-feed').screenshot({
-      path: join(RESULTS_DIR, `orch-feed-${theme}.png`),
+      path: join(RESULTS_DIR, `orch-feed-${theme}--mocked.png`),
+    });
+  }
+
+  await page.getByTestId('orchestrator-view-load').click();
+  const load = page.getByTestId('load-distribution');
+  await expect(load).toBeVisible();
+  await expect(page.getByTestId('load-quota-windows')).toContainText('68% used');
+  await expect(page.getByTestId('load-model-efficiency')).toContainText('claude-opus-4-8');
+  await expect(page.getByTestId('load-decision-stream')).toContainText('Switch auth-refactor');
+  await page.getByTestId('load-period-1h').click();
+  await expect(page.getByTestId('load-period-1h')).toHaveAttribute('aria-pressed', 'true');
+  await load.getByRole('button', { name: 'switch', exact: true }).click();
+  await expect(page.getByTestId('load-decision-stream').locator('.load__decision')).toHaveCount(1);
+
+  for (const theme of themes) {
+    await setTheme(page, theme);
+    await page.waitForTimeout(100);
+    await page.locator('.overlay__panel--orch-feed').screenshot({
+      path: join(RESULTS_DIR, `load-distribution-${theme}--mocked.png`),
     });
   }
 });

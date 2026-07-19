@@ -5,6 +5,10 @@ export const MODEL_IDS = {
   claudeHaiku45: 'claude-haiku-4-5',
   claudeSonnet46: 'claude-sonnet-4-6',
   gpt5Codex: 'gpt-5-codex',
+  // Flagship Codex model once the installed codex CLI advertises it (AGT-2025).
+  // Availability follows the live catalog from /api/cli; this id only seeds
+  // fixtures and the effective-model display before the catalog hydrates.
+  gpt56Sol: 'gpt-5.6-sol',
 } as const;
 
 export const CLAUDE_FALLBACK_MODEL_ID = MODEL_IDS.claudeHaiku45;

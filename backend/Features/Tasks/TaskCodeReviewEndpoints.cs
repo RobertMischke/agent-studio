@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -28,10 +30,11 @@ public static class TaskCodeReviewEndpoints
     public const string TimeoutSecondsConfigKey = "CodeReviewStep:PerRunTimeoutSeconds";
 
     /// <summary>Hard fallback when neither config nor request specifies a CLI.</summary>
-    public const string DefaultCliFallback = "claude";
+    public const string DefaultCliFallback = CliTypes.Codex;
 
     /// <summary>Hard fallback when neither config nor request specifies a model.</summary>
-    public const string DefaultModelFallback = ClaudeCliService.DefaultOpusModel;
+    public static string DefaultModelFallback =>
+        ModelMetadataRegistry.DefaultForCli(DefaultCliFallback) ?? ModelIds.Gpt55;
 
     /// <summary>Default per-run wall-clock cap when configuration omits it.</summary>
     public const int DefaultTimeoutSecondsFallback = 600;
@@ -70,8 +73,9 @@ public static class TaskCodeReviewEndpoints
         // newest-first. Each entry carries the parsed frontmatter so the
         // frontend can render verdict + summary without fetching each file.
         group.MapGet("/{jobId}/code-review/list",
-            (string jobId, string? watchPath, TaskScannerService scanner, FileGenerationIndex generationIndex) =>
+            (string jobId, string? project, string? watchPath, TaskScannerService scanner, FileGenerationIndex generationIndex, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
 
@@ -126,8 +130,9 @@ public static class TaskCodeReviewEndpoints
         // name that came from the list endpoint; we never accept arbitrary
         // paths.
         group.MapGet("/{jobId}/code-review/{fileName}",
-            (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
+            (string jobId, string fileName, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
 
@@ -159,18 +164,34 @@ public static class TaskCodeReviewEndpoints
         // Synchronous: returns the report once the review finishes.
         group.MapPost("/{jobId}/code-review",
             async (string jobId,
+                   string? project,
                    string? watchPath,
                    CodeReviewStepEndpointRequest? body,
                    TaskScannerService scanner,
                    TaskSessionLog sessions,
                    GitService git,
                    CodeReviewStepService service,
+                   OnDemandPostStepService onDemand,
                    IConfiguration configuration,
+                   AgentStudio.Registry.ProjectRegistry projects,
                    CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var resolvedWatchPath = body?.WatchPath ?? watchPath;
             var info = scanner.FindJob(jobId, resolvedWatchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
+
+            var gradeMode = string.Equals(body?.Mode, "grade", StringComparison.OrdinalIgnoreCase);
+            var projectContext = gradeMode
+                ? ResolveProjectContext(projects, scanner, info)
+                : null;
+            if (gradeMode && projectContext == null)
+            {
+                return Results.BadRequest(new
+                {
+                    error = "The task is not associated with a canonical project registry identity.",
+                });
+            }
 
             var detail = scanner.GetJobDetail(jobId, resolvedWatchPath);
             var taskBody = detail?.PromptMarkdown ?? string.Empty;
@@ -200,7 +221,7 @@ public static class TaskCodeReviewEndpoints
             var model = !string.IsNullOrWhiteSpace(body?.Model)
                 ? body!.Model!
                 : configuration[DefaultModelConfigKey] ?? DefaultModelFallback;
-            var thinkingLevel = CliThinkingLevels.Normalize(cli, model, body?.ThinkingLevel);
+            var thinkingLevel = ModelMetadataRegistry.ResolveThinkingLevel(cli, model, body?.ThinkingLevel);
             var timeoutSeconds = configuration.GetValue<int?>(TimeoutSecondsConfigKey)
                 ?? DefaultTimeoutSecondsFallback;
 
@@ -214,12 +235,37 @@ public static class TaskCodeReviewEndpoints
                 CliType: cli,
                 Model: model)
             {
+                Mode = gradeMode
+                    ? CodeReviewMode.Grade
+                    : CodeReviewMode.Verdict,
                 ThinkingLevel = thinkingLevel,
                 Commit = scope.Label,
                 Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+                ResultsInventory = ResultsInventory.Render(info.FolderPath),
+                CardMode = ReviewCardMode.Describe(info.Mode),
             };
 
             var report = await service.RunAsync(request, ct);
+
+            if (request.Mode == CodeReviewMode.Grade)
+            {
+                var stepId = PipelineCatalogue.CodeReviewGradeStepId;
+                var grade = report.Grade is null ? "?" : CodeReviewGradeParsing.GradeToken(report.Grade.Value);
+                await onDemand.AppendAttemptAsync(
+                    info,
+                    projectContext!.Project.Id,
+                    stepId,
+                    "Code-review quality grade",
+                    "Llm",
+                    "Review",
+                    report.Grade == CodeReviewGrade.D ? "Failed" : "Ok",
+                    report.StartedAt,
+                    report.StartedAt.AddMilliseconds(report.DurationMs),
+                    report.DurationMs,
+                    $"Quality grade {grade}: {report.Summary}",
+                    report.FileName,
+                    ct);
+            }
 
             return Results.Ok(new CodeReviewStepEndpointResponse
             {
@@ -233,6 +279,7 @@ public static class TaskCodeReviewEndpoints
                 ConcernTagId = report.ConcernTagId,
                 DurationMs = report.DurationMs,
                 StartedAt = report.StartedAt,
+                Grade = report.Grade is null ? null : CodeReviewGradeParsing.GradeToken(report.Grade.Value),
             });
         });
     }
@@ -311,6 +358,7 @@ public sealed record CodeReviewStepEndpointRequest
     public string? CliType { get; init; }
     public string? ThinkingLevel { get; init; }
     public string? Commit { get; init; }
+    public string? Mode { get; init; }
 }
 
 /// <summary>Response shape for the code-review endpoint.</summary>
@@ -326,4 +374,5 @@ public sealed record CodeReviewStepEndpointResponse
     public string? ConcernTagId { get; init; }
     public required long DurationMs { get; init; }
     public required DateTime StartedAt { get; init; }
+    public string? Grade { get; init; }
 }

@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { api } from '../helpers/api';
+import { contrastRatio } from '../helpers/contrast';
+import { sampleColours, setTheme } from '../helpers/theme';
 
 /**
  * Nav-rebuild step 2 (T5b) — relocation smoke.
@@ -82,11 +84,57 @@ test('Pipeline rail hosts the pipeline-step config', async ({ page }) => {
 });
 
 test('Prompts rail hosts the prompt-admin surface', async ({ page }) => {
+  await page.goto('/');
+  await setTheme(page, 'light');
   await page.goto(`/#/projects/${projectSlug}/prompts`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
 
   await expect(page.getByTestId('prompt-admin-panel')).toBeVisible({ timeout: 10_000 });
-  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-prompts-admin.png'), fullPage: true });
+  const promptPanel = page.getByTestId('project-shell-panel-prompts');
+  const promptList = page.getByTestId('prompt-admin-list');
+  const promptSplitter = page.getByTestId('prompt-admin-splitter');
+  const promptDetail = page.getByTestId('prompt-admin-detail');
+  await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-group-"]').count()).toBeGreaterThan(0);
+  await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-item-"]').count()).toBeGreaterThan(0);
+  await expect(promptList).not.toContainText('shipped');
+  await expect(promptList).toContainText(/\d+ overridden/);
+  await expect(promptList).toContainText(/\d+ inherited/);
+  const overrideIcon = promptList.locator('[data-testid^="prompt-admin-override-"]').first();
+  await expect(overrideIcon).toBeVisible();
+  await expect(overrideIcon).toContainText('Override');
+  await overrideIcon.hover();
+  await expect(page.getByTestId('cac-tooltip').locator('.cac-tooltip__body')).toContainText('Local override active');
+  const firstGroup = promptList.locator('[data-testid^="prompt-admin-group-"]').first();
+  await expect(firstGroup).toHaveAttribute('aria-expanded', 'true');
+  await firstGroup.click();
+  await expect(firstGroup).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('prompt-admin-item-commit-message.md')).toBeHidden();
+  await firstGroup.click();
+  await expect(firstGroup).toHaveAttribute('aria-expanded', 'true');
+
+  await expect(promptSplitter).toBeVisible();
+  await expect(promptSplitter).toHaveAttribute('role', 'separator');
+  const panelBox = await promptPanel.boundingBox();
+  const listBox = await promptList.boundingBox();
+  const splitterBox = await promptSplitter.boundingBox();
+  const detailBox = await promptDetail.boundingBox();
+  expect(panelBox && listBox && splitterBox && detailBox).toBeTruthy();
+  expect(Math.abs(listBox!.x - panelBox!.x), 'prompt list is flush to the project panel').toBeLessThanOrEqual(1);
+  expect(Math.abs(splitterBox!.x - (listBox!.x + listBox!.width)), 'splitter abuts prompt list').toBeLessThanOrEqual(1);
+  expect(Math.abs(detailBox!.x - (splitterBox!.x + splitterBox!.width)), 'detail abuts splitter').toBeLessThanOrEqual(1);
+
+  await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, splitterBox!.y + splitterBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(splitterBox!.x + splitterBox!.width / 2 + 72, splitterBox!.y + splitterBox!.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await promptList.boundingBox())?.width ?? 0).toBeGreaterThan(listBox!.width + 24);
+
+  const nav = await sampleColours(page, '[data-testid="prompt-admin-list"] [data-testid^="prompt-admin-item-"]');
+  const editor = await sampleColours(page, '[data-testid="prompt-admin-editor"]');
+  expect(contrastRatio(nav.color, nav.bg), `prompt nav contrast ${nav.color} on ${nav.bg}`).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(editor.color, editor.bg), `prompt editor contrast ${editor.color} on ${editor.bg}`).toBeGreaterThanOrEqual(4.5);
+
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-prompts-admin-light.png'), fullPage: true });
 });
 
 test('Admin / CLI & Modelle hosts the per-project CLI permission modes', async ({ page }) => {

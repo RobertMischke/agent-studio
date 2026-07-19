@@ -45,7 +45,7 @@ async function findMarkdownProbeJob(): Promise<MarkdownProbeJob | null> {
     let out: CliOutputLine[];
     try {
       out = await api<CliOutputLine[]>(
-        `/api/jobs/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`
+        `/api/tasks/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`
       );
     } catch {
       continue;

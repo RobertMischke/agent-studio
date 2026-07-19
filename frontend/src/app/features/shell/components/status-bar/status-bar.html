@@ -18,6 +18,14 @@
     <div class="statusbar__quota">
       <app-usage-hover-panel (openCliAdmin)="openCliAdmin.emit()" />
     </div>
+    @if (activeFallback(); as fallback) {
+      <app-statusbar-item
+        [button]="false"
+        icon="warn"
+        [label]="'fallback: ' + fallback.quotaFallbackModel"
+        [tooltip]="'Quota fallback active: ' + fallback.quotaFallbackReason"
+        testid="status-bar-quota-fallback" />
+    }
   </div>
 
   <div class="statusbar__group statusbar__group--center statusbar__group--spacer"></div>
@@ -31,11 +39,11 @@
                         testid="orch-side-sheet-toggle"
                         [active]="orchestratorOpen()"
                         (activated)="toggleOrchestrator.emit()" />
-    <app-statusbar-item icon="activity" label="Feed"              tooltip="Orchestrator feed"
+    <app-statusbar-item icon="activity" label="Feed"              tooltip="Activity across all projects"
                         testid="status-bar-feed"
                         [active]="feedOpen()"
                         (activated)="toggleFeed.emit()" />
-    <app-statusbar-item icon="settings" label="Settings"          tooltip="Workspace settings (usage caps, token usage, visual evidence, summary)"
+    <app-statusbar-item icon="settings" label="Settings"          tooltip="Workspace settings (CLI management, system prompts, token usage, visual evidence, summary)"
                         testid="status-bar-settings"
                         [active]="settingsOpen()"
                         (activated)="toggleSettings.emit()" />

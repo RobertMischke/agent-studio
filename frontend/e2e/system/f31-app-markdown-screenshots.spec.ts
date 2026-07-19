@@ -7,7 +7,7 @@ import { api } from '../helpers/api';
  * Markdown surfaces after the central `<app-markdown>` migration.
  *
  * The spec is a screenshot-only smoke; it doesn't make assertions about
- * pixel state. It picks the first job from `/api/jobs` and exits cleanly
+ * pixel state. It picks the first job from `/api/tasks` and exits cleanly
  * if the workspace has none.
  */
 
@@ -16,7 +16,7 @@ interface ListedJob { id: string; watchPath: string }
 const OUT_DIR = 'test-results/f31-app-markdown';
 
 async function pickAnyJob(): Promise<ListedJob | null> {
-  const jobs = await api<ListedJob[]>('/api/jobs');
+  const jobs = await api<ListedJob[]>('/api/tasks');
   return jobs[0] ?? null;
 }
 

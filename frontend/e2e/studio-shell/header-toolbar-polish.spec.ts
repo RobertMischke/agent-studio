@@ -59,7 +59,7 @@ async function pickWatchPath(): Promise<string> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await api(`/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await api(`/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE',
   });
 }
@@ -75,23 +75,21 @@ test.describe('Header toolbar polish', () => {
       return;
     }
 
-    // Board cluster wrapper present with all three controls inside it.
+    // Board cluster wrapper present with its controls inside it. (AGT-2035
+    // removed the Full/Compact toggle along with the abolished card density,
+    // leaving the Lanes/Epics toggle + Add task.)
     const cluster = page.getByTestId('studio-board-actions');
     await expect(cluster).toBeVisible();
     const epicToggle = page.getByTestId('studio-board-epic-toggle');
-    const compactToggle = page.getByTestId('studio-board-compact-toggle');
     const addTask = page.getByTestId('studio-board-add-task');
     await expect(epicToggle).toBeVisible();
-    await expect(compactToggle).toBeVisible();
     await expect(addTask).toBeVisible();
-    // All three sit inside the single cluster row.
+    await expect(cluster.getByTestId('studio-board-compact-toggle')).toHaveCount(0);
     await expect(cluster.getByTestId('studio-board-epic-toggle')).toHaveCount(1);
-    await expect(cluster.getByTestId('studio-board-compact-toggle')).toHaveCount(1);
     await expect(cluster.getByTestId('studio-board-add-task')).toHaveCount(1);
 
-    // Toggles expose a pressed state so they read as switchable controls.
+    // The Lanes/Epics toggle exposes a pressed state so it reads as a switch.
     await expect(epicToggle).toHaveAttribute('aria-pressed', /true|false/);
-    await expect(compactToggle).toHaveAttribute('aria-pressed', /true|false/);
 
     // Titlebar action trio is grouped together.
     const titleActions = page.getByTestId('studio-titlebar-actions');
@@ -103,19 +101,15 @@ test.describe('Header toolbar polish', () => {
     await titleActions.screenshot({ path: 'test-results/header-titlebar-actions.png' });
     await cluster.screenshot({ path: 'test-results/header-board-actions-rest.png' });
 
-    // Flip both toggles so the active (pressed) pill state is captured.
+    // Flip the toggle so the active (pressed) pill state is captured.
     const epicPressedBefore = await epicToggle.getAttribute('aria-pressed');
-    const compactPressedBefore = await compactToggle.getAttribute('aria-pressed');
     if (epicPressedBefore === 'false') await epicToggle.click();
-    if (compactPressedBefore === 'false') await compactToggle.click();
     await expect(epicToggle).toHaveAttribute('aria-pressed', 'true');
-    await expect(compactToggle).toHaveAttribute('aria-pressed', 'true');
     await page.waitForTimeout(150);
     await cluster.screenshot({ path: 'test-results/header-board-actions-active.png' });
 
-    // Restore original toggle states so the spec leaves no board change.
+    // Restore original toggle state so the spec leaves no board change.
     if (epicPressedBefore === 'false') await epicToggle.click();
-    if (compactPressedBefore === 'false') await compactToggle.click();
   });
 
   test('task pane header buttons expose active pressed state', async ({ page }) => {

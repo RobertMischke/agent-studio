@@ -1,4 +1,5 @@
 <section class="cud" data-testid="cli-usage-detail">
+  @if (!workspaceOnly()) {
   <header class="cud__head">
     <div>
       <h3 class="cud__title">
@@ -11,7 +12,7 @@
       <a class="cud__button"
          data-testid="cli-usage-detail-open-timeline"
          href="#/workspace/tokens"
-         [appTooltip]="'Open workspace token timeline'">
+         [cacTooltip]="'Open workspace token timeline'">
         Timeline
       </a>
       <button type="button"
@@ -19,7 +20,7 @@
               data-testid="cli-usage-detail-refresh-all"
               [disabled]="refreshingAll()"
               (click)="refreshAll.emit($event)"
-              [appTooltip]="'Re-probe every CLI now'">
+              [cacTooltip]="'Re-probe every CLI now'">
         {{ refreshingAll() ? 'Refreshing...' : 'Refresh all' }}
       </button>
     </div>
@@ -46,6 +47,7 @@
       }
     </div>
   </section>
+  }
 
   <section class="cud__trend" data-testid="cli-usage-detail-trend">
     <div class="cud__trend-head">
@@ -59,7 +61,7 @@
         <div class="cud__spark-label">Last 24h</div>
         <div class="cud__bars" aria-label="Token trend for the last 24 hours">
           @for (p of spark24h(); track p.label) {
-            <span [style.height.%]="p.pct" [appTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
+            <span [style.height.%]="p.pct" [cacTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
           }
         </div>
       </div>
@@ -67,7 +69,7 @@
         <div class="cud__spark-label">Last 7d</div>
         <div class="cud__bars" aria-label="Token trend for the last seven days">
           @for (p of spark7d(); track p.label) {
-            <span [style.height.%]="p.pct" [appTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
+            <span [style.height.%]="p.pct" [cacTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
           }
         </div>
       </div>
@@ -86,7 +88,7 @@
                   class="cud__project-row"
                   [attr.data-testid]="'cli-usage-detail-project-' + p.slug"
                   [attr.aria-label]="'Open ' + p.project + ' settings'"
-                  [appTooltip]="projectTooltip(p)"
+                  [cacTooltip]="projectTooltip(p)"
                   (click)="openProjectSettings.emit(p.project)">
             <span class="cud__project-name">{{ p.project }}</span>
             <span class="cud__project-stat cud__num">{{ formatTokens(p.totalTokens) }}</span>
@@ -98,6 +100,7 @@
     </section>
   }
 
+  @if (!workspaceOnly()) {
   <div class="cud__sections">
     @for (row of quotaRows(); track row.cliType) {
       <section class="cud__cli" [attr.data-testid]="'cli-usage-detail-cli-' + row.cliType">
@@ -115,7 +118,7 @@
                   [disabled]="refreshing()[row.cliType]"
                   (click)="refreshOne.emit({ cliType: row.cliType, event: $event })"
                   [attr.data-testid]="'cli-usage-detail-refresh-' + row.cliType"
-                  [appTooltip]="'Re-probe ' + row.label">
+                  [cacTooltip]="'Re-probe ' + row.label">
             {{ refreshing()[row.cliType] ? '...' : '↻' }}
           </button>
         </header>
@@ -208,6 +211,8 @@
       </section>
     }
   </div>
+
+  }
 
   <section class="cud__jobs" data-testid="cli-usage-detail-top-jobs">
     <h4>Top tasks</h4>

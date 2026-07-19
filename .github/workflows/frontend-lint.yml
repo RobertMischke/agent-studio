@@ -35,6 +35,6 @@ jobs:
       # in a non-exempt SCSS file fails the build. Legacy files in the
       # `.stylelintrc.json` overrides[].files list run at severity: warning so
       # this step exits 0 while the migration backlog drains. See
-      # docs/frontend-scss-quality.md for the two-tier token system.
+      # docs/quality/frontend/audits/scss-quality.md for the two-tier token system.
       - name: SCSS lint (design tokens)
         run: npm run lint:scss

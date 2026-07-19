@@ -4,6 +4,7 @@ export interface CliUsageSection {
   cliType: 'copilot' | 'claude' | 'codex' | string;
   available: boolean;
   version: string | null;
+  path: string | null;
   error: string | null;
   projects: Array<{ projectName: string; sessions: unknown[] }>;
 }

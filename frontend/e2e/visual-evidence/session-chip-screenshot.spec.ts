@@ -25,13 +25,13 @@ test('session chip — visual capture (continued / lost / fresh)', async ({ page
   });
 
   try {
-    await fetch(`http://127.0.0.1:5030/api/jobs/${encodeURIComponent(job.id)}/continue?watchPath=${encodeURIComponent(wp.path)}`, {
+    await fetch(`http://127.0.0.1:5030/api/tasks/${encodeURIComponent(job.id)}/continue?watchPath=${encodeURIComponent(wp.path)}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ prompt: 'noop' })
     });
     await api(
-      `/api/jobs/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
+      `/api/tasks/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
       { method: 'POST' }
     ).catch(() => {});
 
@@ -44,9 +44,9 @@ test('session chip — visual capture (continued / lost / fresh)', async ({ page
     await header.screenshot({ path: 'test-results/session-chip-lost.png' });
   } finally {
     await api(
-      `/api/jobs/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
+      `/api/tasks/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
       { method: 'POST' }
     ).catch(() => {});
-    await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
+    await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
   }
 });

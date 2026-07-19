@@ -55,41 +55,38 @@ public class CliWatchdogIntegrationTests
 
     /// <summary>
     /// Stripped-down driver that only knows how to spawn a <c>node.exe</c>
-    /// child with a script the test supplies. Lets us reuse the base
-    /// class's <see cref="CliExecutionServiceBase.StartAsync"/>,
+    /// child with a script the test supplies. Lets us reuse the engine's
+    /// <see cref="GenericCliExecutionService.StartAsync"/>,
     /// <c>OnOutput</c> events, output buffer, and Stop semantics without
     /// needing a real claude/codex/gemini install.
     /// </summary>
-    private sealed class FakeNodeCliService : CliExecutionServiceBase
+    private sealed class FakeNodeCliService : GenericCliExecutionService
     {
-        private readonly string _nodeExe;
-        private readonly string _script;
-
         public FakeNodeCliService(string nodeExe, string script)
-            : base(NullLogger<FakeNodeCliService>.Instance, new ConfigurationBuilder().Build())
+            : base(BuildBehavior(nodeExe, script), NullLogger<FakeNodeCliService>.Instance, new ConfigurationBuilder().Build())
         {
-            _nodeExe = nodeExe;
-            _script = script;
         }
 
-        public override string CliType => "fake-node";
-        public override string GetCliPath() => _nodeExe;
-
-        protected override ProcessStartInfo BuildStartInfo(
-            string prompt, string workingDirectory,
-            string? sessionName, bool resumeSession, string? model, string? thinkingLevel, string? permissionMode)
+        private static CliBehavior BuildBehavior(string nodeExe, string script) => new()
         {
-            var psi = new ProcessStartInfo
+            CliType = "fake-node",
+            GetCliPath = _ => nodeExe,
+            BuildStartInfo = (_, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode) =>
             {
-                FileName = _nodeExe,
-                WorkingDirectory = workingDirectory
-            };
-            psi.ArgumentList.Add("-e");
-            psi.ArgumentList.Add(_script);
-            return psi;
-        }
+                var psi = new ProcessStartInfo
+                {
+                    FileName = nodeExe,
+                    WorkingDirectory = workingDirectory
+                };
+                psi.ArgumentList.Add("-e");
+                psi.ArgumentList.Add(script);
+                return psi;
+            },
+        };
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Stop/Finalize-Polling (DateTime.UtcNow-Deadlines) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_PrintsInitThenStalls_RunnerStopsCleanly()
     {
@@ -158,6 +155,8 @@ setInterval(() => {}, 600000);
         Assert.Contains(execAfter!.Status, new[] { "stopped", "cancelled" });
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Event-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_RunStartedAndProcessExited_EventsRaisedOnOnRunEvent()
     {
@@ -182,19 +181,21 @@ setInterval(() => {}, 600000);
         {
             int n;
             lock (events) n = events.Count;
-            if (events.OfType<CliRunEvent.ProcessExited>().Any()) break;
+            if (events.OfType<CliRunEvent.RunEnded>().Any()) break;
             await Task.Delay(50);
         }
 
         List<CliRunEvent> snap;
         lock (events) snap = events.ToList();
         Assert.Contains(snap, e => e is CliRunEvent.RunStarted);
-        Assert.Contains(snap, e => e is CliRunEvent.ProcessExited);
+        Assert.Contains(snap, e => e is CliRunEvent.RunEnded);
         // FakeNodeCliService has no MapLineToRunEvents override, so no
         // OutputDelta / SessionStarted events are expected here - that
         // wiring is per-CLI and tested in ClaudeEventAdapterTests.
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Stop/Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_NoNewlineButAlive_RunnerStillBuffersBytes()
     {
@@ -235,6 +236,8 @@ setInterval(() => {}, 600000);
         Assert.Contains(final, l => l.Stream == "system" && l.Text.Contains("CLI exited"));
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_StderrWritesWhileStdoutSilent_StderrLandsInBuffer()
     {
@@ -269,6 +272,8 @@ setTimeout(() => process.exit(0), 200);
             string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text}")));
     }
 
+    // MachineBound 19.07.: FakeCli-Burst-Spawn (500 Zeilen) + Finalize-Polling flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_FastOutput_NoneDropped()
     {
@@ -305,6 +310,8 @@ process.exit(0);
             (seqLines.Count > 0 ? $"First: {seqLines[0].Text}, last: {seqLines[^1].Text}" : ""));
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Wall-Clock-Timing-Assertion (< 2s Fenster) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task ResetSilenceClock_OnStalledRun_AdvancesLastStreamedToNow()
     {
@@ -370,6 +377,8 @@ setInterval(() => {}, 600000);
         Assert.Null(svc.GetLastStreamedAt("::no-such-job"));
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_StreamsManyFrames_RunnerCapturesAll()
     {

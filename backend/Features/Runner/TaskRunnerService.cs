@@ -19,7 +19,6 @@ public class TaskRunnerService : BackgroundService
     private readonly TaskStateMachine _states;
     private readonly TaskMutationService _mutations;
     private readonly TaskSessionLog _sessions;
-    private readonly CopilotCliService _cli;
     private readonly CliRouter _router;
     private readonly ContextUsageParser _contextUsageParser;
     private readonly SummaryGenerationService _summaryService;
@@ -28,6 +27,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ProjectSettingsService _projectSettings;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
+    private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
     private readonly OrchestratorRunner _orchestratorRunner;
@@ -45,6 +45,8 @@ public class TaskRunnerService : BackgroundService
     private readonly IntegrationLeaseService? _integrationLeases;
     private readonly TimelineLog? _timeline;
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
+    private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     // Forwarded to each ProjectRunner. DI injects the registered singleton; the
     // step is default-OFF per project, so a wired-but-disabled step changes
     // nothing. Null only when a test fixture builds the service directly.
@@ -57,6 +59,25 @@ public class TaskRunnerService : BackgroundService
     // the host does not sleep mid-run. Optional: DI injects the singleton; null
     // when a test fixture builds the service directly (keep-awake then off).
     private readonly SystemKeepAwake? _keepAwake;
+    // Optional: null only when a test fixture builds the service directly.
+    // Consulted at boot so a RootPath set through the registry (onboarding
+    // dialog / project settings) takes effect without anyone having to hand-
+    // edit the gitignored appsettings.Local.json WatchPaths entry (ASS -
+    // "Agent Studio" mode-toggle 404, 2026-07-05).
+    private readonly AgentStudio.Registry.ProjectRegistry? _projectRegistry;
+    // AGT-1812: two-tier orchestrator resolver (project -> workspace default),
+    // handed to each ProjectRunner so its model-override reads pick up a
+    // workspace default. Optional: null when a test fixture builds the service
+    // directly, in which case runners fall back to the project-only value.
+    private readonly AgentStudio.Registry.OrchestratorDefaultsProvider? _orchestratorDefaults;
+    // AGT-2003: the server-authoritative run-lease authority + this backend's own
+    // runner identity, used only to project the active lease owner onto a task's
+    // read-time DTO (ResolveRunnerBadge). Both are DI singletons; null only when a
+    // test fixture builds the service directly, in which case no runner badge is
+    // surfaced (the card falls back to the plain local-run presentation).
+    private readonly RunLeaseService? _runLeases;
+    private readonly RunnerIdentity? _runnerIdentity;
+    private readonly ILoadThrottleGate? _loadThrottle;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -84,7 +105,6 @@ public class TaskRunnerService : BackgroundService
         TaskStateMachine states,
         TaskMutationService mutations,
         TaskSessionLog sessions,
-        CopilotCliService cli,
         CliRouter router,
         ContextUsageParser contextUsageParser,
         SummaryGenerationService summaryService,
@@ -110,7 +130,15 @@ public class TaskRunnerService : BackgroundService
         HumanReviewEscalation? humanReviewEscalation = null,
         AgentStudio.Runner.PostAbortReviewStepService? postAbortReview = null,
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
-        SystemKeepAwake? keepAwake = null)
+        SystemKeepAwake? keepAwake = null,
+        AgentStudio.Registry.ProjectRegistry? projectRegistry = null,
+        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
+        RunLeaseService? runLeases = null,
+        RunnerIdentity? runnerIdentity = null,
+        CliQuotaFallbackService? quotaFallback = null,
+        ILoadThrottleGate? loadThrottle = null,
+        AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
+        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null)
     {
         _config = config;
         _logger = logger;
@@ -118,7 +146,6 @@ public class TaskRunnerService : BackgroundService
         _states = states;
         _mutations = mutations;
         _sessions = sessions;
-        _cli = cli;
         _router = router;
         _contextUsageParser = contextUsageParser;
         _summaryService = summaryService;
@@ -127,6 +154,8 @@ public class TaskRunnerService : BackgroundService
         _projectSettings = projectSettings;
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
+        _quotaFallback = quotaFallback;
+        _loadThrottle = loadThrottle;
         _chatLog = chatLog;
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
@@ -142,9 +171,15 @@ public class TaskRunnerService : BackgroundService
         _integrationLeases = integrationLeases;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
+        _modelQualification = modelQualification;
+        _integrationPushQueue = integrationPushQueue;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
         _keepAwake = keepAwake;
+        _projectRegistry = projectRegistry;
+        _orchestratorDefaults = orchestratorDefaults;
+        _runLeases = runLeases;
+        _runnerIdentity = runnerIdentity;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -219,12 +254,70 @@ public class TaskRunnerService : BackgroundService
     public StuckLoopBudget StuckLoopBudget => _stuckLoopBudget;
     private StuckLoopBudget _stuckLoopBudget = StuckLoopBudget.Default;
 
+    /// <summary>
+    /// AGT-2003 — project the runner holding this task's active run lease onto a
+    /// card-renderable <see cref="AgentStudio.Shared.TaskRunnerInfo"/>, or null when
+    /// no lease is held (the common local-run case: the in-process runner uses the
+    /// disk pickup-lock, not the run lease). O(1) in-memory peek, so it is safe to
+    /// call once per job in the read overlay; the caller gates it on the Progress
+    /// lane. <see cref="AgentStudio.Shared.TaskRunnerInfo.IsRemote"/> compares the
+    /// lease owner against this backend's own runner id, so a lease taken by the
+    /// local backend (should one ever acquire it) still reads as a local run.
+    /// </summary>
+    public AgentStudio.Shared.TaskRunnerInfo? ResolveRunnerBadge(string taskKey)
+    {
+        if (_runLeases == null || string.IsNullOrWhiteSpace(taskKey)) return null;
+        var peek = _runLeases.Peek(taskKey);
+        return ProjectRunnerBadge(peek.Lease, _runnerIdentity?.RunnerId);
+    }
+
+    /// <summary>
+    /// Pure projection of a peeked run-lease record + this backend's own runner id
+    /// into a card-renderable <see cref="AgentStudio.Shared.TaskRunnerInfo"/>. Null
+    /// when no lease is held. <c>IsRemote</c> is true when the lease owner differs
+    /// from <paramref name="localRunnerId"/> (a remote host executes it); a blank
+    /// local id is treated as "cannot prove local" and reads as remote so a real
+    /// remote lease is never hidden. Extracted from <see cref="ResolveRunnerBadge"/>
+    /// so the lokal-vs-remote decision is unit-testable without the runner's DI graph.
+    /// </summary>
+    public static AgentStudio.Shared.TaskRunnerInfo? ProjectRunnerBadge(
+        AgentStudio.Shared.RunLeaseInfoDto? lease, string? localRunnerId)
+    {
+        if (lease is null) return null;
+        var isRemote = string.IsNullOrWhiteSpace(localRunnerId)
+            || !string.Equals(lease.RunnerId, localRunnerId, StringComparison.OrdinalIgnoreCase);
+        var name = string.IsNullOrWhiteSpace(lease.RunnerName) ? lease.RunnerId : lease.RunnerName;
+        return new AgentStudio.Shared.TaskRunnerInfo
+        {
+            RunnerId = lease.RunnerId,
+            RunnerName = name,
+            Hostname = lease.Hostname,
+            BackendName = lease.BackendName,
+            IsRemote = isRemote,
+            LeaseId = lease.LeaseId,
+            FencingToken = lease.FencingToken,
+            AcquiredAt = lease.AcquiredAt
+        };
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Initialize runners for each watch path
         var entries = _scanner.GetWatchPaths();
-        foreach (var entry in entries)
+        foreach (var rawEntry in entries)
         {
+            // The registry (set via the onboarding dialog or project settings)
+            // is the source of truth once a record exists (ADR-0042); the
+            // static WatchPaths RootPath is only the bootstrap-era fallback
+            // for projects that predate the registry field. Without this, a
+            // RootPath set through the UI after this backend last started
+            // silently has no effect until someone also hand-edits the
+            // gitignored appsettings.Local.json.
+            var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
+            var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
+                ? rawEntry
+                : rawEntry with { RootPath = registryRootPath };
+
             if (string.IsNullOrEmpty(entry.RootPath))
             {
                 _logger.LogWarning("WatchPath '{Name}' has no RootPath configured, skipping runner", entry.Name);
@@ -250,7 +343,12 @@ public class TaskRunnerService : BackgroundService
                 pipelineLog: _pipelineLog,
                 humanReviewEscalation: _humanReviewEscalation,
                 postAbortReview: _postAbortReview,
-                sessionInspector: _sessionInspector);
+                sessionInspector: _sessionInspector,
+                orchestratorDefaults: _orchestratorDefaults,
+                quotaFallback: _quotaFallback,
+                loadThrottle: _loadThrottle,
+                modelQualification: _modelQualification,
+                integrationPushQueue: _integrationPushQueue);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -268,13 +366,24 @@ public class TaskRunnerService : BackgroundService
             };
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
-            // → manual" after a job completes.
-            runner.OnModePersist += mode => _projectSettings.SetRunnerMode(entry.Name, mode);
+            // → manual" after a job completes. The source is threaded so a
+            // system-driven flip (update-quiesce, circuit-breaker) updates the
+            // live RunnerMode mirror without clobbering the operator's durable
+            // DesiredRunnerMode intent (ASS-1753).
+            runner.OnModePersist += (mode, source) => _projectSettings.SetRunnerMode(entry.Name, mode, source);
             _runners[entry.Name] = runner;
 
             // Restore last saved mode (if any) after wiring the persist hook so
-            // the restore itself is idempotent and doesn't double-write.
-            var savedMode = _projectSettings.Get(entry.Name).RunnerMode;
+            // the restore itself is idempotent and doesn't double-write. Prefer
+            // the operator's durable DesiredRunnerMode over the live RunnerMode
+            // mirror so a restart that happened while a transient system-manual
+            // was in effect (e.g. mid-update) still comes back up in the mode the
+            // operator actually asked for (ASS-1753). Legacy records that predate
+            // DesiredRunnerMode fall back to RunnerMode.
+            var savedSettings = _projectSettings.Get(entry.Name);
+            var savedMode = string.IsNullOrWhiteSpace(savedSettings.DesiredRunnerMode)
+                ? savedSettings.RunnerMode
+                : savedSettings.DesiredRunnerMode;
             if (!string.IsNullOrWhiteSpace(savedMode) && savedMode != "manual")
             {
                 runner.RestoreMode(savedMode!);
@@ -283,10 +392,10 @@ public class TaskRunnerService : BackgroundService
             _logger.LogInformation("Initialized runner for project '{Name}' (Root: {RootPath})", entry.Name, entry.RootPath);
         }
 
-        // Check CLI availability
-        if (!_cli.IsAvailable())
+        // Check CLI availability (default backend = Claude)
+        if (!_router.Get(CliTypes.Claude).IsAvailable())
         {
-            _logger.LogWarning("Copilot CLI not available - runners will be in manual/board-only mode");
+            _logger.LogWarning("Claude CLI not available - runners will be in manual/board-only mode");
         }
 
         // Boot the orchestrator's long-lived Claude session per project so
@@ -708,6 +817,30 @@ public class TaskRunnerService : BackgroundService
             : null;
     }
 
+    /// <summary>
+    /// In-memory run facts for one Progress-lane task (ASS-1751), resolved O(1)
+    /// via the project name exactly like <see cref="GetStuckLoopStateForJob"/>.
+    /// Returns default facts (no slot / no backoff / zero failures) when the
+    /// project has no live runner - which is also the orphan case after a
+    /// backend restart. The endpoint overlay classifies these into a
+    /// <see cref="TaskRunActivity"/>.
+    /// </summary>
+    public RunActivityFacts GetRunActivityForJob(string jobId, string projectName)
+    {
+        if (string.IsNullOrEmpty(projectName)) return default;
+        return _runners.TryGetValue(projectName, out var runner)
+            ? runner.GetRunActivity(jobId)
+            : default;
+    }
+
+    public QuotaFallbackStatus? GetQuotaFallbackForJob(string jobId, string projectName)
+    {
+        if (string.IsNullOrEmpty(projectName)) return null;
+        return _runners.TryGetValue(projectName, out var runner)
+            ? runner.GetQuotaFallback(jobId)
+            : null;
+    }
+
     private static WatchdogConfig LoadWatchdogConfig(IConfiguration cfg)
     {
         var section = cfg.GetSection("Watchdog");
@@ -823,40 +956,15 @@ public class TaskRunnerService : BackgroundService
     public CliExecution? GetExecutionForJob(TaskInfo info)
         => _router.Get(info.CliType).GetExecution(info.TaskKey);
 
-    public async Task<(ContextUsageSnapshot? Snapshot, string? Error)> RefreshContextUsageAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
+    public Task<(ContextUsageSnapshot? Snapshot, string? Error)> RefreshContextUsageAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) return (null, "Job not found");
-        // /context usage is Copilot-specific; if the job runs another CLI, no-op.
-        if (CliTypes.Normalize(info.CliType) != CliTypes.Copilot)
-            return (null, $"{CliTypes.Normalize(info.CliType)} CLI does not support /context usage refresh.");
-        if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
-
-        var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}'");
-
-        var execution = _cli.GetExecution(info.TaskKey);
-        var canResumeSession = !string.IsNullOrWhiteSpace(info.SessionName) && execution?.Status != "running";
-        var promptResult = await _cli.RunPromptOnceAsync(
-            "/context usage",
-            runner.Entry.RootPath,
-            canResumeSession ? info.SessionName : null,
-            resumeSession: canResumeSession,
-            ct: ct);
-
-        var snapshot = _contextUsageParser.Parse(promptResult.Stdout, promptResult.Stderr, promptResult.ExitCode);
-        if (promptResult.TimedOut)
-        {
-            snapshot = snapshot with
-            {
-                Status = "error",
-                Error = "The /context usage command timed out.",
-                Notes = [.. snapshot.Notes, "The context usage query exceeded the time limit."]
-            };
-        }
-
-        _mutations.UpdateContextUsage(jobId, snapshot, watchPath);
-        return (snapshot, null);
+        if (info == null) return Task.FromResult<(ContextUsageSnapshot?, string?)>((null, "Job not found"));
+        // The interactive /context usage refresh was a Copilot-only feature; the
+        // Copilot CLI backend has been removed. No remaining CLI exposes an
+        // on-demand context-usage probe, so this is always a no-op now.
+        return Task.FromResult<(ContextUsageSnapshot?, string?)>(
+            (null, $"{CliTypes.Normalize(info.CliType)} CLI does not support /context usage refresh."));
     }
 
     /// <summary>
@@ -877,21 +985,98 @@ public class TaskRunnerService : BackgroundService
     }
 
     /// <summary>
-    /// Sweeps every project runner's defensive
-    /// <see cref="ProjectRunner.ReconcileActiveJobAgainstDisk"/>. Cheap when
-    /// no project has an active-job latch held; one disk scan per project
-    /// otherwise. Wired off <see cref="TaskWatcherService.OnJobChanged"/> so
-    /// non-API folder changes (external scripts, hand edits, boot-time
-    /// stuck-folder sweep) get reconciled within the watcher's debounce
-    /// interval rather than waiting for the next 5 s pickup tick.
+    /// Reconciles only the project whose watch tree emitted the change. The
+    /// runner inspects its captured active task folder directly, avoiding the
+    /// global task-index lookup that used to run synchronously on every watcher
+    /// event.
     /// </summary>
-    public void ReconcileAllRunners()
+    public void ReconcileRunnerForPath(string changedPath)
     {
         foreach (var runner in _runners.Values)
         {
+            if (!PathIsUnder(runner.Entry.Path, changedPath)) continue;
             try { runner.ReconcileActiveJobAgainstDisk(); }
             catch (Exception ex) { _logger.LogDebug(ex, "Reconcile failed for runner {Project}", runner.ProjectName); }
+            return;
         }
+    }
+
+    private static bool PathIsUnder(string root, string path)
+    {
+        try
+        {
+            var relative = Path.GetRelativePath(root, path);
+            return relative != "."
+                   && !Path.IsPathRooted(relative)
+                   && !relative.Split(
+                           [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                           StringSplitOptions.RemoveEmptyEntries)
+                       .Any(part => part == "..");
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Activates a runner for a project created after host startup. This is
+    /// intentionally idempotent so POST retries cannot duplicate pickup loops.
+    /// </summary>
+    public bool EnsureRunner(WatchPathEntry rawEntry)
+    {
+        if (_runners.ContainsKey(rawEntry.Name)) return true;
+
+        var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
+        var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
+            ? rawEntry
+            : rawEntry with { RootPath = registryRootPath };
+        if (string.IsNullOrWhiteSpace(entry.RootPath) || !Directory.Exists(entry.RootPath))
+        {
+            _logger.LogInformation(
+                "runner-activation-skipped project={Project} reason=root-path-unavailable root={RootPath}",
+                entry.Name, entry.RootPath);
+            return false;
+        }
+
+        var runner = new ProjectRunner(
+            entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService,
+            _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner,
+            _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git,
+            _pickupFailures, _infraBreaker, _taskAccess, _bus,
+            role: Role,
+            pickupLock: _pickupLock,
+            pickupLockOwner: BuildPickupLockOwner(entry.Name),
+            integrationLeases: _integrationLeases,
+            timeline: _timeline,
+            pipelineLog: _pipelineLog,
+            humanReviewEscalation: _humanReviewEscalation,
+            postAbortReview: _postAbortReview,
+            sessionInspector: _sessionInspector,
+            orchestratorDefaults: _orchestratorDefaults,
+            quotaFallback: _quotaFallback,
+            loadThrottle: _loadThrottle);
+        runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
+        runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
+        runner.ConfigureStuckLoopBudget(LoadStuckLoopBudget(_config));
+        runner.OnStatusChanged += status =>
+        {
+            try { OnRunnerStatusChanged?.Invoke(entry.Name, status); }
+            catch (Exception ex) { _logger.LogWarning(ex, "OnRunnerStatusChanged subscriber threw for {Project}", entry.Name); }
+        };
+        runner.OnModePersist += (mode, source) => _projectSettings.SetRunnerMode(entry.Name, mode, source);
+
+        if (!_runners.TryAdd(entry.Name, runner)) return true;
+        var saved = _projectSettings.Get(entry.Name);
+        var savedMode = string.IsNullOrWhiteSpace(saved.DesiredRunnerMode) ? saved.RunnerMode : saved.DesiredRunnerMode;
+        if (!string.IsNullOrWhiteSpace(savedMode) && savedMode != "manual") runner.RestoreMode(savedMode!);
+        _logger.LogInformation("runner-activated project={Project} root={RootPath}", entry.Name, entry.RootPath);
+        _ = Task.Run(async () =>
+        {
+            try { await runner.BootOrchestratorSessionAsync(CancellationToken.None); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Orchestrator boot failed for {Project}", entry.Name); }
+        });
+        return true;
     }
 
     public bool StartRunner(string projectName)

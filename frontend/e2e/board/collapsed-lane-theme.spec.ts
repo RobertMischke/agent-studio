@@ -79,7 +79,7 @@ async function installRoutes(page: Page) {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
 
-  await page.route('**/api/jobs/grouped**', (route) =>
+  await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED) }));
 
   await page.route('**/api/watch-paths**', (route) =>
@@ -249,7 +249,7 @@ test.describe('Collapsed lane-rail theme regression', () => {
 
       // Hover the rail to trigger the tooltip.
       await rail.hover();
-      const tooltip = page.getByTestId('app-tooltip');
+      const tooltip = page.getByTestId('cac-tooltip');
       await expect(tooltip).toBeVisible({ timeout: 2_000 });
       await page.waitForTimeout(100);
 

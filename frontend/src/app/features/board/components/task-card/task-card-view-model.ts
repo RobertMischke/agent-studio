@@ -1,11 +1,13 @@
 import { TaskState } from '../../../../models/task.model';
 import type { TaskInfo, ClientSummary, CliType, TagRegistryEntry, EpicRollup, AutoLoopSnapshot, PendingIntent, TaskMode } from '../../../../models/task.model';
 import type { TaskCommitInfo } from '../../../../features/git';
-import type { StructuredTooltip } from '../../../../components/tooltip';
+import type { StructuredTooltip } from 'coding-agent-chat/shared';
 import type { MenuItem } from '../../../../components/menu';
 import type { AutoReviewStatusView } from '../../../../services/auto-review-status.store';
 import { cliTypeIcon, cliTypeLabel, shortModelName, taskModeIcon, taskModeLabel } from '../../../../services/format.util';
 import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
+import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
+import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
 
 export interface TaskTypeChip {
   kind: string;
@@ -31,11 +33,11 @@ const FILE_LIST_MAX = 12;
 
 export function buildTaskTypeChip(taskType: TaskInfo['taskType']): TaskTypeChip {
   const type = (taskType || 'chore').toLowerCase();
-  if (type === 'bug') return { kind: 'bug', label: 'Bug', icon: '🐞', tooltip: 'Task type: Bug' };
+  if (type === 'bug') return { kind: 'bug', label: 'Bug', icon: 'warn', tooltip: 'Task type: Bug' };
   if (type === 'feature' || type === 'user-story') {
-    return { kind: 'feature', label: 'Feature', icon: '✨', tooltip: 'Task type: Feature' };
+    return { kind: 'feature', label: 'Feature', icon: 'plus', tooltip: 'Task type: Feature' };
   }
-  return { kind: 'chore', label: 'Chore', icon: '·', tooltip: 'Task type: Chore (default)' };
+  return { kind: 'chore', label: 'Chore', icon: 'dot', tooltip: 'Task type: Chore (default)' };
 }
 
 export interface ModeBadge {
@@ -282,7 +284,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export type EffectiveModelSource = 'run' | 'explicit' | 'default' | 'human' | 'unknown';
+export type EffectiveModelSource = 'fallback' | 'run' | 'explicit' | 'default' | 'human' | 'unknown';
 
 export interface EffectiveModelChip {
   icon: string;
@@ -292,9 +294,10 @@ export interface EffectiveModelChip {
   source: EffectiveModelSource;
   isDefault: boolean;
   tooltip: StructuredTooltip;
+  thinkingLevel: ThinkingLevelIndicator | null;
 }
 
-const CLI_TYPES_SET = new Set(['copilot', 'claude', 'codex', 'gemini']);
+const CLI_TYPES_SET = new Set(['claude', 'codex', 'gemini']);
 
 function isCliType(v: string | null | undefined): v is CliType {
   return !!v && CLI_TYPES_SET.has(v);
@@ -313,7 +316,15 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
   let source: EffectiveModelSource;
   let isDefault: boolean;
 
-  if (execution?.status === 'running' && execution.model) {
+  if (job.quotaFallback) {
+    const cli = isCliType(job.quotaFallback.cliType) ? job.quotaFallback.cliType : null;
+    icon = cli ? cliTypeIcon(cli) : '\u{26A0}';
+    label = `fallback: ${shortModelName(job.quotaFallback.model)}`;
+    fullModel = job.quotaFallback.model;
+    cliLbl = cli ? cliTypeLabel(cli) : null;
+    source = 'fallback';
+    isDefault = false;
+  } else if (execution?.status === 'running' && execution.model) {
     const cli = jobCli ?? ownerCli;
     icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
     label = shortModelName(execution.model);
@@ -352,9 +363,15 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     isDefault = false;
   }
 
-  const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel);
+  const thinkingLevel = buildThinkingLevelIndicator(
+    job.execution,
+    job.thinkingLevel,
+    owner.defaultThinkingLevel,
+    fullModel,
+  );
+  const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel, thinkingLevel);
 
-  return { icon, label, fullModel, cliLabel: cliLbl, source, isDefault, tooltip };
+  return { icon, label, fullModel, cliLabel: cliLbl, source, isDefault, tooltip, thinkingLevel };
 }
 
 function buildModelTooltip(
@@ -363,18 +380,29 @@ function buildModelTooltip(
   source: EffectiveModelSource,
   ownerCli: CliType | null,
   ownerModel: string | null,
+  thinkingLevel: ThinkingLevelIndicator | null,
 ): StructuredTooltip {
   const lines: string[] = [];
 
   const jobCli = isCliType(job.cliType) ? job.cliType : null;
-  const effectiveCli = jobCli ?? ownerCli;
-  const effectiveModel = source === 'run'
+  const fallbackCli = isCliType(job.quotaFallback?.cliType) ? job.quotaFallback.cliType : null;
+  const effectiveCli = source === 'fallback' ? fallbackCli : jobCli ?? ownerCli;
+  const effectiveModel = source === 'fallback'
+    ? job.quotaFallback?.model
+    : source === 'run'
     ? job.execution?.model ?? job.model ?? ownerModel
     : job.model ?? ownerModel;
 
   lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
   lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!jobCli && ownerCli ? ' <i>(client default)</i>' : ''}`);
+  if (thinkingLevel) {
+    lines.push(`<b>Thinking level:</b> ${escapeHtml(thinkingLevel.effective)}${thinkingLevel.differsFromConfigured ? ' <i>(effective)</i>' : ''}`);
+    if (thinkingLevel.differsFromConfigured) {
+      lines.push(`<b>Configured thinking level:</b> ${escapeHtml(thinkingLevel.configured ?? 'none')}`);
+    }
+  }
   lines.push(`<b>Agent:</b> ${escapeHtml(job.agent || 'none')} <i>(pickup permission)</i>`);
+  if (source === 'fallback') lines.push(`<b>Reason:</b> quota (${escapeHtml(job.quotaFallback?.reason ?? 'cap reached')})`);
 
   const ownerLabel = owner.displayName || owner.id;
   const defaultParts: string[] = [];
@@ -385,7 +413,7 @@ function buildModelTooltip(
   lines.push(`<b>Defaults:</b> ${escapeHtml(defaultsStr)}`);
 
   return {
-    title: source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
+    title: source === 'fallback' ? 'Quota fallback active' : source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
     body: lines.join('<br>'),
   };
 }
@@ -397,11 +425,14 @@ export interface TaskTagChip {
   ghost: boolean;
   concern: boolean;
   unparseable: boolean;
+  historical: boolean;
+  historyGlyph: string | null;
   tooltip: string;
 }
 
 const SUPPRESSED_CARD_TAG_TEXT = new Set([
   'ready',
+  'reviewed',
   'reviewready',
   'readytosignoff',
   'autoreview',
@@ -412,6 +443,9 @@ const SUPPRESSED_CARD_TAG_TEXT = new Set([
   'classifier',
   'classifierunknown',
   'classification',
+  'orchestratormove',
+  'orchestratormoved',
+  'movedbyorchestrator',
   'qas',
   'qandas',
   'questionsandanswers',
@@ -431,6 +465,20 @@ const LANE_MIRROR_CARD_TAG_TEXT: Record<string, readonly string[]> = {
   [TaskState.Completed]: ['completed', 'complete', 'done'],
   [TaskState.Archive]: ['archive', 'archived'],
 };
+
+const HISTORY_TAG_RE = /^(?:reissue|abort-review):(.+)$/i;
+const HISTORY_PRESENTATION_LANES = new Set<string>([
+  TaskState.HumanReview,
+  TaskState.Completed,
+  TaskState.Archive,
+]);
+
+function historyTagDetails(id: string): { kind: 'reissue' | 'abort'; reason: string } | null {
+  const match = HISTORY_TAG_RE.exec(id);
+  if (!match) return null;
+  const kind = id.toLowerCase().startsWith('reissue:') ? 'reissue' : 'abort';
+  return { kind, reason: match[1].replace(/[-_]+/g, ' ').trim() };
+}
 
 function compactTagText(value: string): string {
   return value
@@ -468,6 +516,26 @@ export function buildTagChips(
   return list.flatMap((id) => {
     const entry = byId.get(id);
     if (isSuppressedCardTag(id, entry, state)) return [];
+    const history = historyTagDetails(id);
+    const historical = history !== null && state !== undefined && HISTORY_PRESENTATION_LANES.has(state);
+    if (history) {
+      const label = entry?.label ?? (history.kind === 'reissue' ? 'Reissue' : 'Abort review');
+      const reason = entry?.description || history.reason || 'No reason recorded';
+      const occurrences = list.filter((candidate) => historyTagDetails(candidate)?.kind === history.kind).length;
+      return {
+        id,
+        label,
+        color: historical ? 'var(--studio-fg-dim)' : (entry?.color ?? (history.kind === 'reissue' ? '#f59e0b' : '#ef4444')),
+        ghost: false,
+        concern: false,
+        unparseable: false,
+        historical,
+        historyGlyph: historical ? '↺' : null,
+        tooltip: historical
+          ? `History only: ${label}. When: before the task reached its current ${state} lane. Recorded occurrences: ${occurrences} tag${occurrences === 1 ? '' : 's'}. Reason: ${reason}. Open the task timeline for the exact run time and full context.`
+          : `${label} is active in the ${state ?? 'current'} lane. Reason: ${reason}.`
+      };
+    }
     if (entry) {
       return {
         id,
@@ -476,6 +544,8 @@ export function buildTagChips(
         ghost: false,
         concern: false,
         unparseable: false,
+        historical: false,
+        historyGlyph: null,
         tooltip: entry.description ? `${entry.label}: ${entry.description}` : entry.label
       };
     }
@@ -486,7 +556,9 @@ export function buildTagChips(
       ghost: true,
       concern: false,
       unparseable: false,
-        tooltip: `Unknown tag '${id}'; registry entry was removed`
+      historical: false,
+      historyGlyph: null,
+      tooltip: `Unknown tag '${id}'; registry entry was removed`
       };
   });
 }
@@ -494,6 +566,7 @@ export function buildTagChips(
 export interface OwnerChip {
   id: string;
   label: string;
+  initials: string;
   emoji: string;
   background: string;
   border: string;
@@ -512,17 +585,30 @@ function tintFromHex(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** Owner-attribution chip: emoji + display name + the owner's chosen colour. */
+function ownerInitials(label: string, id: string): string {
+  const words = label
+    .trim()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  const source = words.length >= 2
+    ? `${words[0][0]}${words[1][0]}`
+    : (words[0] ?? id).slice(0, 2);
+  return (source || '??').toUpperCase();
+}
+
+/** Owner-attribution chip: compact user marker + the owner's chosen colour. */
 export function buildOwnerChip(owner: ClientSummary): OwnerChip {
   const baseColour = owner.colour || '#64748b';
+  const label = owner.displayName || owner.id;
   return {
     id: owner.id,
-    label: owner.displayName || owner.id,
+    label,
+    initials: ownerInitials(label, owner.id),
     emoji: owner.emoji || '·',
     background: tintFromHex(baseColour, 0.12),
     border: tintFromHex(baseColour, 0.32),
     foreground: '#e2e8f0',
-    tooltip: `Owner: ${owner.displayName || owner.id} (${owner.id})`
+    tooltip: `Owner: ${label} (${owner.id})`
   };
 }
 
@@ -541,19 +627,34 @@ export interface GitStateBadge {
   tooltip: string;
 }
 
-// Lane -> which cards carry a git-state pill at all. Backlog / preparation /
-// ready / failed-pickup have no useful git context and stay quiet (null). The
-// lane no longer decides the LABEL: that comes from the provenance ground truth
-// below. Completed/Archive still map straight through because the lane itself is
-// the terminal fact (accepted into develop / archived).
+// Lane -> which cards may carry a git-state pill. Early lanes still stay quiet
+// unless a real branch/tip is recorded; this lets prepared/ready worktree tasks
+// show their branch before the first commit without inventing context for
+// ordinary backlog cards. The lane no longer decides the LABEL: that comes from
+// the provenance ground truth below. Completed/Archive still map straight
+// through because the lane itself is the terminal fact (accepted into develop /
+// archived).
 const GIT_STATE_LANES: ReadonlySet<string> = new Set<string>([
+  TaskState.Backlog,
+  TaskState.Preparation,
+  TaskState.OrchestratorPrep,
+  TaskState.Ready,
   TaskState.Progress,
   TaskState.CodeNotComplete,
+  TaskState.FailedPickup,
   TaskState.AutoReview,
   TaskState.HumanReview,
   TaskState.Escalated,
   TaskState.Completed,
   TaskState.Archive,
+]);
+
+const EARLY_GIT_CONTEXT_LANES: ReadonlySet<string> = new Set<string>([
+  TaskState.Backlog,
+  TaskState.Preparation,
+  TaskState.OrchestratorPrep,
+  TaskState.Ready,
+  TaskState.FailedPickup,
 ]);
 
 // Review lanes a PARALLEL run only reaches AFTER its task/<id> worktree was
@@ -628,6 +729,10 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
   const tip = currentBranchTip(prov);
   const mergeSha = recordedMergeSha(prov);
 
+  if (EARLY_GIT_CONTEXT_LANES.has(job.state) && !tip && !mergeSha) {
+    return null;
+  }
+
   // (2) Landed in develop. Ground-truth merge fact wins; otherwise the lane is
   // terminal (Completed) or a post-integration review lane whose parallel
   // worktree has already been torn down (a real branch was cut, so this is not a
@@ -671,46 +776,311 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
   };
 }
 
+/**
+ * AGT-2046 — the always-on two-segment merge signal shown on every board card
+ * that carries git work: "gemerged in develop / gemerged in main". The operator
+ * scans the board for these two facts, so the card renders a compact
+ * `[d|m]` indicator whose segments read filled/green when merged and muted/empty
+ * when not.
+ *
+ * Primary source is the backend-computed {@link TaskInfo.mergeSignal} (batched +
+ * cached per repo, so no per-card graph query). When that is absent (an older
+ * payload, or a surface that doesn't compute it) the develop segment degrades
+ * gracefully from the persisted merge fact / terminal lane; main needs the graph
+ * and stays "unknown" (shown as not-merged) until the signal arrives.
+ *
+ * Semantics + colours match the detail-header landed-state (ASS-1724 / AGT-1989):
+ * develop and main are the same worktree -> develop -> main ladder rungs.
+ */
+export interface MergeSignalSegment {
+  key: 'develop' | 'main';
+  /** One-letter scan glyph: `d` (develop) / `m` (main). */
+  short: 'd' | 'm';
+  /** Full branch label for the tooltip ("develop" / "main"). */
+  label: string;
+  merged: boolean;
+  /** Short SHA that proves the membership, when known. */
+  sha: string | null;
+}
+
+export interface MergeSignalView {
+  branch: string | null;
+  develop: MergeSignalSegment;
+  main: MergeSignalSegment;
+  /** Plain-text tooltip: branch + merge-target status in Klartext. */
+  tooltip: string;
+  /** Compact aria label for screen readers ("in develop, not in main"). */
+  ariaLabel: string;
+}
+
+function shortShaOf(sha: string | null | undefined): string | null {
+  if (!sha) return null;
+  const s = sha.trim();
+  if (s.length === 0) return null;
+  return s.length > 7 ? s.slice(0, 7) : s;
+}
+
+/**
+ * True when the card has at least one attributed TASK commit (the SSOT
+ * {@link commitChainOf}). The merge signal is a statement about the task's own
+ * commits, so this is the whole gate. AGT-2063: a card that committed nothing
+ * gets NO signal - not from the backend `mergeSignal`, not from a recorded
+ * branch tip, not from a merge fact. A `task/<id>` branch that was cut but never
+ * produced a commit has its base commit as the tip, and the base is trivially an
+ * ancestor of develop/main; keying off it painted commit-less cards as "in
+ * develop", the false statement the operator hit.
+ */
+function hasTaskCommits(job: TaskInfo): boolean {
+  return commitChainOf(job).length > 0;
+}
+
+/**
+ * Build the two-segment merge signal for a card. Returns null when the card has
+ * no attributed task commit to describe: a card without commits shows no signal
+ * at all, not an empty or default one (AGT-2063).
+ */
+export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
+  if (!hasTaskCommits(job)) return null;
+
+  const sig = job.mergeSignal ?? null;
+  const prov = job.provenance ?? null;
+  const mergeSha = prov?.merge?.mergeCommit ?? null;
+
+  let inDevelop: boolean;
+  let inMain: boolean;
+  let developSha: string | null;
+  let mainSha: string | null;
+  let branch: string | null;
+  let integrationLabel: string;
+  let releaseLabel: string;
+
+  if (sig) {
+    inDevelop = sig.inIntegration;
+    inMain = sig.inRelease;
+    developSha = sig.integrationSha ?? null;
+    mainSha = sig.releaseSha ?? null;
+    branch = sig.branch || prov?.branch || null;
+    integrationLabel = sig.integrationBranch || 'develop';
+    releaseLabel = sig.releaseBranch || 'main';
+  } else {
+    // Graceful degradation: the persisted develop-merge fact and the terminal
+    // Completed lane both prove develop; main is unknown without the graph.
+    inDevelop = !!mergeSha || job.state === TaskState.Completed;
+    inMain = false;
+    developSha = shortShaOf(mergeSha);
+    mainSha = null;
+    branch = prov?.branch || null;
+    integrationLabel = 'develop';
+    releaseLabel = 'main';
+  }
+
+  const develop: MergeSignalSegment = {
+    key: 'develop',
+    short: 'd',
+    label: integrationLabel,
+    merged: inDevelop,
+    sha: developSha,
+  };
+  const main: MergeSignalSegment = {
+    key: 'main',
+    short: 'm',
+    label: releaseLabel,
+    merged: inMain,
+    sha: mainSha,
+  };
+
+  const developLine = inDevelop
+    ? developSha
+      ? `In ${integrationLabel} since ${developSha}`
+      : `In ${integrationLabel}`
+    : `Not yet in ${integrationLabel}`;
+  const mainLine = inMain
+    ? mainSha
+      ? `In ${releaseLabel} (${mainSha})`
+      : `In ${releaseLabel}`
+    : `Not in ${releaseLabel}`;
+
+  const tooltip = [
+    branch ? `Branch: ${branch}` : null,
+    'Merge status:',
+    `• ${developLine}`,
+    `• ${mainLine}`,
+  ].filter((l): l is string => l !== null).join('\n');
+
+  const ariaLabel =
+    `Merge status: ${inDevelop ? `in ${integrationLabel}` : `not in ${integrationLabel}`}, ` +
+    `${inMain ? `in ${releaseLabel}` : `not in ${releaseLabel}`}`;
+
+  return { branch, develop, main, tooltip, ariaLabel };
+}
+
+export type PipelineDotStatus = 'done' | 'active' | 'pending' | 'blocked';
+
+export interface PipelineDot {
+  id: 'pre' | 'run' | 'post' | 'review';
+  label: string;
+  status: PipelineDotStatus;
+}
+
+export interface PipelineDotsView {
+  dots: PipelineDot[];
+  currentLabel: string | null;
+  tooltip: string;
+}
+
+function pipelineView(
+  current: PipelineDot['id'] | null,
+  blocked: PipelineDot['id'] | null,
+  doneThrough: PipelineDot['id'] | null,
+): PipelineDotsView {
+  const order: PipelineDot['id'][] = ['pre', 'run', 'post', 'review'];
+  const labels: Record<PipelineDot['id'], string> = {
+    pre: 'Pre steps',
+    run: 'Core agent work',
+    post: 'Post steps',
+    review: 'Review',
+  };
+  const doneIndex = doneThrough ? order.indexOf(doneThrough) : -1;
+  const dots = order.map((id, index): PipelineDot => ({
+    id,
+    label: labels[id],
+    status: blocked === id ? 'blocked'
+      : current === id ? 'active'
+        : index <= doneIndex ? 'done'
+          : 'pending',
+  }));
+  const currentLabel = current ? labels[current] : null;
+  return {
+    dots,
+    currentLabel,
+    tooltip: `Pipeline: ${dots.map((dot) => `${dot.label} ${dot.status}`).join(', ')}`,
+  };
+}
+
+/**
+ * Tiny card-level pipeline indicator. The board payload intentionally does not
+ * carry the full per-task pipeline execution; that lives behind the detail
+ * endpoint. The card therefore maps the existing lane/phase/execution signals
+ * to the four visible sections (Pre steps, core agent work, post steps, review) without inventing
+ * per-step results.
+ */
+export function buildPipelineDots(job: TaskInfo): PipelineDotsView {
+  switch (job.phase ?? null) {
+    case 'intake-running':
+      return pipelineView('pre', null, null);
+    case 'intake-blocked':
+      return pipelineView(null, 'pre', null);
+    case 'intake-passed':
+      return pipelineView(null, null, 'pre');
+    case 'post-processing-running':
+      return pipelineView('post', null, 'run');
+    case 'post-processing-blocked':
+      return pipelineView(null, 'post', 'run');
+    case 'awaiting-review':
+      return pipelineView(null, null, 'post');
+  }
+
+  if (job.state === TaskState.Progress) {
+    if (job.execution?.status === 'running') {
+      return pipelineView('run', null, 'pre');
+    }
+    return pipelineView(null, null, 'run');
+  }
+
+  if (job.state === TaskState.AutoReview || job.state === '4-review') {
+    return pipelineView('review', null, 'post');
+  }
+
+  if (job.state === TaskState.HumanReview || job.state === TaskState.Escalated) {
+    return pipelineView(null, null, 'review');
+  }
+
+  if (job.state === TaskState.Completed || job.state === TaskState.Archive) {
+    return pipelineView(null, null, 'review');
+  }
+
+  return pipelineView(null, null, null);
+}
+
 export type PhaseBadgeTone =
   | 'human-ready'
   | 'intake-running'
   | 'intake-blocked'
   | 'intake-passed'
+  | 'loop-waiting'
+  | 'steer-pending'
   | 'post-processing-running'
   | 'post-processing-blocked'
   | 'awaiting-review';
 export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: string; }
 
 /**
- * Lifecycle-phase chip. Surfaces the `phase` substate on cards that carry one.
- * Returns null when the job has no explicit phase, so cards that predate the
- * field render exactly like before.
+ * Format a steer wait as compact total-minutes `mm:ss`. The card keeps this
+ * established long-wait representation while lifecycle labels elsewhere use
+ * the shared hour-aware formatter.
  */
-export function buildPhaseBadge(phase: TaskInfo['phase']): PhaseBadge | null {
-  switch (phase ?? null) {
-    case 'human-ready':
-      return null;
-    case 'intake-running':
-      return { label: 'Intake running', tone: 'intake-running',
-               tooltip: 'Orchestrator intake is checking this card (separate runner from the coding CLI).' };
-    case 'intake-blocked':
-      return { label: 'Intake blocked', tone: 'intake-blocked',
-               tooltip: 'Orchestrator intake flagged this card. Check the activity log for the reason and resolve before the coding runner can pick it up.' };
-    case 'intake-passed':
-      return { label: 'Intake passed', tone: 'intake-passed',
-               tooltip: 'Orchestrator intake approved this card. The coding runner is now allowed to pick it up.' };
-    case 'post-processing-running':
-      return { label: 'Post processing', tone: 'post-processing-running',
-               tooltip: 'The coding CLI has finished. An orchestrator or supporting agent is running post-processing before review.' };
-    case 'post-processing-blocked':
-      return { label: 'Post processing blocked', tone: 'post-processing-blocked',
-               tooltip: 'Orchestrator post-processing needs a human decision or failed before it could pass this task to review.' };
-    case 'awaiting-review':
-      return { label: 'Awaiting review', tone: 'awaiting-review',
-               tooltip: 'Post-processing finished and the task is waiting for the review transition.' };
-    default:
-      return null;
+export function formatSteerWait(elapsedMs: number): string {
+  const total = Math.max(0, Math.floor(elapsedMs / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
+ * Card-pill tone + tooltip per lifecycle phase. Only the card-specific
+ * presentation lives here; the visible label text comes from the shared
+ * PHASE_LABELS source of truth via {@link phaseStaticLabel} so the pill and the
+ * task-detail chip can never disagree on wording. Phases absent from this table
+ * (human-ready, execution-running, execution-stalled) render no pill on the
+ * card: the lane already says "Ready" and a live execution shows the
+ * "Running live" chip instead.
+ */
+const PHASE_PILL: Partial<Record<string, { tone: PhaseBadgeTone; tooltip: string }>> = {
+  'steer-pending': { tone: 'steer-pending',
+    tooltip: 'The run asked a question and is waiting for an answer. If it stays unanswered it is auto-answered from the task context or escalated - it will not hang (Run-Liveness Slice B).' },
+  'loop-waiting': { tone: 'loop-waiting',
+    tooltip: 'The coding CLI has exited and freed its execution slot. The orchestrator is preparing a continuation, which must acquire a new slot before the CLI resumes.' },
+  'intake-running': { tone: 'intake-running',
+    tooltip: 'Orchestrator intake is checking this card (separate runner from the coding CLI).' },
+  'intake-blocked': { tone: 'intake-blocked',
+    tooltip: 'Orchestrator intake flagged this card. Check the activity log for the reason and resolve before the coding runner can pick it up.' },
+  'intake-passed': { tone: 'intake-passed',
+    tooltip: 'Orchestrator intake approved this card. The coding runner is now allowed to pick it up.' },
+  'post-processing-running': { tone: 'post-processing-running',
+    tooltip: 'The coding CLI has finished. An orchestrator or supporting agent is running post-processing before review.' },
+  'post-processing-blocked': { tone: 'post-processing-blocked',
+    tooltip: 'Orchestrator post-processing needs a human decision or failed before it could pass this task to review.' },
+  'awaiting-review': { tone: 'awaiting-review',
+    tooltip: 'Post-processing finished and the task is waiting for the review transition.' },
+};
+
+/** The two intentional-wait phases whose pill carries a live "since m:ss" timer. */
+const TIMED_WAIT_PHASES = new Set(['loop-waiting', 'steer-pending']);
+
+/**
+ * Lifecycle-phase chip. Surfaces the `phase` substate on cards that carry one.
+ * Returns null when the job has no explicit phase (or a phase the card renders
+ * elsewhere), so cards that predate the field render exactly like before. For
+ * the two intentional-wait phases the optional `steerPendingSince` + `nowMs`
+ * append the "since m:ss" timer (Run-Liveness Slices B/C).
+ */
+export function buildPhaseBadge(
+  phase: TaskInfo['phase'],
+  steerPendingSince?: string | null,
+  nowMs?: number,
+): PhaseBadge | null {
+  if (!phase) return null;
+  const pill = PHASE_PILL[phase];
+  if (!pill) return null;
+  let label = phaseStaticLabel(phase) ?? phase;
+  if (TIMED_WAIT_PHASES.has(phase)) {
+    const since = steerPendingSince ? Date.parse(steerPendingSince) : NaN;
+    if (Number.isFinite(since) && typeof nowMs === 'number') {
+      const separator = phase === 'steer-pending' ? ' · ' : ' ';
+      label = `${label}${separator}${formatSteerWait(nowMs - since)}`;
+    }
   }
+  return { label, tone: pill.tone, tooltip: pill.tooltip };
 }
 
 export interface ExecutionBadge { label: string; tone: 'running' | 'failed' | 'cancelled'; }
@@ -758,6 +1128,71 @@ export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
   return null;
 }
 
+/**
+ * DtC drive-to-conclusion infra-retry budget: up to 3 total attempts per
+ * run-chain (attempt 1 = original run + up to 2 infra retries). Mirrors the
+ * backend `CompletionRetrigger` DefaultBudget; see the four-terminal model in
+ * `docs/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
+ * CooldownRetry banner counts against this budget.
+ */
+export const INFRA_RETRY_BUDGET = 3;
+
+export interface CooldownRetryBanner {
+  /** Attempt this cooldown is holding for, clamped to [1, budget]. */
+  attempt: number;
+  budget: number;
+  /** Whole seconds until the scheduled re-pickup, or null when already due. */
+  secondsLeft: number | null;
+  /** Primary line, e.g. `infra-crashed · retrying 2/3`. */
+  label: string;
+  /** Countdown fragment, e.g. `in 210s` (or `now` when the timer elapsed). */
+  countdown: string;
+  tooltip: string;
+}
+
+/**
+ * DtC step 6 — the CooldownRetry banner for a `3-progress` card that infra-crashed
+ * and is holding out a scheduled re-pickup backoff (the `runActivity.failed-backoff`
+ * state, ASS-1751). This is the ONLY non-live state allowed in 3-progress, and it
+ * must read distinctly from the normal "Running live" chip so a cooling task does
+ * not look like a fresh stall: the card renders it as a warn-toned banner
+ * (`infra-crashed · retrying k/3 · in Ns`), not the running tint.
+ *
+ * Source is the already-overlaid `runActivity` (kind + backoffUntil + attempt) —
+ * no new side-channel. `nowMs` is injected so the countdown ticks from the card's
+ * shared clock signal. Returns null off the Progress lane, when no runActivity is
+ * attached, or for any run-activity state other than `failed-backoff`.
+ */
+export function buildCooldownRetryBanner(job: TaskInfo, nowMs: number): CooldownRetryBanner | null {
+  if (job.state !== TaskState.Progress) return null;
+  const activity = job.runActivity;
+  if (!activity || activity.kind !== 'failed-backoff') return null;
+
+  const attempt = Math.min(Math.max(activity.attempt, 1), INFRA_RETRY_BUDGET);
+  const untilMs = activity.backoffUntil ? Date.parse(activity.backoffUntil) : Number.NaN;
+  const secondsLeft = Number.isFinite(untilMs) && untilMs > nowMs
+    ? Math.max(1, Math.round((untilMs - nowMs) / 1000))
+    : null;
+  const countdown = secondsLeft !== null ? `in ${secondsLeft}s` : 'now';
+
+  const lastError = activity.lastError?.trim();
+  const tooltipLines = [
+    'Infra crash — the last run died before a terminal verdict.',
+    `The orchestrator kept the loop and scheduled a re-pickup (attempt ${attempt} of ${INFRA_RETRY_BUDGET})${secondsLeft !== null ? ` in ~${secondsLeft}s` : ' now'}.`,
+    'This is a held CooldownRetry, not a live run and not a stall.',
+  ];
+  if (lastError) tooltipLines.push(`Last error: ${lastError}`);
+
+  return {
+    attempt,
+    budget: INFRA_RETRY_BUDGET,
+    secondsLeft,
+    label: `infra-crashed · retrying ${attempt}/${INFRA_RETRY_BUDGET}`,
+    countdown,
+    tooltip: tooltipLines.join('\n'),
+  };
+}
+
 export interface ReviewBadge { label: string; tone: 'generating' | 'ready' | 'failed'; tooltip: string; }
 
 /**
@@ -772,8 +1207,7 @@ export function buildReviewBadge(summaryState: TaskInfo['summaryState']): Review
       return { label: 'summarizing', tone: 'generating',
                tooltip: 'Orchestrator is summarizing the run output (Haiku). The card will become quiet once status.md has been written.' };
     case 'ready':
-      return { label: 'Reviewed', tone: 'ready',
-               tooltip: summaryState.bytesWritten ? `Auto-review wrote ${summaryState.bytesWritten} bytes to status.md.` : 'Auto-review finished.' };
+      return null;
     case 'failed':
       return { label: 'review failed', tone: 'failed',
                tooltip: summaryState.errorMessage ?? 'Auto-review failed.' };
@@ -829,16 +1263,15 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
 // auto-review process badge.
 const HUMAN_DECISION_LANES = new Set<string>([TaskState.HumanReview, TaskState.Escalated, '4-review']);
 
-export interface HumanReviewBadge { label: string; tone: 'attention' | 'accept'; tooltip: string; }
+export interface HumanReviewBadge { label: string; tone: 'attention'; tooltip: string; }
 
 /**
  * Human-decision badge. An escalated / reissue card parked in 5-human-review
  * used to render identically to a Completed card, hiding that a human still has
  * to act ("Failed-Cards sehen aus wie Done"). This pill makes the verdict
  * explicit: a loud red "Escalated" / "Needs rework" marker for action-required
- * verdicts, and a calm green "Reviewed" marker for an accepted card awaiting
- * confirmation. Returns null for plain human review (no verdict yet) so
- * undecided cards stay quiet.
+ * verdicts. Accepted cards stay quiet; the lane and commit context carry enough
+ * state without repeating "Reviewed" as another chip.
  */
 export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
   if (!HUMAN_DECISION_LANES.has(job.state)) return null;
@@ -856,14 +1289,83 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
         tooltip: 'Auto-review asked for a reissue: the work needs changes before it can be accepted. Waiting on a human to act.'
       };
     case 'accept':
-      return {
-        label: 'Reviewed',
-        tone: 'accept',
-        tooltip: 'Auto-review accepted this task. A human just needs to confirm and move it to Completed.'
-      };
+      return null;
     default:
       return null;
   }
+}
+
+export interface RunnerBadge {
+  /** `remote` renders the arrow + runner name; `local` renders the quiet "lokal" chip. */
+  kind: 'remote' | 'local';
+  /** Arrow glyph for the remote case; empty for local. */
+  glyph: string;
+  label: string;
+  tooltip: string;
+}
+
+/**
+ * AGT-2003 runner badge shown next to the CLI badge on a running card. A remote
+ * runner acquires the task's run lease (ADR-0060) before it spawns its CLI, so
+ * `job.runner.isRemote` means the work is executing on another host: render
+ * "→ <runner-name>". A local in-process run holds no run lease (it uses the disk
+ * pickup-lock), so a running Progress card with no remote lease renders a quiet
+ * "lokal" chip — the operator's "Abgleich im Stable Board" (lokal vs remote).
+ * Returns null on non-running cards so the board stays quiet everywhere else.
+ *
+ * Recognizable-pattern sibling of the git-state / branch-context signal
+ * (AGT-1984): a glyph + short label chip that reads at a glance.
+ */
+export function buildRunnerBadge(job: TaskInfo): RunnerBadge | null {
+  const running = job.state === TaskState.Progress && job.execution?.status === 'running';
+  const runner = job.state === TaskState.Progress ? job.runner ?? null : null;
+
+  if (runner && runner.isRemote) {
+    const name = (runner.runnerName || runner.runnerId || 'remote runner').trim();
+    const host = (runner.hostname || '').trim();
+    const parts = [`Running remotely on ${name}${host ? ` (${host})` : ''}.`];
+    parts.push('This task is running on another host, not in-process (holds the run lease).');
+    return { kind: 'remote', glyph: '⇥', label: `remote · ${name}`, tooltip: parts.join('\n') };
+  }
+
+  // Local: only assert "lokal" while the card is genuinely running in-process
+  // (or a same-backend lease is held). Nothing to show once it stops.
+  if (running || runner) {
+    return {
+      kind: 'local',
+      glyph: '',
+      label: 'lokal',
+      tooltip: 'Running in-process on the local backend (no remote run lease held).',
+    };
+  }
+  return null;
+}
+
+export interface ExternalDoneBadge { label: string; tooltip: string; }
+
+/**
+ * "extern erledigt" badge for a task completed out-of-band (operator chat,
+ * external agent, remote host) and reconciled through the external-completion
+ * endpoint. Renders next to the CLI/model chip so a card whose work happened
+ * outside the runner reads as intentionally done, not abandoned. See
+ * docs/concepts/out-of-band-task-completion.md §3.
+ */
+export function buildExternalDoneBadge(job: TaskInfo): ExternalDoneBadge | null {
+  const ext = job.externalCompletion;
+  if (!ext) return null;
+  const source = (ext.source ?? '').trim() || 'external';
+  const when = formatExternalCompletionDate(ext.completedAt);
+  const summary = (ext.summary ?? '').trim();
+  const parts = [`Completed out-of-band by ${source}${when ? ` on ${when}` : ''}.`];
+  if (summary) parts.push(summary);
+  parts.push('Reconciled via the external-completion endpoint; see results/deliverables.md.');
+  return { label: 'extern erledigt', tooltip: parts.join('\n\n') };
+}
+
+function formatExternalCompletionDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
 }
 
 /** Host-level "this card needs a human" flag: an escalate/reissue verdict in a
@@ -917,19 +1419,142 @@ export function buildCodeReviewGradeBadge(tags: readonly string[] | undefined): 
   return null;
 }
 
-export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; tooltip: string; }
+export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; historical: boolean; tooltip: string; }
 
-export function buildOutcomeIssueBadge(issue: TaskInfo['outcomeIssue']): OutcomeIssueBadge | null {
+export function buildOutcomeIssueBadge(job: TaskInfo): OutcomeIssueBadge | null {
+  const issue = job.outcomeIssue;
   if (!issue) return null;
   const severity = (issue.severity ?? '').toLowerCase();
-  const tone = severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
+  const issueAt = issue.lastSeenAt ? Date.parse(issue.lastSeenAt) : Number.NaN;
+  const acceptedAt = job.lastActivity ? Date.parse(job.lastActivity) : Number.NaN;
+  const historical = HISTORY_PRESENTATION_LANES.has(job.state)
+    && job.orchestratorVerdict === 'accept'
+    && Number.isFinite(issueAt)
+    && Number.isFinite(acceptedAt)
+    && issueAt < acceptedAt;
+  const tone = historical ? 'info' : severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
   const seen = issue.lastSeenAt ? `\nLast seen: ${formatShortTime(issue.lastSeenAt)}` : '';
   const summary = issue.summary ? `\n\n${issue.summary}` : '';
   return {
     label: issue.label || issue.kind,
     tone,
-    tooltip: `Runner outcome issue: ${issue.kind}${seen}${summary}`
+    historical,
+    tooltip: historical
+      ? `History only: this runner issue predates the later accepted run.${seen}${summary}`
+      : `Runner outcome issue: ${issue.kind}${seen}${summary}`
   };
+}
+
+/**
+ * AGT-2029 waits-on dependency chip. Consumes the backend-computed
+ * `waitsOn` status (fulfilled/open per target, blocked, cycle) so the card
+ * shows what the task is waiting on, in which state, and can route to the
+ * target - matching the scheduler's own decision (the runner uses the same
+ * evaluation to gate auto-pickup). Null when the task has no dependencies.
+ *
+ * States: `open` (⏳, at least one dependency not yet complete - the card is
+ * held back from auto-pickup), `ready` (✓, all complete - the card is
+ * workable), `cycle` (⚠, a dependsOn cycle that can never be fulfilled -
+ * a configuration error).
+ */
+export interface DependencyChip {
+  glyph: string;
+  label: string;
+  tone: 'open' | 'ready' | 'cycle';
+  tooltip: string;
+  /** F33 key the chip navigates to on click (first open target, else the first). */
+  targetKey: string | null;
+  /** Direct nav target resolved by the backend (works across lanes/projects, incl. archive). */
+  targetJobId: string | null;
+  targetWatchPath: string | null;
+}
+
+export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChip | null {
+  if (!waitsOn || waitsOn.items.length === 0) return null;
+  const items = waitsOn.items;
+  const tooltip = dependencyTooltip(items, waitsOn.cycleDetected);
+
+  if (waitsOn.cycleDetected) {
+    const primary = items[0];
+    return {
+      glyph: '⚠',
+      label: 'dep cycle',
+      tone: 'cycle',
+      tooltip,
+      targetKey: primary?.key ?? null,
+      targetJobId: primary?.targetJobId ?? null,
+      targetWatchPath: primary?.targetWatchPath ?? null,
+    };
+  }
+
+  const open = items.filter((i) => !i.fulfilled);
+  if (open.length > 0) {
+    const primary = open[0];
+    const extra = open.length - 1;
+    return {
+      glyph: '⏳',
+      label: `waits: ${primary.key}${extra > 0 ? ` +${extra}` : ''}`,
+      tone: 'open',
+      tooltip,
+      targetKey: primary.key,
+      targetJobId: primary.targetJobId ?? null,
+      targetWatchPath: primary.targetWatchPath ?? null,
+    };
+  }
+
+  const primary = items[0];
+  const extra = items.length - 1;
+  return {
+    glyph: '✓',
+    label: `${primary.key}${extra > 0 ? ` +${extra}` : ''}`,
+    tone: 'ready',
+    tooltip,
+    targetKey: primary.key,
+    targetJobId: primary.targetJobId ?? null,
+    targetWatchPath: primary.targetWatchPath ?? null,
+  };
+}
+
+/**
+ * AGT-2029: resolve the task a dependency chip should open. Prefers the
+ * backend-resolved target (jobId + watchPath — correct across projects and
+ * lanes the board snapshot omits, e.g. an archived target), falling back to the
+ * F33 key against the current board snapshot. Null when it is not loaded.
+ */
+export function resolveDependencyTarget(
+  chip: DependencyChip,
+  jobs: readonly TaskInfo[],
+): TaskInfo | null {
+  if (chip.targetJobId) {
+    const byId = jobs.find(
+      (t) => t.id === chip.targetJobId && (!chip.targetWatchPath || t.watchPath === chip.targetWatchPath),
+    );
+    if (byId) return byId;
+  }
+  if (chip.targetKey) {
+    const upper = chip.targetKey.toUpperCase();
+    const byKey = jobs.find((t) => (t.key ?? '').toUpperCase() === upper);
+    if (byKey) return byKey;
+  }
+  return null;
+}
+
+function dependencyTooltip(
+  items: NonNullable<TaskInfo['waitsOn']>['items'],
+  cycle: boolean,
+): string {
+  const lines = items.map((i) => {
+    const mark = i.fulfilled ? '✓' : '◦';
+    const state = i.fulfilled ? 'done' : i.resolved ? 'open' : 'not created yet';
+    const title = i.targetTitle ? ` — ${i.targetTitle.slice(0, 40)}` : '';
+    return `${mark} ${i.key} (${state})${title}`;
+  });
+  const head = cycle
+    ? 'Dependency cycle: this task can never be auto-picked until the chain is fixed via its references.'
+    : items.every((i) => i.fulfilled)
+      ? 'All dependencies complete — this task is workable.'
+      : 'Waiting on these to reach completed/archive before pickup:';
+  return `${head}\n${lines.join('\n')}`;
 }
 
 export function buildLoopTooltip(al: AutoLoopSnapshot): string {
@@ -956,6 +1581,13 @@ export function buildPendingTooltip(pi: PendingIntent): string {
 export const EPIC_ASSIGN_PREFIX = 'epic-assign:';
 export const EPIC_DETACH_ID = 'epic-detach';
 export const FILTER_DEPENDENTS_ID = 'filter-dependents';
+/**
+ * Destructive "Delete task" context-menu row. Replaces the hover trash button
+ * that used to sit on every card (fehlklick-risk right where you click/drag).
+ * Clicking it drives the same `deleteRequested` flow — the parent still owns
+ * the confirm/undo semantics.
+ */
+export const DELETE_ID = 'delete-task';
 
 /**
  * Right-click context-menu rows for a card: copy actions + (for non-epic cards)
@@ -1002,5 +1634,16 @@ export function buildCardCtxMenuItems(
       }
     }
   }
+
+  // Destructive delete lives at the very end behind a separator so it never
+  // sits next to the everyday copy/assign rows. Present on every card — for an
+  // epic card it may be the only actionable row, which the operator accepted.
+  items.push({ kind: 'separator' });
+  items.push({
+    kind: 'row',
+    id: DELETE_ID,
+    label: isEpic ? 'Delete epic' : 'Delete task',
+    danger: true,
+  });
   return items;
 }

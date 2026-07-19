@@ -10,7 +10,7 @@ import { apiRoundtrip, clickToVisible, startLongTaskRecorder } from '../helpers/
  * browser, not the API. This suite measures the user-visible numbers
  * directly:
  *
- *   1. /api/jobs/grouped roundtrip from inside the running app.
+ *   1. /api/tasks/grouped roundtrip from inside the running app.
  *      Catches Backend regressions that show up as polling lag (5 s
  *      poll interval means anything slower than ~1 s feels permanent).
  *
@@ -56,12 +56,12 @@ test.describe('Frontend perceived latency', () => {
 
     const ms = await apiRoundtrip(
       page,
-      /\/api\/jobs\/grouped(\?|$)/,
+      /\/api\/tasks\/grouped(\?|$)/,
       () => page.evaluate(() =>
         // Trigger a fresh fetch from the page context so timing reflects
         // browser-side overhead (HttpClient interceptors, parsing) and
         // not just curl wall time.
-        fetch('http://localhost:5030/api/jobs/grouped').then(r => r.text())
+        fetch('http://localhost:5030/api/tasks/grouped').then(r => r.text())
       )
     );
 

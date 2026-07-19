@@ -67,6 +67,20 @@ public static class TerminalRunOutcomeClassifier
                 Reason: agentOutcome.Summary ?? agentOutcome.Reason ?? "agent CLI exited almost immediately without producing agent output");
         }
 
+        if (agentOutcome.IssueKind == RunIssueKind.EnvironmentalTransient)
+        {
+            // A transient host file lock / network glitch. The run failed, but it
+            // is neither the change's fault nor terminal: the orchestrator retries
+            // it with backoff, so it stays out of review and must not raise a crash
+            // toast the way a genuine failure would (AGT-1944).
+            return new TerminalRunOutcome(
+                TerminalRunOutcomeKinds.Failed,
+                "Failed",
+                ShouldMoveToReview: false,
+                ShouldShowFailureToast: false,
+                Reason: agentOutcome.Summary ?? agentOutcome.Reason ?? "transient environmental fault (host file lock / network)");
+        }
+
         if (agentOutcome.MatchedSentinel)
         {
             return agentOutcome.Kind switch

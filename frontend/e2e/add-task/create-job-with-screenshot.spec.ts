@@ -75,7 +75,7 @@ async function pickWatchPath(): Promise<WatchPath> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch {
@@ -192,7 +192,7 @@ test.describe('Add Task dialog - drop + paste screenshot uploads', () => {
     try {
       const fileName = await waitForPersistedAttachment(titleSlug, wp.path);
       const resp = await page.request.get(
-        `http://localhost:5030/api/jobs/${encodeURIComponent(titleSlug)}/attachments/${encodeURIComponent(fileName)}?watchPath=${encodeURIComponent(wp.path)}`
+        `http://localhost:5030/api/tasks/${encodeURIComponent(titleSlug)}/attachments/${encodeURIComponent(fileName)}?watchPath=${encodeURIComponent(wp.path)}`
       );
       expect(resp.ok()).toBeTruthy();
       expect(resp.headers()['content-type']).toContain('image/');
@@ -219,7 +219,7 @@ test.describe('Add Task dialog - drop + paste screenshot uploads', () => {
     try {
       const fileName = await waitForPersistedAttachment(titleSlug, wp.path);
       const resp = await page.request.get(
-        `http://localhost:5030/api/jobs/${encodeURIComponent(titleSlug)}/attachments/${encodeURIComponent(fileName)}?watchPath=${encodeURIComponent(wp.path)}`
+        `http://localhost:5030/api/tasks/${encodeURIComponent(titleSlug)}/attachments/${encodeURIComponent(fileName)}?watchPath=${encodeURIComponent(wp.path)}`
       );
       expect(resp.ok()).toBeTruthy();
       expect(resp.headers()['content-type']).toContain('image/');

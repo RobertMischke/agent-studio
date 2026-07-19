@@ -15,7 +15,7 @@ import { StudioIconComponent } from '../studio-icon/studio-icon.component';
  * components or migrate to a future `<app-dialog>` skeleton when one
  * exists.
  *
- * See docs/frontend-scss-quality.md "Wave B" for the migration plan.
+ * See docs/quality/frontend/audits/scss-quality.md "Wave B" for the migration plan.
  *
  * Usage:
  *

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { WikiFileHistory } from '../../../../../models/project-docs.model';
+import { WikiRelatedTasksComponent } from '../wiki-related-tasks/wiki-related-tasks.component';
 
 /**
  * Read-only provenance + git-history panel for a single wiki document. Shows
@@ -14,6 +15,7 @@ import { WikiFileHistory } from '../../../../../models/project-docs.model';
   selector: 'app-wiki-doc-history',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [WikiRelatedTasksComponent],
   templateUrl: './wiki-doc-history.component.html',
   styleUrl: './wiki-doc-history.component.scss',
 })
@@ -27,6 +29,7 @@ export class WikiDocHistoryComponent {
   readonly model = computed(() => this.history()?.model ?? null);
   readonly meta = computed(() => this.history()?.metadata ?? null);
   readonly commits = computed(() => this.history()?.commits ?? []);
+  readonly relatedTasks = computed(() => this.history()?.relatedTasks ?? []);
 
   /** True when there is at least one provenance fact worth a header row. */
   readonly hasProvenance = computed(() => {

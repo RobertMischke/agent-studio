@@ -29,7 +29,7 @@ test('orchestrator chat renders no inline phase/super-phase dividers', async ({ 
 
   // The legacy master-strip should no longer be present inside the
   // orchestrator's chat surface.
-  const legacyStripInOrch = rail.locator('app-phase-summary-list');
+  const legacyStripInOrch = rail.locator('app-phase-summary-list, cac-phase-summary-list');
   await expect(legacyStripInOrch).toHaveCount(0);
 
   // The chat body should be present and scrollable.
@@ -64,6 +64,8 @@ test('verbose debug overlay has Phases tab populated from chat events', async ({
   const rail = page.locator('app-orchestrator-side-sheet');
   await expect(rail).toHaveClass(/is-open/, { timeout: 5_000 });
   await page.waitForTimeout(500);
+  await rail.getByTestId('orch-context-badge').click();
+  await expect(rail.getByTestId('orch-context-menu')).toBeVisible();
 
   const debugBtn = rail.getByTestId('orch-side-sheet-verbose-debug');
   if (!(await debugBtn.isVisible())) {

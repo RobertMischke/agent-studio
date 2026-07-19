@@ -11,7 +11,7 @@ public class AntigravityQuotaProbeTests
     [Fact]
     public async Task ProbeAsync_ReturnsPlaceholderSnapshot()
     {
-        var ptyEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
+        var ptyEnv = new CliEnvironment(NullLogger<CliEnvironment>.Instance);
         var probe = new AntigravityQuotaProbe(
             NullLogger<AntigravityQuotaProbe>.Instance,
             null!,

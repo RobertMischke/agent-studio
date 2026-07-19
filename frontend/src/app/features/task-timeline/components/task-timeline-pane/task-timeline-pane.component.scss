@@ -16,21 +16,17 @@
   gap: 4px;
   padding: 10px 14px;
   border-radius: 8px;
-  border-left: 3px solid var(--studio-border-strong);
   background: var(--studio-bg-hover);
 
   &--ok {
-    border-left-color: var(--lane-completed);
     background: color-mix(in srgb, var(--lane-completed) 12%, transparent);
   }
 
   &--warn {
-    border-left-color: var(--severity-warn);
     background: color-mix(in srgb, var(--severity-warn) 12%, transparent);
   }
 
   &--danger {
-    border-left-color: var(--severity-high);
     background: color-mix(in srgb, var(--severity-high) 12%, transparent);
   }
 

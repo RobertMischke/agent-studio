@@ -35,15 +35,16 @@ public class FilesystemLayerSnapshotServiceTests : IDisposable
         Directory.CreateDirectory(Path.Combine(repo, "backend", "Services", "Runner"));
         Directory.CreateDirectory(Path.Combine(repo, "backend.Tests"));
         Directory.CreateDirectory(Path.Combine(repo, "coverage"));
-        Directory.CreateDirectory(Path.Combine(repo, "docs", "images"));
+        Directory.CreateDirectory(Path.Combine(repo, "docs", "assets", "images"));
         Directory.CreateDirectory(Path.Combine(repo, "prompts", "runtime"));
 
         File.WriteAllText(Path.Combine(repo, "backend", "Services", "Runner", "ProjectRunner.cs"),
             "line1\nline2\nline3\n");
         File.WriteAllText(Path.Combine(repo, "backend.Tests", "ProjectRunnerTests.cs"),
             "test1\ntest2\n");
-        File.WriteAllText(Path.Combine(repo, "docs", "images", "board.png"), "not really an image");
+        File.WriteAllText(Path.Combine(repo, "docs", "assets", "images", "board.png"), "not really an image");
         File.WriteAllText(Path.Combine(repo, "AGENTS.md"), "agent rules\n");
+        File.WriteAllText(Path.Combine(repo, "GEMINI.md"), "gemini compatibility shim\n");
         File.WriteAllText(Path.Combine(repo, "prompts", "runtime", "runner-fresh-start.md"), "prompt\n");
         File.WriteAllText(Path.Combine(repo, "coverage", "coverage.cobertura.xml"),
             """
@@ -89,14 +90,14 @@ public class FilesystemLayerSnapshotServiceTests : IDisposable
         Assert.Equal(5, root.CodeLoc);
         Assert.Equal(2, root.CodeFiles);
         Assert.Equal(1, root.VisualEvidenceCount);
-        Assert.Equal(2, root.AgentFileCount);
+        Assert.Equal(3, root.AgentFileCount);
         Assert.Equal(2, root.TestLoc);
         Assert.Equal(1, root.TestFiles);
         Assert.Equal(60, root.CoveragePercent);
         Assert.Equal(3, root.CoveredLines);
         Assert.Equal(5, root.CoverableLines);
         Assert.Equal("coverage/coverage.cobertura.xml", root.CoverageSource);
-        Assert.Contains(snapshot.Rows, r => r.Path == "docs/images");
+        Assert.Contains(snapshot.Rows, r => r.Path == "docs/assets/images");
         Assert.Contains(snapshot.Rows, r => r.Path == "prompts/runtime");
         var coverageReport = Assert.Single(snapshot.CoverageReports);
         Assert.Equal("cobertura", coverageReport.Format);

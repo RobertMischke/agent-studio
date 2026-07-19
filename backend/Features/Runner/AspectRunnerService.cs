@@ -44,6 +44,14 @@ public sealed class AspectRunnerService
 
     private Func<string, string, string, string, string?, TimeSpan, string, CancellationToken, Task<string>>? _thinkingAwareCliRunner;
 
+    /// <summary>
+    /// Backoff before the single environmental retry of an aspect whose reviewing
+    /// CLI call died with no verdict (AGT-2021). Defaults to the AGT-1944
+    /// environmental backoff; tests override it with a zero delay so the retry
+    /// path runs instantly.
+    /// </summary>
+    public Func<int, TimeSpan> VerdictRetryBackoff { get; set; } = PostProcessingOutcomeTaxonomy.RetryBackoff;
+
     private readonly AdHocUsageRecorder? _usage;
     private readonly CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
@@ -77,11 +85,11 @@ public sealed class AspectRunnerService
 
     private async Task<string> RunViaOneShotAsync(string aspectId, string cli, string model, string prompt, string? thinkingLevel, TimeSpan timeout, string jobFolderPath, CancellationToken ct)
     {
-        var oneShot = _oneShotRegistry?.Get("claude");
+        var oneShot = _oneShotRegistry?.Get(cli);
         if (oneShot == null) return await DefaultRunCliAsync(aspectId, cli, model, prompt, timeout, ct);
 
         var result = await oneShot.RunAsync(new CliOneShotRequest(
-            CliType: "claude",
+            CliType: cli,
             Model: model,
             Prompt: prompt)
         {
@@ -102,7 +110,21 @@ public sealed class AspectRunnerService
                 "Aspect '{AspectId}' CLI call failed: exit={ExitCode} duration={Duration}ms error={Error}",
                 aspectId, result.ExitCode, result.Duration.TotalMilliseconds, result.Error);
         }
-        return result.Stdout; // raw JSON wrapper; caller still runs ParseOrFallback
+        // Keep the legacy runner seam stable: its caller expects a Claude-style
+        // result envelope so it can reuse ParseOrFallback and usage recording.
+        return JsonSerializer.Serialize(new
+        {
+            type = "result",
+            result = result.ParsedText,
+            usage = result.Usage is null ? null : new
+            {
+                input_tokens = result.Usage.InputTokens,
+                output_tokens = result.Usage.OutputTokens,
+                cache_read_input_tokens = result.Usage.CacheReadTokens,
+                cache_creation_input_tokens = result.Usage.CacheCreationTokens,
+            },
+            model = result.Usage?.Model ?? model,
+        });
     }
 
     /// <summary>
@@ -131,7 +153,7 @@ public sealed class AspectRunnerService
                 ConcernNamespace: "docs",
                 PromptTemplate: "review-aspect-documentation-impact.md",
                 Title: "Documentation impact",
-                FallbackSystem: "Does the change require an update to AGENTS.md / ROADMAP / ADRs / cli-skills / docs/README.md? Are those updated?"),
+                FallbackSystem: "Does the change require an update to AGENTS.md / ROADMAP / ADRs / cli-skills / docs/start/README.md? Are those updated?"),
             ["tests-and-evidence"] = new AspectDefinition(
                 Id: "tests-and-evidence",
                 ConcernNamespace: "quality",
@@ -171,7 +193,8 @@ public sealed class AspectRunnerService
         CancellationToken ct,
         Func<string, string>? modelForAspect = null,
         Func<string, string?>? thinkingLevelForAspect = null,
-        Func<string, string?>? promptForAspect = null)
+        Func<string, string?>? promptForAspect = null,
+        Func<string, string?>? cliForAspect = null)
     {
         var now = DateTime.UtcNow;
 
@@ -207,7 +230,9 @@ public sealed class AspectRunnerService
                 if (string.IsNullOrWhiteSpace(stepModel)) stepModel = model;
                 var stepThinkingLevel = thinkingLevelForAspect?.Invoke(entry.Def.Id);
                 var stepPrompt = promptForAspect?.Invoke(entry.Def.Id);
-                return RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, stepModel, stepThinkingLevel,
+                var stepCli = cliForAspect?.Invoke(entry.Def.Id);
+                if (string.IsNullOrWhiteSpace(stepCli)) stepCli = cliBinary;
+                return RunOneAspectAsync(entry.Index, entry.Def, inputs, stepCli, stepModel, stepThinkingLevel,
                     stepPrompt, perAspectTimeout, gate, now, ct);
             })
             .ToArray();
@@ -260,45 +285,68 @@ public sealed class AspectRunnerService
             OrchestratorTokenUsage? callUsage = null;
             long durationMs = 0;
             var ok = true;
-            try
-            {
-                var sw = AdHocClaudeInvoker.StartTiming();
-                var rawResponse = _thinkingAwareCliRunner is null
-                    ? await CliRunner(def.Id, cliBinary, model, prompt, perAspectTimeout, ct)
-                    : await _thinkingAwareCliRunner(def.Id, cliBinary, model, prompt, thinkingLevel, perAspectTimeout, inputs.JobFolderPath, ct);
-                sw.Stop();
-                durationMs = sw.ElapsedMilliseconds;
-                var parsed = AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
-                callUsage = parsed.Usage;
-                AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.ReviewDecision, model, callUsage,
-                    durationMs, ok: true, project: inputs.Project, jobId: inputs.JobId);
-                response = parsed.Text;
-            }
-            catch (Exception ex)
-            {
-                ok = false;
-                _logger.LogWarning(ex,
-                    "Aspect runner '{AspectId}' invocation failed for {Project}/{JobId}; defaulting to concerns",
-                    def.Id, inputs.Project, inputs.JobId);
-                // Fail-loud-but-don't-block: on infrastructure failure we
-                // want a visible concerns tag rather than silent durchwinken.
-                response = string.Empty;
-            }
+            AspectVerdict verdict;
 
-            var verdict = BuildVerdict(def, response);
-
-            try
+            // Environmental retry-once (AGT-2021 / AGT-1944): a missing / corrupt /
+            // unparseable verdict caused by the reviewing CLI dying (the backend
+            // cut that killed the aspect runner mid-run) is an INFRASTRUCTURE
+            // fault, not the agent's work. Re-run the aspect exactly once with the
+            // environmental backoff; only when the retry again yields no output do
+            // we mark it an InfraCrash. A CLI that DID reply (even garbage) is not
+            // an infra fault - it keeps the existing review:unparseable concern.
+            var envRetries = 0;
+            while (true)
             {
-                var report = AspectVerdictParsing.RenderReport(verdict, now);
-                var fileName = $"aspect-{def.Id}.md";
-                var path = Path.Combine(inputs.JobFolderPath, fileName);
-                await File.WriteAllTextAsync(path, report, ct);
-                var endedAt = DateTime.UtcNow;
-                _fileGenerationIndex?.Upsert(inputs.JobFolderPath, new FileGenerationMeta
+                (response, ok, callUsage, durationMs) =
+                    await InvokeAspectCliAsync(def, inputs, cliBinary, model, thinkingLevel, prompt, perAspectTimeout, ct);
+
+                var parsed = AspectVerdictParsing.ParseVerdict(response);
+                var infraNoVerdict = parsed == null && (!ok || string.IsNullOrWhiteSpace(response));
+                if (!infraNoVerdict)
                 {
-                    File = fileName,
+                    // Got a real verdict, or a non-empty reply we can turn into a
+                    // deterministic review:unparseable concern (existing behaviour).
+                    verdict = BuildVerdict(def, response);
+                    break;
+                }
+
+                var decision = PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry(envRetries);
+                if (decision.Action != EnvironmentalRetryAction.RetryWithBackoff)
+                {
+                    // Retry budget spent: the reviewer died twice. Record it as an
+                    // environmental InfraCrash, never the card's unfinished work.
+                    verdict = BuildInfraFailureVerdict(def, envRetries);
+                    _logger.LogWarning(
+                        "Aspect runner '{AspectId}' produced no verdict for {Project}/{JobId} even after {Retries} environmental retry; recording InfraCrash flagged environmental (AGT-2021).",
+                        def.Id, inputs.Project, inputs.JobId, envRetries);
+                    break;
+                }
+
+                envRetries = decision.Attempt;
+                var backoff = VerdictRetryBackoff(envRetries);
+                _logger.LogWarning(
+                    "Aspect runner '{AspectId}' produced no verdict for {Project}/{JobId} (environmental infra fault, ok={Ok}); {Reason} (backoff {Backoff})",
+                    def.Id, inputs.Project, inputs.JobId, ok, decision.Reason, backoff);
+                if (backoff > TimeSpan.Zero)
+                {
+                    try { await Task.Delay(backoff, ct); }
+                    catch (OperationCanceledException)
+                    {
+                        verdict = BuildInfraFailureVerdict(def, envRetries);
+                        break;
+                    }
+                }
+            }
+
+            try
+            {
+                var resolvedModel = callUsage?.Model ?? model;
+                var endedAt = DateTime.UtcNow;
+                var genMeta = new FileGenerationMeta
+                {
+                    File = string.Empty, // set per artefact below
                     Kind = "aspect",
-                    Model = callUsage?.Model ?? model,
+                    Model = resolvedModel,
                     Cli = cliBinary,
                     TokensIn = callUsage?.InputTokens ?? 0,
                     TokensOut = callUsage?.OutputTokens ?? 0,
@@ -310,12 +358,29 @@ public sealed class AspectRunnerService
                     EndedAt = endedAt,
                     DurationMs = durationMs > 0 ? durationMs : (long)(endedAt - startedAt).TotalMilliseconds,
                     StepId = pipelineStepId,
-                });
+                };
+
+                // Human-readable markdown twin: unchanged, so every existing
+                // reader (AspectConcernReader, orchestrator tag routing, the
+                // legacy Files-tab markdown path) keeps working untouched.
+                var report = AspectVerdictParsing.RenderReport(verdict, now);
+                var mdName = $"aspect-{def.Id}.md";
+                await File.WriteAllTextAsync(Path.Combine(inputs.JobFolderPath, mdName), report, ct);
+                _fileGenerationIndex?.Upsert(inputs.JobFolderPath, genMeta with { File = mdName });
+
+                // Structured JSON source of truth (one source, two renderings —
+                // concept doc §5). Strictly additive: the Files tab prefers it
+                // and suppresses the markdown twin from the list, but the twin
+                // stays on disk for backend readers and older UIs.
+                var jsonBody = AspectVerdictParsing.RenderJson(verdict, resolvedModel, now);
+                var jsonName = $"aspect-{def.Id}.json";
+                await File.WriteAllTextAsync(Path.Combine(inputs.JobFolderPath, jsonName), jsonBody, ct);
+                _fileGenerationIndex?.Upsert(inputs.JobFolderPath, genMeta with { File = jsonName });
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex,
-                    "Aspect runner '{AspectId}' failed to write aspect MD for {JobId}",
+                    "Aspect runner '{AspectId}' failed to write aspect artefacts for {JobId}",
                     def.Id, inputs.JobId);
             }
 
@@ -325,7 +390,11 @@ public sealed class AspectRunnerService
                 StepId = pipelineStepId,
                 Kind = StepKind.Aspect,
                 Model = callUsage?.Model ?? model,
-                Status = ok ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+                // An infra crash (dead reviewer, no verdict after the retry) is a
+                // Failed step flagged environmental so a reviewer never reads it as
+                // a failed change; a healthy run is Passed, a soft CLI error is
+                // Failed. See BuildInfraFailureVerdict.
+                Status = verdict.IsInfraFailure || !ok ? PipelineStepStatus.Failed : PipelineStepStatus.Passed,
                 StartedAt = startedAt,
                 CompletedAt = completedAt,
                 DurationMs = durationMs > 0 ? durationMs : (long)(completedAt - startedAt).TotalMilliseconds,
@@ -333,8 +402,10 @@ public sealed class AspectRunnerService
                 OutputTokens = callUsage?.OutputTokens ?? 0,
                 CacheReadTokens = callUsage?.CacheReadTokens ?? 0,
                 CacheCreationTokens = callUsage?.CacheCreationTokens ?? 0,
-                Verdict = AspectVerdictParsing.StatusToken(verdict.Status),
-                Reason = ok ? null : "aspect-runner-exception",
+                Verdict = verdict.IsInfraFailure ? "environmental" : AspectVerdictParsing.StatusToken(verdict.Status),
+                Reason = verdict.IsInfraFailure
+                    ? "aspect-runner-infra-crash"
+                    : ok ? null : "aspect-runner-exception",
             });
 
             return (index, verdict);
@@ -364,7 +435,13 @@ public sealed class AspectRunnerService
             ["task_body"] = inputs.TaskBody,
             ["recent_log"] = inputs.RecentLog,
             ["diff_summary"] = inputs.DiffSummary,
-            ["status_summary"] = inputs.StatusSummary
+            ["status_summary"] = inputs.StatusSummary,
+            ["results_inventory"] = string.IsNullOrWhiteSpace(inputs.ResultsInventory)
+                ? "No results/ inventory available."
+                : inputs.ResultsInventory,
+            ["card_mode"] = string.IsNullOrWhiteSpace(inputs.CardMode)
+                ? ReviewCardMode.Describe(null)
+                : inputs.CardMode
         };
         try
         {
@@ -388,6 +465,8 @@ public sealed class AspectRunnerService
         sb.AppendLine();
         sb.AppendLine($"## Project / Job: {inputs.Project} / {inputs.JobId} - {inputs.JobTitle}");
         sb.AppendLine();
+        sb.AppendLine(string.IsNullOrWhiteSpace(inputs.CardMode) ? ReviewCardMode.Describe(null) : inputs.CardMode);
+        sb.AppendLine();
         sb.AppendLine("## Task body");
         sb.AppendLine("```");
         sb.AppendLine(inputs.TaskBody);
@@ -398,10 +477,17 @@ public sealed class AspectRunnerService
         sb.AppendLine(inputs.RecentLog);
         sb.AppendLine("```");
         sb.AppendLine();
-        sb.AppendLine("## Diff summary");
+        sb.AppendLine("## Diff summary (task branch vs base)");
         sb.AppendLine("```");
         sb.AppendLine(inputs.DiffSummary);
         sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("## results/ folder inventory");
+        sb.AppendLine("```");
+        sb.AppendLine(string.IsNullOrWhiteSpace(inputs.ResultsInventory) ? "No results/ inventory available." : inputs.ResultsInventory);
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("Only treat deliverables as missing when the diff summary shows no branch changes, the results/ inventory is empty, AND no external deliverable (e.g. a docs/ commit) is documented.");
         sb.AppendLine();
         sb.AppendLine("Reply with a short paragraph or two (under 200 words) plus EXACTLY one verdict sentinel on its own line.");
         sb.AppendLine();
@@ -424,6 +510,78 @@ public sealed class AspectRunnerService
         sb.AppendLine();
         sb.AppendLine("After the sentinel, end with [[TASK_DONE]] on its own line.");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Invoke the reviewing CLI once for one aspect, parse the wrapper, and
+    /// record ad-hoc usage. Returns the parsed text plus <c>ok=false</c> when the
+    /// call threw (the caller treats an exception or an empty reply as an
+    /// environmental infra fault worth one retry). Kept as its own method so the
+    /// AGT-2021 retry loop can call it repeatedly without duplicating the
+    /// timing / usage bookkeeping.
+    /// </summary>
+    private async Task<(string Response, bool Ok, OrchestratorTokenUsage? Usage, long DurationMs)> InvokeAspectCliAsync(
+        AspectDefinition def,
+        AspectRunInputs inputs,
+        string cliBinary,
+        string model,
+        string? thinkingLevel,
+        string prompt,
+        TimeSpan perAspectTimeout,
+        CancellationToken ct)
+    {
+        try
+        {
+            var sw = AdHocClaudeInvoker.StartTiming();
+            var rawResponse = _thinkingAwareCliRunner is null
+                ? await CliRunner(def.Id, cliBinary, model, prompt, perAspectTimeout, ct)
+                : await _thinkingAwareCliRunner(def.Id, cliBinary, model, prompt, thinkingLevel, perAspectTimeout, inputs.JobFolderPath, ct);
+            sw.Stop();
+            var durationMs = sw.ElapsedMilliseconds;
+            var parsed = AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
+            AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.ReviewDecision, model, parsed.Usage,
+                durationMs, ok: true, project: inputs.Project, jobId: inputs.JobId);
+            return (parsed.Text, true, parsed.Usage, durationMs);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Aspect runner '{AspectId}' invocation failed for {Project}/{JobId}",
+                def.Id, inputs.Project, inputs.JobId);
+            // Fail-loud-but-don't-block: on infrastructure failure the caller
+            // retries once, then records an InfraCrash rather than durchwinken.
+            return (string.Empty, false, null, 0);
+        }
+    }
+
+    /// <summary>
+    /// Build the deterministic verdict for an aspect whose reviewing CLI produced
+    /// no output even after the single environmental retry (AGT-2021). This is an
+    /// infrastructure crash, not the card's work: <see cref="AspectVerdict.IsInfraFailure"/>
+    /// is set so the orchestrator records it as an <c>InfraCrash</c> flagged
+    /// <c>environmental</c> and burns no reissue budget. No <c>review:unparseable</c>
+    /// concern tag is hung - that tag means "the model replied but broke the
+    /// format", which is a different (non-infra) signal.
+    /// </summary>
+    private static AspectVerdict BuildInfraFailureVerdict(AspectDefinition def, int envRetries)
+    {
+        var retried = envRetries > 0
+            ? $" even after {envRetries} environmental retr{(envRetries == 1 ? "y" : "ies")}"
+            : string.Empty;
+        return new AspectVerdict(
+            Aspect: def.Id,
+            Status: AspectStatus.Concerns,
+            Summary: $"Aspect runner produced no verdict{retried}; environmental infra crash (AGT-2021).",
+            Body: BuildBody(string.Empty,
+                $"The aspect reviewing CLI produced no output{retried}. This is an infrastructure fault (a dead reviewer), classified environmental - not the card's unfinished work."),
+            ConcernTagId: null)
+        {
+            IsInfraFailure = true,
+        };
     }
 
     private static AspectVerdict BuildVerdict(AspectDefinition def, string response)
@@ -509,6 +667,7 @@ public sealed class AspectRunnerService
         }
         catch (OperationCanceledException)
         {
+            AgentStudio.Diagnostics.CliKillAudit.Trace(p, "AspectRunnerService:512 (entireProcessTree)");
             try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "AspectRunnerService:513"); }
             return string.Empty;
         }
@@ -540,7 +699,24 @@ public sealed record AspectRunInputs(
     string TaskBody,
     string RecentLog,
     string DiffSummary,
-    string StatusSummary);
+    string StatusSummary)
+{
+    /// <summary>
+    /// Inventory of the job's <c>results/</c> folder (file list + short
+    /// excerpts). Completes the evidence source so a reviewer never reads an
+    /// empty git diff as "deliverables missing" when the deliverable is a
+    /// results/ artefact (AGT-2022). Defaults to empty so existing callers /
+    /// tests that build inputs positionally keep compiling.
+    /// </summary>
+    public string ResultsInventory { get; init; } = string.Empty;
+
+    /// <summary>
+    /// One-line framing of the card's execution mode (coding vs read-only
+    /// planning / research) so an empty code diff on a concept / doc / research
+    /// card is read as legitimate rather than as missing work.
+    /// </summary>
+    public string CardMode { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// Aggregated verdict for one job's full multi-aspect pass: the
@@ -553,6 +729,18 @@ public sealed record AspectRunReport(
     IReadOnlyList<string> ConcernTagIds,
     string FollowUpSummary)
 {
+    /// <summary>
+    /// True when at least one aspect infra-crashed even after its single
+    /// environmental retry (AGT-2021). The orchestrator short-circuits on this
+    /// BEFORE the accept / reissue routing: a dead reviewer is an infra fault, so
+    /// the card must not be accepted, reissued, or counted as unfinished work.
+    /// </summary>
+    public bool HasInfraFailure => Verdicts.Any(v => v.IsInfraFailure);
+
+    /// <summary>The aspects that produced no verdict even after the retry.</summary>
+    public IReadOnlyList<AspectVerdict> InfraFailures =>
+        Verdicts.Where(v => v.IsInfraFailure).ToList();
+
     public static AspectRunReport From(IReadOnlyList<AspectVerdict> verdicts)
     {
         var overall = AspectStatus.Pass;
@@ -711,6 +899,23 @@ internal static class ConcernTagWriter
     public static void ReplaceCodeReviewGradeTag(string jobFolderPath, string gradeTagId, ILogger logger)
     {
         if (string.IsNullOrWhiteSpace(gradeTagId)) return;
+        ReconcileCodeReviewGradeTag(jobFolderPath, gradeTagId, logger);
+    }
+
+    /// <summary>
+    /// Remove every stale quality-grade tag while preserving all unrelated
+    /// tags. Used when a new grade dispatch failed before producing an
+    /// authoritative grade, so the card cannot keep advertising an older A-D
+    /// result beside a failed pipeline row.
+    /// </summary>
+    public static void ClearCodeReviewGradeTags(string jobFolderPath, ILogger logger)
+        => ReconcileCodeReviewGradeTag(jobFolderPath, gradeTagId: null, logger);
+
+    private static void ReconcileCodeReviewGradeTag(
+        string jobFolderPath,
+        string? gradeTagId,
+        ILogger logger)
+    {
         var jobJsonPath = Path.Combine(jobFolderPath, "task.json");
         if (!File.Exists(jobJsonPath)) return;
 
@@ -734,9 +939,12 @@ internal static class ConcernTagWriter
 
             var reconciled = existing
                 .Where(t => !t.StartsWith(CodeReviewGradeTagPrefix, StringComparison.OrdinalIgnoreCase))
-                .Append(gradeTagId)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            if (!string.IsNullOrWhiteSpace(gradeTagId))
+            {
+                reconciled.Add(gradeTagId);
+            }
 
             var before = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
             var after = new HashSet<string>(reconciled, StringComparer.OrdinalIgnoreCase);
@@ -747,7 +955,7 @@ internal static class ConcernTagWriter
         catch (Exception ex)
         {
             logger.LogWarning(ex,
-                "ConcernTagWriter: failed to set code-review grade tag into {TaskFolder}",
+                "ConcernTagWriter: failed to reconcile code-review grade tag in {TaskFolder}",
                 jobFolderPath);
         }
     }

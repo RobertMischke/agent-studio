@@ -13,14 +13,20 @@ public class ProjectSettingsService
 {
     private readonly ILogger<ProjectSettingsService> _logger;
     private readonly IConfiguration _config;
+    private readonly IAtomicJsonFileWriter _fileWriter;
     private readonly object _lock = new();
     private Dictionary<string, ProjectSettings> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase);
     private bool _loaded;
 
-    public ProjectSettingsService(ILogger<ProjectSettingsService> logger, IConfiguration config)
+    public ProjectSettingsService(
+        ILogger<ProjectSettingsService> logger,
+        IConfiguration config,
+        IAtomicJsonFileWriter? fileWriter = null)
     {
         _logger = logger;
         _config = config;
+        _fileWriter = fileWriter ?? new AtomicJsonFileWriter();
     }
 
     public ProjectSettings Get(string projectName)
@@ -28,7 +34,8 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            return _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var resolved = ResolveAliasLocked(projectName);
+            return _cache.TryGetValue(resolved, out var s) ? s : new ProjectSettings();
         }
     }
 
@@ -46,8 +53,21 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { AutoCommit = enabled };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { AutoCommit = enabled };
+            Persist();
+        }
+    }
+
+    public void SetCrashRecoveryEnabled(string projectName, bool enabled)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { CrashRecoveryEnabled = enabled };
             Persist();
         }
     }
@@ -58,8 +78,9 @@ public class ProjectSettingsService
         var normalized = AutoPushStrategies.Normalize(strategy);
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { AutoPushStrategy = normalized };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { AutoPushStrategy = normalized };
             Persist();
         }
     }
@@ -75,11 +96,132 @@ public class ProjectSettingsService
         var clamped = maxParallelism < 1 ? 1 : maxParallelism;
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { MaxParallelism = clamped };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { MaxParallelism = clamped };
             Persist();
         }
         _logger.LogInformation("Max parallelism set to {Max} for project {Project}", clamped, projectName);
+    }
+
+    public void SetPublishAutomation(string projectName, string targetId, string mode)
+    {
+        EnsureLoaded();
+        var normalized = PublishAutomationModes.Normalize(targetId, mode);
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            var map = current.PublishAutomation is null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(current.PublishAutomation, StringComparer.OrdinalIgnoreCase);
+            map[targetId.Trim()] = normalized;
+            _cache[key] = current with { PublishAutomation = map };
+            Persist();
+        }
+        _logger.LogInformation(
+            "publish-automation-updated project={Project} target={Target} mode={Mode}",
+            projectName, targetId, normalized);
+    }
+
+    /// <summary>
+    /// Assigns a project to one remote runner and optionally changes its remote
+    /// eligibility. Blank assignment returns pickup ownership to the local
+    /// runner. Both values are persisted in the project record in one write.
+    /// </summary>
+    public void SetExecutionRunner(string projectName, string? executionRunner, bool? remoteExecutionEnabled = null)
+    {
+        EnsureLoaded();
+        var normalized = string.IsNullOrWhiteSpace(executionRunner) ? null : executionRunner.Trim();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with
+            {
+                ExecutionRunner = normalized,
+                RemoteExecutionEnabled = remoteExecutionEnabled ?? current.RemoteExecutionEnabled,
+            };
+            Persist();
+        }
+        _logger.LogInformation(
+            "execution-runner-assignment project={Project} runner={Runner} remoteEnabled={RemoteEnabled}",
+            projectName, normalized ?? "local", remoteExecutionEnabled ?? Get(projectName).RemoteExecutionEnabled);
+    }
+
+    /// <summary>
+    /// Rekeys all settings when editable registry metadata changes a project's
+    /// display name. The optional runner update is folded into the same cache
+    /// mutation and store write so the project-basics endpoint cannot orphan
+    /// the runner assignment (or any other setting) under the old name.
+    /// </summary>
+    public ProjectSettings RekeyProject(
+        string previousProjectName,
+        string currentProjectName,
+        bool updateExecutionRunner = false,
+        string? executionRunner = null,
+        bool? remoteExecutionEnabled = null)
+    {
+        if (string.IsNullOrWhiteSpace(previousProjectName))
+            throw new ArgumentException("previousProjectName is required", nameof(previousProjectName));
+        if (string.IsNullOrWhiteSpace(currentProjectName))
+            throw new ArgumentException("currentProjectName is required", nameof(currentProjectName));
+
+        var previous = previousProjectName.Trim();
+        var current = currentProjectName.Trim();
+        var runner = string.IsNullOrWhiteSpace(executionRunner) ? null : executionRunner.Trim();
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var cacheBefore = new Dictionary<string, ProjectSettings>(_cache, StringComparer.OrdinalIgnoreCase);
+            var renamed = !string.Equals(previous, current, StringComparison.Ordinal);
+            var hasPrevious = _cache.TryGetValue(previous, out var previousSettings);
+            var hasCurrent = _cache.TryGetValue(current, out var currentSettings);
+            var settings = hasPrevious
+                ? previousSettings!
+                : !renamed && hasCurrent
+                    ? currentSettings!
+                    : new ProjectSettings();
+
+            if (updateExecutionRunner)
+            {
+                settings = settings with
+                {
+                    ExecutionRunner = runner,
+                    RemoteExecutionEnabled = remoteExecutionEnabled ?? settings.RemoteExecutionEnabled,
+                };
+            }
+
+            if (!renamed && !updateExecutionRunner) return settings;
+
+            if (renamed
+                && !string.Equals(previous, current, StringComparison.OrdinalIgnoreCase)
+                && hasPrevious
+                && hasCurrent)
+            {
+                _logger.LogWarning(
+                    "project-settings-rekey-overwrites-stale-target previous={Previous} current={Current}",
+                    previous, current);
+            }
+
+            if (renamed) _cache.Remove(previous);
+            // Remove first so a case-only rename updates the serialized key's
+            // casing in a case-insensitive dictionary.
+            _cache.Remove(current);
+            _cache[current] = settings;
+            try { PersistStrict(); }
+            catch
+            {
+                _cache = cacheBefore;
+                throw;
+            }
+
+            if (renamed) UpdateAliasesAfterRenameLocked(previous, current);
+            _logger.LogInformation(
+                "project-settings-rekeyed previous={Previous} current={Current} runnerUpdated={RunnerUpdated}",
+                previous, current, updateExecutionRunner);
+            return settings;
+        }
     }
 
     /// <summary>
@@ -92,8 +234,9 @@ public class ProjectSettingsService
         var value = string.IsNullOrWhiteSpace(branch) ? new ProjectSettings().IntegrationBranch : branch.Trim();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { IntegrationBranch = value };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { IntegrationBranch = value };
             Persist();
         }
         _logger.LogInformation("Integration branch set to {Branch} for project {Project}", value, projectName);
@@ -109,8 +252,9 @@ public class ProjectSettingsService
         var normalized = IntegrationStrategies.Normalize(strategy);
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { IntegrationStrategy = normalized };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { IntegrationStrategy = normalized };
             Persist();
         }
         _logger.LogInformation("Integration strategy set to {Strategy} for project {Project}", normalized, projectName);
@@ -129,8 +273,9 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { BuildProfile = NormalizeProfile(profile) };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { BuildProfile = NormalizeProfile(profile) };
             Persist();
         }
         _logger.LogInformation(
@@ -167,9 +312,10 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
             if (current.BuildProfile is null) return; // nothing to transition
-            _cache[projectName] = current with
+            _cache[key] = current with
             {
                 BuildProfile = current.BuildProfile with
                 {
@@ -219,14 +365,44 @@ public class ProjectSettingsService
     /// <summary>
     /// Persists the runner mode for a project so the auto-pickup toggle survives
     /// a backend restart. Null clears the persisted value (revert to default).
+    /// <para>
+    /// <paramref name="source"/> is the <c>ClassifyModeSource</c> bucket of the
+    /// change (<c>user</c> / <c>circuit-breaker</c> / <c>supervisor</c> /
+    /// <c>system</c>). <see cref="ProjectSettings.RunnerMode"/> always mirrors
+    /// the live mode (the supervisor meta-cycle reads it for drift detection),
+    /// but <see cref="ProjectSettings.DesiredRunnerMode"/> - the value restored
+    /// at boot - is only advanced for a <c>user</c>-sourced change. A
+    /// system-driven flip (update-quiesce, circuit-breaker pause) therefore
+    /// records the manual it imposed without erasing the operator's durable
+    /// auto-continuous intent, which is what kept getting clobbered across a
+    /// deploy-restart (ASS-1753). Default <c>user</c> preserves the legacy
+    /// behaviour for any caller that does not classify its source.
+    /// </para>
     /// </summary>
-    public void SetRunnerMode(string projectName, string? mode)
+    public void SetRunnerMode(string projectName, string? mode, string source = "user")
     {
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { RunnerMode = mode };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            var isUser = string.Equals(source, "user", StringComparison.OrdinalIgnoreCase);
+            // Legacy-record backfill: entries written before DesiredRunnerMode
+            // existed carry the operator's intent only in RunnerMode. A
+            // system-sourced flip is about to overwrite that mirror — and the
+            // boot restore falls back to RunnerMode when DesiredRunnerMode is
+            // empty — so without this backfill one transient system flip
+            // (CLI-unspawnable pause, circuit breaker) would permanently
+            // downgrade the boot mode. Preserve the pre-flip value as the
+            // durable intent before the mirror moves.
+            var desired = current.DesiredRunnerMode;
+            if (!isUser && string.IsNullOrWhiteSpace(desired) && !string.IsNullOrWhiteSpace(current.RunnerMode))
+                desired = current.RunnerMode;
+            _cache[key] = current with
+            {
+                RunnerMode = mode,
+                DesiredRunnerMode = isUser ? mode : desired,
+            };
             Persist();
         }
     }
@@ -240,9 +416,10 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
             var normalizedModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
-            _cache[projectName] = current with
+            _cache[key] = current with
             {
                 OrchestratorModel = normalizedModel,
                 OrchestratorThinkingLevel = thinkingLevel is null
@@ -266,11 +443,12 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
             var normalizedModel = model is null
                 ? current.EpicPlanningModel
                 : (string.IsNullOrWhiteSpace(model) ? null : model.Trim());
-            _cache[projectName] = current with
+            _cache[key] = current with
             {
                 EpicPlanningModel = normalizedModel,
                 EpicPlanningThinkingLevel = thinkingLevel is null
@@ -304,8 +482,9 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { IntakeEnabled = enabled };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { IntakeEnabled = enabled };
             Persist();
         }
         _logger.LogInformation("Intake enabled set to {Enabled} for project {Project}", enabled, projectName);
@@ -317,8 +496,9 @@ public class ProjectSettingsService
         int? clamped = level is null ? null : Math.Clamp(level.Value, 0, 4);
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { AutonomyLevel = clamped };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { AutonomyLevel = clamped };
             Persist();
         }
         _logger.LogInformation("Autonomy level set to {Level} for project {Project}", clamped, projectName);
@@ -343,7 +523,8 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
             var map = current.LaneSortStrategyOverrides is null
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(current.LaneSortStrategyOverrides, StringComparer.OrdinalIgnoreCase);
@@ -355,7 +536,7 @@ public class ProjectSettingsService
             {
                 map[lane.Trim()] = LaneSortStrategies.Normalize(strategy);
             }
-            _cache[projectName] = current with { LaneSortStrategyOverrides = map.Count == 0 ? null : map };
+            _cache[key] = current with { LaneSortStrategyOverrides = map.Count == 0 ? null : map };
             Persist();
         }
     }
@@ -374,7 +555,8 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
             var map = current.PipelineSteps is null
                 ? new Dictionary<string, PipelineStepSetting>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, PipelineStepSetting>(current.PipelineSteps, StringComparer.OrdinalIgnoreCase);
@@ -390,7 +572,7 @@ public class ProjectSettingsService
             var normalizedPrompt = string.IsNullOrWhiteSpace(setting?.Prompt) ? null : setting!.Prompt!.Trim();
             var normalizedCondition = NormalizeCondition(setting?.Condition);
             var isEmpty = setting is null
-                || (setting.Enabled is null && normalizedMode is null && normalizedCliType is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedPrompt is null && normalizedCondition is null);
+                || (setting.Enabled is null && setting.EconomyModel is null && normalizedMode is null && normalizedCliType is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedPrompt is null && normalizedCondition is null);
 
             if (isEmpty)
             {
@@ -401,6 +583,7 @@ public class ProjectSettingsService
                 map[stepId.Trim()] = new PipelineStepSetting
                 {
                     Enabled = setting!.Enabled,
+                    EconomyModel = setting.EconomyModel,
                     Mode = normalizedMode,
                     CliType = normalizedCliType,
                     Model = normalizedModel,
@@ -409,7 +592,7 @@ public class ProjectSettingsService
                     Condition = normalizedCondition,
                 };
             }
-            _cache[projectName] = current with { PipelineSteps = map.Count == 0 ? null : map };
+            _cache[key] = current with { PipelineSteps = map.Count == 0 ? null : map };
             Persist();
         }
         _logger.LogInformation("Pipeline step '{StepId}' config updated for project {Project}", stepId, projectName);
@@ -427,8 +610,9 @@ public class ProjectSettingsService
         var normalized = NormalizePipelineStepOrder(stepIds);
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { PipelineStepOrder = normalized.Count == 0 ? null : normalized };
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            _cache[key] = current with { PipelineStepOrder = normalized.Count == 0 ? null : normalized };
             Persist();
         }
         _logger.LogInformation(
@@ -482,7 +666,8 @@ public class ProjectSettingsService
         var cli = CliTypes.Normalize(cliType);
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
             var map = current.CliModes is null
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(current.CliModes, StringComparer.OrdinalIgnoreCase);
@@ -494,7 +679,7 @@ public class ProjectSettingsService
             else
                 map[cli] = CliPermissionModes.Normalize(mode);
 
-            _cache[projectName] = current with { CliModes = map.Count == 0 ? null : map };
+            _cache[key] = current with { CliModes = map.Count == 0 ? null : map };
             Persist();
         }
         _logger.LogInformation("CLI permission mode for {Cli} set to {Mode} for project {Project}",
@@ -561,7 +746,8 @@ public class ProjectSettingsService
         var cli = CliTypes.Normalize(cliType);
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
             var map = current.CliContextModes is null
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(current.CliContextModes, StringComparer.OrdinalIgnoreCase);
@@ -573,7 +759,7 @@ public class ProjectSettingsService
             else
                 map[cli] = CliContextModes.Normalize(mode);
 
-            _cache[projectName] = current with { CliContextModes = map.Count == 0 ? null : map };
+            _cache[key] = current with { CliContextModes = map.Count == 0 ? null : map };
             Persist();
         }
         _logger.LogInformation("CLI context mode for {Cli} set to {Mode} for project {Project}",
@@ -671,7 +857,8 @@ public class ProjectSettingsService
         EnsureLoaded();
         lock (_lock)
         {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
             var map = current.AnalysisSchedules is null
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(current.AnalysisSchedules, StringComparer.OrdinalIgnoreCase);
@@ -683,7 +870,7 @@ public class ProjectSettingsService
             {
                 map[topic.Trim()] = cadence.Trim();
             }
-            _cache[projectName] = current with { AnalysisSchedules = map };
+            _cache[key] = current with { AnalysisSchedules = map };
             Persist();
         }
     }
@@ -717,13 +904,58 @@ public class ProjectSettingsService
         if (path == null) return;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true }));
+            _fileWriter.Write(path, SerializeCache());
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to write project-settings.json at {Path}", path);
         }
+    }
+
+    private void PersistStrict()
+    {
+        var path = ResolveStorePath();
+        if (path == null) return;
+        try
+        {
+            _fileWriter.Write(path, SerializeCache());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write project-settings.json at {Path}", path);
+            throw new ProjectPersistenceException(
+                $"Could not persist project settings at '{path}'.", ex);
+        }
+    }
+
+    private string SerializeCache() =>
+        JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
+
+    private string ResolveAliasLocked(string projectName)
+    {
+        var current = projectName;
+        for (var i = 0; i < 16 && _aliases.TryGetValue(current, out var target); i++)
+        {
+            if (string.Equals(current, target, StringComparison.OrdinalIgnoreCase)) break;
+            current = target;
+        }
+        return current;
+    }
+
+    private void UpdateAliasesAfterRenameLocked(string previous, string current)
+    {
+        if (string.Equals(previous, current, StringComparison.OrdinalIgnoreCase)) return;
+
+        _aliases.Remove(current);
+        foreach (var alias in _aliases
+                     .Where(pair => string.Equals(pair.Value, previous, StringComparison.OrdinalIgnoreCase))
+                     .Select(pair => pair.Key)
+                     .ToList())
+        {
+            _aliases[alias] = current;
+        }
+        _aliases.Remove(previous);
+        _aliases[previous] = current;
     }
 
     private string? ResolveStorePath()

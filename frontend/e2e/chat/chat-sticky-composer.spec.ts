@@ -8,7 +8,7 @@ async function findJobWithOutput(): Promise<{ id: string; watchPath: string } | 
   const jobs = await listJobs();
   for (const j of jobs) {
     try {
-      const out = await api<unknown[]>(`/api/jobs/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`);
+      const out = await api<unknown[]>(`/api/tasks/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`);
       if (Array.isArray(out) && out.length > 0) return { id: j.id, watchPath: j.watchPath };
     } catch { /* ignore */ }
   }
@@ -39,7 +39,7 @@ test.describe('Chat sticky composer', () => {
     await expect(sheet).toBeVisible();
     await page.waitForTimeout(800);
 
-    const chatBody = page.getByTestId('chat-body');
+    const chatBody = page.getByTestId('conversation-view');
     await expect(chatBody).toBeVisible();
 
     const composer = page.getByTestId('chat-input');
@@ -80,13 +80,13 @@ test.describe('Chat sticky composer', () => {
     await page.getByTestId('orch-side-sheet').waitFor({ state: 'visible' });
     await page.waitForTimeout(800);
 
-    const chatBody = page.getByTestId('chat-body');
+    const chatBody = page.getByTestId('conversation-view');
     await expect(chatBody).toBeVisible();
 
     // If virtualised mode has a top spacer visible, it should be small
     // (representing off-screen content that is scrolled away). The bug was
     // a 3000+ px spacer visible before any messages.
-    const topSpacer = page.getByTestId('chat-spacer-top');
+    const topSpacer = page.getByTestId('conversation-spacer-top');
     const spacerVisible = await topSpacer.isVisible().catch(() => false);
     if (spacerVisible) {
       const spacerBox = await topSpacer.boundingBox();
@@ -97,7 +97,9 @@ test.describe('Chat sticky composer', () => {
 
     // The first chat message or event should be near the top of the chat
     // body, not pushed hundreds of pixels down by a spacer.
-    const firstMsg = chatBody.locator('[data-testid^="chat-msg-"], [data-testid^="chat-event-"]').first();
+    const firstMsg = chatBody.locator(
+      '[data-testid^="conversation-message-message."], [data-testid="conversation-tool-burst"], [data-testid="conversation-system-status"]'
+    ).first();
     if (await firstMsg.isVisible()) {
       const bodyBox = await chatBody.boundingBox();
       const msgBox = await firstMsg.boundingBox();
@@ -121,7 +123,7 @@ test.describe('Chat sticky composer', () => {
     await page.getByTestId('orch-side-sheet').waitFor({ state: 'visible' });
     await page.waitForTimeout(800);
 
-    const chatBody = page.getByTestId('chat-body');
+    const chatBody = page.getByTestId('conversation-view');
     await expect(chatBody).toBeVisible();
 
     // Scroll the chat body up (if scrollable).

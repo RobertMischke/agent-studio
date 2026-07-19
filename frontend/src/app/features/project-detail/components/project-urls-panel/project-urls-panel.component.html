@@ -1,0 +1,161 @@
+<section class="project-urls" data-testid="project-urls-panel">
+  <header class="project-urls__head">
+    <h2 class="project-urls__title">Project URLs</h2>
+    <p class="project-urls__desc">
+      Manage every configured URL here. Each one also gets its own row in the
+      Explorer tree for one-click access.
+    </p>
+  </header>
+
+  @if (loading()) {
+    <div class="project-urls__empty" data-testid="project-urls-loading">Loading…</div>
+  } @else if (loadError(); as err) {
+    <div class="project-urls__empty project-urls__empty--error">{{ err }}</div>
+  } @else if (!projectId()) {
+    <div class="project-urls__empty">
+      This project is not in the registry yet, so URLs cannot be configured.
+    </div>
+  } @else {
+    <!-- Status strip: overall running count + rebuild-all. -->
+    <div class="project-urls__strip" data-testid="project-urls-strip">
+      <span class="project-urls__strip-dot"
+            [class.project-urls__strip-dot--ok]="startableCount() > 0 && runningCount() >= startableCount()"
+            [class.project-urls__strip-dot--building]="anyBuilding()"></span>
+      <span class="project-urls__strip-label">
+        <b>{{ runningCount() }}/{{ urls().length }}</b> dev servers running
+      </span>
+      <button type="button"
+              class="project-urls__strip-btn"
+              data-testid="project-urls-rebuild-all"
+              [disabled]="startableCount() === 0 || anyBuilding()"
+              (click)="rebuildAll()">
+        Rebuild &amp; restart all
+      </button>
+    </div>
+
+    @if (urls().length === 0) {
+      <div class="project-urls__empty" data-testid="project-urls-empty">
+        No URLs configured yet. Add one to see it here and as a row in the
+        Explorer tree.
+      </div>
+    } @else {
+      <ul class="project-urls__list" data-testid="project-urls-list">
+        @for (u of urls(); track u.id) {
+          <li class="project-urls__row" [attr.data-url-id]="u.id"
+              [attr.data-testid]="'project-urls-row-' + u.id">
+            <span class="project-urls__icon">
+              <app-studio-icon name="link" [size]="14" />
+            </span>
+            <div class="project-urls__meta">
+              <div class="project-urls__name">
+                {{ u.label }}
+                <span class="project-urls__pill"
+                      [class.project-urls__pill--running]="pillFor(u) === 'running'"
+                      [class.project-urls__pill--offline]="pillFor(u) === 'offline'"
+                      [class.project-urls__pill--building]="pillFor(u) === 'building'"
+                      [attr.data-testid]="'project-urls-pill-' + u.id"
+                      [attr.data-status]="pillFor(u)">{{ pillFor(u) }}</span>
+              </div>
+              <div class="project-urls__host">
+                {{ host(u.url) }}
+                @if (u.startRule; as rule) {
+                  · <code>{{ rule.command }}</code>
+                }
+              </div>
+            </div>
+            <div class="project-urls__actions">
+              <button type="button" cacTooltip="Open embedded preview"
+                      aria-label="Open embedded preview"
+                      [attr.data-testid]="'project-urls-embed-' + u.id"
+                      (click)="openEmbedded(u)">
+                <app-studio-icon name="link" [size]="13" />
+              </button>
+              <button type="button" cacTooltip="Open in external browser"
+                      aria-label="Open in external browser"
+                      [attr.data-testid]="'project-urls-open-' + u.id"
+                      (click)="openUrl(u)">
+                <app-studio-icon name="send" [size]="13" />
+              </button>
+              @if (u.startRule) {
+                <button type="button" cacTooltip="Build &amp; restart"
+                        aria-label="Restart"
+                        [disabled]="pillFor(u) === 'building'"
+                        [attr.data-testid]="'project-urls-restart-' + u.id"
+                        (click)="restart(u)">
+                  <app-studio-icon name="refresh" [size]="13" />
+                </button>
+              }
+              <button type="button" cacTooltip="Edit"
+                      aria-label="Edit"
+                      [attr.data-testid]="'project-urls-edit-' + u.id"
+                      (click)="startEdit(u)">
+                <app-studio-icon name="sliders" [size]="13" />
+              </button>
+              <button type="button" cacTooltip="Remove"
+                      aria-label="Remove"
+                      [attr.data-testid]="'project-urls-remove-' + u.id"
+                      (click)="remove(u)">
+                <app-studio-icon name="close" [size]="13" />
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (!addOpen()) {
+      <button type="button" class="project-urls__add-btn"
+              data-testid="project-urls-add"
+              (click)="openAdd()">
+        <app-studio-icon name="plus" [size]="13" />
+        Add URL
+      </button>
+    } @else {
+      <div class="project-urls__add" data-testid="project-urls-add-panel">
+        @if (editingId()) {
+          <p class="project-urls__add-hint">Edit this URL.</p>
+        } @else {
+          <p class="project-urls__add-hint">
+            Detected from this repository's <code>package.json</code> /
+            <code>README.md</code>. Click a suggestion to prefill, or fill in
+            manually.
+          </p>
+          @for (s of suggestions(); track $index) {
+            <button type="button" class="project-urls__suggest"
+                    [attr.data-testid]="'project-urls-suggest-' + $index"
+                    (click)="fillFromSuggestion(s)">
+              <span class="project-urls__suggest-src"
+                    [attr.data-source]="s.source">{{ s.source }}</span>
+              <span class="project-urls__suggest-txt">
+                <b>{{ s.label }}</b>
+                <span class="project-urls__suggest-cmd">{{ s.command }}</span>
+              </span>
+            </button>
+          }
+        }
+        <div class="project-urls__form">
+          <label for="project-urls-form-label">Label</label>
+          <input id="project-urls-form-label" type="text" data-testid="project-urls-form-label"
+                 placeholder="e.g. Dev frontend"
+                 [ngModel]="formLabel()" (ngModelChange)="formLabel.set($event)" />
+          <label for="project-urls-form-url">URL</label>
+          <input id="project-urls-form-url" type="text" data-testid="project-urls-form-url"
+                 placeholder="http://localhost:4010"
+                 [ngModel]="formUrl()" (ngModelChange)="formUrl.set($event)" />
+          <label for="project-urls-form-command">Start command (optional)</label>
+          <input id="project-urls-form-command" type="text" data-testid="project-urls-form-command"
+                 placeholder="npm run start"
+                 [ngModel]="formCommand()" (ngModelChange)="formCommand.set($event)" />
+          <div class="project-urls__form-actions">
+            <button type="button" class="project-urls__btn project-urls__btn--link"
+                    (click)="closeAdd()">Cancel</button>
+            <button type="button" class="project-urls__btn project-urls__btn--primary"
+                    data-testid="project-urls-form-save"
+                    [disabled]="!canSave || saving()"
+                    (click)="save()">{{ editingId() ? 'Save' : 'Add URL' }}</button>
+          </div>
+        </div>
+      </div>
+    }
+  }
+</section>

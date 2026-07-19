@@ -28,7 +28,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         var settings = svc.Get("new-project");
 
         Assert.True(settings.AutoCommit);
-        Assert.Equal(AutoPushStrategies.OnCompleted, settings.AutoPushStrategy);
+        Assert.Equal(AutoPushStrategies.AlwaysImmediate, settings.AutoPushStrategy);
     }
 
     [Fact]
@@ -78,6 +78,103 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void SetExecutionRunner_Persists_assignment_and_remote_eligibility_together()
+    {
+        var svc = Build();
+
+        svc.SetExecutionRunner("demo", " runner-01 ", remoteExecutionEnabled: false);
+
+        var current = svc.Get("demo");
+        Assert.Equal("runner-01", current.ExecutionRunner);
+        Assert.False(current.RemoteExecutionEnabled);
+
+        var reloaded = Build().Get("demo");
+        Assert.Equal("runner-01", reloaded.ExecutionRunner);
+        Assert.False(reloaded.RemoteExecutionEnabled);
+
+        svc.SetExecutionRunner("demo", "  ");
+        Assert.Null(svc.Get("demo").ExecutionRunner);
+        Assert.False(svc.Get("demo").RemoteExecutionEnabled);
+    }
+
+    [Fact]
+    public void RekeyProject_MovesAllSettingsAndUpdatesRunnerAcrossReload()
+    {
+        var svc = Build();
+        svc.SetAutoCommit("Old Project", false);
+        svc.SetExecutionRunner("Old Project", "runner-old", remoteExecutionEnabled: false);
+
+        var updated = svc.RekeyProject(
+            "Old Project",
+            "New Project",
+            updateExecutionRunner: true,
+            executionRunner: " runner-new ",
+            remoteExecutionEnabled: true);
+
+        Assert.False(updated.AutoCommit);
+        Assert.Equal("runner-new", updated.ExecutionRunner);
+        Assert.True(updated.RemoteExecutionEnabled);
+        Assert.DoesNotContain("Old Project", svc.GetAll().Keys);
+
+        var reloaded = Build();
+        Assert.DoesNotContain("Old Project", reloaded.GetAll().Keys);
+        Assert.False(reloaded.Get("New Project").AutoCommit);
+        Assert.Equal("runner-new", reloaded.Get("New Project").ExecutionRunner);
+        Assert.True(reloaded.Get("New Project").RemoteExecutionEnabled);
+    }
+
+    [Fact]
+    public void RekeyProject_OldRunnerReadsAndWritesThroughLiveAlias()
+    {
+        var svc = Build();
+        svc.SetExecutionRunner("Old Project", "runner-before", remoteExecutionEnabled: true);
+        svc.RekeyProject("Old Project", "New Project");
+
+        svc.SetExecutionRunner("New Project", "runner-after", remoteExecutionEnabled: true);
+        Assert.Equal("runner-after", svc.Get("Old Project").ExecutionRunner);
+
+        // A runner constructed before the rename persists mode with its captured
+        // old name. The write must land on the new key, not recreate an orphan.
+        svc.SetRunnerMode("Old Project", "paused", source: "system");
+        Assert.Equal("paused", svc.Get("New Project").RunnerMode);
+        Assert.DoesNotContain("Old Project", svc.GetAll().Keys);
+
+        var reloaded = Build();
+        Assert.Equal("runner-after", reloaded.Get("New Project").ExecutionRunner);
+        Assert.Equal("paused", reloaded.Get("New Project").RunnerMode);
+        Assert.DoesNotContain("Old Project", reloaded.GetAll().Keys);
+    }
+
+    [Fact]
+    public void RekeyProject_PersistFailure_RestoresCacheAndDurableKey()
+    {
+        var writer = new ControllableAtomicJsonFileWriter();
+        var svc = Build(writer);
+        svc.SetAutoCommit("Old Project", false);
+        svc.SetExecutionRunner("Old Project", "runner-before", remoteExecutionEnabled: true);
+        var durableBefore = File.ReadAllText(StorePath());
+        writer.ShouldFail = (path, _) => string.Equals(path, StorePath(), StringComparison.OrdinalIgnoreCase);
+
+        Assert.Throws<ProjectPersistenceException>(() => svc.RekeyProject(
+            "Old Project",
+            "New Project",
+            updateExecutionRunner: true,
+            executionRunner: "runner-after",
+            remoteExecutionEnabled: true));
+
+        Assert.Contains("Old Project", svc.GetAll().Keys);
+        Assert.DoesNotContain("New Project", svc.GetAll().Keys);
+        Assert.False(svc.Get("Old Project").AutoCommit);
+        Assert.Equal("runner-before", svc.Get("Old Project").ExecutionRunner);
+        Assert.Equal(durableBefore, File.ReadAllText(StorePath()));
+
+        var reloaded = Build();
+        Assert.Contains("Old Project", reloaded.GetAll().Keys);
+        Assert.DoesNotContain("New Project", reloaded.GetAll().Keys);
+        Assert.Equal("runner-before", reloaded.Get("Old Project").ExecutionRunner);
+    }
+
+    [Fact]
     public void SetAutoCommit_PersistsExplicitFalseAcrossReload()
     {
         var svc = Build();
@@ -106,7 +203,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
 
         svc.SetAutoPushStrategy("runbook", "ship-it");
 
-        Assert.Equal(AutoPushStrategies.OnCompleted, svc.Get("runbook").AutoPushStrategy);
+        Assert.Equal(AutoPushStrategies.AlwaysImmediate, svc.Get("runbook").AutoPushStrategy);
     }
 
     [Fact]
@@ -249,10 +346,9 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         svc.SetCliMode("runbook", CliTypes.Claude, CliPermissionModes.ReadOnly);
 
         Assert.Equal(CliPermissionSources.Project, svc.ResolveCliMode("runbook", CliTypes.Claude).Source);
-        // Gemini/Copilot have no global-config probe, so an un-overridden CLI is
+        // Gemini has no global-config probe, so an un-overridden CLI is
         // always the platform default here regardless of the host's ~/.codex.
         Assert.Equal(CliPermissionSources.Default, svc.ResolveCliMode("runbook", CliTypes.Gemini).Source);
-        Assert.Equal(CliPermissionModes.Yolo, svc.ResolveCliMode("runbook", CliTypes.Copilot).Mode);
     }
 
     // --- T1b / ASS-1742: per-project / per-task context mode --------------
@@ -273,9 +369,6 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     public void ResolveContextMode_SharedOnlyCli_ReportsUnsupported()
     {
         var svc = Build();
-
-        var copilot = svc.ResolveContextMode("new-project", CliTypes.Copilot);
-        Assert.False(copilot.Supported);
 
         var gemini = svc.ResolveContextMode("new-project", CliTypes.Gemini);
         Assert.False(gemini.Supported);
@@ -465,7 +558,142 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.Null(svc.Get("new-project").BuildProfile);
     }
 
-    private ProjectSettingsService Build()
+    // --- ASS-1753: runner-mode durability across restart -----------------
+
+    /// <summary>
+    /// A <c>user</c>-sourced mode change (the operator toggle) advances BOTH the
+    /// live <see cref="ProjectSettings.RunnerMode"/> mirror and the durable
+    /// <see cref="ProjectSettings.DesiredRunnerMode"/> that boot restores from.
+    /// </summary>
+    [Fact]
+    public void SetRunnerMode_UserSourced_AdvancesLiveMirrorAndDurableDesired()
+    {
+        var svc = Build();
+
+        svc.SetRunnerMode("runbook", "auto-continuous", source: "user");
+
+        var s = svc.Get("runbook");
+        Assert.Equal("auto-continuous", s.RunnerMode);
+        Assert.Equal("auto-continuous", s.DesiredRunnerMode);
+    }
+
+    /// <summary>
+    /// The core ASS-1753 regression: a system-driven flip to manual (the
+    /// update-service quiescing runners before a deploy) must mirror the live
+    /// mode without clobbering the operator's durable auto-continuous intent.
+    /// The boot-restore preference (DesiredRunnerMode over RunnerMode) therefore
+    /// still resolves to auto-continuous, so a restart that lands mid-quiesce
+    /// comes back up in the mode the operator actually asked for.
+    /// </summary>
+    [Fact]
+    public void SetRunnerMode_SystemFlipToManual_PreservesDurableDesiredIntent()
+    {
+        var svc = Build();
+        svc.SetRunnerMode("runbook", "auto-continuous", source: "user");
+
+        // update-quiesce / circuit-breaker style flip: NOT operator intent.
+        svc.SetRunnerMode("runbook", "manual", source: "system");
+
+        var s = svc.Get("runbook");
+        Assert.Equal("manual", s.RunnerMode);                 // live mirror reflects reality
+        Assert.Equal("auto-continuous", s.DesiredRunnerMode); // durable intent untouched
+
+        // Boot restore prefers DesiredRunnerMode -> auto-continuous survives.
+        var bootMode = string.IsNullOrWhiteSpace(s.DesiredRunnerMode) ? s.RunnerMode : s.DesiredRunnerMode;
+        Assert.Equal("auto-continuous", bootMode);
+    }
+
+    [Fact]
+    public void SetRunnerMode_SystemFlip_PreservesDesiredAcrossReload()
+    {
+        var svc = Build();
+        svc.SetRunnerMode("runbook", "auto-continuous", source: "user");
+        svc.SetRunnerMode("runbook", "manual", source: "system");
+
+        var reloaded = Build().Get("runbook");
+
+        Assert.Equal("manual", reloaded.RunnerMode);
+        Assert.Equal("auto-continuous", reloaded.DesiredRunnerMode);
+    }
+
+    /// <summary>
+    /// Migration guard: a legacy record that predates DesiredRunnerMode has only
+    /// RunnerMode on disk. Boot must fall back to RunnerMode so existing projects
+    /// keep their persisted auto mode until the operator's next toggle records a
+    /// durable DesiredRunnerMode.
+    /// </summary>
+    [Fact]
+    public void Get_LegacyRecordWithoutDesired_BootFallsBackToRunnerMode()
+    {
+        File.WriteAllText(StorePath(), """
+        {
+          "runbook": {
+            "RunnerMode": "auto-continuous"
+          }
+        }
+        """);
+        var svc = Build();
+
+        var s = svc.Get("runbook");
+        Assert.Equal("auto-continuous", s.RunnerMode);
+        Assert.Null(s.DesiredRunnerMode);
+
+        var bootMode = string.IsNullOrWhiteSpace(s.DesiredRunnerMode) ? s.RunnerMode : s.DesiredRunnerMode;
+        Assert.Equal("auto-continuous", bootMode);
+    }
+
+    /// <summary>
+    /// The hole the backfill closes: on a LEGACY record (no DesiredRunnerMode)
+    /// a system-sourced flip used to overwrite RunnerMode — the only field the
+    /// boot fallback reads — so one transient CLI-unspawnable pause permanently
+    /// downgraded the project to manual across restarts (observed live
+    /// 2026-07-07: auto-continuous -> manual because the claude npm shim was
+    /// half-healed at boot). The system flip must first preserve the pre-flip
+    /// RunnerMode as the durable DesiredRunnerMode.
+    /// </summary>
+    [Fact]
+    public void SetRunnerMode_SystemFlipOnLegacyRecord_BackfillsDesiredFromPreFlipMode()
+    {
+        File.WriteAllText(StorePath(), """
+        {
+          "runbook": {
+            "RunnerMode": "auto-continuous"
+          }
+        }
+        """);
+        var svc = Build();
+
+        svc.SetRunnerMode("runbook", "manual", source: "system");
+
+        var s = svc.Get("runbook");
+        Assert.Equal("manual", s.RunnerMode);
+        Assert.Equal("auto-continuous", s.DesiredRunnerMode); // backfilled from the pre-flip mirror
+
+        // Boot restore therefore still comes back in the operator's mode.
+        var bootMode = string.IsNullOrWhiteSpace(s.DesiredRunnerMode) ? s.RunnerMode : s.DesiredRunnerMode;
+        Assert.Equal("auto-continuous", bootMode);
+    }
+
+    /// <summary>
+    /// Companion guard: the backfill only fires when Desired is EMPTY. A record
+    /// whose durable intent is already set keeps it verbatim (ASS-1753 contract),
+    /// and a user-sourced change still advances both fields.
+    /// </summary>
+    [Fact]
+    public void SetRunnerMode_SystemFlipWithExistingDesired_DoesNotRewriteDesired()
+    {
+        var svc = Build();
+        svc.SetRunnerMode("runbook", "auto-single", source: "user");
+
+        svc.SetRunnerMode("runbook", "auto-continuous", source: "system");
+        svc.SetRunnerMode("runbook", "manual", source: "circuit-breaker");
+
+        var s = svc.Get("runbook");
+        Assert.Equal("manual", s.RunnerMode);
+        Assert.Equal("auto-single", s.DesiredRunnerMode); // the operator's toggle, not the system flips
+    }
+
+    private ProjectSettingsService Build(IAtomicJsonFileWriter? fileWriter = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -473,7 +701,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
                 ["TaskRepository"] = _workspace,
             })
             .Build();
-        return new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        return new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config, fileWriter);
     }
 
     private string StorePath() => Path.Combine(_workspace, "project-settings.json");

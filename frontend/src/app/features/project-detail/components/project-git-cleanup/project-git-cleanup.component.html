@@ -1,0 +1,116 @@
+<section class="cln" data-testid="git-cleanup">
+  <header class="cln__head">
+    <button type="button" class="cln__toggle" data-testid="git-cleanup-toggle"
+            [attr.aria-expanded]="open()" (click)="toggle()">
+      <span class="cln__caret" [class.cln__caret--open]="open()">&#9656;</span>
+      <span class="cln__title">Cleanup merged branches &amp; refs</span>
+      @if (plan()?.isRepo && hasCandidates()) {
+        <span class="cln__pill" data-testid="git-cleanup-eligible-pill">{{ eligibleCount() }} eligible</span>
+      }
+    </button>
+    @if (open()) {
+      <button type="button" class="cln__action" data-testid="git-cleanup-refresh"
+              [disabled]="planState() === 'loading' || executing()" (click)="refresh()">
+        Re-analyse
+      </button>
+    }
+  </header>
+
+  @if (open()) {
+    <div class="cln__body">
+      @if (planState() === 'loading' && !plan()) {
+        <p class="cln__note">Analysing branches and refs...</p>
+      } @else if (planState() === 'error' || (plan() && !plan()!.isRepo)) {
+        <p class="cln__note cln__note--error" data-testid="git-cleanup-error">
+          {{ planError() || 'This project has no git repository.' }}
+        </p>
+      } @else if (plan(); as p) {
+        <p class="cln__lead" data-testid="git-cleanup-summary">
+          Comparing against <code class="mono">{{ p.integrationBranch }}</code>.
+          Only merged branches and refs are eligible; unmerged work is never touched.
+        </p>
+
+        @if (!hasCandidates()) {
+          <p class="cln__note" data-testid="git-cleanup-empty">
+            Nothing to clean up - no task branches, backup refs, or stale worktrees found.
+          </p>
+        } @else {
+          @for (group of groups(); track trackGroup($index, group)) {
+            <section class="cln__group" [attr.data-testid]="'git-cleanup-group-' + group.kind">
+              <h5 class="cln__group-head">
+                <span>{{ group.label }}</span>
+                <span class="cln__group-count">{{ group.eligible }}/{{ group.candidates.length }}</span>
+              </h5>
+              @for (c of group.candidates; track trackCandidate($index, c)) {
+                <label class="cln__row" data-testid="git-cleanup-candidate"
+                       [attr.data-kind]="c.kind" [attr.data-name]="c.name"
+                       [class.cln__row--kept]="!c.eligible">
+                  <input type="checkbox" class="cln__check" data-testid="git-cleanup-check"
+                         [checked]="isSelected(c)" [disabled]="!c.eligible"
+                         (change)="toggleCandidate(c)" />
+                  <span class="cln__row-main">
+                    <span class="cln__row-name mono">{{ c.name }}</span>
+                    @if (c.tipShortSha) { <span class="cln__sha mono">{{ c.tipShortSha }}</span> }
+                    <span class="cln__status" [attr.data-status]="c.mergeStatus">
+                      @if (c.mergeStatus === 'merged') { merged }
+                      @else if (c.mergeStatus === 'unmerged') { unmerged }
+                      @else { stale }
+                    </span>
+                  </span>
+                  <span class="cln__reason">{{ c.reason }}</span>
+                </label>
+              }
+            </section>
+          }
+
+          <div class="cln__bar">
+            <div class="cln__bar-select">
+              <button type="button" class="cln__link" data-testid="git-cleanup-select-all"
+                      [disabled]="eligibleCount() === 0" (click)="selectAllEligible()">Select all eligible</button>
+              <button type="button" class="cln__link" data-testid="git-cleanup-clear"
+                      [disabled]="selectedCount() === 0" (click)="clearSelection()">Clear</button>
+            </div>
+            @if (!confirming()) {
+              <button type="button" class="cln__danger" data-testid="git-cleanup-delete"
+                      [disabled]="selectedCount() === 0 || executing()" (click)="requestDelete()">
+                Delete selected ({{ selectedCount() }})
+              </button>
+            } @else {
+              <div class="cln__confirm" data-testid="git-cleanup-confirm-bar">
+                <span class="cln__confirm-text">
+                  Delete {{ selectedCount() }} merged item{{ selectedCount() === 1 ? '' : 's' }}? This cannot be undone.
+                </span>
+                <button type="button" class="cln__action" data-testid="git-cleanup-cancel" (click)="cancelDelete()">Cancel</button>
+                <button type="button" class="cln__danger" data-testid="git-cleanup-confirm"
+                        [disabled]="executing()" (click)="confirmDelete()">
+                  {{ executing() ? 'Deleting...' : 'Confirm delete' }}
+                </button>
+              </div>
+            }
+          </div>
+        }
+      }
+
+      @if (resultError()) {
+        <p class="cln__note cln__note--error" data-testid="git-cleanup-result-error">{{ resultError() }}</p>
+      }
+
+      @if (result(); as r) {
+        <div class="cln__result" data-testid="git-cleanup-result">
+          <p class="cln__result-head">
+            Cleanup done: <strong>{{ r.deletedCount }} deleted</strong>, {{ r.keptCount }} kept.
+          </p>
+          <ul class="cln__result-list">
+            @for (a of r.actions; track trackAction($index)) {
+              <li class="cln__result-item" data-testid="git-cleanup-action" [class.cln__result-item--kept]="!a.deleted">
+                <span class="cln__result-badge" [attr.data-deleted]="a.deleted">{{ a.deleted ? 'deleted' : 'kept' }}</span>
+                <span class="cln__row-name mono">{{ a.name }}</span>
+                <span class="cln__reason">{{ a.reason }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  }
+</section>

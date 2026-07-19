@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Frame-level regression tests for <see cref="ClaudeCliService"/>'s
+/// Frame-level regression tests for the Claude behavior's
 /// <c>TransformReadLine</c> + <c>OnOutputLine</c>. Each test captures a
 /// real <c>stream-json</c> frame shape (verified against the live
 /// <c>claude</c> CLI) and pins the marker-line output we depend on.
@@ -16,15 +16,15 @@ namespace AgentStudio.Tests;
 /// shape these methods emit. Without per-frame regression tests, an
 /// "innocent" tweak to <c>FormatToolUse</c> or the rate-limit kv tail
 /// can silently break the live header pill or the Continue button. The
-/// matching skill at <c>docs/cli-skills/cli-claude.md</c> documents the
+/// matching skill at <c>docs/system/cli/skills/cli-claude.md</c> documents the
 /// frame catalogue these tests lock.
 /// </summary>
 public class ClaudeCliServiceTests
 {
-    private static ClaudeCliService NewService()
+    private static GenericCliExecutionService NewService()
     {
         var cfg = new ConfigurationBuilder().Build();
-        return new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, cfg);
+        return GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, cfg);
     }
 
     private static CliOutputLine StdoutFrame(string json) => new()
@@ -260,7 +260,7 @@ public class ClaudeCliServiceTests
     [InlineData("   ",                   "   ")]
     public void NormalizeModelId_CoercesDottedFormToDashed(string? input, string? expected)
     {
-        Assert.Equal(expected, ClaudeCliService.NormalizeModelId(input));
+        Assert.Equal(expected, BuiltInCliBehaviors.NormalizeModelId(input));
     }
 
     [Fact]

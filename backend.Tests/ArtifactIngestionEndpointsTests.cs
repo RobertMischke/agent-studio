@@ -1,0 +1,64 @@
+using System.Text;
+
+using Xunit;
+
+namespace AgentStudio.Tests;
+
+public sealed class ArtifactIngestionEndpointsTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "artifact-ingest-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public void NormalizeResultsPath_AddsResultsPrefix()
+    {
+        Assert.Equal(
+            "results/screenshots/home--real.png",
+            ArtifactIngestionEndpoints.NormalizeResultsPath("screenshots/home--real.png"));
+    }
+
+    [Theory]
+    [InlineData("../outside.png")]
+    [InlineData("results/../outside.png")]
+    [InlineData("C:/temp/outside.png")]
+    public void NormalizeResultsPath_RejectsEscapes(string path)
+    {
+        Assert.Throws<ArtifactIngestException>(() => ArtifactIngestionEndpoints.NormalizeResultsPath(path));
+    }
+
+    [Fact]
+    public void WriteArtifacts_WritesDecodedBytesUnderResults()
+    {
+        var job = Path.Combine(_root, "projects", "demo", "tasks", "001", "AGT-1");
+        Directory.CreateDirectory(job);
+        var task = new TaskInfo { Id = "AGT-1", TaskKey = "AGT-1", FolderPath = job };
+        var request = new ArtifactIngestRequest(
+            "AGT-1",
+            [new RunnerArtifactUpload(
+                "screenshots/home--real.png",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("png bytes")))]);
+
+        var response = ArtifactIngestionEndpoints.WriteArtifacts(task, request);
+
+        Assert.Equal(1, response.Uploaded);
+        Assert.Equal(["results/screenshots/home--real.png"], response.Files);
+        Assert.Equal(
+            "png bytes",
+            File.ReadAllText(Path.Combine(job, "results", "screenshots", "home--real.png")));
+    }
+
+    [Fact]
+    public void ArtifactUploadCommitMessage_ListsUploadedFiles()
+    {
+        var message = WorkspaceArtifactCommitService.BuildArtifactUploadMessage(
+            "AGT-1",
+            ["results/a.png", "results/report.json"]);
+
+        Assert.Contains("record uploaded artifacts for AGT-1", message);
+        Assert.Contains("Artifact-Upload-Files: results/a.png,results/report.json", message);
+    }
+}

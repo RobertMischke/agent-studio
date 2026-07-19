@@ -300,7 +300,10 @@ public class TaskRunnerPromptTests
         {
             ["log"] = string.Join('\n',
                 "Captured result screenshot at results/run-proof.png",
-                "Used supplied reference image attachments/input-wireframe.png")
+                "Used supplied reference image attachments/input-wireframe.png"),
+            ["taskType"] = "chore",
+            ["mode"] = "coding",
+            ["outcome"] = "Success",
         });
 
         Assert.Contains("## Images", rendered);
@@ -311,6 +314,82 @@ public class TaskRunnerPromptTests
         Assert.Contains("Images do not count.", rendered);
         Assert.Contains("results/run-proof.png", rendered);
         Assert.Contains("attachments/input-wireframe.png", rendered);
+        Assert.DoesNotContain("{{log}}", rendered);
+    }
+
+    /// <summary>
+    /// The Result redesign (Protocol -> Result) feeds a case-based, overview-first
+    /// view. The frontend parses a `## Overview` section (`- Problem:` / `- Solution:`)
+    /// and an optional `- Case:` hint out of `status.md`; this test pins that the
+    /// summarizer prompt actually asks for both, plus the full case vocabulary the
+    /// client classifier understands. If a template refactor drops these, the
+    /// Result head silently falls back to synthesized overviews and heuristic
+    /// cases for every new run, so keep this contract sharp.
+    /// </summary>
+    [Fact]
+    public void SummaryProtocolTemplate_PinsOverviewAndCaseContract()
+    {
+        var rendered = Prompts().Render(RuntimePromptService.SummaryProtocol, new Dictionary<string, string?>
+        {
+            ["log"] = "did some work",
+            ["taskType"] = "chore",
+            ["mode"] = "coding",
+            ["outcome"] = "Success",
+        });
+
+        Assert.Contains("## Overview", rendered);
+        Assert.Contains("- Problem:", rendered);
+        Assert.Contains("- Solution:", rendered);
+        Assert.Contains("- Case:", rendered);
+        // The two quality-head metrics (Teil 2): the client parses these optional
+        // header lines into the Files / Tests metric chips. If a template refactor
+        // drops them, the chips silently disappear for every new run.
+        Assert.Contains("- Files:", rendered);
+        Assert.Contains("- Tests:", rendered);
+        // The eight cases the client classifier (result-case.ts) understands.
+        foreach (var caseId in new[] { "bugfix", "feature", "refactor", "docs", "forensics", "ui-cleanup", "blocked", "generic" })
+        {
+            Assert.Contains(caseId, rendered);
+        }
+        // Overview must be asked for before the detail section, so status.md
+        // leads with the shareable summary.
+        Assert.True(rendered.IndexOf("## Overview", StringComparison.Ordinal)
+            < rendered.IndexOf("## What Was Done", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The summarizer no longer sees only the log: task metadata and the run
+    /// outcome are injected so it can classify the case and frame a blocked run
+    /// honestly. This pins that <see cref="SummaryGenerationService.BuildSummarySlots"/>
+    /// carries those values through to the rendered prompt (the wiring the
+    /// billable Haiku path can't be unit-tested against).
+    /// </summary>
+    [Fact]
+    public void SummarySlots_CarryTaskMetadataAndOutcomeIntoRenderedPrompt()
+    {
+        var info = new TaskInfo
+        {
+            Id = "slots-test",
+            TaskKey = "::slots-test",
+            Title = "Slots test",
+            State = "4-auto-review",
+            FolderPath = "folder",
+            WatchPath = "",
+            ProjectName = "test",
+            TaskType = TaskTypes.Bug,
+            Mode = TaskModes.Research,
+        };
+
+        var slots = SummaryGenerationService.BuildSummarySlots(info, "LOG-BODY-MARKER", "Blocked");
+        var rendered = Prompts().Render(RuntimePromptService.SummaryProtocol, slots);
+
+        Assert.Contains("Task type: bug", rendered);
+        Assert.Contains("Mode: research", rendered);
+        Assert.Contains("Run outcome: Blocked", rendered);
+        Assert.Contains("LOG-BODY-MARKER", rendered);
+        Assert.DoesNotContain("{{taskType}}", rendered);
+        Assert.DoesNotContain("{{mode}}", rendered);
+        Assert.DoesNotContain("{{outcome}}", rendered);
         Assert.DoesNotContain("{{log}}", rendered);
     }
 

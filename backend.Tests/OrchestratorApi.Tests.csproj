@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +22,7 @@
 
   <ItemGroup>
     <None Include="Fixtures\cli\claude\outcome-classifier\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\cli\codex\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -28,6 +30,36 @@
     <ProjectReference Include="..\update-service\UpdateService.csproj">
       <Aliases>UpdSvc</Aliases>
     </ProjectReference>
+    <!-- Aliased so the standalone runner's WireModels (RunLeaseAcquireRequest,
+         LogIngestRequest, ArtifactIngestRequest, ...) do not collide with the
+         backend's same-named server records. The RM-5 end-to-end test reaches
+         them via `extern alias Runner;`. -->
+    <ProjectReference Include="..\runner\AgentRunner.csproj">
+      <Aliases>Runner</Aliases>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Block 6: same library-type aliases as the app, so tests resolve the adopted
+       types to the CodingAgentRunner package too. -->
+  <ItemGroup>
+    <Using Include="CodingAgentRunner.Model.CliTypes" Alias="CliTypes" />
+    <Using Include="CodingAgentRunner.Model.CliPermissionModes" Alias="CliPermissionModes" />
+    <Using Include="CodingAgentRunner.Model.CliPermissionFlags" Alias="CliPermissionFlags" />
+    <Using Include="CodingAgentRunner.Model.CliContextModes" Alias="CliContextModes" />
+    <Using Include="CodingAgentRunner.Model.CliThinkingLevels" Alias="CliThinkingLevels" />
+    <Using Include="CodingAgentRunner.Model.CliOutputLine" Alias="CliOutputLine" />
+    <Using Include="CodingAgentRunner.Model.CliModelInfo" Alias="CliModelInfo" />
+    <Using Include="CodingAgentRunner.Model.CliModelCatalog" Alias="CliModelCatalog" />
+    <Using Include="CodingAgentRunner.Model.RunStopReason" Alias="RunStopReason" />
+    <Using Include="CodingAgentRunner.Events.CliRunEvent" Alias="CliRunEvent" />
+    <Using Include="CodingAgentRunner.Events.RunPhase" Alias="RunPhase" />
+    <Using Include="CodingAgentRunner.Events.RunPhaseTransitions" Alias="RunPhaseTransitions" />
+    <Using Include="CodingAgentRunner.Events.PlanFrameItem" Alias="PlanFrameItem" />
+    <Using Include="CodingAgentRunner.Events.PlanItemId" Alias="PlanItemId" />
+    <Using Include="CodingAgentRunner.Events.PlanItemStatus" Alias="PlanItemStatus" />
+    <Using Include="CodingAgentRunner.Adapters.ClaudeEventAdapter" Alias="ClaudeEventAdapter" />
+    <Using Include="CodingAgentRunner.Adapters.CodexEventAdapter" Alias="CodexEventAdapter" />
+    <Using Include="CodingAgentRunner.Adapters.GeminiEventAdapter" Alias="GeminiEventAdapter" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,6 +83,7 @@
     <Using Include="AgentStudio.GeneratedFiles" />
     <Using Include="AgentStudio.Git" />
     <Using Include="AgentStudio.Host" />
+    <Using Include="AgentStudio.Orchestrator" />
     <Using Include="AgentStudio.Persistence" />
     <Using Include="AgentStudio.Pipeline" />
     <Using Include="AgentStudio.ProjectChat" />

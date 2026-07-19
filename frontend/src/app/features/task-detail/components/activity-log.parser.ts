@@ -1,20 +1,54 @@
+/**
+ * App-side activity-log helpers.
+ *
+ * The canonical activity-log grouper (`parseActivityLog`) and the
+ * conversation-turn builder (`buildConversationTurns`) moved into
+ * `coding-agent-chat/core` during the library extraction; they are
+ * re-exported here so existing app imports keep working. What remains in
+ * this file is the app-specific layer the library intentionally does not
+ * own: filter state, the legacy chat-message mapping, the live-status
+ * indicator, tool-burst rollups for the Activity Log view, and the
+ * orchestrator `[steer]` line parser.
+ */
+import {
+  parseActivityLog as parseActivityLogLib,
+  buildConversationTurns,
+  type ActivityLogGroup,
+  type ActivityLogKind,
+} from 'coding-agent-chat/core';
 import { CliOutputLine } from '../../../models/task.model';
+import { sanitizeProjectionLines } from './conversation-projection';
 
-export type ActivityLogKind = 'read' | 'search' | 'command' | 'edit' | 'task' | 'todo' | 'error' | 'message' | 'orchestrator' | 'supervisor' | 'other';
-export type ActivityLogFilters = Record<ActivityLogKind, boolean>;
-
-export interface ActivityLogGroup {
-  id: string;
-  kind: ActivityLogKind;
-  title: string;
-  subtitle: string;
-  status: 'ok' | 'error' | 'neutral';
-  lines: CliOutputLine[];
-  collapsedByDefault: boolean;
+/**
+ * Host wrapper around the library grouper. It runs the conversation-projection
+ * guard over the raw line buffer FIRST, so a raw stream-json transport frame
+ * can never reach the library's fallback branch (which would otherwise render
+ * the raw JSON as a `message` group title). Every app surface consumes this
+ * wrapper - the legacy activity-log Conversation/Trace views, the live-status
+ * derivation below, and the protocol pane's `buildConversationTurns` call - so
+ * the guard applies uniformly. See {@link sanitizeProjectionLines}.
+ */
+export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
+  return parseActivityLogLib(sanitizeProjectionLines(lines));
 }
 
-const actionStartRegex = /^(?<marker>[^\w\s]+|x|X|\*)\s+(?<label>.+)$/i;
-const codexJsonFrameTypes = new Set(['turn.started', 'turn.completed', 'thread.started', 'thread.completed', 'session.started', 'session.completed']);
+export {
+  buildConversationTurns,
+  type ActivityLogGroup,
+  type ActivityLogKind,
+};
+export { sanitizeProjectionLines, INTERNAL_EVENT_MARKER, isInternalEventLine } from './conversation-projection';
+
+/**
+ * The library exports `buildConversationTurns` but keeps its row types
+ * internal; derive them from the function signature so the app-side view
+ * models stay exactly in sync with what the builder returns.
+ */
+export type ConversationTurn = ReturnType<typeof buildConversationTurns>[number];
+export type ConversationTurnKind = ConversationTurn['kind'];
+export type ToolBurstSummary = NonNullable<ConversationTurn['toolSummary']>;
+
+export type ActivityLogFilters = Record<ActivityLogKind, boolean>;
 
 export const activityLogKinds: ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo', 'error', 'message', 'orchestrator', 'supervisor', 'other'];
 
@@ -31,296 +65,6 @@ export const defaultActivityLogFilters: ActivityLogFilters = {
   supervisor: true,
   other: true
 };
-
-export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
-  const groups: ActivityLogGroup[] = [];
-  let current: ActivityLogGroup | null = null;
-  const completedCodexCommandIds = collectCompletedCodexCommandIds(lines);
-
-  for (const line of lines) {
-    // User follow-ups are persisted with stream='user' (see backend
-    // TaskRunnerService.AppendUserPromptToCliLog). They are always their own
-    // group — never folded into a preceding agent action — so the chat
-    // transcript reads as alternating user/agent turns.
-    if (line.stream === 'user') {
-      current = {
-        id: `${groups.length}-${line.timestamp}-user`,
-        kind: 'message',
-        title: line.text,
-        subtitle: '',
-        status: 'neutral',
-        lines: [line],
-        collapsedByDefault: false
-      };
-      groups.push(current);
-      // Reset so any subsequent continuation/blank lines don't fold into
-      // the user message group.
-      current = null;
-      continue;
-    }
-
-    // Orchestrator meta messages are written by the backend's
-    // OrchestratorChatLog. They are first-class chat participants alongside
-    // USER and AGENT, never folded into adjacent agent activity. Their text
-    // already carries a leading [tag] (decision / reissue / heuristic /
-    // giveup) which we keep as the title so the renderer can pick a glyph.
-    if (line.stream === 'orchestrator') {
-      current = {
-        id: `${groups.length}-${line.timestamp}-orchestrator`,
-        kind: 'orchestrator',
-        title: line.text,
-        subtitle: '',
-        status: 'neutral',
-        lines: [line],
-        collapsedByDefault: false
-      };
-      groups.push(current);
-      current = null;
-      continue;
-    }
-
-    if (line.stream === 'supervisor') {
-      const isHigh = /\bhigh\b/i.test(line.text) || /^\[force-fail\]/i.test(line.text);
-      const supervisorGroup: ActivityLogGroup = {
-        id: `${groups.length}-${line.timestamp}-supervisor`,
-        kind: 'supervisor',
-        title: line.text,
-        subtitle: '',
-        status: isHigh ? 'error' : 'neutral',
-        lines: [line],
-        collapsedByDefault: false
-      };
-      groups.push(supervisorGroup);
-      current = null;
-      continue;
-    }
-
-    const codexFrame = parseCodexJsonlFrame(line, completedCodexCommandIds);
-    if (codexFrame) {
-      if (codexFrame.visible) {
-        groups.push(codexFrame.group);
-        current = codexFrame.group;
-      } else {
-        current = null;
-      }
-      continue;
-    }
-
-    const action = parseActionLine(line);
-    if (action) {
-      current = {
-        id: `${groups.length}-${line.timestamp}-${action.title}`,
-        kind: action.kind,
-        title: action.title,
-        subtitle: '',
-        status: action.status,
-        lines: [line],
-        collapsedByDefault: false
-      };
-      groups.push(current);
-      continue;
-    }
-
-    if (isBlank(line.text)) {
-      if (current) current.lines.push(line);
-      continue;
-    }
-
-    if (current && isContinuation(line.text)) {
-      current.lines.push(line);
-      if (!current.subtitle) {
-        current.subtitle = cleanContinuation(line.text);
-      }
-      if (line.stream === 'stderr' || /error|failed|exited with error/i.test(line.text)) {
-        current.status = 'error';
-      }
-      continue;
-    }
-
-    const kind: ActivityLogKind = line.stream === 'stderr' || /error|failed|exited with error/i.test(line.text)
-      ? 'error'
-      : 'message';
-    current = {
-      id: `${groups.length}-${line.timestamp}-message`,
-      kind,
-      title: line.text,
-      subtitle: '',
-      status: kind === 'error' ? 'error' : 'neutral',
-      lines: [line],
-      collapsedByDefault: false
-    };
-    groups.push(current);
-  }
-
-  return compressActivityGroups(groups);
-}
-
-type CodexJsonlParseResult =
-  | { visible: true; group: ActivityLogGroup }
-  | { visible: false };
-
-interface CodexJsonObject {
-  type?: unknown;
-  item?: {
-    id?: unknown;
-    type?: unknown;
-    text?: unknown;
-    command?: unknown;
-    aggregated_output?: unknown;
-    exit_code?: unknown;
-    status?: unknown;
-  };
-}
-
-function collectCompletedCodexCommandIds(lines: CliOutputLine[]): Set<string> {
-  const ids = new Set<string>();
-  for (const line of lines) {
-    const trimmed = line.text.trim();
-    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) continue;
-    try {
-      const frame = JSON.parse(trimmed) as CodexJsonObject;
-      const frameType = stringValue(frame.type);
-      const item = frame.item;
-      const itemType = stringValue(item?.type);
-      const itemId = stringValue(item?.id);
-      if (frameType === 'item.completed' && itemType === 'command_execution' && itemId) {
-        ids.add(itemId);
-      }
-    } catch {
-      // Non-JSON or non-Codex lines stay on the legacy parser path.
-    }
-  }
-  return ids;
-}
-
-function parseCodexJsonlFrame(line: CliOutputLine, completedCommandIds: Set<string>): CodexJsonlParseResult | null {
-  const trimmed = line.text.trim();
-  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
-
-  let frame: CodexJsonObject;
-  try {
-    frame = JSON.parse(trimmed) as CodexJsonObject;
-  } catch {
-    return null;
-  }
-
-  const frameType = stringValue(frame.type);
-  if (!frameType) return null;
-
-  const item = frame.item;
-  const itemType = stringValue(item?.type);
-  const itemId = stringValue(item?.id) ?? frameType;
-  if ((frameType === 'item.started' || frameType === 'item.completed') && itemType === 'agent_message') {
-    const text = stringValue(item?.text)?.trim();
-    if (!text) return { visible: false };
-    return {
-      visible: true,
-      group: {
-        id: `${line.timestamp}-codex-agent-${itemId}`,
-        kind: 'message',
-        title: text,
-        subtitle: '',
-        status: 'neutral',
-        lines: [withText(line, text)],
-        collapsedByDefault: false
-      }
-    };
-  }
-
-  if ((frameType === 'item.started' || frameType === 'item.completed') && itemType === 'command_execution') {
-    if (frameType === 'item.started' && completedCommandIds.has(itemId)) {
-      return { visible: false };
-    }
-    const command = stringValue(item?.command)?.trim() || 'Command';
-    const statusText = stringValue(item?.status);
-    const exitCode = numberValue(item?.exit_code);
-    const failed = line.stream === 'stderr'
-      || (exitCode !== null && exitCode !== 0)
-      || /failed|error|cancelled/i.test(statusText ?? '');
-    const output = stringValue(item?.aggregated_output)?.trim();
-    return {
-      visible: true,
-      group: {
-        id: `${line.timestamp}-codex-command-${itemId}`,
-        kind: 'command',
-        title: command,
-        subtitle: commandSubtitle(command, statusText, exitCode, output),
-        status: failed ? 'error' : 'ok',
-        lines: commandDisplayLines(line, command, statusText, exitCode, output),
-        collapsedByDefault: false
-      }
-    };
-  }
-
-  if (codexJsonFrameTypes.has(frameType)
-    || frameType.startsWith('response.')
-    || frameType.startsWith('turn.')
-    || frameType.startsWith('thread.')
-    || frameType.startsWith('session.')
-    || frameType.startsWith('item.')) {
-    return {
-      visible: true,
-      group: codexDebugGroup(line, frameType, itemType, itemId)
-    };
-  }
-
-  return null;
-}
-
-function codexDebugGroup(
-  line: CliOutputLine,
-  frameType: string,
-  itemType: string | null,
-  itemId: string
-): ActivityLogGroup {
-  const itemLabel = itemType ? ` ${itemType}` : '';
-  return {
-    id: `${line.timestamp}-codex-frame-${itemId}`,
-    kind: 'other',
-    title: `Codex ${frameType}${itemLabel}`,
-    subtitle: '',
-    status: 'neutral',
-    lines: [line],
-    collapsedByDefault: true
-  };
-}
-
-function commandDisplayLines(
-  line: CliOutputLine,
-  command: string,
-  status: string | null,
-  exitCode: number | null,
-  output: string | undefined
-): CliOutputLine[] {
-  const summaryParts = [`$ ${command}`];
-  if (status) summaryParts.push(`[${status}]`);
-  if (exitCode !== null) summaryParts.push(`[exit ${exitCode}]`);
-  const displayLines = [withText(line, summaryParts.join(' '))];
-  if (output) {
-    displayLines.push(...output.split(/\r?\n/).map((text) => withText(line, text)));
-  }
-  return displayLines;
-}
-
-function commandSubtitle(command: string, status: string | null, exitCode: number | null, output: string | undefined): string {
-  const parts: string[] = [command];
-  if (status) parts.push(status);
-  if (exitCode !== null) parts.push(`exit ${exitCode}`);
-  if (output) parts.push(output.split(/\r?\n/)[0]);
-  return parts.join(' - ');
-}
-
-function stringValue(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
-}
-
-function numberValue(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function withText(line: CliOutputLine, text: string): CliOutputLine {
-  return { ...line, text };
-}
 
 export function filterActivityGroups(groups: ActivityLogGroup[], filters: ActivityLogFilters): ActivityLogGroup[] {
   return groups.filter((group) => filters[group.kind]);
@@ -407,193 +151,6 @@ function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage
     body: group.lines,
     collapsedByDefault: isTool || group.collapsedByDefault
   };
-}
-
-// =================================================================
-// Conversation turn builder (Activity Log "Conversation" mode)
-// =================================================================
-//
-// The Conversation view collapses the raw activity stream into the kind of
-// alternating dialogue a human reader expects:
-//
-//   user -> tool burst (collapsed) -> agent text turn -> tool burst -> ...
-//
-// One "turn" is a contiguous run of same-role groups - so a sequence of 12
-// reads + 3 edits becomes a single tool burst with counts ("12 reads, 3
-// edits"), and a sequence of 4 agent message lines becomes one big readable
-// agent turn whose body is rendered as Markdown. This is the structure the
-// user explicitly asked for: hide tool noise, keep responses prominent and
-// legible.
-
-export type ConversationTurnKind = 'agent' | 'user' | 'tools' | 'system' | 'orchestrator' | 'supervisor';
-
-export interface ToolBurstSummary {
-  total: number;
-  counts: Partial<Record<ActivityLogKind, number>>;
-  /**
-   * One example label per kind (e.g. "Read prompt.md") so the collapsed badge
-   * can show what was actually done without expanding the full list.
-   */
-  samples: Partial<Record<ActivityLogKind, string>>;
-  /**
-   * Wall-clock span from the burst's first action line to its last, in
-   * milliseconds. The Conversation view shows it as a small "· 4s" chip so
-   * the reader gets a sense of how long the tool noise took without it
-   * stealing focus from the agent reply. Zero when the burst spans a single
-   * timestamp or timestamps are missing.
-   */
-  durationMs: number;
-}
-
-export interface ConversationTurn {
-  id: string;
-  kind: ConversationTurnKind;
-  timestamp: string;
-  status: 'ok' | 'error' | 'neutral';
-  /** Source groups, kept so the UI can offer "expand the underlying tools" or copy. */
-  groups: ActivityLogGroup[];
-  /**
-   * For agent / user / system turns this is the joined raw text. It is fed
-   * through {@link renderMarkdown} on the view side (we keep this layer free
-   * of HTML so it stays unit-testable as plain strings).
-   */
-  text: string;
-  /** Populated only for kind === 'tools'. */
-  toolSummary?: ToolBurstSummary;
-}
-
-function isToolKind(kind: ActivityLogKind): boolean {
-  return TOOL_KINDS.includes(kind);
-}
-
-/**
- * `[taskboard]`-prefixed lines on the system stream are runtime markers
- * (CLI started, CLI exited, duration, exit code, model). They belong in
- * the Trace view as run-bookkeeping but they crowd out the actual agent
- * reply in the Conversation view. The Conversation view filters them
- * out; the metadata strip above the activity log is the right place
- * for "duration: 65s, model: claude-opus-4-7" if we surface them at all.
- */
-function isTaskboardRuntimeMarker(group: ActivityLogGroup): boolean {
-  if (group.lines.length === 0) return false;
-  const first = group.lines[0];
-  if (first.stream !== 'system') return false;
-  return /^\s*\[taskboard\]/i.test(first.text ?? '');
-}
-
-/**
- * Watchdog meta lines arrive as orchestrator messages tagged
- * `[watchdog]` (legacy) or `[watchdog-warning]` / `[watchdog-timeout]`
- * (operator-friendly form). They drive the watchdog chip in the
- * protocol-pane header; surfacing them in the Conversation view as well
- * would double-up the user feedback. Filtered out here, kept in Trace.
- */
-function isWatchdogMetaLine(group: ActivityLogGroup): boolean {
-  if (group.lines.length === 0) return false;
-  const first = group.lines[0];
-  if (first.stream !== 'orchestrator') return false;
-  return /\[watchdog[^\]]*\]/i.test(first.text ?? '');
-}
-
-function isCodexDebugFrame(group: ActivityLogGroup): boolean {
-  return group.kind === 'other' && /^Codex\b/i.test(group.title);
-}
-
-/**
- * Maps a sequence of {@link ActivityLogGroup}s into a sequence of conversation
- * turns. Adjacent groups of the same role are merged. Errors that aren't
- * tool errors surface as their own `system` turns so they're never buried
- * inside an agent block. Runtime taskboard markers (CLI started / exited
- * / duration) are filtered out; they live in the Trace view only.
- */
-export function buildConversationTurns(groups: ActivityLogGroup[]): ConversationTurn[] {
-  const turns: ConversationTurn[] = [];
-  const filtered = groups.filter((g) =>
-    !isTaskboardRuntimeMarker(g) && !isWatchdogMetaLine(g) && !isCodexDebugFrame(g)
-  );
-  let i = 0;
-  while (i < filtered.length) {
-    const group = filtered[i];
-    const role = roleFor(group);
-
-    // Collect the contiguous run of same-role groups.
-    const run: ActivityLogGroup[] = [group];
-    i += 1;
-    while (i < filtered.length && roleFor(filtered[i]) === role) {
-      run.push(filtered[i]);
-      i += 1;
-    }
-
-    turns.push(turnFromRun(run, role, turns.length));
-  }
-  return turns;
-}
-
-function roleFor(group: ActivityLogGroup): ConversationTurnKind {
-  const isUser = group.lines.length > 0 && group.lines[0].stream === 'user';
-  if (isUser) return 'user';
-  if (group.kind === 'supervisor'
-    || (group.lines.length > 0 && group.lines[0].stream === 'supervisor')) return 'supervisor';
-  if (group.kind === 'orchestrator'
-    || (group.lines.length > 0 && group.lines[0].stream === 'orchestrator')) return 'orchestrator';
-  if (isToolKind(group.kind)) return 'tools';
-  if (group.kind === 'error' || group.status === 'error') return 'system';
-  return 'agent';
-}
-
-function turnFromRun(run: ActivityLogGroup[], kind: ConversationTurnKind, index: number): ConversationTurn {
-  const firstLine = run[0]?.lines[0];
-  const timestamp = firstLine ? firstLine.timestamp : new Date().toISOString();
-  const status: 'ok' | 'error' | 'neutral' = run.some((g) => g.status === 'error')
-    ? 'error'
-    : kind === 'user'
-      ? 'neutral'
-      : 'ok';
-
-  if (kind === 'tools') {
-    return {
-      id: `turn-${index}-tools`,
-      kind,
-      timestamp,
-      status,
-      groups: run,
-      text: '',
-      toolSummary: summarizeToolBurst(run)
-    };
-  }
-
-  return {
-    id: `turn-${index}-${kind}`,
-    kind,
-    timestamp,
-    status,
-    groups: run,
-    text: turnTextFromGroups(run, kind)
-  };
-}
-
-/**
- * Joins a run of agent / user / system groups into the readable text body of
- * a single turn. We use group titles (the first line of each group) rather
- * than the entire `lines` array to avoid reintroducing tool-output noise that
- * the parser already classified as continuation. Blank lines between titles
- * are preserved as paragraph breaks so the Markdown renderer can pick them
- * up as `<p>` boundaries.
- */
-function turnTextFromGroups(run: ActivityLogGroup[], kind: ConversationTurnKind): string {
-  const segments: string[] = [];
-  for (const group of run) {
-    if (kind === 'user') {
-      segments.push(group.title);
-      continue;
-    }
-    // For agent / system turns, the model's text was emitted as a sequence of
-    // lines that the backend split per newline. Re-join them with single
-    // newlines so paragraph structure (blank line = new <p>) survives.
-    const lines = group.lines.map((l) => l.text).filter((t) => t !== undefined);
-    segments.push(lines.join('\n'));
-  }
-  return segments.join('\n\n').trim();
 }
 
 export function summarizeToolBurst(groups: ActivityLogGroup[]): ToolBurstSummary {
@@ -735,6 +292,31 @@ export function deriveLiveStatus(
     default:
       return { kind: 'agent', verb: 'Thinking', detail: '', sinceMs };
   }
+}
+
+/**
+ * `[taskboard]`-prefixed lines on the system stream are runtime markers
+ * (CLI started, CLI exited, duration, exit code, model). They belong in
+ * the Trace view as run-bookkeeping, not in the live status.
+ */
+function isTaskboardRuntimeMarker(group: ActivityLogGroup): boolean {
+  if (group.lines.length === 0) return false;
+  const first = group.lines[0];
+  if (first.stream !== 'system') return false;
+  return /^\s*\[taskboard\]/i.test(first.text ?? '');
+}
+
+/**
+ * Watchdog meta lines arrive as orchestrator messages tagged
+ * `[watchdog]` (legacy) or `[watchdog-warning]` / `[watchdog-timeout]`
+ * (operator-friendly form). They drive the watchdog chip in the
+ * protocol-pane header; they are not "current activity".
+ */
+function isWatchdogMetaLine(group: ActivityLogGroup): boolean {
+  if (group.lines.length === 0) return false;
+  const first = group.lines[0];
+  if (first.stream !== 'orchestrator') return false;
+  return /\[watchdog[^\]]*\]/i.test(first.text ?? '');
 }
 
 function isLiveStatusNoise(group: ActivityLogGroup): boolean {
@@ -885,94 +467,6 @@ export function activityKindLabel(kind: ActivityLogKind): string {
     case 'supervisor': return 'Supervisor';
     case 'other': return 'Other';
   }
-}
-
-function parseActionLine(line: CliOutputLine): { kind: ActivityLogKind; title: string; status: 'ok' | 'error' | 'neutral' } | null {
-  const match = actionStartRegex.exec(line.text);
-  if (!match?.groups) return null;
-
-  const label = match.groups['label'].trim();
-  const marker = match.groups['marker'];
-  const status = line.stream === 'stderr' || marker.toLowerCase() === 'x' || /exited with error|failed/i.test(label)
-    ? 'error'
-    : 'ok';
-
-  return {
-    kind: classifyAction(label, status),
-    title: label,
-    status
-  };
-}
-
-function classifyAction(label: string, status: 'ok' | 'error' | 'neutral'): ActivityLogKind {
-  if (status === 'error') return 'error';
-  if (/^Read\b/i.test(label)) return 'read';
-  if (/^Search\b/i.test(label)) return 'search';
-  if (/\(shell\)|^Run\b|^Execute|^Executing|^Build|^Check\b/i.test(label)) return 'command';
-  if (/^Edit\b|^Write\b|^Create\b|^Delete\b|^Move\b|^Update\b|^Apply\b/i.test(label)) return 'edit';
-  if (/^Task\b/i.test(label)) return 'task';
-  if (/^Todo\b/i.test(label)) return 'todo';
-  return 'other';
-}
-
-function compressActivityGroups(groups: ActivityLogGroup[]): ActivityLogGroup[] {
-  const output: ActivityLogGroup[] = [];
-  let index = 0;
-
-  while (index < groups.length) {
-    const group = groups[index];
-    if (!isCompressible(group)) {
-      output.push(group);
-      index += 1;
-      continue;
-    }
-
-    const batch = [group];
-    index += 1;
-    while (index < groups.length && groups[index].kind === group.kind && groups[index].status === group.status) {
-      batch.push(groups[index]);
-      index += 1;
-    }
-
-    if (batch.length === 1) {
-      output.push(group);
-      continue;
-    }
-
-    const lines = batch.flatMap((item) => item.lines);
-    output.push({
-      id: `${group.id}-batch-${batch.length}`,
-      kind: group.kind,
-      title: `${activityKindLabel(group.kind)} ×${batch.length}`,
-      subtitle: batch.map((item) => item.subtitle || item.title).filter(Boolean).slice(0, 3).join(', '),
-      status: group.status,
-      lines,
-      collapsedByDefault: true
-    });
-  }
-
-  return output;
-}
-
-// Tool kinds whose adjacent runs collapse into a single weighted batch group
-// (title "Reading files ×3"). Read and search are the noisiest, but command,
-// edit, task, and todo bursts surface the same "wall of repeated entries"
-// problem in the trace view, so they collapse too. Non-tool kinds (message,
-// error, orchestrator) keep their individual entries; their content matters.
-function isCompressible(group: ActivityLogGroup): boolean {
-  return TOOL_KINDS.includes(group.kind);
-}
-
-function isContinuation(text: string): boolean {
-  return /^\s/.test(text) || /^[|`\\/_-]/.test(text);
-}
-
-function cleanContinuation(text: string): string {
-  return text.replace(/^[\s|`\\/_-]+/, '').trim();
-}
-
-function isBlank(text: string): boolean {
-  return text.trim().length === 0;
 }
 
 /**

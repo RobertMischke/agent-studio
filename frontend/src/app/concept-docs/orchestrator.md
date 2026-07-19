@@ -1,7 +1,7 @@
 ---
 concept: orchestrator
 title: Orchestrator
-learnMore: docs/architecture-decisions.md
+learnMore: docs/system/architecture/decisions/adr-archive.md
 learnMoreLabel: Architecture Decisions (ADR-0002)
 ---
 

@@ -60,9 +60,9 @@ const TASK_INFO = {
  */
 async function stubChatAndCapture(page: Page) {
   const captured: CapturedRequest[] = [];
-  const persistedTurns: Array<{
+  const persistedTurns: {
     id: string; ts: string; role: string; text: string;
-  }> = [];
+  }[] = [];
 
   await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
     const req: Request = route.request();
@@ -133,7 +133,7 @@ async function stubProjectsAndJobs(page: Page) {
     review: [], completed: [], archive: []
   };
 
-  await page.route(/\/api\/jobs\/grouped(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/tasks\/grouped(?:\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -144,7 +144,7 @@ async function stubProjectsAndJobs(page: Page) {
       })
     });
   });
-  await page.route(/\/api\/jobs(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/tasks(?:\?.*)?$/, async (route) => {
     if (route.request().method() !== 'GET') { await route.continue(); return; }
     await route.fulfill({
       status: 200,
@@ -155,7 +155,7 @@ async function stubProjectsAndJobs(page: Page) {
 }
 
 async function stubJobDetail(page: Page) {
-  await page.route(new RegExp(`/api/jobs/${TASK_ID}(\\?.*)?$`), async (route) => {
+  await page.route(new RegExp(`/api/tasks/${TASK_ID}(\\?.*)?$`), async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -202,7 +202,7 @@ test.describe('Project chat context awareness', () => {
     const captured = await stubChatAndCapture(page);
 
     // Stub sub-endpoints the detail panel fetches (runs, output, etc.).
-    await page.route(new RegExp(`/api/jobs/${TASK_ID}/`), async (route) => {
+    await page.route(new RegExp(`/api/tasks/${TASK_ID}/`), async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
 
@@ -222,17 +222,18 @@ test.describe('Project chat context awareness', () => {
     }, deepLinkUrl);
     await page.waitForTimeout(500);
 
-    // Verify the context chip now shows task-detail context.
-    const chip = page.getByTestId('orch-side-sheet-context-chip-text');
-    const chipVisible = (await chip.count()) > 0;
-    if (chipVisible) {
-      const chipText = await chip.textContent();
-      // The chip should reference the task when a detail is open.
-      if (chipText && !chipText.includes('Task')) {
+    // Verify the expanded context menu reflects task-detail context.
+    await page.getByTestId('orch-context-badge').click();
+    const currentContext = page.getByTestId('orch-context-current');
+    const contextVisible = (await currentContext.count()) > 0;
+    if (contextVisible) {
+      const contextText = await currentContext.textContent();
+      if (contextText && !contextText.includes('Task')) {
         // The popstate approach may not have triggered Angular routing;
         // fall back to asserting the builder's output via the POST body.
       }
     }
+    await page.getByTestId('orch-context-badge').click();
 
     await sendChat(page, 'what is the current task?');
 
@@ -254,7 +255,7 @@ test.describe('Project chat context awareness', () => {
       expect(nav.currentTaskId).toBe(TASK_ID);
       expect(nav.currentTaskTitle).toBe(TASK_TITLE);
 
-      const lastBubble = page.locator('[data-testid="chat-msg-orchestrator"]').last();
+      const lastBubble = page.locator('[data-testid="conversation-message-message.orchestrator"]').last();
       await expect(lastBubble).toContainText(TASK_ID, { timeout: 5_000 });
       const bubbleText = (await lastBubble.textContent()) ?? '';
       for (const sig of HALLUCINATION_SIGNATURES) {
@@ -287,7 +288,7 @@ test.describe('Project chat context awareness', () => {
     expect(nav.currentTaskTitle).toBeUndefined();
 
     // The rendered reply acknowledges no task is selected.
-    const lastBubble = page.locator('[data-testid="chat-msg-orchestrator"]').last();
+    const lastBubble = page.locator('[data-testid="conversation-message-message.orchestrator"]').last();
     await expect(lastBubble).toContainText(/no task|which task/i, { timeout: 5_000 });
     const bubbleText = (await lastBubble.textContent()) ?? '';
     for (const sig of HALLUCINATION_SIGNATURES) {

@@ -1,4 +1,7 @@
 
+using AgentStudio.Search;
+using AgentStudio.Proposals;
+
 namespace AgentStudio.Host;
 
 /// <summary>
@@ -22,38 +25,41 @@ public static class EndpointMapping
         tasks.MapTaskGitEndpoints();
         tasks.MapTaskClaudeEndpoints();
         tasks.MapTaskReviewEvidenceEndpoints();
+        tasks.MapTaskExternalCompletionEndpoints();
         tasks.MapTaskCodeReviewEndpoints();
         tasks.MapTaskRegressionRadarEndpoints();
         tasks.MapTaskPipelineEndpoints();
         tasks.MapTaskMergeEndpoints();
 
-        // Compatibility route for operator scripts and docs that still use
-        // "jobs" terminology. Keep this mapped to the same handlers so
-        // /api/jobs/batch-move and the consolidation/audit routes cannot
-        // drift from /api/tasks.
-        var jobs = app.MapGroup("/api/jobs")
-            .AddEndpointFilter<TaskOperationTimingFilter>();
-        jobs.MapTaskCrudEndpoints();
-        jobs.MapTaskMergeEndpoints();
-
         app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();
         app.MapRunnerEndpoints();
+        app.MapOrchestratorSessionEndpoints();
+        app.MapOrchestratorContextEndpoints();
         app.MapLeaseEndpoints();
         app.MapIntegrationLeaseEndpoints();
         app.MapLogIngestionEndpoints();
+        app.MapArtifactIngestionEndpoints();
         app.MapRegistryEndpoints();
         app.MapWorkspaceEndpoints();
+        app.MapWorkspaceSettingsEndpoints();
         app.MapProjectSettingsEndpoints();
+        app.MapCrashRecoveryEndpoints();
         app.MapProjectRegressionRadarEndpoints();
         app.MapProjectDocsEndpoints();
+        app.MapProjectProposalEndpoints();
+        app.MapWikiGradingEndpoints();
         app.MapProjectSteeringDocsEndpoints();
         app.MapSkillReadinessEndpoints();
         app.MapSecurityReviewEndpoints();
         app.MapDesignSurfaceEndpoints();
         app.MapProjectTokenUsageEndpoints();
+        app.MapTokenPricingEndpoints();
         app.MapReviewDecisionsEndpoints();
         app.MapProjectSnapshotEndpoints();
+        app.MapProjectOperatorDashboardEndpoints();
+        app.MapProjectGraphEndpoints();
+        app.MapPublishEndpoints();
         app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
@@ -73,5 +79,6 @@ public static class EndpointMapping
         app.MapTagEndpoints();
         app.MapProjectChatEndpoints();
         app.MapConceptDocsEndpoints();
+        app.MapGlobalSearchEndpoints();
     }
 }

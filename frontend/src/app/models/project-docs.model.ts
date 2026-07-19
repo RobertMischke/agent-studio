@@ -44,6 +44,14 @@ export interface WikiFileContent {
   content: string;
 }
 
+export interface WikiFileSaveResult {
+  relPath: string;
+  saved: boolean;
+  changed: boolean;
+  sha: string | null;
+  branch: string | null;
+}
+
 /** Per-document provenance parsed from YAML frontmatter (mirrors backend WikiDocMetadata). */
 export interface WikiDocMetadata {
   model: string | null;
@@ -73,16 +81,64 @@ export interface WikiFileHistory {
   model: string | null;
   metadata: WikiDocMetadata;
   commits: WikiCommitInfo[];
+  relatedTasks?: RelatedTaskReference[];
+}
+
+export interface RelatedTaskReference {
+  key: string;
+  title: string;
+  linkedAt: string;
+  source: 'auto' | 'manual';
+  exists: boolean | null;
 }
 
 /** Kind of a wiki tree node: a folder, or a document by source type. */
-export type WikiNodeType = 'folder' | 'md' | 'html';
+export type WikiNodeType = 'folder' | 'md' | 'html' | 'json';
+
+/** Curated consolidation status of a wiki page. */
+export type WikiClassificationStatus = 'aktuell' | 'veraltet' | 'ueberholt';
+
+/**
+ * Curation classification of one wiki page (mirrors backend
+ * `WikiClassification`): read from the companion sidecar's `classification`
+ * block, with the backend filling the `type` from a per-folder default when a
+ * page has no sidecar. Absent/null on folders and unclassified pages.
+ */
+export interface WikiClassification {
+  status: WikiClassificationStatus | string | null;
+  /** Docs-relative path of the successor page when status is `ueberholt`. */
+  supersededBy: string | null;
+  /** konzept | adr | contract | domain-map | analyse | runbook | workbench | mockup | proposal | generiert | index */
+  type: string | null;
+  /** ISO date of the consolidation analysis. */
+  analyzedAt: string | null;
+}
+
+/** Compact per-document metadata shown in the tree (mirrors backend WikiTreeMetadata). */
+export interface WikiTreeMetadata {
+  documentMode: string | null;
+  temporalState: string | null;
+  implementationState: string | null;
+  driftGrade: string | null;
+  hasDrift: boolean | null;
+  driftScore: number | null;
+  quality: string | null;
+  duplicateSuspected: boolean | null;
+  duplicateGroupSize: number | null;
+  reportPath: string | null;
+  summary: string | null;
+  companionPath: string | null;
+  sourceChangedSinceReview: boolean | null;
+  findingsCount: number | null;
+}
 
 /**
  * One node in the physical wiki tree (mirrors backend WikiTreeNode). A `folder`
- * carries `children`; a document node (`md` / `html`) is a leaf whose `relPath`
- * is the docs-root-relative path. `title` is the display label (first H1 for
- * docs, order-prefix-stripped name otherwise).
+ * carries `children`; a document node (`md` / `html` / `json`) is a leaf whose
+ * `relPath` is the docs-root-relative path. `title` is the display label (first
+ * H1 or JSON title for docs, order-prefix-stripped name otherwise). `metadata`
+ * is present only when an adjacent `<source-file>.meta.json` companion
+ * describes the source document.
  */
 export interface WikiTreeNode {
   name: string;
@@ -90,6 +146,9 @@ export interface WikiTreeNode {
   relPath: string | null;
   type: WikiNodeType;
   children: WikiTreeNode[];
+  metadata?: WikiTreeMetadata | null;
+  /** Curated classification (pages only; null for folders and unclassified pages). */
+  classification?: WikiClassification | null;
 }
 
 /** The physical docs/ folder tree backing the wiki navigation. */
@@ -100,11 +159,339 @@ export interface WikiTree {
   root: WikiTreeNode[];
 }
 
+/** One recently-edited wiki page (page / git author / when), newest first. */
+export interface WikiRecentEdit {
+  relPath: string;
+  title: string;
+  author: string;
+  authorDateUtc: string;
+  sha: string;
+  shortSha: string;
+  subject: string;
+}
+
+/** Recent-edits payload backing the wiki dashboard landing surface. */
+export interface WikiRecentEdits {
+  projectName: string;
+  baseDir: string;
+  exists: boolean;
+  edits: WikiRecentEdit[];
+}
+
 /** Content of a wiki doc at a past commit (the "view old revision" payload). */
 export interface WikiRevisionContent {
   relPath: string;
   sha: string;
   content: string;
+}
+
+export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'archived' | 'invalid';
+
+export interface WorkbenchListItem {
+  id: string;
+  title: string;
+  summary: string;
+  status: WorkbenchStatus;
+  phase: 'shaping' | 'testing' | 'decision-ready' | null;
+  updatedAtUtc: string;
+  entryPath: string;
+  valid: boolean;
+  error: string | null;
+  sourceTaskKeys: string[];
+}
+
+export interface WorkbenchCatalogue {
+  projectName: string;
+  includesHistory: boolean;
+  count: number;
+  items: WorkbenchListItem[];
+}
+
+export interface WorkbenchDocument {
+  workbench: WorkbenchListItem;
+  html: string;
+  branch: string | null;
+  revision: string | null;
+  workingTreeModified: boolean;
+}
+
+// ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
+
+/** One change-feed row: a recently-edited page + top-folder badge + task key. */
+export interface WikiPulseFeedItem {
+  relPath: string;
+  title: string;
+  author: string;
+  authorDateUtc: string;
+  sha: string;
+  shortSha: string;
+  subject: string;
+  areaSlug: string | null;
+  areaTitle: string | null;
+  taskKey: string | null;
+}
+
+/** Change-feed section (recently-edited pages, newest first). */
+export interface WikiPulseFeed {
+  available: boolean;
+  reason: string | null;
+  items: WikiPulseFeedItem[];
+}
+
+/** One unfiled page plus the reason it landed in the inbox. */
+export interface WikiPulseInboxItem {
+  relPath: string;
+  title: string;
+  type: WikiNodeType;
+  reason: string;
+}
+
+/** Inbox section (loose / unfiled pages; an empty list is healthy). */
+export interface WikiPulseInbox {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  items: WikiPulseInboxItem[];
+}
+
+/** One top-level docs folder's drift grade (worst page band + code-commit counts). */
+export interface WikiPulseDriftArea {
+  slug: string;
+  title: string;
+  grade: string; // Fresh | Aging | Stale | Empty
+  pageCount: number;
+  gradedPageCount: number;
+  worstCommitCount: number;
+  freshCount: number;
+  agingCount: number;
+  staleCount: number;
+}
+
+/** Roll-up of how many graded pages fall in each drift band. */
+export interface WikiPulseDriftCounts {
+  fresh: number;
+  aging: number;
+  stale: number;
+  graded: number;
+}
+
+/** Drift-grading section (the per-top-folder grade bar + roll-up counts). */
+export interface WikiPulseDrift {
+  available: boolean;
+  reason: string | null;
+  overallGrade: string; // Fresh | Aging | Stale | Empty
+  areas: WikiPulseDriftArea[];
+  counts: WikiPulseDriftCounts;
+}
+
+/** One badly-graded page in the Pulse critical section (worst first). */
+export interface WikiPulseCriticalItem {
+  relPath: string;
+  title: string;
+  grade: string; // C | D
+  assessment: string | null;
+  gradedAt: string | null;
+  model: string | null;
+  reportPath: string | null;
+  areaTitle: string | null;
+}
+
+/**
+ * Critical-pages section (AGT-2051): pages a wiki-grading run scored C or D,
+ * worst first, from the companion grading blocks. The LLM grade supplements the
+ * deterministic drift bar. Always available (filesystem read); `overallGrade` is
+ * the worst listed grade or `none`.
+ */
+export interface WikiPulseCritical {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  overallGrade: string; // D | C | none
+  items: WikiPulseCriticalItem[];
+}
+
+export interface WikiPulseWarningItem {
+  kind: 'human-action' | 'dead-link';
+  title: string;
+  detail: string;
+  humanAction: string;
+  relPath: string | null;
+  status: string | null;
+}
+
+export interface WikiPulseWarnings {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  items: WikiPulseWarningItem[];
+}
+
+export interface WikiPulseLiveRun {
+  taskKey: string;
+  lane: string;
+  startedAtUtc: string;
+  docsFilesChanged: number;
+}
+
+export interface WikiPulseActivity {
+  available: boolean;
+  reason: string | null;
+  runs: WikiPulseLiveRun[];
+}
+
+/**
+ * The generated wiki Pulse landing view: a read-only composition of the change
+ * feed, the sort-needed inbox, the deterministic drift grade bar, and the LLM
+ * critical-pages section. Not a wiki page - it is generated, never editable.
+ * Each section carries its own `available` + `reason` so a missing source
+ * degrades to an empty state.
+ */
+export interface WikiPulse {
+  projectName: string;
+  baseDir: string;
+  exists: boolean;
+  generatedAtUtc: string;
+  feed: WikiPulseFeed;
+  inbox: WikiPulseInbox;
+  drift: WikiPulseDrift;
+  critical: WikiPulseCritical;
+  warnings?: WikiPulseWarnings;
+  activity?: WikiPulseActivity;
+  workbenches?: WorkbenchCatalogue | null;
+}
+
+// ---- Wiki folder overview / search / curated home (agreed backend contracts) ----
+
+/** Kind of a folder-overview child: a subfolder or a document page. */
+export type WikiFolderChildKind = 'folder' | 'page';
+
+/**
+ * One row of a folder overview (mirrors the agreed
+ * `GET /api/projects/{p}/wiki/folder/{relPath}` contract). Folders carry
+ * `childCount` (and a null `fileType`); pages carry `fileType` + `size`.
+ */
+export interface WikiFolderChild {
+  name: string;
+  relPath: string;
+  kind: WikiFolderChildKind;
+  fileType: 'md' | 'html' | null;
+  title: string;
+  summary: string | null;
+  updatedAt: string | null;
+  size: number | null;
+  childCount: number | null;
+  /** Curated classification (pages only; null for folders and unclassified pages). */
+  classification?: WikiClassification | null;
+}
+
+/** Overview of one wiki folder: its path, display name, and direct children. */
+export interface WikiFolderOverview {
+  path: string;
+  name: string;
+  children: WikiFolderChild[];
+}
+
+/**
+ * One search hit. `snippet` may carry `<em>` highlight markup only; everything
+ * else arrives escaped and is additionally sanitised client-side before render
+ * (see `sanitizeWikiSearchSnippet`).
+ */
+export interface WikiSearchResult {
+  relPath: string;
+  title: string;
+  kind: string;
+  snippet: string;
+  score: number;
+  updatedAt: string | null;
+}
+
+/** Response of `GET /api/projects/{p}/wiki/search?q=&semantic=&limit=`. */
+export interface WikiSearchResponse {
+  query: string;
+  semanticUsed: boolean;
+  expandedTerms: string[];
+  durationMs: number;
+  results: WikiSearchResult[];
+}
+
+/** One curated entry link; `exists=false` marks a dangling curated target. */
+export interface WikiHomeLink {
+  relPath: string;
+  label: string;
+  note: string | null;
+  exists: boolean;
+}
+
+/** One curated section ("Einstiege") of the wiki home surface. */
+export interface WikiHomeSection {
+  title: string;
+  links: WikiHomeLink[];
+}
+
+/** Response of `GET /api/projects/{p}/wiki/home` (curated landing links). */
+export interface WikiHome {
+  sections: WikiHomeSection[];
+}
+
+// ---- Wiki grading maintenance run (AGT-2051) ----
+
+/** Lifecycle of a grading run (mirrors backend WikiGradingRunState, camelCased). */
+export type WikiGradingRunState = 'running' | 'completed' | 'aborted' | 'failed';
+
+/** One row in the run's recent-outcome tail. */
+export interface WikiGradingRunItem {
+  relPath: string;
+  grade: string;
+  outcome: string; // Graded | Skipped | Failed
+}
+
+/** Live status of a grading run, polled by the trigger UI. */
+export interface WikiGradingRunStatus {
+  projectName: string;
+  runId: string;
+  state: WikiGradingRunState;
+  cliType: string;
+  model: string;
+  thinkingLevel: string | null;
+  force: boolean;
+  total: number;
+  processed: number;
+  graded: number;
+  skipped: number;
+  failed: number;
+  critical: number;
+  currentRelPath: string | null;
+  startedAtUtc: string;
+  completedAtUtc: string | null;
+  error: string | null;
+  recent: WikiGradingRunItem[];
+}
+
+/** Envelope for the status poll: `status` is null until the first run starts. */
+export interface WikiGradingStatusResponse {
+  status: WikiGradingRunStatus | null;
+}
+
+/** Result of an abort request. */
+export interface WikiGradingAbortResponse {
+  aborted: boolean;
+  status: WikiGradingRunStatus | null;
+}
+
+/** Body for starting a run; every field falls back to the maintenance default. */
+export interface WikiGradingRunBody {
+  cliType?: string;
+  model?: string;
+  thinkingLevel?: string | null;
+  force?: boolean;
+  limit?: number;
+}
+
+/** The workspace maintenance-model default (its own CLI-management config class). */
+export interface WikiMaintenanceModelConfig {
+  cliType: string;
+  model: string;
+  thinkingLevel: string | null;
 }
 
 export interface ArchitectureDecisionSummary {
@@ -121,4 +508,44 @@ export interface ArchitectureOverview {
   exists: boolean;
   preamble: string;
   decisions: ArchitectureDecisionSummary[];
+}
+
+export interface ProjectStyleGuideAppliesTo {
+  projects: string[];
+  technologies: string[];
+  taskAreas: string[];
+}
+
+export interface ProjectTechnology {
+  key: string;
+  displayLabel: string;
+}
+
+export interface ProjectStyleGuideMatch {
+  projectWildcard: boolean;
+  projectSelector: string;
+  technologyWildcard: boolean;
+  technologies: ProjectTechnology[];
+}
+
+export interface ProjectStyleGuide {
+  id: string;
+  title: string;
+  relPath: string;
+  summary: string;
+  promptSummary: string;
+  version: string;
+  appliesTo: ProjectStyleGuideAppliesTo;
+  match: ProjectStyleGuideMatch;
+}
+
+export interface ProjectStyleGuideCatalogue {
+  projectKey: string;
+  projectDisplayName: string;
+  technologies: ProjectTechnology[];
+  guides: ProjectStyleGuide[];
+  warnings: { relPath: string; message: string }[];
+  snapshotId: string;
+  capturedAtUtc: string;
+  refreshAfterUtc: string;
 }

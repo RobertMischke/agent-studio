@@ -11,7 +11,7 @@ async function pickWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   }).catch(() => { /* best-effort cleanup */ });
 }
@@ -97,7 +97,7 @@ test.describe('Overview tab — prominent task title at top', () => {
 
       // Watch for the PUT roundtrip to confirm the API call fires.
       const putResponse = page.waitForResponse(
-        resp => /\/api\/jobs\/.+\/title/.test(resp.url()) && resp.request().method() === 'PUT',
+        resp => /\/api\/tasks\/.+\/title/.test(resp.url()) && resp.request().method() === 'PUT',
         { timeout: 10_000 },
       );
 
@@ -122,7 +122,7 @@ test.describe('Overview tab — prominent task title at top', () => {
       let persisted: string | null = null;
       for (let i = 0; i < 10; i++) {
         const fresh = await api<{ info: { title: string } }>(
-          `/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(wp.path)}`,
+          `/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(wp.path)}`,
         );
         persisted = fresh.info.title;
         if (persisted === renamed) break;
@@ -154,7 +154,7 @@ test.describe('Overview tab — prominent task title at top', () => {
       // Track that no PUT against /title is fired during this flow.
       let putFired = false;
       const offPut = (resp: import('@playwright/test').Response) => {
-        if (/\/api\/jobs\/.+\/title/.test(resp.url()) && resp.request().method() === 'PUT') {
+        if (/\/api\/tasks\/.+\/title/.test(resp.url()) && resp.request().method() === 'PUT') {
           putFired = true;
         }
       };
@@ -178,7 +178,7 @@ test.describe('Overview tab — prominent task title at top', () => {
 
       // Backend still carries the original title.
       const fresh = await api<{ info: { title: string } }>(
-        `/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(wp.path)}`,
+        `/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(wp.path)}`,
       );
       expect(fresh.info.title).toBe(title);
     } finally {

@@ -49,7 +49,7 @@ test.describe('runtime console capture', () => {
           level: 'Error',
           event: 'http.request.failed',
           subsystem: 'frontend',
-          operation: 'GET /api/jobs',
+          operation: 'GET /api/tasks',
           status: 'Failed',
           error: { type: 'NetworkError', message: 'fetch failed', code: 'ERR_CONNECTION_REFUSED' }
         }));

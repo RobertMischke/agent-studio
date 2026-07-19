@@ -8,7 +8,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
@@ -29,7 +29,7 @@ export interface EpicOverviewScope {
  * "where do my epics stand" surface, so the only mutation it surfaces is
  * navigation: clicking an epic or a sub-task opens that card's detail.
  *
- * Mirrors {@link BacklogTriageScreenComponent}: the host owns the route
+ * The host owns the route
  * (`EpicOverviewService`) and the detail-open flow; this component fetches,
  * renders, and emits navigation requests.
  */
@@ -56,6 +56,10 @@ export class EpicOverviewScreenComponent implements OnInit {
   readonly openTask = output<{ jobId: string; watchPath: string }>();
 
   readonly epics = signal<EpicRollup[]>([]);
+  readonly completedEpics = signal<EpicRollup[]>([]);
+  readonly completedCount = signal(0);
+  readonly completedOpen = signal(false);
+  readonly completedLoading = signal(false);
   readonly loading = signal(false);
   readonly error = signal(false);
   /** Epic ids whose sub-task list is currently expanded. */
@@ -67,21 +71,33 @@ export class EpicOverviewScreenComponent implements OnInit {
   readonly visibleEpics = computed(() => {
     const scope = this.scopedProject();
     const all = this.epics();
-    return scope ? all.filter((e) => e.projectName === scope.name) : all;
+    const scoped = scope ? all.filter((e) => e.projectName === scope.name) : all;
+    // Archived zero-member epics are deliberate cleanup records, not useful
+    // history. Completed epics remain visible because their member rollup is
+    // the history operators need to inspect.
+    return scoped.filter((e) => e.subTaskTotal > 0 || e.state !== '7-archive');
   });
 
-  readonly totalEpics = computed(() => this.visibleEpics().length);
+  readonly activeEpics = computed(() =>
+    this.visibleEpics().filter((e) => e.subTaskTotal === 0 || e.completed < e.subTaskTotal),
+  );
+  readonly displayedEpics = computed(() => this.completedOpen()
+    ? [...this.activeEpics(), ...this.completedEpics()]
+    : this.activeEpics());
+
+  readonly totalEpics = computed(() => this.activeEpics().length + this.completedCount());
   /** Create is only offered when a single project is in scope. */
   readonly canCreate = computed(() => this.scopedProject() !== null);
 
   ngOnInit(): void {
     this.loadEpics();
+    this.loadCompletedCount();
   }
 
   private loadEpics(): void {
     this.loading.set(true);
     this.error.set(false);
-    this.jobs.getEpics().subscribe({
+    this.jobs.getEpics(false, 'active', this.scopedProject()?.name).subscribe({
       next: (list) => {
         this.epics.set(list ?? []);
         this.loading.set(false);
@@ -90,6 +106,28 @@ export class EpicOverviewScreenComponent implements OnInit {
         this.error.set(true);
         this.loading.set(false);
       },
+    });
+  }
+
+  private loadCompletedCount(): void {
+    this.jobs.getCompletedEpicCount(false, this.scopedProject()?.name).subscribe({
+      next: ({ count }) => this.completedCount.set(count),
+      error: () => this.completedCount.set(0),
+    });
+  }
+
+  toggleCompleted(): void {
+    const open = !this.completedOpen();
+    this.completedOpen.set(open);
+    if (!open || this.completedEpics().length > 0 || this.completedLoading()) return;
+    this.completedLoading.set(true);
+    this.jobs.getEpics(false, 'completed', this.scopedProject()?.name).subscribe({
+      next: (list) => {
+        this.completedEpics.set(list ?? []);
+        this.completedCount.set(list?.length ?? 0);
+        this.completedLoading.set(false);
+      },
+      error: () => this.completedLoading.set(false),
     });
   }
 
@@ -105,6 +143,7 @@ export class EpicOverviewScreenComponent implements OnInit {
   onEpicCreated(): void {
     this.showCreate.set(false);
     this.loadEpics();
+    this.loadCompletedCount();
   }
 
   isExpanded(epicId: string): boolean {
@@ -136,6 +175,11 @@ export class EpicOverviewScreenComponent implements OnInit {
   verdictLabel(verdict: string | null | undefined): string | null {
     if (!verdict) return null;
     return verdict.replace(/-/g, ' ');
+  }
+
+  completedDate(value: string | null | undefined): string | null {
+    if (!value) return null;
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
   }
 
   openEpic(epic: EpicRollup): void {

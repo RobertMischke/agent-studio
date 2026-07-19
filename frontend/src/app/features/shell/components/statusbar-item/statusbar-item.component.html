@@ -2,7 +2,7 @@
   <button class="statusbar__item statusbar__item--btn"
           [class.statusbar__item--active]="active()"
           [attr.aria-pressed]="active()"
-          [appTooltip]="tooltip()"
+          [cacTooltip]="tooltip()"
           [attr.data-testid]="testid()"
           (click)="activated.emit($event)">
     @if (bullet(); as b) {
@@ -16,7 +16,7 @@
   </button>
 } @else {
   <span class="statusbar__item statusbar__item--ro"
-        [appTooltip]="tooltip()"
+        [cacTooltip]="tooltip()"
         [attr.data-testid]="testid()">
     @if (bullet(); as b) {
       <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing()">{{ b }}</span>

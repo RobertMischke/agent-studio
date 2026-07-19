@@ -80,10 +80,10 @@ async function installBoardMocks(page: Page): Promise<void> {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify([{ name: FIXTURE_PROJECT, path: FIXTURE_WATCH, rootPath: FIXTURE_WATCH }]) });
   });
-  await page.route('**/api/jobs', async (route) => {
+  await page.route('**/api/tasks', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(allJobs) });
   });
-  await page.route('**/api/jobs/grouped', async (route) => {
+  await page.route('**/api/tasks/grouped', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(grouped) });
   });
   await page.route('**/api/runner/status', async (route) => {

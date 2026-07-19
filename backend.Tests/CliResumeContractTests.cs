@@ -14,7 +14,7 @@ namespace AgentStudio.Tests;
 /// so the contract is provably intact before live-validation matters.
 ///
 /// <para>
-/// We test through the real <see cref="ClaudeCliService"/>,
+/// We test through the real Claude execution engine,
 /// <see cref="AgentStudio.Runner.TaskRunnerService"/>, and the
 /// real DI graph. Two probes:
 /// </para>
@@ -73,7 +73,7 @@ public class CliResumeContractTests : IClassFixture<WebApplicationFactory<Progra
             });
         });
         _ = factory.CreateClient();
-        var svc = factory.Services.GetRequiredService<ClaudeCliService>();
+        var svc = factory.Services.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude);
 
         // Isolated per-test cwd so the per-cwd ~/.claude/projects/<encoded>/
         // session DB is empty and not contended by parallel claude
@@ -149,7 +149,7 @@ public class CliResumeContractTests : IClassFixture<WebApplicationFactory<Progra
             });
         });
         _ = factory.CreateClient();
-        var svc = factory.Services.GetRequiredService<ClaudeCliService>();
+        var svc = factory.Services.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude);
 
         // A canonical-shape UUID claude has never seen.
         var deadUuid = "00000000-0000-4000-8000-000000000000";
@@ -187,7 +187,7 @@ public class CliResumeContractTests : IClassFixture<WebApplicationFactory<Progra
     }
 
     private static async Task<string?> WaitForSessionId(
-        ClaudeCliService svc, string jobKey, TimeSpan timeout)
+        GenericCliExecutionService svc, string jobKey, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow.Add(timeout);
         while (DateTime.UtcNow < deadline)

@@ -89,12 +89,12 @@ test.describe('Frontend perf baseline', () => {
     for (let i = 0; i < ITERATIONS; i++) {
       const ms = await apiRoundtrip(
         page,
-        /\/api\/jobs\/grouped(\?|$)/,
-        () => page.evaluate(() => fetch('/api/jobs/grouped').then(r => r.text()))
+        /\/api\/tasks\/grouped(\?|$)/,
+        () => page.evaluate(() => fetch('/api/tasks/grouped').then(r => r.text()))
       );
       samples.push(ms);
     }
-    record('board', '/api/jobs/grouped roundtrip', 'ms', samples);
+    record('board', '/api/tasks/grouped roundtrip', 'ms', samples);
     console.log(`board grouped roundtrip: ${statsLine(samples)}`);
   });
 

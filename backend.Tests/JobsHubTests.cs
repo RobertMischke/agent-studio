@@ -179,7 +179,7 @@ public sealed class JobsHubTests : IDisposable
 
         // CreateJob itself fires PublishCreated, so this also covers the
         // publish wiring at the real mutation site, not just the broadcaster.
-        var jobId = mutations.CreateJob(new CreateJobRequest
+        var jobId = mutations.CreateJob(new CreateTaskRequest
         {
             Id = "alpha",
             Title = "Alpha task",

@@ -4,7 +4,7 @@ import type { CliType, WatchPathEntry } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Top toolbar of the job-detail view: project picker, unified CLI+model
  * selector chip, and the live elapsed-time / start / stop controls.
@@ -14,7 +14,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
  * signals; this component only emits intent (start/stop, change project).
  *
  * Migrated 2026-05-29 to use the shared `<app-cli-model-selector>` chip
- * (see `docs/cli-model-selector-audit.md`) so the toolbar matches the
+ * (see `docs/quality/frontend/audits/cli-model-selector-audit.md`) so the toolbar matches the
  * chat composer, overview Agent row, create-task dialog, status-bar
  * default pickers, and code-review panel.
  */

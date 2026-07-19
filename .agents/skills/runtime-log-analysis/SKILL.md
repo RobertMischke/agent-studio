@@ -14,9 +14,9 @@ sentinel: TASKBOARD-SKILL-RUNTIME-LOG-ANALYSIS
 Turn the **product runtime observability** stream into a reviewable narrative
 about how the *built software* actually behaved during a run. This skill is
 the analysis side of the contract documented in
-[`docs/product-runtime-observability.md`](../../../docs/product-runtime-observability.md)
+[`docs/operations/runtime/observability.md`](../../../docs/operations/runtime/observability.md)
 and the capture layout in
-[`docs/product-runtime-log-capture.md`](../../../docs/product-runtime-log-capture.md).
+[`docs/operations/runtime/log-capture.md`](../../../docs/operations/runtime/log-capture.md).
 
 ## When to invoke
 
@@ -67,7 +67,7 @@ The skill reads, in order of preference:
    - Job-scoped: `<job>/logs/runtime/<yyyy-mm-dd>.jsonl`.
    - Project-scoped: `<workspace>/logs/runtime/<project>/<yyyy-mm-dd>.jsonl`.
    - Workspace-scoped: `<workspace>/logs/runtime/_workspace/<yyyy-mm-dd>.jsonl`.
-   - Schema: [`docs/schemas/product-runtime-event.schema.json`](../../../docs/schemas/product-runtime-event.schema.json).
+   - Schema: [`docs/system/schemas/product-runtime-event.schema.json`](../../../docs/system/schemas/product-runtime-event.schema.json).
    - Companion warnings sidecar (`<file>.jsonl.warnings.jsonl`) is a parse
      diagnostic; surface its presence in the report but do not treat
      warnings as runtime events.
@@ -90,7 +90,7 @@ findings from prose.
 ## Findings
 
 The skill produces typed findings against the canonical
-[`AnalysisReport`](../../../docs/analysis-reports.md) shape with
+[`AnalysisReport`](../../../docs/system/reports/analysis-reports.md) shape with
 `topic = "runtime-observability"`. Six finding categories are required;
 report only the ones that have evidence in the input. If a category has zero
 evidence, omit it; do not pad.
@@ -117,10 +117,10 @@ Storage matches the shared analysis-report contract.
 - **Markdown** (durable human artifact): `<workspace>/logs/analysis/<project>/<reportId>.md`.
 - **JSON sidecar** (additive app contract): `<workspace>/logs/analysis/<project>/<reportId>.json`.
 - For workspace-scoped runs, the project key is `_workspace` per
-  [`docs/analysis-reports.md` §7](../../../docs/analysis-reports.md#71-locations).
+  [`docs/system/reports/analysis-reports.md` §7](../../../docs/system/reports/analysis-reports.md#71-locations).
 
 The JSON sidecar validates against
-[`docs/schemas/analysis-report.schema.json`](../../../docs/schemas/analysis-report.schema.json)
+[`docs/system/schemas/analysis-report.schema.json`](../../../docs/system/schemas/analysis-report.schema.json)
 with these fixed fields:
 
 - `topic`: `"runtime-observability"`.

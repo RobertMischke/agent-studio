@@ -1,0 +1,27 @@
+// Deliberate prompt-coverage GUARD FIXTURE — not compiled (.cs.fixture).
+// Scanned only by PromptCoverageGuardTests to prove the guard fires on the
+// "pasted multi-line instruction block" shape it is meant to break the build on.
+// This is exactly the regression the T3b guard exists to catch: a fresh agent
+// prompt inlined into a .cs file instead of living in the runtime template registry.
+namespace AgentStudio.Fixtures;
+
+internal static class InlinePromptViolation
+{
+    // A multi-line verbatim literal whose body is agent-instruction prose.
+    public static string ReviewPrompt(string diff) =>
+        $@"You are the code-review agent for this change set.
+Your task is to read the diff below and decide whether it ships.
+
+{diff}
+
+Reply with a short paragraph plus exactly one verdict sentinel on its own line.";
+
+    // The raw-string-literal form of the same violation.
+    public static string GradePrompt(string diff) =>
+        $"""
+        You are grading the task change set on an A/B/C/D scale.
+        Return only the sentinel line, nothing else.
+
+        {diff}
+        """;
+}

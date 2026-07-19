@@ -10,7 +10,7 @@
                 [attr.data-testid]="'epic-group-collapse-' + group.id"
                 [attr.aria-expanded]="!isCollapsed(group.id)"
                 [attr.aria-controls]="'epic-group-body-' + group.id"
-                [appTooltip]="isCollapsed(group.id) ? 'Expand epic' : 'Collapse epic'"
+                [cacTooltip]="isCollapsed(group.id) ? 'Expand epic' : 'Collapse epic'"
                 [attr.aria-label]="isCollapsed(group.id) ? 'Expand epic' : 'Collapse epic'"
                 (click)="toggleCollapse(group.id)">
           <app-studio-icon name="chevronRight" [size]="14"></app-studio-icon>
@@ -20,7 +20,7 @@
         <span class="epic-board__count"
               [attr.data-testid]="'epic-group-count-' + group.id">{{ group.completed }} / {{ group.total }}</span>
         <div class="epic-board__progress"
-             [appTooltip]="progressTooltip(group)">
+             [cacTooltip]="progressTooltip(group)">
           <div class="epic-board__progress-fill"
                [attr.data-testid]="'epic-group-progress-' + group.id"
                [style.width.%]="group.progressPct"></div>
@@ -50,7 +50,7 @@
                         class="epic-board__subtask-button"
                         data-testid="epic-group-open-subtask"
                         [attr.data-sub-id]="sub.id"
-                        [appTooltip]="'Open sub-task'"
+                        [cacTooltip]="'Open sub-task'"
                         (click)="jobClick.emit(sub)">
                   <span class="epic-board__subtask-title">{{ sub.title || sub.id }}</span>
                   <span class="epic-board__subtask-meta">

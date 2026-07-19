@@ -14,7 +14,7 @@ import {
   ChangeDetectorRef,
   OnDestroy,
 } from '@angular/core';
-import { TooltipDirective } from '../tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { OverlayPortalRef, OverlayPortalService } from '../../services/overlay-portal.service';
 import {

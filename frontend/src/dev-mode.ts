@@ -70,7 +70,7 @@ export async function applyDevModeIfFlagged(): Promise<void> {
   // dev mode just drop it so the SVG above is the sole favicon source.
   document.head.querySelector('link[rel="icon"][type="image/x-icon"]')?.remove();
   setMetaThemeColor('#f59e0b');
-  document.title = 'Agent Software Studio (DEV)';
+  document.title = 'Agent Studio (DEV)';
   injectDevBanner();
 }
 
@@ -97,20 +97,7 @@ function setMetaThemeColor(color: string): void {
 // stays brand-orange on both themes; `--studio-on-accent` (= --color-grey-950)
 // gives near-black text designed for use on saturated accent fills, which
 // clears WCAG-AA against orange-500 (≈7.4:1) on either page background.
-// The left-edge stripe stays a brand gradient (accent → lane-failed) so the
-// red end of the gradient picks up the theme-aware --lane-failed token.
 const DEV_BANNER_STYLE = `
-  body::before {
-    content: "";
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 3px;
-    background: linear-gradient(180deg, var(--studio-accent), var(--lane-failed));
-    z-index: 9998;
-    pointer-events: none;
-  }
   .dev-banner {
     position: fixed;
     left: 0;

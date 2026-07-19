@@ -12,7 +12,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJobApi(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE',
     headers: { 'x-client-id': process.env.PW_CLIENT_ID?.trim() || 'local-default' }
   });
@@ -46,13 +46,14 @@ test.describe('Unified confirm + notify visuals', () => {
       // Give vite/HMR time to settle before interacting.
       await page.waitForTimeout(1500);
 
-      const card = page.locator(`[data-testid="job-card"]`, { hasText: job.id });
+      const card = page.locator('app-job-card', { hasText: job.id });
       await expect(card).toBeVisible({ timeout: 15_000 });
       await card.scrollIntoViewIfNeeded();
-      await card.hover({ force: true });
-      const trash = card.getByTestId('job-card-delete');
-      await expect(trash).toBeVisible({ timeout: 5_000 });
-      await trash.click({ force: true });
+      // AGT-2020: Delete lives in the card context menu now (no hover trash).
+      await card.locator('[data-testid="task-card"]').click({ button: 'right' });
+      const deleteItem = page.getByTestId('card-ctx-item-delete-task');
+      await expect(deleteItem).toBeVisible({ timeout: 5_000 });
+      await deleteItem.click({ force: true });
 
       const dialog = page.getByTestId('confirm-dialog-panel');
       await expect(dialog).toBeVisible({ timeout: 5_000 });

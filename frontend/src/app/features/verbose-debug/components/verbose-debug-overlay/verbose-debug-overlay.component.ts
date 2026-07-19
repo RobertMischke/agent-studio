@@ -14,25 +14,25 @@ import type { CliOutputLine, TaskInfo } from '../../../../models/task.model';
 import type { RunRecord, RunTimeline } from '../../../../features/run-timeline';
 import type { TaskScreenshot } from '../../../../features/screenshots';
 import type { TaskTokenSummary } from '../../../../features/tokens';
-import { projectConversation } from '../../../../components/chat/conversation-projection';
+import { projectConversation } from 'coding-agent-chat/core';
 import type {
   ConversationEvent,
   MessageEvent,
   RawLineRange,
   ToolFamily,
   WorkbenchDebugEvent,
-} from '../../../../components/chat/conversation-event';
+} from 'coding-agent-chat/core';
 import {
   groupIntoPhases,
   groupIntoSuperPhases,
   type ChatPhase,
   type PhaseInputMessage,
   type SuperPhase,
-} from '../../../workforce';
+} from 'coding-agent-chat/composer';
 import { formatTokens as fmtTokens } from '../../../../services/format.util';
 
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 export type VerboseDebugTab =
   | 'overview'
   | 'actors'
@@ -181,7 +181,7 @@ export class VerboseDebugOverlayComponent {
     return projectConversation({
       source: this.source(),
       lines: lines as CliOutputLine[],
-      job: this.job(),
+      task: this.job(),
       runTimeline: this.runTimeline(),
       tokenSummary: this.tokenSummary(),
       screenshots,

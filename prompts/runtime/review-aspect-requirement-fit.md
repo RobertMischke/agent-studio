@@ -49,6 +49,8 @@ the actual task goal, `pass`.
 - **Id:** `{{job_id}}`
 - **Title:** {{job_title}}
 
+{{card_mode}}
+
 ## Task body (`prompt.md`)
 
 ```
@@ -73,11 +75,24 @@ contradicted, or impossible to assess from all available evidence.
 {{recent_log}}
 ```
 
-## Diff summary
+## Diff summary (task branch vs base)
 
 ```
 {{diff_summary}}
 ```
+
+## results/ folder inventory
+
+```
+{{results_inventory}}
+```
+
+**Deliverables rule.** Treat the deliverable as missing ONLY when the diff
+summary shows no branch changes AND the results/ inventory is empty AND no
+external deliverable (e.g. a `docs/` commit) is documented. A read-only /
+concept / research card legitimately ships no code diff; its deliverable is the
+results/ artefact or doc. Do not `block` "deliverables missing" when a branch
+diff or a results/ artefact is present.
 
 ## What you must emit
 

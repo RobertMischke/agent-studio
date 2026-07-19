@@ -99,16 +99,19 @@ public sealed class WikiLearningsPostStepRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Run_WhenProjectHasNoWiki_Skips()
+    public void Run_WhenDocsEmpty_SelfProvisionsLearningsHome()
     {
-        var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "no-wiki")).FullName;
+        // Self-provisioning (AGT-2024): an enabled step no longer skips because
+        // the wiki folder is missing - it bootstraps its own docs/operations/learnings home.
+        var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "empty-docs")).FullName;
         var runner = NewRunner();
 
         var result = runner.Run(Task(), Entry(projectRoot), SimpleRun("accept"),
             new DateTime(2026, 06, 08, 10, 0, 0, DateTimeKind.Utc));
 
-        Assert.Equal(WikiLearningsVerdict.Skipped, result.Verdict);
-        Assert.False(Directory.Exists(LearningsRoot(projectRoot)));
+        Assert.Equal(WikiLearningsVerdict.Created, result.Verdict);
+        Assert.True(File.Exists(Path.Combine(LearningsRoot(projectRoot), "ass-1694.md")),
+            "learnings page was not written");
     }
 
     private static WikiLearningsRun SimpleRun(string verdict) => new(
@@ -125,12 +128,12 @@ public sealed class WikiLearningsPostStepRunnerTests : IDisposable
     private string PrepareProjectWiki()
     {
         var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "project", Guid.NewGuid().ToString("N"))).FullName;
-        Directory.CreateDirectory(Path.Combine(projectRoot, "docs", "wiki"));
+        Directory.CreateDirectory(Path.Combine(projectRoot, "docs"));
         return projectRoot;
     }
 
     private static string LearningsRoot(string projectRoot)
-        => Path.Combine(projectRoot, "docs", "wiki", "learnings");
+        => Path.Combine(projectRoot, "docs", "operations", "learnings");
 
     private static WatchPathEntry Entry(string projectRoot) => new()
     {

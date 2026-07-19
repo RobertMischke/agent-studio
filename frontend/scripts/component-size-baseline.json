@@ -7,52 +7,40 @@
   },
   "components": {
     "src/app/app.ts": {
-      "typeScript": 2403,
-      "template": 865,
-      "styles": 2132,
-      "total": 5400
-    },
-    "src/app/components/chat/chat/chat.component.ts": {
-      "typeScript": 656,
-      "template": 242,
-      "styles": 755,
-      "total": 1653
-    },
-    "src/app/components/chat/conversation-view/conversation-view.component.ts": {
-      "typeScript": 653,
-      "template": 357,
-      "styles": 629,
-      "total": 1639
+      "typeScript": 2567,
+      "template": 902,
+      "styles": 2008,
+      "total": 5477
     },
     "src/app/components/markdown-rich-editor/markdown-rich-editor.ts": {
-      "typeScript": 464,
+      "typeScript": 466,
       "template": 102,
       "styles": 184,
-      "total": 750
+      "total": 752
+    },
+    "src/app/features/board/components/create-task-dialog/create-task-dialog.component.ts": {
+      "typeScript": 451,
+      "template": 259,
+      "styles": 0,
+      "total": 710
     },
     "src/app/features/board/components/task-card/task-card.component.ts": {
-      "typeScript": 442,
-      "template": 382,
-      "styles": 1242,
-      "total": 2066
+      "typeScript": 574,
+      "template": 482,
+      "styles": 1726,
+      "total": 2782
     },
     "src/app/features/board/components/task-column/task-column.ts": {
-      "typeScript": 729,
-      "template": 221,
-      "styles": 700,
-      "total": 1650
+      "typeScript": 839,
+      "template": 243,
+      "styles": 738,
+      "total": 1820
     },
     "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
       "typeScript": 1104,
-      "template": 186,
-      "styles": 323,
-      "total": 1613
-    },
-    "src/app/features/project-chat/components/project-chat-list/project-chat-list.component.ts": {
-      "typeScript": 621,
-      "template": 197,
-      "styles": 184,
-      "total": 1002
+      "template": 190,
+      "styles": 337,
+      "total": 1631
     },
     "src/app/features/project-detail/components/project-detail/project-detail.ts": {
       "typeScript": 903,
@@ -61,10 +49,34 @@
       "total": 2135
     },
     "src/app/features/project-detail/components/project-drift-overview-section/project-drift-overview-section.ts": {
-      "typeScript": 553,
+      "typeScript": 554,
       "template": 313,
-      "styles": 313,
-      "total": 1179
+      "styles": 307,
+      "total": 1174
+    },
+    "src/app/features/project-detail/components/project-git-panel/project-git-panel.component.ts": {
+      "typeScript": 304,
+      "template": 188,
+      "styles": 415,
+      "total": 907
+    },
+    "src/app/features/project-detail/components/project-pipeline-panel/project-pipeline-panel.component.ts": {
+      "typeScript": 628,
+      "template": 313,
+      "styles": 584,
+      "total": 1525
+    },
+    "src/app/features/project-detail/components/project-steering-docs-section/project-steering-docs-section.ts": {
+      "typeScript": 490,
+      "template": 339,
+      "styles": 719,
+      "total": 1548
+    },
+    "src/app/features/project-detail/components/project-wiki-section/project-wiki-section.ts": {
+      "typeScript": 1773,
+      "template": 892,
+      "styles": 1937,
+      "total": 4602
     },
     "src/app/features/project-detail/components/project-observability/project-observability-panel.component.ts": {
       "typeScript": 508,
@@ -90,41 +102,59 @@
       "styles": 399,
       "total": 1060
     },
+    "src/app/features/studio-shell/components/explorer-workspace-tree/explorer-workspace-tree.component.ts": {
+      "typeScript": 508,
+      "template": 276,
+      "styles": 147,
+      "total": 931
+    },
     "src/app/features/studio-shell/studio-shell.component.ts": {
-      "typeScript": 1214,
-      "template": 780,
-      "styles": 2123,
-      "total": 4117
+      "typeScript": 1333,
+      "template": 838,
+      "styles": 2210,
+      "total": 4327
     },
     "src/app/features/task-detail/components/activity-log-view/activity-log-view.ts": {
-      "typeScript": 478,
-      "template": 268,
-      "styles": 690,
-      "total": 1436
+      "typeScript": 489,
+      "template": 279,
+      "styles": 703,
+      "total": 1471
+    },
+    "src/app/features/task-detail/components/detail-header/detail-header.component.ts": {
+      "typeScript": 489,
+      "template": 214,
+      "styles": 308,
+      "total": 1011
     },
     "src/app/features/task-detail/components/git-pane/git-pane/git-pane.component.ts": {
-      "typeScript": 244,
-      "template": 262,
-      "styles": 552,
-      "total": 1058
+      "typeScript": 541,
+      "template": 382,
+      "styles": 866,
+      "total": 1789
     },
     "src/app/features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.ts": {
-      "typeScript": 1629,
-      "template": 630,
-      "styles": 1268,
-      "total": 3527
+      "typeScript": 1904,
+      "template": 755,
+      "styles": 1679,
+      "total": 4336
     },
     "src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.ts": {
-      "typeScript": 1198,
-      "template": 579,
+      "typeScript": 1390,
+      "template": 612,
       "styles": 1035,
-      "total": 2812
+      "total": 3003
     },
     "src/app/features/task-detail/task-detail.ts": {
-      "typeScript": 1500,
-      "template": 206,
+      "typeScript": 1541,
+      "template": 208,
       "styles": 1284,
-      "total": 2990
+      "total": 3023
+    },
+    "src/app/features/tokens/components/workspace-token-timeline/workspace-token-timeline.ts": {
+      "typeScript": 432,
+      "template": 264,
+      "styles": 313,
+      "total": 1009
     },
     "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.ts": {
       "typeScript": 608,

@@ -6,7 +6,7 @@
 
 ## Repeated errors
 
-- `http.request.failed` x3 (System.IO.IOException, code 502, retryable=true) - all on `GET /api/jobs/x`. See evidence #1.
+- `http.request.failed` x3 (System.IO.IOException, code 502, retryable=true) - all on `GET /api/tasks/x`. See evidence #1.
 
 ## Slow operations
 

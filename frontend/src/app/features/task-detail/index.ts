@@ -12,6 +12,11 @@
  */
 export { TaskDetailComponent } from './task-detail';
 export { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-rollup-pane.component';
+// AGT-2069 — exported for the planning-visibility visual harness
+// (src/mockups/planning-visibility). The panel is otherwise rendered only from
+// the feature-internal overview pane; the barrel export keeps the mockup on the
+// public API instead of piercing the feature boundary (ADR-0034).
+export { PlanningSpawnPanelComponent } from './components/planning-spawn-panel/planning-spawn-panel.component';
 export { TaskSelectionService } from './state/task-selection.service';
 export { TriageController } from './state/triage-controller.service';
 export { LanePagerService } from './state/lane-pager.service';
@@ -19,13 +24,17 @@ export {
   overflowActionsFor,
   primaryActionFor,
   laneLabelFor,
+  mergeAcceptViewFor,
   LANE_LABELS,
+  type MergeAcceptView,
   type TriageActionPayload,
   type TriageButton,
 } from './state/triage-actions.model';
 export { HygieneStripComponent } from './components/hygiene-strip/hygiene-strip/hygiene-strip.component';
 export { ProjectHygieneBadgeComponent } from './components/hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
 export { ActivityLogViewComponent } from './components/activity-log-view/activity-log-view';
+export { ResultViewComponent } from './components/protocol-pane/result-view/result-view.component';
+export type { ProtocolVerdict } from './components/protocol-pane/protocol-verdict';
 export {
   parseActivityLog,
   buildConversationTurns,

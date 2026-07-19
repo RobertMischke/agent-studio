@@ -17,7 +17,7 @@
     @for (t of topics; track t.slug) {
       <button class="par__btn"
               [attr.data-testid]="'project-analysis-trigger-' + t.slug"
-              [appTooltip]="t.description"
+              [cacTooltip]="t.description"
               [disabled]="triggering() === t.slug"
               (click)="trigger(t.slug)">
         {{ t.label }}
@@ -52,7 +52,7 @@
                     [ngModel]="scheduleFor(t.slug)"
                     (ngModelChange)="onScheduleChange(t.slug, $event)">
               @for (c of cadences; track c.id) {
-                <option [value]="c.id" [appTooltip]="c.tooltip">{{ c.label }}</option>
+                <option [value]="c.id" [cacTooltip]="c.tooltip">{{ c.label }}</option>
               }
             </select>
           </td>
@@ -81,11 +81,11 @@
           <header>
             <span class="par__sev par__sev--{{ r.severity.toLowerCase() }}">{{ r.severity }}</span>
             <span class="par__topic">{{ r.topic }}</span>
-            <span class="par__trigger" [appTooltip]="'Trigger: ' + r.trigger">{{ triggerLabel(r.trigger) }}</span>
+            <span class="par__trigger" [cacTooltip]="'Trigger: ' + r.trigger">{{ triggerLabel(r.trigger) }}</span>
             @if (r.parseStatus !== 'Structured') {
               <span class="par__parse par__parse--bad"
                     [attr.data-testid]="'project-analysis-report-parse-' + r.parseStatus.toLowerCase()"
-                    [appTooltip]="parseTooltip(r)">
+                    [cacTooltip]="parseTooltip(r)">
                 ⚠️ {{ parseLabel(r.parseStatus) }}
               </span>
             }

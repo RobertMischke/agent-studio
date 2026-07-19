@@ -11,9 +11,13 @@
             class="create-dialog__close"
             data-testid="create-dialog-close"
             aria-label="Close"
-            [appTooltip]="'Close'"
+            [cacTooltip]="'Close'"
             (click)="cancelRequest.emit()">×</button>
     <h2 class="create-dialog__title" data-testid="create-dialog-header">{{ header() }}</h2>
+    <div class="create-dialog__legacy" data-testid="create-dialog-legacy-notice">
+      <span class="create-dialog__legacy-badge">Legacy</span><span class="create-dialog__legacy-copy">This full-field editor remains available. Please use Orchestrator Chat for the primary task-creation flow.</span><button type="button" class="create-dialog__chat-btn" data-testid="create-in-chat" (click)="openChatRequest.emit()">Create in chat</button>
+    </div>
+    <h3 class="create-dialog__section-title">Task details</h3>
     <div class="field">
       <span class="field__label">Title</span>
       <div class="create-dialog__title-row">
@@ -26,7 +30,7 @@
                 data-testid="create-generate-title"
                 [disabled]="!canGenerateTitle()"
                 (click)="generateTitle()"
-                [appTooltip]="'Generate a title from the prompt below (Haiku)'">
+                [cacTooltip]="'Generate a title from the prompt below (Haiku)'">
           @if (titleGenerating()) {
             <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
             <span>Generating…</span>
@@ -65,6 +69,7 @@
         </div>
       </div>
     </div>
+    <h3 class="create-dialog__section-title">Configuration</h3>
     <div class="create-dialog__grid">
       <div class="field">
         <span class="field__label">Type</span>
@@ -98,11 +103,10 @@
           triggerTestid="create-agent"
           pickerTestidPrefix="create-agent-picker"
           (cliTypeChange)="cliTypeChange.emit($event)"
-          (modelChange)="newModel.set($event)"
-          (thinkingLevelChange)="newThinkingLevel.set($event)" />
+          (modelChange)="newModel.set($event); modelSelectionTouched.emit()"
+          (thinkingLevelChange)="newThinkingLevel.set($event); modelSelectionTouched.emit()" />
       </div>
     </div>
-
     <div class="field">
       <span class="field__label">Kind</span>
       <div class="create-type-picker" data-testid="create-kind">
@@ -115,17 +119,15 @@
                 class="create-type-picker__btn"
                 [class.create-type-picker__btn--active]="isEpic()"
                 data-testid="create-kind-epic"
-                [appTooltip]="'An epic is a container for sub-tasks. The prompt is the overarching goal.'"
+                [cacTooltip]="'An epic is a container for sub-tasks. The prompt is the overarching goal.'"
                 (click)="setKind('epic')">Epic</button>
       </div>
     </div>
-
     <app-create-mode-picker [(mode)]="newMode" [(allowWebAccess)]="newAllowWebAccess" />
     <app-create-epic-picker
       [watchPath]="newWatchPath()"
       [show]="!isEpic()"
       [(parentEpicId)]="newEpicId" />
-
     @if (availableTags().length > 0) {
       <div class="field">
         <span class="field__label">Tags</span>
@@ -136,13 +138,13 @@
                     [class.create-tag-picker__chip--active]="newTags().includes(t.id)"
                     [attr.data-testid]="'create-tag-' + t.id"
                     [style.--tag-color]="t.color"
-                    [appTooltip]="t.description ? t.label + ': ' + t.description : t.label"
+                    [cacTooltip]="t.description ? t.label + ': ' + t.description : t.label"
                     (click)="toggleTag(t.id)">{{ t.label }}</button>
           }
         </div>
       </div>
     }
-
+    <h3 class="create-dialog__section-title">Description</h3>
     <div class="field create-dialog__prompt-field">
       <div class="create-dialog__prompt-label">
         <span class="field__label">Prompt</span>
@@ -152,7 +154,7 @@
                   data-testid="create-enhance-prompt"
                   [disabled]="!canEnhance()"
                   (click)="enhancePrompt()"
-                  [appTooltip]="'Refine the prompt, auto-generate the title, and pre-fill tags + lane (Haiku)'">
+                  [cacTooltip]="'Refine the prompt, auto-generate the title, and pre-fill tags + lane (Haiku)'">
             @if (enhancing()) {
               <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
               <span>Enhancing…</span>
@@ -165,7 +167,7 @@
                   class="create-dialog__attach-btn"
                   data-testid="create-attach-image"
                   (click)="triggerFilePicker()"
-                  [appTooltip]="'Attach image (paste or drop also works)'">📎 Image</button>
+                  [cacTooltip]="'Attach image (paste or drop also works)'">📎 Image</button>
         </div>
       </div>
       <textarea #promptArea
@@ -230,7 +232,7 @@
               <button type="button"
                       class="create-dialog__attachment-remove"
                       (click)="removeAttachment(att.id)"
-                      [appTooltip]="'Remove attachment'">×</button>
+                      [cacTooltip]="'Remove attachment'">×</button>
             </div>
           }
         </div>
@@ -239,7 +241,6 @@
         <div class="create-dialog__attachment-error" data-testid="create-attach-error">⚠ {{ attachmentError() }}</div>
       }
     </div>
-
     <div class="create-dialog__actions">
       <button class="btn" data-testid="create-cancel" (click)="cancelRequest.emit()">Cancel</button>
       <button class="btn btn--primary"

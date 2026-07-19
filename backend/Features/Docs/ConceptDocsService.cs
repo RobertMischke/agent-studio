@@ -4,7 +4,7 @@ namespace AgentStudio.Docs;
 
 /// <summary>
 /// Read-only loader for the in-product concept-docs at
-/// <c>docs/concept-docs/</c>. Each markdown file in that folder is one
+/// <c>docs/app/help/lane-guides/</c>. Each markdown file in that folder is one
 /// topic; the file basename (without extension) is its topic id and the
 /// addressing key for <c>GET /api/concept-docs/{topic}</c>.
 ///
@@ -85,7 +85,7 @@ public class ConceptDocsService
 
     /// <summary>
     /// Walks up from <c>AppContext.BaseDirectory</c> looking for
-    /// <c>docs/concept-docs/</c>. Mirrors the resolver pattern used for
+    /// <c>docs/app/help/lane-guides/</c>. Mirrors the resolver pattern used for
     /// <c>AgentRules:CorePath</c> so dev / stable / test layouts all
     /// find the same folder without configuration.
     /// </summary>
@@ -94,7 +94,7 @@ public class ConceptDocsService
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
         {
-            var candidate = Path.Combine(dir.FullName, "docs", "concept-docs");
+            var candidate = Path.Combine(dir.FullName, "docs", "app", "help", "lane-guides");
             if (Directory.Exists(candidate))
             {
                 return Path.GetFullPath(candidate) + Path.DirectorySeparatorChar;

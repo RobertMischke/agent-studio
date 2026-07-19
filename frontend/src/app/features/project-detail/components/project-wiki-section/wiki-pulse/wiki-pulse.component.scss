@@ -1,0 +1,334 @@
+@use '../../../../../../styles/mixins' as m;
+
+// The Pulse cards slot directly into the wiki dashboard's grid: the host
+// contributes no box of its own, each top-level card is a grid item.
+:host { display: contents; }
+
+.wpulse__card {
+  @include m.knowledge-card;
+}
+
+// The drift strip reads as a band across the whole dashboard grid.
+.wpulse__card--drift {
+  grid-column: 1 / -1;
+}
+
+/* ---- shared card head ---- */
+
+.wpulse__card-head {
+  @include m.knowledge-card-head;
+}
+
+.wpulse__card-icon {
+  @include m.knowledge-card-icon;
+}
+
+.wpulse__loading {
+  margin-left: auto;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.wpulse__badge {
+  margin-left: auto;
+  padding: 0 var(--studio-spacing-2);
+  border-radius: 999px;
+  background: var(--pwiki-paper-soft);
+  color: var(--pwiki-paper-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+.wpulse__badge[data-tone='warn'] {
+  background: color-mix(in srgb, var(--studio-warn) 18%, transparent);
+  color: var(--pwiki-paper-fg);
+}
+
+.wpulse__badge[data-tone='info'] {
+  background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
+  color: var(--pwiki-paper-fg);
+}
+
+.wpulse__card-action {
+  flex: 0 0 auto;
+  min-height: 22px;
+  margin-left: var(--studio-spacing-1);
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid var(--pwiki-paper-border);
+  border-radius: 5px;
+  background: var(--pwiki-paper-bg);
+  color: var(--pwiki-paper-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wpulse__card-action:hover {
+  background: var(--pwiki-paper-soft);
+  color: var(--pwiki-paper-fg);
+}
+
+/* ---- drift grade bar ---- */
+
+.wpulse__gradebar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: var(--studio-spacing-2);
+}
+
+.wpulse__seg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid var(--pwiki-paper-border);
+  border-top-width: 3px;
+  border-radius: 7px;
+  background: var(--pwiki-paper-bg);
+}
+
+.wpulse__seg-title {
+  overflow: hidden;
+  color: var(--pwiki-paper-fg);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wpulse__seg-grade {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.wpulse__seg-count {
+  color: var(--pwiki-paper-muted);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.wpulse__hint {
+  margin: 0;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.74rem;
+}
+
+/* ---- lists and rows ---- */
+
+.wpulse__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wpulse__row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--pwiki-paper-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wpulse__row:hover {
+  border-color: var(--pwiki-paper-border);
+  background: var(--pwiki-paper-soft);
+}
+
+.wpulse__row:focus-visible {
+  outline: 2px solid var(--studio-accent-4-strong);
+  outline-offset: 1px;
+}
+
+.wpulse__row-top {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  flex-wrap: wrap;
+}
+
+.wpulse__area {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 var(--studio-spacing-2);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+  color: var(--pwiki-paper-fg);
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wpulse__task {
+  padding: 0 var(--studio-spacing-2);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--studio-accent-4-strong) 14%, transparent);
+  color: var(--pwiki-paper-fg);
+  font-size: 0.64rem;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.02em;
+  line-height: 16px;
+}
+
+.wpulse__kind {
+  margin-left: auto;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.wpulse__row-title {
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wpulse__row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.7rem;
+}
+
+.wpulse__author {
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wpulse__dot-sep { opacity: 0.6; }
+
+/* ---- attention card (warnings + inbox) ---- */
+
+.wpulse__warning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--studio-warn) 8%, transparent);
+}
+
+.wpulse__signal-kind,
+.wpulse__status {
+  color: var(--pwiki-paper-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.wpulse__status { color: var(--studio-warn); }
+
+.wpulse__action {
+  color: var(--pwiki-paper-fg);
+  font-size: 0.72rem;
+}
+
+.wpulse__sub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.wpulse__sub-title {
+  margin: 0;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.wpulse__reason {
+  color: var(--pwiki-paper-muted);
+  font-size: 0.72rem;
+}
+
+.wpulse__path {
+  overflow: hidden;
+  background: transparent;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.68rem;
+  font-family: var(--font-mono, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wpulse__empty {
+  margin: 0;
+  color: var(--pwiki-paper-muted);
+  font-size: 0.76rem;
+}
+
+/* ---- activity card ---- */
+
+.wpulse__live-run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--studio-accent-3) 8%, transparent);
+}
+
+.wpulse__live-run > span {
+  color: var(--pwiki-paper-muted);
+  font-size: 0.7rem;
+}
+
+/* ---- tones (drift segments, run status) ---- */
+
+[data-tone='good'] { --wpulse-tone: var(--studio-success); }
+[data-tone='warn'] { --wpulse-tone: var(--studio-warn); }
+[data-tone='bad']  { --wpulse-tone: var(--studio-error); }
+[data-tone='info'] { --wpulse-tone: var(--studio-accent-3); }
+[data-tone='muted'] { --wpulse-tone: var(--pwiki-paper-muted); }
+
+.wpulse__seg[data-tone] {
+  border-top-color: color-mix(in srgb, var(--wpulse-tone) 70%, transparent);
+}
+
+.wpulse__seg[data-tone='muted'] {
+  border-top-color: var(--pwiki-paper-border);
+}
+
+.wpulse__seg .wpulse__seg-grade {
+  color: color-mix(in srgb, var(--wpulse-tone) 60%, var(--pwiki-paper-fg));
+}
+
+.wpulse__seg[data-tone='muted'] .wpulse__seg-grade {
+  color: var(--pwiki-paper-muted);
+}

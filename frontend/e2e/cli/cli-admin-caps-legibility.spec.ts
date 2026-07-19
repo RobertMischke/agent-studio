@@ -58,8 +58,8 @@ async function stubBackgroundApis(page: Page) {
   const json = (body: unknown) => async (route: import('@playwright/test').Route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
-  await page.route('**/api/jobs', json([]));
-  await page.route('**/api/jobs/grouped*', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
+  await page.route('**/api/tasks', json([]));
+  await page.route('**/api/tasks/grouped*', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
   await page.route('**/api/watch-paths', json([]));
   await page.route('**/api/runner/status', json({ projects: {} }));
   await page.route('**/api/runner/token-summary-aggregate*', json({
@@ -84,7 +84,9 @@ async function stubBackgroundApis(page: Page) {
 
 async function openCapsSection(page: Page) {
   await page.getByTestId('status-bar-settings').click();
-  await expect(page.getByTestId('workspace-settings-overlay')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator(
+    '[data-testid="workspace-settings-inline"], [data-testid="workspace-settings-overlay"]',
+  )).toBeVisible({ timeout: 5_000 });
   await page.getByTestId('workspace-settings-rail-caps').click();
   await expect(page.getByTestId('cli-admin-overlay')).toBeVisible();
   await expect(page.getByTestId('cli-admin-panel')).toBeVisible({ timeout: 5_000 });
@@ -124,7 +126,7 @@ test.describe('Usage-caps panel legibility', () => {
       await openCapsSection(page);
 
       const scope = '[data-testid="cli-admin-overlay"] ';
-      const samples: Array<{ what: string; selector: string; min: number }> = [
+      const samples: { what: string; selector: string; min: number }[] = [
         { what: 'panel title', selector: `${scope}.cli-admin__title`, min: 4.5 },
         { what: 'panel subtitle', selector: `${scope}.cli-admin__subtitle`, min: 4.5 },
         { what: 'section heading', selector: `${scope}.cli-admin__section-head h3`, min: 4.5 },
@@ -148,7 +150,7 @@ test.describe('Usage-caps panel legibility', () => {
       expect(failures, failures.join('\n')).toEqual([]);
 
       await page.screenshot({
-        path: join(SHOT_DIR, `cli-admin-caps-${theme}.png`),
+        path: join(SHOT_DIR, `cli-admin-caps--mocked-${theme}.png`),
         fullPage: false,
       });
     });

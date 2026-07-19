@@ -7,7 +7,7 @@ import { TaskService } from '../../../../services/task.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import { WorkspaceManagerService } from '../../../shell';
 import type { TaskInfo, WatchPathEntry } from '../../../../models/task.model';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 /**
  * Per-project settings row: a workspace (watch path) dropdown plus a Save

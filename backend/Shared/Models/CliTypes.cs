@@ -9,7 +9,6 @@ namespace AgentStudio.Shared;
 public static class AgentTypes
 {
     public const string Human   = "human";
-    public const string Copilot = "copilot";
     public const string Claude  = "claude";
     public const string Codex   = "codex";
     public const string Gemini  = "gemini";
@@ -18,33 +17,7 @@ public static class AgentTypes
         !string.Equals(agent, Human, StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>
-/// Identifiers for the supported CLI backends. The string values are persisted
-/// to <c>job.json</c> and used as URL segments — keep them stable.
-/// </summary>
-public static class CliTypes
-{
-    public const string Copilot = "copilot";
-    public const string Claude  = "claude";
-    public const string Codex   = "codex";
-    public const string Gemini  = "gemini";
-
-    /// <summary>
-    /// Sentinel for "no automated CLI resolver" (e.g. a router fallback that needs
-    /// a human). Mirrors <see cref="AgentTypes.Human"/>. Deliberately NOT part of
-    /// <see cref="All"/>/<see cref="IsValid"/> — it is a comparison sentinel, not a
-    /// selectable backend.
-    /// </summary>
-    public const string Human   = "human";
-
-    public static readonly string[] All = [Copilot, Claude, Codex, Gemini];
-
-    public static bool IsValid(string? type) =>
-        !string.IsNullOrWhiteSpace(type) && All.Contains(type, StringComparer.OrdinalIgnoreCase);
-
-    public static string Normalize(string? type) =>
-        IsValid(type) ? type!.ToLowerInvariant() : Copilot;
-}
+// CliTypes now comes from the CodingAgentRunner package (aliased in the csproj).
 
 /// <summary>
 /// How a project's CLI sessions are managed when a job starts.
@@ -72,7 +45,7 @@ public static class SessionModes
 /// <summary>One known session belonging to a CLI for a given project (cwd).</summary>
 public record CliSessionInfo
 {
-    /// <summary>CLI-native session identifier (Copilot name, Claude UUID/name, Codex UUID).</summary>
+    /// <summary>CLI-native session identifier (Claude UUID/name, Codex UUID).</summary>
     public string Id { get; init; } = "";
     /// <summary>Display label — for Codex this is the auto-derived thread name.</summary>
     public string? Label { get; init; }
@@ -80,6 +53,13 @@ public record CliSessionInfo
     public DateTime? UpdatedAt { get; init; }
     /// <summary>Working directory the session was last invoked in (when known).</summary>
     public string? Cwd { get; init; }
+    /// <summary>
+    /// On-disk size of the session's transcript in bytes. Free to compute for
+    /// file-backed stores (Claude, Gemini) where the enumeration already stats
+    /// each file; 0 when the CLI's inventory is index-only (Codex) so the row
+    /// renders "size unknown" rather than a wrong number.
+    /// </summary>
+    public long SizeBytes { get; init; }
     /// <summary>Best-effort token / cost summary (may be null).</summary>
     public SessionUsage? LastUsage { get; init; }
     /// <summary>True when this is the project's persistent reuse session.</summary>
@@ -123,6 +103,8 @@ public record CliUsageSection
     public string CliType { get; init; } = "";
     public bool Available { get; init; }
     public string? Version { get; init; }
+    /// <summary>Resolved executable path used by the backend for this CLI.</summary>
+    public string? Path { get; init; }
     public string? Error { get; init; }
     /// <summary>Sessions grouped by project (cwd or project name).</summary>
     public List<CliUsageProjectGroup> Projects { get; init; } = [];
@@ -139,4 +121,48 @@ public record CliUsageReport
 {
     public DateTime At { get; init; } = DateTime.UtcNow;
     public List<CliUsageSection> Sections { get; init; } = [];
+}
+
+/// <summary>
+/// On-demand deep read of a single CLI session, parsed lazily when the user
+/// expands a row in the CLI-session tool. Kept off the list report so building
+/// the (potentially thousands of rows) inventory never reads transcript bodies;
+/// this endpoint touches exactly one file. Fields are best-effort: a value the
+/// transcript does not record is null and the UI shows a muted placeholder.
+/// </summary>
+public record CliSessionDetail
+{
+    public string Id { get; init; } = "";
+    public string CliType { get; init; } = "";
+    /// <summary>Last coding-agent model seen in the transcript (e.g. <c>claude-opus-4-8</c>).</summary>
+    public string? Model { get; init; }
+    /// <summary>
+    /// Thinking / reasoning level when the transcript records one. Claude does
+    /// not persist an explicit level, so this is "used" when reasoning blocks are
+    /// present and null otherwise; Codex/Gemini map their own field when known.
+    /// </summary>
+    public string? ThinkingLevel { get; init; }
+    /// <summary>User + assistant turn count (bounded by the scan cap).</summary>
+    public int MessageCount { get; init; }
+    /// <summary>First user prompt, trimmed to one line, as a human anchor.</summary>
+    public string? FirstPrompt { get; init; }
+    public string? Cwd { get; init; }
+    public string? GitBranch { get; init; }
+    /// <summary>CLI version string recorded in the transcript, when present.</summary>
+    public string? CliVersion { get; init; }
+    public long SizeBytes { get; init; }
+    /// <summary>Absolute path of the transcript file on disk.</summary>
+    public string? Path { get; init; }
+    public DateTime? UpdatedAt { get; init; }
+    /// <summary>Non-null when the detail could not be read (missing file, unsupported CLI).</summary>
+    public string? Error { get; init; }
+}
+
+/// <summary>Outcome of a guarded single-session cleanup delete.</summary>
+public record CliSessionDeleteResult
+{
+    /// <summary>One of <c>Deleted</c> | <c>NotFound</c> | <c>Error</c>.</summary>
+    public string Status { get; init; } = "";
+    public string? Message { get; init; }
+    public long FreedBytes { get; init; }
 }

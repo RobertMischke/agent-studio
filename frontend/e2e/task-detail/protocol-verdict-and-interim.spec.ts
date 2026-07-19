@@ -9,10 +9,11 @@ interface JobDetail {
   statusMarkdown: string | null;
 }
 
-function buildCompletedJobDetail(jobId: string, watchPath: string, statusMarkdown: string) {
+function buildCompletedJobDetail(jobId: string, watchPath: string, statusMarkdown: string | null) {
   return {
     info: {
       id: jobId,
+      taskKey: `${watchPath}::${jobId}`,
       jobKey: `${watchPath}::${jobId}`,
       title: 'Verdict duration spec fixture',
       state: '5-human-review',
@@ -25,6 +26,7 @@ function buildCompletedJobDetail(jobId: string, watchPath: string, statusMarkdow
       sessionName: '00000000-0000-0000-0000-000000000000',
       lastUsage: null,
       execution: null,
+      orchestratorVerdict: null,
       order: 1,
     },
     promptMarkdown: 'Pretend prompt.',
@@ -42,23 +44,23 @@ async function installCompletedJobMocks(
 ): Promise<void> {
   const detailBody = JSON.stringify(buildCompletedJobDetail(target.id, target.watchPath, statusMarkdown));
 
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: detailBody });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/output?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/output?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ events: [], sessionChain: [] }),
     });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(null) });
   });
 }
@@ -90,7 +92,10 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
       `/?job=${encodeURIComponent(first.id)}&watchPath=${encodeURIComponent(first.watchPath)}`
     );
 
-    const chip = page.locator('[data-testid^="protocol-verdict-"]');
+    // The banner root carries `role="status"`; scope to it so the newer
+    // sub-element testids (protocol-verdict-detail / -duration / -superseded)
+    // do not turn this into a multi-match locator.
+    const chip = page.locator('[data-testid^="protocol-verdict-"][role="status"]');
     await expect(chip).toBeVisible({ timeout: 15_000 });
 
     // One of the three kinds must be present. The exact one depends on the
@@ -155,6 +160,78 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     });
   });
 
+  test('review activity without a verdict stays actionable from Result', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1600, height: 1100 });
+
+    const jobs = await listJobs();
+    test.skip(jobs.length === 0, 'No jobs available in workspace');
+    const target = { id: jobs[0].id, watchPath: jobs[0].watchPath };
+    const detail = buildCompletedJobDetail(target.id, target.watchPath, null);
+    detail.summaryState = {
+      status: 'none',
+      startedAt: null,
+      finishedAt: null,
+      errorMessage: null,
+    };
+
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/summary/regenerate?**`, async (route) => {
+      await route.fulfill({ status: 202, contentType: 'application/json', body: '{}' });
+    });
+    await page.route((url) => url.pathname === `/api/tasks/${encodeURIComponent(target.id)}`, async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) });
+    });
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/output?**`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            timestamp: '2026-07-12T10:00:00Z',
+            stream: 'stdout',
+            text: 'Investigated the review hand-off and left useful activity.',
+          },
+        ]),
+      });
+    });
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) });
+    });
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ events: [], sessionChain: [] }),
+      });
+    });
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(null) });
+    });
+
+    await page.goto(
+      `/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`,
+    );
+
+    const resultTab = page.getByTestId('inspector-tab-protocol');
+    await expect(resultTab).toBeVisible({ timeout: 15_000 });
+    await expect(resultTab).toBeEnabled();
+    await expect(resultTab).toHaveClass(/pane-tab--active/);
+
+    const generate = page.getByTestId('protocol-regenerate-summary');
+    await expect(generate).toBeVisible();
+    await expect(generate).toBeEnabled();
+    await expect(generate).toContainText('Generate result');
+    await testInfo.attach('verdictless-review-result', {
+      body: await page.getByTestId('pane-protocol').screenshot(),
+      contentType: 'image/png',
+    });
+
+    const request = page.waitForRequest((candidate) =>
+      candidate.method() === 'POST' && candidate.url().includes('/summary/regenerate'),
+    );
+    await generate.evaluate((element: HTMLButtonElement) => element.click());
+    await request;
+  });
+
   test('interim endpoint returns the precondition error when cli-output.log is missing', async ({ page }) => {
     const watchPaths = await api<WatchPathEntry[]>('/api/watch-paths');
     test.skip(watchPaths.length === 0, 'No watch paths configured');
@@ -173,7 +250,7 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
 
     try {
       const res = await page.request.post(
-        `${BACKEND}/api/jobs/${encodeURIComponent(created.id)}/summary/interim?watchPath=${encodeURIComponent(watchPath)}`,
+        `${BACKEND}/api/tasks/${encodeURIComponent(created.id)}/summary/interim?watchPath=${encodeURIComponent(watchPath)}`,
         { headers: { 'x-client-id': 'local-default' } }
       );
       // The endpoint surfaces precondition errors as 400 with `{ error: "..." }`.
@@ -182,7 +259,7 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
       expect(body.error).toMatch(/CLI output|cli-output\.log/i);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       ).catch(() => { /* best-effort cleanup */ });
     }

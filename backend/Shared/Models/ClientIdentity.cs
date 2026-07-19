@@ -9,7 +9,7 @@ namespace AgentStudio.Shared;
 /// Loaded on backend boot. Mutations through <c>/api/clients/*</c> are the
 /// single writer; no other service writes identity files directly.
 ///
-/// Pairs with <c>docs/schemas/client-identity.schema.json</c>.
+/// Pairs with <c>docs/app/schemas/client-identity.schema.json</c>.
 ///
 /// This is a registration boundary, not a security model: the door has a
 /// sign, every visitor signs in. Cryptographic signing is a follow-up.
@@ -44,8 +44,8 @@ public record ClientIdentity
     public string? Notes { get; init; }
 
     /// <summary>
-    /// User's preferred CLI for new tasks ("claude", "codex", "copilot",
-    /// "gemini"). The orchestrator reads this on every chat turn so a
+    /// User's preferred CLI for new tasks ("claude", "codex", "gemini").
+    /// The orchestrator reads this on every chat turn so a
     /// "create me three tasks" request lands on the user's actual default
     /// instead of the hardcoded "claude" fallback. Null until first set.
     /// </summary>
@@ -62,6 +62,21 @@ public record ClientIdentity
     /// use the selected model's default level.
     /// </summary>
     public string? DefaultThinkingLevel { get; init; }
+
+    /// <summary>Latest daemon startup proof: <c>ready</c> or <c>read-only</c>; null for legacy clients.</summary>
+    public string? RunnerGitStatus { get; init; }
+    public string? RunnerGitDetail { get; init; }
+    public DateTime? RunnerGitCheckedAt { get; init; }
+
+    /// <summary>Persisted operator lifecycle. A drain blocks claims; retire completes after active slots reach zero.</summary>
+    public DateTime? DrainRequestedAt { get; init; }
+    public DateTime? RetireRequestedAt { get; init; }
+
+    /// <summary>Latest daemon activity projection, reported on every claim poll.</summary>
+    public string? RunnerDaemonState { get; init; }
+    public DateTime? RunnerLastClaimAt { get; init; }
+    public int? RunnerActiveSlots { get; init; }
+    public int? RunnerAvailableSlots { get; init; }
 }
 
 public enum ClientIdentityKind
@@ -127,6 +142,15 @@ public record ClientSummary
     public string? DefaultCliType { get; init; }
     public string? DefaultModel { get; init; }
     public string? DefaultThinkingLevel { get; init; }
+    public string? RunnerGitStatus { get; init; }
+    public string? RunnerGitDetail { get; init; }
+    public DateTime? RunnerGitCheckedAt { get; init; }
+    public DateTime? DrainRequestedAt { get; init; }
+    public DateTime? RetireRequestedAt { get; init; }
+    public string? RunnerDaemonState { get; init; }
+    public DateTime? RunnerLastClaimAt { get; init; }
+    public int? RunnerActiveSlots { get; init; }
+    public int? RunnerAvailableSlots { get; init; }
 
     public static ClientSummary From(ClientIdentity i) => new()
     {
@@ -148,11 +172,25 @@ public record ClientSummary
         Notes = i.Notes,
         DefaultCliType = i.DefaultCliType,
         DefaultModel = i.DefaultModel,
-        DefaultThinkingLevel = i.DefaultThinkingLevel
+        DefaultThinkingLevel = i.DefaultThinkingLevel,
+        RunnerGitStatus = i.RunnerGitStatus,
+        RunnerGitDetail = i.RunnerGitDetail,
+        RunnerGitCheckedAt = i.RunnerGitCheckedAt,
+        DrainRequestedAt = i.DrainRequestedAt,
+        RetireRequestedAt = i.RetireRequestedAt,
+        RunnerDaemonState = i.RunnerDaemonState,
+        RunnerLastClaimAt = i.RunnerLastClaimAt,
+        RunnerActiveSlots = i.RunnerActiveSlots,
+        RunnerAvailableSlots = i.RunnerAvailableSlots
     };
 }
 
-/// <summary>
+public record RunnerGitCapabilityRequest
+{
+    public string Status { get; init; } = "";
+    public string? Detail { get; init; }
+    public DateTime CheckedAt { get; init; }
+}
 /// Body for <c>PUT /api/clients/{id}/defaults</c>. Each field is independent;
 /// omit a field to leave it untouched. Set a field to an empty string to
 /// clear that side.

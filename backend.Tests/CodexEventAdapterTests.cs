@@ -144,7 +144,7 @@ public class CodexEventAdapterTests
         var evt = Assert.Single(CodexEventAdapter.Map(frame, Jk).ToList());
         Assert.IsType<CliRunEvent.Heartbeat>(evt);
         Assert.IsNotType<CliRunEvent.ToolCompleted>(evt);
-        Assert.Equal(Jk, evt.TaskKey);
+        Assert.Equal(Jk, evt.RunId);
         Assert.True(RunPhaseTransitions.IsActivitySignal(evt),
             "A reasoning Heartbeat must reset the silence clock.");
     }

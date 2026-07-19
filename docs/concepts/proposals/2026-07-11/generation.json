@@ -1,0 +1,19 @@
+{
+  "generation": "2026-07-11",
+  "source": "C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard\\tasks\\002\\AGT-2073\\results\\app-survey-2026-07-11.html",
+  "severities": [
+    "critical",
+    "medium"
+  ],
+  "limits": {
+    "critical": 45,
+    "medium": 21
+  },
+  "total": 66,
+  "createdThisRun": 0,
+  "preserved": 66,
+  "counts": {
+    "medium": 21,
+    "critical": 45
+  }
+}

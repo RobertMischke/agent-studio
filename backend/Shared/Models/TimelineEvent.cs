@@ -79,6 +79,18 @@ public static class TimelineEventKinds
     public const string PromptCreated = "prompt_created";
     /// <summary>One CLI invocation started (start / continue / recovery).</summary>
     public const string AgentRunStarted = "agent_run_started";
+    /// <summary>A run switched to its configured fallback because primary quota was exhausted.</summary>
+    public const string QuotaFallbackActivated = "quota_fallback_activated";
+    /// <summary>
+    /// AGT-2055: the algorithmic pre-launch quota check made a load-steering
+    /// decision for a card before any launch was attempted - switch model,
+    /// throttle, or wait for the next reset. <see cref="TimelineEvent.Details"/>
+    /// carries the burn-rate/projection numbers so the load-distribution view
+    /// has a stable data source.
+    /// </summary>
+    public const string QuotaAdmissionDecision = "quota_admission_decision";
+    /// <summary>Sustained host CPU saturation deferred a new runner slot.</summary>
+    public const string LoadThrottleDecision = "load_throttle_decision";
     /// <summary>
     /// ADR-0052: the parallel pick-gate admitted this task into a runner slot.
     /// <see cref="TimelineEvent.Summary"/> carries the occupancy
@@ -113,6 +125,17 @@ public static class TimelineEventKinds
     public const string OrchestratorEscalated = "orchestrator_escalated";
     /// <summary>The orchestrator emitted a STEER block (see OrchestratorReplyParser).</summary>
     public const string OrchestratorSteered = "orchestrator_steered";
+    /// <summary>
+    /// Run-Liveness Slice B (concept Rule 2): an unanswered steer / NeedsInput
+    /// question hit its bounded timeout and the runner resolved it without a
+    /// human - either auto-answered from the task context (the branch-state
+    /// check) or routed to a blocked escalation. <see cref="TimelineEvent.Summary"/>
+    /// carries the decision and the answer given; <see cref="TimelineEvent.Details"/>
+    /// carries the reason code, how long it waited, and the timeout. Emitted so a
+    /// card's history shows why the wait ended instead of an invisible 5-hour hang
+    /// (belegt 2062/2067/2068, 2026-07-10).
+    /// </summary>
+    public const string SteerTimeoutResolved = "steer_timeout_resolved";
     /// <summary>
     /// The orchestrator's auto-review pass judged the run genuinely done
     /// and promoted it forward (to human review). The positive terminal of
@@ -168,6 +191,31 @@ public static class TimelineEventKinds
     /// by the run-detail panel. Emitted by the runner at run-finish.
     /// </summary>
     public const string ExecutionContext = "execution_context";
+    /// <summary>
+    /// The task-spawner post-step judged this task's change set relevant to
+    /// another project and created a follow-up card there (AGT-2028). Emitted on
+    /// the SOURCE task so its history shows the hand-off ("Spawned WEB-123 in
+    /// Website"); <see cref="TimelineEvent.Summary"/> reads the spawned key +
+    /// target project and <see cref="TimelineEvent.Details"/> carries
+    /// <c>targetProject</c> / <c>targetKey</c> / <c>targetJobId</c> / <c>reason</c>.
+    /// The spawned card gets its own <see cref="PromptCreated"/> entry and a
+    /// <c>relatedTo</c> reference back to this task. Reporting-only: the spawn
+    /// never changes the source task's lane decision.
+    /// </summary>
+    public const string TaskSpawned = "task_spawned";
+    /// <summary>
+    /// The task was completed out-of-band (operator chat, external agent, a
+    /// remote host) and reconciled through
+    /// <c>POST /api/tasks/{id}/external-completion</c> instead of a runner run.
+    /// <see cref="TimelineEvent.Summary"/> reads "Completed externally by
+    /// &lt;source&gt;"; <see cref="TimelineEvent.Details"/> carries the source and
+    /// the target lane, and <see cref="TimelineEvent.PayloadRef"/> points at
+    /// <c>results/deliverables.md</c>. This is the first-class ingest path for
+    /// externally produced results described in
+    /// <c>docs/concepts/out-of-band-task-completion.md</c> §3, so a card's
+    /// history shows the external hand-off rather than ending in a corpse.
+    /// </summary>
+    public const string ExternalCompletion = "external_completion";
 }
 
 /// <summary>
@@ -181,5 +229,12 @@ public static class TimelineActors
     public const string Orchestrator = "orchestrator";
     public const string QualityLoop = "quality-loop";
     public const string System = "system";
+    /// <summary>
+    /// Work that arrived from outside the local runner: an operator chat, an
+    /// external agent, or a remote host. Used by the out-of-band completion
+    /// ingest path (<c>external_completion</c> timeline events) so the Timeline
+    /// filter chips can tell externally produced results from runner activity.
+    /// </summary>
+    public const string External = "external";
     public static string Human(string email) => string.IsNullOrWhiteSpace(email) ? "human" : $"human:{email}";
 }

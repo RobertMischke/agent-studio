@@ -1,5 +1,5 @@
-export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
-export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
+export type CliType = 'claude' | 'codex' | 'gemini';
+export const CLI_TYPES: CliType[] = ['claude', 'codex', 'gemini'];
 
 /**
  * Single source of truth for lane / task-state keys. Mirrors backend
@@ -36,7 +36,7 @@ export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState)
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let TaskInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { TaskCommitInfo, TaskProvenanceRecord } from '../features/git';
+import type { TaskCommitInfo, TaskProvenanceRecord, TaskMergeSignal } from '../features/git';
 import type { TaskTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -78,6 +78,14 @@ export interface TaskReferences {
   supersedes: string[];
 }
 
+export interface RelatedWikiPage {
+  relPath: string;
+  title: string;
+  linkedAt: string;
+  source: 'auto' | 'manual';
+  exists?: boolean | null;
+}
+
 /** The four F34 relation kinds, in display order. */
 export type TaskReferenceKind = 'dependsOn' | 'relatedTo' | 'blockedBy' | 'supersedes';
 export const TASK_REFERENCE_KINDS: TaskReferenceKind[] = [
@@ -100,6 +108,76 @@ export interface TaskReferenceLink {
   sourceState: string;
   sourceWatchPath: string;
   kind: TaskReferenceKind | string;
+}
+
+/**
+ * AGT-2029: one resolved (or unresolved) waits-on dependency. Mirrors backend
+ * `WaitsOnItem`. Carries enough of the target task for the card chip to render
+ * its state and route to it - including targets in lanes the board snapshot
+ * omits (e.g. archived), which is why the backend resolves this server-side.
+ */
+export interface WaitsOnItem {
+  key: string;
+  resolved: boolean;
+  fulfilled: boolean;
+  targetJobId?: string | null;
+  targetTitle?: string | null;
+  targetState?: string | null;
+  targetWatchPath?: string | null;
+}
+
+/**
+ * AGT-2029: read-time waits-on status derived from `references.dependsOn`
+ * against the whole workspace (all projects, all lanes incl. archive). Mirrors
+ * backend `WaitsOnStatus`. Present only on cards that have dependsOn edges;
+ * drives the state-aware, navigable dependency chip on the board card.
+ */
+export interface WaitsOnStatus {
+  items: WaitsOnItem[];
+  /** At least one dependency is not yet fulfilled (open or unknown). */
+  blocked: boolean;
+  /** The card sits on a dependsOn cycle - a configuration error. */
+  cycleDetected: boolean;
+}
+
+/**
+ * Response body of `PUT /api/tasks/{id}/references` (AGT-2029). The write now
+ * persists even when a referenced key is unknown; those edges come back as
+ * `warnings` (the target may be created later) rather than a 400.
+ */
+export interface SetTaskReferencesResponse {
+  references: TaskReferences;
+  warnings: { code: string; kind: string; target: string; message: string }[];
+}
+
+/**
+ * AGT-2069: one follow-up card a planning task spawned (from the AGT-2028 spawn
+ * ledger). Mirrors backend `PlanningSpawnRef`. Rendered as a "spawnt: AGT-xxxx"
+ * microcard chip on the planning task's detail.
+ */
+export interface PlanningSpawnRef {
+  targetKey?: string | null;
+  targetJobId?: string | null;
+  targetProject?: string | null;
+  reason?: string | null;
+  at: string;
+}
+
+/**
+ * AGT-2069: read-time spawn-visibility + spawn-contract projection for a
+ * planning task. Mirrors backend `PlanningSpawnSummary`. Present (non-null) only
+ * on `mode === 'planning'` cards; drives the "spawnt: AGT-xxxx" chips, the
+ * "no follow-up cards" warning, and the accept-dialog guard against the
+ * AGT-1915 trap. `contractSatisfied` is true when a follow-up card exists OR
+ * the operator declared "no follow-up intended".
+ */
+export interface PlanningSpawnSummary {
+  spawned: PlanningSpawnRef[];
+  spawnedCount: number;
+  noFollowUpDeclared: boolean;
+  noFollowUpReason?: string | null;
+  declaredAt?: string | null;
+  contractSatisfied: boolean;
 }
 
 export interface TaskInfo {
@@ -127,6 +205,11 @@ export interface TaskInfo {
   model: string | null;
   thinkingLevel?: string | null;
   cliType: CliType | null;
+  quotaFallback?: {
+    cliType: string;
+    model: string | null;
+    reason: string | null;
+  } | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
    * when omitted) is an ordinary card. See backend `TaskKinds`.
@@ -217,7 +300,7 @@ export interface TaskInfo {
    * the kanban Ready group split (Human Ready vs Intake) and the per-card
    * phase chip. Null means "no explicit phase on disk"; the Ready lane
    * defaults to Human Ready in that case (compatibility contract from
-   * docs/research/expanded-lifecycle-lanes-plan-2026-05.md).
+   * docs/concepts/expanded-lifecycle-lanes-plan-2026-05.md).
    *
    * Allowed values for 2-ready: `human-ready`, `intake-running`,
    * `intake-blocked`, `intake-passed`. The 3-progress phase values
@@ -225,6 +308,16 @@ export interface TaskInfo {
    * same field but are owned by the post-processing slice.
    */
   phase?: string | null;
+  /** UTC time at which the current lifecycle phase was entered. */
+  phaseEnteredAt?: string | null;
+  /**
+   * Run-Liveness Slice B: when this 3-progress card is waiting on an unanswered
+   * steer / NeedsInput question (`phase === 'steer-pending'`), the ISO UTC time
+   * the wait started - read from the durable `steer-pending.json` marker. Null
+   * otherwise. Drives the card's "Waiting for answer since m:ss" pill so the wait
+   * is visible instead of an invisible hang.
+   */
+  steerPendingSince?: string | null;
   /**
    * Structural classification of the task. One of `bug`, `feature`, or
    * `chore` (default for legacy and technical work). Drives the small chip
@@ -245,6 +338,16 @@ export interface TaskInfo {
    * detail-view reference section and the card `waiting on KEY` badge.
    */
   references?: TaskReferences;
+  /** Wiki pages accumulated by completion post-processing. Missing targets are retained as ghosts. */
+  relatedWikiPages?: RelatedWikiPage[];
+  /**
+   * AGT-2029: read-time waits-on status derived from `references.dependsOn`
+   * against the whole workspace (all projects, all lanes incl. archive). Mirrors
+   * backend `TaskInfo.WaitsOn`. Present (non-null) only on cards that carry
+   * dependsOn edges; drives the state-aware, clickable dependency chip on the
+   * board card. Null/absent means "no dependencies".
+   */
+  waitsOn?: WaitsOnStatus | null;
   /**
    * Append-only commit-provenance record (ASS-1724). Mirrors backend
    * `TaskInfo.Provenance` and ships on every board card so the git-state pill
@@ -253,6 +356,98 @@ export interface TaskInfo {
    * guessing from the lane. Null on legacy `task.json` that predate the field.
    */
   provenance?: TaskProvenanceRecord | null;
+
+  /**
+   * AGT-2046: compact, always-on merge signal (is the work in develop / main?).
+   * Mirrors backend `TaskInfo.MergeSignal`; computed batched + cached per repo
+   * on the backend and folded onto the board payload so the card can render a
+   * two-segment `[develop|main]` indicator without a per-task graph query. Null
+   * on cards with no committed/merged anchor yet.
+   */
+  mergeSignal?: TaskMergeSignal | null;
+
+  /**
+   * PUB-1: read-time "publishable to" signal for accepted (6-completed) cards -
+   * which publish targets (npm / NuGet / website) this task's merged work
+   * touches, so the card / detail renders a "publishable: npm, website" chip.
+   * Computed batched per project on the backend by set-membership of the task's
+   * mainline anchor against each target's pending set. Null on non-accepted
+   * cards and cards whose work touches no derived publish target.
+   */
+  publishSignal?: TaskPublishSignal | null;
+
+  /**
+   * ASS-1751: read-time run-activity classification for `3-progress` cards,
+   * distinguishing a live run, a failed run waiting out the rapid-crash
+   * backoff, and an orphan killed by a backend restart. Present only on
+   * Progress-lane tasks; null/absent on every other lane. Pure visibility.
+   */
+  runActivity?: TaskRunActivity | null;
+
+  /**
+   * Set when the task was completed out-of-band (operator chat, external
+   * agent, remote host) and reconciled through
+   * `POST /api/tasks/{id}/external-completion` instead of a runner run.
+   * Mirrors backend `TaskInfo.ExternalCompletion`; null on every task that
+   * finished through the normal runner/review path. Drives the
+   * "extern erledigt" badge on the card. See
+   * docs/concepts/out-of-band-task-completion.md §3.
+   */
+  externalCompletion?: ExternalCompletionInfo | null;
+
+  /**
+   * AGT-2003: runner holding this task's active run lease, folded on by the
+   * read overlay only while the task is `3-progress` and a lease is held; null
+   * otherwise. Mirrors backend `TaskInfo.Runner`. A remote runner acquires the
+   * run lease before it spawns its CLI (a local in-process run holds none), so
+   * a non-null value with `isRemote` is the signal the board card uses to show
+   * "→ <runner>" next to the CLI badge instead of the quiet local presentation.
+   */
+  runner?: TaskRunnerInfo | null;
+
+  /**
+   * AGT-2069: read-time spawn-visibility + spawn-contract projection, present
+   * (non-null) only on planning-mode cards. Mirrors backend
+   * `TaskInfo.PlanningSpawn`. Drives the spawn chips / "no follow-up cards"
+   * warning on the planning task's detail and the accept-dialog guard against
+   * the AGT-1915 trap. Null on every coding / research / epic card.
+   */
+  planningSpawn?: PlanningSpawnSummary | null;
+}
+
+/**
+ * Card-renderable projection of the runner that holds a task's active run lease
+ * (AGT-2003). Mirrors backend `TaskRunnerInfo`. Sourced from the in-memory
+ * run-lease record; `runnerName` + `isRemote` drive the badge, the lease id /
+ * fencing token ride along for the tooltip.
+ */
+export interface TaskRunnerInfo {
+  runnerId: string;
+  /** Human-facing runner name shown on the badge (e.g. `agent-runner-01`). */
+  runnerName: string;
+  hostname: string;
+  backendName: string;
+  /** True when the lease owner is a different runner than this backend — a remote host. */
+  isRemote: boolean;
+  leaseId: string;
+  fencingToken: number;
+  /** UTC ISO instant the active lease was acquired. */
+  acquiredAt: string;
+}
+
+/**
+ * Provenance of an out-of-band task completion. Mirrors backend
+ * `ExternalCompletionInfo`; the canonical narrative lives in
+ * `results/deliverables.md` and the `external_completion` timeline event, this
+ * is the small card-renderable summary behind the "extern erledigt" badge.
+ */
+export interface ExternalCompletionInfo {
+  /** Who / which channel completed the task (operator name, agent id, "chat", ...). */
+  source: string;
+  /** One-line result summary shown in the badge tooltip; may be empty. */
+  summary?: string | null;
+  /** UTC instant the external completion was recorded (ISO 8601). */
+  completedAt: string;
 }
 
 export interface TaskOutcomeIssue {
@@ -287,6 +482,15 @@ export interface ClientSummary {
   defaultCliType?: string | null;
   defaultModel?: string | null;
   defaultThinkingLevel?: string | null;
+  runnerGitStatus?: 'ready' | 'read-only' | null;
+  runnerGitDetail?: string | null;
+  runnerGitCheckedAt?: string | null;
+  drainRequestedAt?: string | null;
+  retireRequestedAt?: string | null;
+  runnerDaemonState?: 'running' | 'read-only' | 'stopped' | null;
+  runnerLastClaimAt?: string | null;
+  runnerActiveSlots?: number | null;
+  runnerAvailableSlots?: number | null;
 }
 
 /**
@@ -422,14 +626,9 @@ export interface ContinueTaskQueuedInfo {
  */
 // (Orchestrator session + chat now in features/orchestrator/models; re-exported below)
 
-/**
- * One turn returned by the Slice D project-chat surface
- * (`/api/projects/{project}/chat/...`). Wider author + kind enums
- * than the legacy `OrchestratorChatTurn`: the new tree carries
- * embedded events (tool-call / watchdog / rate-limit / ...) as
- * first-class records alongside conventional turns.
- */
-// (Project chat turn + responses now in features/project-chat/models; re-exported below)
+// Project chat now renders through the `coding-agent-chat` Composer host in
+// features/orchestrator. The former app-local Slice D models/components were
+// retired with MC-0a.
 
 // (TokenSummaryByModel now in features/tokens/models/tokens.model.ts; re-exported below)
 
@@ -482,7 +681,7 @@ export interface TaskDetail {
    * audits, code-review passes, task checks, or human notes. Empty when
    * the file is absent. Findings are evidence for review, not blockers:
    * the lane transitions never gate on them. See
-   * `docs/filesystem-contract.md` "results/review-evidence.jsonl".
+   * `docs/system/contracts/filesystem.md` "results/review-evidence.jsonl".
    */
   reviewEvidence: ReviewEvidenceEntry[];
 }
@@ -555,10 +754,10 @@ export interface FileGenerationMeta {
 }
 
 /**
- * One `.md` file in the job root surfaced by the Files tab. The content
+ * One supported document in the job root surfaced by the Files tab. Markdown,
+ * HTML, and structured aspect JSON are listed. The content
  * itself is not embedded — the Files tab fetches it lazily through
- * `GET /api/tasks/{id}/files/{fileName}` only when the user expands the
- * card (or when it's the sole prompt and auto-expanded).
+ * `GET /api/tasks/{id}/files/{fileName}` lazily for the Files-tab surface.
  */
 export interface TaskArtifact {
   name: string;
@@ -672,7 +871,7 @@ export interface ArchivedTasksResponse {
   limit: number;
 }
 
-export interface CreateJobRequest {
+export interface CreateTaskRequest {
   id?: string;
   title: string;
   order?: number;
@@ -683,6 +882,8 @@ export interface CreateJobRequest {
   cliType?: CliType;
   model?: string;
   thinkingLevel?: string;
+  modelExplicit?: boolean;
+  thinkingLevelExplicit?: boolean;
   /** One of `bug`, `feature`, `chore`. Defaults to `chore` server-side. */
   taskType?: string;
   /** Workspace tag ids to attach on create. */
@@ -701,7 +902,7 @@ export interface CreateJobRequest {
  * Payload from GET /api/tasks/{id}/promote-to-coding: a pre-filled coding-task
  * draft derived from a finished planning task. The frontend seeds the existing
  * create-task modal with these fields and re-uploads `attachments` byte-for-byte
- * into the new task. See docs/research/planning-research-task-kinds-2026-05.md.
+ * into the new task. See docs/concepts/planning-research-task-kinds-2026-05.md.
  */
 export interface PromoteToCodingResponse {
   title: string;
@@ -738,6 +939,8 @@ export interface EpicRollup {
   completed: number;
   inProgress: number;
   open: number;
+  /** Latest lane-entry timestamp among all members once the epic is complete. */
+  completedAt?: string | null;
   byState: Record<string, number>;
   subTasks: EpicSubTaskRef[];
 }
@@ -785,12 +988,60 @@ export interface WatchPathEntry {
   rootPath: string;
 }
 
+/** Mirrors backend `ProjectUrlStartRule`: how to build/start a URL's server. */
+export interface ProjectUrlStartRule {
+  command: string;
+  cwd: string | null;
+  port: number | null;
+  /** `manual` | `package-json` | `readme`. */
+  source: string;
+}
+
+/** Snapshot of a backend-owned dev-server process for a project URL. */
+export interface ProjectUrlProcessSnapshot {
+  started: boolean;
+  projectId: string;
+  urlId: string;
+  command: string;
+  cwd: string;
+  state: 'starting' | 'running' | 'exited' | 'stopped' | 'failed';
+  processId: number | null;
+  startedAtUtc: string;
+  finishedAtUtc: string | null;
+  exitCode: number | null;
+  output: string[];
+}
+
+/** Mirrors backend `ProjectUrlRecord`: one watchable URL on a project. */
+export interface RegistryProjectUrl {
+  id: string;
+  label: string;
+  url: string;
+  sortOrder: number;
+  startRule: ProjectUrlStartRule | null;
+}
+
+/** Mirrors backend `ProjectUrlSuggestion` from `GET .../url-suggestions`. */
+export interface ProjectUrlSuggestion {
+  label: string;
+  url: string | null;
+  command: string;
+  cwd: string | null;
+  port: number | null;
+  /** `package-json` | `angular-json` | `readme`. */
+  source: string;
+}
+
+/** Compatibility name retained for existing start-only consumers. */
+export type ProjectUrlStartResponse = ProjectUrlProcessSnapshot;
+
 /**
  * F45a / ADR-0042 — flat project summary returned by `GET /api/projects`
  * and embedded under `WorkspaceListItem.projects`. Mirrors backend
  * `ProjectSummary`.
  */
 export interface RegistryProjectSummary {
+  sourceType: ProjectSourceType;
   id: string;
   displayName: string;
   shortCode: string;
@@ -800,6 +1051,12 @@ export interface RegistryProjectSummary {
   modelDefault: string | null;
   sortOrder: number;
   storageLocation: string;
+  repositoryPath: string | null;
+  rootPath: string | null;
+  /** Well-known repository URL (`urls[id=repo]`) projected for project basics editing. */
+  repositoryUrl: string | null;
+  /** Configured watchable URLs, ordered; empty for most projects. */
+  urls: RegistryProjectUrl[];
   archived: boolean;
   createdAt: string;
 }
@@ -811,7 +1068,18 @@ export interface CreateRegistryProjectRequest {
   cliDefault?: CliType;
   modelDefault?: string | null;
   color?: string | null;
+  /**
+   * Optional CLI working directory. Without this, a project has no
+   * auto-pickup runner until someone sets it later via project settings
+   * (or hand-edits the gitignored appsettings.Local.json WatchPaths entry).
+   */
+  rootPath?: string;
+  repositoryPath?: string;
+  repositoryUrl?: string;
+  executionRunner?: string;
 }
+
+export type ProjectSourceType = 'local-folder';
 
 /**
  * F45a / ADR-0042 — workspace listing entry returned by `GET /api/workspaces`.
@@ -841,10 +1109,50 @@ export interface CliExecution {
   runOutcome?: string | null;
 }
 
+/**
+ * ASS-1751: the four ways a `3-progress` card can look "untouched", as
+ * classified by the backend at read time:
+ * - `active` — a run process is alive and occupies a parallelism slot.
+ * - `failed-backoff` — the last run failed and a rapid-crash backoff is still
+ *   in effect; the task is waiting for re-pickup (carries `backoffUntil`).
+ * - `failed-idle` — the last run failed (or a fail-without-progress streak is
+ *   recorded) but no backoff is active and nothing is running.
+ * - `no-active-run` — no live run, no backoff, no recorded failure; e.g. an
+ *   orphan after a backend restart awaiting re-pickup.
+ */
+export type TaskRunActivityKind = 'active' | 'failed-backoff' | 'failed-idle' | 'no-active-run';
+
+/**
+ * Read-time visibility projection for a `3-progress` task (ASS-1751). Purely
+ * informational — it carries no behavior; the kanban card and the task-detail
+ * header render a small, quiet status pill from it. Present only on
+ * Progress-lane tasks; absent (null/undefined) on every other lane.
+ */
+export interface TaskRunActivity {
+  kind: TaskRunActivityKind;
+  /** OS process id of the live run; set only when `kind === 'active'`. */
+  processId?: number | null;
+  /** UTC ISO instant the rapid-crash backoff expires; set only when `kind === 'failed-backoff'`. */
+  backoffUntil?: string | null;
+  /** Consecutive fail-without-progress attempts recorded for this task (0 when none). */
+  attempt: number;
+  /** One-line last-error summary mirrored from the outcome issue; null when unknown. */
+  lastError?: string | null;
+}
+
 export interface CliOutputLine {
   timestamp: string;
   stream: string;
   text: string;
+  /**
+   * Set by the host conversation-projection guard
+   * (`features/task-detail/components/conversation-projection.ts`) when `text`
+   * was redacted to the `[internal event]` marker because the original line was
+   * a raw stream-json transport frame. Holds the original raw JSON so Trace /
+   * Verbose-Debug can disclose it on demand; the readable chat only ever shows
+   * the marker.
+   */
+  internalDetail?: string;
 }
 
 export interface ProjectRunnerStatus {
@@ -852,6 +1160,8 @@ export interface ProjectRunnerStatus {
   mode: string;
   activeJobId: string | null;
   activeExecution: CliExecution | null;
+  quotaFallbackModel?: string | null;
+  quotaFallbackReason?: string | null;
   queuedJobIds: string[];
   /**
    * Human-readable reason recorded the last time the runner mode changed
@@ -887,25 +1197,26 @@ export interface ProjectRunnerStatus {
    */
   role?: 'orchestrator' | 'test-subject' | string | null;
   /**
-   * Mode the operator asked for while a job was still running. Non-null only
+   * Mode the operator asked for while tasks were still running. Non-null only
    * when a `PUT /api/runner/{project}/mode` with `manual` / `paused` arrived
-   * while {@link activeJobId} was set. The runner applies the value the
-   * moment the active job clears; the lane pill renders as
-   * "MANUAL (after current)" while this is populated. See ADR-0044.
+   * while tasks were active. Auto admission closes immediately, and the runner
+   * applies the value after the request-time active set drains. See ADR-0044.
    */
   pendingMode?: string | null;
-  /** Job id the deferred mode change is waiting on. */
+  /** Job id of the sole remaining request-time task; null while several remain. */
   pendingModeWillApplyAfter?: string | null;
+  /** Remaining tasks from the active snapshot captured when the change was requested. */
+  pendingModeActiveTaskCount?: number;
+  /** Title of the sole remaining snapshot task, when exactly one remains. */
+  pendingModeActiveTaskTitle?: string | null;
 }
 
 /**
  * Response body for `PUT /api/runner/{project}/mode` (ADR-0044).
  * `applied: true` means the live mode moved immediately; `applied: false`
- * means the change is queued behind the active job, in which case
+ * means the change is queued behind the request-time active task set, in which case
  * {@link pendingMode} + {@link willApplyAfterJobId} carry the deferred
- * value. The frontend renders the lane pill as
- * "{mode} (then {pendingMode} after {willApplyAfterJobId})" while the
- * deferred change is pending.
+ * value. `willApplyAfterJobId` is populated only when one snapshot task remains.
  */
 export interface SetRunnerModeResponse {
   applied: boolean;
@@ -936,6 +1247,7 @@ export interface ProjectSnapshot {
   };
   settings: {
     autoCommit: boolean;
+    crashRecoveryEnabled: boolean;
     autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
     runnerMode: string | null;
     orchestratorModel: string | null;
@@ -947,7 +1259,101 @@ export interface ProjectSnapshot {
   orchestratorSession: OrchestratorSession | null;
   reviewDecisionsPending: { jobId: string; title: string; reason: string | null }[];
   runnerPendingDecisions: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[];
+  /** PUB-1: derived publish targets + pending deltas for the Hub publish badges. */
+  publishTargets: PublishTarget[];
   queueHealth: ProjectQueueHealth;
+}
+
+/**
+ * PUB-1 - a derived publish target for a project, rendered as a Hub badge like
+ * "NuGet 0.3.1 -> 4 tasks pending". Repo-fact-derived and read-only. A package
+ * that has never been released carries `firstPublishPending` (no version, no
+ * count); `pendingCount === 0` is a quiet state (no badge). `pendingCount` is
+ * null when no baseline could be derived from git (see `referenceKind === 'none'`).
+ */
+export interface PublishTarget {
+  /** Stable id: 'package:npm', 'package:nuget', or 'website'. */
+  id: string;
+  /** Wire value is the camelCase enum name (JsonStringEnumConverter). */
+  kind: 'package' | 'website';
+  /** 'npm' | 'nuget' for packages; null for websites. */
+  ecosystem: string | null;
+  /** Short label the badge renders: 'npm', 'NuGet', 'Website'. */
+  label: string;
+  /** Package id/name (e.g. 'coding-agent-chat'); null for websites / unknown. */
+  packageName: string | null;
+  /** Current published version (e.g. '0.3.1'); null when never released. */
+  currentVersion: string | null;
+  /** A package with a release workflow but no tag: never published. */
+  firstPublishPending: boolean;
+  /** Merged commits since the reference touching this target's scope; null = no baseline. */
+  pendingCount: number | null;
+  /** How the baseline was set: 'tag' | 'release-tag' | 'pages-branch' | 'none'. */
+  referenceKind: string;
+  /** The reference the baseline resolves to (tag name or date); null for 'none'. */
+  reference: string | null;
+}
+
+export type PublishAutomationMode = 'manual' | 'suggest' | 'auto';
+
+export interface PublishPendingTask {
+  taskId: string;
+  taskKey: string;
+  title: string;
+  taskType: 'bug' | 'feature' | 'chore';
+}
+
+export interface PublishWorkflowRun {
+  project: string;
+  targetId: string;
+  workflow: string;
+  runId: number | null;
+  status: string;
+  conclusion: string | null;
+  version: string | null;
+  url: string | null;
+  triggeredAt: string;
+  error: string | null;
+}
+
+export interface PublishActionPanel {
+  project: string;
+  target: PublishTarget;
+  automationMode: PublishAutomationMode;
+  pendingTasks: PublishPendingTask[];
+  suggestedVersion: string | null;
+  notice: string | null;
+  lastRun: PublishWorkflowRun | null;
+}
+
+/**
+ * PUB-1 - per-task publish chip signal folded onto an accepted task
+ * (`TaskInfo.publishSignal`): which publish targets the task's merged work is
+ * publishable to. Renders "publishable: npm, website" on the card / detail.
+ */
+export interface TaskPublishSignal {
+  /** Target ids the task is publishable to ('package:npm', 'website', ...). */
+  targetIds: string[];
+  /** Short labels for the chip, in target order (e.g. 'npm', 'Website'). */
+  labels: string[];
+}
+
+export interface CrashRecoveryPending {
+  id: string;
+  createdAt: string;
+  projectName: string;
+  jobId: string | null;
+  repoRoot: string;
+  files: string[];
+  message: string;
+  reason: string;
+}
+
+export interface CrashRecoveryActionResult {
+  status: 'committed' | 'dismissed' | 'failed' | 'not-found' | 'nothing-to-commit' | string;
+  pending: CrashRecoveryPending | null;
+  commitSha: string | null;
+  error: string | null;
 }
 
 export interface ProjectQueueHealthLocation {

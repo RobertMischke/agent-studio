@@ -46,7 +46,7 @@ public class ClaudeEventAdapterTests
         """;
         var events = ClaudeEventAdapter.Map(frame, Jk).ToList();
         var rl = Assert.IsType<CliRunEvent.RateLimitObserved>(Assert.Single(events));
-        Assert.Equal("five_hour", rl.Window);
+        Assert.Equal("5-hour", rl.Window);
         Assert.Equal("allowed", rl.Status);
         Assert.Equal(1777999999L, rl.ResetsAt);
         Assert.False(rl.IsUsingOverage);

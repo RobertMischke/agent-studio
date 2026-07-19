@@ -78,7 +78,7 @@ async function installRoutes(
 ) {
   await page.route('**/api/**', (route) => {
     const url = route.request().url();
-    if (url.endsWith('/api/jobs')) {
+    if (url.endsWith('/api/tasks')) {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       return;
     }
@@ -87,7 +87,7 @@ async function installRoutes(
       .catch(() => undefined);
   });
 
-  await page.route('**/api/jobs/grouped**', (route) =>
+  await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -199,7 +199,7 @@ async function seedBoardTab(page: Page) {
 
 async function readTooltipForLocator(page: Page, locator: ReturnType<Page['locator']>): Promise<string> {
   await locator.hover();
-  const root = page.getByTestId('app-tooltip').first();
+  const root = page.getByTestId('cac-tooltip').first();
   await root.waitFor({ state: 'attached', timeout: 4000 });
   return ((await root.textContent()) ?? '').trim();
 }
@@ -243,8 +243,12 @@ test.describe('Lane status cluster — shared workspace / multi-backend', () => 
     await expect(runningPill).toBeVisible({ timeout: 6000 });
     await expect(runningPill).toHaveAttribute('data-job-id', FOREIGN_JOB_ID);
     await expect(runningPill).toHaveAttribute('data-foreign', 'true');
-    await expect(runningPill).toContainText('RUNNING');
-    await expect(runningPill).toContainText('external');
+    // The running indicator is the dot ONLY — no visible label to truncate.
+    // The job id, elapsed time and foreign-backend note live in the tooltip.
+    await expect(runningPill).toHaveText('');
+    const runTip = await readTooltipForLocator(page, runningPill);
+    expect(runTip).toContain(FOREIGN_JOB_ID);
+    expect(runTip.toLowerCase()).toContain('another backend');
 
     // Mode pill stays MANUAL (this backend's truth) but the tooltip
     // acknowledges the foreign run so the operator does not read MANUAL
@@ -347,6 +351,9 @@ test.describe('Lane status cluster — shared workspace / multi-backend', () => 
     // is the signal that the local runner owns the execution.
     const hasForeignAttr = await runningPill.evaluate((el) => el.hasAttribute('data-foreign'));
     expect(hasForeignAttr).toBe(false);
-    await expect(runningPill).not.toContainText('external');
+    // Dot-only indicator: no visible label in either the local or foreign case.
+    await expect(runningPill).toHaveText('');
+    const runTip = await readTooltipForLocator(page, runningPill);
+    expect(runTip.toLowerCase()).not.toContain('another backend');
   });
 });

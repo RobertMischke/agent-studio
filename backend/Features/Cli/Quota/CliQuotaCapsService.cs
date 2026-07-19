@@ -91,6 +91,29 @@ public sealed class CliQuotaCapsService
     {
         if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.CliType))
             return CapEvaluation.NotBlocked;
+
+        // Conservative admission for unconfirmed snapshots (AGT-2064). A snapshot
+        // flagged suspicious - a downward glitch a confirmation probe has not yet
+        // agreed with, or one a live usage-limit error contradicted - is treated
+        // as over-cap regardless of how green its numbers look: we would rather
+        // hold a launch than fire onto a CLI that may really be at its limit. The
+        // hold clears the moment a re-probe produces a trusted snapshot.
+        if (snapshot.Suspicious)
+        {
+            var worstSuspect = snapshot.Windows?
+                .Where(w => w.UsedPct is not null)
+                .OrderByDescending(w => w.UsedPct)
+                .FirstOrDefault();
+            return new CapEvaluation(
+                Blocked: true,
+                CliType: snapshot.CliType,
+                WindowLabel: worstSuspect?.Label ?? "quota",
+                CapPct: worstSuspect?.Label is { } wl ? GetCap(snapshot.CliType, wl) : DefaultCapPct,
+                UsedPct: worstSuspect?.UsedPct ?? 100d,
+                Suspicious: true,
+                SuspiciousReason: snapshot.SuspiciousReason);
+        }
+
         if (snapshot.Windows == null || snapshot.Windows.Count == 0)
             return CapEvaluation.NotBlocked;
 
@@ -182,13 +205,26 @@ public sealed record CapEvaluation(
     string? CliType = null,
     string? WindowLabel = null,
     int CapPct = 0,
-    double UsedPct = 0d)
+    double UsedPct = 0d,
+    bool Suspicious = false,
+    string? SuspiciousReason = null,
+    // AGT-2055: set when the block is a forward-looking projection ("this
+    // window will cross the cap before it resets") rather than an already-
+    // breached cap. Callers use this to pre-empt the wall instead of reacting
+    // to it. <see cref="ResetAt"/> carries the offending window's reset time
+    // so a "next reset HH:mm" hint can be surfaced at the waiting slot.
+    bool Projected = false,
+    DateTime? ResetAt = null)
 {
     public static readonly CapEvaluation NotBlocked = new(false);
 
     public string DescribeReason()
     {
         if (!Blocked) return "ok";
-        return $"{CliType} {WindowLabel} at {UsedPct:0.#}% (cap {CapPct}%)";
+        if (Suspicious)
+            return $"{CliType} quota snapshot unconfirmed ({SuspiciousReason ?? "suspicious glitch"}); holding launch until a re-probe confirms";
+        return Projected
+            ? $"{CliType} {WindowLabel} projected to reach the {CapPct}% cap before reset (now {UsedPct:0.#}%)"
+            : $"{CliType} {WindowLabel} at {UsedPct:0.#}% (cap {CapPct}%)";
     }
 }

@@ -4,12 +4,8 @@ namespace AgentStudio.Review;
 /// <summary>
 /// Resolves the model and CLI the automatic quality-grade code-review step
 /// (ASS-1657) runs with. The grade pass is deliberately quality-first: it
-/// defaults to Claude Opus 4.8 even though the four cheap aspect reviews stay
-/// on Haiku (<see cref="AgentStudio.Runner.OrchestratorRunner.DefaultModel"/>).
-/// That asymmetry is the whole point — it resolves the ASS-855 (pulled the
-/// review onto Haiku for cost) vs ASS-916 (wanted it back on Opus) tension:
-/// the cheap aspect verdicts keep running on Haiku, but the operator-facing
-/// quality grade gets the strong model. Both the model and the CLI are
+/// follows the strongest model advertised by the live Codex catalogue while
+/// the four bounded aspect reviews use the economy Codex model. Both the model and the CLI are
 /// configurable (<c>CodeReviewStep:DefaultModel</c> / <c>CodeReviewStep:DefaultCli</c>)
 /// so a deployment can dial the grade model without touching the aspects.
 /// Extracted from the inline orchestrator path so the default is unit-testable.
@@ -17,15 +13,18 @@ namespace AgentStudio.Review;
 public static class CodeReviewGradeModelSelector
 {
     /// <summary>
-    /// Quality-first default model for the grade pass: Claude Opus 4.8.
-    /// Intentionally distinct from the cheap aspect default (Haiku); the
-    /// regression test pins this so a future cost cut can't silently drag the
-    /// grade pass back onto a weak model.
+    /// Quality-first default model for the grade pass. Live Codex discovery may
+    /// promote this to a newer flagship; gpt-5.5 is the safe static fallback.
     /// </summary>
-    public const string DefaultModel = ClaudeCliService.DefaultOpusModel;
+    public static string DefaultModel =>
+        ModelMetadataRegistry.DefaultForCli(CliTypes.Codex) ?? ModelIds.Gpt55;
 
     /// <summary>Default CLI for the grade pass.</summary>
-    public const string DefaultCli = "claude";
+    public const string DefaultCli = CliTypes.Codex;
+
+    /// <summary>Top reasoning level advertised for the selected flagship.</summary>
+    public static string? DefaultThinkingLevel =>
+        ModelMetadataRegistry.DefaultThinkingLevelForCli(DefaultCli, DefaultModel);
 
     /// <summary>
     /// Resolve the effective (model, cli) for the grade pass, layering the

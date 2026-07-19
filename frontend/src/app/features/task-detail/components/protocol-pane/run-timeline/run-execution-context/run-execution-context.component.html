@@ -1,0 +1,51 @@
+@if (hasExecutionContext()) {
+  <div class="run-card__row run-card__row--exec-context">
+    <span class="run-card__row-label">Execution context</span>
+    <div class="exec-context" [attr.data-testid]="'run-exec-context-' + run().index">
+      <div class="exec-context__scalars">
+        @if (run().executionContext?.model) {
+          <span class="exec-context__scalar"><small>model</small><code>{{ run().executionContext?.model }}</code></span>
+        }
+        @if (run().executionContext?.permissionMode) {
+          <span class="exec-context__scalar"><small>permission</small><code>{{ run().executionContext?.permissionMode }}</code></span>
+        }
+        @if (run().executionContext?.cwd) {
+          <span class="exec-context__scalar"><small>cwd</small><code>{{ run().executionContext?.cwd }}</code></span>
+        }
+        @if (run().executionContext?.contextMode) {
+          <span class="exec-context__scalar"
+                [attr.data-testid]="'run-exec-context-mode-' + run().index"
+                [cacTooltip]="run().executionContext?.contextMode === 'clean' ? 'Isolierter Per-Run-Home: nur Prompt + versionierte Repo-Dateien.' : 'Geteilter globaler CLI-Zustand des Operators.'"><small>context</small><code>{{ run().executionContext?.contextMode }}</code></span>
+        }
+        <span class="exec-context__origin" [cacTooltip]="executionSourceLabel(run().executionContext)">
+          {{ run().executionContext?.source }}
+        </span>
+      </div>
+      @for (group of executionGroups(); track group.kind) {
+        <div class="exec-context__group" [attr.data-kind]="group.kind">
+          <span class="exec-context__group-label">{{ group.label }}</span>
+          <ul class="exec-context__list">
+            @for (source of group.sources; track $index) {
+              <li class="exec-context__source"
+                  [class.exec-context__source--missing]="source.exists === false"
+                  [attr.data-exists]="source.exists">
+                <span class="exec-context__source-label">{{ source.label }}</span>
+                @if (source.path) {
+                  <code class="exec-context__source-path" [cacTooltip]="source.path">{{ source.path }}</code>
+                }
+                @if (source.exists === true) {
+                  <span class="exec-context__source-flag exec-context__source-flag--ok">present</span>
+                } @else if (source.exists === false) {
+                  <span class="exec-context__source-flag exec-context__source-flag--missing">absent</span>
+                }
+                @if (source.detail) {
+                  <span class="exec-context__source-detail">{{ source.detail }}</span>
+                }
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  </div>
+}

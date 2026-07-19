@@ -314,9 +314,9 @@ test.describe('Pipeline restart indicator', () => {
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
 
-    // Attempt 1, empty archive -> the restart affordances stay hidden.
-    await expect(page.getByTestId('overview-pipeline-restart-badge')).toHaveCount(0);
-    await expect(page.getByTestId('overview-pipeline-previous-runs')).toHaveCount(0);
+    // Attempt 1, empty archive -> the run band (which only appears once there
+    // is more than one attempt) stays hidden.
+    await expect(page.getByTestId('overview-pipeline-run-switcher')).toHaveCount(0);
   });
 
   test('a restarted run is flagged and the prior run stays distinguishable', async ({ page }) => {
@@ -329,23 +329,25 @@ test.describe('Pipeline restart indicator', () => {
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
 
-    // The restart badge flags the current run as a fresh attempt (#2).
-    const badge = page.getByTestId('overview-pipeline-restart-badge');
-    await expect(badge).toBeVisible();
-    await expect(badge).toHaveAttribute('data-attempt', '2');
-    await expect(badge).toContainText('Run #2');
+    // The run band appears because there is now more than one attempt.
+    const switcher = page.getByTestId('overview-pipeline-run-switcher');
+    await expect(switcher).toBeVisible();
 
-    // The prior run is preserved as a distinct, scannable entry: old vs. new
-    // step runs are distinguishable without re-reading the full step list.
-    const history = page.getByTestId('overview-pipeline-previous-runs');
-    await expect(history).toBeVisible();
-    const priorRuns = page.getByTestId('overview-pipeline-previous-run');
+    // The current run is written out as a fresh attempt (#2), flagged "Current".
+    const current = switcher.locator('[data-testid="overview-pipeline-run-option"][data-current="true"]');
+    await expect(current).toHaveAttribute('data-attempt', '2');
+    await expect(current).toContainText('#2');
+    await expect(current.getByTestId('overview-pipeline-run-current')).toContainText('Current');
+
+    // The prior run is preserved as a distinct, scannable chip (#1): old vs. new
+    // runs stay distinguishable without re-reading the full step list, and it is
+    // marked failed (the archived run recorded a failure) via its ✗ outcome glyph.
+    const priorRuns = switcher.locator('[data-testid="overview-pipeline-run-option"]:not([data-current="true"])');
     await expect(priorRuns).toHaveCount(1);
     await expect(priorRuns.first()).toHaveAttribute('data-attempt', '1');
-    await expect(priorRuns.first()).toContainText('Run #1');
-    // The archived run recorded two passes and one failure.
-    await expect(priorRuns.first()).toContainText('2✓');
-    await expect(priorRuns.first()).toContainText('1✗');
+    await expect(priorRuns.first()).toHaveAttribute('data-kind', 'fail');
+    await expect(priorRuns.first()).toContainText('#1');
+    await expect(priorRuns.first()).toContainText('✗');
 
     // The current run's own steps are the live ones (core still running).
     const coreRow = page.locator('[data-step-id="core-agent-run"]');

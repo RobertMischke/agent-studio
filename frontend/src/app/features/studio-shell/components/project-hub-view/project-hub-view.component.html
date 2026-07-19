@@ -7,20 +7,28 @@
   (closeShell)="closeShell()">
   @defer (when activeRail() === 'overview') {
     @if (activeRail() === 'overview') {
-      <app-project-detail
+      <app-project-overview-dashboard
         [projectName]="projectName()"
-        view="overview"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
+        (openRail)="setRail($event)"
+        (openTask)="openTask.emit($event)"
+        (openUrlPreview)="openUrlPreview($event)" />
     }
   }
-  @defer (when activeRail() === 'jobs') {
-    @if (activeRail() === 'jobs') {
-      <app-project-detail
+  @defer (when activeRail() === 'project-urls') {
+    @if (activeRail() === 'project-urls') {
+      <app-project-urls-panel
         [projectName]="projectName()"
-        view="jobs"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
+        (openEmbeddedPreview)="openUrlPreview($event)" />
+    }
+  }
+  @defer (when activeRail() === 'deployment') {
+    @if (activeRail() === 'deployment') {
+      <app-project-deployment-panel [projectName]="projectName()" />
+    }
+  }
+  @defer (when activeRail() === 'git') {
+    @if (activeRail() === 'git') {
+      <app-project-git-panel [projectName]="projectName()" />
     }
   }
   @defer (when activeRail() === 'security') {
@@ -30,6 +38,11 @@
         (createFollowUp)="onSecurityFollowUp($event)"
         (openEvidence)="onSecurityOpenEvidence($event)"
         (auditQueuedEvent)="onSecurityAuditQueued($event)" />
+    }
+  }
+  @defer (when activeRail() === 'proposals') {
+    @if (activeRail() === 'proposals') {
+      <app-project-proposals-panel [projectName]="projectName()" />
     }
   }
   @defer (when activeRail() === 'visual-evidence') {
@@ -48,6 +61,9 @@
         (openReport)="openReport($event)" />
     }
   }
+  @if (activeRail() === 'project-graph') {
+    <app-project-graph [projectName]="projectName()" />
+  }
   @defer (when activeRail() === 'drift') {
     @if (activeRail() === 'drift') {
       <app-project-detail
@@ -65,6 +81,11 @@
         (actionQueuedEvent)="onUxuiActionQueued($event)" />
     }
   }
+  @defer (when activeRail() === 'test-quality') {
+    @if (activeRail() === 'test-quality') {
+      <app-regression-radar scope="project" [projectName]="projectName()" />
+    }
+  }
   @defer (when activeRail() === 'token-usage') {
     @if (activeRail() === 'token-usage') {
       <app-project-token-usage-panel [projectName]="projectName()" />
@@ -79,29 +100,22 @@
         (openReport)="openReport($event)" />
     }
   }
-  @defer (when activeRail() === 'product-runtime') {
-    @if (activeRail() === 'product-runtime') {
-      <app-project-product-runtime-panel [projectName]="projectName()" />
-    }
-  }
   @defer (when activeRail() === 'steering') {
     @if (activeRail() === 'steering') {
       <app-project-steering-docs-section [projectName]="projectName()" />
-      <app-project-skill-readiness-section [projectName]="projectName()" />
     }
   }
   @defer (when activeRail() === 'wiki') {
     @if (activeRail() === 'wiki') {
-      <app-project-wiki-section [projectName]="projectName()" />
+      <app-project-wiki-section [projectName]="projectName()" (openWorkbench)="openWorkbench($event)" />
     }
   }
   @defer (when activeRail() === 'pipeline') {
     @if (activeRail() === 'pipeline') {
-      <app-project-detail
+      <app-project-pipeline-panel
         [projectName]="projectName()"
-        view="pipeline"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
+        [focusStepId]="pipelineStepId()"
+        (openPrompts)="setRail('prompts')" />
     }
   }
   @defer (when activeRail() === 'workflow') {
@@ -128,15 +142,6 @@
       <app-project-detail
         [projectName]="projectName()"
         view="orchestrator"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
-    }
-  }
-  @defer (when activeRail() === 'activity') {
-    @if (activeRail() === 'activity') {
-      <app-project-detail
-        [projectName]="projectName()"
-        view="activity"
         (openFeed)="openFeedFromDetail($event)"
         (openReport)="openReport($event)" />
     }

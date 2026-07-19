@@ -82,7 +82,7 @@ async function installRoutes(page: Page): Promise<void> {
 
   await page.route('**/api/**', json([]));
   await page.route(/\/api\/(?:jobs|tasks)(\?.*)?$/, json([taskInfo()]));
-  await page.route('**/api/jobs/grouped**', json(grouped()));
+  await page.route('**/api/tasks/grouped**', json(grouped()));
   await page.route('**/api/tasks/grouped**', json(grouped()));
   await page.route('**/api/watch-paths**', json([
     { name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH, repositoryPath: WATCH_PATH },
@@ -160,12 +160,12 @@ async function expectTooltip(
 
   const start = Date.now();
   await target.hover();
-  const tip = page.getByTestId('app-tooltip');
+  const tip = page.getByTestId('cac-tooltip');
   await expect(tip).toBeVisible({ timeout: 250 });
   expect(Date.now() - start).toBeLessThan(500);
   await expect(tip).toContainText(expectedText);
-  await expect(page.locator('[data-testid="app-tooltip"]')).toHaveCount(1);
-  await expect(page.locator('.app-tooltip')).toHaveCount(1);
+  await expect(page.locator('[data-testid="cac-tooltip"]')).toHaveCount(1);
+  await expect(page.locator('.cac-tooltip')).toHaveCount(1);
 
   const shot = await page.screenshot({ fullPage: false });
   await testInfo.attach(`${screenshotName}.png`, { body: shot, contentType: 'image/png' });
@@ -183,12 +183,14 @@ async function expectTooltip(
 test('canonical tooltip layer is lazy, instant, singleton, and visually shared across surfaces', async ({ page }, testInfo) => {
   await openBoard(page);
 
-  await expect(page.getByTestId('app-tooltip')).toHaveCount(0);
+  await expect(page.getByTestId('cac-tooltip')).toHaveCount(0);
 
+  // AGT-2035 removed the compact-cards toggle; the Lanes/Epics toggle is the
+  // representative board tab-bar control that carries the shared tooltip.
   await expectTooltip(
     page,
-    page.getByTestId('studio-board-compact-toggle'),
-    /Show compact cards|Show full cards/i,
+    page.getByTestId('studio-board-epic-toggle'),
+    /Group tasks by epic|Show lane columns/i,
     'tooltip-standard-board-control',
     testInfo,
   );

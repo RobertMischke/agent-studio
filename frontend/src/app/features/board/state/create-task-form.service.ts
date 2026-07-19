@@ -38,7 +38,7 @@ export class CreateTaskFormService {
   // previous template ergonomics.
   newTitle = '';
   newWatchPath = '';
-  newAgent: CliType = 'copilot';
+  newAgent: CliType = 'claude';
   newPrompt = '';
   newTargetState: string = TaskState.Preparation;
   newTaskType = 'chore';
@@ -54,6 +54,7 @@ export class CreateTaskFormService {
   newCliType: CliType = readDefaultCliPref();
   newModel: string = readDefaultModelPref(readDefaultCliPref());
   newThinkingLevel: string | null = readDefaultThinkingLevelPref(readDefaultCliPref());
+  modelSelectionExplicit = false;
   newAttachments: PendingAttachment[] = [];
 
   /** Allowed manual-create lanes (everything before 3-progress). */
@@ -160,7 +161,7 @@ export class CreateTaskFormService {
    * title, prompt body, same project, mode=coding — and surface the images as
    * already-attached chips. On Save the existing attachment-upload pipeline
    * copies them byte-for-byte into the new task. See
-   * docs/research/planning-research-task-kinds-2026-05.md.
+   * docs/concepts/planning-research-task-kinds-2026-05.md.
    */
   openPromotePlanning(payload: PromoteToCodingResponse, attachments: PendingAttachment[]): void {
     this.newTitle = payload.title;
@@ -188,6 +189,10 @@ export class CreateTaskFormService {
     this.loadCreateModels(t);
   }
 
+  markModelSelectionExplicit(): void {
+    this.modelSelectionExplicit = true;
+  }
+
   /** Mirrors a global "default model for CLI X" change into the form when relevant. */
   onDefaultModelChange(ev: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
     if (ev.cliType === this.newCliType) {
@@ -210,7 +215,7 @@ export class CreateTaskFormService {
     this.visible.set(false);
     this.newTitle = '';
     this.newPrompt = '';
-    this.newAgent = 'copilot';
+    this.newAgent = 'claude';
     this.newTaskType = 'chore';
     this.newTags = [];
     this.newTargetState = TaskState.Preparation;
@@ -221,6 +226,7 @@ export class CreateTaskFormService {
     this.newCliType = readDefaultCliPref();
     this.newModel = readDefaultModelPref(this.newCliType);
     this.newThinkingLevel = readDefaultThinkingLevelPref(this.newCliType);
+    this.modelSelectionExplicit = false;
     this.availableModels.set([]);
     for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
     this.newAttachments = [];
@@ -251,6 +257,8 @@ export class CreateTaskFormService {
       cliType: this.newCliType,
       model: this.newModel.trim() || undefined,
       thinkingLevel: this.newThinkingLevel || undefined,
+      modelExplicit: this.modelSelectionExplicit,
+      thinkingLevelExplicit: this.modelSelectionExplicit,
       taskType: this.newTaskType,
       tags: this.newTags.length > 0 ? [...this.newTags] : undefined,
       kind: this.newKind,

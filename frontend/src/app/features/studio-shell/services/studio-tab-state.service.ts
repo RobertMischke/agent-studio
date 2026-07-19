@@ -65,11 +65,25 @@ export class StudioTabStateService {
     return ALL_BOARD_KEY;
   }
 
-  /** Open the tab if it's not already there, then focus it. */
+  /**
+   * Open the tab if it's not already there, then focus it. When a tab with
+   * the same key is already open, adopt the fresh payload in place rather
+   * than keeping the stale one — the tab key intentionally omits some fields
+   * (a Hub tab keys on project only, not its {@link HubTab.section}), so an
+   * `open()` that carries a new section must be able to move the open tab to
+   * it. Without this, re-opening the Hub on a different section (Project vs.
+   * Wiki) would silently drop the section and "do nothing".
+   */
   open(tab: StudioTab): void {
     const normalized = this.normalizeTab(tab);
     const key = studioTabKey(normalized);
-    this._tabs.update(list => list.some(t => studioTabKey(t) === key) ? list : [...list, normalized]);
+    this._tabs.update(list => {
+      const idx = list.findIndex(t => studioTabKey(t) === key);
+      if (idx < 0) return [...list, normalized];
+      const next = list.slice();
+      next[idx] = normalized;
+      return next;
+    });
     this._activeKey.set(key);
     this.persist();
   }
@@ -208,15 +222,45 @@ export class StudioTabStateService {
     const before = this._tabs();
     const after = before.filter(t => {
       if (t.kind === 'board' && t.projectName !== ALL_PROJECTS) return validNames.has(t.projectName);
-      if (t.kind === 'backlog' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'epics' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
+      if (t.kind === 'workbench') return validNames.has(t.projectName);
+      if (t.kind === 'url-preview') return validNames.has(t.projectName);
       return true;
     });
     if (after.length === before.length) return;
     this._tabs.set(after);
     if (!after.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(after.length ? studioTabKey(after[after.length - 1]) : null);
+    }
+    this.persist();
+  }
+
+  /** Retarget every project-keyed tab after a registry display-name change. */
+  renameProject(previousName: string, currentName: string): void {
+    if (!previousName || !currentName || previousName === currentName) return;
+    const active = this.activeTab();
+    const rename = (tab: StudioTab): StudioTab => {
+      switch (tab.kind) {
+        case 'board':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'epics':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'hub':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'url-preview':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        default:
+          return tab;
+      }
+    };
+    const next = this.dedupe(this._tabs().map(rename));
+    this._tabs.set(next);
+    if (active) {
+      const renamedActiveKey = studioTabKey(rename(active));
+      this._activeKey.set(next.some((tab) => studioTabKey(tab) === renamedActiveKey)
+        ? renamedActiveKey
+        : (next.length ? studioTabKey(next[next.length - 1]) : null));
     }
     this.persist();
   }
@@ -237,9 +281,9 @@ export class StudioTabStateService {
       const parsed = JSON.parse(raw) as PersistedState;
       if (!parsed || parsed.v !== STORAGE_VERSION) return false;
       if (!Array.isArray(parsed.tabs)) return false;
-      // Drop any tab entries that don't round-trip through studioTabKey;
-      // a future StudioTabKind variant the running build doesn't recognise
-      // would otherwise live as a ghost row in the tab bar.
+      // Drop retired and future tab kinds that don't round-trip through
+      // studioTabKey. This is also the migration for persisted Backlog Triage
+      // tabs from builds that still exposed that feature.
       const safeTabs = parsed.tabs.filter(t => {
         try { return typeof studioTabKey(t) === 'string'; }
         catch { return false; }
@@ -278,8 +322,6 @@ export class StudioTabStateService {
     switch (tab.kind) {
       case 'board':
         return { kind: 'board', projectName: tab.projectName };
-      case 'backlog':
-        return { kind: 'backlog', projectName: tab.projectName };
       case 'epics':
         return { kind: 'epics', projectName: tab.projectName };
       case 'epic':
@@ -291,11 +333,22 @@ export class StudioTabStateService {
       case 'task':
         return { kind: 'task', taskKey: tab.taskKey };
       case 'hub':
-        return { kind: 'hub', projectName: tab.projectName, section: tab.section };
+        return {
+          kind: 'hub',
+          projectName: tab.projectName,
+          section: tab.section,
+          ...(tab.pipelineStepId ? { pipelineStepId: tab.pipelineStepId } : {}),
+        };
+      case 'workbench':
+        return { kind: 'workbench', projectName: tab.projectName, workbenchId: tab.workbenchId, title: tab.title };
       case 'diff':
         return { kind: 'diff', commitSha: tab.commitSha };
       case 'activity':
         return { kind: 'activity', taskKey: tab.taskKey };
+      case 'url-preview':
+        return { kind: 'url-preview', projectName: tab.projectName, urlId: tab.urlId };
+      case 'workspace-settings':
+        return { kind: 'workspace-settings' };
       case 'welcome':
         return { kind: 'welcome' };
     }

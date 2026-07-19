@@ -23,7 +23,7 @@
              placeholder="What is this epic about?" />
     </label>
     <label class="ecd__field">
-      <span class="ecd__label">Description <span class="ecd__optional">(optional)</span></span>
+      <span class="ecd__label">Goal description</span>
       <textarea class="ecd__input ecd__input--area"
                 data-testid="epic-create-description"
                 rows="4"
@@ -31,13 +31,14 @@
                 [ngModel]="draftDescription()"
                 (ngModelChange)="draftDescription.set($event)"
                 [disabled]="submitting()"
-                placeholder="Outline the goal so the decomposition run has context."></textarea>
+                required
+                placeholder="Outline the goal so the decomposition run can create concrete sub-tasks."></textarea>
     </label>
     @if (errorMsg(); as msg) {
       <p class="ecd__hint ecd__hint--error" data-testid="epic-create-error">{{ msg }}</p>
     } @else {
       <p class="ecd__hint">
-        Creates a <code>kind=epic</code> card. Sub-tasks attach to it once the epic is decomposed.
+        A goal is required to prevent unexplained empty epics. Sub-tasks attach once the epic is decomposed.
       </p>
     }
   </div>

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -20,6 +21,59 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class ReviewDecisionOrchestratorTests : IDisposable
 {
+    [Fact]
+    public void RecentLogTruncation_PreservesTerminalAndDropsEarlyFailure()
+    {
+        var log = "Build FAILED.\n" + new string('x', 7_000) +
+                  "\n67/67 tests passed.\n[[TASK_DONE]]\n[taskboard] CLI exited: status=completed, exitCode=0";
+
+        var recent = ReviewDecisionOrchestrator.TruncateTail(log, 6_000);
+
+        Assert.DoesNotContain("Build FAILED", recent);
+        Assert.Contains("67/67 tests passed", recent);
+        Assert.Contains("[[TASK_DONE]]", recent);
+        Assert.Contains("exitCode=0", recent);
+    }
+
+    [Fact]
+    public void ReviewBasis_SelectsLastSuccessfulRun_NotLaterLaunchFailure()
+    {
+        var runs = new[]
+        {
+            new RunRecord
+            {
+                Index = 1, Status = "completed", HeadShaBefore = "base", HeadShaAfter = "success",
+            },
+            new RunRecord
+            {
+                Index = 2, Status = "failed", HeadShaBefore = "success", HeadShaAfter = "success",
+            },
+        };
+
+        var selected = ReviewDecisionOrchestrator.SelectAuthoritativeReviewRuns(runs);
+
+        var run = Assert.Single(selected);
+        Assert.Equal(1, run.Index);
+        Assert.Equal("success", run.HeadShaAfter);
+    }
+
+    [Fact]
+    public void LaunchFailure_AfterGradedSuccess_PreservesHumanReviewBasis()
+    {
+        var runs = new[]
+        {
+            new RunRecord { Index = 1, Status = "completed" },
+            new RunRecord { Index = 2, Status = "failed" },
+        };
+
+        Assert.True(ProjectRunner.HasSuccessfulGradedRun(
+            new[] { "code-review:grade-a" }, runs));
+        Assert.False(ProjectRunner.HasSuccessfulGradedRun(
+            Array.Empty<string>(), runs));
+        Assert.False(ProjectRunner.HasSuccessfulGradedRun(
+            new[] { "code-review:grade-a" }, new[] { new RunRecord { Status = "failed" } }));
+    }
+
     private readonly string _workspace;
     private readonly string _watchPath;
     private readonly TimelineLog _timeline = new(NullLogger<TimelineLog>.Instance);
@@ -116,7 +170,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         SeedReviewJobWithNeedsInput("auth-rewrite", "use OAuth or magic-link?");
         var orchestrator = BuildOrchestrator(
-            cliResponse: "[[ORCHESTRATOR_DECISION: action=escalate; reason=Needs strategic call.]]");
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=escalate; reason=Needs strategic call.]]",
+            reviewCli: "custom-review-cli");
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
@@ -139,6 +194,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.Escalated, "auth-rewrite");
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.NeedsHumanInput &&
+            o.Performer == PostProcessingPerformers.SupportingAgent &&
+            o.PerformerCliType == "custom-review-cli");
     }
 
     [Fact]
@@ -264,6 +325,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
+
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "doc-edit");
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.PassToHumanReview &&
+            o.Performer == PostProcessingPerformers.SupportingAgent &&
+            o.PerformerCliType == CliTypes.Codex);
     }
 
     [Fact]
@@ -962,6 +1029,102 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public void BuildBranchDiffSummary_SteerFollowupEmptyWorkingDiff_ShowsBranchCommits()
+    {
+        // AGT-2022 test 3: a steer follow-up run leaves an empty working diff, but
+        // the task branch still carries its commits vs the base branch. The aspect
+        // reviewers must see that branch range so they never false-BLOCK the task
+        // as "deliverables missing".
+        var commits = new List<GitCommitInfo>
+        {
+            new("sha2222222", "sha2", DateTime.UtcNow, "dev", "feat: wire the endpoint", 3, 40, 5),
+            new("sha1111111", "sha1", DateTime.UtcNow.AddMinutes(-10), "dev", "feat: add the service", 2, 120, 0),
+        };
+
+        var summary = ReviewDecisionOrchestrator.BuildBranchDiffSummary("develop", "task/AGT-2022", commits);
+
+        Assert.Contains("task/AGT-2022", summary);
+        Assert.Contains("develop", summary);
+        Assert.Contains("2 commit(s) ahead", summary);
+        Assert.Contains("Total files changed: 5", summary);
+        Assert.Contains("+160/-5", summary);
+        Assert.Contains("feat: wire the endpoint", summary);
+        Assert.Contains("feat: add the service", summary);
+        Assert.Contains("Do NOT treat an empty working diff as missing work", summary);
+    }
+
+    [Fact]
+    public void SelectGradeDiff_EmptyWorkingDiff_FallsBackToBranchRange_AndLabelsIt()
+    {
+        // AGT-2022 fallback selection: post-squash/merge or steer follow-up leaves
+        // the run-window working diff empty. The grade must fall back to the
+        // task-branch-vs-base range so it never mis-grades a real, landed change as
+        // an empty diff, and the label must name the fallback source.
+        var branchSummary = "Task branch `task/AGT-2022` vs base `main`: 2 commit(s) ahead.";
+        var (diff, label) = ReviewDecisionOrchestrator.SelectGradeDiff(
+            workingDiff: "   ", scopeLabel: "abc1234", branchDiffFactory: () => branchSummary);
+
+        Assert.Equal(branchSummary, diff);
+        Assert.Equal("abc1234 (branch range vs base)", label);
+    }
+
+    [Fact]
+    public void SelectGradeDiff_NonEmptyWorkingDiff_WinsAndNeverConsultsBranchRange()
+    {
+        // The guard that keeps a normal run cheap and correct: a non-empty working
+        // diff is graded on exactly what the run changed, and the git-backed branch
+        // range is never resolved (the factory must not be called).
+        var (diff, label) = ReviewDecisionOrchestrator.SelectGradeDiff(
+            workingDiff: "diff --git a/x b/x\n+real change",
+            scopeLabel: "HEAD",
+            branchDiffFactory: () => throw new InvalidOperationException("branch range must not be resolved for a non-empty working diff"));
+
+        Assert.Contains("+real change", diff);
+        Assert.Equal("HEAD", label);
+    }
+
+    [Fact]
+    public void SelectGradeDiff_EmptyWorkingDiff_NoBranchRange_StaysEmpty()
+    {
+        // Genuinely empty deliverable: the working diff is blank AND no branch
+        // range exists (git unwired / no task branch / empty range). The diff
+        // selection stays empty and keeps the original scope label - the results/
+        // inventory and card-mode framing carry the read-only case in the prompt,
+        // not this fallback.
+        var (diff, label) = ReviewDecisionOrchestrator.SelectGradeDiff(
+            workingDiff: "", scopeLabel: "HEAD", branchDiffFactory: () => null);
+
+        Assert.Equal("", diff);
+        Assert.Equal("HEAD", label);
+    }
+
+    [Fact]
+    public void ComposeAspectDiffSummary_AppendsBranchRange_WhenPresent()
+    {
+        // The aspect diff summary always carries the branch range appended to the
+        // run-window summary so an empty run-window view still shows the real
+        // change set (AGT-2022).
+        var composed = ReviewDecisionOrchestrator.ComposeAspectDiffSummary(
+            baseSummary: "No commits attributed to this task.",
+            branchSummary: "Task branch `task/AGT-2022` vs base `main`: 2 commit(s) ahead.");
+
+        Assert.Contains("No commits attributed to this task.", composed);
+        Assert.Contains("Task branch `task/AGT-2022` vs base `main`", composed);
+        // The two evidence blocks are kept as separate paragraphs.
+        Assert.Contains("task.\n\nTask branch", composed);
+    }
+
+    [Fact]
+    public void ComposeAspectDiffSummary_NoBranchRange_ReturnsBaseUnchanged()
+    {
+        // Sequential runs never create a task branch, and an empty range yields
+        // no summary: the base run-window summary passes through untouched.
+        const string baseSummary = "Commits attributed to this task: 1\nTotal files changed: 3";
+        Assert.Equal(baseSummary, ReviewDecisionOrchestrator.ComposeAspectDiffSummary(baseSummary, null));
+        Assert.Equal(baseSummary, ReviewDecisionOrchestrator.ComposeAspectDiffSummary(baseSummary, "   "));
+    }
+
+    [Fact]
     public void BuildDiffSummary_AggregateEmptyButLegacyCommitPresent_FallsBackToLegacyView()
     {
         // Defensive fallback path: the aggregator could not be wired
@@ -1128,8 +1291,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Contains(outcomes, o => o.Outcome == PostProcessingOutcomes.PassToHumanReview);
         Assert.Contains(outcomes, o =>
             o.StepId == PipelineCatalogue.OrchestratorDecisionStepId &&
-            o.Performer == PostProcessingPerformers.SupportingAgent &&
-            o.PerformerCliType == CliTypes.Claude);
+            o.Performer == PostProcessingPerformers.Orchestrator &&
+            o.PerformerCliType == null);
 
         // Decision-journal records the accept-as-done with a multi-aspect reason.
         var record = ReadOnlyDecisionRecord();
@@ -1169,22 +1332,22 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task TaskDone_PostProcessingEvidence_ShowsDifferentSupportingCliIdentity()
+    public async Task TaskDone_PostProcessingEvidence_AttributesDeterministicDecisionWithoutInventedCli()
     {
-        SeedReviewJobWithDone("codex-main-claude-post", agent: CliTypes.Codex);
+        SeedReviewJobWithDone("codex-main-deterministic-post", agent: CliTypes.Codex);
         var orchestrator = BuildOrchestratorWithAspects(
             aspectStub: _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var taskJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "codex-main-claude-post", "task.json"));
+        var taskJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "codex-main-deterministic-post", "task.json"));
         Assert.Contains("\"agent\": \"codex\"", taskJson);
 
-        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "codex-main-claude-post");
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "codex-main-deterministic-post");
         Assert.Contains(outcomes, o =>
             o.Outcome == PostProcessingOutcomes.PassToHumanReview &&
-            o.Performer == PostProcessingPerformers.SupportingAgent &&
-            o.PerformerCliType == CliTypes.Claude);
+            o.Performer == PostProcessingPerformers.Orchestrator &&
+            o.PerformerCliType == null);
     }
 
     [Fact]
@@ -1391,6 +1554,59 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
         Assert.Contains("Multi-aspect block", record.Reason);
+
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.Ready, "blocked-job");
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.NeedsFollowUpTask &&
+            o.Performer == PostProcessingPerformers.Orchestrator &&
+            o.PerformerCliType == null);
+    }
+
+    [Fact]
+    public async Task TaskDone_AspectVerdictInfraCrash_EscalatesEnvironmental_WithoutBudgetBurn()
+    {
+        // AGT-2021: the reviewing CLI dies on both the run and the single
+        // environmental retry, so no aspect produces a verdict. This is an
+        // INFRASTRUCTURE crash, not the card's unfinished work. The card must be
+        // escalated flagged environmental (InfraCrash), NEVER reissued or accepted,
+        // and the escalation must NOT burn the reissue budget (an Escalate record,
+        // never a Reissue).
+        SeedReviewJobWithDone("infra-crash-job");
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: _ => string.Empty);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Lane: moved to 5e-escalated, never accepted (5-human-review) or
+        // reissued (2-ready).
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "infra-crash-job")));
+
+        // Decision journal: exactly one record, an Escalate (chain-ending, so no
+        // budget is charged) - and crucially NOT a Reissue.
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        var record = Assert.Single(records);
+        Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+        Assert.DoesNotContain(records, r => r.Kind == ReviewDecisionKind.Reissue);
+        Assert.StartsWith(ReviewDecisionOrchestrator.AspectInfraCrashReasonPrefix, record.Reason);
+        // No reissue in the chain -> the card's reissue budget is untouched.
+        Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, "infra-crash-job"));
+
+        // Outcome evidence is a post-processing failure (infra), not a work
+        // deficit reissue.
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.Escalated, "infra-crash-job");
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.FailedPostProcessing &&
+            o.Performer == PostProcessingPerformers.Orchestrator &&
+            o.PerformerCliType == null);
+
+        // Timeline carries the environmental + InfraCrash flags.
+        var events = ReadTimeline(TaskStates.Escalated, "infra-crash-job");
+        var escalate = Assert.Single(
+            events.Where(e => e.Kind == TimelineEventKinds.OrchestratorEscalated).ToList());
+        Assert.Equal("true", escalate.Details?["environmental"]);
+        Assert.Equal("InfraCrash", escalate.Details?["issueKind"]);
     }
 
     [Fact]
@@ -1722,6 +1938,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
         aspectRunner.CliRunner = (aspectId, _, _, _, _, _) => Task.FromResult(aspectStub(aspectId));
+        // No real wall-clock wait on the AGT-2021 environmental retry path.
+        aspectRunner.VerdictRetryBackoff = _ => TimeSpan.Zero;
         var taskAccess = BuildTaskAccess(scanner, stateMachine, config);
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot ?? new AutoReviewStatusSnapshot(), config,
@@ -1882,7 +2100,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     private ReviewDecisionOrchestrator BuildOrchestrator(
         string cliResponse,
         Action? onCall = null,
-        OrchestratorChatLog? chatLogOverride = null)
+        OrchestratorChatLog? chatLogOverride = null,
+        string? reviewCli = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -1892,7 +2111,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
                 ["WatchPaths:0:Path"] = _watchPath,
                 ["WatchPaths:0:RootPath"] = _watchPath,
                 ["ReviewDecisionOrchestrator:Enabled"] = "true",
-                ["ReviewDecisionOrchestrator:CallsPerHour"] = "100"
+                ["ReviewDecisionOrchestrator:CallsPerHour"] = "100",
+                ["ReviewDecisionOrchestrator:Cli"] = reviewCli ?? CliTypes.Codex,
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
@@ -1913,6 +2133,138 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             return Task.FromResult(cliResponse);
         };
         return orchestrator;
+    }
+
+    // --- branch-diff fallback: real git, end to end -------------------------
+
+    [Fact]
+    public void BranchDiffFallback_SteerFollowupCleanWorkingTree_SurfacesRealBranchCommits()
+    {
+        // AGT-2022 test scenario 3, end to end against a real repository: a steer
+        // follow-up run leaves the working tree clean (`git diff` is empty), yet
+        // the task branch still carries its commits vs the base branch. This test
+        // closes the gap the code-review named - the git-backed fallback was
+        // exercised only through its pure renderer. Here we drive the exact
+        // GitService primitives TryBuildBranchDiffSummary depends on
+        // (BranchExists / ResolveIntegrationBranch / GetCommitsInRangeAtRoot)
+        // against a seeded repo, prove the working diff really is empty, and
+        // assert the branch range still surfaces the real, landed change set so
+        // the reviewer never false-BLOCKs the task as "deliverables missing".
+        var repo = SeedBranchDiffRepo("steer-followup", commitCount: 2);
+        var git = BuildGitServiceForRepo(repo);
+
+        // Precondition of the fallback: the current run's working diff is empty.
+        var (workingDiff, _, _) = RunGit(repo, "diff HEAD");
+        Assert.True(string.IsNullOrWhiteSpace(workingDiff),
+            "seed must leave a clean working tree so this exercises the empty-working-diff fallback");
+
+        // The real primitives the orchestrator's fallback resolves lazily.
+        const string taskBranch = "task/steer-followup";
+        Assert.True(git.BranchExists(repo, taskBranch));
+        var baseBranch = git.ResolveIntegrationBranch(repo, "develop");
+        Assert.Equal("develop", baseBranch);
+
+        var commits = git.GetCommitsInRangeAtRoot(repo, baseBranch, taskBranch);
+        Assert.Equal(2, commits.Count);
+
+        // The renderer fed by real git output produces the evidence block that
+        // rides into every aspect / review prompt.
+        var summary = ReviewDecisionOrchestrator.BuildBranchDiffSummary(baseBranch, taskBranch, commits);
+
+        Assert.Contains("task/steer-followup", summary);
+        Assert.Contains("develop", summary);
+        Assert.Contains("2 commit(s) ahead", summary);
+        Assert.Contains("feat: wire the endpoint", summary);
+        Assert.Contains("feat: add the service", summary);
+        // The line counts are real git shortstat numbers, not hand-authored.
+        Assert.Contains("lines +", summary);
+        Assert.Contains("Do NOT treat an empty working diff as missing work", summary);
+    }
+
+    [Fact]
+    public void BranchDiffFallback_NoTaskBranch_YieldsNoRange()
+    {
+        // Sequential runs never create a task branch: the fallback must resolve
+        // no range (BranchExists false, empty commit list) so a genuinely empty
+        // deliverable is not dressed up with a phantom branch diff.
+        var repo = SeedBranchDiffRepo("no-branch", commitCount: 0, createTaskBranch: false);
+        var git = BuildGitServiceForRepo(repo);
+
+        Assert.False(git.BranchExists(repo, "task/no-branch"));
+        Assert.Empty(git.GetCommitsInRangeAtRoot(repo, "develop", "task/no-branch"));
+    }
+
+    /// <summary>
+    /// Seed a throwaway repo shaped like a live task worktree: <c>main</c> seed
+    /// commit, a <c>develop</c> integration branch, and (optionally) a
+    /// <c>task/&lt;name&gt;</c> branch carrying <paramref name="commitCount"/>
+    /// committed changes with a clean working tree - the steer-follow-up state
+    /// where the run-window working diff is empty but the branch holds the work.
+    /// </summary>
+    private string SeedBranchDiffRepo(string name, int commitCount, bool createTaskBranch = true)
+    {
+        var repo = Path.Combine(_workspace, "branchdiff-" + name);
+        Directory.CreateDirectory(repo);
+        RunGit(repo, "init -q -b main");
+        RunGit(repo, "config user.email test@example.com");
+        RunGit(repo, "config user.name test");
+        RunGit(repo, "config commit.gpgsign false");
+        File.WriteAllText(Path.Combine(repo, "README.md"), "seed");
+        RunGit(repo, "add -A");
+        RunGit(repo, "commit -q -m seed");
+        RunGit(repo, "checkout -q -b develop");
+
+        if (createTaskBranch)
+        {
+            RunGit(repo, $"checkout -q -b task/{name}");
+            // Newest-first order in the summary means the last commit ("wire the
+            // endpoint") is the higher one; keep the two assertion subjects fixed.
+            var subjects = new[] { "feat: add the service", "feat: wire the endpoint" };
+            for (var i = 0; i < commitCount; i++)
+            {
+                File.WriteAllText(Path.Combine(repo, $"work{i}.txt"),
+                    string.Join("\n", Enumerable.Range(0, (i + 1) * 5).Select(n => $"line {n}")) + "\n");
+                RunGit(repo, "add -A");
+                var subject = i < subjects.Length ? subjects[i] : $"feat: work {i}";
+                RunGit(repo, $"commit -q -m \"{subject}\"");
+            }
+        }
+        return repo;
+    }
+
+    private static GitService BuildGitServiceForRepo(string repo)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = "demo",
+                ["WatchPaths:0:RootPath"] = repo,
+                ["WatchPaths:0:RepositoryPath"] = repo,
+                ["WatchPaths:0:Path"] = Path.Combine(repo, ".orchestrator", "jobs"),
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        return new GitService(NullLogger<GitService>.Instance, scanner, config);
+    }
+
+    private static (string Out, string Err, int Code) RunGit(string cwd, string args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = args,
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var p = Process.Start(psi)!;
+        var so = p.StandardOutput.ReadToEnd();
+        var se = p.StandardError.ReadToEnd();
+        p.WaitForExit(15_000);
+        return (so, se, p.ExitCode);
     }
 }
 

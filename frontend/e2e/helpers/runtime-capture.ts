@@ -1,8 +1,8 @@
 /**
  * Browser console capture for Product Runtime Observability.
  *
- * Mirrors the schema in `docs/schemas/product-runtime-event.schema.json` and
- * the file layout in `docs/product-runtime-log-capture.md`. Adapter-style: the
+ * Mirrors the schema in `docs/app/schemas/product-runtime-event.schema.json` and
+ * the file layout in `docs/operations/runtime/log-capture.md`. Adapter-style: the
  * built application emits structured events via whatever logging library it
  * already uses (winston-style JSON, console.log of a JSON string, plain
  * console messages). The helper sniffs each console line: if it parses as a

@@ -21,6 +21,8 @@ Rules for this run:
 - Run git status and git diff in the repository path above when you need to inspect changes.
 - Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push. The platform owns commit and push after the run.
 - Place review-relevant screenshots / result files under the job folder's `results/` directory.
+- Label each evidence screenshot's source in its filename: `--real` for a shot against a running backend, `--mocked` for an e2e run with mocked API routes. For UI-acceptance evidence, a `--real` shot against a live backend is recommended; mocked shots stay allowed but must be labelled. Composite / stitched before-after images are welcome - name them `--composite` and list their parts, for example `before-after--composite-real-mocked.png`. Unlabelled filenames make no source claim.
+- Make sure every image you link from a protocol or note actually exists under `results/` (or `attachments/`); a link to a missing file is surfaced to the reviewer as a broken-reference finding.
 - Do not rely on hand-written `status.md`; the application regenerates it from logs.
 
 Build-time observability (when your change affects product behavior):

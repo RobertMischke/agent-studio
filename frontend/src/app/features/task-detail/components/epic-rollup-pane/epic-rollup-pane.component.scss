@@ -291,7 +291,6 @@
     &--selected {
       background: color-mix(in srgb, var(--lane-color, var(--studio-accent)) 16%, transparent);
       color: var(--studio-fg-strong, var(--studio-fg));
-      box-shadow: inset 2px 0 0 var(--lane-color, var(--studio-accent));
     }
 
     &:focus-visible {

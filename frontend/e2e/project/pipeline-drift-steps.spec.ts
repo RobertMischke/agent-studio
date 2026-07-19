@@ -81,18 +81,19 @@ test('pipeline: drift dimensions appear as opt-in post-steps that default OFF', 
   const section = page.getByTestId('project-detail-pipeline');
   await expect(section).toBeVisible();
 
-  // Every drift row renders, and every one is disabled by default.
+  // Every drift row renders, and every one is disabled by default. Asserted
+  // via the stable data-enabled marker rather than a styling-dependent class.
   for (const d of DRIFT_STEPS) {
     const row = page.getByTestId(`pipeline-step-row-${d.id}`);
     await expect(row).toBeVisible();
-    await expect(row).toHaveClass(/proj-detail__pl-row--disabled/);
+    await expect(row).toHaveAttribute('data-enabled', 'false');
   }
 
   // A normal aspect step is NOT disabled by default - proves the default-OFF
   // behaviour is specific to drift, not a blanket "everything off".
   const aspectRow = page.getByTestId('pipeline-step-row-aspect-code-quality');
   await expect(aspectRow).toBeVisible();
-  await expect(aspectRow).not.toHaveClass(/proj-detail__pl-row--disabled/);
+  await expect(aspectRow).toHaveAttribute('data-enabled', 'true');
 
   const driftRow = page.getByTestId('pipeline-step-row-post-drift-adr-code');
   await driftRow.scrollIntoViewIfNeeded();

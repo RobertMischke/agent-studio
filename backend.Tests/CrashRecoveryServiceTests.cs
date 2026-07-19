@@ -100,7 +100,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RecoverAsync_OrphanWorkingTreeChanges_AreCommittedWithCrashRecoveryAuthor()
+    public async Task RecoverAsync_OrphanWorkingTreeChanges_AreQueuedUntilConfirmed()
     {
         WriteJob(TaskStates.Progress, "active-task");
         var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "active-task");
@@ -115,7 +115,26 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var (recovery, scanner) = BuildRecovery();
         var decisions = await recovery.RecoverAsync();
 
-        // Working tree must be clean now.
+        var pending = Assert.Single(recovery.GetPendingOrphanRecoveries());
+        Assert.Equal(ProjectName, pending.ProjectName);
+        Assert.Equal("active-task", pending.JobId);
+        Assert.Contains("README.md", pending.Files);
+        Assert.Contains("new-file.txt", pending.Files);
+
+        var queuedDecision = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanPending);
+        Assert.Equal("active-task", queuedDecision.JobId);
+        Assert.Contains(pending.Id, queuedDecision.Reason);
+
+        // The boot sweep must not commit autonomously.
+        var dirtyBeforeConfirmation = RunGitCapture(_repoRoot, "status --porcelain=v1");
+        Assert.False(string.IsNullOrWhiteSpace(dirtyBeforeConfirmation),
+            "working tree must remain dirty until the operator confirms recovery");
+
+        var result = recovery.CommitPendingOrphanRecovery(pending.Id);
+        Assert.Equal(CrashRecoveryActionStatuses.Committed, result.Status);
+        Assert.False(string.IsNullOrWhiteSpace(result.CommitSha));
+
+        // Working tree must be clean after confirmation.
         var status = RunGitCapture(_repoRoot, "status --porcelain=v1");
         Assert.True(string.IsNullOrWhiteSpace(status),
             $"working tree must be clean after orphan recovery; got: {status}");
@@ -124,12 +143,11 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var lastAuthor = RunGitCapture(_repoRoot, "log -1 --format=%ae");
         Assert.Contains("crash-recovery", lastAuthor, StringComparison.OrdinalIgnoreCase);
 
-        var commitDecision = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanCommitted);
-        Assert.Equal("active-task", commitDecision.JobId);
-        Assert.False(string.IsNullOrWhiteSpace(commitDecision.CommitSha));
+        Assert.Empty(recovery.GetPendingOrphanRecoveries());
 
         // Decision is mirrored both in recovery.jsonl and in the daily backend log.
         var jsonl = File.ReadAllText(Path.Combine(_logDir, "recovery.jsonl"));
+        Assert.Contains("orphan-pending-confirmation", jsonl);
         Assert.Contains("orphan-committed", jsonl);
 
         var dailyLog = Path.Combine(_logDir, $"{DateTime.UtcNow:yyyy-MM-dd}.log");
@@ -163,8 +181,17 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var (recovery, scanner) = BuildRecovery();
         var decisions = await recovery.RecoverAsync();
 
-        var commitDecision = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanCommitted);
-        Assert.Equal("active-task", commitDecision.JobId);
+        var pending = Assert.Single(recovery.GetPendingOrphanRecoveries());
+        Assert.Equal("active-task", pending.JobId);
+        Assert.Contains("alpha.txt", pending.Files);
+        Assert.Contains("beta.txt", pending.Files);
+        Assert.DoesNotContain("README.md", pending.Files);
+        Assert.DoesNotContain("foreign.txt", pending.Files);
+        var queuedDecision = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanPending);
+        Assert.Equal("active-task", queuedDecision.JobId);
+
+        var result = recovery.CommitPendingOrphanRecovery(pending.Id);
+        Assert.Equal(CrashRecoveryActionStatuses.Committed, result.Status);
 
         var committed = RunGitCapture(_repoRoot, "show --name-only --pretty=format: HEAD")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -187,13 +214,12 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RecoverAsync_OrphanChangesWithNoActiveJob_AreSkipped()
+    public async Task RecoverAsync_OrphanChangesWithNoActiveJob_AreQueuedForOperatorDecision()
     {
         // C1 (2026-05-22): uncommitted changes WITHOUT an active 3-progress
-        // job are usually a human editor session, not a crashed agent run.
-        // The recovery sweep now logs an OrphanSkipped decision instead of
-        // committing those changes blindly. Re-enable the old behaviour
-        // via ATP_CRASH_RECOVERY_AGGRESSIVE=1.
+        // job are usually a human editor session, not a crashed agent run,
+        // so the recovery sweep queues a confirmation item instead of
+        // committing those changes blindly.
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "edited by a human");
         File.WriteAllText(Path.Combine(_repoRoot, "new-file.txt"), "from a Claude Code session");
 
@@ -205,14 +231,23 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(status),
             "uncommitted edits must be preserved when there is no active job to attribute them to");
 
-        // The decision must be OrphanSkipped, not OrphanCommitted.
-        var skipped = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanSkipped);
-        Assert.Null(skipped.JobId);
-        Assert.Contains("no 3-progress job", skipped.Reason);
+        var pending = Assert.Single(recovery.GetPendingOrphanRecoveries());
+        Assert.Null(pending.JobId);
+        Assert.Contains("README.md", pending.Files);
+        Assert.Contains("new-file.txt", pending.Files);
+
+        var queued = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanPending);
+        Assert.Null(queued.JobId);
+        Assert.Contains(pending.Id, queued.Reason);
         Assert.DoesNotContain(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanCommitted);
 
+        var dismiss = recovery.DismissPendingOrphanRecovery(pending.Id);
+        Assert.Equal(CrashRecoveryActionStatuses.Dismissed, dismiss.Status);
+        Assert.Empty(recovery.GetPendingOrphanRecoveries());
+
         var jsonl = File.ReadAllText(Path.Combine(_logDir, "recovery.jsonl"));
-        Assert.Contains("orphan-skipped", jsonl);
+        Assert.Contains("orphan-pending-confirmation", jsonl);
+        Assert.Contains("operator dismissed pending orphan recovery", jsonl);
     }
 
     [Fact]
@@ -265,6 +300,35 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecoverAsync_ValidSteerPendingMarker_OwnsStaleLockRecovery()
+    {
+        WriteJob(TaskStates.Progress, "steer-wait");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "steer-wait");
+        SteerPendingMarker.Write(jobFolder, new SteerPendingRecord
+        {
+            WaitStartedAt = DateTime.UtcNow - TimeSpan.FromMinutes(5),
+            Kind = SteerPendingKinds.Steer,
+            Ask = "ist iframe schon implementiert?"
+        });
+        WriteRawLock(jobFolder, new PickupLockInfo
+        {
+            Pid = 0x7FFFFFFE,
+            Hostname = Environment.MachineName,
+            Role = RunnerRoles.Orchestrator,
+            BackendName = "stable",
+            AcquiredAt = DateTime.UtcNow.AddMinutes(-5)
+        });
+
+        var (recovery, _) = BuildRecovery();
+        var decisions = await recovery.RecoverAsync();
+
+        Assert.True(Directory.Exists(jobFolder));
+        Assert.True(SteerPendingMarker.Exists(jobFolder));
+        Assert.True(File.Exists(Path.Combine(jobFolder, PickupLockFile.LockFileName)));
+        Assert.DoesNotContain(decisions, d => d.Kind == RecoveryDecisionKinds.RunInterruptedRequeued);
+    }
+
+    [Fact]
     public async Task RecoverAsync_LiveForeignLock_LeavesRunInProgress()
     {
         // A live foreign owner (e.g. the other backend on the same workspace)
@@ -303,7 +367,25 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "untouched")));
     }
 
-    private (CrashRecoveryService Recovery, TaskScannerService Scanner) BuildRecovery()
+    [Fact]
+    public async Task RecoverAsync_CrashRecoveryDisabled_SkipsProjectSweep()
+    {
+        WriteJob(TaskStates.Progress, "active-task");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "active-task");
+        StampLastProgressAt(jobFolder, DateTime.UtcNow);
+        File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "dirty but disabled");
+
+        var (recovery, _) = BuildRecovery(settings => settings.SetCrashRecoveryEnabled(ProjectName, false));
+        var decisions = await recovery.RecoverAsync();
+
+        Assert.Empty(decisions);
+        Assert.Empty(recovery.GetPendingOrphanRecoveries());
+        var status = RunGitCapture(_repoRoot, "status --porcelain=v1");
+        Assert.Contains("README.md", status);
+    }
+
+    private (CrashRecoveryService Recovery, TaskScannerService Scanner) BuildRecovery(
+        Action<ProjectSettingsService>? configureSettings = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -311,6 +393,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
             ["WatchPaths:0:Path"] = _watchPath,
             ["WatchPaths:0:RootPath"] = _repoRoot,
             ["WatchPaths:0:RepositoryPath"] = _repoRoot,
+            ["TaskRepository"] = _tempDir,
             ["Logging:BackendFile:LogDirectory"] = _logDir
         }).Build();
 
@@ -319,6 +402,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        configureSettings?.Invoke(settings);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
@@ -326,7 +410,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var logOptions = new BackendFileLoggerOptions { LogDirectory = _logDir, RetentionDays = 14 };
         var sink = new BackendFileLogSink(logOptions);
         var recovery = new CrashRecoveryService(
-            scanner, transitions, mutations, git,
+            scanner, transitions, mutations, git, settings,
             sink, Options.Create(logOptions),
             NullLogger<CrashRecoveryService>.Instance);
         return (recovery, scanner);

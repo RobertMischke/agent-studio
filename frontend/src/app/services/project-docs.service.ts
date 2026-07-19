@@ -1,16 +1,43 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { map } from 'rxjs';
 import {
   ArchitectureOverview,
+  ProjectStyleGuideCatalogue,
   SecurityFileContent,
   SecurityMeta,
   SecurityOverview,
   WikiFileContent,
   WikiFileHistory,
+  WikiFileSaveResult,
+  WikiFolderOverview,
+  WikiGradingAbortResponse,
+  WikiGradingRunBody,
+  WikiGradingRunStatus,
+  WikiGradingStatusResponse,
+  WikiHome,
+  WikiMaintenanceModelConfig,
   WikiOverview,
+  WikiPulse,
+  WikiRecentEdits,
   WikiRevisionContent,
-  WikiTree
+  WikiSearchResponse,
+  WikiTree,
+  WorkbenchCatalogue,
+  WorkbenchDocument,
 } from '../models/project-docs.model';
+
+/**
+ * Reduces a search snippet to text plus literal `<em>` / `</em>` highlight
+ * tags. The backend contract already escapes everything except the `<em>`
+ * markup; this client-side pass guarantees it: any `<` that does not start an
+ * exact `<em>` / `</em>` tag is escaped, so `<em onclick=…>` or any other tag
+ * degrades to visible text. Existing entities are left untouched (no double
+ * escaping). Only after this pass is the snippet safe for `[innerHTML]`.
+ */
+export function sanitizeWikiSearchSnippet(snippet: string): string {
+  return (snippet ?? '').replace(/<(?!\/?em>)/gi, '&lt;');
+}
 
 /**
  * Read/write surface for the project-level Security archive and the
@@ -54,6 +81,13 @@ export class ProjectDocsService {
     );
   }
 
+  /** Technology-aware style guides selected from repository frontmatter. */
+  getProjectStyleGuides(projectName: string) {
+    return this.http.get<ProjectStyleGuideCatalogue>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/style-guides`
+    );
+  }
+
   /** The physical docs/ folder tree (folders + .md/.html files), the wiki nav source. */
   getWikiTree(projectName: string) {
     return this.http.get<WikiTree>(
@@ -61,9 +95,83 @@ export class ProjectDocsService {
     );
   }
 
+  /** Recently-edited wiki pages (page / git author / when), newest first. */
+  getWikiRecentEdits(projectName: string, limit = 12) {
+    return this.http.get<WikiRecentEdits>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/recent?limit=${limit}`
+    );
+  }
+
+  /**
+   * The generated wiki Pulse landing view (PULSE-1): change feed + inbox +
+   * drift grade bar, composed server-side in one call so the landing surface
+   * does not multiply the per-doc git lookups.
+   */
+  getWikiPulse(projectName: string, feedLimit = 12) {
+    return this.http.get<WikiPulse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/pulse?feedLimit=${feedLimit}`
+    );
+  }
+
+  /** Overview of one wiki folder (direct children incl. summaries/sizes). */
+  getWikiFolder(projectName: string, relPath: string) {
+    return this.http.get<WikiFolderOverview>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/folder/${this.encodeRelPath(relPath)}`
+    );
+  }
+
+  /**
+   * Wiki full-text search; `semantic=true` asks the backend to expand the
+   * query. Snippets are sanitised to `<em>`-only markup on the way in so the
+   * result list may bind them via `[innerHTML]`.
+   */
+  searchWiki(projectName: string, query: string, options: { semantic?: boolean; limit?: number } = {}) {
+    let params = new HttpParams().set('q', query);
+    if (options.semantic) params = params.set('semantic', 'true');
+    if (options.limit != null) params = params.set('limit', String(options.limit));
+    return this.http.get<WikiSearchResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/search`,
+      { params }
+    ).pipe(map(response => ({
+      ...response,
+      expandedTerms: response.expandedTerms ?? [],
+      results: (response.results ?? []).map(result => ({
+        ...result,
+        snippet: sanitizeWikiSearchSnippet(result.snippet),
+      })),
+    })));
+  }
+
+  /** Curated entry links ("Einstiege") for the wiki landing surface. */
+  getWikiHome(projectName: string) {
+    return this.http.get<WikiHome>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/home`
+    );
+  }
+
+  getWorkbenches(projectName: string, history = false) {
+    return this.http.get<WorkbenchCatalogue>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches`,
+      { params: history ? { history: 'true' } : {} },
+    );
+  }
+
+  getWorkbench(projectName: string, id: string) {
+    return this.http.get<WorkbenchDocument>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches/${encodeURIComponent(id)}`,
+    );
+  }
+
   getWikiFile(projectName: string, relPath: string) {
     return this.http.get<WikiFileContent>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`
+    );
+  }
+
+  putWikiFile(projectName: string, relPath: string, content: string) {
+    return this.http.put<WikiFileSaveResult>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`,
+      { content }
     );
   }
 
@@ -110,11 +218,58 @@ export class ProjectDocsService {
     );
   }
 
+  /**
+   * Persist the display order of the category folders under one parent
+   * ("" = docs root). Stored server-side beside the other wiki metadata
+   * (docs/app/config/wiki-order.json) and committed like every other wiki mutation.
+   */
+  setWikiFolderOrder(projectName: string, parentRelPath: string, orderedNames: string[]) {
+    return this.http.put<{ relPath: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/folder-order`,
+      { parentRelPath, orderedNames }
+    );
+  }
+
   /** Delete a wiki node (file or folder) via git rm + commit. */
   deleteWikiNode(projectName: string, relPath: string) {
     return this.http.delete<{ relPath: string; sha: string }>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`
     );
+  }
+
+  // ---- Wiki grading maintenance run (AGT-2051) ----
+
+  /** Start a global grading pass. Fields default from the maintenance model. */
+  startWikiGrading(projectName: string, body: WikiGradingRunBody = {}) {
+    return this.http.post<WikiGradingRunStatus>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/grading/run`,
+      body
+    );
+  }
+
+  /** Poll the latest run status (`status` is null until the first run starts). */
+  getWikiGradingStatus(projectName: string) {
+    return this.http.get<WikiGradingStatusResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/grading/status`
+    );
+  }
+
+  /** Request cancellation of an in-flight grading run. */
+  abortWikiGrading(projectName: string) {
+    return this.http.post<WikiGradingAbortResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/grading/abort`,
+      {}
+    );
+  }
+
+  /** Read the workspace maintenance-model default (CLI-management area). */
+  getMaintenanceModel() {
+    return this.http.get<WikiMaintenanceModelConfig>(`${this.baseUrl}/cli/maintenance-model`);
+  }
+
+  /** Write the workspace maintenance-model default. */
+  setMaintenanceModel(config: Partial<WikiMaintenanceModelConfig>) {
+    return this.http.put<WikiMaintenanceModelConfig>(`${this.baseUrl}/cli/maintenance-model`, config);
   }
 
   getArchitectureOverview(projectName: string) {

@@ -61,5 +61,33 @@ describe('ProjectDetailComponent (smoke)', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Auto-commit on transition 3-progress -> 4-auto-review');
     expect(text).toContain('Changes apply immediately to the next job transition.');
+    expect(text).toContain('CLI environment');
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="project-detail-cli-environment"]')).toBeTruthy();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="project-cli-onboarding-status"]')).toBeNull();
+  });
+
+  it('keeps the retired legacy overview free of machine plumbing', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectDetailComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectDetailComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    fixture.componentRef.setInput('view', 'overview');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const text = host.textContent ?? '';
+    expect(text).not.toContain('Watch path');
+    expect(text).not.toContain('Working directory');
+    expect(text).not.toContain('Repository');
+    expect(text).not.toContain('Onboarding status');
+    expect(host.querySelector('[data-testid="project-cli-onboarding-status"]')).toBeNull();
   });
 });

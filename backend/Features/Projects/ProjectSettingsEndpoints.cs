@@ -30,6 +30,12 @@ public record SetPipelineStepOrderRequest
     public List<string> StepIds { get; init; } = [];
 }
 
+/// <summary>Body for project-level boolean feature toggles.</summary>
+public record SetCrashRecoveryRequest
+{
+    public bool Enabled { get; init; }
+}
+
 /// <summary>
 /// Per-project preferences under <c>/api/projects</c> — read-all
 /// for the header bar plus the per-project auto-commit toggle.
@@ -49,8 +55,11 @@ public static class ProjectSettingsEndpoints
                 kv => new
                 {
                     autoCommit = kv.Value.AutoCommit,
+                    crashRecoveryEnabled = kv.Value.CrashRecoveryEnabled,
                     autoPushStrategy = AutoPushStrategies.Normalize(kv.Value.AutoPushStrategy),
                     runnerMode = kv.Value.RunnerMode,
+                    executionRunner = kv.Value.ExecutionRunner,
+                    remoteExecutionEnabled = kv.Value.RemoteExecutionEnabled,
                     orchestratorModel = kv.Value.OrchestratorModel,
                     orchestratorThinkingLevel = kv.Value.OrchestratorThinkingLevel,
                     // Epic decomposition (planning) run knobs (way 3): null
@@ -120,8 +129,16 @@ public static class ProjectSettingsEndpoints
         // project can enable/disable, set a model on, or set a gate mode on.
         // The Settings panel reads this to render one control per step
         // without hardcoding the step list on the frontend.
-        app.MapGet("/api/projects/pipeline-catalogue", () =>
+        app.MapGet("/api/projects/pipeline-catalogue", (string? projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
+            ProjectSettings? projectSettings = null;
+            if (!string.IsNullOrWhiteSpace(projectName))
+            {
+                var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+                if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+                projectSettings = settings.Get(projectName.Trim());
+            }
+
             var pipeline = PipelineCatalogue.Standard;
             var steps = pipeline.Pre.Select(s => ProjectPipelineStepDto(s, "pre"))
                 .Concat(pipeline.Core.Select(s => ProjectPipelineStepDto(s, "core")))
@@ -138,54 +155,65 @@ public static class ProjectSettingsEndpoints
                 return "post";
             }
 
-            static object ProjectPipelineStepDto(PipelineStep s, string phase) => new
+            object ProjectPipelineStepDto(PipelineStep s, string phase)
             {
-                id = s.Id,
-                displayName = s.DisplayName,
-                kind = s.Kind.ToString(),
-                phase,
-                // The core agent run cannot be disabled or model-overridden
-                // here (it uses the task's own CLI + model). Aspect, drift,
-                // and orchestrator review/decision rows invoke LLMs, so the
-                // admin exposes the shared CLI/model/thinking/prompt controls.
-                usesModel = s.Kind is StepKind.Aspect or StepKind.Drift or StepKind.Orchestrator,
-                usesPrompt = s.Kind is StepKind.Aspect or StepKind.Drift or StepKind.Orchestrator,
-                supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
-                cliType = s.CliType,
-                promptTemplate = s.PromptTemplate,
-                // The loop guard is a safety net that always runs (the
-                // StuckLoopGuard circuit-breaker fires regardless of this row);
-                // the pipeline step only mirrors its state, so it is not an
-                // opt-out toggle - making it disable-able would let a project
-                // hide a loop the breaker still acts on.
-                canDisable = s.Kind != StepKind.Core
-                    && !string.Equals(s.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal),
-                // The drift post-steps default off (opt-in); every other step
-                // defaults on. The Settings UI uses this to render the toggle's
-                // initial state when the project has no explicit override.
-                defaultEnabled = s.DefaultEnabled,
-                supportsCondition = s.Kind != StepKind.Core,
-            };
+                var resolved = PipelineStepModelDefaults.Resolve(projectSettings, s);
+                var configured = PipelineStepConfigResolver.Lookup(projectSettings, s.Id);
+                var cliType = configured?.CliType ?? s.CliType ?? PipelineStepModelDefaults.RuntimeDefaultCliFor(s);
+                var thinking = resolved is null
+                    ? null
+                    : PipelineStepConfigResolver.ResolveThinkingLevelWithSource(
+                        projectSettings,
+                        s,
+                        cliType,
+                        resolved.Model,
+                        PipelineStepModelDefaults.RuntimeDefaultThinkingLevelFor(s));
+                return new
+                {
+                    id = s.Id,
+                    displayName = s.DisplayName,
+                    kind = s.Kind.ToString(),
+                    phase,
+                    runMode = s.RunMode.ToString(),
+                    dependsOn = s.DependsOn,
+                    idempotent = s.Idempotent,
+                    stub = s.Stub,
+                    deferred = s.Deferred,
+                    model = s.Model,
+                    resolvedModel = resolved?.Model,
+                    modelSource = resolved?.Source,
+                    resolvedThinkingLevel = thinking?.ThinkingLevel,
+                    thinkingLevelSource = thinking?.Source,
+                    // The core agent run cannot be disabled or model-overridden
+                    // here (it uses the task's own CLI + model). Only steps that
+                    // the runtime actually resolves through PipelineStepConfigResolver
+                    // expose the shared CLI/model/thinking controls.
+                    usesModel = PipelineStepModelDefaults.UsesModel(s),
+                    supportsEconomyModel = s.Kind == StepKind.Aspect,
+                    usesPrompt = PipelineStepModelDefaults.UsesModel(s),
+                    supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
+                    cliType,
+                    promptTemplate = s.PromptTemplate,
+                    // The loop guard is a safety net that always runs (the
+                    // StuckLoopGuard circuit-breaker fires regardless of this row);
+                    // the pipeline step only mirrors its state, so it is not an
+                    // opt-out toggle - making it disable-able would let a project
+                    // hide a loop the breaker still acts on.
+                    canDisable =
+                        PipelineStepConfigResolver.CanDisable(s),
+                    // The drift post-steps default off (opt-in); every other step
+                    // defaults on. The Settings UI uses this to render the toggle's
+                    // initial state when the project has no explicit override.
+                    defaultEnabled = s.DefaultEnabled,
+                    supportsCondition = s.Kind != StepKind.Core,
+                };
+            }
 
             // The abort-triggered review step lives off the linear AllSteps list
             // (it only fires after a non-clean run end) but is configurable
             // through the same per-project override mechanism.
             var abort = PipelineCatalogue.AbortReviewStep;
-            steps.Add(new
-            {
-                id = abort.Id,
-                displayName = abort.DisplayName,
-                kind = abort.Kind.ToString(),
-                phase = "abort",
-                usesModel = true,
-                usesPrompt = true,
-                supportsMode = false,
-                cliType = abort.CliType,
-                promptTemplate = abort.PromptTemplate,
-                canDisable = true,
-                defaultEnabled = abort.DefaultEnabled,
-                supportsCondition = true,
-            });
+            steps.Add(ProjectPipelineStepDto(abort, "abort"));
 
             return Results.Ok(new { pipelineId = pipeline.Id, steps });
         });
@@ -228,6 +256,7 @@ public static class ProjectSettingsEndpoints
             settings.SetPipelineStep(projectName, req.StepId, new PipelineStepSetting
             {
                 Enabled = req.Enabled,
+                EconomyModel = req.EconomyModel,
                 Mode = req.Mode,
                 CliType = req.CliType,
                 Model = req.Model,
@@ -272,6 +301,15 @@ public static class ProjectSettingsEndpoints
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             settings.SetAutoCommit(projectName, req.Enabled);
+            return Results.Ok(settings.Get(projectName));
+        });
+
+        app.MapPut("/api/projects/{projectName}/crash-recovery", (string projectName, SetCrashRecoveryRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetCrashRecoveryEnabled(projectName, req.Enabled);
             return Results.Ok(settings.Get(projectName));
         });
 
@@ -412,6 +450,37 @@ public static class ProjectSettingsEndpoints
 
             settings.SetMaxParallelism(projectName, req.MaxParallelism);
             return Results.Ok(settings.Get(projectName));
+        });
+
+        // Remote runner assignment is server-owned so local and remote pickup
+        // cannot drift apart. Blank executionRunner hands the project back to
+        // the local runner. Eligibility defaults true; screenshots/headless UI
+        // work is supported remotely, while machine-bound projects opt out.
+        app.MapPut("/api/projects/{projectName}/execution-runner", (string projectName, SetExecutionRunnerRequest req,
+            ProjectSettingsService settings, TaskScannerService scanner, ClientIdentityStore clients) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            try
+            {
+                var runner = ExecutionRunnerAssignment.NormalizeAndValidate(req.ExecutionRunner, clients);
+                settings.RekeyProject(
+                    projectName,
+                    projectName,
+                    updateExecutionRunner: true,
+                    executionRunner: runner,
+                    remoteExecutionEnabled: req.RemoteExecutionEnabled);
+                return Results.Ok(settings.Get(projectName));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (ProjectPersistenceException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+            }
         });
 
         // ADR-0052: integration branch parallel task worktrees branch off and

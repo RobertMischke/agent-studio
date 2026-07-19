@@ -3,23 +3,27 @@ import { ProjectOverlaysService } from '../../state/project-overlays.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OrchestratorFeedComponent, PromptAdminPanelComponent } from '../../../orchestrator';
 import { ProjectDetailComponent } from '../project-detail/project-detail';
+import { ProjectOverviewDashboardComponent } from '../project-overview-dashboard/project-overview-dashboard';
+import { ProjectDeploymentPanelComponent } from '../project-deployment-panel/project-deployment-panel.component';
+import { ProjectUrlsPanelComponent } from '../project-urls-panel/project-urls-panel.component';
+import { ProjectGraphComponent } from '../project-graph/project-graph.component';
 import { ProjectSettingsPanelComponent } from '../project-settings-panel/project-settings-panel.component';
 import { ProjectShellComponent } from '../project-shell/project-shell.component';
 import { SecurityPanelComponent } from '../security-panel/security-panel.component';
 import { UxuiPanelComponent } from '../uxui-panel/uxui-panel.component';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { ProjectObservabilityPanelComponent } from '../project-observability/project-observability-panel.component';
-import { ProjectProductRuntimePanelComponent } from '../project-product-runtime/project-product-runtime-panel.component';
+import { ProjectPipelinePanelComponent } from '../project-pipeline-panel/project-pipeline-panel.component';
 import { ProjectSteeringDocsSectionComponent } from '../project-steering-docs-section/project-steering-docs-section';
-import { ProjectSkillReadinessSectionComponent } from '../project-skill-readiness-section/project-skill-readiness-section';
 import { ProjectWikiSectionComponent } from '../project-wiki-section/project-wiki-section';
 import { AnalysisReportDrilldownComponent } from '../analysis-report-drilldown/analysis-report-drilldown';
 import { ProjectRailKey } from '../project-shell/project-shell.config';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import type { TaskScreenshot } from '../../../screenshots';
+import { RegressionRadarComponent } from '../../../regression-radar';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Cycle 9g project-detail-feature container: renders the project-level
  * overlays (orch-feed / project-shell / analysis-report). The former
@@ -37,18 +41,22 @@ import { TooltipDirective } from '../../../../components/tooltip';
   imports: [
     OrchestratorFeedComponent,
     ProjectDetailComponent,
+    ProjectOverviewDashboardComponent,
+    ProjectDeploymentPanelComponent,
+    ProjectUrlsPanelComponent,
+    ProjectGraphComponent,
     ProjectSettingsPanelComponent,
     ProjectShellComponent,
     SecurityPanelComponent,
     UxuiPanelComponent,
     ProjectTokenUsagePanelComponent,
     ProjectObservabilityPanelComponent,
-    ProjectProductRuntimePanelComponent,
+    ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,
-    ProjectSkillReadinessSectionComponent,
     ProjectWikiSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,
+    RegressionRadarComponent,
     PromptAdminPanelComponent,
     TooltipDirective,
     OverlayPortalDirective
@@ -66,22 +74,24 @@ export class ProjectOverlaysComponent {
   readonly securityAuditQueued = output<{ projectName: string; jobId: string }>();
   readonly uxuiFollowUp = output<{ projectName: string; prefill: string; title: string }>();
   readonly uxuiActionQueued = output<{ projectName: string; action: string; jobId: string }>();
-  readonly openTask = output<TaskScreenshot>();
+  readonly openTask = output<Pick<TaskScreenshot, 'jobId' | 'watchPath'>>();
 
   /** The shell needs to provide watchPaths for hash → name resolution on rail change. */
   readonly railChangeNeedsWatchPaths = output<ProjectRailKey>();
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
     return rail === 'overview'
-      || rail === 'jobs'
+      || rail === 'deployment'
+      || rail === 'project-urls'
       || rail === 'security'
       || rail === 'visual-evidence'
       || rail === 'architecture'
+      || rail === 'project-graph'
       || rail === 'drift'
       || rail === 'uxui'
+      || rail === 'test-quality'
       || rail === 'token-usage'
       || rail === 'observability'
-      || rail === 'product-runtime'
       || rail === 'steering'
       || rail === 'wiki'
       || rail === 'settings'
@@ -91,12 +101,16 @@ export class ProjectOverlaysComponent {
       || rail === 'pipeline'
       || rail === 'workflow'
       || rail === 'prompts'
-      || rail === 'orchestrator'
-      || rail === 'activity';
+      || rail === 'orchestrator';
   }
 
   setProjectShellRail(key: ProjectRailKey): void {
     this.overlays.setProjectShellRail(key);
+  }
+
+  openTaskFromProjectShell(task: Pick<TaskScreenshot, 'jobId' | 'watchPath'>): void {
+    this.overlays.closeProjectShell();
+    this.openTask.emit(task);
   }
 
   private readonly modalStack = inject(ModalStackService);

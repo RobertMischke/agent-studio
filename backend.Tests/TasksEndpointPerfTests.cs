@@ -34,6 +34,7 @@ namespace AgentStudio.Tests;
 /// brings it under 50 ms); we leave headroom for a slow CI runner.
 /// </para>
 /// </summary>
+[Trait("Category", "MachineBound")]
 public class JobsEndpointPerfTests : IDisposable
 {
     private readonly string _watchPath;
@@ -200,7 +201,7 @@ public class JobsEndpointPerfTests : IDisposable
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
             var sw = Stopwatch.StartNew();
-            using var response = await client.GetAsync("/api/jobs/grouped", timeout.Token);
+            using var response = await client.GetAsync("/api/tasks/grouped", timeout.Token);
             sw.Stop();
 
             response.EnsureSuccessStatusCode();
@@ -210,7 +211,7 @@ public class JobsEndpointPerfTests : IDisposable
             Assert.NotNull(grouped);
             Assert.Contains(grouped!.Keys, key => string.Equals(key, "progress", StringComparison.OrdinalIgnoreCase));
             Assert.True(sw.ElapsedMilliseconds < 5_000,
-                $"/api/jobs/grouped over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
+                $"/api/tasks/grouped over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
                 + "the grouped endpoint must stay below the post-restart verifier regression budget.");
         }
         finally
@@ -388,18 +389,13 @@ public class JobsEndpointPerfTests : IDisposable
         // calls router.Get(...).GetExecution(), which returns null when no
         // process is registered. That's exactly what we want for the perf
         // assertion: a fast no-op lookup.
-        var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
-        var copilot = new CopilotCliService(
-            NullLogger<CopilotCliService>.Instance, config,
-            new CopilotModelDiscovery(NullLogger<CopilotModelDiscovery>.Instance, cliEnv, config),
-            cliEnv);
         var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config);
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
-        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, config, codexDiscovery,
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, config);
+        var codex = GenericCliExecutionService.ForCodex(NullLogger<GenericCliExecutionService>.Instance, config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
-        var router = new CliRouter(copilot, claude, codex, gemini);
+        var gemini = GenericCliExecutionService.ForAntigravity(NullLogger<GenericCliExecutionService>.Instance, config);
+        var router = new CliRouter(claude, codex, gemini);
 
         var contextUsageParser = new ContextUsageParser();
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
@@ -427,7 +423,7 @@ public class JobsEndpointPerfTests : IDisposable
 
         var runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
-            copilot, router, contextUsageParser, summary, prompts, transitions, projectSettings,
+            router, contextUsageParser, summary, prompts, transitions, projectSettings,
             quotaService, quotaCaps,
             chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker, taskAccess);
         return (router, runners);

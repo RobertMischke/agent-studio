@@ -29,8 +29,17 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         @"Weekly\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Header of the Spark sub-block: "<model>-Spark limit:". It is
+    // DELIBERATELY version-agnostic. The previous form pinned the model to
+    // "GPT-5.3-Codex-Spark"; when the CLI bumped the Spark model (5.3 -> 5.6),
+    // the header stopped matching, the standard/spark split silently collapsed,
+    // and the standard-window regexes then latched onto the Spark block's
+    // near-empty "% left" line - reporting an exhausted 5-hour/Weekly window as
+    // ~1-4% used. That is the AGT-2064 false-snapshot glitch. Only the Spark
+    // sub-panel header contains the word "Spark", so matching on "Spark limit"
+    // alone is both sufficient and immune to future model renames.
     private static readonly Regex SparkHeaderRegex = new(
-        @"GPT\s*-\s*5\.3\s*-\s*Codex\s*-\s*Spark\s*limit\s*:?",
+        @"Spark\s*limit\s*:?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // "Account: someone@example.com (Plus)" — captures the parenthesised plan name.
@@ -47,7 +56,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
     public CodexQuotaProbe(
         ILogger<CodexQuotaProbe> logger,
         CliRouter router,
-        CopilotCliEnvironment env)
+        CliEnvironment env)
         : base(logger, router, env) { }
 
     public override string CliType => CliTypes.Codex;
@@ -83,6 +92,17 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
             var windows = ParseStatusWindows(snap);
 
+            // Log the parsed windows next to the raw sample so a future false
+            // snapshot (AGT-2064) is diagnosable from logs alone, without having
+            // to reconstruct the PTY transcript. Kept at Information because a
+            // quota probe is a low-frequency, high-value observability surface.
+            var sparkSeen = SparkHeaderRegex.IsMatch(snap);
+            _logger.LogInformation(
+                "codex_quota_probe_parsed plan={Plan} sparkBlock={Spark} windows=[{Windows}]",
+                plan ?? "<none>",
+                sparkSeen,
+                string.Join(", ", windows.Select(w => $"{w.Label}={w.UsedPct}%")));
+
             return new QuotaSnapshot
             {
                 CliType   = CliType,
@@ -106,6 +126,11 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
     {
         var windows = new List<QuotaWindow>();
         var sparkHeader = SparkHeaderRegex.Match(snap);
+        // The standard 5-hour/Weekly windows are read ONLY from the region above
+        // the Spark header. This is what keeps the Spark sub-block's own
+        // near-empty 5h/Weekly lines from being mistaken for the main windows
+        // (AGT-2064). See SparkHeaderRegex for why the header match is
+        // version-agnostic.
         var standardSnap = sparkHeader.Success ? snap[..sparkHeader.Index] : snap;
 
         AddLimitWindow(windows, standardSnap, FiveHourRegex, "5-hour");

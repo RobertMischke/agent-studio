@@ -2,9 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { StudioTabStateService } from './studio-tab-state.service';
 import type { StudioTab } from '../studio-shell.types';
 import { studioTabKey } from '../studio-shell.types';
+import { ensureBrowserStorage } from '../../../../testing/browser-storage';
 
 const STORAGE_KEY = 'atp.studio.tabs.v1';
 const ALL_BOARD_KEY = 'board:__all__';
+
+ensureBrowserStorage();
 
 describe('StudioTabStateService', () => {
   let svc: StudioTabStateService;
@@ -64,6 +67,34 @@ describe('StudioTabStateService', () => {
     expect(svc.activeTab()).toEqual(tab);
   });
 
+  it('retargets open project tabs and preserves the active settings tab after rename', () => {
+    svc.open({ kind: 'board', projectName: 'Old Name' });
+    svc.open({ kind: 'hub', projectName: 'Old Name', section: 'settings' });
+    svc.open({ kind: 'url-preview', projectName: 'Old Name', urlId: 'dev' });
+    svc.select('hub:Old Name');
+
+    svc.renameProject('Old Name', 'New Name');
+
+    expect(svc.tabs()).toContainEqual({ kind: 'board', projectName: 'New Name' });
+    expect(svc.tabs()).toContainEqual({ kind: 'hub', projectName: 'New Name', section: 'settings' });
+    expect(svc.tabs()).toContainEqual({ kind: 'url-preview', projectName: 'New Name', urlId: 'dev' });
+    expect(svc.activeKey()).toBe('hub:New Name');
+  });
+
+  it('opens workspace settings as a persistent editor tab', () => {
+    const tab: StudioTab = { kind: 'workspace-settings' };
+    svc.open(tab);
+    expect(studioTabKey(tab)).toBe('workspace-settings');
+    expect(svc.activeKey()).toBe('workspace-settings');
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+    const restored = TestBed.inject(StudioTabStateService);
+
+    expect(restored.activeKey()).toBe('workspace-settings');
+    expect(restored.activeTab()).toEqual(tab);
+  });
+
   it('focuses an already-open tab instead of duplicating', () => {
     const tab: StudioTab = { kind: 'task', taskKey: 'demo|x' };
     svc.open(tab);
@@ -71,6 +102,52 @@ describe('StudioTabStateService', () => {
     // Default board + 1 task = 2.
     expect(svc.tabs()).toHaveLength(2);
     expect(svc.activeKey()).toBe('task:demo|x');
+  });
+
+  describe('Project Hub and Wiki tab identity', () => {
+    it('keeps an open Overview Hub and Explorer-opened Wiki as distinct tabs', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
+
+      expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A')).toHaveLength(1);
+      expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A:wiki')).toHaveLength(1);
+      expect(svc.activeKey()).toBe('hub:Project A:wiki');
+      expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
+    });
+
+    it('still adopts fresh sections that belong to the base Hub identity', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'drift' });
+
+      expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A')).toHaveLength(1);
+      expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'drift' });
+    });
+
+    it('preserves an exact pipeline-row deep link when adopting the Hub tab', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+      svc.open({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'pipeline',
+        pipelineStepId: 'post-wiki-learnings',
+      });
+
+      expect(svc.activeTab()).toEqual({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'pipeline',
+        pipelineStepId: 'post-wiki-learnings',
+      });
+    });
+
+    it('keeps the tab in its original slot when adopting a new section', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'drift' });
+      svc.open({ kind: 'task', taskKey: 'later' });
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+
+      expect(svc.tabs().map(t => studioTabKey(t)))
+        .toEqual([ALL_BOARD_KEY, 'hub:Project A', 'task:later']);
+    });
   });
 
   it('closing the active tab falls back to the previous one', () => {
@@ -309,6 +386,56 @@ describe('StudioTabStateService', () => {
       expect(restored.tabs().map(t => studioTabKey(t)))
         .toEqual([ALL_BOARD_KEY, 'board:demo', 'task:a', 'task:b']);
       expect(restored.activeKey()).toBe('task:b');
+    });
+
+    it('restores the All-projects board as the active reload surface', () => {
+      svc.open({ kind: 'task', taskKey: 'a' });
+      svc.select(ALL_BOARD_KEY);
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.activeKey()).toBe(ALL_BOARD_KEY);
+      expect(restored.activeTab()).toEqual({ kind: 'board', projectName: '__all__' });
+    });
+
+    it('restores a project board as the active reload surface', () => {
+      svc.open({ kind: 'board', projectName: 'Project A' });
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.activeKey()).toBe('board:Project A');
+      expect(restored.activeTab()).toEqual({ kind: 'board', projectName: 'Project A' });
+    });
+
+    it('drops persisted Backlog Triage tabs and falls back to a surviving tab', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        v: 1,
+        tabs: [
+          { kind: 'board', projectName: '__all__' },
+          { kind: 'backlog', projectName: 'Project A' },
+        ],
+        activeKey: 'backlog:Project A',
+      }));
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.tabs()).toEqual([{ kind: 'board', projectName: '__all__' }]);
+      expect(restored.activeKey()).toBe(ALL_BOARD_KEY);
+      expect(restored.activeTab()).toEqual({ kind: 'board', projectName: '__all__' });
+      expect(localStorage.getItem(STORAGE_KEY)).not.toContain('backlog');
+    });
+
+    it('restores a project navigation tab as the active reload surface', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A' });
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.activeKey()).toBe('hub:Project A');
+      expect(restored.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: undefined });
     });
 
     it('honours a persisted empty tab list (user closed everything) and shows the empty-state', () => {

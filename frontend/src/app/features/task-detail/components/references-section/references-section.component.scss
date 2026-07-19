@@ -101,6 +101,10 @@
   border-color: color-mix(in srgb, var(--studio-accent-warn) 55%, var(--studio-border));
   background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
 }
+.refs__chip--ghost {
+  opacity: 0.58;
+  border-style: dashed;
+}
 
 .refs__chip-link {
   border: 0;

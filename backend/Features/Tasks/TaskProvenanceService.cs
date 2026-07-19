@@ -71,7 +71,7 @@ public sealed class TaskProvenanceService
             if (string.IsNullOrWhiteSpace(repoRoot)) return;
 
             var branch = WorktreeTaskLifecycle.BranchFor(info.Id);
-            var integrationBranch = ResolveIntegrationBranch(info.ProjectName);
+            var integrationBranch = ResolveIntegrationBranch(info.ProjectName, repoRoot);
 
             var branchTip = _git.GetBranchTip(repoRoot, branch);
             var workBranchHead = HeadOf(repoRoot, integrationBranch);
@@ -231,10 +231,18 @@ public sealed class TaskProvenanceService
     /// </summary>
     public TaskProvenanceView BuildView(TaskInfo info)
     {
+        // Measure the provenance endpoint's git spawns (AGT-2007). This was the
+        // heaviest git-info request: it forked a fixed handful of ref reads plus
+        // TWO `merge-base --is-ancestor` spawns PER attributed commit, all
+        // serial, so a multi-commit task's landed-state view cost seconds. The
+        // work below is now fanned out in parallel waves and the per-commit
+        // membership is batched into a fixed set of `rev-list` reads.
+        using var _t = GitProcessTelemetry.BeginRequest("tasks/provenance", _logger);
+
         var branch = WorktreeTaskLifecycle.BranchFor(info.Id);
-        var integrationBranch = ResolveIntegrationBranch(info.ProjectName);
         var prov = info.Provenance;
         var repoRoot = _git.ResolveRepoRootForWatchPath(info.WatchPath);
+        var integrationBranch = ResolveIntegrationBranch(info.ProjectName, repoRoot);
 
         // No resolvable repo (e.g. project not configured for git): surface the
         // persisted facts with an empty derived view rather than throwing.
@@ -252,7 +260,19 @@ public sealed class TaskProvenanceService
             };
         }
 
-        var liveBranchTip = _git.GetBranchTip(repoRoot, branch);
+        var root = repoRoot!;
+
+        // Wave 1: the branch tip and the two integration/release heads are
+        // independent ref reads. Fetch them concurrently instead of paying three
+        // (up to five, counting origin/ fallbacks) serial spawns in a row.
+        var tBranchTip = Task.Run(() => _git.GetBranchTip(root, branch));
+        var tIntegrationHead = Task.Run(() => HeadOf(root, integrationBranch));
+        var tReleaseHead = Task.Run(() => HeadOf(root, ReleaseBranch));
+        Task.WaitAll(tBranchTip, tIntegrationHead, tReleaseHead);
+        var liveBranchTip = tBranchTip.Result;
+        var integrationHead = tIntegrationHead.Result;
+        var releaseHead = tReleaseHead.Result;
+
         // Anchor for the landed-state: prefer the live branch tip, fall back to
         // the newest recorded transition anchor, then to the latest known commit
         // SHA (sequential runs that never cut a task/<id> branch).
@@ -261,13 +281,18 @@ public sealed class TaskProvenanceService
             ?? info.Commits.LastOrDefault()?.Sha
             ?? info.Commit?.Sha;
 
-        var integrationHead = HeadOf(repoRoot, integrationBranch);
-        var releaseHead = HeadOf(repoRoot, ReleaseBranch);
+        // Wave 2: the anchor's landed-state (two containment checks) and the full
+        // per-commit membership set are independent, so compute them together.
+        var tMergedToIntegration = Task.Run(() => !string.IsNullOrWhiteSpace(anchorSha)
+            && IsContainedIn(_git, root, anchorSha!, integrationBranch));
+        var tReleasedToRelease = Task.Run(() => !string.IsNullOrWhiteSpace(anchorSha)
+            && IsContainedIn(_git, root, anchorSha!, ReleaseBranch));
+        var tCommits = Task.Run(() =>
+            BuildCommitMembership(info, root, branch, liveBranchTip, prov?.Base, integrationBranch));
+        Task.WaitAll(tMergedToIntegration, tReleasedToRelease, tCommits);
 
-        var mergedToIntegration = !string.IsNullOrWhiteSpace(anchorSha)
-            && IsContainedIn(_git, repoRoot, anchorSha!, integrationBranch);
-        var releasedToRelease = !string.IsNullOrWhiteSpace(anchorSha)
-            && IsContainedIn(_git, repoRoot, anchorSha!, ReleaseBranch);
+        var mergedToIntegration = tMergedToIntegration.Result;
+        var releasedToRelease = tReleasedToRelease.Result;
 
         var landedState = releasedToRelease
             ? LandedStates.ReleasedToMain
@@ -285,7 +310,7 @@ public sealed class TaskProvenanceService
             ReleasedToRelease = releasedToRelease,
         };
 
-        var commits = BuildCommitMembership(info, repoRoot, branch, liveBranchTip, prov?.Base, integrationBranch);
+        var commits = tCommits.Result;
 
         return new TaskProvenanceView
         {
@@ -316,22 +341,59 @@ public sealed class TaskProvenanceService
     {
         if (liveBranchTip != null && !string.IsNullOrWhiteSpace(baseSha))
         {
-            var range = _git.GetCommitsInRangeAtRoot(repoRoot, baseSha!, branch);
+            // The range walk and the two reachability sets are independent reads;
+            // run them together. The sets are the batch that replaces the old
+            // per-commit `merge-base --is-ancestor` fan-out: instead of two
+            // ancestry spawns for every commit on the branch, we read the commits
+            // develop / main are ahead of the same fork point ONCE and answer
+            // membership with an in-memory lookup (AGT-2007).
+            var tRange = Task.Run(() => _git.GetCommitsInRangeAtRoot(repoRoot, baseSha!, branch));
+            var tSets = Task.Run(() => ReachableMembershipSets(repoRoot, baseSha!, integrationBranch));
+            Task.WaitAll(tRange, tSets);
+
+            var range = tRange.Result;
             if (range.Count > 0)
             {
+                var (intSet, relSet) = tSets.Result;
                 return range.Select(c => new TaskCommitMembership
                 {
                     Sha = c.Sha,
                     ShortSha = c.ShortSha,
                     Message = c.Subject,
                     OnTaskBranch = true,
-                    AlsoOnIntegration = IsContainedIn(_git, repoRoot, c.Sha, integrationBranch),
-                    AlsoOnRelease = IsContainedIn(_git, repoRoot, c.Sha, ReleaseBranch),
+                    AlsoOnIntegration = intSet.Contains(c.Sha),
+                    AlsoOnRelease = relSet.Contains(c.Sha),
                 }).ToList();
             }
         }
 
         return FallbackMembership(info, repoRoot, integrationBranch);
+    }
+
+    /// <summary>
+    /// The develop/main reachability sets for a task branch's merge-set: the
+    /// commit SHAs each integration line is ahead of the branch's fork point
+    /// (<c>base</c>). A commit on <c>base..branch</c> is "also on develop" iff it
+    /// is in <c>base..develop</c> (see <see cref="GitService.GetReachableShaSet"/>).
+    /// Both the local ref and its <c>origin/</c> mirror are unioned so a
+    /// fresh-clone task with only remote-tracking branches still resolves,
+    /// matching the local-or-origin semantics of <see cref="IsContainedIn"/>.
+    /// The four reads are independent and run concurrently.
+    /// </summary>
+    private (HashSet<string> Integration, HashSet<string> Release) ReachableMembershipSets(
+        string repoRoot, string baseSha, string integrationBranch)
+    {
+        var tIntLocal = Task.Run(() => _git.GetReachableShaSet(repoRoot, baseSha, integrationBranch));
+        var tIntOrigin = Task.Run(() => _git.GetReachableShaSet(repoRoot, baseSha, "origin/" + integrationBranch));
+        var tRelLocal = Task.Run(() => _git.GetReachableShaSet(repoRoot, baseSha, ReleaseBranch));
+        var tRelOrigin = Task.Run(() => _git.GetReachableShaSet(repoRoot, baseSha, "origin/" + ReleaseBranch));
+        Task.WaitAll(tIntLocal, tIntOrigin, tRelLocal, tRelOrigin);
+
+        var integration = tIntLocal.Result;
+        integration.UnionWith(tIntOrigin.Result);
+        var release = tRelLocal.Result;
+        release.UnionWith(tRelOrigin.Result);
+        return (integration, release);
     }
 
     /// <summary>
@@ -346,23 +408,43 @@ public sealed class TaskProvenanceService
             ? info.Commits
             : info.Commit is null ? [] : new List<TaskCommitInfo> { info.Commit };
 
-        return chain
-            .Where(c => !string.IsNullOrWhiteSpace(c.Sha))
-            .Select(c => new TaskCommitMembership
+        var commits = chain.Where(c => !string.IsNullOrWhiteSpace(c.Sha)).ToList();
+
+        // No repo to graph-check against: the chain is task-only by construction.
+        if (repoRoot == null)
+        {
+            return commits.Select(c => new TaskCommitMembership
             {
                 Sha = c.Sha,
                 ShortSha = string.IsNullOrWhiteSpace(c.ShortSha) ? Short(c.Sha) : c.ShortSha,
                 Message = c.Message,
                 OnTaskBranch = true,
-                AlsoOnIntegration = repoRoot != null && IsContainedIn(_git, repoRoot, c.Sha, integrationBranch),
-                AlsoOnRelease = repoRoot != null && IsContainedIn(_git, repoRoot, c.Sha, ReleaseBranch),
-            })
-            .ToList();
+                AlsoOnIntegration = false,
+                AlsoOnRelease = false,
+            }).ToList();
+        }
+
+        // Each commit needs two ancestry checks; the chain is small (persisted
+        // attributed commits), so fan the checks out per commit rather than
+        // paying 2*N serial spawns (AGT-2007). Order is preserved.
+        var tasks = commits.Select(c => Task.Run(() => new TaskCommitMembership
+        {
+            Sha = c.Sha,
+            ShortSha = string.IsNullOrWhiteSpace(c.ShortSha) ? Short(c.Sha) : c.ShortSha,
+            Message = c.Message,
+            OnTaskBranch = true,
+            AlsoOnIntegration = IsContainedIn(_git, repoRoot, c.Sha, integrationBranch),
+            AlsoOnRelease = IsContainedIn(_git, repoRoot, c.Sha, ReleaseBranch),
+        })).ToArray();
+        Task.WaitAll(tasks);
+        return tasks.Select(t => t.Result).ToList();
     }
 
-    private string ResolveIntegrationBranch(string projectName)
+    private string ResolveIntegrationBranch(string projectName, string? repoRoot)
     {
         var configured = _settings.Get(projectName).IntegrationBranch;
+        if (!string.IsNullOrWhiteSpace(repoRoot))
+            return _git.ResolveIntegrationBranch(repoRoot, configured);
         return string.IsNullOrWhiteSpace(configured) ? new ProjectSettings().IntegrationBranch : configured;
     }
 

@@ -1,5 +1,6 @@
 
 using Xunit;
+using RunOutcome = CodingAgentRunner.Model.RunOutcome;
 
 namespace AgentStudio.Tests;
 
@@ -34,8 +35,7 @@ public class RunPhaseTransitionsTests
     [InlineData(typeof(CliRunEvent.TurnFailed))]
     [InlineData(typeof(CliRunEvent.NeedsInput))]
     [InlineData(typeof(CliRunEvent.ApprovalRequested))]
-    [InlineData(typeof(CliRunEvent.ProcessExited))]
-    [InlineData(typeof(CliRunEvent.Killed))]
+    [InlineData(typeof(CliRunEvent.RunEnded))]
     public void IsActivitySignal_FalseForExpectedKinds(System.Type kind)
     {
         var evt = MakeEvent(kind);
@@ -78,8 +78,7 @@ public class RunPhaseTransitionsTests
         if (t == typeof(CliRunEvent.TurnFailed))          return new CliRunEvent.TurnFailed("err");
         if (t == typeof(CliRunEvent.NeedsInput))          return new CliRunEvent.NeedsInput("ask");
         if (t == typeof(CliRunEvent.ApprovalRequested))   return new CliRunEvent.ApprovalRequested("approve?");
-        if (t == typeof(CliRunEvent.ProcessExited))       return new CliRunEvent.ProcessExited(0, "completed", 1.0);
-        if (t == typeof(CliRunEvent.Killed))              return new CliRunEvent.Killed("Watchdog");
+        if (t == typeof(CliRunEvent.RunEnded))            return new CliRunEvent.RunEnded(RunOutcome.Completed, null, 0, 1.0);
         throw new System.NotSupportedException($"unknown test event type: {t}");
     }
 }

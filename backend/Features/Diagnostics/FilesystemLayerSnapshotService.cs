@@ -559,11 +559,13 @@ public class FilesystemLayerSnapshotService
            || path == "AGENTS.md"
            || path.EndsWith("/CLAUDE.md", StringComparison.OrdinalIgnoreCase)
            || path == "CLAUDE.md"
+           || path.EndsWith("/GEMINI.md", StringComparison.OrdinalIgnoreCase)
+           || path == "GEMINI.md"
            || path.EndsWith("copilot-instructions.md", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith(".github/prompts/", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("prompts/", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("agent-rules/", StringComparison.OrdinalIgnoreCase)
-           || path.StartsWith("docs/cli-skills/", StringComparison.OrdinalIgnoreCase);
+           || path.StartsWith("docs/system/cli/skills/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTestFile(string path)
         => path.StartsWith("backend.Tests/", StringComparison.OrdinalIgnoreCase)

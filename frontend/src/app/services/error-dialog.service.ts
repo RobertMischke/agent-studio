@@ -302,7 +302,7 @@ function looksLikeCliError(message: string | null | undefined): boolean {
     return false;
   }
 
-  return /cli|copilot|authenticat/i.test(message);
+  return /cli|authenticat/i.test(message);
 }
 
 function looksLikeStackTrace(value: string): boolean {

@@ -46,7 +46,21 @@ public static class RunQuarantineBreaker
         RunIssueKind.EnvironmentBlocker => false,
         RunIssueKind.EmptyFastExit      => false,
         RunIssueKind.ContextOverflow    => false,
+        // A wrong/unsupported model and an exhausted quota are not the task's
+        // fault: re-running the same task content will not fix them, so they
+        // must not accrue toward the per-task no-progress quarantine streak.
+        RunIssueKind.ModelInvalid       => false,
+        RunIssueKind.QuotaExhausted     => false,
+        // A transient host file lock / network glitch is not the task's fault and
+        // has its own bounded retry-with-backoff; it must not accrue toward the
+        // per-task no-progress quarantine streak (AGT-1944).
+        RunIssueKind.EnvironmentalTransient => false,
         RunIssueKind.CliLaunchFailed    => false,
+        // A failed OAuth-session refresh is an infra credential fault shared
+        // across every run, not this task's work: re-running the same task
+        // content cannot revive a dead token, so it must not accrue toward the
+        // per-task no-progress quarantine streak (AGT-2066).
+        RunIssueKind.AuthRefreshFailed  => false,
         RunIssueKind.SilentCompletion   => false,
         RunIssueKind.Quarantined        => false,
         RunIssueKind.AgentGitViolation  => false,

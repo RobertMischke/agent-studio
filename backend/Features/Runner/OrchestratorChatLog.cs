@@ -51,7 +51,7 @@ public class OrchestratorChatLog
             // Bridge to the Agent Message Bus. Best-effort; the chat log is the
             // canonical record (the activity-log parser reads it). The bus
             // mirrors typed entries so future tooling can query without
-            // reparsing prose. See docs/agent-message-bus.md section 9.
+            // reparsing prose. See docs/system/architecture/bus/agent-message-bus.md section 9.
             try { _ = _bus?.EmitOrchestratorChatAsync(info, kind, text); }
             catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator chat failed for {JobId}", info?.Id); }
         }
@@ -156,14 +156,16 @@ public enum OrchestratorMessageKind
     MissingTerminalSentinel,
     /// <summary>The agent reported done without a structured sentinel; kept as visible legacy heuristic.</summary>
     HeuristicDone,
-    /// <summary>The classifier could not map the agent text to a known outcome.</summary>
-    ClassifierUnknown,
+    /// <summary>The agent CLI crashed hard (process death, exitCode &lt; 0) before reaching a terminal verdict; the orchestrator stops and surfaces it for review.</summary>
+    InfraCrash,
+    /// <summary>The run failed with real agent text the contract could not map to a terminal verdict; the orchestrator stops and hands the task to the user.</summary>
+    OrchestratorInconclusive,
     /// <summary>
     /// The agent CLI failed to launch or its <c>--resume</c> target was
     /// rejected before any agent turn happened (exit != 0, ~0s, only a CLI
     /// error fragment). The orchestrator treats this as a recoverable
     /// host/CLI condition and rebuilds from disk via Recovery on the next
-    /// attempt, rather than surfacing a terminal classifier-unknown FAILURE.
+    /// attempt, rather than surfacing a terminal inconclusive FAILURE.
     /// </summary>
     CliLaunchFailed,
     /// <summary>
@@ -204,6 +206,36 @@ public enum OrchestratorMessageKind
     /// endless reissue loop.
     /// </summary>
     Quarantined,
+    /// <summary>
+    /// The configured model is invalid/unsupported for this account or CLI
+    /// (invalid_request / HTTP 400 "model not supported"). Non-retryable: the
+    /// orchestrator routes it to human review with a model-invalid reason so a
+    /// human changes the model, instead of re-issuing into the same rejection.
+    /// </summary>
+    ModelInvalid,
+    /// <summary>
+    /// The account's usage/session/rate-limit budget is exhausted. Transient:
+    /// the orchestrator routes it to human review with a quota-exhausted reason
+    /// (and schedules a rate-limit cooldown) rather than the misleading
+    /// orchestrator-inconclusive, so re-queueing after reset is the clear next
+    /// step.
+    /// </summary>
+    QuotaExhausted,
+    /// <summary>
+    /// The agent CLI could not launch because its OAuth session expired and the
+    /// token refresh failed (AGT-2066 token roulette). Shared across every
+    /// parallel run and non-retryable, so the orchestrator STOPS immediately
+    /// (the breaker) and routes to human review with a re-auth instruction
+    /// rather than burning further launch budgets.
+    /// </summary>
+    AuthRefreshFailed,
+    /// <summary>
+    /// A transient environmental fault (host file lock / MSB302x copy-lock,
+    /// network glitch) failed the run. The condition clears on its own, so the
+    /// orchestrator retries the task with exponential backoff before escalating -
+    /// this line marks the automatic retry, not a give-up (AGT-1944).
+    /// </summary>
+    EnvironmentalRetry,
     /// <summary>
     /// A worktree-isolated run modified the shared main checkout. The runner
     /// skipped integration and surfaced the harness integrity violation.
@@ -249,7 +281,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.WatchdogWarning   => "watchdog",
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
-        OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
+        OrchestratorMessageKind.InfraCrash        => "infra-crash",
+        OrchestratorMessageKind.OrchestratorInconclusive => "orchestrator-inconclusive",
         OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
         OrchestratorMessageKind.EmptyFastExit     => "empty-fast-exit",
         OrchestratorMessageKind.GiveUp            => "giveup",
@@ -258,6 +291,10 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",
         OrchestratorMessageKind.Quarantined       => "quarantined",
+        OrchestratorMessageKind.ModelInvalid      => "model-invalid",
+        OrchestratorMessageKind.QuotaExhausted    => "quota-exhausted",
+        OrchestratorMessageKind.AuthRefreshFailed => "auth-refresh-failed",
+        OrchestratorMessageKind.EnvironmentalRetry => "environmental-retry",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
@@ -276,13 +313,18 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.WatchdogWarning   => "watchdog-warning",
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
-        OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
+        OrchestratorMessageKind.InfraCrash        => "infra-crash",
+        OrchestratorMessageKind.OrchestratorInconclusive => "orchestrator-inconclusive",
         OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
         OrchestratorMessageKind.EmptyFastExit     => "empty-fast-exit",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",
         OrchestratorMessageKind.Quarantined       => "quarantined",
+        OrchestratorMessageKind.ModelInvalid      => "model-invalid",
+        OrchestratorMessageKind.QuotaExhausted    => "quota-exhausted",
+        OrchestratorMessageKind.AuthRefreshFailed => "auth-refresh-failed",
+        OrchestratorMessageKind.EnvironmentalRetry => "environmental-retry",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",

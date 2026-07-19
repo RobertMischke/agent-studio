@@ -1,0 +1,76 @@
+:host {
+  display: block;
+  padding: 24px;
+  background: var(--studio-bg-app, #1d1f23);
+  min-height: 100vh;
+}
+
+.harness {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.harness__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.harness__title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--studio-text-secondary, #c8ccd4);
+}
+
+.harness__themes {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.harness__theme {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  border: 1px solid var(--studio-border, #3a3d44);
+  border-radius: 6px;
+  background: var(--studio-bg-surface, #2a2d33);
+  color: var(--studio-text-primary, #e8ebf0);
+  cursor: pointer;
+}
+
+.harness__theme--active {
+  border-color: var(--studio-accent, #f0883e);
+  color: var(--studio-accent, #f0883e);
+}
+
+.harness__hint {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+  color: var(--studio-text-secondary, #c8ccd4);
+}
+
+.harness__stage {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.harness__col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+}
+
+.harness__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--studio-text-secondary, #c8ccd4);
+}

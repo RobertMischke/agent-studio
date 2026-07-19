@@ -2,7 +2,7 @@
 
 Reusable specialist workflows that any CLI agent (Claude Code, Codex,
 Copilot, Gemini) can pick up and follow. Architecture documented in
-[`docs/skills-architecture.md`](../../docs/skills-architecture.md).
+[`docs/concepts/skills-architecture.md`](../../docs/concepts/skills-architecture.md).
 
 Skill format: each subfolder is one skill with a `SKILL.md` at its root that
 states when to invoke, hard rules, process, and anti-patterns. Larger skills
@@ -12,7 +12,7 @@ add `scripts/`, `references/`, and `tests/` siblings.
 
 | Skill | When to invoke | Folder |
 |-------|----------------|--------|
-| **Job API** | Create / move / triage tasks via HTTP. Required reading for any CLI work that touches the task queue. | [`job-api/`](job-api/SKILL.md) |
+| **Task API** | Create / move / triage tasks via HTTP. Required reading for any CLI work that touches the task queue. | [`task-api/`](task-api/SKILL.md) |
 | **Regenerate README** | Rewrite `README.md` from current product reality (after a load-bearing change). | [`regenerate-readme/`](regenerate-readme/SKILL.md) |
 | **Runtime log analysis** | Inspect backend / runner / CLI logs after an incident. | [`runtime-log-analysis/`](runtime-log-analysis/SKILL.md) |
 

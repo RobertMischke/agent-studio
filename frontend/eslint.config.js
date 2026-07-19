@@ -90,7 +90,7 @@ module.exports = tseslint.config(
       // (`[style.width.px]="..."`, `[ngStyle]="..."`) are exempt because they
       // are needed for runtime-computed geometry (e.g. the side-sheet width
       // animation). Severity: warning while the codebase migrates; promotion
-      // to error is tracked in docs/style-guide/migration-status.md.
+      // to error is tracked in docs/quality/frontend/style-guide/migration-status.md.
       '@angular-eslint/template/no-inline-styles': [
         'warn',
         { allowNgStyle: true, allowBindToStyle: true },

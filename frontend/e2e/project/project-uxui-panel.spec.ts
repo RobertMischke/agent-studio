@@ -274,14 +274,14 @@ void BACKEND;
 async function cleanupQueuedDesignJobs(): Promise<void> {
   type Job = { id: string; title?: string | null; state?: string; watchPath?: string };
   try {
-    const list = await api<Job[]>(`/api/jobs`);
+    const list = await api<Job[]>(`/api/tasks`);
     const designJobs = list.filter(j =>
       (j.title ?? '').toLowerCase().startsWith('design:') &&
       (j.watchPath?.toLowerCase() === projectPath.toLowerCase()),
     );
     for (const j of designJobs) {
       try {
-        await api(`/api/jobs/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(projectPath)}`, { method: 'DELETE' });
+        await api(`/api/tasks/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(projectPath)}`, { method: 'DELETE' });
       } catch { /* best-effort cleanup */ }
     }
   } catch { /* best-effort */ }

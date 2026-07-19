@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "CLI + Model Selector Audit",
+  "source": {
+    "path": "docs/quality/frontend/audits/cli-model-selector-audit.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "4086793c048400b431f938518097c64767da6d03a279331b2376756c823c4dee",
+      "sizeBytes": 6874,
+      "lineCount": 113,
+      "capturedAt": "2026-07-18T18:45:50.480Z"
+    }
+  },
+  "classification": {
+    "owner": "frontend",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "unknown",
+    "status": "veraltet",
+    "supersededBy": null,
+    "type": "analyse",
+    "analyzedAt": "2026-07-18"
+  }
+}

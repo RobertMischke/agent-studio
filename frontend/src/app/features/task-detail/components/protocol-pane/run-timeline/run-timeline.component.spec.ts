@@ -343,6 +343,87 @@ describe('RunTimelineComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="run-context-pre-2"]')).toBeNull();
     http.verify();
   });
+
+  // ── Runner attribution in the run header (AGT-2003) ────────────────────
+
+  it('names the remote runner that executed the latest run', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', {
+      ...taskInfo(),
+      runner: {
+        runnerId: 'agent-runner-01@linux-host',
+        runnerName: 'agent-runner-01',
+        hostname: 'linux-host',
+        backendName: 'remote',
+        isRemote: true,
+        leaseId: 'lease-1',
+        fencingToken: 4,
+        acquiredAt: '2026-07-09T10:00:00Z',
+      },
+    } as TaskInfo);
+    fixture.componentRef.setInput('runs', [
+      runRecord(1, 'start', 'completed', null, 20),
+      { ...runRecord(2, 'continue', 'running', null, 25), endedAt: null },
+    ]);
+    fixture.detectChanges();
+
+    const runButton = fixture.nativeElement.querySelector('[data-testid="run-icon-2"]') as HTMLButtonElement;
+    runButton.click();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(r => r.url.endsWith('/tasks/task-1/runs/2/commits')).flush({ commits: [] });
+    fixture.detectChanges();
+
+    const chip = fixture.nativeElement.querySelector('[data-testid="run-runner-2"]') as HTMLElement | null;
+    expect(chip).not.toBeNull();
+    expect(chip?.getAttribute('data-runner-kind')).toBe('remote');
+    expect(chip?.textContent).toContain('agent-runner-01');
+
+    // Earlier runs get no fabricated attribution.
+    expect(fixture.componentInstance.runnerAttribution(
+      fixture.componentInstance.visibleRuns()[0],
+    )).toBeNull();
+    http.verify();
+  });
+
+  it('labels a local in-process run as "lokal" in the run header', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', taskInfo());
+    fixture.componentRef.setInput('runs', [
+      { ...runRecord(1, 'start', 'running', null, 20), endedAt: null },
+    ]);
+    fixture.detectChanges();
+
+    const runButton = fixture.nativeElement.querySelector('[data-testid="run-icon-1"]') as HTMLButtonElement;
+    runButton.click();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(r => r.url.endsWith('/tasks/task-1/runs/1/commits')).flush({ commits: [] });
+    fixture.detectChanges();
+
+    const chip = fixture.nativeElement.querySelector('[data-testid="run-runner-1"]') as HTMLElement | null;
+    expect(chip?.getAttribute('data-runner-kind')).toBe('local');
+    expect(chip?.textContent?.trim()).toBe('lokal');
+    http.verify();
+  });
 });
 
 function taskInfo(): TaskInfo {

@@ -1,0 +1,95 @@
+@if (open()) {
+  <app-dialog
+    eyebrow="Crash recovery"
+    title="Review recovered working-tree changes"
+    subtitle="The backend found uncommitted changes during startup. Nothing will be committed until you confirm it here."
+    kind="primary"
+    widthTier="lg"
+    [closable]="false"
+    testid="crash-recovery-prompt">
+    <div class="crp" data-testid="crash-recovery-list">
+      <div class="crp__toolbar">
+        <button type="button"
+                class="crp__button crp__button--ghost"
+                data-testid="crash-recovery-dismiss-all"
+                [disabled]="busyId() !== null || busyAll()"
+                (click)="dismissAll()">
+          <app-studio-icon name="archive" [size]="14"></app-studio-icon>
+          <span>{{ busyAll() ? 'Leaving all...' : 'Leave all uncommitted' }}</span>
+        </button>
+      </div>
+
+      @if (error(); as msg) {
+        <p class="crp__error" data-testid="crash-recovery-error">{{ msg }}</p>
+      }
+
+      @for (item of pending(); track item.id) {
+        <article class="crp__item" [attr.data-testid]="'crash-recovery-item-' + item.id">
+          <header class="crp__item-head">
+            <div class="crp__identity">
+              <span class="crp__project">{{ item.projectName }}</span>
+              <span class="crp__job">{{ item.jobId || 'No active task attribution' }}</span>
+            </div>
+            <time class="crp__time" [dateTime]="item.createdAt">{{ item.createdAt | date: 'short' }}</time>
+          </header>
+
+          <p class="crp__reason">{{ item.reason }}</p>
+
+          <dl class="crp__meta">
+            <div>
+              <dt>Repository</dt>
+              <dd>{{ item.repoRoot }}</dd>
+            </div>
+            <div>
+              <dt>Commit message</dt>
+              <dd><code>{{ item.message.split('\n')[0] }}</code></dd>
+            </div>
+          </dl>
+
+          <details class="crp__files" open>
+            <summary>{{ fileCountLabel(item) }}</summary>
+            @if (item.files.length > 0) {
+              <ul>
+                @for (file of item.files; track file) {
+                  <li>{{ file }}</li>
+                }
+              </ul>
+            } @else {
+              <p class="crp__empty">The backend did not receive a file list for this item.</p>
+            }
+          </details>
+
+          <div class="crp__actions">
+            <button type="button"
+                    class="crp__button crp__button--ghost"
+                    data-testid="crash-recovery-dismiss"
+                    [disabled]="busyId() !== null"
+                    (click)="dismiss(item)">
+              <app-studio-icon name="archive" [size]="14"></app-studio-icon>
+              <span>{{ busyId() === item.id ? 'Leaving...' : 'Leave uncommitted' }}</span>
+            </button>
+            <button type="button"
+                    class="crp__button crp__button--primary"
+                    data-testid="crash-recovery-commit"
+                    [disabled]="busyId() !== null"
+                    (click)="commit(item)">
+              <app-studio-icon name="check" [size]="14"></app-studio-icon>
+              <span>{{ busyId() === item.id ? 'Committing...' : 'Commit recovery' }}</span>
+            </button>
+          </div>
+        </article>
+      }
+    </div>
+
+    <div footer class="crp__footer">
+      <button type="button"
+              class="crp__button crp__button--ghost"
+              data-testid="crash-recovery-refresh"
+              [disabled]="loading() || busyId() !== null"
+              (click)="refresh()">
+        <app-studio-icon name="refresh" [size]="14"></app-studio-icon>
+        <span>{{ loading() ? 'Refreshing...' : 'Refresh' }}</span>
+      </button>
+    </div>
+  </app-dialog>
+}

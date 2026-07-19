@@ -45,4 +45,19 @@ describe('BeautifulResultsComponent', () => {
     const host = await mount('[[TASK_NOOP]]');
     expect(host.querySelector('[data-testid="results-empty"]')).not.toBeNull();
   });
+
+  it('replaces a broken image with a compact "missing" placeholder instead of an empty row', async () => {
+    const host = await mount('## Images\n\n- ![](results/does-not-exist.png)');
+    // Let the highlight/broken-image microtask attach its error listener.
+    await Promise.resolve();
+    const img = host.querySelector<HTMLImageElement>('img.results-figure__img');
+    expect(img).not.toBeNull();
+    img!.dispatchEvent(new Event('error'));
+
+    const missing = host.querySelector('[data-testid="results-image-missing"]');
+    expect(missing).not.toBeNull();
+    expect(missing?.textContent ?? '').toContain('results/does-not-exist.png');
+    // The broken <img> is gone, so no silently empty figure remains.
+    expect(host.querySelector('img.results-figure__img')).toBeNull();
+  });
 });

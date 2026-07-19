@@ -1,0 +1,62 @@
+<section class="token-usage" data-testid="token-usage-section">
+  <aside class="token-usage__tree" aria-label="Token usage sections" data-testid="token-usage-tree">
+    <div class="token-usage__tree-group">Scope</div>
+    <button type="button" [class.token-usage__tree-item--active]="page() === 'workspace'"
+            [attr.aria-current]="page() === 'workspace' ? 'page' : null"
+            data-testid="token-usage-nav-workspace" (click)="pageChange.emit('workspace')">
+      <strong>Workspace &amp; projects</strong><span>Recorded token spend and project filters</span>
+    </button>
+    <div class="token-usage__tree-group">CLI accounts</div>
+    <button type="button" [class.token-usage__tree-item--active]="page() === 'claude'"
+            [attr.aria-current]="page() === 'claude' ? 'page' : null"
+            data-testid="token-usage-nav-claude" (click)="pageChange.emit('claude')">
+      <strong>Claude</strong><span>Account quota windows and burn</span>
+    </button>
+    <button type="button" [class.token-usage__tree-item--active]="page() === 'codex'"
+            [attr.aria-current]="page() === 'codex' ? 'page' : null"
+            data-testid="token-usage-nav-codex" (click)="pageChange.emit('codex')">
+      <strong>Codex</strong><span>Account quota windows and burn</span>
+    </button>
+  </aside>
+
+  <div class="token-usage__page">
+  @if (page() === 'workspace') {
+    <header class="token-usage__page-head">
+      <span class="token-usage__eyebrow">Workspace level</span>
+      <h2>Workspace and project usage</h2>
+      <p>Recorded token events across this workspace. Project filters change every visible total below.</p>
+    </header>
+    <app-workspace-token-timeline />
+
+  <section class="token-usage__detail" data-testid="token-usage-detail">
+    <header class="token-usage__detail-head">
+      <h3>Workspace detail</h3>
+      <span class="token-usage__hint">project attribution · trend · top tasks</span>
+    </header>
+    <app-cli-usage-detail
+      [workspaceOnly]="true"
+      [quotaRows]="usage.quotaRows()"
+      [tokens]="usage.tokens()"
+      [adhoc]="usage.adhoc()"
+      [timeline24h]="usage.timeline24h()"
+      [timeline7d]="usage.timeline7d()"
+      [expensiveJobs]="usage.expensiveJobs()"
+      [refreshing]="usage.refreshing()"
+      [refreshingAll]="usage.refreshingAll()"
+      (refreshAll)="usage.refreshAll()"
+      (refreshOne)="refreshOne($event)"
+      (openProjectSettings)="openProjectSettings.emit($event)" />
+  </section>
+  } @else {
+    <app-cli-window-analysis
+      [cliType]="cliPage()"
+      [quotaRows]="usage.quotaRows()"
+      [tokens]="usage.tokens()"
+      [adhoc]="usage.adhoc()"
+      [timeline24h]="usage.timeline24h()"
+      [timeline7d]="usage.timeline7d()"
+      [refreshing]="usage.refreshing()[cliPage()]"
+      (refresh)="usage.refreshOne(cliPage())" />
+  }
+  </div>
+</section>

@@ -56,6 +56,55 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task EachAspect_WritesStructuredJsonTwin_AlongsideMarkdown()
+    {
+        // Concept doc §5: the aspect runner now writes a structured
+        // `aspect-{id}.json` source of truth next to the human-readable
+        // `.md`. The JSON must carry the load-bearing fields the Files tab
+        // and Result head read; the markdown twin stays for existing readers.
+        var runner = BuildRunner(aspect => aspect switch
+        {
+            "code-quality" => "The helper duplicates foo().\n[[ASPECT_VERDICT: status=concerns; summary=Dead helper left behind.]]\n[[TASK_DONE]]",
+            _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"
+        });
+
+        await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        var mdPath = Path.Combine(_jobFolder, "aspect-code-quality.md");
+        var jsonPath = Path.Combine(_jobFolder, "aspect-code-quality.json");
+        Assert.True(File.Exists(mdPath), "markdown twin must still be written");
+        Assert.True(File.Exists(jsonPath), "structured JSON source of truth must be written");
+
+        var doc = AspectVerdictParsing.TryParseJson(File.ReadAllText(jsonPath));
+        Assert.NotNull(doc);
+        Assert.Equal("code-quality", doc!.Aspect);
+        Assert.Equal("concerns", doc.Status);
+        Assert.Equal("Dead helper left behind.", doc.Summary);
+        Assert.Equal("quality:concerns", doc.Tag);
+        Assert.Equal("claude-haiku-4-5", doc.Model);
+        Assert.Contains("duplicates foo()", doc.Details);
+        Assert.Equal(AspectVerdictParsing.AspectDocumentSchemaVersion, doc.SchemaVersion);
+    }
+
+    [Fact]
+    public async Task PassAspect_JsonTwin_HasNullTag()
+    {
+        var runner = BuildRunner(_ => "[[ASPECT_VERDICT: status=pass; summary=Looks fine.]]\n[[TASK_DONE]]");
+
+        await runner.RunAsync(BuildInputs(),
+            new[] { "requirement-fit" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        var doc = AspectVerdictParsing.TryParseJson(
+            File.ReadAllText(Path.Combine(_jobFolder, "aspect-requirement-fit.json")));
+        Assert.NotNull(doc);
+        Assert.Equal("pass", doc!.Status);
+        Assert.Null(doc.Tag);
+    }
+
+    [Fact]
     public async Task OneConcernsThreePasses_OverallIsConcerns_ConcernTagAddedForThatNamespace()
     {
         var runner = BuildRunner(aspect => aspect switch
@@ -149,6 +198,22 @@ public class AspectRunnerTests : IDisposable
         Assert.Equal(AspectStatus.Concerns, AspectVerdictParsing.ReadStatusFromReport(content));
     }
 
+    [Fact]
+    public async Task SparkReply_WithMalformedVerdict_UsesDeterministicUnparseableConcern()
+    {
+        var runner = BuildRunner(_ => "Analysis complete. [[ASPECT_VERDICT: status=maybe; summary=looks fine]]");
+
+        var report = await runner.RunAsync(BuildInputs(), ["documentation-impact"],
+            CliTypes.Codex, "gpt-5.6-codex-spark", TimeSpan.FromSeconds(5), CancellationToken.None,
+            modelForAspect: _ => "gpt-5.6-codex-spark",
+            cliForAspect: _ => CliTypes.Codex);
+
+        var verdict = Assert.Single(report.Verdicts);
+        Assert.Equal(AspectStatus.Concerns, verdict.Status);
+        Assert.Equal("Aspect runner produced no parseable verdict.", verdict.Summary);
+        Assert.Equal("review:unparseable", verdict.ConcernTagId);
+    }
+
     [Theory]
     [InlineData("Looks fine.\n\nStatus: pass", AspectStatus.Pass)]
     [InlineData("**Status:** concerns\n\nNeeds review.", AspectStatus.Concerns)]
@@ -227,6 +292,47 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task AspectPrompt_CarriesResultsInventoryAndCardMode_ForEvidenceCompleteness()
+    {
+        // AGT-2022: every aspect prompt must carry the results/ inventory and the
+        // card-mode framing so a read-only / concept card is never false-BLOCKed
+        // as "deliverables missing" when the deliverable lives outside the diff.
+        string? capturedPrompt = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, _, _, prompt, _, _) =>
+        {
+            capturedPrompt = prompt;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        var inputs = new AspectRunInputs(
+            Project: "demo",
+            JobId: "concept-job",
+            JobTitle: "Analyse the pipeline and propose next steps",
+            JobFolderPath: _jobFolder,
+            TaskBody: "# Task\n\nWrite a plan.",
+            RecentLog: "done",
+            DiffSummary: "No commits attributed to this task.",
+            StatusSummary: "Plan written to results/plan.md.")
+        {
+            ResultsInventory = "results/ folder contains 1 file(s):\n- plan.md (512 bytes)",
+            CardMode = ReviewCardMode.Describe("planning"),
+        };
+
+        await runner.RunAsync(inputs,
+            new[] { "requirement-fit" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.NotNull(capturedPrompt);
+        Assert.Contains("results/ folder inventory", capturedPrompt!);
+        Assert.Contains("plan.md", capturedPrompt);
+        Assert.Contains("read-only", capturedPrompt);
+        Assert.Contains("Deliverables rule", capturedPrompt);
+    }
+
+    [Fact]
     public async Task PerAspectModel_RoutesEachAspectsCliCallToItsConfiguredModel()
     {
         // The load-bearing per-step-model-selection acceptance: when the
@@ -279,6 +385,50 @@ public class AspectRunnerTests : IDisposable
 
         Assert.Equal("claude-haiku-4-5", captured["code-quality"]);
         Assert.Equal("claude-haiku-4-5", captured["tests-and-evidence"]);
+    }
+
+    [Fact]
+    public async Task PerAspectCli_RoutesConfiguredCodexCliWithSparkModel()
+    {
+        string? capturedCli = null;
+        string? capturedModel = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, cli, model, _, _, _) =>
+        {
+            capturedCli = cli;
+            capturedModel = model;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        await runner.RunAsync(BuildInputs(), new[] { "documentation-impact" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None,
+            modelForAspect: _ => "gpt-5.3-codex-spark",
+            cliForAspect: _ => CliTypes.Codex);
+
+        Assert.Equal(CliTypes.Codex, capturedCli);
+        Assert.Equal("gpt-5.3-codex-spark", capturedModel);
+    }
+
+    [Fact]
+    public async Task NullPerAspectCli_KeepsRunWideCli()
+    {
+        string? capturedCli = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, cli, _, _, _, _) =>
+        {
+            capturedCli = cli;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        await runner.RunAsync(BuildInputs(), ["documentation-impact"],
+            CliTypes.Codex, ModelIds.Gpt54Mini, TimeSpan.FromSeconds(5), CancellationToken.None,
+            cliForAspect: null);
+
+        Assert.Equal(CliTypes.Codex, capturedCli);
     }
 
     [Fact]
@@ -340,6 +490,170 @@ public class AspectRunnerTests : IDisposable
     public void SerializeFindings_EmptyInput_YieldsEmptyArray()
     {
         Assert.Equal("[]", AspectVerdictParsing.SerializeFindings(Array.Empty<AspectVerdict>()));
+    }
+
+    [Fact]
+    public void RenderJson_EmitsCamelCaseStructuredDocument_AndRoundTrips()
+    {
+        var verdict = new AspectVerdict(
+            "code-quality", AspectStatus.Concerns, "Dead helper.",
+            "## Model reply\n\n```\nnarrative\n```\n", "quality:concerns");
+        var now = new DateTime(2026, 7, 9, 19, 21, 3, DateTimeKind.Utc);
+
+        var json = AspectVerdictParsing.RenderJson(verdict, "claude-haiku-4-5", now);
+
+        using (var probe = System.Text.Json.JsonDocument.Parse(json))
+        {
+            var root = probe.RootElement;
+            Assert.Equal("code-quality", root.GetProperty("aspect").GetString());
+            Assert.Equal("concerns", root.GetProperty("status").GetString());
+            Assert.Equal("Dead helper.", root.GetProperty("summary").GetString());
+            Assert.Equal("quality:concerns", root.GetProperty("tag").GetString());
+            Assert.Equal("claude-haiku-4-5", root.GetProperty("model").GetString());
+            // Empty metrics is dropped from the wire, not emitted as {}.
+            Assert.False(root.TryGetProperty("metrics", out _));
+        }
+
+        var parsed = AspectVerdictParsing.TryParseJson(json);
+        Assert.NotNull(parsed);
+        Assert.Equal("code-quality", parsed!.Aspect);
+        Assert.Equal("concerns", parsed.Status);
+        Assert.Equal("quality:concerns", parsed.Tag);
+    }
+
+    [Fact]
+    public void RenderJson_PassVerdict_OmitsTag_AndKeepsMetricsWhenProvided()
+    {
+        var verdict = new AspectVerdict("tests-and-evidence", AspectStatus.Pass, "ok", "body", null);
+        var metrics = new Dictionary<string, string> { ["filesChanged"] = "3", ["testsPassed"] = "157" };
+
+        var json = AspectVerdictParsing.RenderJson(verdict, "claude-haiku-4-5", DateTime.UtcNow, metrics);
+
+        using var probe = System.Text.Json.JsonDocument.Parse(json);
+        var root = probe.RootElement;
+        Assert.False(root.TryGetProperty("tag", out _)); // null tag dropped
+        Assert.Equal("3", root.GetProperty("metrics").GetProperty("filesChanged").GetString());
+        Assert.Equal("157", root.GetProperty("metrics").GetProperty("testsPassed").GetString());
+    }
+
+    [Fact]
+    public void TryParseJson_RejectsMarkdownTwin_AndBlankInput()
+    {
+        var md = AspectVerdictParsing.RenderReport(
+            new AspectVerdict("code-quality", AspectStatus.Pass, "ok", "body", null), DateTime.UtcNow);
+        Assert.Null(AspectVerdictParsing.TryParseJson(md));
+        Assert.Null(AspectVerdictParsing.TryParseJson(""));
+        Assert.Null(AspectVerdictParsing.TryParseJson("   "));
+        Assert.Null(AspectVerdictParsing.TryParseJson("{ not valid json"));
+    }
+
+    // ---- AGT-2021: environmental retry-once + InfraCrash --------------------
+
+    [Fact]
+    public async Task MissingVerdict_FromDeadReviewer_RetriesOnce_ThenRecovers()
+    {
+        // The backend cut kills the reviewing CLI mid-run -> the first call
+        // returns nothing. This is an INFRASTRUCTURE fault, not the card's work,
+        // so the aspect runner reruns the step once with the environmental
+        // backoff; the retry succeeds and the aspect passes cleanly.
+        var calls = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+        var runner = BuildRunner(aspect =>
+        {
+            var n = calls.AddOrUpdate(aspect, 1, (_, c) => c + 1);
+            return n == 1
+                ? string.Empty // dead reviewer: no output
+                : "[[ASPECT_VERDICT: status=pass; summary=Recovered on retry.]]\n[[TASK_DONE]]";
+        });
+        runner.VerdictRetryBackoff = _ => TimeSpan.Zero; // no real wait in the test
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.False(report.HasInfraFailure);
+        Assert.Equal(AspectStatus.Pass, report.Overall);
+        Assert.Empty(report.ConcernTagIds);
+        Assert.Equal(2, calls["code-quality"]); // ran once, retried once
+        Assert.False(report.Verdicts.Single().IsInfraFailure);
+    }
+
+    [Fact]
+    public async Task MissingVerdict_Twice_RecordsInfraCrash_NotUnfinishedWork()
+    {
+        // The reviewer dies on both the run and the retry -> environmental
+        // InfraCrash. The verdict is flagged IsInfraFailure and hangs NO
+        // review:unparseable concern tag (that tag means "model replied but broke
+        // the format", a different, non-infra signal).
+        var calls = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+        var runner = BuildRunner(aspect =>
+        {
+            calls.AddOrUpdate(aspect, 1, (_, c) => c + 1);
+            return string.Empty; // dead every time
+        });
+        runner.VerdictRetryBackoff = _ => TimeSpan.Zero;
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.True(report.HasInfraFailure);
+        Assert.Single(report.InfraFailures);
+        Assert.Equal("code-quality", report.InfraFailures[0].Aspect);
+        Assert.True(report.Verdicts.Single().IsInfraFailure);
+        Assert.Null(report.Verdicts.Single().ConcernTagId);
+        Assert.Empty(report.ConcernTagIds); // no review:unparseable chip leaks
+        Assert.Equal(2, calls["code-quality"]); // one run + one retry, then stop
+        Assert.Contains("environmental infra crash", report.Verdicts.Single().Summary);
+    }
+
+    [Fact]
+    public async Task ReviewerThrows_TreatedAsInfra_RetriesThenInfraCrash()
+    {
+        // A CLI invocation that THROWS (not just an empty reply) is the same
+        // infra class: retry once, then InfraCrash.
+        var calls = 0;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance)
+        {
+            VerdictRetryBackoff = _ => TimeSpan.Zero
+        };
+        runner.CliRunner = (_, _, _, _, _, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            throw new InvalidOperationException("reviewing CLI died");
+        };
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "requirement-fit" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.True(report.HasInfraFailure);
+        Assert.Equal(2, calls); // one run + one retry
+    }
+
+    [Fact]
+    public async Task NonEmptyUnparseableReply_StaysConcern_NoRetry()
+    {
+        // A reviewer that DID reply (even garbage) is not an infra fault: it keeps
+        // the existing review:unparseable concern and is NOT retried. Guards the
+        // AGT-2021 change against widening the environmental class too far.
+        var calls = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+        var runner = BuildRunner(aspect =>
+        {
+            calls.AddOrUpdate(aspect, 1, (_, c) => c + 1);
+            return "I have no opinion.";
+        });
+        runner.VerdictRetryBackoff = _ => TimeSpan.Zero;
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.False(report.HasInfraFailure);
+        Assert.Equal(AspectStatus.Concerns, report.Overall);
+        Assert.Equal("review:unparseable", report.ConcernTagIds[0]);
+        Assert.Equal(1, calls["code-quality"]); // no retry for a real (if garbage) reply
     }
 
     private AspectRunInputs BuildInputs() => new(

@@ -15,19 +15,19 @@
       </span>
       @if (attemptLabel(); as al) {
         <span class="loop__attempt" data-testid="overview-loop-attempt"
-              [appTooltip]="'Attempt ' + al + ' of the orchestrator completion loop. Each re-open feeds the specific gap into the next run.'">
+              [cacTooltip]="'Attempt ' + al + ' of the orchestrator completion loop. Each re-open feeds the specific gap into the next run.'">
           Attempt {{ al }}
         </span>
       }
       @if (loop.reopenCount > 0) {
         <span class="loop__reopens" data-testid="overview-loop-reopens"
-              [appTooltip]="'Number of times the orchestrator judged the work not truly done and re-opened the task.'">
+              [cacTooltip]="'Number of times the orchestrator judged the work not truly done and re-opened the task.'">
           re-opened {{ loop.reopenCount }}×
         </span>
       }
       @if (loop.at) {
         <span class="loop__when" data-testid="overview-loop-when"
-              [appTooltip]="formatAbsoluteTime(loop.at)">
+              [cacTooltip]="formatAbsoluteTime(loop.at)">
           {{ formatRelativeTime(loop.at) }}
         </span>
       }

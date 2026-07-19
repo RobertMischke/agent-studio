@@ -133,7 +133,7 @@ test('element drill-down: panel renders evidence, guidelines, and action buttons
         'Runner state-machine has drifted from ADR-0024.', {
           guidelines: ['Single-writer state machine via JobTransitionService.'],
           allowedDependencies: ['Services/Jobs/*', 'Services/TaskAccess/*'],
-          evidenceRefs: ['docs/architecture-decisions.md#adr-0024', 'backend/Services/Jobs/JobTransitionService.cs:1'],
+          evidenceRefs: ['docs/system/architecture/decisions/adr-archive.md#adr-0024', 'backend/Services/Jobs/JobTransitionService.cs:1'],
           followUps: ['Reconcile RunnerEndpoints with JobTransitionService.'],
         }),
       element('api', 'API surface', 80, 'Info', 0.9, 'New'),
@@ -257,7 +257,7 @@ function plantDriftReport(dir: string, opts: { overall: number; band: string; el
     project: projectName,
     createdAt,
     trigger: 'Manual',
-    scope: { kind: 'Project', sourceRefs: ['docs/architecture-decisions.md'] },
+    scope: { kind: 'Project', sourceRefs: ['docs/system/architecture/decisions/adr-archive.md'] },
     overallScore: opts.overall,
     scoreBand: opts.band,
     summary: 'Architecture marble surface fixture (planted by Playwright spec).',
@@ -270,7 +270,7 @@ function plantDriftReport(dir: string, opts: { overall: number; band: string; el
         sourceCoverage: 0.8,
         status: 'New',
         summary: 'Architecture-only fixture for the marble surface.',
-        evidenceRefs: ['docs/architecture-decisions.md'],
+        evidenceRefs: ['docs/system/architecture/decisions/adr-archive.md'],
         recommendedActions: [],
       },
     ],
@@ -279,7 +279,7 @@ function plantDriftReport(dir: string, opts: { overall: number; band: string; el
     architectureModel: {
       modelId: 'fixture-model-1',
       title: 'Project architecture map (fixture)',
-      sourceRef: 'docs/architecture-decisions.md',
+      sourceRef: 'docs/system/architecture/decisions/adr-archive.md',
       elements: opts.elements,
     },
   };

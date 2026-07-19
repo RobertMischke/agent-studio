@@ -135,7 +135,7 @@ public class DriftReportArchitectureModelTests : IDisposable
                     SourceCoverage: 0.8,
                     Status: DriftFindingStatus.New,
                     Summary: "ok",
-                    EvidenceRefs: new[] { "docs/architecture-decisions.md" },
+                    EvidenceRefs: new[] { "docs/system/architecture/decisions/adr-archive.md" },
                     RecommendedActions: Array.Empty<string>()),
             },
             Summary: "test",

@@ -2,6 +2,7 @@
   <app-detail-header
     #detailHeader
     [info]="detail().info"
+    [defaultThinkingLevel]="defaultThinkingLevel()"
     [editingTitle]="editingTitle()"
     [titleDraft]="titleDraft()"
     [savingTitle]="savingTitle()"
@@ -10,6 +11,7 @@
     [pagerTotal]="pagerTotal()"
     [pagerCanPrev]="pagerCanPrev()"
     [pagerCanNext]="pagerCanNext()"
+    [loading]="detailLoading()"
     [pagerLaneLabel]="pagerLaneLabel()"
     [pagerLaneState]="pagerLaneState()"
     [laneIndex]="laneIndex()"
@@ -20,6 +22,8 @@
     [commitMessageDraft]="commitMessage()"
     [generatingCommitMessage]="generatingMsg()"
     [committing]="committing()"
+    [landedState]="landedState()"
+    [gitInfoLoading]="gitInfoLoading()"
     (back)="back.emit()"
     (titleDraftChange)="titleDraft.set($event)"
     (startTitleEdit)="startTitleEdit()"
@@ -39,6 +43,10 @@
       [epicId]="detail().info.epicId!"
       [watchPath]="detail().info.watchPath"
       (openEpic)="openEpicRequested.emit($event)" />
+  }
+
+  @if (isEscalated()) {
+    <app-escalation-summary [detail]="detail()" />
   }
 
   <app-command-deck
@@ -62,22 +70,6 @@
     (stopRequest)="stopJob()"
     (toggleCollapsed)="toggleSetupCollapsed()" />
 
-
-  @if (showCliConfig() && cliTypeDraft() === 'copilot') {
-    <app-cli-config-card
-      [status]="cliStatus()"
-      [testResult]="cliTestResult()"
-      [pathDraft]="cliPathDraft()"
-      [tokenDraft]="tokenDraft()"
-      [testing]="cliTesting()"
-      [tokenSaving]="tokenSaving()"
-      (closeRequest)="showCliConfig.set(false)"
-      (pathDraftChange)="cliPathDraft.set($event)"
-      (tokenDraftChange)="tokenDraft.set($event)"
-      (testPath)="testCliPath()"
-      (savePath)="saveCliPath()"
-      (saveToken)="saveToken()" />
-  }
 
   <app-pane-toggle-bar
     [panesVisible]="panesVisible()"
@@ -137,7 +129,7 @@
            [class.pane__splitter--dragging]="paneSplitterDragging()"
            role="separator" aria-orientation="vertical"
            data-testid="pane-splitter"
-           [appTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
+           [cacTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
     }
 
     @if (isPaneRendered('protocol')) {
@@ -177,7 +169,7 @@
            [class.pane__splitter--dragging]="paneSplitterDragging()"
            role="separator" aria-orientation="vertical"
            data-testid="pane-splitter"
-           [appTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
+           [cacTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
     }
 
     @if (isPaneRendered('git')) {

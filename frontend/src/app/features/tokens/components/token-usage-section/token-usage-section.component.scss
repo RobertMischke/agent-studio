@@ -1,0 +1,80 @@
+:host {
+  display: block;
+}
+
+.token-usage {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--studio-spacing-4);
+}
+
+.token-usage__tree {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+}
+
+.token-usage__tree-group {
+  margin: var(--studio-spacing-2) var(--studio-spacing-2) var(--studio-spacing-1);
+  color: var(--studio-fg-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.token-usage__tree button {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.token-usage__tree button:hover { background: var(--studio-bg-hover); }
+.token-usage__tree button:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+.token-usage__tree .token-usage__tree-item--active {
+  background: var(--studio-nav-active-bg);
+  color: var(--studio-nav-active-fg);
+  box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
+}
+.token-usage__tree button span { color: var(--studio-fg-muted); font-size: 0.7rem; line-height: 1.35; }
+.token-usage__page { min-width: 0; }
+.token-usage__page-head { margin-bottom: var(--studio-spacing-3); }
+.token-usage__page-head h2 { margin: var(--studio-spacing-1) 0; color: var(--studio-fg-strong); font-size: 1.1rem; }
+.token-usage__page-head p { margin: 0; color: var(--studio-fg-dim); font-size: 0.78rem; }
+.token-usage__eyebrow { color: var(--studio-accent); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.token-usage__detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  margin-bottom: var(--studio-spacing-2);
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--studio-fg);
+  }
+}
+
+.token-usage__hint {
+  font-size: 0.75rem;
+  color: var(--studio-fg-muted);
+}
+
+@media (max-width: 900px) {
+  .token-usage { grid-template-columns: 1fr; }
+  .token-usage__tree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .token-usage__tree-group { display: none; }
+}

@@ -6,11 +6,11 @@ import { api } from '../helpers/api';
 /**
  * In-product concept docs: the small "i" trigger next to a panel title
  * opens a popover with a short paragraph plus a "Learn more" link to the
- * matching doc under docs/. The component is wired into five panels:
+ * matching doc under docs/. The component is wired into four panels:
  * the global orchestrator card (concept = orchestrator), the project
  * supervisor section (concept = supervisor), the project security panel
- * (concept = audits-and-checks), the project skill-readiness section
- * (concept = skills), and the CLI usage detail modal (concept = probes).
+ * (concept = audits-and-checks), and the CLI usage detail modal
+ * (concept = probes).
  *
  * The spec verifies that each trigger renders, opens the popover with a
  * non-empty body and a Learn-more link pointing to the expected docs path,
@@ -95,7 +95,7 @@ test('orchestrator concept-help on the global orchestrator card', async ({ page 
   const card = page.getByTestId('global-orchestrator-card');
   await card.scrollIntoViewIfNeeded();
   await expect(card).toBeVisible({ timeout: 10_000 });
-  await assertConceptHelp(page, 'orchestrator', 'docs/architecture-decisions.md');
+  await assertConceptHelp(page, 'orchestrator', 'docs/system/architecture/decisions/adr-archive.md');
   await page.screenshot({
     path: `${SCREENSHOT_DIR}/01-orchestrator.png`,
     fullPage: true,
@@ -109,7 +109,7 @@ test('supervisor concept-help on the project supervisor section', async ({ page 
   const section = page.getByTestId('project-supervisor-section');
   await section.scrollIntoViewIfNeeded();
   await expect(section).toBeVisible();
-  await assertConceptHelp(page, 'supervisor', 'docs/architecture-decisions.md');
+  await assertConceptHelp(page, 'supervisor', 'docs/system/architecture/decisions/adr-archive.md');
   await page.screenshot({
     path: `${SCREENSHOT_DIR}/02-supervisor.png`,
     fullPage: true,
@@ -119,21 +119,9 @@ test('supervisor concept-help on the project supervisor section', async ({ page 
 test('audits-and-checks concept-help on the project security panel', async ({ page }) => {
   await openProjectRail(page, 'security');
   await expect(page.getByTestId('security-panel')).toBeVisible();
-  await assertConceptHelp(page, 'audits-and-checks', 'docs/security/overview.md');
+  await assertConceptHelp(page, 'audits-and-checks', 'docs/operations/security/overview.md');
   await page.screenshot({
     path: `${SCREENSHOT_DIR}/03-audits-and-checks.png`,
-    fullPage: true,
-  });
-});
-
-test('skills concept-help on the project skill-readiness section', async ({ page }) => {
-  await openProjectRail(page, 'steering');
-  const section = page.getByTestId('project-skill-readiness-section');
-  await section.scrollIntoViewIfNeeded();
-  await expect(section).toBeVisible();
-  await assertConceptHelp(page, 'skills', 'docs/skills-architecture.md');
-  await page.screenshot({
-    path: `${SCREENSHOT_DIR}/04-skills.png`,
     fullPage: true,
   });
 });
@@ -147,9 +135,9 @@ test('probes concept-help on the CLI usage detail panel', async ({ page }) => {
   await trigger.click();
   await expect(page.getByTestId('cli-admin-panel')).toBeVisible({ timeout: 5_000 });
   await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
-  await assertConceptHelp(page, 'probes', 'docs/cli-skills/cli-overview.md');
+  await assertConceptHelp(page, 'probes', 'docs/system/cli/skills/cli-overview.md');
   await page.screenshot({
-    path: `${SCREENSHOT_DIR}/05-probes.png`,
+    path: `${SCREENSHOT_DIR}/04-probes.png`,
     fullPage: true,
   });
 });

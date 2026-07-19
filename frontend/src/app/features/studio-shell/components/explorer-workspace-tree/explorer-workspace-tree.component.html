@@ -9,12 +9,30 @@
     [count]="totalProjectCount()"
     testid="studio-explorer-workspace-head"
     (collapsedChange)="setCollapsed('workspace', $event)">
+    <!-- AGT-2031: whole tree collapsed → workspace-wide aggregate pulse. -->
+    @if (isCollapsed('workspace') && allPulseAggregate().state !== 'off') {
+      <app-explorer-auto-pulse actions
+        [state]="allPulseAggregate().state"
+        [aggregate]="true"
+        [tooltip]="aggregatePulseTooltip(allPulseAggregate())"
+        [ariaLabel]="aggregatePulseTooltip(allPulseAggregate())"
+        testid="studio-explorer-workspace-pulse" />
+    }
     <button actions
             type="button"
-            class="studio-sidebar__action studio-sidebar__action--inline"
-            [class.studio-sidebar__action--active]="showAllActive()"
+            class="studio-sidebar-header__action studio-sidebar-header__action--inline"
+            data-testid="studio-explorer-add-workspace"
+            cacTooltip="Create workspace"
+            aria-label="Create workspace"
+            (click)="onboardWorkspaceRequest.emit(); $event.stopPropagation()">
+      <app-studio-icon name="plus" [size]="11"></app-studio-icon>
+    </button>
+    <button actions
+            type="button"
+            class="studio-sidebar-header__action studio-sidebar-header__action--inline"
+            [class.studio-sidebar-header__action--active]="showAllActive()"
             data-testid="studio-explorer-show-all-projects"
-            appTooltip="Show all projects (open the cross-project board)"
+            cacTooltip="Show all projects (open the cross-project board)"
             aria-label="Show all projects"
             (click)="showAll.emit(); $event.stopPropagation()">
       <app-studio-icon name="grid" [size]="11"></app-studio-icon>
@@ -55,19 +73,42 @@
              opens the rename menu. The `studio-explorer-ws-group-<id>`
              testid + aria-expanded contract is preserved for the F46
              specs. -->
-        <app-tree-row
-          level="root"
-          class="studio-explorer-tree__ws-head"
-          glyph="folder"
-          [chevron]="isCollapsed('ws:' + g.id) ? 'collapsed' : 'expanded'"
-          [label]="g.displayName"
-          [count]="g.projects.length"
-          [testid]="'studio-explorer-ws-group-' + g.id"
-          appTooltip="Double-click or right-click to rename this workspace"
-          (chevronClick)="onWsHeaderToggle(g)"
-          (selectRequest)="onWsHeaderToggle(g)"
-          (secondary)="startRenameWorkspace(g)"
-          (contextmenu)="openWsContextMenu($event, g)" />
+        <div class="studio-explorer-tree__ws-head">
+          @let wsAgg = wsPulseAggregate(g);
+          <app-tree-row
+            level="root"
+            glyph="folder"
+            [chevron]="isCollapsed('ws:' + g.id) ? 'collapsed' : 'expanded'"
+            [label]="g.displayName"
+            [count]="g.projects.length"
+            [testid]="'studio-explorer-ws-group-' + g.id"
+            cacTooltip="Double-click or right-click to rename this workspace"
+            (chevronClick)="onWsHeaderToggle(g)"
+            (selectRequest)="onWsHeaderToggle(g)"
+            (secondary)="startRenameWorkspace(g)"
+            (contextmenu)="openWsContextMenu($event, g)">
+            <!-- AGT-2031: collapsed workspace → aggregate pulse (names on auto
+                 in the tooltip); expanded → the per-project dots carry it. -->
+            @if (isCollapsed('ws:' + g.id) && wsAgg.state !== 'off') {
+              <app-explorer-auto-pulse
+                [state]="wsAgg.state"
+                [aggregate]="true"
+                [tooltip]="aggregatePulseTooltip(wsAgg)"
+                [ariaLabel]="aggregatePulseTooltip(wsAgg)"
+                [testid]="'studio-explorer-ws-pulse-' + g.id" />
+            }
+          </app-tree-row>
+          @if (g.id !== '__all__' && g.id !== '__unassigned__') {
+            <button type="button"
+                    class="studio-explorer-tree__row-action"
+                    [attr.data-testid]="'studio-workspace-' + g.id + '-add-project'"
+                    cacTooltip="Create project in this workspace"
+                    [attr.aria-label]="'Create project in ' + g.displayName"
+                    (click)="onboardProjectRequest.emit(g.id); $event.stopPropagation()">
+              <app-studio-icon name="plus" [size]="11"></app-studio-icon>
+            </button>
+          }
+        </div>
       }
 
       @if (!isCollapsed('ws:' + g.id)) {
@@ -78,11 +119,11 @@
                [class.studio-tree-project--moving]="!!p.projectId && projectDrag.movingProjectId() === p.projectId"
                [attr.data-project-name]="p.name"
                [attr.data-testid]="'studio-explorer-project-row-' + p.name"
-               [appTooltip]="rowTitle(p)"
+               [cacTooltip]="rowTitle(p)"
                (contextmenu)="onProjectContextMenu($event, p)"
                (dragstart)="onDragStart($event, p)"
                (dragend)="onDragEnd()">
-            @if (projectActions.renamingProjectId() === p.projectId) {
+            @if (p.projectId && projectActions.renamingProjectId() === p.projectId) {
               <!-- Inline rename: registry displayName only; PROJ id + storage
                    stay put. Enter commits, Escape / blur cancels. -->
               <div class="studio-explorer-tree__ws-rename">
@@ -112,9 +153,16 @@
                             (chevronClick)="toggleExpanded.emit(p.name)"
                             (selectRequest)="toggleExpanded.emit(p.name)"
                             (secondary)="openBoardRequest.emit(p.name)">
+                <!-- AGT-2031: subtle auto-pickup pulse (reserved slot → no
+                     reflow when auto toggles). -->
+                <app-explorer-auto-pulse
+                  [state]="pulseStateFor(p.name)"
+                  [tooltip]="pulseTooltip(pulseStateFor(p.name))"
+                  [ariaLabel]="pulseAriaLabel(pulseStateFor(p.name))"
+                  [testid]="'studio-explorer-project-pulse-' + p.name" />
                 <button type="button"
                         class="studio-tree-row__hub-link"
-                        appTooltip="Open Project Hub"
+                        cacTooltip="Open Project Hub"
                         aria-label="Open Project Hub"
                         (click)="openHubRequest.emit(p.name); $event.stopPropagation()">
                   <app-studio-icon name="grid" [size]="10"></app-studio-icon>
@@ -122,56 +170,76 @@
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
-              <!-- ASS-658/ASS-597: per-project links are exactly four, all
-                   project-scoped — Board (kanban), Project Hub, Backlog
-                   (triage), and Epics (overview). Per-lane children stay
-                   retired; lanes are reachable from the board itself. -->
+              <!-- Fixed project-scoped rows for Board (kanban), Project Hub,
+                   Wiki, and Epics (overview), followed by 0..N dynamic
+                   Project URL rows (see the @for below). These are the third
+                   tree level: `level="child"` insets them one step under the
+                   project row (workspace → project → destinations) so a project
+                   reads as clearly superordinate to its destinations rather than
+                   flush beside them (AGT-2057 regression fix). Per-lane children
+                   stay retired. -->
               <div class="studio-tree-children">
                 <app-tree-row level="child" glyph="grid"
                               label="Board"
                               [ariaLabel]="'Board, ' + boardLaneCountsLabel(p)"
+                              [active]="p.isActive && activeProjectSurface() === 'board'"
+                              [ariaCurrent]="p.isActive && activeProjectSurface() === 'board' ? 'page' : null"
                               [testid]="'studio-explorer-project-board-' + p.name"
                               (selectRequest)="openBoardRequest.emit(p.name)">
-                  <span class="studio-board-lane-counts"
-                        [attr.data-testid]="'studio-explorer-project-board-counts-' + p.name"
-                        [attr.aria-label]="boardLaneCountsLabel(p)">
-                    <span class="studio-board-lane-count studio-board-lane-count--ready"
-                          [appTooltip]="laneCountTooltips.ready"
-                          [attr.data-testid]="'studio-explorer-project-board-count-ready-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).ready }}</span>
-                    <span class="studio-board-lane-count studio-board-lane-count--progress"
-                          [appTooltip]="laneCountTooltips.progress"
-                          [attr.data-testid]="'studio-explorer-project-board-count-progress-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).progress }}</span>
-                    <span class="studio-board-lane-count studio-board-lane-count--human-review"
-                          [appTooltip]="laneCountTooltips.humanReview"
-                          [attr.data-testid]="'studio-explorer-project-board-count-human-review-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).humanReview }}</span>
-                  </span>
+                  <app-explorer-lane-dashboard
+                    [counts]="laneCountsFor(p)" [view]="metricView()"
+                    [projectName]="p.name" />
                 </app-tree-row>
                 <app-tree-row level="child" glyph="layout"
                               label="Project Hub"
+                              [active]="p.isActive && activeProjectSurface() === 'hub'"
+                              [ariaCurrent]="p.isActive && activeProjectSurface() === 'hub' ? 'page' : null"
                               [testid]="'studio-explorer-project-hub-' + p.name"
                               (selectRequest)="openHubRequest.emit(p.name)" />
-                <app-tree-row level="child" glyph="list"
-                              label="Backlog"
-                              [testid]="'studio-explorer-project-backlog-' + p.name"
-                              (selectRequest)="openBacklogRequest.emit(p.name)" />
+                <app-tree-row level="child" glyph="book"
+                              label="Wiki"
+                              [active]="p.isActive && activeProjectSurface() === 'wiki'"
+                              [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
+                              [testid]="'studio-explorer-project-wiki-' + p.name"
+                              (selectRequest)="openWikiRequest.emit(p.name)" />
+                <app-explorer-workbench-list [projectName]="p.name" [active]="p.isActive && activeProjectSurface() === 'workbench'" (openWorkbench)="openWorkbenchRequest.emit({ projectName: p.name, workbench: $event })" />
                 <app-tree-row level="child" glyph="book"
                               label="Epics"
+                              [active]="p.isActive && activeProjectSurface() === 'epics'"
+                              [ariaCurrent]="p.isActive && activeProjectSurface() === 'epics' ? 'page' : null"
                               [testid]="'studio-explorer-project-epics-' + p.name"
                               (selectRequest)="openEpicsRequest.emit(p.name)" />
+                <!-- Project URLs: 0..N rows appended after fixed rows. A link glyph and a
+                     running/offline status dot instead of a count badge.
+                     AGT-2067: primary click now opens the URL EMBEDDED in a
+                     sandboxed iframe as its own tab (openUrlPreviewRequest);
+                     a hover-revealed icon keeps the browser-jump fallback. -->
+                @for (u of p.urls; track u.id) {
+                  <app-tree-row level="child" glyph="link"
+                                [label]="u.label"
+                                [ariaLabel]="u.label + ', opens ' + u.url + ' as an embedded preview tab'"
+                                [cacTooltip]="u.url"
+                                [testid]="'studio-explorer-project-url-' + p.name + '-' + u.id"
+                                (selectRequest)="openUrlPreview(p.name, u.id)">
+                    <span class="studio-url-status-dot"
+                          [class.studio-url-status-dot--running]="urlProbe.statusFor(p.projectId ?? '', u.id) === 'running'"
+                          [class.studio-url-status-dot--offline]="urlProbe.statusFor(p.projectId ?? '', u.id) === 'offline'"
+                          [attr.data-testid]="'studio-explorer-project-url-dot-' + p.name + '-' + u.id"
+                          [attr.data-status]="urlProbe.statusFor(p.projectId ?? '', u.id)"
+                          [attr.aria-label]="urlProbe.statusFor(p.projectId ?? '', u.id)"></span>
+                    <button type="button"
+                            class="studio-tree-row__url-ext"
+                            [attr.data-testid]="'studio-explorer-project-url-ext-' + p.name + '-' + u.id"
+                            cacTooltip="Open in external browser"
+                            aria-label="Open in external browser"
+                            (click)="openUrlExternal(u.url, $event)">
+                      <app-studio-icon name="send" [size]="10" />
+                    </button>
+                  </app-tree-row>
+                }
               </div>
             }
           </div>
-        }
-        @if (g.id !== '__all__' && g.id !== '__unassigned__') {
-          <button type="button"
-                  class="studio-explorer-tree__add-project"
-                  [attr.data-testid]="'studio-workspace-' + g.id + '-add-project'"
-                  (click)="onboardProjectRequest.emit(g.id)">
-            + New project
-          </button>
         }
       }
       </div>

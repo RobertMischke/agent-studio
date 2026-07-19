@@ -18,10 +18,10 @@ describe('MediaLightboxService', () => {
   });
 
   it('opens with src and alt', () => {
-    service.open({ src: '/api/jobs/x/attachments/y.png', alt: 'Screenshot' });
+    service.open({ src: '/api/tasks/x/attachments/y.png', alt: 'Screenshot' });
     const active = service.active();
     expect(active).not.toBeNull();
-    expect(active?.src).toBe('/api/jobs/x/attachments/y.png');
+    expect(active?.src).toBe('/api/tasks/x/attachments/y.png');
     expect(active?.alt).toBe('Screenshot');
   });
 

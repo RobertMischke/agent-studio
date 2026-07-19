@@ -22,6 +22,20 @@ public record TaskScreenshot
     public string Caption { get; init; } = "";
     /// <summary>One of <c>passed</c>, <c>failed</c>, <c>skipped</c>, <c>unknown</c>, or null when no harvest index applies.</summary>
     public string? Status { get; init; }
+    /// <summary>
+    /// Provenance label derived from the filename suffix: one of
+    /// <see cref="ScreenshotSources"/> (<c>real</c> / <c>mocked</c> /
+    /// <c>composite</c> / <c>unlabeled</c>). The UI renders it text-only next
+    /// to the caption so the reviewer can tell a live-backend shot from a
+    /// mocked-route e2e shot.
+    /// </summary>
+    public string Source { get; init; } = ScreenshotSources.Unlabeled;
+    /// <summary>
+    /// For a composite (<see cref="Source"/> == <c>composite</c>), the source
+    /// of each stitched part (e.g. <c>["real", "mocked"]</c>). Empty for every
+    /// other source label.
+    /// </summary>
+    public List<string> CompositeParts { get; init; } = [];
     /// <summary>Absolute on-disk path. The frontend offers a copy-to-clipboard / open-in-Explorer affordance off this.</summary>
     public string LocalPath { get; init; } = "";
     public DateTime TimestampUtc { get; init; }

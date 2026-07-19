@@ -2,6 +2,8 @@
 
 namespace AgentStudio.Host;
 
+using System.Reflection;
+
 /// <summary>
 /// Cross-cutting routes that don't fit any of the resource-scoped
 /// groups: workspace enumeration, environment flags consumed by the
@@ -30,6 +32,31 @@ public static class SystemEndpoints
                 deleteE2EJobsEnabled = config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled")
             };
             return Results.Ok(new { isDev, devTools });
+        });
+
+        // Runtime identity is taken from the loaded backend assembly, not from
+        // the checkout on disk. This remains truthful when main has advanced or
+        // files were pulled without restarting the running process.
+        app.MapGet("/api/system/version", () =>
+        {
+            var assembly = typeof(SystemEndpoints).Assembly;
+            var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            var deployedAt = File.GetLastWriteTimeUtc(assembly.Location);
+            var configuredSha = Environment.GetEnvironmentVariable("ATP_DEPLOY_SHA");
+            var configuredAt = Environment.GetEnvironmentVariable("ATP_DEPLOYED_AT");
+            var sourceSha = !string.IsNullOrWhiteSpace(configuredSha)
+                ? configuredSha
+                : informational?.Split('+', 2).ElementAtOrDefault(1)?.Split('.', 2)[0] ?? "unknown";
+            var builtAt = DateTime.TryParse(configuredAt, out var parsedAt)
+                ? parsedAt.ToUniversalTime()
+                : deployedAt;
+            return Results.Ok(new
+            {
+                version = $"{builtAt:yyyy.MM.dd-HHmm}+{sourceSha[..Math.Min(8, sourceSha.Length)]}",
+                commit = sourceSha,
+                deployedAt = builtAt,
+                informationalVersion = informational
+            });
         });
 
         // Lists the centrally-managed agent-rule files that are appended as a
@@ -86,6 +113,57 @@ public static class SystemEndpoints
         // do not need.
         app.MapGet("/api/git/hygiene", (string project, GitService git) =>
             Results.Ok(git.GetProjectHygiene(project)));
+
+        // Project Hub Git View: read-only branch / worktree / recent-history
+        // inventory for one project. Cached ~3 s server-side. Deliberately
+        // project-scoped (never a global git client): it lists the project's
+        // branches, on-disk worktree/checkout folders, and recent commits so
+        // the Git View tree can distinguish main / develop / feature / task
+        // branches and hand a browsed SHA to the shared diff renderer.
+        app.MapGet("/api/git/inventory", (string project, GitService git) =>
+            Results.Ok(git.GetProjectInventory(project)));
+
+        // Changed-file list for a commit browsed in the project Git View,
+        // resolved through the project's configured repository (no job context).
+        app.MapGet("/api/git/project-commit/files", (string project, string sha, GitService git) =>
+            Results.Ok(new { sha, files = git.GetProjectCommitFiles(project, sha) }));
+
+        // Unified diff for a commit browsed in the project Git View, optionally
+        // scoped to one path. Returns the same { diff, hasDiff, emptyReason }
+        // envelope the per-task commit-diff endpoints use so the frontend diff
+        // surfaces share one payload contract.
+        app.MapGet("/api/git/project-commit/diff", (string project, string sha, string? path, GitService git) =>
+        {
+            var result = git.GetProjectCommitDiffResult(project, sha, path);
+            if (!result.Success)
+                return Results.BadRequest(new { error = result.Error ?? "Could not load diff." });
+            var hasDiff = !string.IsNullOrWhiteSpace(result.Diff);
+            return Results.Ok(new
+            {
+                diff = result.Diff,
+                hasDiff,
+                emptyReason = hasDiff ? null : "No diff for this path in the selected commit."
+            });
+        });
+
+        // Git-Management cleanup (AGT-2009). Dry-run analysis of which merged
+        // task/* branches (local + remote), refs/backups/* refs and stale
+        // worktree registrations can be pruned against the integration branch.
+        // Read-only: nothing is deleted here.
+        app.MapGet("/api/git/cleanup/plan", (string project, GitCleanupService cleanup) =>
+            Results.Ok(cleanup.BuildPlan(project)));
+
+        // Executes an operator-confirmed subset of the cleanup plan. The service
+        // re-derives eligibility from a fresh plan and re-checks merge ancestry
+        // immediately before each delete, so only GEMERGTES is ever removed
+        // (AGT-1945). Returns the n-deleted / m-kept report.
+        app.MapPost("/api/git/cleanup/execute", (string project, GitCleanupRequest req, GitCleanupService cleanup) =>
+        {
+            var result = cleanup.Execute(project, req ?? new GitCleanupRequest([]));
+            return result.IsRepo
+                ? Results.Ok(result)
+                : Results.BadRequest(new { error = result.Error ?? "Could not run cleanup." });
+        });
 
         app.MapGet("/healthz", () => Results.Ok("ok"));
     }

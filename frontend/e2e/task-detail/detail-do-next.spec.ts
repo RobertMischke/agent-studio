@@ -12,13 +12,13 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
 
 async function listReadyForProject(watchPath: string, projectName: string): Promise<Job[]> {
-  const all = await api<Job[]>('/api/jobs?includeFixtures=true');
+  const all = await api<Job[]>('/api/tasks?includeFixtures=true');
   return all.filter(j => j.state === '2-ready' && j.watchPath === watchPath && j.projectName === projectName);
 }
 
@@ -31,7 +31,7 @@ function uid(suffix: string) {
  * (queued, not yet picked up). Clicking it pushes the task to the head of
  * the project's ready queue so the runner picks it up on the next tick.
  *
- * Implementation reuses the existing /api/jobs/reorder endpoint: the lane is
+ * Implementation reuses the existing /api/tasks/reorder endpoint: the lane is
  * rewritten with this task at index 0, so its `order` ends up the smallest
  * within the project's 2-ready set.
  */
@@ -75,7 +75,7 @@ test.describe('Detail view — Do Next', () => {
 
       // Read the project name + initial order so we can assert correctly.
       const beforeReady = await listReadyForProject(wp.path, await api<{ info: { projectName: string } }>(
-        `/api/jobs/${encodeURIComponent(target.id)}?watchPath=${encodeURIComponent(wp.path)}`
+        `/api/tasks/${encodeURIComponent(target.id)}?watchPath=${encodeURIComponent(wp.path)}`
       ).then(d => d.info.projectName));
       const projectName = beforeReady.find(j => j.id === target.id)!.projectName;
       const orderedBefore = [...beforeReady].sort((a, b) => a.order - b.order).map(j => j.id);
@@ -114,7 +114,7 @@ test.describe('Detail view — Do Next', () => {
     const target   = await createJob({ id: uid('t'), title: 'do-next-pending', watchPath: wp.path, targetState: '2-ready' });
 
     try {
-      await page.route('**/api/jobs/*/move-to-top*', async route => {
+      await page.route('**/api/tasks/*/move-to-top*', async route => {
         await new Promise(r => setTimeout(r, 800));
         await route.continue();
       });
@@ -127,7 +127,7 @@ test.describe('Detail view — Do Next', () => {
       await expect(btn).toBeDisabled({ timeout: 2_000 });
       await expect(btn).toBeEnabled({ timeout: 5_000 });
     } finally {
-      await page.unroute('**/api/jobs/*/move-to-top*').catch(() => {});
+      await page.unroute('**/api/tasks/*/move-to-top*').catch(() => {});
       await deleteJob(target.id, wp.path).catch(() => {});
       await deleteJob(siblingA.id, wp.path).catch(() => {});
     }

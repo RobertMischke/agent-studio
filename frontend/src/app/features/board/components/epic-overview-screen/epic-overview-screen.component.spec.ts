@@ -29,7 +29,8 @@ function mount(scope: EpicOverviewScope | null, epics: EpicRollup[]) {
   fixture.componentRef.setInput('scopedProject', scope);
   fixture.detectChanges();
   const http = TestBed.inject(HttpTestingController);
-  http.expectOne((r) => r.url.endsWith('/epics')).flush(epics);
+  http.expectOne((r) => r.url.endsWith('/epics') && r.params.get('status') === 'active').flush(epics);
+  http.expectOne((r) => r.url.endsWith('/epics/completed/count')).flush({ count: 0 });
   fixture.detectChanges();
   return { fixture, http };
 }
@@ -71,6 +72,21 @@ describe('EpicOverviewScreenComponent', () => {
     http.verify();
   });
 
+  it('loads completed epics only after its collapsed count header is opened', () => {
+    const { fixture, http } = mount(null, [rollup({ id: 'active', subTaskTotal: 2, completed: 1 })]);
+    const host = { nativeElement: fixture.nativeElement as HTMLElement };
+    expect(fixture.componentInstance.activeEpics().map((e) => e.id)).toEqual(['active']);
+    expect(testid(host, 'epic-overview-section-completed')).toBeTruthy();
+    expect(testids(host, 'epic-overview-card')).toHaveLength(1);
+    (testid(host, 'epic-overview-completed-toggle') as HTMLButtonElement).click();
+    const request = http.expectOne((r) => r.url.endsWith('/epics') && r.params.get('status') === 'completed');
+    request.flush([rollup({ id: 'done', subTaskTotal: 2, completed: 2 })]);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.completedEpics().map((e) => e.id)).toEqual(['done']);
+    expect(testids(host, 'epic-overview-card')).toHaveLength(2);
+    http.verify();
+  });
+
   it('opens the create dialog from the invite button', () => {
     const { fixture, http } = mount({ name: 'Acme', watchPath: '/repo/acme' }, []);
     const host = { nativeElement: fixture.nativeElement as HTMLElement };
@@ -107,6 +123,7 @@ describe('EpicOverviewScreenComponent', () => {
     expect(testid(host, 'epic-overview-subs')).toBeTruthy();
     expect(testids(host, 'epic-overview-open-sub')).toHaveLength(2);
     expect(testids(host, 'epic-overview-open-sub')[0].textContent).toContain('ready');
+    expect(testids(host, 'epic-overview-sub-project')).toHaveLength(2);
     expect(testids(host, 'epic-overview-sub-verdict')[0].textContent).toContain('escalate');
 
     testids(host, 'epic-overview-open-sub')[1].click();

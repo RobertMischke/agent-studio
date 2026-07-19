@@ -72,7 +72,7 @@ async function openBoardForProject(page: Page, name: string) {
 
 /**
  * Hover the target locator and return the text of the singleton
- * `<div data-testid="app-tooltip">` the `[appTooltip]` directive injects
+ * `<div data-testid="cac-tooltip">` the `[appTooltip]` directive injects
  * via `TooltipController`. The directive renders into `document.body`
  * (not as a `title` attribute), so plain `getAttribute('title')` returns
  * empty; this helper exists so specs that exercise the tooltip don't
@@ -80,7 +80,7 @@ async function openBoardForProject(page: Page, name: string) {
  */
 async function readTooltipForLocator(page: Page, locator: import('@playwright/test').Locator): Promise<string> {
   await locator.hover();
-  const root = page.getByTestId('app-tooltip').first();
+  const root = page.getByTestId('cac-tooltip').first();
   await root.waitFor({ state: 'attached', timeout: 4000 });
   return ((await root.textContent()) ?? '').trim();
 }

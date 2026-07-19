@@ -10,12 +10,15 @@ import { api } from '../helpers/api';
  * the inherited global defaults read-only with working deep-links into
  * the matching global Workspace-settings sections.
  *
- * The default-agent and usage-caps cards have no per-project override
- * backend, so they are read-only; we assert the "Inherited" badges and
- * that the "Open Workspace settings" / "Manage usage caps" links open
- * the global overlay on the right section. The embedded project-detail
- * overrides (workspace dropdown) must still render below. All branches
- * are read-only, so the spec is non-billable and idempotent.
+ * The default-agent card now labels the workspace value as a fallback because
+ * Project Basics owns the editable per-project override. Usage caps remain
+ * inherited and read-only. We assert both scope badges and that the "Open
+ * Workspace settings" / "Manage usage caps" links open the global overlay on
+ * the right section. AGT-1812 adds a third,
+ * editable "Orchestrator" card (workspace-default model + autonomy); we
+ * assert it renders with interactive controls. The embedded project-detail
+ * overrides (workspace dropdown) must still render below. Every branch only
+ * reads (no edit is submitted), so the spec is non-billable and idempotent.
  */
 
 interface WatchPath { name: string; path: string }
@@ -54,10 +57,10 @@ test('settings rail renders the real panel mirroring the global defaults', async
   await expect(panel.getByTestId('project-settings-title')).toHaveText('Settings');
   await expect(panel.getByTestId('project-settings-desc')).toBeVisible();
 
-  // Default-agent card: inherited, read-only agent chip + deep-link.
+  // Default-agent card: workspace fallback beneath the editable Project Basics override.
   const agentCard = panel.getByTestId('project-settings-default-agent');
   await expect(agentCard).toBeVisible();
-  await expect(panel.getByTestId('project-settings-default-agent-inherited')).toHaveText('Inherited');
+  await expect(panel.getByTestId('project-settings-default-agent-inherited')).toHaveText('Workspace fallback');
   await expect(panel.getByTestId('project-settings-default-agent-chip')).toBeVisible();
   await expect(panel.getByTestId('project-settings-open-workspace')).toBeVisible();
 
@@ -71,6 +74,31 @@ test('settings rail renders the real panel mirroring the global defaults', async
   await expect(page.getByTestId('project-detail-workspace')).toBeVisible();
 
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-settings-panel.png'), fullPage: true });
+});
+
+test('workspace-default Orchestrator card is editable in the Workspace defaults section', async ({ page }) => {
+  // AGT-1812: the third Workspace-defaults card is the new editable
+  // orchestrator tier (model + autonomy) that writes the owning workspace's
+  // defaults. A project override still wins and lives in the section below.
+  const slug = slugFor(projectName);
+  await page.goto(`/#/projects/${slug}/settings`);
+  await expect(page.getByTestId('project-settings-panel')).toBeVisible({ timeout: 10_000 });
+
+  const orchCard = page.getByTestId('project-settings-orchestrator');
+  await expect(orchCard).toBeVisible();
+  // Unlike the read-only fallback/inherited cards, this one is an editable workspace default.
+  await expect(page.getByTestId('project-settings-orchestrator-editable')).toHaveText('Workspace default');
+  // Both controls render and are interactive (no run in flight -> not disabled).
+  const modelSelect = page.getByTestId('project-settings-orchestrator-model');
+  const autonomySelect = page.getByTestId('project-settings-orchestrator-autonomy');
+  await expect(modelSelect).toBeVisible();
+  await expect(autonomySelect).toBeVisible();
+  await expect(modelSelect).toBeEnabled();
+  await expect(autonomySelect).toBeEnabled();
+  // The autonomy select offers the platform-default sentinel plus 0..4 stops.
+  await expect(autonomySelect.locator('option')).toHaveCount(6);
+
+  await orchCard.screenshot({ path: path.join(SCREENSHOT_DIR, '04-orchestrator-card--real.png') });
 });
 
 test('default-agent link opens the global Workspace-settings home', async ({ page }) => {

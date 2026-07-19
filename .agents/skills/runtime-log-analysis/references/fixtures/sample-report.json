@@ -26,13 +26,13 @@
     { "kind": "LogSlice", "ref": "sample-job:1:7-15", "label": "queue.tick burst" },
     { "kind": "LogSlice", "ref": "sample-job:1:6", "label": "order.shipped without order.placed" },
     { "kind": "Screenshot", "ref": "sample-job/results/runtime/orders.spec.jsonl", "label": "Playwright runtime attachment" },
-    { "kind": "Doc", "ref": "docs/product-runtime-observability.md", "label": "runtime observability contract" }
+    { "kind": "Doc", "ref": "docs/operations/runtime/observability.md", "label": "runtime observability contract" }
   ],
   "findings": [
     {
       "topic": "repeated-error",
       "severity": "High",
-      "message": "http.request.failed x3 with System.IO.IOException code=502 retryable=true on GET /api/jobs/x",
+      "message": "http.request.failed x3 with System.IO.IOException code=502 retryable=true on GET /api/tasks/x",
       "evidenceRefs": ["sample-job:1:3-5"]
     },
     {

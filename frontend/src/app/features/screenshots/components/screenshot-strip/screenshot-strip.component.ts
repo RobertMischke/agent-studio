@@ -14,7 +14,7 @@ import type { TaskScreenshot } from '../../../../features/screenshots';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Visual-evidence strip + lightbox. Two surfaces share this component:
  *
@@ -109,7 +109,44 @@ export class ScreenshotStripComponent {
     const lines = [s.caption, s.fileName, ts];
     if (s.projectName) lines.push(s.projectName);
     if (s.status) lines.push(`Status: ${this.statusLabel(s.status)}`);
+    const source = this.sourceLabel(s);
+    if (source) lines.push(`Source: ${source}`);
     return lines.filter(Boolean).join('\n');
+  }
+
+  /**
+   * Human label for the provenance chip, or `''` when the source is
+   * `unlabeled` so the UI never claims a source it cannot prove. A composite
+   * spells out its part sources when known.
+   */
+  sourceLabel(s: TaskScreenshot): string {
+    switch (s.source) {
+      case 'real':
+        return 'real';
+      case 'mocked':
+        return 'mocked';
+      case 'composite':
+        return s.compositeParts.length > 0
+          ? `composite (${s.compositeParts.join(', ')})`
+          : 'composite';
+      default:
+        return '';
+    }
+  }
+
+  sourceTooltip(s: TaskScreenshot): string {
+    switch (s.source) {
+      case 'real':
+        return 'Captured against a running backend';
+      case 'mocked':
+        return 'Captured from an e2e run with mocked API routes';
+      case 'composite':
+        return s.compositeParts.length > 0
+          ? `Stitched composite combining ${s.compositeParts.join(' + ')} parts`
+          : 'Stitched composite image';
+      default:
+        return '';
+    }
   }
 
   statusLabel(status: string): string {

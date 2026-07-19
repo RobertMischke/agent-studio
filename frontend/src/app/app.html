@@ -60,9 +60,13 @@
           [activeJobId]="selectedJob()?.info?.id ?? null"
           [activeJobTitle]="selectedJob()?.info?.title ?? null"
           [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
+          [activeJobKey]="selectedJob()?.info?.displayKey ?? selectedJob()?.info?.taskKey ?? null"
+          [activeJobState]="selectedJob()?.info?.state ?? null"
+          [activeRun]="orchSideSheetActiveRun()"
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
           (openJobDetail)="onOpenJobDetailFromSheet($event)"
+          (navigateToContext)="onNavigateToChatContext($event)"
           (openSettings)="openOrchestratorSettings()" />
         <!-- Inline filter UI for the activity-bar Filter panel. Same
              component as the right-edge sheet, just rendered without
@@ -80,7 +84,6 @@
           [activeTagIds]="activeTagFilter()"
           [owners]="clientService.clients()"
           [activeOwnerId]="activeClientFilter()"
-          [compactCards]="effectiveCompactCards()"
           [hitCount]="filteredTaskCount()"
           [totalCount]="totalTaskCount()"
           [hasAnyFilter]="hasActiveFiltersOrSearch()"
@@ -88,7 +91,6 @@
           (setType)="onSetType($event)"
           (toggleTag)="toggleTagFilter($event)"
           (setOwner)="setClientFilter($event)"
-          (toggleCompactCards)="toggleCompactCards()"
           (clearAll)="onSidesheetClearAll()" />
         <!-- Per-tab actions land in the tab bar via this slot. The board
              tab gets filter + compact + add-task; task tabs reuse the
@@ -101,20 +103,10 @@
                       [class.studio-tab-action--active]="groupByEpic()"
                       [attr.aria-pressed]="groupByEpic()"
                       data-testid="studio-board-epic-toggle"
-                      [appTooltip]="groupByEpic() ? 'Show lane columns' : 'Group tasks by epic'"
+                      [cacTooltip]="groupByEpic() ? 'Show lane columns' : 'Group tasks by epic'"
                       (click)="toggleGroupByEpic()">
                 <app-studio-icon [name]="groupByEpic() ? 'epic' : 'grid'" [size]="14"></app-studio-icon>
                 <span>{{ groupByEpic() ? 'Epics' : 'Lanes' }}</span>
-              </button>
-              <button type="button"
-                      class="studio-tab-action studio-tab-action--toggle"
-                      [class.studio-tab-action--active]="effectiveCompactCards()"
-                      [attr.aria-pressed]="effectiveCompactCards()"
-                      data-testid="studio-board-compact-toggle"
-                      [appTooltip]="compactToggleTooltip()"
-                      (click)="toggleCompactCards()">
-                <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
-                <span>{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
               </button>
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <button type="button"
@@ -129,6 +121,17 @@
                  activity link + pager + complete. Replaces the wide
                  detail-header row that the reference design folded into
                  the tab bar. -->
+            @if (studioRunActivityBadge(); as ra) {
+              <span class="studio-tab-action__run-activity"
+                    [class]="'studio-tab-action__run-activity studio-tab-action__run-activity--' + ra.tone"
+                    [cacTooltip]="ra.tooltip"
+                    data-testid="studio-run-activity"
+                    [attr.data-run-activity-kind]="ra.kind">
+                <span class="studio-tab-action__run-activity-dot"></span>
+                {{ ra.label }}
+              </span>
+              <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+            }
             <div class="studio-tab-action__pane-toggles"
                  data-testid="studio-pane-toggles"
                  role="group"
@@ -139,7 +142,7 @@
                       [attr.aria-pressed]="shellPanesVisible().prompt"
                       aria-label="Toggle Description panel"
                       data-testid="studio-pane-toggle-prompt"
-                      [appTooltip]="'Description'"
+                      [cacTooltip]="'Description'"
                       (click)="onShellTogglePane('prompt')">
                 <app-studio-icon name="book" [size]="14"></app-studio-icon>
               </button>
@@ -149,7 +152,7 @@
                       [attr.aria-pressed]="shellPanesVisible().protocol"
                       aria-label="Toggle Protocol panel"
                       data-testid="studio-pane-toggle-protocol"
-                      [appTooltip]="'Protocol &amp; chat'"
+                      [cacTooltip]="'Protocol &amp; chat'"
                       (click)="onShellTogglePane('protocol')">
                 <app-studio-icon name="bot" [size]="14"></app-studio-icon>
               </button>
@@ -159,7 +162,7 @@
                       [attr.aria-pressed]="shellPanesVisible().git"
                       aria-label="Toggle Git panel"
                       data-testid="studio-pane-toggle-git"
-                      [appTooltip]="'Git diff &amp; file tree'"
+                      [cacTooltip]="'Git diff &amp; file tree'"
                       (click)="onShellTogglePane('git')">
                 <app-studio-icon name="diff" [size]="14"></app-studio-icon>
                 @if (gitCommitCount > 0) {
@@ -173,7 +176,7 @@
             <button type="button"
                     class="studio-tab-action studio-tab-action--icon"
                     data-testid="studio-task-prev"
-                    [appTooltip]="'Previous task in lane'"
+                    [cacTooltip]="'Previous task in lane'"
                     (click)="onTriagePrev(detail.info)">‹</button>
             @if (slimPagerTotal() > 0) {
               <span class="studio-tab-action studio-tab-action--counter"
@@ -183,7 +186,7 @@
             <button type="button"
                     class="studio-tab-action studio-tab-action--icon"
                     data-testid="studio-task-next"
-                    [appTooltip]="'Next task in lane'"
+                    [cacTooltip]="'Next task in lane'"
                     (click)="onTriageNext(detail.info)">›</button>
             <span class="studio-tab-actions-sep" aria-hidden="true"></span>
             <select class="studio-tab-action studio-tab-action--lane-select"
@@ -191,7 +194,7 @@
                     [value]="studioPagerLaneState()"
                     data-testid="studio-lane-select"
                     aria-label="Page through lane"
-                    [appTooltip]="'Select which lane to page through'"
+                    [cacTooltip]="'Select which lane to page through'"
                     (change)="onStudioLaneChange(detail.info, $event)">
               @for (lane of studioLaneOptions; track lane.state) {
                 <option [value]="lane.state" [selected]="lane.state === studioPagerLaneState()">{{ lane.label }}</option>
@@ -203,14 +206,29 @@
             @if (studioTriageHasActions()) {
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <div class="studio-tab-action__triage" data-testid="studio-triage-panel" data-triage-root>
+                <!-- Landed status stays in the git pane; this cluster only offers
+                     the acceptance action and its context-aware label. -->
                 @if (studioTriagePrimary(); as primary) {
                   <button type="button"
                           class="studio-tab-action studio-tab-action--primary"
+                          [class.studio-tab-action--git-loading]="studioPrimaryAwaitingGit()"
                           [attr.data-testid]="'studio-triage-action-' + primary.id"
                           [attr.data-action-id]="primary.id"
-                          [disabled]="updateClient.mutationsBlocked()"
-                          [appTooltip]="primary.label + ' (Enter)'"
-                          (click)="onStudioTriagePrimary()">{{ primary.label }}</button>
+                          [attr.data-git-loading]="studioPrimaryAwaitingGit() ? 'true' : null"
+                          [disabled]="updateClient.mutationsBlocked() || studioPrimaryAwaitingGit() || studioTriageActingId() !== null"
+                          [appPendingButton]="studioTriageActingId() === primary.id"
+                          [pendingLabel]="studioPrimaryLabel() + '…'"
+                          [cacTooltip]="studioPrimaryAwaitingGit()
+                            ? 'Checking git status — action available once loaded.'
+                            : (studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
+                          (click)="onStudioTriagePrimary()">
+                    @if (studioPrimaryAwaitingGit()) {
+                      <span class="studio-tab-action__skeleton" aria-hidden="true"></span>
+                      <span class="visually-hidden">Checking git status…</span>
+                    } @else {
+                      {{ studioPrimaryLabel() }}
+                    }
+                  </button>
                 }
                 <button type="button"
                         class="studio-tab-action studio-tab-action--icon"
@@ -218,7 +236,7 @@
                         aria-haspopup="menu"
                         [attr.aria-expanded]="studioTriageOverflowOpen()"
                         [disabled]="updateClient.mutationsBlocked()"
-                        [appTooltip]="'More task actions'"
+                        [cacTooltip]="'More task actions'"
                         (click)="toggleStudioTriageOverflow($event)">⋯</button>
                 <app-menu
                   [items]="studioTriageMenuItems()"
@@ -237,6 +255,9 @@
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
+              @if (boardLoading() && jobService.jobs().length === 0) {
+                <app-loading-surface kind="board" label="Loading board…" />
+              } @else {
               @if (hasActiveFiltersOrSearch() && filteredTaskCount() === 0) {
                 <div class="board-filter-empty-hint" data-testid="board-filter-empty-hint">
                   <span class="board-filter-empty-hint__text">
@@ -288,6 +309,7 @@
                           [sortStrategy]="laneSortStrategy(lane.state, lane.jobs)"
                           [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)"
                           [autoProject]="laneAutoProject(lane.state, lane.jobs)"
+                          [projectScope]="boardProjectScope()"
                           [autoMode]="laneAutoMode(lane.state, lane.jobs)"
                           [runnerStatus]="laneAutoRunner(lane.state, lane.jobs)"
                           [nowMs]="nowMs()"
@@ -306,13 +328,12 @@
                 }
               </main>
               }
-            }
-            @case ('backlog') {
-              <app-backlog-triage-screen
-                (newTaskRequested)="onBacklogNewTask()" />
+              }
             }
             @case ('task') {
-              @if (selectedJob(); as detail) {
+              @if (detailLoading()) {
+                <app-loading-surface kind="task-detail" label="Loading task details…" />
+              } @else if (selectedJob(); as detail) {
                 <main class="workspace__main workspace__main--studio" data-testid="studio-task">
                   <app-job-detail #jobDetail
                                   [detail]="detail"
@@ -346,13 +367,8 @@
                 @if (tab.kind === 'epic' && selectedJob(); as detail) {
                   <main class="workspace__main workspace__main--studio" data-testid="studio-epic">
                     @if (epicTabTaskDetail(); as subDetail) {
-                      <!-- In-place sub-task view: clicking a sub-task in the epic
-                           rollup swaps THIS same panel from the epic to the task,
-                           reusing the single-panel detail. No right-hand panel or
-                           sheet is opened. The epic-membership banner rendered
-                           inside the detail is the consistent "back to epic" path
-                           (and the pager prev/next stays within the epic's
-                           sub-tasks). -->
+                  <!-- In-place sub-task view reuses this panel; the membership
+                       banner returns to the epic and paging stays within it. -->
                       <app-job-detail #jobDetail
                         [detail]="subDetail"
                         data-testid="studio-epic-subtask-detail"
@@ -402,7 +418,8 @@
                 @if (tab.kind === 'hub') {
                   <app-project-hub-view
                     [projectName]="tab.projectName"
-                    [initialSection]="tab.section ?? 'overview'" />
+                    [initialSection]="tab.section ?? 'overview'" [pipelineStepId]="tab.pipelineStepId"
+                    (openTask)="onOpenTaskFromReel($event)" />
                 }
               }
             }
@@ -429,9 +446,27 @@
                 }
               }
             }
-            @default {
-              <!-- Welcome screen owned by the shell itself when no tab is active. -->
+            @case ('url-preview') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'url-preview') {
+                  <app-project-url-preview-tab
+                    [projectName]="tab.projectName"
+                    [urlId]="tab.urlId"
+                    (openSettings)="onOpenUrlPreviewSettings($event)" />
+                }
+              }
             }
+            @case ('workbench') { @if (studioTabState.activeTab(); as tab) { @if (tab.kind === 'workbench') {
+              <app-workbench-viewer [projectName]="tab.projectName" [workbenchId]="tab.workbenchId" />
+            } } }
+            @case ('workspace-settings') {
+              <app-workspace-overlays [inline]="true"
+                                      [watchPaths]="watchPaths()"
+                                      (openTask)="onOpenTaskFromReel($event)"
+                                      (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
+                                      (openJobDetail)="onOpenTaskFromSession($event)" />
+            }
+            @default { <!-- Welcome screen owned by the shell when no tab is active. --> }
           }
         </div>
       </app-studio-shell>
@@ -439,14 +474,17 @@
 <!-- <app-update-banner /> moved into <app-notification-stack> in F40 so
            the update strip docks alongside other banner notifications. -->
       <app-update-center />
-      <app-update-block-modal />
+      <app-update-block-modal /><app-crash-recovery-prompt />
       <app-confirm-dialog />
       @if (workspaceManager.createOpen()) {
         <app-workspace-create-dialog />
+      }
+      @if (workspaceManager.onboardProjectOpen()) {
         <app-onboard-project-dialog />
       }
       <app-notification-stack />
       <app-media-lightbox />
+      <app-cost-breakdown-dialog />
       @if (errorDialog.activeError(); as error) {
         <app-error-dialog
           [error]="error"
@@ -475,7 +513,9 @@
           [(newMode)]="createJobForm.newMode"
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
+          (modelSelectionTouched)="createJobForm.markModelSelectionExplicit()"
           (cancelRequest)="cancelCreate()"
+          (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
       }
       @if (showE2ECleanup()) {
@@ -487,10 +527,6 @@
         <app-tag-manager-dialog
           (closed)="onTagManagerClosed()" />
       }
-      @if (orchestratorSettingsOpen()) {
-        <app-orchestrator-settings-modal
-          (closed)="closeOrchestratorSettings()" />
-      }
       <app-workspace-banner [projects]="bannerProjects()" />
       <app-project-overlays
         (securityFollowUp)="onSecurityFollowUp($event)"
@@ -499,9 +535,6 @@
         (uxuiFollowUp)="onUxuiFollowUp($event)"
         (uxuiActionQueued)="onUxuiActionQueued($event)"
         (openTask)="onOpenTaskFromReel($event)" />
-      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
-                              (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
-                              (openJobDetail)="onOpenTaskFromSession($event)" />
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {
           <app-verbose-debug-overlay
@@ -525,9 +558,9 @@
          data-testid="app-root">
       <header class="header">
         <div class="header__brand">
-          <img class="header__icon" src="icons/icon.svg" alt="Agent Software Studio" width="20" height="20" />
+          <img class="header__icon" src="icons/icon.svg" alt="Agent Studio" width="20" height="20" />
           <h1 class="header__title">
-            <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Software Studio</span>
+            <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Studio</span>
           </h1>
         </div>
         <app-project-tabs
@@ -561,15 +594,6 @@
             [activeTagIds]="activeTagFilter()"
             (setType)="onSetType($event)"
             (toggleTag)="toggleTagFilter($event)" />
-          <button class="btn btn--compact-toggle"
-                  data-testid="compact-cards-toggle"
-                  [class.btn--compact-toggle--active]="effectiveCompactCards()"
-                  [attr.aria-pressed]="effectiveCompactCards()"
-                  [appTooltip]="compactToggleTooltip()"
-                  (click)="toggleCompactCards()">
-            <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
-            <span class="btn--compact-toggle__label">{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
-          </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
           </button>
@@ -577,7 +601,7 @@
             <button #devtoolsTrigger
                     class="devtools-menu__trigger"
                     data-testid="devtools-menu-trigger"
-                    [appTooltip]="'Dev tools'"
+                    [cacTooltip]="'Dev tools'"
                     [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
                     (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()" tabindex="0" (keydown.enter)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()" (keydown.space)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation(); $event.preventDefault()">⋮</button>
             <app-menu
@@ -610,11 +634,11 @@
               <aside class="task-nav task-nav--collapsed" data-testid="task-nav-collapsed">
                 <button class="task-nav__expand"
                         data-testid="task-nav-expand"
-                        [appTooltip]="'Expand task list'"
+                        [cacTooltip]="'Expand task list'"
                         (click)="setTaskNavCollapsed(false)">›</button>
                 <button class="task-nav__expand task-nav__expand--board"
                         data-testid="back-to-board"
-                        [appTooltip]="'Back to board'"
+                        [cacTooltip]="'Back to board'"
                         (click)="closeDetail()">←</button>
               </aside>
             } @else {
@@ -624,7 +648,7 @@
                   <button class="btn btn--ghost" data-testid="back-to-board" (click)="closeDetail()">← Board</button>
                   <button class="task-nav__collapse"
                           data-testid="task-nav-collapse"
-                          [appTooltip]="'Collapse task list'"
+                          [cacTooltip]="'Collapse task list'"
                           (click)="setTaskNavCollapsed(true)" tabindex="0" (keydown.enter)="setTaskNavCollapsed(true)" (keydown.space)="setTaskNavCollapsed(true); $event.preventDefault()">‹</button>
                 </div>
                 <div>
@@ -765,9 +789,13 @@
           [activeJobId]="selectedJob()?.info?.id ?? null"
           [activeJobTitle]="selectedJob()?.info?.title ?? null"
           [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
+          [activeJobKey]="selectedJob()?.info?.displayKey ?? selectedJob()?.info?.taskKey ?? null"
+          [activeJobState]="selectedJob()?.info?.state ?? null"
+          [activeRun]="orchSideSheetActiveRun()"
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
           (openJobDetail)="onOpenJobDetailFromSheet($event)"
+          (navigateToContext)="onNavigateToChatContext($event)"
           (openSettings)="openOrchestratorSettings()" />
       </div>
 
@@ -794,7 +822,8 @@
         (openTask)="onOpenTaskFromReel($event)" />
 
 
-      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
+      <app-workspace-overlays [watchPaths]="watchPaths()"
+                              (openTask)="onOpenTaskFromReel($event)"
                               (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
                               (openJobDetail)="onOpenTaskFromSession($event)" />
 
@@ -818,7 +847,9 @@
           [(newMode)]="createJobForm.newMode"
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
+          (modelSelectionTouched)="createJobForm.markModelSelectionExplicit()"
           (cancelRequest)="cancelCreate()"
+          (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
       }
 
@@ -843,18 +874,15 @@
           (openCliConfig)="openCliConfigFromError()" />
       }
 
-      <app-confirm-dialog />
+      <app-confirm-dialog /><app-crash-recovery-prompt />
       @if (workspaceManager.createOpen()) {
         <app-workspace-create-dialog />
+      }
+      @if (workspaceManager.onboardProjectOpen()) {
         <app-onboard-project-dialog />
       }
       <app-notification-stack />
       <app-media-lightbox />
-
-      @if (orchestratorSettingsOpen()) {
-        <app-orchestrator-settings-modal
-          (closed)="closeOrchestratorSettings()" />
-      }
 
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {

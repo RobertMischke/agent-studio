@@ -36,13 +36,13 @@ async function findContinuableJob(): Promise<ContinuableJob | null> {
   const jobs = await listJobs();
   for (const j of jobs) {
     const detail = await api<{ info: { sessionName: string | null; cliType: string | null } }>(
-      `/api/jobs/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(j.watchPath)}`
+      `/api/tasks/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(j.watchPath)}`
     );
     const session = detail.info.sessionName;
     const cli = detail.info.cliType;
     if (cli === 'claude' && session && /^[0-9a-f-]{36}$/i.test(session)) {
       const out = await api<unknown[]>(
-        `/api/jobs/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`
+        `/api/tasks/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`
       );
       if (Array.isArray(out) && out.length > 0) return { id: j.id, watchPath: j.watchPath };
     }
@@ -76,7 +76,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
 
 async function stopAnyLiveRun(target: ContinuableJob): Promise<void> {
   await fetch(
-    `${BACKEND}/api/jobs/${encodeURIComponent(target.id)}/stop?watchPath=${encodeURIComponent(target.watchPath)}`,
+    `${BACKEND}/api/tasks/${encodeURIComponent(target.id)}/stop?watchPath=${encodeURIComponent(target.watchPath)}`,
     { method: 'POST' }
   ).catch(() => undefined);
 }
@@ -89,7 +89,7 @@ test.describe('Activity tab — interactive chat continuation', () => {
   // test from leaving the runner in a "failed" snapshot that re-opens the
   // error dialog on the next page load and blocks pointer events.
   test.beforeEach(async ({ page }) => {
-    await page.route('**/api/jobs/*/continue**', async route => {
+    await page.route('**/api/tasks/*/continue**', async route => {
       const body = JSON.stringify({
         jobId: 'stub',
         jobKey: 'stub',
@@ -208,13 +208,13 @@ test.describe('Continue persists user prompt to cli-output.log', () => {
 
     // Snapshot BEFORE so we can assert this exact follow-up was added.
     const before = await api<Array<{ stream: string; text: string }>>(
-      `/api/jobs/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
+      `/api/tasks/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
     );
     const beforeMatches = before.filter(l => l.stream === 'user' && l.text.includes(followup));
     expect(beforeMatches).toHaveLength(0);
 
     await api(
-      `/api/jobs/${encodeURIComponent(target.id)}/continue?watchPath=${encodeURIComponent(target.watchPath)}`,
+      `/api/tasks/${encodeURIComponent(target.id)}/continue?watchPath=${encodeURIComponent(target.watchPath)}`,
       { method: 'POST', body: JSON.stringify({ prompt: followup }) }
     );
 
@@ -223,7 +223,7 @@ test.describe('Continue persists user prompt to cli-output.log', () => {
     await stopAnyLiveRun(target);
 
     const after = await api<Array<{ stream: string; text: string }>>(
-      `/api/jobs/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
+      `/api/tasks/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
     );
     const afterMatches = after.filter(l => l.stream === 'user' && l.text.includes(followup));
     expect(afterMatches.length, 'cli-output.log must contain the user follow-up as a [user] line').toBeGreaterThanOrEqual(1);

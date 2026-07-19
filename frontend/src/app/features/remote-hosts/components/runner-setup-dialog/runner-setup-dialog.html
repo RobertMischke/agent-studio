@@ -1,0 +1,124 @@
+<div class="setup-backdrop"
+     data-testid="runner-setup-dialog"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="runner-setup-title"
+     (click)="closeFromBackdrop($event)"
+     (keydown.escape)="cancelled.emit()">
+  <section class="setup">
+    <header class="setup__header">
+      <div>
+        <span class="setup__eyebrow">Remote-host process</span>
+        <h2 id="runner-setup-title">Set up runner on {{ host().name }}</h2>
+        <p>Confirm how the controller reaches this host and how the host reaches the Task Server. Progress and operator login steps stay in the durable task conversation.</p>
+      </div>
+      <button class="setup__close" type="button" aria-label="Close runner setup" (click)="cancelled.emit()">×</button>
+    </header>
+
+    <div class="setup__body">
+      <section class="setup__configuration" aria-labelledby="runner-setup-connection-title">
+        <div class="setup__section-head">
+          <span class="setup__step">1</span>
+          <div>
+            <h3 id="runner-setup-connection-title">Connection and identity</h3>
+            <p>These values become explicit task inputs. The agent must use SSH for every host operation.</p>
+          </div>
+        </div>
+
+        <div class="setup__fields">
+          <label>
+            <span>SSH target</span>
+            <input data-testid="runner-setup-ssh"
+                   autocomplete="off"
+                   [ngModel]="sshTarget()"
+                   (ngModelChange)="sshTarget.set($event)" />
+            <small>Alias or user@host accepted by the workstation's SSH client.</small>
+          </label>
+
+          <label>
+            <span>Client identity / X-Client-Id</span>
+            <input data-testid="runner-setup-client-id"
+                   autocomplete="off"
+                   [ngModel]="clientId()"
+                   (ngModelChange)="clientId.set($event)" />
+            <small>The existing Task Server identity assigned to this host.</small>
+          </label>
+
+          <label>
+            <span>Task Server URL</span>
+            <input data-testid="runner-setup-task-server-url"
+                   autocomplete="off"
+                   inputmode="url"
+                   [ngModel]="taskServerUrl()"
+                   (ngModelChange)="taskServerUrl.set($event)" />
+            <small>This URL must be reachable from the remote host, not just from this browser.</small>
+          </label>
+
+          <label>
+            <span>Connection mode</span>
+            <select data-testid="runner-setup-connection-mode"
+                    [ngModel]="connectionMode()"
+                    (ngModelChange)="setConnectionMode($event)">
+              <option value="">Choose a mode</option>
+              <option value="central">Central URL</option>
+              <option value="lan">LAN binding</option>
+              <option value="tunnel">Reverse tunnel</option>
+            </select>
+            <small>Loopback is valid only when the host owns the tunnel endpoint.</small>
+          </label>
+
+          <label class="setup__field--wide">
+            <span>Git fetch URL</span>
+            <input data-testid="runner-setup-git-remote"
+                   autocomplete="off"
+                   [ngModel]="gitRemote()"
+                   (ngModelChange)="gitRemote.set($event)" />
+            <small>Use a credential-free HTTPS URL for clone and fetch.</small>
+          </label>
+
+          <label class="setup__field--wide">
+            <span>Git push URL</span>
+            <input data-testid="runner-setup-git-push-remote"
+                   autocomplete="off"
+                   [ngModel]="gitPushRemote()"
+                   (ngModelChange)="gitPushRemote.set($event)" />
+            <small>Use the SSH URL backed by this host's write deploy key, or a fine-grained token credential helper fallback.</small>
+          </label>
+        </div>
+
+        @if (loopbackBlocked()) {
+          <div class="setup__reachability" data-testid="runner-setup-loopback-block" role="alert">
+            <strong>Loopback is not remotely reachable.</strong>
+            <span>Choose Reverse tunnel, or enter a central or LAN URL the host can curl directly.</span>
+          </div>
+        }
+      </section>
+
+      <section class="setup__execution" aria-labelledby="runner-setup-execution-title">
+        <div class="setup__section-head">
+          <span class="setup__step">2</span>
+          <div>
+            <h3 id="runner-setup-execution-title">Visible setup task</h3>
+            <p>The standard CLI-task surface owns live output, OAuth device codes, operator replies, completion, and history.</p>
+          </div>
+        </div>
+
+        @if (ready()) {
+          <app-visible-cli-task-card
+            [request]="request()"
+            [workspaces]="workspaces()"
+            (taskCreated)="taskCreated.emit($event)" />
+        } @else {
+          <div class="setup__blocked" data-testid="runner-setup-blocked">
+            <strong>Complete the setup inputs before queuing the task.</strong>
+            <ul>
+              @for (issue of issues(); track issue) {
+                <li>{{ issue }}</li>
+              }
+            </ul>
+          </div>
+        }
+      </section>
+    </div>
+  </section>
+</div>

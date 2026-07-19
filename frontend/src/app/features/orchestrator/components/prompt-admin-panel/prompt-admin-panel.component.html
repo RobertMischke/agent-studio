@@ -6,34 +6,58 @@
   }
 
   <div class="prompts__layout">
-    <aside class="prompts__list" data-testid="prompt-admin-list" aria-label="Prompt templates">
-      @for (group of groups(); track group.name) {
-        <div class="prompts__group-head">{{ group.name }}</div>
-        @for (item of group.items; track item.name) {
-          <button
-            type="button"
-            class="prompts__item"
-            [class.prompts__item--active]="item.name === selectedName()"
-            [attr.data-testid]="'prompt-admin-item-' + item.name"
-            (click)="select(item.name)">
-            <span class="prompts__item-title">{{ item.title }}</span>
-            <span class="prompts__item-tags">
-              @if (item.hasOverride) {
-                <span class="prompts__pill prompts__pill--override">overridden</span>
-              } @else {
-                <span class="prompts__pill">default</span>
-              }
-              @if (item.defaultChangedSinceOverride) {
-                <span class="prompts__pill prompts__pill--warn"
-                      [attr.data-testid]="'prompt-admin-drift-' + item.name">default changed</span>
-              }
-            </span>
-          </button>
+    <aside class="prompts__list" id="prompt-admin-list" data-testid="prompt-admin-list" aria-label="Prompt templates">
+      <div class="prompts__list-filter" data-testid="prompt-admin-inheritance-summary">
+        <span><strong>{{ overrideCount() }}</strong> overridden</span><span class="prompts__list-filter-inherited">{{ inheritedCount() }} inherited</span>
+        <button type="button" class="prompts__filter-btn"
+          [class.prompts__filter-btn--active]="onlyOverrides()" [attr.aria-pressed]="onlyOverrides()"
+          data-testid="prompt-admin-only-overrides" (click)="onlyOverrides.set(!onlyOverrides())">Only overridden</button>
+      </div>
+      @for (group of visibleGroups(); track group.name; let first = $first) {
+        <app-section-header [collapsible]="true"
+          [collapsed]="isGroupCollapsed(group.name)"
+          [title]="group.name"
+          [count]="group.items.length"
+          [divider]="!first"
+          [testid]="'prompt-admin-group-' + group.name"
+          (collapsedChange)="setGroupCollapsed(group.name, $event)" />
+        @if (!isGroupCollapsed(group.name)) {
+          @for (item of group.items; track item.name) {
+            <app-tree-row
+              level="root"
+              glyph="file" [class.prompts__item--inherited]="!item.hasOverride" [reserveChevron]="true"
+              [label]="item.title"
+              [active]="item.name === selectedName()" [ariaCurrent]="item.name === selectedName() ? 'page' : null"
+              [ariaLabel]="item.title + (item.hasOverride ? ', overridden' : ', inherited')" [testid]="'prompt-admin-item-' + item.name" (selectRequest)="select(item.name)">
+              <span class="prompts__item-tags">
+                @if (item.hasOverride) {
+                  <span class="prompts__pill prompts__pill--override prompts__nav-pill" aria-label="Local override active"
+                        [cacTooltip]="overrideTooltip(item)" [attr.data-testid]="'prompt-admin-override-' + item.name">
+                    <app-studio-icon name="diff" [size]="11"></app-studio-icon> Override
+                  </span>
+                }
+              </span>
+            </app-tree-row>
+          }
         }
       }
     </aside>
 
-    <main class="prompts__detail">
+    <div class="prompts__splitter"
+         role="separator"
+         tabindex="0"
+         aria-controls="prompt-admin-list"
+         aria-orientation="vertical"
+         aria-label="Resize prompt navigation"
+         aria-valuemin="192"
+         aria-valuemax="544"
+         aria-valuenow="280"
+         data-testid="prompt-admin-splitter"
+         appPromptNavSplitter>
+      <span aria-hidden="true"></span>
+    </div>
+
+    <main class="prompts__detail" data-testid="prompt-admin-detail">
       @if (detail(); as d) {
         <header class="prompts__detail-head">
           <div>
@@ -47,12 +71,12 @@
           @if (d.hasOverride) {
             <span class="prompts__pill prompts__pill--override">overridden by you</span>
             <span class="prompts__muted">
-              based on default {{ shortSha(d.baseDefaultSha) }}
+              based on shipped {{ shortSha(d.baseDefaultSha) }}
               @if (d.overrideUpdatedAt) { · edited {{ d.overrideUpdatedAt | date:'short' }} }
             </span>
           } @else {
-            <span class="prompts__pill">shipped default</span>
-            <span class="prompts__muted">default {{ shortSha(d.defaultSha) }}</span>
+            <span class="prompts__pill">shipped</span>
+            <span class="prompts__muted">shipped {{ shortSha(d.defaultSha) }}</span>
           }
         </div>
 
@@ -93,7 +117,7 @@
             <div>
               <strong>The shipped default changed since you created this override.</strong>
               <span class="prompts__muted">
-                Your override was based on {{ shortSha(d.baseDefaultSha) }}; the current default is
+                Your override was based on {{ shortSha(d.baseDefaultSha) }}; the current shipped default is
                 {{ shortSha(d.defaultSha) }}. Compare below, then choose:
               </span>
             </div>
@@ -101,7 +125,7 @@
               <button type="button" class="prompts__btn" [disabled]="busy()"
                       data-testid="prompt-admin-keep-mine" (click)="keepMine()">Keep mine</button>
               <button type="button" class="prompts__btn" [disabled]="busy()"
-                      data-testid="prompt-admin-take-default" (click)="takeNewDefault()">Take new default</button>
+                      data-testid="prompt-admin-take-default" (click)="takeNewDefault()">Take shipped default</button>
               <button type="button" class="prompts__btn prompts__btn--primary" [disabled]="busy()"
                       data-testid="prompt-admin-merge" (click)="openMergeDraft()">Open merge draft</button>
             </div>
@@ -131,7 +155,7 @@
                   [disabled]="busy() || !dirty()" (click)="revertDraft()">Revert edits</button>
           <button type="button" class="prompts__btn prompts__btn--danger"
                   data-testid="prompt-admin-reset"
-                  [disabled]="busy() || !d.hasOverride" (click)="resetToDefault()">Reset to default</button>
+                  [disabled]="busy() || !d.hasOverride" (click)="resetToDefault()">Reset to shipped</button>
           @if (d.hasDefault) {
             <button type="button" class="prompts__btn prompts__btn--ghost"
                     data-testid="prompt-admin-toggle-default" (click)="toggleDefault()">

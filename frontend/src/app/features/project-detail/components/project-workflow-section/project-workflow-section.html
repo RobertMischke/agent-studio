@@ -1,0 +1,85 @@
+<!--
+  Workflow / Lanes page - stage 1 (T6a). Read-mostly transparency surface:
+  lane roles + per-lane sort controls in one board-order list (the only writes),
+  a read-only view of what the platform does at each transition today, and
+  clearly-labelled placeholders for the stage 2/3 work that lands only after
+  the Git-concept decisions (docs/concepts/git-branching-integration-zielbild.md SS7).
+-->
+
+<section class="wf__group" data-testid="workflow-lane-list">
+  <h3>Lanes &amp; board sort</h3>
+  <div class="wf__lanes" data-testid="project-detail-lane-sort">
+    @for (lane of lanes; track lane.state) {
+      <div class="wf__lane-row" [attr.data-testid]="'workflow-lane-' + lane.state">
+        <span class="wf__lane-icon" aria-hidden="true">{{ lane.icon }}</span>
+        <div class="wf__lane-main">
+          <span class="wf__lane-label">{{ lane.label }}</span>
+          <span class="wf__lane-role">{{ lane.role }}</span>
+        </div>
+        <label class="wf__lane-sort-control">
+          <span>Sort</span>
+          <select class="wf__lane-sort-select"
+                  [attr.data-testid]="'lane-sort-select-' + lane.state"
+                  [cacTooltip]="laneSortMeta(laneSortDraft[lane.state]).hint"
+                  [(ngModel)]="laneSortDraft[lane.state]"
+                  (ngModelChange)="onLaneSortChange(lane.state)">
+            @for (opt of laneSortOptions; track opt.value) {
+              <option [value]="opt.value">{{ opt.icon }} {{ opt.label }}</option>
+            }
+          </select>
+        </label>
+      </div>
+    }
+  </div>
+  <p class="wf__hint">
+    The fixed board sequence runs top to bottom. The sort control defines how
+    cards appear inside each lane. <strong>Manual</strong>
+    enables drag-and-drop reordering; the other strategies sort automatically and
+    disable drag on that lane. The auto-pickup runner always uses its own priority
+    order regardless of this setting.
+  </p>
+</section>
+
+<section class="wf__group" data-testid="workflow-transitions">
+  <h3>What the platform does at each transition</h3>
+  <p class="wf__hint wf__hint--lead">
+    Read-only. These are the steps the platform performs today, driven by this
+    project's live settings and pipeline configuration. Configure them where the
+    <em>Configured in</em> column points.
+  </p>
+  <div class="wf__transitions">
+    @for (row of transitions(); track row.key) {
+      <div class="wf__transition" [attr.data-testid]="'workflow-transition-' + row.key">
+        <div class="wf__transition-head">
+          <span class="wf__transition-facet">{{ row.facetLabel }}</span>
+          <span class="wf__transition-hop">{{ row.hop }}</span>
+          <span class="wf__transition-state"
+                [attr.data-testid]="'workflow-transition-state-' + row.key">{{ row.state }}</span>
+        </div>
+        <p class="wf__transition-detail">{{ row.detail }}</p>
+        <p class="wf__transition-config">Configured in: <strong>{{ row.configuredIn }}</strong></p>
+      </div>
+    }
+  </div>
+</section>
+
+<section class="wf__group wf__group--placeholder" data-testid="workflow-stage2-placeholder">
+  <h3>Per-transition Git profiles <span class="wf__soon">after Git concept</span></h3>
+  <p class="wf__hint">
+    Stage 2 will let each lane transition carry its own Git profile (branch model,
+    commit/push policy, gate selection) instead of the single project-wide setting
+    shown above. This stays a placeholder until the branching semantics are decided
+    in <code>docs/concepts/git-branching-integration-zielbild.md</code> SS7. No
+    control is shown here on purpose - the page only surfaces implemented behaviour.
+  </p>
+</section>
+
+<section class="wf__group wf__group--placeholder" data-testid="workflow-stage3-placeholder">
+  <h3>Integration profiles &amp; MR / team workflow <span class="wf__soon">after Git concept</span></h3>
+  <p class="wf__hint">
+    Stage 3 covers shared-branch integration: merge-request creation, review
+    hand-off, and multi-agent / team workflows on top of the stage 2 profiles.
+    Also deferred to the same Git-concept decision (SS7); no behaviour switches
+    appear here until the model is settled.
+  </p>
+</section>

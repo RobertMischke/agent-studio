@@ -1,199 +1,338 @@
-<section class="proj-detail__group" data-testid="project-steering-docs-section">
-  <h3>
-    <span class="psd__icon">🧭</span>
-    Agent Docs
-    @if (overview(); as ov) {
-      <span class="psd__pill" data-testid="project-steering-docs-count">
-        {{ presentCount() }} / {{ ov.sources.length }} present
-      </span>
-      @if (warningCount() > 0) {
-        <span class="psd__pill psd__pill--warn" data-testid="project-steering-docs-warning-count">
-          {{ warningCount() }} warning{{ warningCount() === 1 ? '' : 's' }}
-        </span>
-      }
+<section class="psd" data-testid="project-steering-docs-section">
+  <header class="psd__head">
+    @if (overview()) {
+      <button class="psd__chrome-btn"
+              type="button"
+              data-testid="project-steering-docs-toggle-nav"
+              [cacTooltip]="navCollapsed() ? 'Show document tree' : 'Hide document tree'"
+              (click)="toggleNav()">
+        <app-studio-icon name="panelLeft" [size]="14"></app-studio-icon>
+      </button>
     }
-  </h3>
 
-  <p class="proj-detail__hint">
-    Inventory of the instruction files agents read of their own accord on this project
-    (AGENTS.md and the agent-facing domain docs). Raw sources stay visible; the human
-    summary and warnings below help spot stale or missing guidance. Action buttons queue
-    normal 1-preparation tasks - the surface never silently rewrites docs.
-  </p>
+    <div class="psd__title-block">
+      <span class="psd__icon" aria-hidden="true">
+        <app-studio-icon name="file" [size]="16"></app-studio-icon>
+      </span>
+      <div class="psd__title-copy">
+        <h3 class="psd__title-h">Agent Docs</h3>
+        @if (overview(); as ov) {
+          <span class="psd__count" data-testid="project-steering-docs-count">
+            {{ ov.sources.length }} file{{ ov.sources.length === 1 ? '' : 's' }}
+          </span>
+          @if (warningCount() > 0) {
+            <span class="psd__count psd__count--warn" data-testid="project-steering-docs-warning-count">
+              {{ warningCount() }} warning{{ warningCount() === 1 ? '' : 's' }}
+            </span>
+          }
+        }
+      </div>
+    </div>
+
+    @if (overview(); as ov) {
+      <div class="psd__top-meta">
+        @if (openedRel(); as rel) {
+          <span>{{ selectedSource()?.label ?? rel }}</span>
+          <code>{{ rel }}</code>
+        } @else {
+          <span>Repository root</span>
+          <code>{{ ov.baseDir }}</code>
+        }
+      </div>
+    }
+
+    <span class="psd__spacer"></span>
+    <button class="psd__chrome-btn"
+            type="button"
+            data-testid="project-steering-docs-refresh"
+            cacTooltip="Refresh agent docs inventory"
+            (click)="refresh()">
+      <app-studio-icon name="refresh" [size]="14"></app-studio-icon>
+    </button>
+  </header>
 
   @if (loading() && !overview() && !error()) {
-    <p class="studio-empty" data-testid="project-steering-docs-loading">Loading steering inventory…</p>
-  }
-
-  @if (error(); as e) {
+    <p class="studio-empty" data-testid="project-steering-docs-loading">Loading steering inventory...</p>
+  } @else if (error(); as e) {
     <div class="psd__error" data-testid="project-steering-docs-error">
       <strong>Could not load steering inventory.</strong>
       <span>{{ e }}</span>
       <button class="psd__btn psd__btn--ghost"
+              type="button"
               data-testid="project-steering-docs-retry"
               (click)="refresh()">Retry</button>
     </div>
-  }
-
-  @if (overview(); as ov) {
+  } @else if (overview(); as ov) {
     @if (ov.sources.length === 0) {
       <p class="studio-empty" data-testid="project-steering-docs-empty">
-        No steering inventory available for this project. The base directory could not be resolved
-        (no <code>repositoryPath</code>, <code>rootPath</code>, or watch path).
+        No agent instruction files were found below <code>{{ ov.baseDir }}</code>.
       </p>
     } @else {
-      <h4 class="psd__sub">Raw sources</h4>
-      <ul class="psd__sources" data-testid="project-steering-docs-sources">
-        @for (s of ov.sources; track s.id) {
-          <li class="psd__source"
-              [class.psd__source--missing]="!s.exists"
-              [class.psd__source--active]="openedId() === s.id">
-            <button class="psd__src-btn"
-                    [attr.data-testid]="'project-steering-docs-source-' + s.id"
-                    (click)="toggle(s)">
-              <span class="psd__src-row">
-                <span class="psd__src-label">{{ s.label }}</span>
-                <span class="psd__src-path"><code>{{ s.relPath }}</code></span>
-                @if (s.exists) {
-                  <span class="psd__src-meta">{{ formatSize(s.size) }} · {{ formatTime(s.updatedAt) }}</span>
-                } @else {
-                  <span class="psd__src-meta psd__src-meta--missing"
-                        [attr.data-testid]="'project-steering-docs-missing-' + s.id">missing</span>
-                }
-              </span>
-              <span class="psd__src-why">{{ s.why }}</span>
-            </button>
-            @if (openedId() === s.id) {
-              <div class="psd__viewer" data-testid="project-steering-docs-viewer">
-                @if (!s.exists) {
-                  <p class="studio-empty">
-                    File is missing at <code>{{ s.relPath }}</code> under <code>{{ ov.baseDir }}</code>.
-                  </p>
-                } @else if (s.children && s.children.length > 0) {
-                  <p class="psd__hint">
-                    Directory listing - click a file to open its content:
-                  </p>
-                  <ul class="psd__children" data-testid="project-steering-docs-children">
-                    @for (c of s.children; track c.relPath) {
-                      <li>
-                        <button class="psd__child-btn"
-                                [attr.data-testid]="'project-steering-docs-child-' + c.name"
-                                [class.psd__child-btn--active]="openedRel() === c.relPath"
-                                (click)="openChild(c.relPath)">
-                          <code>{{ c.name }}</code>
-                          <span>{{ formatSize(c.size) }} · {{ formatTime(c.updatedAt) }}</span>
-                        </button>
-                      </li>
-                    }
-                  </ul>
-                  @if (childContent(); as cc) {
-                    <app-markdown class="psd__body psd__body--child"
-                                  testId="project-steering-docs-child-content"
-                                  [source]="cc.content" />
+      <div class="psd__body"
+           [class.psd__body--nav-collapsed]="navCollapsed()">
+        @if (!navCollapsed()) {
+          <nav class="psd__tree" data-testid="project-steering-docs-tree" aria-label="Agent Docs tree">
+            <div class="psd__tree-top">
+              <span>Documents</span>
+              <span>{{ ov.sources.length }}</span>
+            </div>
+            <div class="psd__root-strip" data-testid="project-steering-docs-root-path">
+              <app-studio-icon name="folder" [size]="13"></app-studio-icon>
+              <span>Root</span>
+              <code>{{ rootFolderLabel() }}</code>
+            </div>
+
+            <div class="psd__rows" role="tree" aria-label="Agent instruction document tree">
+              @for (row of rows(); track rowId(row.node)) {
+                <div class="psd__row"
+                     role="treeitem"
+                     [class.psd__row--group]="!row.node.source"
+                     [class.psd__row--doc]="!!row.node.source"
+                     [class.psd__row--active]="openedRel() === row.node.relPath"
+                     [style.padding-left.px]="rowPad(row.depth)"
+                     [attr.aria-level]="row.depth + 1"
+                     [attr.aria-expanded]="!row.node.source ? row.expanded : null"
+                     [attr.aria-selected]="openedRel() === row.node.relPath ? 'true' : null"
+                     [attr.data-testid]="'project-steering-docs-node-' + rowId(row.node)">
+                  @if (!row.node.source) {
+                    <button class="psd__chevron" type="button"
+                            [attr.aria-label]="row.expanded ? 'Collapse' : 'Expand'"
+                            (click)="toggleFolder(rowId(row.node))">
+                      <app-studio-icon [name]="row.expanded ? 'chevronDown' : 'chevronRight'" [size]="11"></app-studio-icon>
+                    </button>
+                    <button class="psd__label psd__label--group"
+                            type="button"
+                            (click)="toggleFolder(rowId(row.node))">
+                      <app-studio-icon name="folder" [size]="13"></app-studio-icon>
+                      <span class="psd__label-copy">
+                        <span class="psd__label-text">{{ row.node.title }}</span>
+                      </span>
+                      <span class="psd__group-count">{{ row.node.children.length }}</span>
+                    </button>
+                  } @else if (row.node.source; as src) {
+                    <span class="psd__chevron-spacer"></span>
+                    <button class="psd__label psd__label--doc"
+                            type="button"
+                            [attr.title]="src.relPath"
+                            [attr.data-testid]="'project-steering-docs-file-' + src.relPath"
+                            (click)="openSource(src)">
+                      <app-studio-icon name="file" [size]="13"></app-studio-icon>
+                      <span class="psd__label-copy">
+                        <span class="psd__label-text">{{ row.node.title }}</span>
+                        <span class="psd__file-path">{{ src.relPath }}</span>
+                      </span>
+                      <span class="psd__cli-mini">
+                        @for (cli of src.appliesToClis; track cli) {
+                          <span>{{ cliLabel(cli) }}</span>
+                        }
+                      </span>
+                    </button>
                   }
-                } @else if (fileContent(); as fc) {
-                  <app-markdown class="psd__body"
-                                testId="project-steering-docs-content"
-                                [source]="fc.content" />
-                } @else if (fileLoading()) {
-                  <p class="studio-empty">Loading file…</p>
-                } @else if (fileError()) {
-                  <p class="studio-empty studio-empty--error" data-testid="project-steering-docs-file-error">{{ fileError() }}</p>
+                </div>
+              }
+            </div>
+          </nav>
+          <div class="psd__splitter" aria-hidden="true"><span></span></div>
+        }
+
+        <article class="psd__viewer" data-testid="project-steering-docs-viewer">
+          @if (selectedSource(); as selected) {
+            <header class="psd__viewer-head">
+              <div>
+                <h4>{{ selected.label }}</h4>
+                <code data-testid="project-steering-docs-viewer-path">{{ selected.relPath }}</code>
+              </div>
+              <div class="psd__cli-chips" data-testid="project-steering-docs-viewer-clis">
+                @for (cli of selected.appliesToClis; track cli) {
+                  <span class="psd__cli-chip">{{ cliLabel(cli) }}</span>
+                }
+              </div>
+            </header>
+
+            <dl class="psd__meta">
+              <div><dt>Updated</dt><dd>{{ formatTime(selected.updatedAt) }}</dd></div>
+              <div><dt>Size</dt><dd>{{ formatSize(selected.size) }}</dd></div>
+              <div><dt>Applies to</dt><dd>{{ cliList(selected.appliesToClis) }}</dd></div>
+              <div><dt>Scope</dt><dd>{{ selected.why }}</dd></div>
+            </dl>
+
+            @if (sourceWarnings(selected).length > 0) {
+              <div class="psd__inline-warnings" data-testid="project-steering-docs-selected-warnings">
+                @for (w of sourceWarnings(selected); track w.message) {
+                  <p>
+                    <span class="psd__sev psd__sev--{{ w.severity }}">{{ w.severity }}</span>
+                    {{ w.message }}
+                  </p>
                 }
               </div>
             }
-          </li>
-        }
-      </ul>
 
-      <h4 class="psd__sub">Human summary</h4>
-      <div class="psd__summary" data-testid="project-steering-docs-summary">
-        <ul class="psd__bullets">
-          <li>
-            Agents on this project read
-            <strong>{{ presentCount() }}</strong> of
-            <strong>{{ ov.sources.length }}</strong> canonical steering sources.
-            Latest edit: {{ ov.lastUpdated ? formatTime(ov.lastUpdated) : '— never recorded —' }}.
-          </li>
-          <li>
-            Critical rules and non-goals live in <code>AGENTS.md</code> and
-            <code>ROADMAP.md</code>; the durable archive of architectural decisions
-            is <code>docs/architecture-decisions.md</code>. Project settings live in
-            <code>backend/appsettings.json</code> (defaults) and
-            <code>backend/appsettings.Local.json</code> (gitignored overrides).
-          </li>
-          @if (statusBuckets().length > 0) {
-            <li class="psd__buckets">
-              @for (b of statusBuckets(); track b.label) {
-                <span class="psd__bucket"
-                      [class.psd__bucket--missing]="b.cls === 'missing'">
-                  {{ b.label }} <strong>{{ b.count }}</strong>
-                </span>
+            <section class="psd__doc-paper">
+              @if (fileLoading()) {
+                <p class="studio-empty">Loading file...</p>
+              } @else if (fileError()) {
+                <p class="studio-empty studio-empty--error" data-testid="project-steering-docs-file-error">{{ fileError() }}</p>
+              } @else if (fileContent(); as fc) {
+                <cac-markdown class="psd__body-md"
+                              testId="project-steering-docs-content"
+                              [source]="fc.content" />
               }
-            </li>
+            </section>
+          } @else {
+            <p class="studio-empty" data-testid="project-steering-docs-viewer-empty">
+              Select an agent instruction file from the tree.
+            </p>
           }
-          <li class="psd__caveat">
-            The summary above is a heuristic projection of the inventory, not a
-            rewritten human review. Click <em>Summarize Steering Docs</em> below
-            to spawn a task that reads each file and produces a real summary.
-          </li>
-        </ul>
-      </div>
 
-      <h4 class="psd__sub">Warnings</h4>
-      @if (ov.warnings.length === 0) {
-        <p class="studio-empty" data-testid="project-steering-docs-warnings-empty">
-          No drift heuristics tripped: every required source is present, no shim has grown
-          past its contract, and no file is older than the staleness threshold.
-        </p>
-      } @else {
-        <ul class="psd__warnings" data-testid="project-steering-docs-warnings">
-          @for (w of ov.warnings; track w.message) {
-            <li class="psd__warning psd__warning--{{ w.severity }}"
-                [attr.data-testid]="'project-steering-docs-warning-' + w.kind"
-                [class.psd__warning--clickable]="w.evidenceRefs.length > 0"
-                tabindex="0"
-                (click)="onWarningClick(w)"
-                (keydown.enter)="onWarningClick(w)"
-                (keydown.space)="onWarningClick(w); $event.preventDefault()">
-              <header>
-                <span class="psd__sev psd__sev--{{ w.severity }}">{{ w.severity }}</span>
-                <span class="psd__warn-kind">{{ humanWarningKind(w.kind) }}</span>
-              </header>
-              <p>{{ w.message }}</p>
-              @if (w.evidenceRefs.length > 0) {
-                <footer>
-                  <span class="psd__evidence-label">Evidence:</span>
-                  @for (ref of w.evidenceRefs; track ref) {
-                    <code class="psd__evidence">{{ ref }}</code>
+          <div class="psd__context-grid">
+            <section class="psd__summary" data-testid="project-steering-docs-summary">
+              <h4 class="psd__sub">Summary</h4>
+              <ul class="psd__bullets">
+                <li>
+                  The inventory contains <strong>{{ ov.sources.length }}</strong> existing agent instruction
+                  file{{ ov.sources.length === 1 ? '' : 's' }}. Missing canonical files are not shown here.
+                </li>
+                <li>
+                  Latest edit: {{ ov.lastUpdated ? formatTime(ov.lastUpdated) : 'never recorded' }}.
+                </li>
+                @if (statusBuckets().length > 0) {
+                  <li class="psd__buckets">
+                    @for (b of statusBuckets(); track b.label) {
+                      <span class="psd__bucket"
+                            [class.psd__bucket--missing]="b.cls === 'missing'">
+                        {{ b.label }} <strong>{{ b.count }}</strong>
+                      </span>
+                    }
+                  </li>
+                }
+              </ul>
+            </section>
+
+            <section class="psd__usage-mock" data-testid="project-steering-docs-tool-use">
+              @if (readAnalytics(); as ra) {
+                <header>
+                  <h4 class="psd__sub">Tool-use read analytics</h4>
+                  @if (ra.hasData) {
+                    <span class="psd__mock-pill psd__mock-pill--live"
+                          data-testid="project-steering-docs-tool-use-live">
+                      {{ ra.totalReads }} read{{ ra.totalReads === 1 ? '' : 's' }}
+                    </span>
+                  } @else {
+                    <span class="psd__mock-pill" data-testid="project-steering-docs-tool-use-nodata">No data yet</span>
                   }
-                </footer>
+                </header>
+                @if (ra.hasData) {
+                  <p>
+                    How often CLI tool-use reads consumed each agent doc across
+                    {{ ra.taskCount }} task{{ ra.taskCount === 1 ? '' : 's' }}.
+                    "Recent" counts the last {{ ra.windowDays }} days.
+                  </p>
+                  @if (ra.byCli.length > 0) {
+                    <div class="psd__cli-chips" data-testid="project-steering-docs-tool-use-by-cli">
+                      @for (c of ra.byCli; track c.cli) {
+                        <span class="psd__cli-chip">{{ cliLabel(c.cli) }} {{ c.reads }}</span>
+                      }
+                    </div>
+                  }
+                  <div class="psd__usage-table">
+                    <div class="psd__usage-head">
+                      <span>Document</span>
+                      <span>Reads</span>
+                      <span>Recent</span>
+                      <span>Last read</span>
+                      <span>By CLI</span>
+                    </div>
+                    @for (row of toolUseRows(); track row.relPath) {
+                      <div class="psd__usage-row"
+                           [attr.data-testid]="'project-steering-docs-tool-use-row-' + row.relPath">
+                        <code>{{ row.relPath }}</code>
+                        <strong>{{ row.reads }}</strong>
+                        <span>{{ row.recentReads }}</span>
+                        <span>{{ row.lastRead }}</span>
+                        <span>{{ row.byCli }}</span>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="studio-empty" data-testid="project-steering-docs-tool-use-empty">
+                    No indexed tool-use reads for these agent docs yet. Counts appear here once a
+                    Claude, Codex, or Gemini run reads one of the files above.
+                  </p>
+                }
+              } @else if (readAnalyticsError(); as err) {
+                <header><h4 class="psd__sub">Tool-use read analytics</h4></header>
+                <p class="studio-empty studio-empty--error"
+                   data-testid="project-steering-docs-tool-use-error">{{ err }}</p>
+              } @else {
+                <header><h4 class="psd__sub">Tool-use read analytics</h4></header>
+                <p class="studio-empty">Loading read analytics...</p>
               }
-            </li>
-          }
-        </ul>
-      }
+            </section>
 
-      <h4 class="psd__sub">Actions</h4>
-      <div class="psd__actions" data-testid="project-steering-docs-actions">
-        @for (a of actions; track a.slug) {
-          <button class="psd__btn"
-                  [attr.data-testid]="'project-steering-docs-action-' + a.slug"
-                  [appTooltip]="a.description"
-                  [disabled]="busyAction() === a.slug"
-                  (click)="runAction(a)">
-            {{ a.label }}
-            @if (busyAction() === a.slug) { <span class="psd__btn-spin">…</span> }
-          </button>
-        }
+            <section class="psd__warning-panel">
+              <h4 class="psd__sub">Warnings</h4>
+              @if (ov.warnings.length === 0) {
+                <p class="studio-empty" data-testid="project-steering-docs-warnings-empty">
+                  No heuristics tripped: the existing files are current enough, shims are small,
+                  and the docs do not look overloaded with local detail.
+                </p>
+              } @else {
+                <ul class="psd__warnings" data-testid="project-steering-docs-warnings">
+                  @for (w of ov.warnings; track w.message) {
+                    <li class="psd__warning"
+                        [class.psd__warning--info]="w.severity === 'info'"
+                        [class.psd__warning--warn]="w.severity === 'warn'"
+                        [class.psd__warning--high]="w.severity === 'high'"
+                        [class.psd__warning--clickable]="w.evidenceRefs.length > 0"
+                        [attr.data-testid]="'project-steering-docs-warning-' + w.kind"
+                        tabindex="0"
+                        (click)="onWarningClick(w)"
+                        (keydown.enter)="onWarningClick(w)"
+                        (keydown.space)="onWarningClick(w); $event.preventDefault()">
+                      <header>
+                        <span class="psd__sev psd__sev--{{ w.severity }}">{{ w.severity }}</span>
+                        <span class="psd__warn-kind">{{ humanWarningKind(w.kind) }}</span>
+                      </header>
+                      <p>{{ w.message }}</p>
+                      @if (w.evidenceRefs.length > 0) {
+                        <footer>
+                          <span class="psd__evidence-label">Evidence:</span>
+                          @for (ref of w.evidenceRefs; track ref) {
+                            <code class="psd__evidence">{{ ref }}</code>
+                          }
+                        </footer>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            </section>
+
+            <section class="psd__action-panel">
+              <h4 class="psd__sub">Actions</h4>
+              <div class="psd__actions" data-testid="project-steering-docs-actions">
+                @for (a of actions; track a.slug) {
+                  <button class="psd__btn"
+                          type="button"
+                          [attr.data-testid]="'project-steering-docs-action-' + a.slug"
+                          [cacTooltip]="a.description"
+                          [disabled]="busyAction() === a.slug"
+                          (click)="runAction(a)">
+                    {{ a.label }}
+                    @if (busyAction() === a.slug) { <span class="psd__btn-spin">...</span> }
+                  </button>
+                }
+              </div>
+              @if (actionMessage(); as msg) {
+                <p class="psd__action-msg" data-testid="project-steering-docs-action-msg">{{ msg }}</p>
+              }
+              @if (actionError(); as err) {
+                <p class="psd__action-error" data-testid="project-steering-docs-action-error">{{ err }}</p>
+              }
+            </section>
+          </div>
+        </article>
       </div>
-      @if (actionMessage(); as msg) {
-        <p class="psd__action-msg" data-testid="project-steering-docs-action-msg">{{ msg }}</p>
-      }
-      @if (actionError(); as err) {
-        <p class="psd__action-error" data-testid="project-steering-docs-action-error">{{ err }}</p>
-      }
     }
   }
 </section>
-  

@@ -286,13 +286,14 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText('34 runs');
     await expect(badge).toHaveAttribute('data-run-count', '34');
+    await expect(badge).toHaveAttribute('aria-haspopup', 'dialog');
 
     // Exactly one badge across the whole pipeline (core only).
     await expect(page.getByTestId('overview-pipeline-agent-runs')).toHaveCount(1);
 
     // Keyboard accessibility: focus (not mouse) must open the popover.
     await badge.focus();
-    const tip = page.getByTestId('app-tooltip');
+    const tip = page.getByTestId('cac-tooltip');
     await expect(tip).toBeVisible();
     await expect(tip).toContainText('34 runs');
     await expect(tip).toContainText('Runs: 34');
@@ -331,7 +332,18 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
     await page.locator('body').click({ position: { x: 2, y: 2 } });
     await expect(tip).toBeHidden();
     await badge.hover();
-    await expect(page.getByTestId('app-tooltip')).toBeVisible();
+    await expect(page.getByTestId('cac-tooltip')).toBeVisible();
+
+    // Multiple invocations are actionable: clicking the count opens the full
+    // chronological run history instead of leaving the history in a tooltip.
+    await badge.click();
+    await expect(badge).toHaveAttribute('aria-expanded', 'true');
+    const history = page.getByTestId('overview-pipeline-agent-run-history');
+    await expect(history).toBeVisible();
+    await expect(history).toContainText('Chronological CLI invocation history');
+    await expect(history.getByTestId('run-timeline-card')).toHaveCount(4);
+    await expect(history).toContainText('Run #0');
+    await expect(history).toContainText('recovery');
   });
 
   for (const theme of ['dark', 'light'] as const) {
@@ -345,7 +357,7 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
       await expect(badge).toHaveText('34 runs');
 
       await badge.focus();
-      const tip = page.getByTestId('app-tooltip');
+      const tip = page.getByTestId('cac-tooltip');
       await expect(tip).toBeVisible();
       await expect(tip).toContainText('Runs: 34');
 

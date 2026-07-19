@@ -8,9 +8,20 @@ Imports via `from './features/cli'`. See [`index.ts`](./index.ts).
 
 **Components**:
 
-- `CliAdminPanelComponent` — the CLI-usage hub inside the global Workspace Settings home ("Usage caps" rail section): per-CLI quota caps, the embedded full usage detail, and the per-CLI per-project `CliSessionsPanelComponent`. The status-bar "Usage" button opens this section.
+- `CliAdminPanelComponent`: the **"CLI Management"** hub, a section inside the global Workspace Settings home (rail key `caps`). It answers "what's available and how is it wired": the CLI catalog + per-CLI models and fallback routes (as compact rows), per-window usage caps, and the read-only completion contracts. The status-bar "Usage" button and legacy CLI-admin events open this section. Session inventory and on-disk paths were split into their own encapsulated rail pages (AGT-2101).
 - `CliConsoleComponent` — read-only console viewer for raw CLI output.
-- `CliSessionsPanelComponent` — per-CLI per-project session inventory (lazy-loaded from `/api/cli/usage`); emits `openJobDetail` so a session's task-link chip opens the owning task. Embedded by `CliAdminPanelComponent`.
+- `CliSessionsPanelComponent` — the CLI-session **tool** (AGT-2102): a
+  token-themed, **virtualised** (CDK `cdk-virtual-scroll-viewport`, AGT-1913)
+  inventory of every native CLI transcript on disk. Flattens `/api/cli/usage`
+  into one searchable/filterable row list (per-CLI chips, free-text, sort), shows
+  per-session metadata (CLI, size, age, path, token rollup, linked-task chip),
+  and a lazy detail aside fed by `GET /api/cli/{cliType}/session-detail`
+  (model / thinking / message count / first prompt / git branch). Actions: open
+  task (`openJobDetail`), copy id/path, and a confirm-gated **clean up** that
+  calls `DELETE /api/cli/{cliType}/session`. It has its own settings page
+  (`cli-sessions` rail key) since AGT-2101. Row transforms live in the sibling
+  `cli-session-row.util.ts` (unit-tested).
+ - `CliPathsPanelComponent` — read-only per-CLI filesystem footprint (executable path + version + the project roots it holds session state for), the location projection of the same `/api/cli/usage` report. Its own settings page (`cli-paths` rail key), AGT-2101.
 
 **Types** (lifted from `models/job.model.ts` per ADR-0034):
 
@@ -22,4 +33,4 @@ Imports via `from './features/cli'`. See [`index.ts`](./index.ts).
 ## Notable
 
 - CLI types live alongside other CLI surface (admin / console / usage). Job-coupled CLI types (`CliExecution`, `CliSettings`, `CliOutputLine`, `ContinueMode`) stay in `models/job.model.ts` because they participate in the JobInfo graph.
-- CLI usage has a single hub: the formerly loose right-edge `CliUsageSheetComponent` sidesheet was retired and its quota glance + session inventory folded into `CliAdminPanelComponent` in the Workspace Settings home. See [`frontend/AGENTS.md`](../../../../AGENTS.md) under "Side-sheet layout contract" for the history note.
+- CLI administration and usage have one hub: the formerly loose right-edge `CliUsageSheetComponent` sidesheet was retired and its management surfaces were folded into `CliAdminPanelComponent` in Workspace Settings. See [`frontend/AGENTS.md`](../../../../AGENTS.md) under "Side-sheet layout contract" for the history note.

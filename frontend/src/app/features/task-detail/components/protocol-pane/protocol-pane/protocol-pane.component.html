@@ -16,7 +16,7 @@
     (hide)="hide.emit()">
     <ng-container tabs>
       <app-pane-tabs variant="header"
-                     ariaLabel="Protocol / Activity"
+                     ariaLabel="Result / Activity"
                      [tabs]="protocolTabs()"
                      [activeTabId]="activeInspectorTab()"
                      [listModifier]="inProgress() ? 'activity-first' : null"
@@ -25,7 +25,7 @@
     <ng-container trailing>
       @if (sessionChip(); as chip) {
         <span class="pane__telemetry pane__session-chip pane__session-chip--{{ chip.kind }}"
-              [appTooltip]="chip.tooltip"
+              [cacTooltip]="chip.tooltip"
               [attr.data-testid]="'session-chip-' + chip.kind">
           {{ chip.emoji }} {{ chip.label }}
         </span>
@@ -33,13 +33,13 @@
       @if (claudeSession(); as cs) {
         @if (cs.error && !cs.turnCount) {
           <span class="pane__telemetry pane__telemetry--err"
-                [appTooltip]="'Claude session telemetry: ' + cs.error"
+                [cacTooltip]="'Claude session telemetry: ' + cs.error"
                 data-testid="claude-telemetry-error">⚠ no session yet</span>
         } @else if (cs.turnCount > 0) {
           <!-- Single-badge telemetry: tooltip carries the full breakdown
                (input / output / cache / turns / model) so no info is lost. -->
           <span class="pane__telemetry pane__telemetry--badge"
-                [appTooltip]="claudeSessionTooltip()"
+                [cacTooltip]="claudeSessionTooltip()"
                 data-testid="claude-telemetry"
                 role="img"
                 [attr.aria-label]="claudeSessionTooltip()">
@@ -51,7 +51,7 @@
         @if (wp.visible) {
           <span class="pane__watchdog"
                 [attr.data-state]="wp.state"
-                [appTooltip]="wp.tooltip"
+                [cacTooltip]="wp.tooltip"
                 data-testid="watchdog-chip">{{ wp.label }}</span>
         }
       }
@@ -59,7 +59,7 @@
         <button type="button"
                 class="pane__outcome-issue"
                 [class]="'pane__outcome-issue--' + outcomeIssueTone()"
-                [appTooltip]="issue.summary || issue.kind"
+                [cacTooltip]="issue.summary || issue.kind"
                 data-testid="protocol-outcome-issue-chip"
                 (click)="outcomeIssueModalOpen.set(true)">
           {{ issue.label || issue.kind }}
@@ -69,7 +69,7 @@
         <span class="pane__telemetry pane__telemetry-rate"
               [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
               [class.pane__telemetry-rate--warn]="rl.status && rl.status !== 'allowed'"
-              [appTooltip]="rateLimitTooltip()"
+              [cacTooltip]="rateLimitTooltip()"
               data-testid="claude-rate-limit">
           <span class="pane__telemetry-chip">⏱ {{ formatRateWindow(rl.window) }} · {{ rl.status || '?' }}</span>
           @if (rl.resetsAt > 0) {
@@ -85,7 +85,7 @@
                 class="pane__interim-btn"
                 data-testid="protocol-interim-summary"
                 [disabled]="!canRequestInterim()"
-                [appTooltip]="interimInFlight()
+                [cacTooltip]="interimInFlight()
                   ? ('Asking Haiku for an interim status... ' + interimElapsedSeconds() + 's')
                   : 'Generate an interim status summary from the current run output. Does not touch status.md.'"
                 (click)="requestInterimSummary()"
@@ -105,8 +105,8 @@
                 data-testid="pane-meta-toggle"
                 (click)="toggleVsCodeMeta()"
                 [class.pane-header__btn--active]="featureFlags.vsCodeMetaOpen()"
-                [appTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide meta panel' : 'Show meta panel'"
-                aria-label="Toggle meta panel">
+                [cacTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide telemetry chips' : 'Show telemetry chips'"
+                aria-label="Toggle telemetry chips">
           i
         </button>
       }
@@ -114,23 +114,10 @@
   </app-pane-header>
   <div class="pane__body">
     @if (protocolVerdict(); as v) {
-      <div class="protocol-verdict"
-           [attr.data-kind]="v.kind"
-           [attr.data-testid]="'protocol-verdict-' + v.kind"
-           role="status">
-        <span class="protocol-verdict__emoji" aria-hidden="true">{{ v.emoji }}</span>
-        <span class="protocol-verdict__label">{{ v.label }}</span>
-        <span class="protocol-verdict__detail">{{ v.detail }}</span>
-        @if (v.duration) {
-          <span class="protocol-verdict__duration"
-                [appTooltip]="'Run duration: ' + v.duration"
-                data-testid="protocol-verdict-duration"
-                aria-label="Run duration">
-            <span class="protocol-verdict__duration-icon" aria-hidden="true">⏱</span>
-            <span class="protocol-verdict__duration-value">{{ v.duration }}</span>
-          </span>
-        }
-      </div>
+      <app-protocol-verdict-banner
+        [verdict]="v"
+        [chain]="verdictChain()"
+        (openEvidence)="onVerdictChainEvidence($event)" />
     }
     @if (interimSummary(); as s) {
       @if (s.status === 'pending' || s.status === 'ready' || s.status === 'failed') {
@@ -209,11 +196,7 @@
         </div>
       }
     }
-    <!-- Visual evidence (screenshot strip), review-evidence panel, and
-         code-review panel all live in the prompt pane's Evidence and
-         Code Review tabs (F38: visual-evidence dedup). The protocol
-         pane stays focused on the live run timeline + chat composer. -->
-
+    <!-- Visual evidence and code review live in the prompt pane (F38). -->
     @if (followupCreated(); as fc) {
       <div class="evidence-followup-banner"
            data-testid="review-evidence-followup-banner">
@@ -222,16 +205,14 @@
         <button type="button"
                 class="evidence-followup-banner__open"
                 data-testid="review-evidence-followup-open"
-                (click)="onOpenFollowup(fc.jobId)">Open</button>
+                (click)="onOpenFollowup(fc)">Open</button>
         <button type="button"
                 class="evidence-followup-banner__dismiss"
                 data-testid="review-evidence-followup-dismiss"
                 (click)="dismissFollowupBanner()">×</button>
       </div>
     }
-    <!-- Inspector body. Tabs were lifted into the pane-header `[tabs]`
-         slot (F38), so the section is just the content-switching
-         container now. -->
+    <!-- Tabs live in the pane header; this section only switches content. -->
     <section class="inspector">
       <div class="inspector__body">
         @if (activeInspectorTab() === 'protocol') {
@@ -240,15 +221,12 @@
               <div class="summary-error" role="alert" data-testid="protocol-summary-error">
                 <div class="summary-error__head">
                   <span class="summary-error__icon" aria-hidden="true">⚠</span>
-                  <h4 class="summary-error__title">Protocol could not be generated</h4>
+                  <h4 class="summary-error__title">Result could not be generated</h4>
                 </div>
                 <pre class="summary-error__body" data-testid="protocol-summary-error-message">{{ detail().summaryState?.errorMessage || 'Unknown error — no detail from backend.' }}</pre>
                 <div class="summary-error__actions">
-                  <button type="button"
-                          class="btn-regen"
-                          data-testid="protocol-regenerate-summary"
-                          [appTooltip]="'Re-run the Haiku summary on the CLI output'"
-                          [disabled]="regenerating()"
+                  <button type="button" class="btn-regen" data-testid="protocol-regenerate-summary"
+                          [cacTooltip]="'Re-run the Haiku summary on the CLI output'" [disabled]="regenerating()"
                           (click)="regenerateSummary.emit()">
                     <span class="btn-regen__icon" aria-hidden="true">✨</span>
                     <span>{{ regenerating() ? 'Generating…' : 'Try again' }}</span>
@@ -257,7 +235,6 @@
                 </div>
               </div>
             }
-
             @if (summaryStatus() === 'generating' && !detail().statusMarkdown) {
               <div class="notes-panel__placeholder" data-testid="protocol-generating-placeholder">
                 <span class="spinner-ring spinner-ring--lg"></span>
@@ -265,14 +242,24 @@
               </div>
             } @else if (!detail().statusMarkdown && summaryStatus() !== 'failed') {
               <div class="notes-panel__placeholder">
-                <p>No protocol yet. It will be generated automatically after the first run.</p>
+                @if (canRegenerate()) {
+                  <p>No result was generated for this activity yet.</p>
+                  <button type="button" class="btn-regen btn-regen--placeholder" data-testid="protocol-regenerate-summary"
+                          [cacTooltip]="'Generate a short result from the recorded CLI activity'" [disabled]="regenerating()" [attr.aria-busy]="regenerating()"
+                          (click)="regenerateSummary.emit()">
+                    <span class="btn-regen__icon" aria-hidden="true">✨</span>
+                    <span>{{ regenerating() ? 'Generating…' : 'Generate result' }}</span>
+                  </button>
+                } @else {
+                  <p>No result yet. There is no CLI activity to summarize.</p>
+                }
               </div>
             } @else if (detail().statusMarkdown) {
               <div class="notes-panel__toolbar" data-testid="protocol-toolbar">
                 @if (statusProvenance(); as generation) {
                   <span class="notes-panel__provenance"
                         data-testid="protocol-provenance"
-                        [appTooltip]="generation.tooltip">
+                        [cacTooltip]="generation.tooltip">
                     <span class="notes-panel__provenance-by">Generated by</span>
                     <span class="notes-panel__provenance-model"
                           data-testid="protocol-provenance-model">{{ generation.producer }}</span>
@@ -288,14 +275,14 @@
                 <button type="button"
                         class="btn-icon"
                         data-testid="protocol-copy-markdown"
-                        [appTooltip]="'Copy protocol markdown'"
+                        [cacTooltip]="'Copy protocol markdown'"
                         (click)="copyProtocolMarkdown()">
                   {{ copyIconLabel() }}
                 </button>
                 <button type="button"
                         class="btn-icon"
                         data-testid="protocol-more-actions"
-                        [appTooltip]="'More actions'"
+                        [cacTooltip]="'More actions'"
                         (click)="openProtocolMenu($event)">
                   ⋯
                 </button>
@@ -305,7 +292,7 @@
                 [open]="protocolMenuOpen()"
                 [position]="protocolMenuPosition()"
                 testIdPrefix="protocol-context-menu"
-                ariaLabel="Protocol actions"
+                ariaLabel="Result actions"
                 [minWidth]="200"
                 (itemClick)="onProtocolMenuItemClick($event)"
                 (closeRequest)="closeProtocolMenu()" />
@@ -322,12 +309,11 @@
                                          [content]="detail().statusMarkdown"
                                          [contentTransform]="statusHistoryTransform" />
               } @else {
-                <app-beautiful-results class="notes-panel__body"
-                                       data-testid="protocol-beautiful-results"
-                                       [markdown]="statusMarkdownBody()"
-                                       [jobId]="detail().info.id"
-                                       [watchPath]="detail().info.watchPath"
-                                       (openSource)="openSource($event)" />
+                <app-result-view class="notes-panel__body"
+                                 data-testid="protocol-beautiful-results"
+                                 [detail]="detail()"
+                                 [verdict]="protocolVerdict()"
+                                 (openSource)="openSource($event)" />
               }
             }
           </section>
@@ -349,7 +335,7 @@
                       <button type="button"
                               class="activity-runs__count"
                               data-testid="activity-runs-open"
-                              [appTooltip]="'Show the full run list'"
+                              [cacTooltip]="'Show the full run list'"
                               (click)="runsModalOpen.set(true)">
                         {{ runCount() }} Run{{ runCount() === 1 ? '' : 's' }}
                       </button>
@@ -357,7 +343,7 @@
                               class="btn-icon activity-runs__info"
                               data-testid="activity-runs-info"
                               aria-label="What is a run?"
-                              [appTooltip]="runInfoTooltip"
+                              [cacTooltip]="runInfoTooltip"
                               tooltipPosition="bottom">i</button>
                     </span>
                   }
@@ -366,7 +352,7 @@
                             data-testid="protocol-maximize-log"
                             (click)="openLogOverlay.emit()"
                             aria-label="Maximize log"
-                            [appTooltip]="'Maximize log'">⤢</button>
+                            [cacTooltip]="'Maximize log'">⤢</button>
                   }
                   <button type="button"
                           class="btn-icon"
@@ -374,7 +360,7 @@
                           aria-label="More activity actions"
                           aria-haspopup="menu"
                           [attr.aria-expanded]="activityMenuOpen()"
-                          [appTooltip]="'More activity actions'"
+                          [cacTooltip]="'More activity actions'"
                           (click)="openActivityMenu($event)">⋯</button>
                   <app-menu
                     [items]="activityMenuItems()"
@@ -439,10 +425,16 @@
                   }
                   @case ('conversation') {
                     @if (nextGenConversationEnabled()) {
-                      <app-conversation-view [events]="nextGenChatEvents()"
+                      <!-- Virtualised: the transcript can grow into the thousands of
+                           events for a long-running task, so the view windows its own
+                           DOM and owns its own scroll container (bounded by the
+                           `cac-conversation-view` host sizing in the stylesheet below)
+                           instead of the ancestor `.pane__body` scrolling everything. -->
+                      <cac-conversation-view [events]="nextGenChatEvents()"
                                              [isRunning]="isRunning() || isActiveJob()"
                                              [queuedFollowUp]="queuedFollowUp()"
                                              [showHeader]="false"
+                                             [virtualised]="true"
                                              variant="embedded"
                                              (openTrace)="onConversationOpenTrace($event)"
                                              (openFollowUp)="onOpenFollowup($event)"
@@ -517,7 +509,7 @@
                                   class="auto-eval__chip"
                                   [attr.data-testid]="'auto-eval-chip'"
                                   (click)="applyQuickReply(chip)"
-                                  [appTooltip]="chip.prompt">{{ chip.label }}</button>
+                                  [cacTooltip]="chip.prompt">{{ chip.label }}</button>
                         }
                       </div>
                     }
@@ -534,7 +526,7 @@
                             [class.chat-mode__pill--active]="continueMode() === m.id"
                             [attr.data-mode]="m.id"
                             [attr.data-testid]="'activity-chat-mode-' + m.id"
-                            [appTooltip]="m.tooltip"
+                            [cacTooltip]="m.tooltip"
                             (click)="continueModeChange.emit(m.id)">
                       <span class="chat-mode__icon" aria-hidden="true">{{ m.icon }}</span>
                       <span class="chat-mode__title">{{ m.title }}</span>
@@ -550,6 +542,16 @@
                           (keydown.control.enter)="sendChat.emit()"
                           (keydown.meta.enter)="sendChat.emit()"></textarea>
                 <div class="chat-compose__actions">
+                  @if (permissionOptions().length > 0) {
+                    <cac-permission-select
+                      [options]="permissionOptions()"
+                      [value]="permissionMode()"
+                      [disabled]="isRunning()"
+                      disabledReason="Stop the run first to change the permission mode."
+                      triggerTestid="chat-compose-permission"
+                      pickerTestidPrefix="chat-permission-picker"
+                      (valueChange)="onPermissionModeChange($event)" />
+                  }
                   <app-cli-model-selector
                     [cliType]="cliType()"
                     [model]="model()"
@@ -559,6 +561,12 @@
                     triggerTestid="chat-compose-model"
                     pickerTestidPrefix="chat-model-picker"
                     (commit)="agentConfigCommit.emit($event)" />
+                  <cac-context-ring
+                    [usage]="chatContextUsage()"
+                    [busy]="contextBusy()"
+                    triggerTestid="chat-compose-context"
+                    popoverTestidPrefix="chat-context-popover"
+                    (refreshRequested)="onContextRefresh()" />
                   <span class="chat-compose__spacer"></span>
                   @if (isRunning()) {
                     <button type="button"

@@ -1,0 +1,218 @@
+/* "Where am I right now" header. Uses the shared studio tokens + the
+   sheet's --orch-accent alias so it flips cleanly with the theme; spacing
+   comes from the --studio-spacing-* scale per the frontend spacing rule. */
+:host {
+  display: block;
+}
+
+.octx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+  margin: 0 0 var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--studio-accent) 6%, var(--studio-bg-elevated));
+}
+
+/* A running task earns a subtly stronger frame so "something is live" reads
+   at a glance without shouting. */
+.octx[data-scope='task'] {
+  border-color: color-mix(in srgb, var(--studio-accent) 22%, var(--studio-border));
+}
+
+.octx__row {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+}
+
+.octx__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
+  padding: calc(var(--studio-spacing-1) * 0.75) var(--studio-spacing-2);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--studio-fg);
+}
+
+.octx__chip-icon {
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.octx__chip-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.octx__chip--project {
+  border-color: color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
+  background: color-mix(in srgb, var(--studio-accent-3) 12%, transparent);
+  color: var(--studio-fg-strong);
+  flex: 0 1 auto;
+}
+
+.octx__chip--task {
+  border-color: color-mix(in srgb, var(--studio-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 10%, transparent);
+  color: var(--studio-fg-strong);
+  flex: 1 1 auto;
+}
+
+/* MC-2: pinned marker. Sits at the trailing edge of the primary row so the
+   frozen-context state is visible without competing with the project/task
+   chips. Quiet by default (muted), tinted with the accent to echo the
+   toolbar's pinned button. */
+.octx__pin {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding: calc(var(--studio-spacing-1) * 0.75) var(--studio-spacing-2);
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--studio-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+  color: var(--studio-fg-strong);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.octx__chip--board {
+  border-color: var(--studio-border);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-muted);
+  flex: 0 0 auto;
+}
+
+.octx__chip-key {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--studio-accent);
+}
+
+.octx__chip-text--task {
+  font-weight: 500;
+}
+
+.octx__sep {
+  flex: 0 0 auto;
+  opacity: 0.5;
+  color: var(--studio-fg-muted);
+}
+
+.octx__row--meta {
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+}
+
+.octx__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: calc(var(--studio-spacing-1) / 2) var(--studio-spacing-2);
+  border-radius: 999px;
+  border: 1px solid var(--studio-border);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.octx__pill--lane[data-tone='progress'] {
+  border-color: color-mix(in srgb, var(--studio-accent-3) 45%, transparent);
+  background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
+  color: var(--studio-accent-3-strong);
+}
+
+.octx__pill--lane[data-tone='review'] {
+  border-color: color-mix(in srgb, var(--severity-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
+  color: var(--severity-warn);
+}
+
+.octx__pill--lane[data-tone='done'] {
+  border-color: color-mix(in srgb, var(--studio-accent-success) 45%, transparent);
+  background: color-mix(in srgb, var(--studio-accent-success) 14%, transparent);
+  color: var(--studio-accent-success-strong);
+}
+
+/* Live-run telemetry — the only animated element in the header. */
+.octx__run {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  margin-left: auto;
+  padding:
+    calc(var(--studio-spacing-1) / 2)
+    calc(var(--studio-spacing-2) + (var(--studio-spacing-1) / 2))
+    calc(var(--studio-spacing-1) / 2)
+    var(--studio-spacing-2);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
+  background: var(--studio-bg-running);
+  color: var(--studio-fg-strong);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.octx__run-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--studio-accent-3-strong);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--studio-accent-3) 60%, transparent);
+  animation: octx-pulse 1.8s ease-out infinite;
+}
+
+.octx__run-label {
+  color: var(--studio-accent-3-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.octx__run-sep {
+  opacity: 0.5;
+}
+
+.octx__run-model {
+  font-weight: 700;
+}
+
+.octx__run-dur {
+  font-variant-numeric: tabular-nums;
+  color: var(--studio-fg-muted);
+}
+
+@keyframes octx-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--studio-accent-3) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--studio-accent-3) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--studio-accent-3) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .octx__run-pulse {
+    animation: none;
+  }
+}

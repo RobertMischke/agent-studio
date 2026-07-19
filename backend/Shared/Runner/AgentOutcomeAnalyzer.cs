@@ -38,7 +38,24 @@ public enum RunIssueKind
     WatchdogTimeout,
     MissingTerminalSentinel,
     HeuristicDone,
-    ClassifierUnknown,
+    /// <summary>
+    /// The agent CLI process died hard (a Windows <c>Process.Kill</c> hands
+    /// back <c>exitCode &lt; 0</c>) before it could reach a terminal sentinel,
+    /// and the run left no commits. This is an infra crash, not an agent
+    /// decision: the orchestrator must surface it for review/retry rather than
+    /// re-issuing from scratch. Replaces the old <c>ClassifierUnknown</c> for
+    /// the hard-process-death half of that bucket (drive-to-conclusion model).
+    /// </summary>
+    InfraCrash,
+    /// <summary>
+    /// The run failed with a real, substantial agent turn whose text the
+    /// deterministic contract could not map to a terminal verdict (no sentinel,
+    /// no commits, but not a hard process death either). The orchestrator can
+    /// draw no honest conclusion, so it stops and hands the task to the user
+    /// instead of accepting a meaningless marker. Replaces the old
+    /// <c>ClassifierUnknown</c> for the logical-failure half of that bucket.
+    /// </summary>
+    OrchestratorInconclusive,
     NoAgentOutput,
     /// <summary>
     /// The CLI process exited almost immediately with no agent turn. Unlike an
@@ -57,7 +74,7 @@ public enum RunIssueKind
     /// unclassifiable agent reply. The runner has already marked the
     /// session chain for Recovery, so the policy routes this to the
     /// rebuild-from-disk path instead of surfacing a terminal
-    /// <see cref="ClassifierUnknown"/> FAILURE.
+    /// <see cref="OrchestratorInconclusive"/> FAILURE.
     /// </summary>
     CliLaunchFailed,
     /// <summary>
@@ -102,7 +119,68 @@ public enum RunIssueKind
     /// <see cref="AgentOutcomeAnalyzer"/> - so autonomous agent commits are
     /// surfaced as process violations instead of clean completions.
     /// </summary>
-    AgentGitViolation
+    AgentGitViolation,
+    /// <summary>
+    /// The agent CLI rejected the run because the requested MODEL is invalid
+    /// for this account/CLI: an <c>invalid_request_error</c> / HTTP 400 whose
+    /// message says the model is not supported / does not exist (e.g. codex-cli
+    /// with a ChatGPT account rejecting <c>gpt-5-codex</c>: "The 'gpt-5-codex'
+    /// model is not supported when using Codex with a ChatGPT account"). This
+    /// is NON-RETRYABLE by re-issue - resending the same model spawns straight
+    /// back into the same 400 - and it is NOT an unclassifiable agent reply
+    /// (the old orchestrator-inconclusive mislabel). The orchestrator routes it
+    /// to human review with a <c>model-invalid</c> reason so the card clearly
+    /// says the configured model must be changed. See AGT-1941 / the codex
+    /// spawn-failure signature (AGT-1928/1929/1930/1936).
+    /// </summary>
+    ModelInvalid,
+    /// <summary>
+    /// The agent CLI rejected the run because the account's usage / session /
+    /// rate-limit budget is exhausted ("You've hit your session limit", a
+    /// <c>Rate limit · … · rejected</c> marker, "usage limit reached"). This is
+    /// a TRANSIENT provider condition, not an agent decision and not an
+    /// unclassifiable reply: it clears when the quota window resets. Typed
+    /// distinctly so the escalation reason is an honest <c>quota-exhausted</c>
+    /// (with the reset time when the CLI reported it) instead of the misleading
+    /// <c>orchestrator-inconclusive</c>, and so the runner exempts it from the
+    /// per-task no-progress quarantine streak. This is the AGT-1918/1919/1920
+    /// signature (claude-sonnet-5 five-hour session limit on 2026-07-07).
+    /// </summary>
+    QuotaExhausted,
+    /// <summary>
+    /// A TRANSIENT environmental fault that is neither the task's code nor a
+    /// provider account problem: a host file lock (the MSBuild <c>MSB3021</c> /
+    /// <c>MSB3026</c> / <c>MSB3027</c> copy-lock family, "the process cannot
+    /// access the file … because it is being used by another process") or a
+    /// network glitch (DNS "could not resolve host" / "temporary failure in name
+    /// resolution", <c>ECONNRESET</c> / <c>ETIMEDOUT</c> / <c>EAI_AGAIN</c>,
+    /// "connection reset by peer", a 502/503/504 gateway blip). Unlike
+    /// <see cref="EnvironmentBlocker"/> (host-permission / sandbox faults the
+    /// agent cannot resolve and that only a human can fix) this class CLEARS on
+    /// its own on a retry: the lock releases, the network recovers. So it is
+    /// RETRYABLE - the orchestrator retries it with exponential backoff instead
+    /// of escalating, and only routes it to human review (flagged
+    /// <c>environmental</c>) once the bounded retry budget is spent. This is the
+    /// MSB302x-lock / network signature from the post-processing outcome-taxonomy
+    /// (AGT-1944; belege AGT-1945/1929/1930 backend-restart cycles).
+    /// </summary>
+    EnvironmentalTransient,
+    /// <summary>
+    /// The agent CLI could not launch because its OAuth session was expired and
+    /// the token refresh failed ("OAuth session expired and could not be
+    /// refreshed"). This is the AGT-2066 "token roulette" launch signature: a
+    /// dead/rotated refresh token that no re-issue can revive, and - because
+    /// every parallel run shares the same operator credential - one that fails
+    /// EVERY launch identically until the credential is re-authenticated
+    /// centrally. It is NON-RETRYABLE (unlike <see cref="CliLaunchFailed"/>,
+    /// which rebuilds from disk and retries): retrying only burns launch budgets
+    /// on a credential that is still dead. Typed distinctly so the orchestrator
+    /// STOPS immediately with a clear re-auth instruction (the WÄCHTER / breaker
+    /// half of the AGT-2066 fix) instead of the 17-cards-in-minutes cascade the
+    /// 2026-07-10 incident produced, and so it is not mislabelled as a generic
+    /// recoverable launch failure.
+    /// </summary>
+    AuthRefreshFailed
 }
 
 /// <summary>
@@ -144,7 +222,7 @@ public sealed record AgentOutcome(
 ///   (<c>[[TASK_DONE]]</c>, <c>[[TASK_BLOCKED:&lt;reason&gt;]]</c>,
 ///   <c>[[TASK_NEEDS_INPUT:&lt;reason&gt;]]</c>, <c>[[TASK_NOOP]]</c>).
 ///   These are authoritative. The agent contract is documented in
-///   <c>docs/agent-task-contract.md</c>.</item>
+///   <c>docs/system/contracts/agent-task.md</c>.</item>
 ///   <item>Empty fast exit: empty output buffer or no agent text plus a
 ///   sub-threshold duration. The CLI exited before an agent turn produced
 ///   reviewable output; this is a failed-start issue, not a no-op.</item>
@@ -310,6 +388,106 @@ public static class AgentOutcomeAnalyzer
             { IssueKind = RunIssueKind.ContextOverflow };
         }
 
+        // 1.42) Model-invalid. A failed run whose output carries a provider
+        //    model-rejection (invalid_request_error / HTTP 400 "model is not
+        //    supported / does not exist") is NON-RETRYABLE: the requested model
+        //    is wrong for this account/CLI, so re-issuing spawns into the same
+        //    400. This is the codex ChatGPT-account signature (gpt-5-codex
+        //    rejected). Typed so the escalation reason is a clear "model-invalid"
+        //    instead of the catch-all orchestrator-inconclusive, and checked
+        //    BEFORE the CLI-launch / heuristic paths so it wins. Gated on
+        //    `failed` so an agent quoting one of these phrases mid-success is
+        //    unaffected.
+        if (failed && IsModelInvalid(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildModelInvalidSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "model rejected by the provider (invalid_request / model not supported)",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.ModelInvalid };
+        }
+
+        // 1.45) Quota / session-limit exhaustion. A failed run whose output
+        //    carries a usage/session/rate-limit-exhausted signal ("You've hit
+        //    your session limit", a `Rate limit · … · rejected` marker) is a
+        //    TRANSIENT provider condition that clears when the quota window
+        //    resets - not an unclassifiable agent reply. Typed so the escalation
+        //    reason is an honest "quota-exhausted" (carrying the reported reset
+        //    time) instead of orchestrator-inconclusive, and so the runner's
+        //    rate-limit cooldown / quarantine exemption treat it as transient.
+        //    Gated on `failed`, and checked BEFORE the CLI-launch / heuristic
+        //    paths so it is not swallowed by them. NOTE: claude emits a benign
+        //    `● Rate limit · … · allowed` telemetry marker on healthy runs too,
+        //    so the needles below match only the EXHAUSTED shapes.
+        if (failed && IsQuotaExhausted(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildQuotaExhaustedSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "provider usage/session/rate limit exhausted",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.QuotaExhausted };
+        }
+
+        // 1.48) Transient environmental fault. A failed run whose output carries
+        //    a host file-lock (MSB302x copy-lock family / "being used by another
+        //    process") or a network glitch (DNS failure, ECONNRESET/ETIMEDOUT,
+        //    502/503/504) signal is TRANSIENT: unlike an EnvironmentBlocker the
+        //    condition clears on its own, so re-running the same task after a
+        //    short backoff usually succeeds. Typed distinctly so the runner
+        //    retries it with backoff instead of escalating, and so it does not
+        //    accrue toward the per-task no-progress quarantine streak. Gated on
+        //    `failed`, and checked BEFORE the CLI-launch / heuristic paths so it
+        //    is not swallowed by them. Kept below quota/model so a provider
+        //    account problem is not mislabelled as a transient blip.
+        if (failed && IsEnvironmentalTransient(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildEnvironmentalTransientSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "transient environmental fault (host file lock / network) detected in CLI output",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.EnvironmentalTransient };
+        }
+
+        // 1.49) OAuth-refresh launch failure (AGT-2066 WÄCHTER). A failed run
+        //    whose output carries the "OAuth session expired and could not be
+        //    refreshed" signature is the token-roulette launch death: a dead /
+        //    rotated refresh token no re-issue can revive, shared across every
+        //    parallel run, so it fails EVERY launch identically until the
+        //    operator re-authenticates centrally. Checked BEFORE the generic
+        //    CliLaunchFailed branch (1.5) - which would otherwise swallow this
+        //    fast, short failure and RETRY it - so the breaker wins: the policy
+        //    stops immediately with a re-auth instruction instead of burning
+        //    launch budgets (17 cards in minutes, incident 2026-07-10). Gated on
+        //    `failed` so an agent quoting the phrase in a healthy turn is unaffected.
+        if (failed && IsAuthRefreshFailure(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildAuthRefreshFailureSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "OAuth session expired and could not be refreshed before an agent turn (AGT-2066)",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.AuthRefreshFailed };
+        }
+
         // 1.5) CLI launch / resume failure. A failed run that produced no
         //    real agent turn - it died almost instantly (~0s) or the only
         //    output is a recognised CLI launch/resume error fragment (e.g.
@@ -355,7 +533,7 @@ public static class AgentOutcomeAnalyzer
         //    the frontend's classifier so the orchestrator and the UI agree
         //    on what "done" / "blocked" / "needs-input" mean today.
         var (heuristicKind, heuristicSummary) = HeuristicClassify(agentText);
-        var issue = ResolveIssueKind(heuristicKind, agentText.Length, failed);
+        var issue = ResolveIssueKind(heuristicKind, agentText.Length, failed, exitCode);
         return new AgentOutcome(
             Kind: heuristicKind,
             Summary: heuristicSummary,
@@ -380,7 +558,7 @@ public static class AgentOutcomeAnalyzer
     // (the continuous-decision scanner, post-run policy, supervisor parsing)
     // share one grammar. ADR-0002 anchors the deterministic-orchestration
     // philosophy on a single sentinel regex; this is the single source of truth
-    // referenced from AGENTS.md and docs/agent-task-contract.md.
+    // referenced from AGENTS.md and docs/system/contracts/agent-task.md.
     public static readonly Regex SentinelRegex = new(
         @"\[\[\s*TASK[\s_-]*(?<keyword>DONE|BLOCKED|NEEDS[\s_-]*INPUT|NOOP)\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -487,18 +665,25 @@ public static class AgentOutcomeAnalyzer
         // misses for claude/other CLIs) has almost always done work. The safe,
         // CLI-agnostic default is to treat it as Done and let it flow to review
         // — where the now-non-optional commit step captures the work and a
-        // human/orchestrator has the final say — instead of spinning the
-        // classifier-unknown reissue loop that leaves the work uncommitted in
+        // human/orchestrator has the final say — instead of spinning an
+        // inconclusive reissue loop that leaves the work uncommitted in
         // the worktree. Only a short, contentless reply stays Unknown.
         if (agentText.Trim().Length >= 400)
             return (AgentOutcomeKind.Done, "Substantial reply without a parseable verdict; treating as done for review (heuristic).");
         return (AgentOutcomeKind.Unknown, "Agent text did not match any known shape.");
     }
 
-    private static RunIssueKind ResolveIssueKind(AgentOutcomeKind kind, int agentTextChars, bool failed)
+    private static RunIssueKind ResolveIssueKind(AgentOutcomeKind kind, int agentTextChars, bool failed, int? exitCode)
     {
         if (agentTextChars == 0) return failed ? RunIssueKind.NoAgentOutput : RunIssueKind.None;
-        if (failed) return RunIssueKind.ClassifierUnknown;
+        // A failed run with real agent text and no sentinel (sentinels return
+        // early in Analyze) splits two ways instead of the old blanket
+        // ClassifierUnknown: a hard process death (exitCode < 0, the Windows
+        // Process.Kill artifact) is an InfraCrash; anything else is an honest
+        // OrchestratorInconclusive logical failure. Both stop and surface for
+        // review; neither is ever silently accepted (drive-to-conclusion model).
+        if (failed)
+            return exitCode is < 0 ? RunIssueKind.InfraCrash : RunIssueKind.OrchestratorInconclusive;
         return kind switch
         {
             AgentOutcomeKind.Done    => RunIssueKind.MissingTerminalSentinel,
@@ -510,7 +695,7 @@ public static class AgentOutcomeAnalyzer
     /// <summary>
     /// Pull the diagnosis text out of the synthetic
     /// <c>[environment-blocker] &lt;diagnosis&gt;</c> system line written by
-    /// <c>CliExecutionServiceBase.CheckEnvironmentBlocker</c>. Returns null
+    /// <c>GenericCliExecutionService.CheckEnvironmentBlocker</c>. Returns null
     /// when the run did not trip the detector. The marker is the only
     /// signal the analyzer trusts here: the underlying needles (codex
     /// sandbox text, EPERM, etc.) can appear inside an agent's own prose
@@ -648,6 +833,249 @@ public static class AgentOutcomeAnalyzer
             if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Phrases a CLI emits when it cannot launch because its OAuth session has
+    /// expired and the token refresh failed. The canonical claude form is the
+    /// exact incident line "OAuth session expired and could not be refreshed";
+    /// the shorter fragments cover the codex/gemini and provider variants ("could
+    /// not be refreshed", "failed to refresh"/"unable to refresh" the token/
+    /// session/credentials). Kept specific - and gated on a <c>failed</c> status
+    /// at the call site - so an agent quoting one of these phrases in a healthy
+    /// turn does not trip the breaker. This is the AGT-2066 token-roulette
+    /// launch signature.
+    /// </summary>
+    private static readonly string[] AuthRefreshFailureNeedles =
+    {
+        "oauth session expired and could not be refreshed",
+        "session expired and could not be refreshed",
+        "could not be refreshed",
+        "oauth token expired",
+        "failed to refresh the oauth",
+        "failed to refresh oauth token",
+        "unable to refresh the oauth",
+        "credentials could not be refreshed",
+        "token refresh failed",
+    };
+
+    /// <summary>
+    /// True when the run output carries a recognised OAuth-refresh-failure
+    /// signal. Callers must only invoke this for a <c>failed</c> run so an agent
+    /// that merely discusses token refresh in a healthy turn does not trip it.
+    /// </summary>
+    private static bool IsAuthRefreshFailure(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in AuthRefreshFailureNeedles)
+        {
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static string BuildAuthRefreshFailureSummary(string rawText)
+    {
+        var detail = ExtractFirstMatchingLine(rawText, "could not be refreshed")
+                     ?? ExtractFirstMatchingLine(rawText, "refresh");
+        var head = detail != null
+            ? $"The agent CLI could not launch: its OAuth session expired and the token refresh failed (\"{detail}\")."
+            : "The agent CLI could not launch: its OAuth session expired and the token refresh failed.";
+        return head
+            + " This is NON-RETRYABLE by re-issue and shared across every parallel run: the credential"
+            + " is dead until it is re-authenticated centrally, so further launches would fail identically."
+            + " Re-auth the CLI from the operator shell (refresh ~/.claude/.credentials.json), then re-queue (AGT-2066).";
+    }
+
+    /// <summary>
+    /// Phrases a CLI / provider emits when the requested MODEL is rejected as
+    /// invalid for the account or CLI. Kept specific so a match (combined with a
+    /// <c>failed</c> status) is an unambiguous model-rejection rather than
+    /// incidental prose. The canonical codex ChatGPT-account form is
+    /// <c>invalid_request_error</c> + "model is not supported when using Codex";
+    /// the others cover the OpenAI/Anthropic "model does not exist / not found"
+    /// and generic unsupported-model API messages.
+    /// </summary>
+    private static readonly string[] ModelInvalidNeedles =
+    {
+        "is not supported when using",
+        "model is not supported",
+        "not a supported model",
+        "unsupported model",
+        "model_not_found",
+        "does not exist or you do not have access",
+        "invalid model",
+        "unknown model",
+    };
+
+    /// <summary>
+    /// True when the run output carries a recognised model-rejection signal.
+    /// Callers must only invoke this for a <c>failed</c> run so an agent that
+    /// merely discusses model names in a healthy turn does not trip it. The
+    /// bare <c>invalid_request_error</c> token also counts, but only when it
+    /// co-occurs with a "model" mention, so an unrelated 400 (bad param) is not
+    /// mislabelled as a model problem.
+    /// </summary>
+    private static bool IsModelInvalid(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in ModelInvalidNeedles)
+        {
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return rawText.Contains("invalid_request_error", StringComparison.OrdinalIgnoreCase)
+            && rawText.Contains("model", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildModelInvalidSummary(string rawText)
+    {
+        var detail = ExtractProviderErrorMessage(rawText);
+        return detail != null
+            ? $"The agent CLI rejected the run: the configured model is invalid for this account/CLI. {detail} Change the model on the task; re-issuing the same model will fail identically."
+            : "The agent CLI rejected the run because the configured model is invalid/unsupported for this account or CLI. Change the model on the task; re-issuing the same model will fail identically.";
+    }
+
+    /// <summary>
+    /// Phrases a CLI / provider emits when the account's usage / session /
+    /// rate-limit budget is exhausted. Kept to the EXHAUSTED shapes so the
+    /// benign per-run <c>● Rate limit · … · allowed</c> telemetry claude prints
+    /// on healthy runs does not trip it. Callers must only invoke this for a
+    /// <c>failed</c> run.
+    /// </summary>
+    private static readonly string[] QuotaExhaustedNeedles =
+    {
+        "hit your session limit",
+        "session limit reached",
+        "usage limit reached",
+        "you've reached your usage limit",
+        "quota exceeded",
+        "rate limit exceeded",
+        "rate_limit_exceeded",
+        "· rejected ·",
+        "status=rejected",
+        "insufficient_quota",
+    };
+
+    private static bool IsQuotaExhausted(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in QuotaExhaustedNeedles)
+        {
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static string BuildQuotaExhaustedSummary(string rawText)
+    {
+        var reset = ExtractFirstMatchingLine(rawText, "session limit")
+                    ?? ExtractFirstMatchingLine(rawText, "usage limit")
+                    ?? ExtractFirstMatchingLine(rawText, "rate limit");
+        return reset != null
+            ? $"The agent CLI rejected the run: the account's usage/session budget is exhausted. \"{reset}\" This is transient - re-queue after the quota window resets."
+            : "The agent CLI rejected the run because the account's usage/session/rate-limit budget is exhausted. This is transient - re-queue after the quota window resets.";
+    }
+
+    /// <summary>
+    /// Host file-lock signatures. The MSBuild copy-lock family (MSB3021 "Unable
+    /// to copy file", MSB3026/MSB3027 "Could not copy … exceeded retry count")
+    /// and the underlying Windows sharing-violation text all mean a build output
+    /// was momentarily locked by a lingering process (an antivirus scan, a
+    /// still-exiting test host, a parallel build). The lock releases on its own,
+    /// so a retry after a short backoff clears it. Kept specific so a match is an
+    /// unambiguous transient signal, not incidental prose.
+    /// </summary>
+    private static readonly string[] HostFileLockNeedles =
+    {
+        "msb3021",
+        "msb3026",
+        "msb3027",
+        "being used by another process",
+        "the process cannot access the file",
+        "used by another process",
+        "sharing violation",
+    };
+
+    /// <summary>
+    /// Network-glitch signatures. DNS resolution failures, reset/timed-out
+    /// sockets, and transient 5xx gateway responses are host/provider blips that
+    /// clear on their own, so a retry usually succeeds. Kept specific (concrete
+    /// error codes / phrases, not the bare word "network") so a match combined
+    /// with a <c>failed</c> status is an unambiguous transient signal.
+    /// </summary>
+    private static readonly string[] NetworkGlitchNeedles =
+    {
+        "temporary failure in name resolution",
+        "could not resolve host",
+        "name or service not known",
+        "getaddrinfo enotfound",
+        "getaddrinfo eai_again",
+        "eai_again",
+        "econnreset",
+        "connection reset by peer",
+        "etimedout",
+        "connection timed out",
+        "enetunreach",
+        "network is unreachable",
+        "econnrefused",
+        "connection refused",
+        "socket hang up",
+        "tls handshake timeout",
+        "502 bad gateway",
+        "503 service unavailable",
+        "504 gateway time-out",
+        "504 gateway timeout",
+    };
+
+    /// <summary>
+    /// True when the run output carries a recognised transient environmental
+    /// signal (host file lock or network glitch). Callers must only invoke this
+    /// for a <c>failed</c> run so an agent that merely quotes one of these
+    /// phrases in a healthy turn does not trip it.
+    /// </summary>
+    private static bool IsEnvironmentalTransient(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in HostFileLockNeedles)
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        foreach (var needle in NetworkGlitchNeedles)
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private static string BuildEnvironmentalTransientSummary(string rawText)
+    {
+        var isLock = HostFileLockNeedles.Any(n => rawText.Contains(n, StringComparison.OrdinalIgnoreCase));
+        var kind = isLock ? "a host file lock (MSB302x / file-in-use)" : "a network glitch (DNS / reset / gateway)";
+        var detail = ExtractFirstMatchingLine(rawText, isLock ? "process cannot access" : "resolve")
+                     ?? ExtractFirstMatchingLine(rawText, isLock ? "msb30" : "econn");
+        return detail != null
+            ? $"The run failed on {kind}: \"{detail}\" This is transient - the orchestrator retries it with backoff before escalating."
+            : $"The run failed on {kind}. This is transient - the orchestrator retries it with backoff before escalating.";
+    }
+
+    /// <summary>Pull a provider error <c>message</c> value out of a JSON-ish
+    /// error frame (<c>"message":"…"</c>), for the human-readable summary.</summary>
+    private static string? ExtractProviderErrorMessage(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(
+            rawText, "\"message\"\\s*:\\s*\"(?<msg>[^\"]{1,300})\"");
+        return m.Success ? m.Groups["msg"].Value.Trim() : null;
+    }
+
+    private static string? ExtractFirstMatchingLine(string text, string needle)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        foreach (var line in text.Split('\n'))
+        {
+            if (line.Contains(needle, StringComparison.OrdinalIgnoreCase))
+            {
+                var trimmed = line.Trim();
+                return trimmed.Length <= 200 ? trimmed : trimmed[..200] + "...";
+            }
+        }
+        return null;
     }
 
     private static string BuildCliLaunchFailureSummary(string rawText)

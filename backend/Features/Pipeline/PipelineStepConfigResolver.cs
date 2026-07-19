@@ -107,6 +107,15 @@ public static class PipelineStepConfigResolver
         => Lookup(settings, step.Id)?.Enabled ?? step.DefaultEnabled;
 
     /// <summary>
+    /// Whether an operator may disable this catalogue step. The core agent run
+    /// is mandatory, and the pre-loop guard mirrors an always-on safety circuit
+    /// breaker, so neither may expose an enable/disable control.
+    /// </summary>
+    public static bool CanDisable(PipelineStep step)
+        => step.Kind != StepKind.Core
+           && !string.Equals(step.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal);
+
+    /// <summary>
     /// Resolve the model for a step addressed by id, with no catalogue
     /// step in hand (the aspect runner only knows the bare aspect id).
     /// </summary>
@@ -233,7 +242,7 @@ public static class PipelineStepConfigResolver
         var step = Normalize(stepOverride);
         var project = Normalize(projectOverride);
         var global = Normalize(globalDefault);
-        var modelDefault = CliThinkingLevels.DefaultFor(cliType, resolvedModel);
+        var modelDefault = ModelMetadataRegistry.DefaultThinkingLevelForCli(cliType, resolvedModel);
 
         if (step is not null)
             return new(CliThinkingLevels.Normalize(cliType, resolvedModel, step), ModelSourceStep, step, project, global, modelDefault);

@@ -32,6 +32,12 @@ public class TaskStateMachine
     // enteredLaneAt of the latest move. Optional for the same test-compat reason
     // as _notifier; when null the move still lands, just without a ledger row.
     private readonly TimelineLog? _timeline;
+    // Transition-Committer hook: every successful lane crossing enqueues a
+    // workspace evidence-commit wish onto this queue. The commit itself is done
+    // debounced, off-thread, by WorkspaceEvidenceWorker — NEVER synchronously in
+    // this move path. Optional for the same test-compat reason as the others;
+    // when null the move still lands, just without an evidence nudge.
+    private readonly AgentStudio.Pipeline.WorkspaceEvidenceQueue? _evidenceQueue;
 
     public TaskStateMachine(
         TaskScannerService scanner,
@@ -39,7 +45,8 @@ public class TaskStateMachine
         LaneMutexRegistry? laneMutex = null,
         TaskChangeNotifier? notifier = null,
         ProjectRegistry? projectRegistry = null,
-        TimelineLog? timeline = null)
+        TimelineLog? timeline = null,
+        AgentStudio.Pipeline.WorkspaceEvidenceQueue? evidenceQueue = null)
     {
         _scanner = scanner;
         _logger = logger;
@@ -50,6 +57,28 @@ public class TaskStateMachine
         _notifier = notifier;
         _projectRegistry = projectRegistry;
         _timeline = timeline;
+        _evidenceQueue = evidenceQueue;
+    }
+
+    /// <summary>
+    /// Transition-Committer hook. Best-effort, non-blocking: a channel write
+    /// that must never throw into — and therefore never break — the lane move
+    /// that already landed on disk. The actual git commit is debounced and runs
+    /// on <see cref="AgentStudio.Pipeline.WorkspaceEvidenceWorker"/>.
+    /// </summary>
+    private void EnqueueEvidence(string? watchPath, string? project, string? slug, string? fromState, string? toState)
+    {
+        if (_evidenceQueue == null || string.IsNullOrWhiteSpace(watchPath)) return;
+        try
+        {
+            _evidenceQueue.Enqueue(new AgentStudio.Pipeline.WorkspaceEvidenceRequest(
+                watchPath!, project ?? string.Empty, slug ?? string.Empty,
+                fromState ?? string.Empty, toState ?? string.Empty));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "workspace-evidence enqueue failed for {Slug} ({From}->{To})", slug, fromState, toState);
+        }
     }
 
     /// <param name="cause">
@@ -94,6 +123,16 @@ public class TaskStateMachine
                 if (!byKey.ContainsKey(key))
                     TaskLayoutIndex.Rebuild(recheck.WatchPath, _logger);
 
+                // Diagnostic (19.07., temporary): an unidentified caller keeps
+                // re-escalating 5-human-review cards with actor "system" and no
+                // matching log line or decision record. Capture the full stack
+                // for every system-side move INTO 5e so the next flip names its
+                // caller. Remove once the source is found.
+                if (string.Equals(targetState, TaskStates.Escalated, StringComparison.Ordinal))
+                    _logger.LogWarning(
+                        "escalation-diagnostic key={Key} from={From} to={To} stack={Stack}",
+                        key, recheck.State, targetState, Environment.StackTrace);
+
                 var result = TaskLayoutTransition.ChangeState(recheck.WatchPath, key, targetState, _logger);
                 if (result.Location == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
                 if (result.Changed)
@@ -102,6 +141,7 @@ public class TaskStateMachine
                     ClearIncompatiblePhase(recheck.FolderPath, targetState);
                     RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause);
                     _scanner.InvalidateCache();
+                    EnqueueEvidence(recheck.WatchPath, recheck.ProjectName, recheck.Id, recheck.State, targetState);
                 }
                 return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
             }
@@ -172,6 +212,7 @@ public class TaskStateMachine
             // pre-move snapshot. The 250 ms FileSystemWatcher debounce alone
             // is too slow for that round-trip.
             _scanner.InvalidateCache();
+            EnqueueEvidence(recheck.WatchPath, recheck.ProjectName, targetSlug, recheck.State, targetState);
             // Hand the post-move path back to the caller so chat-log writes
             // and follow-up files cannot land in the now-vanished source
             // folder via a stale FindJob result (see MoveJobOutcome docs).
@@ -466,6 +507,10 @@ public class TaskStateMachine
                 File.WriteAllText(jobJsonPath, placeholder);
             }
             _scanner.InvalidateCache();
+            // Archive / dead-letter / restore are real lane crossings: capture
+            // their evidence too. Project label falls back to the watch-path
+            // leaf since this path has no TaskInfo/ProjectName.
+            EnqueueEvidence(watchPath, Path.GetFileName(watchPath), newSlug, Path.GetFileName(stateDir) ?? string.Empty, targetState);
             return new MoveJobOutcome(MoveJobStatus.Success);
         }
         catch (Exception ex)
@@ -486,6 +531,13 @@ public class TaskStateMachine
             using var _ = _laneMutex.Acquire(info.WatchPath);
             var recheck = _scanner.FindJob(jobId, watchPath);
             if (recheck == null) return false;
+            // F21: a peer lane-writer may have moved the job while we waited
+            // on the mutex. Deleting it at its NEW location would let both
+            // writers report success (lost update: the mover believes the
+            // card now lives in the target lane). The delete targeted the
+            // folder resolved before the wait — if the job no longer lives
+            // there, fail cleanly and let the caller re-issue.
+            if (!WatchPathComparison.PathsEqual(recheck.FolderPath, info.FolderPath)) return false;
 
             try
             {
@@ -527,7 +579,7 @@ public class TaskStateMachine
         }
 
         var entry = _scanner.GetWatchPaths()
-            .FirstOrDefault(e => string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(e => WatchPathComparison.PathsEqual(e.Path, watchPath));
         if (entry == null)
         {
             return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.NotFound, "Watch path not found.");
@@ -634,30 +686,36 @@ public class TaskStateMachine
     public bool ChangeProject(string jobId, string targetWatchPath, string? watchPath = null)
     {
         var entries = _scanner.GetWatchPaths();
-        var targetEntry = entries.FirstOrDefault(e => e.Path == targetWatchPath);
+        // Path-aware target resolution, and carry the RESOLVED entry path
+        // forward so the copy lands under the canonical project directory even
+        // when the caller passed a differently-spelled watchPath (D1: change
+        // project by PROJ-ID/path). A raw ordinal `==` matched no entry when
+        // the spelling differed. See WatchPathComparison (AGT-1940).
+        var targetEntry = entries.FirstOrDefault(e => WatchPathComparison.PathsEqual(e.Path, targetWatchPath));
         if (targetEntry == null) return false;
+        var canonicalTarget = targetEntry.Path;
 
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        if (info.WatchPath == targetWatchPath) return true;
+        if (WatchPathComparison.PathsEqual(info.WatchPath, canonicalTarget)) return true;
 
         // F21: take both source and target lane mutexes. Lock order is
         // ordinal-lowercased ascending so two simultaneous cross-project
         // moves (A->B and B->A) cannot deadlock.
         var (firstKey, secondKey) = string.CompareOrdinal(
             info.WatchPath.ToLowerInvariant(),
-            targetWatchPath.ToLowerInvariant()) <= 0
-            ? (info.WatchPath, targetWatchPath)
-            : (targetWatchPath, info.WatchPath);
+            canonicalTarget.ToLowerInvariant()) <= 0
+            ? (info.WatchPath, canonicalTarget)
+            : (canonicalTarget, info.WatchPath);
         using var _outerLock = _laneMutex.Acquire(firstKey);
         using var _innerLock = _laneMutex.Acquire(secondKey);
 
         var recheck = _scanner.FindJob(jobId, watchPath);
         if (recheck == null) return false;
-        if (recheck.WatchPath == targetWatchPath) return true;
+        if (WatchPathComparison.PathsEqual(recheck.WatchPath, canonicalTarget)) return true;
 
         var jobFolderName = Path.GetFileName(recheck.FolderPath);
-        var targetDir = Path.Combine(targetWatchPath, recheck.State, jobFolderName);
+        var targetDir = Path.Combine(canonicalTarget, recheck.State, jobFolderName);
 
         if (Directory.Exists(targetDir)) return false;
 

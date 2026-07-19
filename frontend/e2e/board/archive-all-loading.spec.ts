@@ -16,7 +16,7 @@ async function deleteJob(jobId: string, watchPath: string): Promise<void> {
   // Retry once on 404: JobIndexCache invalidation lags slightly after a bulk
   // archive (FE click -> backend move -> cache refresh), and a cleanup DELETE
   // landing in that window sees a 404 even though the folder still exists.
-  const path = `/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`;
+  const path = `/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`;
   try {
     await api<void>(path, { method: 'DELETE' });
   } catch (e: unknown) {
@@ -60,7 +60,7 @@ test.describe('Archive-all loading indicator', () => {
 
     const idA = uid();
     const idB = uid();
-    // fixture: false makes these jobs visible in the default /api/jobs/grouped
+    // fixture: false makes these jobs visible in the default /api/tasks/grouped
     // response the board polls. With the default (fixture: true) they would be
     // filtered out and `filteredGrouped().completed` stays at 0, which short-
     // circuits archiveAllCompleted and the loading state never appears.
@@ -81,7 +81,7 @@ test.describe('Archive-all loading indicator', () => {
     // is updated but the cache still serves the previous lane, which makes
     // the board paint an empty Completed column and short-circuits the click.
     await expect(async () => {
-      const jobs = await api<Array<{ id: string; state: string }>>('/api/jobs?includeFixtures=true');
+      const jobs = await api<Array<{ id: string; state: string }>>('/api/tasks?includeFixtures=true');
       const a = jobs.find(j => j.id === jobA.id);
       const b = jobs.find(j => j.id === jobB.id);
       expect(a?.state).toBe('6-completed');
@@ -95,7 +95,7 @@ test.describe('Archive-all loading indicator', () => {
     // Hold the move POSTs until the loading-state assertions have run.
     // `page.route` intercepts the browser-side fetch and lets us pause
     // before forwarding it.
-    await page.route('**/api/jobs/*/move*', async (route, request) => {
+    await page.route('**/api/tasks/*/move*', async (route, request) => {
       if (request.method() !== 'POST') return route.continue();
       movePostCount += 1;
       await gate;
@@ -148,7 +148,7 @@ test.describe('Archive-all loading indicator', () => {
       await expect(btn).toBeEnabled();
       await expect(btn).toContainText(/Archive all/i);
     } finally {
-      await page.unroute('**/api/jobs/*/move*').catch(() => {});
+      await page.unroute('**/api/tasks/*/move*').catch(() => {});
       // resolveGate may not have been called if an assertion failed early;
       // release it so the route handler doesn't keep the page hung on cleanup.
       resolveGate?.();

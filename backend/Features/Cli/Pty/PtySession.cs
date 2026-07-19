@@ -72,13 +72,22 @@ public sealed class PtySession : IAsyncDisposable
         bool verbatimCommandLine = false,
         CancellationToken ct = default)
     {
-        var env = new Dictionary<string, string>
+        // Seed from the backend process's full environment first, THEN layer our
+        // overrides on top. Starting from an empty dictionary would strip
+        // USERPROFILE/HOME/APPDATA and leave the spawned CLI unable to locate its
+        // credential store (~/.claude, ~/.codex, …) — it would boot as if freshly
+        // installed and hit onboarding instead of returning real quota data. This
+        // mirrors what ProcessStartInfo.Environment already does for free on the
+        // real task-run spawn path (CliExecutionServiceBase); do not diverge.
+        var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry kv in Environment.GetEnvironmentVariables())
         {
-            ["TERM"] = "xterm-256color",
-            ["COLORTERM"] = "truecolor",
-            ["FORCE_COLOR"] = "0",
-            ["NO_COLOR"] = "1",
-        };
+            if (kv.Key is string k && kv.Value is string v) env[k] = v;
+        }
+        env["TERM"] = "xterm-256color";
+        env["COLORTERM"] = "truecolor";
+        env["FORCE_COLOR"] = "0";
+        env["NO_COLOR"] = "1";
         if (extraEnv != null)
         {
             foreach (var (k, v) in extraEnv) env[k] = v;

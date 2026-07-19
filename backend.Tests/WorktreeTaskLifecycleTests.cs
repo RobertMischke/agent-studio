@@ -427,6 +427,88 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void PrepareOrReuse_RecutsMergedStaleBranch_AfterOrphanDir()
+    {
+        // S11 (AGT-1785): a branch folded into develop AND strictly behind its tip
+        // (a failed/escalated leftover) must NOT be re-attached onto stale code —
+        // it is deleted and fresh-cut off the CURRENT develop tip.
+        var (repo, life) = SeedWithDevelop("por-recut");
+        var wtRoot = WorktreeRoot();
+        var taskId = "task-recut";
+        var branch = WorktreeTaskLifecycle.BranchFor(taskId);
+
+        // Branch at the OLD develop tip, then advance develop so it is merged+stale.
+        Assert.Equal(0, RunGit(repo, $"branch {branch} develop").Code);
+        File.WriteAllText(Path.Combine(repo, "newer.txt"), "advanced develop");
+        RunGit(repo, "add -A");
+        RunGit(repo, "commit -q -m advance");
+        var developTip = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var orphanPath = Path.Combine(wtRoot, taskId);
+        Directory.CreateDirectory(orphanPath);
+        File.WriteAllText(Path.Combine(orphanPath, "orphan.txt"), "stale");
+
+        var prep = life.PrepareOrReuse(repo, taskId, "develop", wtRoot);
+
+        Assert.True(prep.Success, prep.Error);
+        Assert.False(prep.Reused); // merged-stale branch deleted -> fresh cut
+        Assert.True(Directory.Exists(prep.WorktreePath));
+        Assert.False(File.Exists(Path.Combine(orphanPath, "orphan.txt")));
+        // Fresh branch is cut off the CURRENT develop tip, not the stale one.
+        Assert.Equal(0, RunGit(prep.WorktreePath!, $"merge-base --is-ancestor {developTip} HEAD").Code);
+    }
+
+    [Fact]
+    public void PrepareOrReuse_PreservesUnmergedBranch_AfterOrphanDir()
+    {
+        // S11: a branch with commits NOT on develop (real in-progress work) must
+        // survive the self-heal — re-attached, never deleted.
+        var (repo, life) = SeedWithDevelop("por-keepwork");
+        var wtRoot = WorktreeRoot();
+        var taskId = "task-keepwork";
+
+        var first = life.PrepareOrReuse(repo, taskId, "develop", wtRoot);
+        Assert.True(first.Success, first.Error);
+        File.WriteAllText(Path.Combine(first.WorktreePath!, "work.txt"), "unmerged work");
+        Commit(first.WorktreePath!, "feat: unmerged");
+        var taskTip = RunGit(first.WorktreePath!, "rev-parse HEAD").Out.Trim();
+
+        // Orphan the dir out-of-band: drop the registration, leave a stale dir.
+        RunGit(repo, $"worktree remove --force \"{first.WorktreePath}\"");
+        Directory.CreateDirectory(first.WorktreePath!);
+        File.WriteAllText(Path.Combine(first.WorktreePath!, "orphan.txt"), "stale dir");
+
+        var second = life.PrepareOrReuse(repo, taskId, "develop", wtRoot);
+
+        Assert.True(second.Success, second.Error);
+        Assert.True(second.Reused); // unmerged branch preserved + re-attached
+        Assert.Equal(taskTip, RunGit(second.WorktreePath!, "rev-parse HEAD").Out.Trim());
+    }
+
+    [Fact]
+    public void PrepareOrReuse_RejectsCleanly_WhenOrphanDirBusy()
+    {
+        // S11: a holder (e.g. a leftover capture server) keeping the orphan dir
+        // busy must yield a precise reject, NOT a confusing 'already exists'
+        // collision and NOT a throw — so the runner defers to the next tick.
+        var (repo, life) = SeedWithDevelop("por-busy");
+        var wtRoot = WorktreeRoot();
+        var taskId = "task-busy";
+        var canonical = Path.Combine(wtRoot, taskId);
+        Directory.CreateDirectory(canonical);
+        var lockedFile = Path.Combine(canonical, "locked.txt");
+        File.WriteAllText(lockedFile, "held");
+
+        using var handle = new FileStream(lockedFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        var prep = life.PrepareOrReuse(repo, taskId, "develop", wtRoot);
+
+        Assert.False(prep.Success);
+        Assert.NotNull(prep.Error);
+        Assert.Contains("busy", prep.Error!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void CommitInWorktree_ThenIntegrate_BringsTaskCommitToDevelop()
     {
         // Fix-acceptance #3: after a worktree run the task branch has >= 1 commit
@@ -497,6 +579,58 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         var (repo, life) = SeedWithDevelop("tdi-noop");
         var td = life.TeardownIfIntegrated(repo, "never-ran", "develop", WorktreeRoot());
         Assert.True(td.Success, td.Error);
+    }
+
+    [Fact]
+    public void TeardownIfIntegrated_PreservesUncommittedWork_OnTaskBranch()
+    {
+        // AGT-1945 regression: a run whose auto-commit failed/was skipped leaves
+        // the deliverable ONLY as uncommitted changes in the worktree. The task
+        // branch tip then still equals develop, so a naive "is the branch merged?"
+        // check reads it as safe-to-remove and the force-remove wipes the work
+        // irreversibly. Terminal teardown MUST snapshot the work onto task/<id>
+        // first so a reissue / human review can still reach it.
+        var (repo, life) = SeedWithDevelop("tdi-dirty");
+        var wtRoot = WorktreeRoot();
+        var prep = life.PrepareOrReuse(repo, "task-dirty", "develop", wtRoot);
+        Assert.True(prep.Success, prep.Error);
+
+        // Uncommitted work only: no Commit(), simulating a failed auto-commit.
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "deliverable.txt"), "hard-won work");
+
+        var td = life.TeardownIfIntegrated(repo, "task-dirty", "develop", wtRoot);
+
+        Assert.True(td.Success, td.Error);
+        // Branch survives and now carries the work as a WIP safety commit.
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify task/task-dirty").Code);
+        Assert.Equal("hard-won work", RunGit(repo, "show task/task-dirty:deliverable.txt").Out.Trim());
+        // Not folded into develop -> teardown deferred, worktree kept.
+        Assert.NotEqual(0, RunGit(repo, "merge-base --is-ancestor task/task-dirty develop").Code);
+    }
+
+    [Fact]
+    public void TeardownIfIntegrated_PreservesUncommittedWork_EvenWhenEarlierWorkMerged()
+    {
+        // A reissue can produce NEW uncommitted edits on top of already-merged
+        // work. The branch tip is an ancestor of develop, so the merge check
+        // alone would allow teardown - the new edits must be snapshotted first.
+        var (repo, life) = SeedWithDevelop("tdi-dirty-merged");
+        var wtRoot = WorktreeRoot();
+        var prep = life.PrepareOrReuse(repo, "task-dm", "develop", wtRoot);
+        Assert.True(prep.Success, prep.Error);
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "first.txt"), "first pass");
+        Commit(prep.WorktreePath!, "feat: first pass");
+        Assert.Equal(IntegrationOutcome.Merged,
+            life.Integrate(repo, prep.WorktreePath!, prep.Branch!, "develop", IntegrationStrategies.DirectMerge).Outcome);
+
+        // New uncommitted edits from a follow-up run that never got committed.
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "second.txt"), "second pass");
+
+        var td = life.TeardownIfIntegrated(repo, "task-dm", "develop", wtRoot);
+
+        Assert.True(td.Success, td.Error);
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify task/task-dm").Code);
+        Assert.Equal("second pass", RunGit(repo, "show task/task-dm:second.txt").Out.Trim());
     }
 
     // --- harness ------------------------------------------------------------

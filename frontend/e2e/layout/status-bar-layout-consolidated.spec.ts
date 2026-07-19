@@ -94,7 +94,7 @@ test.describe('Status bar layout consolidated', () => {
       statusBar.getByTestId('hquota-card-copilot'),
       // Right side: action buttons and unified defaults chip
       // (formerly two separate cli/model pickers, see
-      // docs/cli-model-selector-audit.md).
+      // docs/quality/frontend/audits/cli-model-selector-audit.md).
       statusBar.getByTestId('orch-side-sheet-toggle'),
       statusBar.getByTestId('status-bar-defaults'),
     ];
@@ -163,7 +163,7 @@ test.describe('Status bar layout consolidated', () => {
     // Hovering must surface the project's HTML tooltip with state words.
     await codexCard.hover();
     await page.waitForTimeout(200);
-    const tooltip = page.getByTestId('app-tooltip');
+    const tooltip = page.getByTestId('cac-tooltip');
     await expect(tooltip).toBeVisible();
     const tooltipText = (await tooltip.textContent()) ?? '';
     expect(tooltipText.toLowerCase()).toContain('quota warning');

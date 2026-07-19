@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
-import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { retry, timeout } from 'rxjs';
 import { TaskService } from '../../../../services/task.service';
 import { RowComponent } from '../../../../components/row/row.component';
+import { DiffContentComponent } from '../../../../components/diff-content/diff-content.component';
 import type { TaskInfo } from '../../../../models/task.model';
 import type { GitFileChange } from '../../../git';
-import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../utils/diff2html-lazy';
 import { describeDiffSize, isLargeDiff } from '../../../../utils/large-diff-gate';
 
 interface CommitDiffPayload {
@@ -30,13 +29,12 @@ interface CommitDiffPayload {
   selector: 'app-studio-diff-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RowComponent],
+  imports: [RowComponent, DiffContentComponent],
   templateUrl: './diff-tab-view.component.html',
   styleUrl: './diff-tab-view.component.scss',
 })
 export class StudioDiffViewComponent {
   private readonly jobService = inject(TaskService);
-  private readonly sanitizer = inject(DomSanitizer);
 
   readonly commitSha = input.required<string>();
 
@@ -52,7 +50,6 @@ export class StudioDiffViewComponent {
   readonly diffEmptyMessage = signal<string | null>(null);
   private readonly revealedPaths = signal<Set<string>>(new Set<string>());
   readonly revealAllLargeDiffs = signal(false);
-  private readonly diff2htmlReady = signal(hasDiff2HtmlLoaded());
   private ownerLoadKey = '';
   private diffLoadKey = '';
 
@@ -117,21 +114,6 @@ export class StudioDiffViewComponent {
     return !(path && this.revealedPaths().has(path));
   });
 
-  readonly diffHtml = computed<SafeHtml | null>(() => {
-    const text = this.diffText();
-    if (!text) return null;
-    if (this.diffGated()) return null;
-    const diff2html = currentDiff2Html();
-    if (!this.diff2htmlReady() || !diff2html) return null;
-    const rendered = diff2html.html(text, {
-      drawFileList: false,
-      outputFormat: 'side-by-side',
-      matching: 'lines',
-      colorScheme: diff2html.darkScheme,
-    });
-    return this.sanitizer.bypassSecurityTrustHtml(rendered);
-  });
-
   private readonly _loadFilesForOwner = effect(() => {
     const owner = this.owner();
     if (!owner) {
@@ -143,14 +125,6 @@ export class StudioDiffViewComponent {
     if (key === this.ownerLoadKey) return;
     this.ownerLoadKey = key;
     this.loadFiles(owner, key);
-  });
-
-  private readonly _ensureDiff2HtmlLoaded = effect(() => {
-    const text = this.diffText();
-    if (!text) return;
-    if (this.diffGated()) return;
-    if (this.diff2htmlReady()) return;
-    loadDiff2Html().then(() => this.diff2htmlReady.set(true));
   });
 
   selectFile(path: string): void {

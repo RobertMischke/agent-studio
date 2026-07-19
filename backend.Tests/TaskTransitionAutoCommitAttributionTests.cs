@@ -294,6 +294,37 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         Assert.Equal("progress-to-auto-review", request.Source);
     }
 
+    [Fact]
+    public async Task MoveProgressToReady_DoesNotCommitOrStartPostProcessing()
+    {
+        // Steer-timeout auto-answer and Slice A process-loss recovery both
+        // demote Progress -> Ready. That is a resume/retry transition, not a
+        // completed core run, so it must not auto-commit, attribute commits, or
+        // start/enqueue the auto-review post-processing bracket.
+        WriteJob(TaskStates.Progress, "resume-task");
+        var firstActivity = DateTime.UtcNow;
+        AppendSessionEvent("resume-task", firstActivity);
+        var edited = Path.Combine(_repoRoot, "resume-work.txt");
+        File.WriteAllText(edited, "work that the resumed run still owns\n");
+        File.SetLastWriteTimeUtc(edited, firstActivity.AddSeconds(30));
+        var queue = new RecordingAutoReviewQueue();
+
+        var deps = BuildDeps(queue);
+        var outcome = await deps.Transitions.MoveAsync("resume-task", TaskStates.Ready, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var moved = ReadJob(TaskStates.Ready, "resume-task");
+        Assert.NotNull(moved);
+        Assert.Null(moved!.Commit);
+        Assert.Empty(moved.Commits);
+        Assert.Empty(queue.Requests);
+        Assert.False(File.Exists(Path.Combine(moved.FolderPath, "lifecycle.json")));
+        Assert.False(File.Exists(Path.Combine(moved.FolderPath, PostProcessingOutcomeLog.FileName)));
+
+        var status = deps.Git.GetStatus("resume-task", _watchPath);
+        Assert.Contains(status.Files, f => f.Path.EndsWith("resume-work.txt", StringComparison.Ordinal));
+    }
+
     private Deps BuildDeps(IAutoReviewPostProcessingQueue? autoReviewQueue = null)
     {
         var config = new ConfigurationBuilder()

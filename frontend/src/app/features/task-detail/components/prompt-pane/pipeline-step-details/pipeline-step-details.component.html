@@ -1,0 +1,76 @@
+<button type="button"
+        class="step-details__trigger"
+        data-testid="overview-pipeline-step-details"
+        [attr.data-detail-step-id]="stepId()"
+        aria-haspopup="dialog"
+        [attr.aria-expanded]="open()"
+        [attr.aria-label]="'Open details for ' + label()"
+        [cacTooltip]="'Prompt, docs, result, and concerns'"
+        (click)="show()">
+  <app-studio-icon name="eye" [size]="13" />
+</button>
+
+@if (open()) {
+  <app-dialog eyebrow="Pipeline step"
+              [title]="label()"
+              [subtitle]="stepId()"
+              role="dialog"
+              widthTier="lg"
+              testid="overview-pipeline-step-details-dialog"
+              (closeRequest)="close()"
+              (backdropClick)="close()">
+    <div class="step-details__body">
+      <section class="step-details__section" data-testid="overview-pipeline-step-docs">
+        <h3 class="step-details__heading">
+          <app-studio-icon name="book" [size]="14" />
+          Docs
+        </h3>
+        <p>{{ docs() }}</p>
+      </section>
+
+      @if (promptMarkdown().trim()) {
+        <section class="step-details__section" data-testid="overview-pipeline-step-prompt-detail">
+          <h3 class="step-details__heading">
+            <app-studio-icon name="file" [size]="14" />
+            Prompt
+          </h3>
+          <app-task-prompt-popover
+            [markdown]="promptMarkdown()"
+            [jobId]="jobId()"
+            [watchPath]="watchPath()"
+            title="Step prompt"
+            triggerLabel="Open prompt"
+            [triggerTestid]="'overview-pipeline-step-prompt-' + stepId()"
+            modalStackId="step-prompt-popover" />
+        </section>
+      }
+
+      @if (resultHeader(); as header) {
+        @if (resultFile(); as file) {
+          <section class="step-details__section" data-testid="overview-pipeline-step-result-detail">
+            <h3 class="step-details__heading">
+              <app-studio-icon name="check" [size]="14" />
+              Result
+            </h3>
+            <app-pipeline-step-result
+              [header]="header"
+              [jobId]="jobId()"
+              [watchPath]="watchPath() ?? undefined"
+              [fileName]="file" />
+          </section>
+        }
+      }
+
+      @if (concernBody(); as concern) {
+        <section class="step-details__section step-details__section--concern"
+                 data-testid="overview-pipeline-step-concerns-detail">
+          <h3 class="step-details__heading">
+            <app-studio-icon name="warn" [size]="14" />
+            {{ concernTitle() || 'Concerns' }}
+          </h3>
+          <p>{{ concern }}</p>
+        </section>
+      }
+    </div>
+  </app-dialog>
+}

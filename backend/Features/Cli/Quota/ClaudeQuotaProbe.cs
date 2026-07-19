@@ -54,12 +54,19 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         @"Claude\s*Code\s*v|Welcome\s*back|Tips\s*for\s*getting\s*started",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Signature of a first-run onboarding screen or a feature/what's-new upsell dialog that
+    // sits in front of the ready REPL and swallows the /usage slash command. Distinct from a
+    // /usage format drift — see LooksLikeOnboardingWizard / the self-diagnosis in ProbeAsync.
+    private static readonly Regex OnboardingWizardRegex = new(
+        @"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|Let'?s\s*get\s*started|match\s*terminal|fullscreen\s*renderer|Try\s*the\s*new\s*full|Flicker-?free\s*output",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly IConfiguration _configuration;
 
     public ClaudeQuotaProbe(
         ILogger<ClaudeQuotaProbe> logger,
         CliRouter router,
-        CopilotCliEnvironment env,
+        CliEnvironment env,
         IConfiguration configuration)
         : base(logger, router, env)
     {
@@ -72,24 +79,38 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
     {
         try
         {
-            var trustPattern   = new Regex(@"trust\s*this\s*folder|Quick\s*safety\s*check", RegexOptions.IgnoreCase);
-            var welcomePattern = new Regex(@"Claude\s*Code\s*v|Welcome\s*back|Tips\s*for\s*getting\s*started", RegexOptions.IgnoreCase);
-            var usagePattern   = new Regex(@"Current\s*session|Current\s*week", RegexOptions.IgnoreCase);
+            var trustPattern  = new Regex(@"trust\s*this\s*folder|Quick\s*safety\s*check", RegexOptions.IgnoreCase);
+            var themePattern  = new Regex(@"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|match\s*terminal", RegexOptions.IgnoreCase);
+            var upsellPattern = new Regex(@"fullscreen\s*renderer|Flicker-?free|Try\s*the\s*new|What'?s\s*new|Not\s*now|Esc\s*to\s*cancel", RegexOptions.IgnoreCase);
+            var readyPattern  = new Regex(@"\?\s*for\s*shortcuts|for\s*shortcuts|esc\s*to\s*interrupt", RegexOptions.IgnoreCase);
+            var usagePattern  = new Regex(@"Current\s*session|Current\s*week", RegexOptions.IgnoreCase);
 
-            // Two-step: confirm trust, wait for welcome, send /usage, wait for the
-            // usage panel to render. /usage works even when over quota.
+            // Drive claude past its startup gates, THEN run /usage. Claude Code 2.1.x can
+            // interpose several interactive screens between spawn and the ready REPL:
+            //   folder-trust dialog  →  first-run THEME picker  →  feature/what's-new upsells
+            //     (e.g. "Try the new fullscreen renderer?")  →  ready prompt.
+            // The old flow fired /usage on the WELCOME BANNER, but the banner is already on
+            // screen during onboarding, so /usage leaked into the wizard and windows came back
+            // empty. Instead we dismiss each known gate with a guarded step (no-op + no key-leak
+            // when that gate isn't showing) and only send /usage once the READY affordance
+            // ("? for shortcuts", which no wizard renders) appears.
             //
-            // The trust step uses SendKeysOnlyIfMatched: once trust has been accepted
-            // for the scratch folder (Claude persists "hasTrustDialogAccepted: true" in
-            // ~/.claude.json keyed by absolute path), the dialog never appears again
-            // and blindly sending "1<Enter>" leaks "1" into the chat input box as a
-            // real prompt — which then turns the following "/usage" into a chat reply
-            // instead of a slash command, leaving windows[] empty.
+            //  - Trust / theme steps are SendKeysOnlyIfMatched: once accepted, Claude persists
+            //    the choice (~/.claude.json) and the dialog never returns; blindly sending keys
+            //    would leak them into the chat input and corrupt the following /usage.
+            //  - Upsells are declined with <Esc> (never <Enter>: the highlighted default may be
+            //    "Yes", and switching on the fullscreen/alt-screen renderer would break the PTY
+            //    snapshot we scrape). Two passes because the CLI can stack more than one.
+            //  - send-usage is NOT guarded: if the ready-affordance text shifts in a future
+            //    release we still fire /usage after the wait rather than hang forever.
             var snap = await ProbeWithStepsAsync(
             [
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 4000, SendKeys: "1<Enter>", SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
-                new ProbeStep("await-welcome", WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/usage<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
-                new ProbeStep("await-usage",   WaitForPattern: usagePattern,   WaitTimeoutMs: 8000,  SettleIdleMs: 1200, SettleTimeoutMs: 5000)
+                new ProbeStep("await-trust",      WaitForPattern: trustPattern,  WaitTimeoutMs: 4000, SendKeys: "1<Enter>",      SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
+                new ProbeStep("dismiss-theme",    WaitForPattern: themePattern,  WaitTimeoutMs: 3500, SendKeys: "<Enter>",       SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
+                new ProbeStep("dismiss-upsell-1", WaitForPattern: upsellPattern, WaitTimeoutMs: 3500, SendKeys: "<Esc>",         SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
+                new ProbeStep("dismiss-upsell-2", WaitForPattern: upsellPattern, WaitTimeoutMs: 2500, SendKeys: "<Esc>",         SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
+                new ProbeStep("send-usage",       WaitForPattern: readyPattern,  WaitTimeoutMs: 10000, SendKeys: "/usage<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
+                new ProbeStep("await-usage",      WaitForPattern: usagePattern,  WaitTimeoutMs: 8000,  SettleIdleMs: 1200, SettleTimeoutMs: 5000)
             ],
             initialIdleMs: 8000,
             ct);
@@ -121,7 +142,20 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
                 });
             }
 
-            if (LooksLikeParserDrift(snap, windows))
+            // Self-diagnosis order matters: an onboarding/upsell wizard on screen is a DISTINCT
+            // failure from a real /usage format drift, and it wins. Checking it first keeps the
+            // parser-drift signal meaningful (it no longer fires on a wizard the banner happens
+            // to sit behind) and puts the actionable cause — "finish onboarding" — in the log.
+            if (windows.Count == 0 && LooksLikeOnboardingWizard(snap))
+            {
+                _logger.LogWarning(
+                    "Claude /usage probe returned 0 windows because the CLI is stuck on a first-run onboarding / " +
+                    "feature-upsell wizard (theme picker or a \"Try the new …\" dialog), so /usage never reached the " +
+                    "ready prompt. Fix: finish Claude Code onboarding (or seed hasCompletedOnboarding in ~/.claude.json), " +
+                    "or extend the probe's dismiss steps for this CLI version. Raw sample (tail): {Sample}",
+                    TruncateForDebug(snap, 400));
+            }
+            else if (LooksLikeParserDrift(snap, windows))
             {
                 _logger.LogWarning(
                     "Claude /usage probe returned 0 windows but the welcome banner is present in the snapshot. " +
@@ -138,9 +172,11 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
                 Source    = "/usage",
                 RawSample = TruncateForDebug(snap),
                 Windows   = windows,
-                Error     = (plan == null && windows.Count == 0)
-                    ? "Could not parse plan or quota info from Claude /usage panel."
-                    : null
+                Error     = windows.Count == 0 && LooksLikeOnboardingWizard(snap)
+                    ? "Claude CLI is showing its first-run onboarding/feature wizard, so /usage never ran. Finish Claude Code onboarding, or update the quota probe's dismiss steps."
+                    : (plan == null && windows.Count == 0)
+                        ? "Could not parse plan or quota info from Claude /usage panel."
+                        : null
             };
         }
         catch (Exception ex)
@@ -163,6 +199,16 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         if (string.IsNullOrEmpty(snap)) return false;
         return WelcomeBannerRegex.IsMatch(snap);
     }
+
+    /// <summary>
+    /// True when the snapshot shows Claude's first-run onboarding (theme picker, "Let's get
+    /// started") or a post-onboarding feature upsell ("Try the new fullscreen renderer?").
+    /// These screens sit in front of the ready REPL and swallow the /usage slash command, so
+    /// windows come back empty for a reason that is NOT a /usage format drift. Public so tests
+    /// can pin the heuristic against captured v2.1.201 wizard snapshots.
+    /// </summary>
+    public static bool LooksLikeOnboardingWizard(string snap)
+        => !string.IsNullOrEmpty(snap) && OnboardingWizardRegex.IsMatch(snap);
 
     private static string NormalizePlan(string raw)
     {

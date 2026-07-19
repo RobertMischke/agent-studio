@@ -196,6 +196,45 @@ public class CodeReviewStepServiceTests : IDisposable
         Assert.Contains("does not solve the task", capturedPrompt);
     }
 
+    [Theory]
+    [InlineData(CodeReviewMode.Verdict)]
+    [InlineData(CodeReviewMode.Grade)]
+    public async Task Prompt_CarriesResultsInventoryAndCardMode_ForEvidenceCompleteness(CodeReviewMode mode)
+    {
+        // AGT-2022: the code-review verdict AND grade prompts must both carry the
+        // results/ inventory and the card-mode framing so a read-only / concept
+        // card is never false-BLOCKed (or graded D) as "deliverables missing"
+        // when the deliverable lives outside the git diff. This pins the
+        // CodeReviewStepService half of the evidence contract that the AspectRunner
+        // test pins for the aspect prompts.
+        string? capturedPrompt = null;
+        var service = BuildService((_, _, prompt, _, _) =>
+        {
+            capturedPrompt = prompt;
+            return Task.FromResult(mode == CodeReviewMode.Grade
+                ? "[[CODE_REVIEW_GRADE: grade=A; summary=ok]]\n[[TASK_DONE]]"
+                : "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        });
+
+        var request = BuildRequest() with
+        {
+            Mode = mode,
+            ResultsInventory = "results/ folder contains 1 file(s):\n- plan.md (512 bytes)",
+            CardMode = ReviewCardMode.Describe("planning"),
+        };
+
+        await service.RunAsync(request, CancellationToken.None);
+
+        Assert.NotNull(capturedPrompt);
+        Assert.Contains("results/ folder inventory", capturedPrompt!);
+        Assert.Contains("plan.md", capturedPrompt);
+        // Card-mode framing: a planning card legitimately ships no code diff.
+        Assert.Contains("read-only", capturedPrompt);
+        // The deliverables-missing rule is stated so an empty diff with results/
+        // artefacts is not treated as a gap.
+        Assert.Contains("results/ artefact", capturedPrompt);
+    }
+
     [Fact]
     public void TagFor_MapsAllVerdicts()
     {
@@ -238,6 +277,24 @@ public class CodeReviewStepServiceTests : IDisposable
         Assert.Equal(AspectStatus.Concerns, report.Status);
         Assert.Equal("code-review:grade-c", report.ConcernTagId);
         Assert.Contains("code-review:grade-c", ReadTags());
+    }
+
+    [Fact]
+    public async Task GradeMode_CliThrows_ReportsExecutionError_WithoutAuthoritativeGradeTag()
+    {
+        File.WriteAllText(
+            Path.Combine(_jobFolder, "task.json"),
+            "{ \"id\": \"demo\", \"title\": \"Demo\", \"tags\": [\"keep-me\", \"code-review:grade-a\"] }");
+        var service = BuildService((_, _, _, _, _) =>
+            throw new InvalidOperationException("Codex grade process unavailable"));
+
+        var report = await service.RunAsync(BuildGradeRequest(), CancellationToken.None);
+
+        Assert.Equal("Codex grade process unavailable", report.ExecutionError);
+        Assert.Null(report.ConcernTagId);
+        Assert.DoesNotContain(ReadTags(), tag => tag.StartsWith("code-review:grade-"));
+        Assert.Contains("keep-me", ReadTags());
+        Assert.True(File.Exists(report.FilePath));
     }
 
     [Fact]

@@ -183,6 +183,17 @@ function pipelineWithAllPhases() {
   };
 }
 
+function pipelineWithDisabledStep() {
+  const body = pipelineWithAllPhases();
+  return {
+    ...body,
+    config: {
+      ...body.config,
+      'post-drift-adr-code': { enabled: false, model: null, mode: null },
+    },
+  };
+}
+
 async function installRoutes(page: Page, state: string, pipelineBody: () => unknown) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
@@ -286,6 +297,20 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Expand every collapsible pipeline section (ASS-1914). Sections that hold no
+ * running/failed work default-collapse, so a test that asserts on the full
+ * configured row set must first open every section. Each header is a toggle
+ * button carrying `aria-expanded`; clicking a collapsed one reduces the count.
+ */
+async function expandAllPipelineSections(page: Page): Promise<void> {
+  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
+  for (let i = 0; i < 20; i++) {
+    if ((await collapsed.count()) === 0) break;
+    await collapsed.first().click();
+  }
+}
+
 test.describe('Pipeline: per-step metric column headers', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -307,6 +332,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     // The header appears once and carries all four captions.
     const header = page.getByTestId('overview-pipeline-header');
@@ -320,7 +346,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     // against the core row, which has populated timing, tokens and cost. Wait
     // for the poll to populate the row content before measuring.
     const coreRow = page.locator('[data-step-id="core-agent-run"]');
-    await expect(coreRow.locator('.ov-pl-step__tokens')).toHaveText('248.0k');
+    await expect(coreRow.locator('.ov-pl-step__tokens')).toHaveText('248k');
 
     const align = await page.evaluate(() => {
       const right = (sel: string, root: ParentNode = document): number => {
@@ -344,7 +370,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-column-headers.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-column-headers--mocked.png'),
         fullPage: true,
       });
     }
@@ -361,25 +387,30 @@ test.describe('Pipeline: per-step metric column headers', () => {
     const phases = page.getByTestId('overview-pipeline-phase');
     await expect(phases).toHaveCount(6);
     await expect(phases.locator('.ov-pl-phase__label')).toHaveText([
-      'PRE',
-      'CORE',
+      'PRE STEPS',
+      'CORE AGENT WORK',
       'ASPECT',
       'TOOL',
       'DECISION',
       'DRIFT',
     ]);
 
+    // Section headers carry an accessible name that folds in the phase label,
+    // its aggregate tone/step count, and the description (ASS-1914).
     const phaseAriaLabels = await phases.evaluateAll(els =>
       els.map(el => el.getAttribute('aria-label') ?? ''),
     );
     expect(phaseAriaLabels).toEqual([
-      expect.stringContaining('PRE pipeline phase:'),
-      expect.stringContaining('CORE pipeline phase:'),
-      expect.stringContaining('ASPECT pipeline phase:'),
-      expect.stringContaining('TOOL pipeline phase:'),
-      expect.stringContaining('DECISION pipeline phase:'),
-      expect.stringContaining('DRIFT pipeline phase:'),
+      expect.stringContaining('PRE STEPS phase,'),
+      expect.stringContaining('CORE AGENT WORK phase,'),
+      expect.stringContaining('ASPECT phase,'),
+      expect.stringContaining('TOOL phase,'),
+      expect.stringContaining('DECISION phase,'),
+      expect.stringContaining('DRIFT phase,'),
     ]);
+
+    // Open every section so the grouped DOM order below includes each step row.
+    await expandAllPipelineSections(page);
 
     const domOrder = await page.evaluate(() => {
       return Array
@@ -413,25 +444,80 @@ test.describe('Pipeline: per-step metric column headers', () => {
       const phaseStyle = getComputedStyle(phase);
       const rowStyle = getComputedStyle(row);
       return {
-        phaseBackground: phaseStyle.background,
+        phaseBackground: phaseStyle.backgroundColor,
+        phaseBorderLeftWidth: phaseStyle.borderLeftWidth,
         phaseBoxShadow: phaseStyle.boxShadow,
-        rowBackground: rowStyle.background,
+        rowBackground: rowStyle.backgroundColor,
+        rowBorderLeftWidth: rowStyle.borderLeftWidth,
         rowBoxShadow: rowStyle.boxShadow,
       };
     });
 
-    expect(groupingStyle.phaseBackground).not.toBe('none');
-    expect(groupingStyle.phaseBoxShadow).toContain('inset');
-    expect(groupingStyle.rowBackground).not.toBe('none');
-    expect(groupingStyle.rowBoxShadow).toContain('inset');
+    // Aggregate state uses a whole-surface tint. R1 forbids decorative left
+    // borders and inset left-edge shadows on both phase headers and step rows.
+    expect(groupingStyle.phaseBackground).not.toMatch(/^(?:transparent|rgba\(0, 0, 0, 0\))$/);
+    expect(groupingStyle.phaseBorderLeftWidth).toBe('0px');
+    expect(groupingStyle.phaseBoxShadow).toBe('none');
+    expect(groupingStyle.rowBackground).not.toMatch(/^(?:transparent|rgba\(0, 0, 0, 0\))$/);
+    expect(groupingStyle.rowBorderLeftWidth).toBe('0px');
+    expect(groupingStyle.rowBoxShadow).toBe('none');
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-phase-groups.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-phase-groups--mocked.png'),
         fullPage: true,
       });
     }
+  });
+
+  test('phase headers stay wider than inset steps and the disabled-step filter hides disabled rows', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineWithDisabledStep);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(6);
+
+    const geometry = await page.evaluate(() => {
+      const rect = (selector: string): DOMRect => {
+        const el = document.querySelector<HTMLElement>(selector);
+        if (!el) throw new Error(`missing ${selector}`);
+        return el.getBoundingClientRect();
+      };
+      const phase = rect('[data-testid="overview-pipeline-phase"][data-phase="aspect"]');
+      const step = rect('[data-testid="overview-pipeline-step"][data-phase="aspect"]');
+      const header = rect('[data-testid="overview-pipeline-header"]');
+      return {
+        stepInset: step.left - phase.left,
+        stepRightOverhang: step.right - phase.right,
+        headerLeftDelta: Math.abs(header.left - step.left),
+        headerRightDelta: Math.abs(header.right - step.right),
+      };
+    });
+
+    expect(geometry.stepInset, `step inset ${geometry.stepInset}px`).toBeGreaterThan(4);
+    expect(geometry.stepRightOverhang, `step right overhang ${geometry.stepRightOverhang}px`).toBeLessThanOrEqual(1);
+    expect(geometry.headerLeftDelta, `header/step left delta ${geometry.headerLeftDelta}px`).toBeLessThanOrEqual(1.5);
+    expect(geometry.headerRightDelta, `header/step right delta ${geometry.headerRightDelta}px`).toBeLessThanOrEqual(1.5);
+
+    const disabledRow = page.locator('[data-step-id="post-drift-adr-code"]');
+    await expect(disabledRow).toHaveAttribute('data-status', 'disabled');
+
+    const toggle = page.getByTestId('overview-pipeline-toggle-disabled');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(disabledRow).toHaveCount(0);
+    await expect(page.getByTestId('overview-pipeline-phase')).toHaveCount(5);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(disabledRow).toHaveCount(1);
   });
 
   test('metric columns share one right edge across every phase group (no per-row drift)', async ({ page }) => {
@@ -441,6 +527,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     // All six phase rows must be present and populated before measuring.
     const steps = page.getByTestId('overview-pipeline-step');
@@ -485,7 +572,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-cross-row-alignment.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-cross-row-alignment--mocked.png'),
         fullPage: true,
       });
     }
@@ -498,6 +585,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
     await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(6);
 
     // The metric columns degrade off the pipeline block's own inline-size, not
@@ -544,7 +632,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-narrow-degraded.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-narrow-degraded--mocked.png'),
         fullPage: true,
       });
     }
@@ -576,6 +664,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     await expect(overview).toBeVisible({ timeout: 10_000 });
     await expect(protocol).toBeVisible();
     await expect(pipeline).toBeVisible();
+    await expandAllPipelineSections(page);
 
     const geometry = await page.evaluate(() => {
       const box = (selector: string): DOMRect => {
@@ -635,7 +724,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     if (RESULTS_DIR) {
       await overview.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'overview-content-measures-wide.png'),
+        path: path.join(RESULTS_DIR, 'overview-content-measures-wide--mocked.png'),
         fullPage: true,
       });
     }

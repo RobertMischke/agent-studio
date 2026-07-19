@@ -1,0 +1,3 @@
+# C# sources in this Windows-first repository include both LF and CRLF files.
+# A carriage return that belongs to CRLF is not trailing whitespace.
+*.cs whitespace=cr-at-eol

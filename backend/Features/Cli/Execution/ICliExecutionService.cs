@@ -2,7 +2,7 @@
 namespace AgentStudio.Cli;
 
 /// <summary>
-/// Common surface every CLI backend exposes (Copilot, Claude Code, Codex).
+/// Common surface every CLI backend exposes (Claude Code, Codex, Gemini).
 /// All implementations are wrapped by <see cref="CliRouter"/> so callers
 /// never need to know which CLI executes a given job.
 /// </summary>
@@ -31,13 +31,13 @@ public interface ICliExecutionService
 
     /// <summary>
     /// Whether this adapter can isolate its persistent state for a
-    /// <see cref="AgentStudio.Shared.CliContextModes.Clean"/> run by relocating
+    /// <see cref="CliContextModes.Clean"/> run by relocating
     /// the CLI's config home to a per-run temp dir (T1b / ASS-1742). Claude and
-    /// Codex can; Copilot and Gemini expose no such redirect and are shared-only.
+    /// Codex can; Gemini exposes no such redirect and is shared-only.
     /// Defaults to false so a stub / shared-only backend opts out cleanly; the
     /// runner falls back to a shared run when this is false even if clean was
     /// requested. Must agree with
-    /// <see cref="AgentStudio.Shared.CliContextModes.SupportsClean"/>.
+    /// <see cref="CliContextModes.SupportsClean"/>.
     /// </summary>
     bool SupportsCleanContext => false;
 
@@ -60,7 +60,7 @@ public interface ICliExecutionService
     /// <c>status = "failed", exitCode = -1</c> the legacy implementation
     /// produced. Returns false when no process is tracked under that key.
     /// </summary>
-    bool Stop(string jobKey, AgentStudio.Shared.RunStopReason reason = AgentStudio.Shared.RunStopReason.UserStop);
+    bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop);
     bool SendInput(string jobKey, string input);
 
     List<CliOutputLine> GetOutput(string jobKey);
@@ -84,7 +84,31 @@ public interface ICliExecutionService
 
     CliExecution? GetExecution(string jobKey);
     SessionUsage? GetLastUsage(string jobKey);
+
+    /// <summary>Captured CLI-native session id for a run (from its init/thread frame), or null. Default null keeps stubs compilable; real backends provide it.</summary>
+    string? GetCapturedSessionId(string jobKey) => null;
+
+    /// <summary>Most recent parsed per-turn usage snapshot (+ observed-at + run start), or null. The runner mirrors it onto the agent message bus.</summary>
+    (ParsedTurnUsage Usage, DateTime ObservedAt, DateTime StartedAt)? GetLastParsedTurnUsage(string jobKey) => null;
+
+    /// <summary>Whether this CLI emits a session id on every run. When true, a missing captured id is a capture-loss the runner routes to Recovery. A stub that never does stays false.</summary>
+    bool EmitsSessionId => false;
+
+    /// <summary>Whether the runner should attempt post-hoc usage reconstruction when a run finished without a usage footer (Claude reads its session JSONL).</summary>
+    bool NeedsPostHocUsageReconstruction => false;
+
     bool IsRunningForProject(string rootPath);
+
+    /// <summary>
+    /// Currently-tracked live runs (OS process alive and the run still marked
+    /// <c>running</c>) as <c>(jobKey, execution)</c> pairs. Used by the runner's
+    /// post-restart slot reconcile (ASS-1753) to re-book runs this CLI still
+    /// owns into the in-memory slot registry, whose contents a restart cleared.
+    /// The default is empty so test stubs and backends that do not track live
+    /// runs stay compilable and contribute nothing to the reconcile.
+    /// </summary>
+    IReadOnlyList<(string JobKey, CliExecution Execution)> RunningExecutions()
+        => Array.Empty<(string, CliExecution)>();
 
     /// <summary>
     /// Describe the context sources this CLI loaded for the live (or
@@ -94,7 +118,7 @@ public interface ICliExecutionService
     /// <b>read-only observability</b> surface (ASS-1739 / T1a): producing it
     /// never changes what the CLI loads. For Claude the scalar header and MCP
     /// list come from the stream-json init frame the CLI already emits; for
-    /// Codex / Copilot / Gemini they are derived from the adapter invocation
+    /// Codex / Gemini they are derived from the adapter invocation
     /// plus each CLI's documented config-path conventions. The runner calls
     /// this at run finish (while the per-run process info is still alive) and
     /// persists the result onto the run's <see cref="AgentStudio.Shared.SessionEvent"/>.
@@ -155,8 +179,8 @@ public interface ICliExecutionService
 
     /// <summary>
     /// Returns true if <paramref name="sessionName"/> looks like a session
-    /// identifier this CLI can resume. Cross-CLI session names (e.g. a Copilot
-    /// slug fed to Claude's <c>-r</c>) used to make the new CLI hang silently;
+    /// identifier this CLI can resume. Cross-CLI session names (e.g. a slug
+    /// fed to Claude's <c>-r</c>) used to make the new CLI hang silently;
     /// callers should drop the recorded name and start fresh when this returns
     /// false.
     /// </summary>
@@ -169,10 +193,10 @@ public interface ICliExecutionService
     /// <summary>
     /// Typed lifecycle events (ADR-0013). Subclasses with an adapter
     /// raise these alongside <see cref="OnOutput"/>; subclasses without
-    /// one only fire <see cref="Cli.CliRunEvent.RunStarted"/> and
-    /// <see cref="Cli.CliRunEvent.ProcessExited"/> (both come from the
+    /// one only fire <see cref="CliRunEvent.RunStarted"/> and
+    /// <see cref="CliRunEvent.ProcessExited"/> (both come from the
     /// base spawn / monitor flow). The runner uses these to drive the
     /// phase-aware watchdog.
     /// </summary>
-    event Action<string, Cli.CliRunEvent>? OnRunEvent;
+    event Action<string, CliRunEvent>? OnRunEvent;
 }

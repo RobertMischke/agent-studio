@@ -45,9 +45,38 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
             "the pickup lock must be removed when the run never starts");
         Assert.Equal(0, runner.GetStatus().OccupiedSlots);
 
+        Assert.False(File.Exists(Path.Combine(readyFolder, "logs", "session-events.jsonl")),
+            "a rejected spawn must not create a historical run boundary");
+        var timelinePath = Path.Combine(readyFolder, "logs", "timeline.jsonl");
+        Assert.False(File.Exists(timelinePath)
+            && File.ReadAllText(timelinePath).Contains(TimelineEventKinds.AgentRunStarted, StringComparison.Ordinal),
+            "agent_run_started must be durable only after process confirmation");
+
         var cliOutput = Path.Combine(readyFolder, "logs", "cli-output.log");
         Assert.True(File.Exists(cliOutput), "spawn failures should leave a diagnostic in cli-output.log");
         Assert.Contains("spawn failed", File.ReadAllText(cliOutput), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AutoPickupAdmissionFault_RevertsReady_RemovesLock_AndFreesSlot()
+    {
+        WriteJob(TaskStates.Ready, "job-fault");
+        var cli = new FailingCliService(throwOnStart: true);
+        var runner = BuildRunner(cli);
+        runner.SetMode("auto-continuous");
+
+        await runner.TickAsync(CancellationToken.None);
+
+        var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, "job-fault");
+        Assert.True(cli.StartCalled, "fault injection must reach the process-start boundary");
+        Assert.True(Directory.Exists(readyFolder), "an admission exception must self-heal back to Ready");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "job-fault")),
+            "an admission exception must never leave Progress without an active run");
+        Assert.False(File.Exists(Path.Combine(readyFolder, PickupLockFile.LockFileName)),
+            "fault recovery must release durable ownership so the bounded wake can retry");
+        Assert.Equal(0, runner.GetStatus().OccupiedSlots);
+        Assert.False(File.Exists(Path.Combine(readyFolder, "logs", "session-events.jsonl")),
+            "an admission fault must not create a historical run boundary");
     }
 
     private void WriteJob(string state, string slug, int order = 1)
@@ -58,7 +87,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         File.WriteAllText(
             Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order}," +
-            "\"agent\":\"copilot\",\"cliType\":\"copilot\",\"ownerClientId\":\"local-default\"}");
+            "\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"}");
     }
 
     private ProjectRunner BuildRunner(FailingCliService cli)
@@ -105,7 +134,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
             NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
         var router = new CliRouter(cli);
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, config);
         var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);
         var orchestratorSessions = new OrchestratorSessionStore(NullLogger<OrchestratorSessionStore>.Instance);
         var quotaCacheStore = new QuotaCacheStore(config, NullLogger<QuotaCacheStore>.Instance);
@@ -138,11 +167,18 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
 
     private sealed class FailingCliService : ICliExecutionService
     {
-        public string CliType => CliTypes.Copilot;
+        private readonly bool _throwOnStart;
+
+        public FailingCliService(bool throwOnStart = false)
+        {
+            _throwOnStart = throwOnStart;
+        }
+
+        public string CliType => CliTypes.Claude;
         public bool StartCalled { get; private set; }
         public bool PickupLockExistedAtStart { get; private set; }
 
-        public string GetCliPath() => "fake-copilot";
+        public string GetCliPath() => "fake-claude";
         public bool IsAvailable() => true;
         public (bool Available, string? Version, string Path) TestCliPath(string? path = null) => (true, "test", path ?? GetCliPath());
 
@@ -163,6 +199,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
             StartCalled = true;
             PickupLockExistedAtStart = !string.IsNullOrWhiteSpace(jobFolderPath)
                 && File.Exists(Path.Combine(jobFolderPath, PickupLockFile.LockFileName));
+            if (_throwOnStart) throw new InvalidOperationException("injected admission fault");
             return Task.FromResult<(CliExecution?, string?)>((null, "fake spawn failure"));
         }
 

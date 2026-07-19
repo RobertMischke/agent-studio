@@ -107,6 +107,18 @@
   text-overflow: ellipsis;
 }
 
+/* Provenance label: deliberately text-only (no colour fill) so it reads as
+   an honest annotation, not a status badge. `mocked` carries a touch more
+   emphasis so a reviewer notices a non-live shot. */
+.strip__caption-source {
+  color: var(--studio-fg-dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+
+  &[data-source="mocked"] { color: var(--studio-warn); }
+}
+
 /* Lightbox — a full-bleed photo viewer with its own near-black backdrop.
    Deliberately stays dark on both themes (the image is the focus), so its
    chrome keeps fixed light-on-dark colours rather than theme tokens. */
@@ -203,6 +215,15 @@
   &[data-status="passed"]  { background: #a6e3a1; color: #1e1e2e; }
   &[data-status="failed"]  { background: #f38ba8; color: #1e1e2e; }
   &[data-status="skipped"] { background: #cdd6f4; color: #1e1e2e; }
+}
+
+/* Text-only provenance label in the lightbox; no fill, matching the strip. */
+.lightbox__source {
+  color: #a6adc8;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+
+  &[data-source="mocked"] { color: #f9e2af; }
 }
 
 .lightbox__index {

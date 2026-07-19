@@ -29,7 +29,7 @@ namespace AgentStudio.Tasks;
 /// cache and do not take the mutex.</para>
 ///
 /// <para>The architecture document at
-/// <c>docs/architecture-3-progress-lane-writers.md</c> lists every writer
+/// <c>docs/system/architecture/runner-lanes/progress-lane-writers.md</c> lists every writer
 /// and the move it makes; that file is the load-bearing reference when
 /// adding a seventh writer.</para>
 /// </summary>

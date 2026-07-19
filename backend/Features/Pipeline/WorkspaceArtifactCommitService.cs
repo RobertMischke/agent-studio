@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -19,13 +20,34 @@ public sealed class WorkspaceArtifactCommitService
 
     private readonly IConfiguration _configuration;
     private readonly ILogger<WorkspaceArtifactCommitService> _logger;
+    private readonly WorkspaceArtifactPushQueue? _pushQueue;
+    private readonly int _indexLockRetryAttempts;
+    private readonly int _indexLockRetryBackoffMs;
+
+    // Per-repo serialization gate. The punctual job-folder commits and the
+    // debounced Transition-Committer's evidence batches both mutate the same
+    // workspace repo's index; without a shared lock two `git commit` calls can
+    // collide on `.git/index.lock`. Keyed by resolved git root so distinct
+    // repos never contend. Static so the single DI singleton and any test
+    // instance pointed at the same repo share the gate.
+    private static readonly ConcurrentDictionary<string, object> RepoGates =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static object RepoGate(string gitRoot) =>
+        RepoGates.GetOrAdd(gitRoot, _ => new object());
 
     public WorkspaceArtifactCommitService(
         IConfiguration configuration,
-        ILogger<WorkspaceArtifactCommitService> logger)
+        ILogger<WorkspaceArtifactCommitService> logger,
+        WorkspaceArtifactPushQueue? pushQueue = null)
     {
         _configuration = configuration;
         _logger = logger;
+        _pushQueue = pushQueue;
+        _indexLockRetryAttempts = Math.Clamp(
+            configuration.GetValue<int?>("WorkspaceEvidence:IndexLockRetryAttempts") ?? 5, 1, 50);
+        _indexLockRetryBackoffMs = Math.Clamp(
+            configuration.GetValue<int?>("WorkspaceEvidence:IndexLockRetryBackoffMs") ?? 100, 0, 5000);
     }
 
     public WorkspaceArtifactCommitResult TryCommitRunBoundary(
@@ -34,6 +56,76 @@ public sealed class WorkspaceArtifactCommitService
         string? beforeMoveFolderPath,
         string? afterMoveFolderPath,
         ReviewDecisionKind verdict)
+        => TryCommitJobFolder(
+            workspaceRoot,
+            jobId,
+            beforeMoveFolderPath,
+            afterMoveFolderPath,
+            logLabel: $"verdict={NormalizeVerdict(verdict)}",
+            failLabel: verdict.ToString(),
+            planMessage: (gitRoot, pathspecs, afterFolder) =>
+            {
+                var runIndex = ResolveRunIndex(gitRoot, pathspecs, afterFolder);
+                var steps = ResolveStepsTrailer(afterFolder);
+                return new ArtifactCommitPlan(BuildCommitMessage(jobId, runIndex, verdict, steps), runIndex, steps);
+            });
+
+    /// <summary>
+    /// Commits the job-folder evidence at an out-of-band completion boundary
+    /// (<c>docs/concepts/out-of-band-task-completion.md</c> §3). Shares the
+    /// add/diff/commit plumbing with <see cref="TryCommitRunBoundary"/>; only
+    /// the commit message differs, recording the external source instead of an
+    /// orchestrator verdict + run index.
+    /// </summary>
+    public WorkspaceArtifactCommitResult TryCommitExternalCompletion(
+        string? workspaceRoot,
+        string jobId,
+        string? beforeMoveFolderPath,
+        string? afterMoveFolderPath,
+        string source)
+    {
+        var normalizedSource = string.IsNullOrWhiteSpace(source) ? "external" : source.Trim();
+        return TryCommitJobFolder(
+            workspaceRoot,
+            jobId,
+            beforeMoveFolderPath,
+            afterMoveFolderPath,
+            logLabel: $"external-completion source={normalizedSource}",
+            failLabel: "external-completion",
+            planMessage: (_, _, _) =>
+                new ArtifactCommitPlan(BuildExternalCompletionMessage(jobId, normalizedSource), 0, null));
+    }
+
+    public WorkspaceArtifactCommitResult TryCommitArtifactUpload(
+        string? workspaceRoot,
+        string jobId,
+        string jobFolderPath,
+        IReadOnlyList<string> files)
+        => TryCommitJobFolder(
+            workspaceRoot,
+            jobId,
+            beforeMoveFolderPath: null,
+            afterMoveFolderPath: jobFolderPath,
+            logLabel: $"artifact-upload files={files.Count}",
+            failLabel: "artifact-upload",
+            planMessage: (_, _, _) =>
+                new ArtifactCommitPlan(BuildArtifactUploadMessage(jobId, files), 0, null));
+
+    /// <summary>
+    /// Shared add/diff/commit core for the workspace evidence commits. The
+    /// caller supplies the commit message (and the run-index/steps it wants
+    /// echoed in the result) via <paramref name="planMessage"/>, which runs only
+    /// after the tree is confirmed dirty, so the message builders never pay for
+    /// a no-op commit.
+    /// </summary>
+    private WorkspaceArtifactCommitResult TryCommitJobFolder(
+        string? workspaceRoot,
+        string jobId,
+        string? beforeMoveFolderPath,
+        string? afterMoveFolderPath,
+        string logLabel,
+        string failLabel,
+        Func<string, IReadOnlyList<string>, string, ArtifactCommitPlan> planMessage)
     {
         try
         {
@@ -51,55 +143,94 @@ public sealed class WorkspaceArtifactCommitService
             if (pathspecs.Count == 0)
                 return WorkspaceArtifactCommitResult.Skipped("job-folder-outside-workspace");
 
-            var addArgs = new List<string> { "add", "-A", "--" };
-            addArgs.AddRange(pathspecs);
-            var add = RunGit(gitRoot, addArgs);
-            if (add.Code != 0)
-                return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
-
-            var changed = RunGit(gitRoot, ["diff", "--cached", "--quiet", "--", .. pathspecs]);
-            if (changed.Code == 0)
-                return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
-            if (changed.Code != 1)
-                return WorkspaceArtifactCommitResult.Failed("git-diff-cached", changed.ErrorText);
-
-            var afterFolder = !string.IsNullOrWhiteSpace(afterMoveFolderPath)
-                ? afterMoveFolderPath!
-                : beforeMoveFolderPath ?? string.Empty;
-            var runIndex = ResolveRunIndex(gitRoot, pathspecs, afterFolder);
-            var steps = ResolveStepsTrailer(afterFolder);
-            var message = BuildCommitMessage(jobId, runIndex, verdict, steps);
-
-            var commitArgs = new List<string>
+            string? shortSha;
+            ArtifactCommitPlan plan;
+            // Serialize with the Transition-Committer's evidence batches (and
+            // any concurrent job-folder commit) on this repo, with an
+            // index.lock retry so a lost race with an external git process is
+            // recovered rather than surfaced as a failure.
+            lock (RepoGate(gitRoot))
             {
-                "-c", $"user.name={CommitterName}",
-                "-c", $"user.email={CommitterEmail}",
-                "commit", "-F", "-", "--"
-            };
-            commitArgs.AddRange(pathspecs);
-            var commit = RunGit(gitRoot, commitArgs, message);
-            if (commit.Code != 0)
-            {
-                if (commit.ErrorText.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                var addArgs = new List<string> { "add", "-A", "--" };
+                addArgs.AddRange(pathspecs);
+                var add = RunGitRetryingIndexLock(gitRoot, addArgs);
+                if (add.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
+
+                var changed = RunGit(gitRoot, ["diff", "--cached", "--quiet", "--", .. pathspecs]);
+                if (changed.Code == 0)
                     return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
-                return WorkspaceArtifactCommitResult.Failed("git-commit", commit.ErrorText);
-            }
+                if (changed.Code != 1)
+                    return WorkspaceArtifactCommitResult.Failed("git-diff-cached", changed.ErrorText);
 
-            var sha = RunGit(gitRoot, ["rev-parse", "--short", "HEAD"]);
-            var shortSha = sha.Code == 0 ? sha.Out.Trim() : null;
+                var afterFolder = !string.IsNullOrWhiteSpace(afterMoveFolderPath)
+                    ? afterMoveFolderPath!
+                    : beforeMoveFolderPath ?? string.Empty;
+                plan = planMessage(gitRoot, pathspecs, afterFolder);
+
+                var commitArgs = new List<string>
+                {
+                    "-c", $"user.name={CommitterName}",
+                    "-c", $"user.email={CommitterEmail}",
+                    "commit", "-F", "-", "--"
+                };
+                commitArgs.AddRange(pathspecs);
+                var commit = RunGitRetryingIndexLock(gitRoot, commitArgs, plan.Message);
+                if (commit.Code != 0)
+                {
+                    if (commit.ErrorText.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                        return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
+                    return WorkspaceArtifactCommitResult.Failed("git-commit", commit.ErrorText);
+                }
+
+                var sha = RunGit(gitRoot, ["rev-parse", "--short", "HEAD"]);
+                shortSha = sha.Code == 0 ? sha.Out.Trim() : null;
+            }
             _logger.LogInformation(
-                "workspace-artifact-commit jobId={JobId} verdict={Verdict} runIndex={RunIndex} sha={Sha} paths={Paths}",
-                jobId, verdict, runIndex, shortSha ?? "", string.Join(",", pathspecs));
-            return WorkspaceArtifactCommitResult.Committed(shortSha, runIndex, steps);
+                "workspace-artifact-commit jobId={JobId} {LogLabel} runIndex={RunIndex} sha={Sha} paths={Paths}",
+                jobId, logLabel, plan.RunIndex, shortSha ?? "", string.Join(",", pathspecs));
+            if (WorkspaceAutoPushEnabled() && _pushQueue != null)
+            {
+                var enqueued = _pushQueue.Enqueue(new WorkspaceArtifactPushRequest(gitRoot, jobId));
+                if (!enqueued)
+                    _logger.LogWarning("workspace-artifact-push enqueue failed jobId={JobId} repo={Repo}", jobId, gitRoot);
+            }
+            return WorkspaceArtifactCommitResult.Committed(shortSha, plan.RunIndex, plan.Steps ?? "none");
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "workspace-artifact-commit failed for {JobId} ({Verdict})",
-                jobId, verdict);
+                "workspace-artifact-commit failed for {JobId} ({Label})",
+                jobId, failLabel);
             return WorkspaceArtifactCommitResult.Failed("exception", ex.Message);
         }
     }
+
+    internal static string BuildExternalCompletionMessage(string jobId, string source)
+    {
+        var normalizedJob = string.IsNullOrWhiteSpace(jobId) ? "job" : jobId.Trim();
+        var normalizedSource = string.IsNullOrWhiteSpace(source) ? "external" : source.Trim();
+        return
+            $"chore(workspace): record external completion for {normalizedJob}\n\n" +
+            $"Completed-Externally-By: {normalizedSource}\n";
+    }
+
+    private bool WorkspaceAutoPushEnabled() =>
+        _configuration.GetValue<bool?>("WorkspaceArtifacts:AutoPushEnabled") ?? true;
+
+    internal static string BuildArtifactUploadMessage(string jobId, IReadOnlyList<string> files)
+    {
+        var normalizedJob = string.IsNullOrWhiteSpace(jobId) ? "job" : jobId.Trim();
+        var normalizedFiles = files.Count == 0
+            ? "none"
+            : string.Join(",", files.Select(f => string.IsNullOrWhiteSpace(f) ? "unknown" : f.Trim()));
+        return
+            $"chore(workspace): record uploaded artifacts for {normalizedJob}\n\n" +
+            $"Artifact-Upload-Files: {normalizedFiles}\n";
+    }
+
+    /// <summary>Message plan produced once the tree is known dirty: the commit body plus the run-index/steps echoed in the result.</summary>
+    private sealed record ArtifactCommitPlan(string Message, int RunIndex, string? Steps);
 
     internal static string BuildCommitMessage(
         string jobId,
@@ -233,6 +364,204 @@ public sealed class WorkspaceArtifactCommitService
         return max + 1;
     }
 
+    /// <summary>
+    /// Resolves the git top-level for a workspace/watch path, falling back to
+    /// the configured <c>TaskRepository</c> when none is supplied. Used by the
+    /// Transition-Committer to bucket enqueued transitions by repo without a
+    /// second copy of the git-root plumbing.
+    /// </summary>
+    public string? ResolveWorkspaceGitRoot(string? workspaceRoot)
+    {
+        var root = string.IsNullOrWhiteSpace(workspaceRoot)
+            ? _configuration["TaskRepository"]
+            : workspaceRoot;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            return null;
+        return ResolveGitRoot(root);
+    }
+
+    /// <summary>
+    /// Debounced evidence commit for the Transition-Committer: stages the data
+    /// paths of the workspace repo touched by a batch of lane transitions
+    /// (<paramref name="watchPaths"/>, each scoped to its relative folder under
+    /// the git root) minus <paramref name="excludeGlobs"/>, and commits them
+    /// with <paramref name="message"/>. Shares the committer identity, git
+    /// plumbing, per-repo lock and index.lock retry with the punctual
+    /// job-folder commits above — no parallel implementation. Push is left to
+    /// the caller (the batcher enqueues onto the existing push queue when the
+    /// <c>WorkspaceEvidence:Push</c> switch is on), so this method never
+    /// touches the network. Never throws: every failure is returned as a
+    /// <see cref="WorkspaceArtifactCommitResult.Failed"/> so the caller — and
+    /// ultimately the transition that produced the evidence — is never broken.
+    /// </summary>
+    public WorkspaceArtifactCommitResult TryCommitEvidence(
+        string gitRoot,
+        IReadOnlyList<string> watchPaths,
+        IReadOnlyList<string> excludeGlobs,
+        string message)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(gitRoot) || !Directory.Exists(gitRoot))
+                return WorkspaceArtifactCommitResult.Skipped("workspace-missing");
+
+            var pathspecs = new List<string>();
+            foreach (var wp in watchPaths)
+                AddPathspec(pathspecs, gitRoot, wp);
+            pathspecs = pathspecs
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (pathspecs.Count == 0)
+                return WorkspaceArtifactCommitResult.Skipped("no-data-paths");
+
+            // Excludes are enforced in two places, and BOTH are required:
+            //   1. `git reset` unstages them from the index (below). This alone
+            //      handles untracked scratch, and keeps the index clean so the
+            //      diff-check is precise.
+            //   2. `:(exclude)` magic pathspecs on the `git commit` (here). This
+            //      is the load-bearing half for already-TRACKED files: passing
+            //      pathspecs to `git commit` triggers partial-commit (`--only`)
+            //      semantics that record the WORKING-TREE content of every listed
+            //      tracked path and disregard the index — so a reset-unstaged but
+            //      tracked file (e.g. a project's ~1 MB `.orchestrator/` runtime
+            //      churn) would otherwise still be committed. The exclude pathspec
+            //      removes it from the partial commit's file set.
+            // The excludes are deliberately NOT put on `git add`/`git diff`: a
+            // no-slash exclude glob (e.g. `*.tmp`) makes `git add` stage nothing
+            // at all (a git pathspec quirk), which would silently disable the
+            // whole evidence commit. `git commit` does not share that quirk.
+            var resetSpecs = NormalizeExcludeGlobs(excludeGlobs);
+            var excludeCommitSpecs = BuildExcludePathspecs(excludeGlobs);
+
+            string? shortSha;
+            lock (RepoGate(gitRoot))
+            {
+                // Stage the data paths (git add already honours the workspace
+                // repo's .gitignore), then unstage the exclude globs from the
+                // index.
+                var addArgs = new List<string> { "add", "-A", "--" };
+                addArgs.AddRange(pathspecs);
+                var add = RunGitRetryingIndexLock(gitRoot, addArgs);
+                if (add.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
+
+                if (resetSpecs.Count > 0)
+                {
+                    var resetArgs = new List<string> { "reset", "-q", "--" };
+                    resetArgs.AddRange(resetSpecs);
+                    var reset = RunGit(gitRoot, resetArgs);
+                    if (reset.Code != 0)
+                        _logger.LogDebug("workspace-evidence exclude reset non-zero root={Root} error={Error}", gitRoot, reset.ErrorText);
+                }
+
+                var diffArgs = new List<string> { "diff", "--cached", "--quiet", "--" };
+                diffArgs.AddRange(pathspecs);
+                var changed = RunGit(gitRoot, diffArgs);
+                if (changed.Code == 0)
+                    return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
+                if (changed.Code != 1)
+                    return WorkspaceArtifactCommitResult.Failed("git-diff-cached", changed.ErrorText);
+
+                var commitArgs = new List<string>
+                {
+                    "-c", $"user.name={CommitterName}",
+                    "-c", $"user.email={CommitterEmail}",
+                    "commit", "-F", "-", "--"
+                };
+                commitArgs.AddRange(pathspecs);
+                commitArgs.AddRange(excludeCommitSpecs);
+                var commit = RunGitRetryingIndexLock(gitRoot, commitArgs, message);
+                if (commit.Code != 0)
+                {
+                    if (commit.ErrorText.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                        return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
+                    return WorkspaceArtifactCommitResult.Failed("git-commit", commit.ErrorText);
+                }
+
+                var sha = RunGit(gitRoot, ["rev-parse", "--short", "HEAD"]);
+                shortSha = sha.Code == 0 ? sha.Out.Trim() : null;
+            }
+
+            _logger.LogInformation(
+                "workspace-evidence-commit gitRoot={Root} sha={Sha} paths={Paths}",
+                gitRoot, shortSha ?? "", string.Join(",", pathspecs));
+            return WorkspaceArtifactCommitResult.Committed(shortSha, 0, "evidence");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "workspace-evidence-commit failed for {Root}", gitRoot);
+            return WorkspaceArtifactCommitResult.Failed("exception", ex.Message);
+        }
+    }
+
+    /// <summary>Normalize exclude globs into git reset pathspecs (default magic,
+    /// where <c>*</c> also matches <c>/</c>), dropping blanks.</summary>
+    private static List<string> NormalizeExcludeGlobs(IReadOnlyList<string> excludeGlobs)
+    {
+        var specs = new List<string>();
+        if (excludeGlobs == null) return specs;
+        foreach (var glob in excludeGlobs)
+        {
+            if (string.IsNullOrWhiteSpace(glob)) continue;
+            specs.Add(glob.Trim());
+        }
+        return specs;
+    }
+
+    /// <summary>Turn exclude globs into <c>:(exclude)</c> magic pathspecs (default
+    /// magic, where <c>*</c> also matches <c>/</c>, so a glob matches at any depth
+    /// under the staged data paths) for the partial-commit's file set. Blanks are
+    /// dropped; a glob already written as an exclude pathspec is passed through.</summary>
+    private static List<string> BuildExcludePathspecs(IReadOnlyList<string> excludeGlobs)
+    {
+        var specs = new List<string>();
+        if (excludeGlobs == null) return specs;
+        foreach (var glob in excludeGlobs)
+        {
+            if (string.IsNullOrWhiteSpace(glob)) continue;
+            var trimmed = glob.Trim();
+            specs.Add(trimmed.StartsWith(":", StringComparison.Ordinal) ? trimmed : $":(exclude){trimmed}");
+        }
+        return specs;
+    }
+
+    private GitProcessResult RunGitRetryingIndexLock(string gitRoot, IReadOnlyList<string> args, string? stdin = null)
+        => RunWithIndexLockRetry(
+            () => RunGit(gitRoot, args, stdin),
+            _indexLockRetryAttempts,
+            attempt => Thread.Sleep(_indexLockRetryBackoffMs * attempt));
+
+    /// <summary>
+    /// Retry a git invocation while it fails on <c>.git/index.lock</c>
+    /// contention. Pure over an injected <paramref name="run"/> so the retry
+    /// contract is unit-testable without real git or real time (the debounce
+    /// path uses virtual time; this one uses a no-op backoff).
+    /// </summary>
+    internal static GitProcessResult RunWithIndexLockRetry(
+        Func<GitProcessResult> run,
+        int attempts,
+        Action<int>? backoff)
+    {
+        var result = run();
+        var max = Math.Max(1, attempts);
+        for (var attempt = 1; attempt < max && IsIndexLockContention(result.Code, result.ErrorText); attempt++)
+        {
+            backoff?.Invoke(attempt);
+            result = run();
+        }
+        return result;
+    }
+
+    internal static bool IsIndexLockContention(int code, string errorText)
+    {
+        if (code == 0 || string.IsNullOrEmpty(errorText)) return false;
+        return errorText.Contains("index.lock", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("Another git process", StringComparison.OrdinalIgnoreCase)
+            || (errorText.Contains("Unable to create", StringComparison.OrdinalIgnoreCase)
+                && errorText.Contains(".lock", StringComparison.OrdinalIgnoreCase));
+    }
+
     private string? ResolveGitRoot(string workspaceRoot)
     {
         var result = RunGit(workspaceRoot, ["rev-parse", "--show-toplevel"]);
@@ -345,7 +674,7 @@ public sealed class WorkspaceArtifactCommitService
         return new GitProcessResult(stdout, stderr, p.ExitCode);
     }
 
-    private sealed record GitProcessResult(string Out, string Err, int Code)
+    internal sealed record GitProcessResult(string Out, string Err, int Code)
     {
         public string ErrorText => string.IsNullOrWhiteSpace(Err) ? Out.Trim() : Err.Trim();
     }

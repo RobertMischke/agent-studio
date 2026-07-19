@@ -41,7 +41,7 @@
  *     the test is robust to whatever default sort the lane applies.
  *
  * Routes are `/api/tasks*`; this spec inlines the few task API calls it needs
- * so it does not depend on the still-`/api/jobs` shared `helpers/jobs.ts`.
+ * so it does not depend on the still-`/api/tasks` shared `helpers/jobs.ts`.
  */
 import { test, expect, Page } from '@playwright/test';
 import { api, BACKEND } from '../helpers/api';

@@ -41,6 +41,129 @@ export interface GitProjectSummary {
   totalRemoved: number;
 }
 
+/** Coarse branch classification used by the Project Hub Git View tree. */
+export type GitBranchCategory = 'main' | 'develop' | 'feature' | 'task' | 'other';
+
+/**
+ * One checkout of the project repository (primary or an ADR-0052 per-task
+ * worktree) as reported by the backend inventory. Mirrors backend
+ * `GitWorktreeEntry`. The concrete on-disk {@link path} is always present so
+ * the Git View can show where each checkout lives.
+ */
+export interface GitWorktreeEntry {
+  path: string;
+  branch: string | null;
+  headSha: string | null;
+  headShortSha: string | null;
+  isPrimary: boolean;
+  isDetached: boolean;
+  isBare: boolean;
+}
+
+/** One local branch in the Git View inventory. Mirrors backend `GitBranchEntry`. */
+export interface GitBranchEntry {
+  name: string;
+  category: GitBranchCategory;
+  tipSha: string | null;
+  tipShortSha: string | null;
+  isCurrent: boolean;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  lastCommitSubject: string | null;
+  lastCommitAtUtc: string | null;
+  worktreePath: string | null;
+}
+
+/** One commit in the Git View recent-history list. Mirrors backend `GitCommitInfo`. */
+export interface GitCommitEntry {
+  sha: string;
+  shortSha: string;
+  authorDateUtc: string;
+  author: string;
+  subject: string;
+  filesChanged: number;
+  added: number;
+  removed: number;
+}
+
+/**
+ * Read-only branch / worktree / recent-history inventory for one project.
+ * Mirrors backend `GitProjectInventory`; fetched from
+ * `GET /api/git/inventory?project=<name>` and consumed by the Project Hub Git
+ * View. `isRepo === false` with a populated {@link error} is the empty/error
+ * signal (unknown project, no configured repository, or a non-git folder).
+ */
+export interface GitProjectInventory {
+  projectName: string;
+  repositoryPath: string | null;
+  isRepo: boolean;
+  currentBranch: string | null;
+  worktrees: GitWorktreeEntry[];
+  branches: GitBranchEntry[];
+  recentCommits: GitCommitEntry[];
+  error: string | null;
+}
+
+/**
+ * Git-Management cleanup (AGT-2009). Mirrors backend `GitCleanupService` models.
+ * The plan is a read-only dry-run preview; execution acts on an operator-confirmed
+ * subset and only ever removes GEMERGTES (AGT-1945 invariant).
+ */
+export type CleanupTargetKind = 'localBranch' | 'remoteBranch' | 'backupRef' | 'staleWorktree';
+export type CleanupMergeStatus = 'merged' | 'unmerged' | 'notApplicable';
+
+/** One row of the cleanup dry-run preview. Mirrors backend `CleanupCandidate`. */
+export interface CleanupCandidate {
+  kind: CleanupTargetKind;
+  name: string;
+  remote: string | null;
+  tipSha: string | null;
+  tipShortSha: string | null;
+  mergeStatus: CleanupMergeStatus;
+  /** True only when the item is provably safe to delete (merged / stale). */
+  eligible: boolean;
+  /** Merge evidence when eligible; why-kept reason otherwise. */
+  reason: string;
+}
+
+/** The cleanup dry-run plan for one project. Mirrors backend `GitCleanupPlan`. */
+export interface GitCleanupPlan {
+  projectName: string;
+  repositoryPath: string | null;
+  isRepo: boolean;
+  integrationBranch: string;
+  candidates: CleanupCandidate[];
+  error: string | null;
+}
+
+/** One confirmed item posted to the execute endpoint. Mirrors backend `CleanupExecutionItem`. */
+export interface CleanupExecutionItem {
+  kind: CleanupTargetKind;
+  name: string;
+  remote: string | null;
+}
+
+/** Per-item outcome of an executed cleanup. Mirrors backend `CleanupActionOutcome`. */
+export interface CleanupActionOutcome {
+  kind: CleanupTargetKind;
+  name: string;
+  remote: string | null;
+  deleted: boolean;
+  reason: string;
+}
+
+/** Result report of an executed cleanup. Mirrors backend `GitCleanupResult`. */
+export interface GitCleanupResult {
+  projectName: string;
+  integrationBranch: string;
+  isRepo: boolean;
+  deletedCount: number;
+  keptCount: number;
+  actions: CleanupActionOutcome[];
+  error: string | null;
+}
+
 /**
  * Repository hygiene snapshot. Mirrors backend `GitHygieneStatus`.
  *
@@ -188,4 +311,31 @@ export interface TaskProvenanceRecord {
   base: string | null;
   transitions: TaskProvenanceTransition[];
   merge: TaskProvenanceMerge | null;
+}
+
+/**
+ * Compact, always-on board-card merge signal (AGT-2046). Mirrors backend
+ * `TaskMergeSignal` and ships on every board card via `TaskInfo.mergeSignal`,
+ * so the card renders a two-segment `[develop|main]` indicator without the
+ * per-task graph query the detail header pays. Uses the same
+ * worktree -> develop -> main semantics as {@link LandedState}: `inIntegration`
+ * == the task's anchor is an ancestor of develop, `inRelease` == an ancestor of
+ * main. Computed batched + cached per repository on the backend (never per
+ * card). Null on cards with no committed/merged anchor yet.
+ */
+export interface TaskMergeSignal {
+  /** The task's worktree branch name, for the card's branch chip + tooltip. */
+  branch: string;
+  /** True when the work is folded into the integration branch (develop). */
+  inIntegration: boolean;
+  /** True when the work has reached the release branch (main). */
+  inRelease: boolean;
+  /** Integration branch the signal was computed against (usually "develop"). */
+  integrationBranch: string;
+  /** Release branch the signal was computed against (usually "main"). */
+  releaseBranch: string;
+  /** Short SHA proving develop membership (merge commit or anchor); null when not in develop. */
+  integrationSha: string | null;
+  /** Short SHA of the anchor that reached main; null when not in main. */
+  releaseSha: string | null;
 }

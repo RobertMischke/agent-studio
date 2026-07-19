@@ -46,7 +46,7 @@ public class TaskModeTests : IDisposable
     public void CreateJob_DefaultModeIsCoding_NoWebAccess()
     {
         var (_, scanner, mutations) = Build();
-        mutations.CreateJob(new CreateJobRequest { Id = "plain", Title = "Plain", WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "plain", Title = "Plain", WatchPath = _watchPath, TargetState = TaskStates.Ready });
 
         var info = scanner.FindJob("plain", _watchPath);
         Assert.NotNull(info);
@@ -58,7 +58,7 @@ public class TaskModeTests : IDisposable
     public void CreateJob_PlanningMode_IsPersistedAndScanned_WebOffByDefault()
     {
         var (_, scanner, mutations) = Build();
-        mutations.CreateJob(new CreateJobRequest { Id = "plan-1", Title = "Plan", Mode = TaskModes.Planning, WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "plan-1", Title = "Plan", Mode = TaskModes.Planning, WatchPath = _watchPath, TargetState = TaskStates.Ready });
 
         var info = scanner.FindJob("plan-1", _watchPath);
         Assert.NotNull(info);
@@ -70,7 +70,7 @@ public class TaskModeTests : IDisposable
     public void CreateJob_ResearchMode_DefaultsWebAccessOn()
     {
         var (_, scanner, mutations) = Build();
-        mutations.CreateJob(new CreateJobRequest { Id = "res-1", Title = "Res", Mode = TaskModes.Research, WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "res-1", Title = "Res", Mode = TaskModes.Research, WatchPath = _watchPath, TargetState = TaskStates.Ready });
 
         var info = scanner.FindJob("res-1", _watchPath);
         Assert.NotNull(info);
@@ -83,7 +83,7 @@ public class TaskModeTests : IDisposable
     {
         var (_, scanner, mutations) = Build();
         // research, but the caller explicitly turns web access off
-        mutations.CreateJob(new CreateJobRequest { Id = "res-2", Title = "Res2", Mode = TaskModes.Research, AllowWebAccess = false, WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "res-2", Title = "Res2", Mode = TaskModes.Research, AllowWebAccess = false, WatchPath = _watchPath, TargetState = TaskStates.Ready });
 
         var info = scanner.FindJob("res-2", _watchPath);
         Assert.NotNull(info);
@@ -95,7 +95,7 @@ public class TaskModeTests : IDisposable
     {
         var (_, scanner, mutations) = Build();
         // an epic with no mode -> defaults coding; kind + mode are independent fields
-        mutations.CreateJob(new CreateJobRequest { Id = "the-epic", Title = "Epic", Kind = TaskKinds.Epic, WatchPath = _watchPath, TargetState = TaskStates.Ready });
+        mutations.CreateJob(new CreateTaskRequest { Id = "the-epic", Title = "Epic", Kind = TaskKinds.Epic, WatchPath = _watchPath, TargetState = TaskStates.Ready });
 
         var info = scanner.FindJob("the-epic", _watchPath);
         Assert.NotNull(info);

@@ -23,7 +23,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string) {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
 }
 
 async function readyColumnLocator(page: Page) {
@@ -69,7 +69,7 @@ test('@evidence capture optimistic reorder before/after screenshots', async ({ p
   const others = (await listJobs())
     .filter(j => j.state === '2-ready' && ![a.id, b.id, c.id].includes(j.id))
     .map(j => ({ jobId: j.id, watchPath: j.watchPath }));
-  await api('/api/jobs/reorder', {
+  await api('/api/tasks/reorder', {
     method: 'POST',
     body: JSON.stringify({ jobs: [...others, { jobId: a.id, watchPath }, { jobId: b.id, watchPath }, { jobId: c.id, watchPath }] })
   });
@@ -77,7 +77,7 @@ test('@evidence capture optimistic reorder before/after screenshots', async ({ p
   try {
     // Stall the reorder POST so the screenshot timing window proves the
     // UI updates without waiting for the server.
-    await page.route('**/api/jobs/reorder', async route => {
+    await page.route('**/api/tasks/reorder', async route => {
       await new Promise(r => setTimeout(r, 1500));
       try { await route.continue(); } catch { /* unrouted */ }
     });
@@ -110,7 +110,7 @@ test('@evidence capture optimistic reorder before/after screenshots', async ({ p
 
     // Drag A to the trailing drop zone. Capture immediately after dispatch
     // — the route handler still has ~1500 ms to go.
-    const postStarted = page.waitForRequest(r => r.url().includes('/api/jobs/reorder') && r.method() === 'POST');
+    const postStarted = page.waitForRequest(r => r.url().includes('/api/tasks/reorder') && r.method() === 'POST');
     await dispatchDrag(page, tA, zoneCount - 1);
     await postStarted;
 
@@ -119,8 +119,8 @@ test('@evidence capture optimistic reorder before/after screenshots', async ({ p
     await ready.screenshot({ path: path.join(JOB_RESULTS, 'reorder-02-after-drop-post-still-pending.png') });
 
     // Wait for POST + grace, then the persisted state.
-    await page.waitForResponse(r => r.url().includes('/api/jobs/reorder') && r.request().method() === 'POST');
-    await page.unroute('**/api/jobs/reorder');
+    await page.waitForResponse(r => r.url().includes('/api/tasks/reorder') && r.request().method() === 'POST');
+    await page.unroute('**/api/tasks/reorder');
     await page.waitForTimeout(2000);
     await ready.screenshot({ path: path.join(JOB_RESULTS, 'reorder-03-after-server-confirm.png') });
   } finally {

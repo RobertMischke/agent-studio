@@ -5,7 +5,7 @@ import { createJob, startJob, waitForJob, getJobOutput } from '../helpers/jobs';
 /**
  * CLI skill pickup test.
  *
- * The four CLI skill files under `docs/cli-skills/` (cli-overview, cli-claude,
+ * The four CLI skill files under `docs/system/cli/skills/` (cli-overview, cli-claude,
  * cli-codex, cli-copilot, cli-gemini) each carry a frontmatter `sentinel:` of
  * the form `TASKBOARD-CLI-SKILL-<NAME>-2026`. This spec proves that **any** CLI
  * driving this repo can find and read the matching skill: we ask the CLI to
@@ -72,7 +72,7 @@ function buildPrompt(skillName: string): string {
   // narrate one sentence + the token, which is enough for the .toContain
   // assertion below.
   return [
-    `Read the file \`docs/cli-skills/${skillName}.md\` (it is in the repo you are currently running in).`,
+    `Read the file \`docs/system/cli/skills/${skillName}.md\` (it is in the repo you are currently running in).`,
     `Find the line in its YAML frontmatter that starts with \`sentinel:\` and write the full TASKBOARD-CLI-SKILL-... token into your reply.`,
     `One short reply is fine. Do not edit any files.`
   ].join('\n');

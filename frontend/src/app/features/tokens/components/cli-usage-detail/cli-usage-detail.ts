@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import type { CliType } from '../../../../models/task.model';
 import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 import type { QuotaWindow } from '../../../../features/quota';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type {
   AdHocUsageAggregate,
@@ -65,6 +65,9 @@ interface ModelUsageRow {
   styleUrl: './cli-usage-detail.scss',
 })
 export class CliUsageDetailComponent {
+  /** Workspace mode keeps project attribution and task totals while account
+   * windows live on the dedicated per-CLI pages. */
+  readonly workspaceOnly = input(false);
   readonly quotaRows = input<CliUsageQuotaRow[]>([]);
   readonly tokens = input<TokenSummaryAggregate | null>(null);
   readonly adhoc = input<AdHocUsageAggregate | null>(null);
@@ -121,7 +124,7 @@ export class CliUsageDetailComponent {
   }
 
   costLabel(value: number, priced: boolean): string {
-    return priced ? this.formatUsd(value) : 'n/a';
+    return priced ? this.formatUsd(value) : 'Unknown';
   }
 
   formatTokens(n: number): string {
@@ -223,8 +226,6 @@ export class CliUsageDetailComponent {
         return m.includes('claude') || m.includes('haiku') || m.includes('sonnet') || m.includes('opus');
       case 'codex':
         return m.includes('codex') || m.startsWith('gpt') || /^o\d/.test(m);
-      case 'copilot':
-        return m.includes('copilot');
       case 'gemini':
         return m.includes('gemini');
       default:

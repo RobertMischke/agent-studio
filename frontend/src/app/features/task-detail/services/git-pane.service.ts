@@ -8,6 +8,7 @@ import type {
   TaskProvenanceView,
 } from '../../../features/git';
 import { TaskService } from '../../../services/task.service';
+import type { CodeReviewListEntry } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import {
   setVisibleInterval,
@@ -34,6 +35,19 @@ export class GitPaneService implements OnDestroy {
   readonly loading = signal(false);
   readonly selectedDiffPath = signal<string | null>(null);
   readonly diffText = signal<string>('');
+
+  // --- md/html preview (AGT-2008) --------------------------------------
+  // The git-pane can render a changed .md/.html file as a formatted preview
+  // instead of its diff. Content is fetched lazily the first time the preview
+  // is shown for a path, from the same ref the diff came from (working tree,
+  // the selected commit, or - in the aggregated view - the newest task
+  // commit) so the preview matches what the diff shows.
+  readonly previewContent = signal<string | null>(null);
+  readonly previewLoading = signal(false);
+  readonly previewError = signal<string | null>(null);
+  readonly previewIsBinary = signal(false);
+  private readonly PREVIEW_CACHE_LIMIT = 16;
+  private previewCache = new Map<string, { content: string; isBinary: boolean }>();
   readonly commitMessage = signal('');
   readonly committing = signal(false);
   readonly generatingMsg = signal(false);
@@ -81,12 +95,39 @@ export class GitPaneService implements OnDestroy {
       if (key.startsWith('worktree|')) this.diffCache.delete(key);
     }
   }
+  private invalidateWorktreePreviewCache(): void {
+    for (const key of [...this.previewCache.keys()]) {
+      if (key.startsWith('worktree|')) this.previewCache.delete(key);
+    }
+  }
 
   // Commit-history view: when the task has an auto-commit recorded, the
   // pane switches from "live working tree" to "what this task changed".
   // That data survives future work in the repo and is what the user wants
   // to see when reviewing a finished task.
   readonly commitDetail = signal<TaskCommitDetail | null>(null);
+
+  /**
+   * User-triggered code-review artifacts for this task (newest first),
+   * mirroring the Code Review tab's listing. Loaded lazily when the job is
+   * set / gains a commit so the commit view can surface a compact rating
+   * badge on the commit line (AGT-1995). Silent on error: the badge simply
+   * stays hidden, it is never load-bearing for the diff/commit flow.
+   */
+  readonly codeReviews = signal<CodeReviewListEntry[]>([]);
+
+  /**
+   * The most recent code review whose reviewed commit matches the commit the
+   * detail view is currently showing, or `null` when none matches (or when
+   * the aggregated "all commits" view is active, which has no single commit
+   * line). Drives the commit-row rating badge + its "jump to Code Review"
+   * click.
+   */
+  readonly commitReview = computed<CodeReviewListEntry | null>(() => {
+    const sha = this.commitDetail()?.commit?.sha ?? null;
+    if (!sha) return null;
+    return this.codeReviews().find((r) => reviewMatchesSha(r.commit, sha)) ?? null;
+  });
 
   /**
    * Commit-provenance & landed-state (ASS-1724): the live, graph-derived view
@@ -96,6 +137,19 @@ export class GitPaneService implements OnDestroy {
    * develop / main have advanced.
    */
   readonly provenance = signal<TaskProvenanceView | null>(null);
+
+  /**
+   * Whether the graph-derived provenance has resolved (success OR error) for the
+   * currently-open job. Starts `false` on every job change and flips `true` the
+   * first time `loadProvenance()` settles. Git-dependent UI (the detail-header
+   * "Merge into Develop" / "Accept" acceptance primary) reads this to stay
+   * disabled + show a loading state until the branch/merge truth is known, so a
+   * still-loading `provenance() === null` no longer renders as an actionable
+   * "not yet merged" button that later flips to "already merged" (AGT-2006).
+   * A same-job refresh that re-pulls provenance leaves this `true` so the
+   * acceptance primary does not flicker back into a skeleton on every poll.
+   */
+  readonly provenanceLoaded = signal(false);
 
   /**
    * Ordered chain of commits attributed to this task (oldest -&gt; newest).
@@ -196,6 +250,9 @@ export class GitPaneService implements OnDestroy {
         // A new commit (or a just-landed merge) can move the landed-state, so
         // re-pull the graph-derived provenance when the chain grows.
         this.loadProvenance();
+        // A follow-up commit may carry a fresh code-review verdict; refresh
+        // the listing so the commit-row badge tracks the new commit.
+        this.loadCodeReviews();
       }
       return;
     }
@@ -210,11 +267,37 @@ export class GitPaneService implements OnDestroy {
     this.committing.set(false);
     this.generatingMsg.set(false);
     this.provenance.set(null);
+    this.provenanceLoaded.set(false);
+    this.codeReviews.set([]);
     this.clearDiffCache();
+    this.previewCache.clear();
+    this.resetPreview();
     const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
     this.commitChain.set(chain);
     this.applyCommitDefault(chain);
     this.loadProvenance();
+    this.loadCodeReviews();
+  }
+
+  /**
+   * Load the code-review listing for the current job (newest first). Silent
+   * on error - the commit-row rating badge simply stays hidden. No-op in
+   * worktree-only tasks with no commit, but harmless to call regardless.
+   */
+  loadCodeReviews(): void {
+    const info = this.currentJob;
+    if (!info) return;
+    this.jobService.listCodeReviews(info.id, info.watchPath).subscribe({
+      // Guard the shape explicitly: the listing contract is `{ entries: [...] }`,
+      // but a malformed/unexpected body (e.g. a bare array) would make
+      // `resp.entries` resolve to `Array.prototype.entries` - a truthy function
+      // that slips past `?? []` and then throws `.find is not a function` inside
+      // the `commitReview` computed, aborting the git-pane's change-detection
+      // pass and leaving the commit header half-rendered. Only trust an actual
+      // array here so the rating badge stays a strictly best-effort overlay.
+      next: (resp) => this.codeReviews.set(Array.isArray(resp?.entries) ? resp.entries : []),
+      error: () => this.codeReviews.set([]),
+    });
   }
 
   /**
@@ -227,8 +310,11 @@ export class GitPaneService implements OnDestroy {
     const info = this.currentJob;
     if (!info) return;
     this.jobService.getTaskProvenance(info.id, info.watchPath).subscribe({
-      next: (view) => this.provenance.set(view),
-      error: () => this.provenance.set(null),
+      // Flip the resolved flag on both settle paths: a failed load still means
+      // "we are no longer waiting", so the acceptance primary falls back to the
+      // persisted merge fact instead of staying disabled forever.
+      next: (view) => { this.provenance.set(view); this.provenanceLoaded.set(true); },
+      error: () => { this.provenance.set(null); this.provenanceLoaded.set(true); },
     });
   }
 
@@ -350,6 +436,7 @@ export class GitPaneService implements OnDestroy {
     // picks up a fresh diff. Commit-mode entries are immutable per sha,
     // so we keep those.
     this.invalidateWorktreeCache();
+    this.invalidateWorktreePreviewCache();
     this.jobService.getGitStatus(info.id, info.watchPath).subscribe({
       next: (status) => {
         this.status.set(status);
@@ -360,6 +447,7 @@ export class GitPaneService implements OnDestroy {
         if (selected && !status.files.some((f) => f.path === selected)) {
           this.selectedDiffPath.set(null);
           this.diffText.set('');
+          this.resetPreview();
         }
       },
       error: (err) => {
@@ -370,6 +458,9 @@ export class GitPaneService implements OnDestroy {
   }
 
   selectDiffPath(path: string): void {
+    // Preview state is per-selected-file; drop it whenever the selection moves
+    // so a stale .md/.html render never lingers under a different file.
+    this.resetPreview();
     if (this.selectedDiffPath() === path) {
       this.selectedDiffPath.set(null);
       this.diffText.set('');
@@ -442,6 +533,95 @@ export class GitPaneService implements OnDestroy {
     });
   }
 
+  /**
+   * Fetch the formatted-preview source for a path (md/html rendering). Serves
+   * from an LRU cache when possible so toggling Diff <-> Preview is instant;
+   * otherwise pulls the file text from the ref that backs the current view
+   * (working tree, the selected commit, or the newest task commit for the
+   * aggregated diff). Late responses are dropped when the selection has moved
+   * on, mirroring {@link selectDiffPath}'s stale-guard.
+   */
+  loadPreview(path: string): void {
+    const info = this.currentJob;
+    if (!info || !path) return;
+
+    const key = this.previewKey(path);
+    const cached = this.previewCacheGet(key);
+    if (cached) {
+      this.previewContent.set(cached.content);
+      this.previewIsBinary.set(cached.isBinary);
+      this.previewError.set(null);
+      this.previewLoading.set(false);
+      return;
+    }
+
+    this.previewContent.set(null);
+    this.previewIsBinary.set(false);
+    this.previewError.set(null);
+    this.previewLoading.set(true);
+
+    const stillSelected = () => this.selectedDiffPath() === path;
+    const apply = (res: { content?: string; isBinary?: boolean } | null) => {
+      const content = typeof res?.content === 'string' ? res.content : '';
+      const isBinary = res?.isBinary === true;
+      this.previewCachePut(key, { content, isBinary });
+      if (!stillSelected()) return;
+      this.previewLoading.set(false);
+      this.previewIsBinary.set(isBinary);
+      this.previewContent.set(isBinary ? '' : content);
+    };
+    const fail = () => {
+      if (!stillSelected()) return;
+      this.previewLoading.set(false);
+      this.previewError.set('Failed to load preview.');
+    };
+
+    if (this.viewMode() === 'commit') {
+      // Aggregated view has no single commit; preview the file at the newest
+      // task commit so the "final" version is shown. A single-commit view uses
+      // that commit's blob so the preview matches its diff.
+      const sha = this.selectedCommitSha() ?? this.newestCommitSha();
+      if (!sha) { this.previewLoading.set(false); this.previewError.set('No commit to preview.'); return; }
+      this.jobService.getJobCommitFileBySha(info.id, sha, path, info.watchPath).subscribe({ next: apply, error: fail });
+      return;
+    }
+    this.jobService.getGitFileContent(info.id, path, info.watchPath).subscribe({ next: apply, error: fail });
+  }
+
+  /** Newest SHA on the task's commit chain (the chain is oldest -> newest). */
+  private newestCommitSha(): string | null {
+    const chain = this.commitChain();
+    return chain.length ? chain[chain.length - 1].sha : null;
+  }
+
+  private previewKey(path: string): string {
+    if (this.viewMode() === 'commit') {
+      const sha = this.selectedCommitSha() ?? this.newestCommitSha() ?? '';
+      return `commit|${sha}|${path}`;
+    }
+    return `worktree|${path}`;
+  }
+  private previewCacheGet(key: string): { content: string; isBinary: boolean } | undefined {
+    const v = this.previewCache.get(key);
+    if (v !== undefined) { this.previewCache.delete(key); this.previewCache.set(key, v); }
+    return v;
+  }
+  private previewCachePut(key: string, value: { content: string; isBinary: boolean }): void {
+    if (this.previewCache.has(key)) this.previewCache.delete(key);
+    this.previewCache.set(key, value);
+    while (this.previewCache.size > this.PREVIEW_CACHE_LIMIT) {
+      const oldest = this.previewCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.previewCache.delete(oldest);
+    }
+  }
+  private resetPreview(): void {
+    this.previewContent.set(null);
+    this.previewIsBinary.set(false);
+    this.previewError.set(null);
+    this.previewLoading.set(false);
+  }
+
   generateCommitMessage(): void {
     const info = this.currentJob;
     if (!info) return;
@@ -487,4 +667,15 @@ export class GitPaneService implements OnDestroy {
         this.errorDialog.show(err, { title: 'Open in VS Code failed', source: `Task ${info.id}` }),
     });
   }
+}
+
+/**
+ * Match a code-review entry's reviewed-commit field against a commit SHA.
+ * The review may record either a full or an abbreviated SHA (it stores
+ * whatever HEAD resolved to at review time), so we accept a prefix match in
+ * either direction rather than requiring equal-length strings.
+ */
+function reviewMatchesSha(reviewCommit: string | null | undefined, sha: string): boolean {
+  if (!reviewCommit || !sha) return false;
+  return sha === reviewCommit || sha.startsWith(reviewCommit) || reviewCommit.startsWith(sha);
 }

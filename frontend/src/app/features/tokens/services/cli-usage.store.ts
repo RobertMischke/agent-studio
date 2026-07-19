@@ -289,7 +289,6 @@ export class CliUsageStore {
     switch (cli) {
       case 'claude': return 'Claude';
       case 'codex': return 'Codex';
-      case 'copilot': return 'Copilot';
       case 'gemini': return 'Gemini';
       default: return cli;
     }

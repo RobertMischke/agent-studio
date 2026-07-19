@@ -1,45 +1,56 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { TaskService } from '../../../../services/task.service';
-import type { TaskInfo } from '../../../../models/task.model';
+import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
 import {
   ProjectShellComponent,
   ProjectDetailComponent,
+  ProjectOverviewDashboardComponent,
+  ProjectDeploymentPanelComponent,
   ProjectSettingsPanelComponent,
   SecurityPanelComponent,
   UxuiPanelComponent,
   ProjectObservabilityPanelComponent,
-  ProjectProductRuntimePanelComponent,
+  ProjectPipelinePanelComponent,
   ProjectSteeringDocsSectionComponent,
-  ProjectSkillReadinessSectionComponent,
   ProjectWikiSectionComponent,
+  ProjectUrlsPanelComponent,
+  ProjectGitPanelComponent,
+  ProjectProposalsPanelComponent,
+  ProjectGraphComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
+import { RegressionRadarComponent } from '../../../regression-radar';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   ProjectRailKey,
   isProjectRailKey,
 } from '../../../project-detail/components/project-shell/project-shell.config';
 import { ProjectOverlaysService } from '../../../project-detail/state/project-overlays.service';
+import { StudioTabStateService } from '../../services/studio-tab-state.service';
+import { studioTabKey } from '../../studio-shell.types';
+import type { WorkbenchListItem } from '../../../../models/project-docs.model';
 
 /** Rails whose content panel is real (not the project-shell placeholder). */
 const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRailKey>([
   'overview',
+  'deployment',
+  'project-urls',
+  'git',
   'visual-evidence',
   'security',
+  'proposals',
   'architecture',
+  'project-graph',
   'drift',
   'uxui',
+  'test-quality',
   'token-usage',
   'observability',
-  'product-runtime',
   'steering',
   'wiki',
-  'jobs',
-  // Nav-rebuild step 2 (T5b): the Pipeline / Workflow / Prompts shells now
-  // host real content moved out of Project Settings (pipeline steps, lane
-  // sort) and the application-wide prompt-admin surface.
+  // Nav-rebuild step 2 (T5b): Pipeline / Workflow host real content moved
+  // out of Project Settings, and Prompts keeps the application-wide
+  // prompt-admin surface from the Context segment.
   'pipeline',
   'workflow',
   'prompts',
@@ -48,9 +59,6 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'settings-defaults',
   'settings-overrides',
   'orchestrator',
-  'activity',
-  // Note: 'steering-docs' (tree container) and 'runtime-prompts' deliberately
-  // fall through to the shell's generic placeholder panel.
 ]);
 
 /**
@@ -60,9 +68,9 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
  * and every rail uses its real content panel where one exists.
  *
  * The rail is a collapsible-segment tree (ASS-1711): Insight / Quality /
- * Operations / Config segments fold; the "Steering Docs" container expands
- * to Architecture / Wiki / Agent Docs; "Runtime Prompts" is its own point;
- * and Settings expands to Workspace Defaults / Project Overrides.
+ * Context / Config segments fold; Context contains Architecture / Wiki /
+ * Agent Docs / Prompts, and Settings expands to Workspace Defaults / Project
+ * Overrides.
  */
 @Component({
   selector: 'app-project-hub-view',
@@ -70,29 +78,37 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   imports: [
     ProjectShellComponent,
     ProjectDetailComponent,
+    ProjectOverviewDashboardComponent,
+    ProjectDeploymentPanelComponent,
     ProjectSettingsPanelComponent,
     SecurityPanelComponent,
     UxuiPanelComponent,
     ProjectTokenUsagePanelComponent,
     ProjectObservabilityPanelComponent,
-    ProjectProductRuntimePanelComponent,
+    ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,
-    ProjectSkillReadinessSectionComponent,
     ProjectWikiSectionComponent,
+    ProjectUrlsPanelComponent,
+    ProjectGitPanelComponent,
+    ProjectProposalsPanelComponent,
+    ProjectGraphComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
+    RegressionRadarComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-hub-view.component.html',
   styleUrl: './project-hub-view.component.scss',
 })
 export class ProjectHubViewComponent {
-  private readonly jobService = inject(TaskService);
   private readonly overlays = inject(ProjectOverlaysService);
+  private readonly tabState = inject(StudioTabStateService);
 
   readonly projectName = input.required<string>();
   /** Optional initial rail; defaults to "overview" if absent or unknown. */
   readonly initialSection = input<string>('overview');
+  /** Exact Project Pipeline row requested by a task-detail activation link. */
+  readonly pipelineStepId = input<string | undefined>();
 
   /** Bubbles to the parent so it can navigate when a row link is clicked. */
   readonly openTask = output<{ jobId: string; watchPath: string }>();
@@ -106,18 +122,8 @@ export class ProjectHubViewComponent {
     });
   }
 
-  readonly jobsForProject = computed<TaskInfo[]>(() => {
-    const grouped = this.jobService.grouped();
-    const out: TaskInfo[] = [];
-    for (const lane of Object.values(grouped)) {
-      for (const job of lane as TaskInfo[]) {
-        if (job.projectName === this.projectName()) out.push(job);
-      }
-    }
-    return out;
-  });
-
   hasCustomPanel(rail: ProjectRailKey): boolean {
+    if (rail === 'project-graph') return true;
     return RAILS_WITH_CUSTOM_PANEL.has(rail);
   }
 
@@ -127,12 +133,18 @@ export class ProjectHubViewComponent {
   }
 
   setRail(rail: ProjectRailKey): void {
+    const projectName = this.projectName();
+    const sourceKey = studioTabKey({ kind: 'hub', projectName, section: this.activeRail() });
     this.activeRail.set(rail);
+    this.tabState.retarget(
+      sourceKey,
+      { kind: 'hub', projectName, section: rail },
+    );
   }
 
   /**
    * Open the orchestrator feed overlay (same target as the legacy
-   * project-shell's 📜 Open feed button).
+   * project-shell feed button).
    */
   openFeed(): void {
     this.overlays.openOrchFeed(this.projectName());
@@ -147,9 +159,23 @@ export class ProjectHubViewComponent {
     this.overlays.openAnalysisReport(this.projectName(), report.reportId);
   }
 
-  /** Hub closes when the user closes the tab; no separate close action. */
+  /**
+   * AGT-2067 — open a configured URL as an embedded preview tab from the
+   * Project URLs management page. Same `url-preview` tab the Explorer row
+   * opens (open-or-focus by key), so both entry points land on one tab.
+   */
+  openUrlPreview(url: { id: string }): void {
+    this.tabState.open({ kind: 'url-preview', projectName: this.projectName(), urlId: url.id });
+  }
+
+  openWorkbench(workbench: WorkbenchListItem): void {
+    if (!workbench.valid) return;
+    this.tabState.open({ kind: 'workbench', projectName: this.projectName(), workbenchId: workbench.id, title: workbench.title });
+  }
+
+  /** Hub closes when the user closes the editor tab; the in-rail button only collapses navigation. */
   closeShell(): void {
-    /* no-op — the tab close button handles this */
+    /* legacy output hook: ProjectShell owns navigation collapse internally */
   }
 
   onSecurityFollowUp(evt: unknown): void { void evt; }
