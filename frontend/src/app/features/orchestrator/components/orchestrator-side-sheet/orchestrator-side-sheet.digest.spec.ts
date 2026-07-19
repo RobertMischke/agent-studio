@@ -72,6 +72,8 @@ describe('OrchestratorSideSheetComponent · ORCH-1 context digest', () => {
     const previous = digest('project:demo-project');
     component.contextDigestState.selectContext('project:demo-project');
     component.contextDigestState.digest.set(previous);
+    fixture.detectChanges();
+    http.expectOne('/api/orchestrator/sessions').flush({ sessions: [] });
 
     component.refreshCurrentContext();
     http.expectOne('/api/orchestrator/context/project:demo-project/refresh').flush(

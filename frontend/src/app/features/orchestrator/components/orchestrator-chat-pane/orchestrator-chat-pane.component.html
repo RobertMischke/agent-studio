@@ -1,0 +1,61 @@
+<div class="chat-pane">
+  @if (errorMsg(); as error) {
+    <div class="chat-pane__error">{{ error }}</div>
+  }
+
+  <section class="chat-pane__chat">
+    <div class="chat-pane__conversation" data-testid="orchestrator-conversation">
+      <cac-conversation-view
+        variant="embedded"
+        [events]="conversationEvents()"
+        [isRunning]="sending() || loading()"
+        [showHeader]="false"
+        [virtualised]="true"
+        bodyMaxHeight="100%"
+        (openVerboseDebug)="onOpenVerboseDebug()" />
+    </div>
+
+    @for (event of events(); track event.id) {
+      @if (event.actionLabel && hasChatEventAction(event.id)) {
+        <button type="button"
+                class="chat-pane__event-action"
+                (click)="onChatEventAction(event.id)"
+                [attr.data-testid]="'orch-conversation-event-action-' + event.id">
+          {{ event.actionLabel }}
+        </button>
+      }
+    }
+
+    <cac-chat
+      class="chat-pane__composer"
+      variant="embedded"
+      emptyState=""
+      [pending]="sending()"
+      [disabled]="sending()"
+      [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
+      [toolbarStart]="toolbarStart"
+      [toolbarEnd]="toolbarEnd"
+      [routingLabel]="routingLabel()"
+      (submitMessage)="onSubmit($event)"
+      (toolbarAction)="onToolbarAction($event)" />
+
+    <div class="chat-pane__draft-actions" data-testid="orch-side-sheet-draft-actions">
+      <button class="chat-pane__draft-btn chat-pane__draft-btn--primary"
+              type="button"
+              (click)="createFromUserMessage()"
+              [disabled]="!canCreateTaskFromUserMessage()"
+              [cacTooltip]="'Open Add Task pre-filled with the text you typed'"
+              data-testid="orch-side-sheet-make-task-from-yours">
+        Make a task from your message
+      </button>
+      <button class="chat-pane__draft-btn"
+              type="button"
+              (click)="createFromLastReply()"
+              [disabled]="!canCreateTaskFromReply()"
+              [cacTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
+              data-testid="orch-side-sheet-make-task">
+        Make a task from this reply
+      </button>
+    </div>
+  </section>
+</div>

@@ -1,23 +1,36 @@
 <section class="context-list" data-testid="chat-context-list">
+  <label class="context-list__search">
+    <span class="context-list__search-glyph" aria-hidden="true">⌕</span>
+    <span class="context-list__search-label">Filter chat contexts</span>
+    <input type="search"
+           [value]="query()"
+           (input)="updateQuery($event)"
+           placeholder="Filter contexts..."
+           data-testid="chat-switcher-search" />
+  </label>
   <div id="chat-context-groups" class="context-list__groups" data-testid="chat-context-groups">
     @for (group of [{ label: 'Global', rows: globalRows() }, { label: 'Projects', rows: projectRows() }, { label: 'Tasks', rows: taskRows() }]; track group.label) {
-      @if (group.rows.length > 0) {
-        <section class="context-list__group">
-          <h3>{{ group.label }}</h3>
+      <section class="context-list__group">
+        <h3>{{ group.label }}</h3>
+        @if (group.rows.length > 0) {
           @for (row of group.rows; track row.contextKey) {
             <div class="context-list__row"
                  [class.context-list__row--active]="row.contextKey === activeContextKey()"
                  [attr.data-testid]="'chat-switcher-row-' + row.contextKey">
-              <button type="button" class="context-list__name" (click)="select(row.contextKey)">
+              <button type="button"
+                      class="context-list__name"
+                      [attr.aria-current]="row.contextKey === activeContextKey() ? 'page' : null"
+                      (click)="select(row.contextKey)">
                 <span class="context-list__presence"
                       [class.context-list__presence--live]="row.runtimeStatus === 'active'"
+                      [class.context-list__presence--queued]="row.runtimeStatus === 'queued'"
                       aria-hidden="true"></span>
                 <span class="context-list__label">{{ row.label }}</span>
                 <span class="context-list__badges">
                   @if (row.runtimeStatus === 'active') { <span class="context-list__badge context-list__badge--live">running</span> }
                   @if (row.runtimeStatus === 'queued') { <span class="context-list__badge">queued {{ row.queuePosition }}</span> }
-                  @if (row.runtimeStatus === 'parked') { <span class="context-list__badge">parked</span> }
-                  @if (unreadContextKeys().has(row.contextKey)) { <span class="context-list__badge context-list__badge--unread">new</span> }
+                  @if (row.runtimeStatus === 'parked' || row.runtimeStatus === 'idle') { <span class="context-list__badge">parked</span> }
+                  @if (unreadContextKeys().has(row.contextKey)) { <span class="context-list__badge context-list__badge--unread">unread</span> }
                   @if (tokenLabel(row); as tokens) { <span class="context-list__badge">{{ tokens }}</span> }
                 </span>
               </button>
@@ -27,8 +40,10 @@
                       (click)="navigate(row.contextKey, $event)">&rarr;</button>
             </div>
           }
-        </section>
-      }
+        } @else {
+          <p class="context-list__empty">No matches</p>
+        }
+      </section>
     }
   </div>
 </section>

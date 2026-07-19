@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import type { TaskInfo } from '../../../../models/task.model';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
 
@@ -21,6 +21,7 @@ export class ChatSwitcherRailComponent {
   readonly unreadContextKeys = input<ReadonlySet<string>>(new Set());
   readonly contextSelected = output<string>();
   readonly locationRequested = output<string>();
+  readonly query = signal('');
 
   readonly rows = computed<RailRow[]>(() => {
     const byKey = new Map(this.sessions().map(session => [session.contextKey, session]));
@@ -45,9 +46,15 @@ export class ChatSwitcherRailComponent {
     }));
   });
 
-  readonly globalRows = computed(() => this.rows().filter(row => row.kind === 'global'));
-  readonly projectRows = computed(() => this.rows().filter(row => row.kind === 'project'));
-  readonly taskRows = computed(() => this.rows().filter(row => row.kind === 'task'));
+  readonly filteredRows = computed(() => {
+    const query = this.query().trim().toLocaleLowerCase();
+    return query
+      ? this.rows().filter(row => `${row.label} ${row.contextKey}`.toLocaleLowerCase().includes(query))
+      : this.rows();
+  });
+  readonly globalRows = computed(() => this.filteredRows().filter(row => row.kind === 'global'));
+  readonly projectRows = computed(() => this.filteredRows().filter(row => row.kind === 'project'));
+  readonly taskRows = computed(() => this.filteredRows().filter(row => row.kind === 'task'));
 
   select(contextKey: string): void {
     this.contextSelected.emit(contextKey);
@@ -58,19 +65,24 @@ export class ChatSwitcherRailComponent {
     this.locationRequested.emit(contextKey);
   }
 
+  updateQuery(event: Event): void {
+    this.query.set((event.target as HTMLInputElement).value);
+  }
+
   tokenLabel(row: RailRow): string | null {
     const total = row.cumulativeInputTokens + row.cumulativeOutputTokens
       + row.cumulativeCacheReadTokens + row.cumulativeCacheCreationTokens;
     if (total <= 0) return null;
-    if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}m`;
-    if (total >= 1_000) return `${Math.round(total / 1_000)}k`;
-    return String(total);
+    if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}m tokens`;
+    if (total >= 1_000) return `${Math.round(total / 1_000)}k tokens`;
+    return `${total} tokens`;
   }
 
   private taskLabel(session: OrchestratorContextSession): string {
     const task = this.tasks().find(item =>
       item.projectName === session.projectId
       && (item.taskKey === session.taskKey || item.displayKey === session.taskKey || item.key === session.taskKey));
-    return task?.title ?? session.taskKey ?? session.contextKey;
+    if (!task) return session.taskKey ?? session.contextKey;
+    return [session.taskKey, task.title].filter(Boolean).join(' ');
   }
 }

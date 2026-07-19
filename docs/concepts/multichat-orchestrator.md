@@ -89,6 +89,13 @@ AGT-1915 split view (the sheet IS the right-hand pane there).
 | **3 — multichat switcher** | switcher rail, badges (running/parked/unread/cost), search; park/resume UX | side sheet (splitting its 3-tab 1321-LOC component becomes due here) |
 | **4 — placement & gate** | workspace-level admin tabs get the orchestrator settings; feature gate state (see remote-integration §6.4) | settings surface |
 
+**Phase 3 delivered.** The side sheet now keeps the switcher collapsed
+by default behind an active-or-queued count chip. Expanding it adds the Frame B
+rail beside the still-visible chat, with filterable Global / Projects / Tasks
+groups, running / parked / unread / token badges, name-only chat switching, and
+a separate arrow for workspace navigation. The former oversized side-sheet
+controller was split into context/rail hosting and a dedicated chat pane.
+
 Phase 0+1 are independent and can start immediately; 2 needs 1; 3 needs 2.
 
 ## 6. Open questions (deliberately deferred)

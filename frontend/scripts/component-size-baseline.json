@@ -36,12 +36,6 @@
       "styles": 738,
       "total": 1820
     },
-    "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
-      "typeScript": 1104,
-      "template": 190,
-      "styles": 337,
-      "total": 1631
-    },
     "src/app/features/project-detail/components/project-detail/project-detail.ts": {
       "typeScript": 903,
       "template": 551,

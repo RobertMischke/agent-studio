@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'node:path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * MC-2 (Concept §4): the orchestrator side sheet follows the operator's
@@ -150,11 +151,11 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     const badge = page.getByTestId('orch-context-badge');
     await expect(badge).toBeVisible();
     await expect(badge).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.getByTestId('orch-context-count')).toHaveText('3');
+    await expect(page.getByTestId('orch-context-count')).toHaveText('1');
     await expect(page.getByTestId('orch-context-menu')).toHaveCount(0);
-    await expect(page.getByTestId('orch-side-sheet-pin')).toHaveCount(0);
-    await expect(page.getByTestId('orch-side-sheet-settings')).toHaveCount(0);
-    await expect(page.getByTestId('orch-side-sheet-refresh')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-pin')).toBeVisible();
+    await expect(page.getByTestId('orch-side-sheet-settings')).toBeVisible();
+    await expect(page.getByTestId('orchestrator-conversation')).toBeVisible();
 
     const resultsDir = process.env.JOB_RESULTS_DIR;
     if (resultsDir) {
@@ -166,13 +167,20 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     const contextMenu = page.getByTestId('orch-context-menu');
     await expect(contextMenu).toBeVisible();
     await expect(page.getByTestId('chat-context-groups')).toBeVisible();
+    await expect.poll(async () => {
+      const menu = await contextMenu.boundingBox();
+      const chat = await page.getByTestId('orch-chat-pane').boundingBox();
+      return menu && chat ? Math.abs(chat.x - (menu.x + menu.width)) : Number.POSITIVE_INFINITY;
+    }).toBeLessThanOrEqual(2);
 
     const sheetBox = await page.getByTestId('orch-side-sheet').boundingBox();
     const menuBox = await contextMenu.boundingBox();
+    const chatBox = await page.getByTestId('orch-chat-pane').boundingBox();
     expect(sheetBox).not.toBeNull();
     expect(menuBox).not.toBeNull();
-    expect(Math.abs(menuBox!.x - sheetBox!.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(menuBox!.width - sheetBox!.width)).toBeLessThanOrEqual(2);
+    expect(chatBox).not.toBeNull();
+    expect(menuBox!.width).toBeLessThan(chatBox!.width);
+    await expect(page.getByTestId('orchestrator-conversation')).toBeVisible();
 
     const header = page.getByTestId('orch-context-header');
     await expect(header).toBeVisible();
@@ -183,6 +191,14 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(page.getByTestId(`chat-switcher-row-project:${PROJECT}`)).toContainText('running');
     await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('parked');
     await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('15k');
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: `screenshots/orchestrator-side-sheet-pin/rail-frame-b--${theme}.png`,
+        fullPage: false,
+      });
+    }
 
     if (resultsDir) {
       await page.screenshot({ path: path.join(resultsDir, 'orchestrator-context-expanded--mocked.png'), fullPage: false });

@@ -1,4 +1,3 @@
-<!-- Resize splitter pinned to the panel's left edge. -->
 @if (open()) {
   <div class="orch-resize"
        role="separator"
@@ -18,62 +17,39 @@
       [disabled]="pinned()"
       (projectSelected)="selectProjectTab($event)" />
 
-    <button class="sheet__context-badge"
+    <button class="sheet__rail-chip"
             type="button"
             aria-controls="orch-context-menu"
-            [attr.aria-expanded]="contextMenuOpen()"
-            [class.sheet__context-badge--open]="contextMenuOpen()"
-            (click)="toggleContextMenu()"
+            [attr.aria-expanded]="railOpen()"
+            [class.sheet__rail-chip--open]="railOpen()"
+            (click)="toggleRail()"
             data-testid="orch-context-badge">
-      <span>Contexts</span>
-      <strong data-testid="orch-context-count">{{ contextCount() }}</strong>
-      <span class="sheet__context-caret" aria-hidden="true">{{ contextMenuOpen() ? '▴' : '▾' }}</span>
+      <span aria-hidden="true">☰</span>
+      <strong data-testid="orch-context-count">{{ activeContextCount() }}</strong>
+      <span>active</span>
     </button>
   </div>
 
-  <main class="sheet__workspace">
-    @if (contextMenuOpen()) {
-      <section id="orch-context-menu"
-               class="sheet__context-menu"
-               aria-label="Chat contexts"
-               data-testid="orch-context-menu">
-        <header class="sheet__context-menu-head">
-          <div class="sheet__context-menu-title">
-            <h3>Chat contexts</h3>
-            @if (contextChipText(); as contextLabel) {
-              <p data-testid="orch-context-current">{{ contextLabel }}</p>
-            }
-          </div>
-          <div class="sheet__context-actions" role="group" aria-label="Context actions">
-            <button type="button"
-                    [class.sheet__context-action--active]="pinned()"
-                    [attr.aria-pressed]="pinned()"
-                    (click)="togglePin()"
-                    data-testid="orch-side-sheet-pin">{{ pinned() ? 'Follow navigation' : 'Pin context' }}</button>
-            @if (effectiveJobId() && effectiveWatchPath()) {
-              <button type="button"
-                      (click)="onOpenVerboseDebug()"
-                      data-testid="orch-side-sheet-verbose-debug">Debug</button>
-            }
-            <button type="button"
-                    (click)="onOpenSettings()"
-                    data-testid="orch-side-sheet-settings">Settings</button>
-            <button type="button"
-                    (click)="refreshCurrentContext()"
-                    [disabled]="loading() || contextDigestState.refreshing()"
-                    data-testid="orch-side-sheet-refresh">
-              {{ contextDigestState.refreshing() ? 'Refreshing...' : (loading() ? 'Loading...' : 'Refresh') }}
-            </button>
-            <button type="button"
-                    [attr.aria-pressed]="!contextDismissed()"
-                    (click)="toggleNextMessageContext()"
-                    data-testid="orch-context-send-toggle">
-              {{ contextDismissed() ? 'Include context next' : 'Exclude context once' }}
-            </button>
-          </div>
-        </header>
+  <main class="sheet__workspace" [class.sheet__workspace--rail-open]="railOpen()">
+    @if (railOpen()) {
+      <aside id="orch-context-menu"
+             class="sheet__rail"
+             aria-label="Chat contexts"
+             data-testid="orch-context-menu">
+        <app-chat-switcher-rail
+          [sessions]="contextSessions()"
+          [projects]="projects()"
+          [tasks]="jobService.jobs()"
+          [activeContextKey]="contextKey()"
+          [unreadContextKeys]="unreadContextKeys()"
+          (contextSelected)="selectChatContext($event)"
+          (locationRequested)="onNavigateToContext($event)" />
+      </aside>
+    }
 
-        <div class="sheet__context-summary">
+    <section class="sheet__pane" data-testid="orch-chat-pane">
+      <header class="sheet__context-bar">
+        <div class="sheet__context-heading">
           <app-orchestrator-context-header
             [project]="effectiveProject()"
             [taskTitle]="effectiveJobTitle()"
@@ -84,98 +60,66 @@
             [runActive]="activeRun() !== null"
             [runModel]="activeRun()?.model ?? null"
             [runStartedAt]="activeRun()?.startedAt ?? null" />
+
           <nav class="sheet__scope-row" aria-label="Orchestrator scope">
-            <span class="sheet__scope sheet__scope--active"
-                  aria-current="true"
-                  data-testid="orch-context-scope">{{ contextDigestState.scopeLabel() }}</span>
+            <span class="sheet__scope" aria-current="true" data-testid="orch-context-scope">
+              {{ contextDigestState.scopeLabel() }}
+            </span>
             <span class="sheet__memory"
                   [attr.title]="contextDigestState.statusTitle()"
                   data-testid="orch-context-freshness">{{ contextDigestState.statusText() }}</span>
           </nav>
         </div>
 
-        <app-chat-switcher-rail
-          [sessions]="contextSessions()"
-          [projects]="projects()"
-          [tasks]="jobService.jobs()"
-          [activeContextKey]="contextKey()"
-          [unreadContextKeys]="unreadContextKeys()"
-          (contextSelected)="selectChatContext($event)"
-          (locationRequested)="onNavigateToContext($event)" />
-      </section>
-    } @else {
-      <div class="sheet__content">
-        @if (errorMsg(); as err) {
-          <div class="sheet__error">{{ err }}</div>
-        }
+        <div class="sheet__context-actions" role="group" aria-label="Context actions">
+          <button type="button"
+                  [class.sheet__context-action--active]="pinned()"
+                  [attr.aria-pressed]="pinned()"
+                  (click)="togglePin()"
+                  data-testid="orch-side-sheet-pin">{{ pinned() ? 'Follow navigation' : 'Pin context' }}</button>
+          @if (effectiveJobId() && effectiveWatchPath()) {
+            <button type="button"
+                    (click)="onOpenVerboseDebug()"
+                    data-testid="orch-side-sheet-verbose-debug">Debug</button>
+          }
+          <button type="button"
+                  (click)="onOpenSettings()"
+                  data-testid="orch-side-sheet-settings">Settings</button>
+          <button type="button"
+                  (click)="refreshCurrentContext()"
+                  [disabled]="(chatPane()?.loading() ?? false) || contextDigestState.refreshing()"
+                  data-testid="orch-side-sheet-refresh">
+            {{ contextDigestState.refreshing() ? 'Refreshing...' : ((chatPane()?.loading() ?? false) ? 'Loading...' : 'Refresh') }}
+          </button>
+          <button type="button"
+                  [attr.aria-pressed]="!contextDismissed()"
+                  (click)="toggleNextMessageContext()"
+                  data-testid="orch-context-send-toggle">
+            {{ contextDismissed() ? 'Include context next' : 'Exclude context once' }}
+          </button>
+        </div>
+      </header>
 
-        @if (selectedContextKey() === 'global') {
-          <section class="sheet__no-project" data-testid="orchestrator-global-chat-empty">
-            Global orchestrator selected. This workspace has no global transcript yet.
-          </section>
-        } @else if (effectiveProject()) {
-          <section class="sheet__chat">
-            <div class="sheet__conversation" data-testid="orchestrator-conversation">
-              <cac-conversation-view
-                variant="embedded"
-                [events]="conversationEvents()"
-                [isRunning]="sending() || loading()"
-                [showHeader]="false"
-                [virtualised]="true"
-                bodyMaxHeight="100%"
-                (openVerboseDebug)="onOpenVerboseDebug()" />
-            </div>
-
-            @for (event of events(); track event.id) {
-              @if (event.actionLabel && hasChatEventAction(event.id)) {
-                <button type="button"
-                        class="sheet__event-action"
-                        (click)="onChatEventAction({ eventId: event.id })"
-                        [attr.data-testid]="'orch-conversation-event-action-' + event.id">
-                  {{ event.actionLabel }}
-                </button>
-              }
-            }
-
-            <!-- `cac-chat` is deliberately composer-only here. With no
-                 messages/events and an empty state, the library suppresses
-                 its legacy transcript body while retaining its composer. -->
-            <cac-chat
-              class="sheet__composer"
-              variant="embedded"
-              emptyState=""
-              [pending]="sending()"
-              [disabled]="sending()"
-              [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
-              [toolbarStart]="composerToolbarStart"
-              [toolbarEnd]="composerToolbarEnd"
-              [routingLabel]="composerRoutingLabel()"
-              (submitMessage)="onSubmit($event)"
-              (toolbarAction)="onChatToolbarAction($event)" />
-
-            <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
-              <button class="sheet__draft-btn sheet__draft-btn--primary"
-                      type="button"
-                      (click)="onCreateTaskFromYourMessage()"
-                      [disabled]="!canCreateTaskFromUserMessage()"
-                      [cacTooltip]="'Open Add Task pre-filled with the text you typed'"
-                      data-testid="orch-side-sheet-make-task-from-yours">
-                Make a task from your message
-              </button>
-              <button class="sheet__draft-btn"
-                      type="button"
-                      (click)="onCreateTaskFromLastReply()"
-                      [disabled]="!canCreateTaskFromReply()"
-                      [cacTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
-                      data-testid="orch-side-sheet-make-task">
-                Make a task from this reply
-              </button>
-            </div>
-          </section>
-        } @else {
-          <div class="sheet__no-project">No watched projects yet.</div>
-        }
-      </div>
-    }
+      @if (selectedContextKey() === 'global') {
+        <section class="sheet__empty" data-testid="orchestrator-global-chat-empty">
+          Global orchestrator selected. This workspace has no global transcript yet.
+        </section>
+      } @else if (effectiveProject()) {
+        <app-orchestrator-chat-pane
+          [active]="open()"
+          [project]="effectiveProject()"
+          [contextKey]="contextKey()"
+          [jobId]="effectiveJobId()"
+          [jobTitle]="effectiveJobTitle()"
+          [watchPath]="effectiveWatchPath()"
+          [watchPaths]="watchPaths()"
+          [contextExcluded]="contextDismissed()"
+          (createTaskFromDraft)="createTaskFromDraft.emit($event)"
+          (openVerboseDebug)="openVerboseDebug.emit($event)"
+          (openJobDetail)="openJobDetail.emit($event)" />
+      } @else {
+        <div class="sheet__empty">No watched projects yet.</div>
+      }
+    </section>
   </main>
 </app-sidesheet>

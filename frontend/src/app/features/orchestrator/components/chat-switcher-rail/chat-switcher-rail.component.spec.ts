@@ -29,7 +29,7 @@ describe('ChatSwitcherRailComponent', () => {
     expect(text).toContain('Projects');
     expect(text).toContain('Tasks');
     expect(text).toContain('parked');
-    expect(text).toContain('new');
+    expect(text).toContain('unread');
     expect(text).toContain('1k');
 
     const current = fixture.nativeElement.querySelector('[data-testid="chat-switcher-row-task:Alpha/A-1"]');
@@ -48,5 +48,17 @@ describe('ChatSwitcherRailComponent', () => {
 
     expect(selected).toHaveBeenCalledWith('task:Alpha/A-1');
     expect(navigated).toHaveBeenCalledWith('task:Alpha/A-1');
+  });
+
+  it('filters rows without removing the three context groups', () => {
+    const search = fixture.nativeElement.querySelector('[data-testid="chat-switcher-search"]') as HTMLInputElement;
+    search.value = 'A-1';
+    search.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="chat-switcher-row-task:Alpha/A-1"]')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Global');
+    expect(fixture.nativeElement.textContent).toContain('Projects');
+    expect(fixture.nativeElement.textContent).toContain('Tasks');
   });
 });
