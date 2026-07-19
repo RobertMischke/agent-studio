@@ -48,7 +48,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
  * </ul>
  *
  * <p>The CLI list is intentionally not filtered (see
- * <code>docs/frontend/audits/cli-model-selector-audit.md</code>): the backend
+ * <code>docs/quality/frontend/audits/cli-model-selector-audit.md</code>): the backend
  * <code>POST /api/tasks/{id}/code-review</code> endpoint accepts an
  * arbitrary <code>cliType</code> field, so the operator may run a review
  * with any installed CLI even though Claude remains the default.</p>
@@ -71,6 +71,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly entries = signal<CodeReviewListEntry[]>([]);
   readonly loading = signal(true);
   readonly running = signal(false);
+  readonly runningMode = signal<'verdict' | 'grade' | null>(null);
   readonly error = signal<string | null>(null);
   readonly expandedFile = signal<string | null>(null);
   readonly expandedBody = signal<string | null>(null);
@@ -84,6 +85,29 @@ export class CodeReviewPanelComponent implements OnInit {
 
   /** True when there is at least one MD listed and the user can drill in. */
   readonly hasEntries = computed(() => this.entries().length > 0);
+  /** Last available grade when the newest review belongs to a newer delivery. */
+  readonly olderGrade = computed<CodeReviewListEntry | null>(() => {
+    const entries = [...this.entries()].sort((a, b) => (b.runAt ?? '').localeCompare(a.runAt ?? ''));
+    const graded = entries.find((entry) => !!entry.grade?.trim()) ?? null;
+    if (!graded) return null;
+    const newerReviewExists = graded !== entries[0];
+    const reviewAt = Date.parse(graded.runAt);
+    const legacyCommit = this.job().commit;
+    const commits = this.job().commits ?? (legacyCommit ? [legacyCommit] : []);
+    const deliveryTimes = commits
+      .map((commit) => commit.at)
+      .map((value) => Date.parse(value ?? ''))
+      .filter(Number.isFinite);
+    const reviewedCommit = graded.commit?.trim().toLowerCase() || null;
+    const latestCommit = commits.at(-1)?.sha?.trim().toLowerCase() || null;
+    const newerCommitExists = !!reviewedCommit
+      && !!latestCommit
+      && !latestCommit.startsWith(reviewedCommit)
+      && !reviewedCommit.startsWith(latestCommit);
+    const newerDeliveryExists = Number.isFinite(reviewAt)
+      && deliveryTimes.some((timestamp) => timestamp > reviewAt);
+    return newerReviewExists || newerCommitExists || newerDeliveryExists ? graded : null;
+  });
   readonly bodyIsLarge = computed<boolean>(() => isLargeDiff(this.expandedBody()));
   readonly bodySizeLabel = computed<string>(() => describeDiffSize(this.expandedBody()));
   readonly bodyGated = computed<boolean>(() => this.bodyIsLarge() && !this.expandedBodyRevealed());
@@ -169,11 +193,12 @@ export class CodeReviewPanelComponent implements OnInit {
    * resolves HEAD at request time. The button stays disabled and the
    * spinner stays up until the POST resolves.
    */
-  runReview(): void {
+  runReview(mode: 'verdict' | 'grade' = 'verdict'): void {
     const job = this.job();
     if (!job?.id) return;
     if (this.running()) return;
     this.running.set(true);
+    this.runningMode.set(mode);
     this.error.set(null);
     // Register the run in the shared store so the kanban card shows a
     // "code review…" badge for the whole synchronous call, even if the
@@ -186,7 +211,7 @@ export class CodeReviewPanelComponent implements OnInit {
     const model = this.selectedModel().trim();
     if (model) body.model = model;
     if (this.selectedThinkingLevel()) body.thinkingLevel = this.selectedThinkingLevel();
-    this.jobs.runCodeReview(job.id, body, job.watchPath).subscribe({
+    this.jobs.runCodeReview(job.id, { ...body, mode }, job.watchPath).subscribe({
       next: (resp) => {
         // Remember the pair the backend actually ran with, so the next
         // visit seeds from a real run rather than a transient picker state.
@@ -198,12 +223,14 @@ export class CodeReviewPanelComponent implements OnInit {
         this.selectedThinkingLevel.set(ranThinkingLevel ?? null);
         this.rememberLastAgent(ranCli, ranModel, ranThinkingLevel ?? null);
         this.running.set(false);
+        this.runningMode.set(null);
         this.activity.clear(activityKey);
         this.refresh();
       },
       error: (err) => {
         this.error.set(err?.message ?? 'Code review failed.');
         this.running.set(false);
+        this.runningMode.set(null);
         this.activity.clear(activityKey);
       },
     });
@@ -250,6 +277,14 @@ export class CodeReviewPanelComponent implements OnInit {
 
   verdictTone(v: string): CodeReviewVerdictTone {
     return codeReviewVerdictTone(v);
+  }
+
+  gradeTone(grade: string | null | undefined): string {
+    const normalized = grade?.trim().toUpperCase();
+    if (normalized === 'A' || normalized === 'B') return 'pass';
+    if (normalized === 'C') return 'concerns';
+    if (normalized === 'D') return 'block';
+    return 'neutral';
   }
 
   trackByFile(_index: number, entry: CodeReviewListEntry): string {

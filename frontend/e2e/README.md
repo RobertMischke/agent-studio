@@ -143,7 +143,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `create-job-with-screenshot.spec.ts` | Add Task dialog - drop + paste screenshot uploads |
 | `promote-planning-to-coding.spec.ts` | Promote planning result -> coding task |
 
-### `board/` - 72 specs
+### `board/` - 73 specs
 
 | Spec | Summary |
 |------|---------|
@@ -213,6 +213,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `no-redundant-scrollbars.spec.ts` | F60 - no redundant scrollbars in super-column layout |
 | `optimistic-reorder-evidence.spec.ts` | @evidence capture optimistic reorder before/after screenshots |
 | `post-processing-lane-identity.spec.ts` | Post Processing lane identity |
+| `remote-running-card.spec.ts` | Remote-running card visibility, steer wait, and timeout recovery |
 | `signalr-jobs-hub.spec.ts` | SignalR jobs hub - push delivery |
 | `task-filter-removed.spec.ts` | Task filter axis removed from filter list |
 | `thinking-level-indicator.spec.ts` | shows the effective level and highlights deviations from the client default in both themes |
@@ -383,7 +384,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `perf-frontend.spec.ts` | Frontend perceived latency |
 | `perf-stress.spec.ts` | Frontend stress: render perf at scale |
 
-### `project/` - 37 specs
+### `project/` - 39 specs
 
 | Spec | Summary |
 |------|---------|
@@ -417,7 +418,9 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-steering-docs.spec.ts` | Project detail - Agent Docs section |
 | `project-tab-tokens.spec.ts` | Per-project token total badge |
 | `project-token-usage-panel.spec.ts` | empty state - no orchestrator entries renders explicit empty copy |
+| `project-url-preview-in-place.spec.ts` | keeps start, settings, live output, and stop in the embed in both themes |
 | `project-uxui-panel.spec.ts` | empty state - no design folder, all action buttons render |
+| `project-wiki-interactive-html.spec.ts` | AGT-2083 exploration runs scripts while parent access stays blocked |
 | `project-wiki-section.spec.ts` | Project detail - Knowledge section |
 | `proposals-hub.spec.ts` | Project Hub proposals render in both themes |
 | `wiki-pulse.spec.ts` | Wiki Pulse landing view (PULSE-2) |
@@ -602,7 +605,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `explorer-micro-dashboard.spec.ts` | numbers default, dots toggle, cap, order, a11y, and both themes |
 | `explorer-tree-nesting.spec.ts` | AGT-2057: Explorer tree destination nesting |
 | `project-board-lane-counters.spec.ts` | Explorer Project Board row shows subtle live lane counters |
-| `project-sources.spec.ts` | project source onboarding and administration |
+| `project-onboarding-basics.spec.ts` | project onboarding, store separation, validation, and editable Project Basics |
 | `workspace-rename.spec.ts` | F46: workspace-header inline rename |
 | `workspace-tree.spec.ts` | F46: Explorer two-level workspace -> project tree |
 

@@ -486,17 +486,12 @@ export class TaskDetailComponent implements OnDestroy {
       // refreshes for the same job (e.g. execution status changes) must
       // preserve the live CLI output and view state.
       this.showLogOverlay.set(false);
-      // Default tab:
-      //  • In-progress jobs always start on Activity — the live CLI output is
-      //    what the user wants to see; any existing protocol from a prior run
-      //    is stale until the current run finishes.
-      //  • Otherwise: Protocol if a summary exists, else Activity.
-      // The auto-switch effect below promotes Activity → Protocol once
-      // Haiku finishes, unless the user has manually picked a tab.
-      const isInProgress = d.info.state === TaskState.Progress;
-      this.activeInspectorTab.set(
-        isInProgress ? 'activity' : d.statusMarkdown ? 'protocol' : 'activity',
-      );
+      // Live/fresh work starts on Activity. Review/escalation starts on Result
+      // even without status.md so verdict-less CLI activity can be summarized;
+      // an existing summary keeps Result primary in every settled lane.
+      const opensOnResult = d.info.state !== TaskState.Progress &&
+        (!!d.statusMarkdown || d.info.state === TaskState.HumanReview || d.info.state === TaskState.Escalated);
+      this.activeInspectorTab.set(opensOnResult ? 'protocol' : 'activity');
       this.userTouchedInspectorTab = false;
       this.showCliConfig.set(false);
       this.cliTestResult.set(null);

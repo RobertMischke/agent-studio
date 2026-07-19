@@ -16,14 +16,13 @@ namespace AgentStudio.Tests;
 /// <list type="number">
 ///   <item>the grade step actually executes in the pipeline flow and records a
 ///   <c>post-code-review-grade</c> row with the parsed grade verdict;</item>
-///   <item>it invokes the strong model (Claude Opus 4.8) — and demonstrably NOT
-///   the cheap Haiku the four aspect reviews run on, the exact ASS-855/ASS-916
-///   asymmetry this feature exists to enforce;</item>
+///   <item>it invokes the live Codex flagship — and demonstrably NOT
+///   the bounded gpt-5.4-mini model the four aspect reviews run on;</item>
 ///   <item>it stamps a single <c>code-review:grade-*</c> tag on the real task
 ///   and leaves a rendered <c>code-review-grade-*.md</c> behind.</item>
 /// </list>
 /// The CLI is stubbed so the suite runs offline; the model id the orchestrator
-/// hands the service is captured so the Opus-vs-Haiku assertion is on the real
+/// hands the service is captured so the flagship-vs-mini assertion is on the real
 /// wired value, not a constant.
 /// </summary>
 public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
@@ -50,7 +49,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
     }
 
     [Fact]
-    public async Task GradeStep_RunsEndToEnd_InvokesOpus48NotHaiku_StampsGradeTag_AndRecordsPipelineRow()
+    public async Task GradeStep_RunsEndToEnd_InvokesCodexFlagshipNotMini_StampsGradeTag_AndRecordsPipelineRow()
     {
         SeedReviewJobWithDone("grade-e2e", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
 
@@ -77,16 +76,17 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         Assert.True(Directory.Exists(folder), "a clean accepted task should land in 5-human-review");
 
         // 1. The grade step ran on the strong model and demonstrably NOT on the
-        //    cheap aspect model. This is the ASS-855(Haiku)/ASS-916(Opus) tension
-        //    the feature resolves: aspects stay cheap, the grade goes Opus 4.8.
-        Assert.Equal("claude-opus-4-8", gradeModel);
-        Assert.Equal("claude-haiku-4-5", aspectModel);
+        //    bounded aspect model: aspects stay economical, the grade uses the flagship.
+        Assert.Equal(ModelMetadataRegistry.DefaultForCli(CliTypes.Codex), gradeModel);
+        Assert.Equal(ModelIds.Gpt54Mini, aspectModel);
         Assert.NotEqual(aspectModel, gradeModel);
 
         // 2. The pipeline records a post-code-review-grade row with the parsed grade.
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.CodeReviewGradeStepId + "\"", pipelineJson);
         Assert.Contains("\"verdict\": \"B\"", pipelineJson);
+        var gradeStep = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepModelDefaults.QualityThinkingLevel, gradeStep.ThinkingLevel);
 
         // 3. Exactly one code-review:grade-* tag is stamped on the real task.json.
         var tags = ReadTags(folder);
@@ -122,7 +122,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        // The per-deployment override is honored over the Opus-4.8 default, so a
+        // The per-deployment override is honored over the Codex flagship default, so a
         // deployment can dial the grade model without code changes.
         Assert.Equal("claude-opus-4-7", gradeModel);
     }
@@ -151,16 +151,195 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         Assert.Contains("code-review:grade-d", ReadTags(folder));
     }
 
+    [Fact]
+    public async Task GradeStep_BuildGateFails_StillRunsBeforeReissue()
+    {
+        SeedReviewJobWithDone("grade-build-red", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
+
+        var aspectCalls = 0;
+        var gradeCalls = 0;
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) =>
+            {
+                Interlocked.Increment(ref aspectCalls);
+                return PassVerdict;
+            },
+            gradeCli: _ =>
+            {
+                Interlocked.Increment(ref gradeCalls);
+                return "[[CODE_REVIEW_GRADE: grade=B; summary=Useful despite the red build gate.]]\n[[TASK_DONE]]";
+            },
+            maxReissues: 3,
+            buildTestGate: new FakeBuildTestGateRunner(new BuildTestGateResult(
+                BuildTestGateVerdict.Fail,
+                1,
+                123,
+                "error CS1001: build failed",
+                "dotnet build exit 1",
+                true,
+                false)));
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "grade-build-red");
+        Assert.True(Directory.Exists(folder), "the red build gate should still reissue the task");
+        Assert.Equal(0, aspectCalls);
+        Assert.Equal(1, gradeCalls);
+
+        var grade = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepStatus.Passed, grade.Status);
+        Assert.Equal("B", grade.Verdict);
+        Assert.Contains("code-review:grade-b", ReadTags(folder));
+    }
+
+    [Fact]
+    public async Task GradeStep_AspectInfrastructureFails_StillRunsBeforeEscalation()
+    {
+        SeedReviewJobWithDone("grade-aspect-infra", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
+
+        var gradeCalls = 0;
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) => string.Empty,
+            gradeCli: _ =>
+            {
+                Interlocked.Increment(ref gradeCalls);
+                return "[[CODE_REVIEW_GRADE: grade=C; summary=Review aspects were unavailable.]]\n[[TASK_DONE]]";
+            },
+            maxReissues: 3);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.Escalated, "grade-aspect-infra");
+        Assert.True(Directory.Exists(folder), "aspect infrastructure failure should escalate");
+        Assert.Equal(1, gradeCalls);
+
+        var grade = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepStatus.Passed, grade.Status);
+        Assert.Equal("C", grade.Verdict);
+    }
+
+    [Fact]
+    public async Task GradeStep_RuntimeError_RecordsFailedRow_WithoutBlockingLaneDecision()
+    {
+        SeedReviewJobWithDone(
+            "grade-error",
+            CleanStatus,
+            taskType: TaskTypes.Chore,
+            withScreenshot: true,
+            withStaleGradeTag: true);
+
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) => PassVerdict,
+            gradeCli: _ => throw new InvalidOperationException("Codex grade process unavailable"),
+            maxReissues: 3);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "grade-error");
+        Assert.True(Directory.Exists(folder), "a reporting-only grade failure must not block the lane decision");
+
+        var grade = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepStatus.Failed, grade.Status);
+        Assert.Contains("Codex grade process unavailable", grade.Reason);
+        Assert.DoesNotContain(ReadTags(folder), t => t.StartsWith("code-review:grade-"));
+        Assert.Contains("keep-me", ReadTags(folder));
+    }
+
+    [Fact]
+    public async Task GradeStep_GlobalDisable_RecordsSkippedReason()
+    {
+        SeedReviewJobWithDone("grade-disabled", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
+
+        var gradeCalls = 0;
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) => PassVerdict,
+            gradeCli: _ =>
+            {
+                Interlocked.Increment(ref gradeCalls);
+                return "[[CODE_REVIEW_GRADE: grade=A; summary=should not run]]\n[[TASK_DONE]]";
+            },
+            maxReissues: 3,
+            extraConfig: new Dictionary<string, string?>
+            {
+                ["CodeReviewStep:AutoGrade"] = "false",
+            });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "grade-disabled");
+        Assert.Equal(0, gradeCalls);
+        var grade = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepStatus.Skipped, grade.Status);
+        Assert.Contains("AutoGrade=false", grade.Reason);
+    }
+
+    [Fact]
+    public async Task GradeStep_ConditionMismatch_RecordsSkippedReason()
+    {
+        SeedReviewJobWithDone("grade-condition", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
+        File.WriteAllText(Path.Combine(_workspace, "project-settings.json"), """
+        {
+          "demo": {
+            "pipelineSteps": {
+              "post-code-review-grade": {
+                "enabled": true,
+                "condition": { "when": "tag", "value": "security" }
+              }
+            }
+          }
+        }
+        """);
+
+        var gradeCalls = 0;
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) => PassVerdict,
+            gradeCli: _ =>
+            {
+                Interlocked.Increment(ref gradeCalls);
+                return "[[CODE_REVIEW_GRADE: grade=A; summary=should not run]]\n[[TASK_DONE]]";
+            },
+            maxReissues: 3);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "grade-condition");
+        Assert.Equal(0, gradeCalls);
+        var grade = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepStatus.Skipped, grade.Status);
+        Assert.Contains("condition", grade.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GradeStep_MissingService_RecordsSkippedReason()
+    {
+        SeedReviewJobWithDone("grade-service-missing", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
+
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) => PassVerdict,
+            gradeCli: _ => "[[CODE_REVIEW_GRADE: grade=A; summary=should not run]]\n[[TASK_DONE]]",
+            maxReissues: 3,
+            wireGradeService: false);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "grade-service-missing");
+        var grade = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepStatus.Skipped, grade.Status);
+        Assert.Contains("service is unavailable", grade.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void SeedReviewJobWithDone(
         string slug,
         string status,
         string taskType,
-        bool withScreenshot = false)
+        bool withScreenshot = false,
+        bool withStaleGradeTag = false)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        var tagsJson = withStaleGradeTag ? ",\"tags\":[\"keep-me\",\"code-review:grade-a\"]" : string.Empty;
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\",\"taskType\":\"{taskType}\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\",\"taskType\":\"{taskType}\"{tagsJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing for {slug}.\n");
         File.WriteAllText(Path.Combine(dir, "status.md"), status);
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
@@ -179,7 +358,9 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         Func<string, string, string> aspectStub,
         Func<string, string> gradeCli,
         int maxReissues,
-        IDictionary<string, string?>? extraConfig = null)
+        IDictionary<string, string?>? extraConfig = null,
+        IBuildTestGateRunner? buildTestGate = null,
+        bool wireGradeService = true)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -205,6 +386,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        aspectRunner.VerdictRetryBackoff = _ => TimeSpan.Zero;
         aspectRunner.CliRunner = (aspectId, _, model, _, _, _) => Task.FromResult(aspectStub(aspectId, model));
 
         var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
@@ -223,10 +405,14 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
 
         var pipelineLog = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
 
-        var codeReviewStep = new CodeReviewStepService(
-            prompts,
-            NullLogger<CodeReviewStepService>.Instance);
-        codeReviewStep.CliRunner = (_, model, _, _, _) => Task.FromResult(gradeCli(model));
+        CodeReviewStepService? codeReviewStep = null;
+        if (wireGradeService)
+        {
+            codeReviewStep = new CodeReviewStepService(
+                prompts,
+                NullLogger<CodeReviewStepService>.Instance);
+            codeReviewStep.CliRunner = (_, model, _, _, _) => Task.FromResult(gradeCli(model));
+        }
 
         return new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner,
@@ -238,7 +424,28 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
             git: null,
             pipelineLog: pipelineLog,
             lintScssRunner: null,
-            codeReviewStep: codeReviewStep);
+            codeReviewStep: codeReviewStep,
+            projectSettings: settings,
+            buildTestGateRunner: buildTestGate);
+    }
+
+    private static PipelineStepExecution ReadPipelineStep(string folder, string stepId)
+    {
+        var log = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
+        var record = log.Read(folder);
+        Assert.NotNull(record);
+        return record!.Steps.Single(s => string.Equals(s.StepId, stepId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class FakeBuildTestGateRunner(BuildTestGateResult result) : IBuildTestGateRunner
+    {
+        public Task<BuildTestGateResult> RunAsync(
+            string repositoryPath,
+            IReadOnlyList<string>? changedFiles,
+            BuildProfile? profile,
+            PostStepMode mode,
+            TimeSpan timeout,
+            CancellationToken ct) => Task.FromResult(result);
     }
 
     private static List<string> ReadTags(string folder)

@@ -170,7 +170,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         SeedReviewJobWithNeedsInput("auth-rewrite", "use OAuth or magic-link?");
         var orchestrator = BuildOrchestrator(
-            cliResponse: "[[ORCHESTRATOR_DECISION: action=escalate; reason=Needs strategic call.]]");
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=escalate; reason=Needs strategic call.]]",
+            reviewCli: "custom-review-cli");
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
@@ -193,6 +194,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.Escalated, "auth-rewrite");
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.NeedsHumanInput &&
+            o.Performer == PostProcessingPerformers.SupportingAgent &&
+            o.PerformerCliType == "custom-review-cli");
     }
 
     [Fact]
@@ -318,6 +325,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
+
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "doc-edit");
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.PassToHumanReview &&
+            o.Performer == PostProcessingPerformers.SupportingAgent &&
+            o.PerformerCliType == CliTypes.Codex);
     }
 
     [Fact]
@@ -1278,8 +1291,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Contains(outcomes, o => o.Outcome == PostProcessingOutcomes.PassToHumanReview);
         Assert.Contains(outcomes, o =>
             o.StepId == PipelineCatalogue.OrchestratorDecisionStepId &&
-            o.Performer == PostProcessingPerformers.SupportingAgent &&
-            o.PerformerCliType == CliTypes.Claude);
+            o.Performer == PostProcessingPerformers.Orchestrator &&
+            o.PerformerCliType == null);
 
         // Decision-journal records the accept-as-done with a multi-aspect reason.
         var record = ReadOnlyDecisionRecord();
@@ -1319,22 +1332,22 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task TaskDone_PostProcessingEvidence_ShowsDifferentSupportingCliIdentity()
+    public async Task TaskDone_PostProcessingEvidence_AttributesDeterministicDecisionWithoutInventedCli()
     {
-        SeedReviewJobWithDone("codex-main-claude-post", agent: CliTypes.Codex);
+        SeedReviewJobWithDone("codex-main-deterministic-post", agent: CliTypes.Codex);
         var orchestrator = BuildOrchestratorWithAspects(
             aspectStub: _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var taskJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "codex-main-claude-post", "task.json"));
+        var taskJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "codex-main-deterministic-post", "task.json"));
         Assert.Contains("\"agent\": \"codex\"", taskJson);
 
-        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "codex-main-claude-post");
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "codex-main-deterministic-post");
         Assert.Contains(outcomes, o =>
             o.Outcome == PostProcessingOutcomes.PassToHumanReview &&
-            o.Performer == PostProcessingPerformers.SupportingAgent &&
-            o.PerformerCliType == CliTypes.Claude);
+            o.Performer == PostProcessingPerformers.Orchestrator &&
+            o.PerformerCliType == null);
     }
 
     [Fact]
@@ -1541,6 +1554,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
         Assert.Contains("Multi-aspect block", record.Reason);
+
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.Ready, "blocked-job");
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.NeedsFollowUpTask &&
+            o.Performer == PostProcessingPerformers.Orchestrator &&
+            o.PerformerCliType == null);
     }
 
     [Fact]
@@ -1577,7 +1596,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // Outcome evidence is a post-processing failure (infra), not a work
         // deficit reissue.
         var outcomes = ReadPostProcessingOutcomes(TaskStates.Escalated, "infra-crash-job");
-        Assert.Contains(outcomes, o => o.Outcome == PostProcessingOutcomes.FailedPostProcessing);
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.FailedPostProcessing &&
+            o.Performer == PostProcessingPerformers.Orchestrator &&
+            o.PerformerCliType == null);
 
         // Timeline carries the environmental + InfraCrash flags.
         var events = ReadTimeline(TaskStates.Escalated, "infra-crash-job");
@@ -2078,7 +2100,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     private ReviewDecisionOrchestrator BuildOrchestrator(
         string cliResponse,
         Action? onCall = null,
-        OrchestratorChatLog? chatLogOverride = null)
+        OrchestratorChatLog? chatLogOverride = null,
+        string? reviewCli = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -2088,7 +2111,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
                 ["WatchPaths:0:Path"] = _watchPath,
                 ["WatchPaths:0:RootPath"] = _watchPath,
                 ["ReviewDecisionOrchestrator:Enabled"] = "true",
-                ["ReviewDecisionOrchestrator:CallsPerHour"] = "100"
+                ["ReviewDecisionOrchestrator:CallsPerHour"] = "100",
+                ["ReviewDecisionOrchestrator:Cli"] = reviewCli ?? CliTypes.Codex,
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);

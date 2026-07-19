@@ -295,7 +295,7 @@
   toolbar + diff + preview markup lives in exactly one place. For .md/.html
   files a Preview toggle swaps the diff for a rendered view (AGT-2008):
   markdown through the shared <cac-markdown> surface, html through a
-  scripts-disabled sandboxed iframe.
+  script-enabled, opaque-origin sandboxed iframe.
 -->
 <ng-template #diffPanel>
   <div class="git-view__diff-col" data-testid="git-diff-col">
@@ -350,7 +350,7 @@
             <iframe class="git-view__preview-frame"
                     data-testid="git-preview-html"
                     title="HTML preview"
-                    sandbox=""
+                    sandbox="allow-scripts"
                     [srcdoc]="doc"></iframe>
           } @else {
             <div class="git-view__diff--placeholder">(loading preview…)</div>

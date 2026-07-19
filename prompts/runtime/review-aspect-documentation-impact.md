@@ -7,7 +7,7 @@ do not duplicate their work.
 
 Question to answer: **does the change require an update to AGENTS.md,
 ROADMAP.md, the architecture-decisions archive, the CLI skills, the
-docs/README.md index, or any other load-bearing document, and have
+docs/start/README.md index, or any other load-bearing document, and have
 those updates been made?**
 
 You must form an opinion. Use:

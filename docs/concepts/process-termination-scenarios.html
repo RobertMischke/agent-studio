@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Process Termination &amp; Abort Scenarios — Test Suite</title>
+<style>
+  :root{--fg:#1d2127;--muted:#5b626d;--line:#e3e6ea;--accent:#1f6feb;--bad:#b42318;--ok:#067647;--warn:#b54708;--bg:#fbfcfd;--code:#eff1f4;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1100px;margin:0 auto;padding:32px 24px 80px;}
+  h1{font-size:26px;margin:0 0 4px;} h2{font-size:19px;margin:30px 0 10px;padding-top:10px;border-top:1px solid var(--line);}
+  .sub{color:var(--muted);margin:0 0 18px;}
+  code{background:var(--code);padding:1px 5px;border-radius:4px;font:12.5px/1.5 ui-monospace,Consolas,monospace;}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:12.8px;} th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top;}
+  th{background:#f3f5f7;font-weight:600;}
+  .ok{color:var(--ok);font-weight:600;} .open{color:var(--bad);font-weight:600;} .part{color:var(--warn);font-weight:600;}
+  .box{background:#fff;border-left:3px solid var(--accent);padding:10px 16px;margin:14px 0;}
+  .toc{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:18px 0;font-size:13.5px;}
+  .toc a{color:var(--accent);text-decoration:none;}
+  ol li,ul li{margin:4px 0;} .small{font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Process Termination &amp; Abort Scenarios — Test Suite</h1>
+  <p class="sub">Status: maintained living page (seeded 2026-06-23 overnight). The single re-findable specification of <strong>what must happen when a coding run is killed, crashes, or aborts</strong> — for both the <strong>Claude Code</strong> and <strong>Codex</strong> CLIs — and whether the user can <strong>see</strong> what happened. Each scenario is a repeatable test case. This is the companion spec to the <a href="../operations/haertung-verteilte-ausfuehrung/historie.html">hardening chronicle (incidents, invariants &amp; sessions)</a>.</p>
+
+  <div class="box">
+    <strong>Prime directive.</strong> No matter how a run ends, the task must reach a <em>terminal lane</em> with an <em>honest, visible</em> reason. Nothing silently strands in <code>3-progress</code>; nothing silently pauses. "Visible" means the feed/orchestrator-log carries the reason and the card lands in a lane a human can act on. The orchestrator's job is to <em>keep the pipeline moving</em> — recover automatically where it can, escalate honestly where it cannot.
+  </div>
+
+  <div class="toc">
+    <strong>Contents</strong><br/>
+    <a href="#how">1. How a run end is classified</a> &middot;
+    <a href="#matrix">2. Scenario matrix (the suite)</a> &middot;
+    <a href="#repeat">3. Running the suite</a> &middot;
+    <a href="#gaps">4. Open gaps → tasks</a>
+  </div>
+
+  <h2 id="how">1. How a run end is classified</h2>
+  <p>A finished CLI run flows through three pure stages, then a routing decision:</p>
+  <ol>
+    <li><code>AgentOutcomeAnalyzer.Analyze(lines, status, durationSeconds, exitCode)</code> → an <code>AgentOutcome</code> with a <code>Kind</code> (Done/Blocked/NeedsInput/Progress/NoOp/Unknown) and a typed <code>IssueKind</code>.</li>
+    <li><code>RunOutcomePolicy.Decide(...)</code> → an <code>OutcomeAction</code> (Accept / NotifyUserAndAccept / ReissueWithStrongerFraming / NotifyUserAndStop).</li>
+    <li><code>ProjectRunner.OnCliFinished</code> routes on that action: move-to-review, abort-review, completion-retrigger, route-to-human-review, or — the backstop — <code>StrandedRunBackstop.MustEscalateStrandedRun</code> for any genuinely failed run that no typed route claimed.</li>
+  </ol>
+  <p class="small">Key status facts: <code>exitCode &lt; 0</code> is the Windows <code>Process.Kill</code> artifact (a hard death). <code>RunStatuses.Failed = "failed"</code>, <code>Stopped = "stopped"</code> (deliberate), <code>Completed = "completed"</code>. A failed run with zero agent text is <code>NoAgentOutput</code>; with real text it splits into <code>InfraCrash</code> (exit&lt;0) vs <code>OrchestratorInconclusive</code> (other).</p>
+
+  <h2 id="matrix">2. Scenario matrix (the suite)</h2>
+  <p>Each row is a scenario. "CLI" notes whether it is shared or CLI-specific. "Visible" is what the user sees. "Status" is whether it is handled <em>and</em> covered by a repeatable test.</p>
+  <table>
+    <thead><tr>
+      <th style="width:150px;">Scenario</th><th>Trigger</th><th style="width:60px;">CLI</th><th>Classify → route</th><th>Visible to user</th><th style="width:135px;">Status</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>S1 — Hard kill mid-run</strong></td>
+        <td>OS/taskkill kills the CLI process while it works (watchdog kill, manual taskkill, host reaping)</td>
+        <td>both</td>
+        <td><code>exit&lt;0</code>, text&gt;0 → <code>InfraCrash</code> → NotifyUserAndStop → 5e human-review</td>
+        <td>orchestrator log "Routed … after infra-crash"; card in human-review</td>
+        <td class="ok">DONE+TEST (d941d6e7)</td>
+      </tr>
+      <tr>
+        <td><strong>S2 — Fast crash, no output</strong></td>
+        <td>Resume against a dead/stale session: CLI exits 1 in ~2–4 s having produced nothing</td>
+        <td>Claude (resume); Codex: bad app-server handshake</td>
+        <td><code>failed</code>, exit=1, 0 text → <code>NoAgentOutput</code> → Accept → <strong>backstop</strong> → human-review</td>
+        <td>orchestrator log "failed run … no terminal route"; card in human-review</td>
+        <td class="ok">FIXED TONIGHT (StrandedRunBackstop)</td>
+      </tr>
+      <tr>
+        <td><strong>S3 — Launch/spawn fails</strong></td>
+        <td>CLI cannot start (binary missing, bad args), &lt;3 s, exit≠0; or spawn returns no process</td>
+        <td>both</td>
+        <td>spawn-null → revert to 2-ready (no zombie); <code>CliLaunchFailed</code> on a started-then-died launch → backstop</td>
+        <td>cli-output.log "spawn failed"; card back in 2-ready or human-review</td>
+        <td class="ok">DONE+TEST (PickupAtomicity)</td>
+      </tr>
+      <tr>
+        <td><strong>S4 — Logical failure with output</strong></td>
+        <td>Run did real work, then exited non-zero (test failure surfaced as exit, agent error)</td>
+        <td>both</td>
+        <td><code>failed</code>, text&gt;0, exit≥0 → <code>OrchestratorInconclusive</code> → NotifyUserAndStop → human-review</td>
+        <td>orchestrator log "orchestrator-inconclusive"; card in human-review</td>
+        <td class="ok">DONE+TEST (d941d6e7)</td>
+      </tr>
+      <tr>
+        <td><strong>S5 — Watchdog silence timeout</strong></td>
+        <td>Run goes silent (no streamed output) past the watchdog window → runner kills it</td>
+        <td>both</td>
+        <td><code>WatchdogTimeout</code> → completion-retrigger (retry N with resume) → then human-review</td>
+        <td>recovery chat line "silence timeout → reissue (attempt n/N)"; then human-review</td>
+        <td class="ok">DONE+TEST</td>
+      </tr>
+      <tr>
+        <td><strong>S6 — Backend host crash</strong></td>
+        <td>The orchestrator backend process itself dies mid-run (power, OOM, deploy)</td>
+        <td>both</td>
+        <td>on reboot <code>CrashRecoveryService</code> reads the <code>CompletionMarker</code> and finishes the lane transition</td>
+        <td>card resolves to its marked lane on next boot; live foreign lock is respected</td>
+        <td class="part">PARTIAL (CrashRecovery tests; needs explicit abort-visibility)</td>
+      </tr>
+      <tr>
+        <td><strong>S7 — Context overflow</strong></td>
+        <td>The model context window is exceeded mid-run</td>
+        <td>both</td>
+        <td><code>ContextOverflow</code> → NotifyUserAndStop (non-retryable; skips abort-review) → human-review</td>
+        <td>orchestrator log "context-overflow"; card in human-review</td>
+        <td class="ok">DONE+TEST</td>
+      </tr>
+      <tr>
+        <td><strong>S8 — Quarantine (repeat no-progress)</strong></td>
+        <td>N consecutive failed runs with no new commit (anti-endless-reissue)</td>
+        <td>both</td>
+        <td><code>Quarantined</code> → NotifyUserAndStop → human-review; exponential backoff between attempts</td>
+        <td>orchestrator log "quarantined after N fails"; card in human-review</td>
+        <td class="ok">DONE+TEST (RunQuarantineBreaker)</td>
+      </tr>
+      <tr>
+        <td><strong>S9 — Codex silent completion</strong></td>
+        <td>Codex exits 0 but produced no real work / relies on sentinel-scraping (legacy exec)</td>
+        <td>Codex</td>
+        <td><code>SilentCompletion</code> (ADR-0013): should use the official SDK process-exit / App-Server contract</td>
+        <td>partial — needs an explicit "silent completion" surface</td>
+        <td class="part">PARTIAL — AGT-833</td>
+      </tr>
+      <tr>
+        <td><strong>S10 — Rapid-crash retry loop</strong></td>
+        <td>A run that fast-fails below the quarantine threshold: backoff is armed but the task is left in 3-progress</td>
+        <td>both</td>
+        <td>backoff+retry relies on re-pickup, but pickup only scans 2-ready → retry never fires. Backstop now routes immediately instead</td>
+        <td>card reaches human-review (no strand) — but the intended retry-with-cooldown does not run</td>
+        <td class="part">PARTIAL — backstop stops the strand; retry-from-2-ready is the refinement</td>
+      </tr>
+      <tr>
+        <td><strong>S11 — Orphaned worktree blocks pickup</strong></td>
+        <td>A prior run's worktree dir is left at the target path → "run never started" revert loop</td>
+        <td>both</td>
+        <td>should self-heal: prune + force-recreate the worktree before a run, never give up to a revert loop</td>
+        <td>currently only a log line; the lane silently fails to advance</td>
+        <td class="open">OPEN — needs runner self-heal</td>
+      </tr>
+      <tr>
+        <td><strong>S12 — Build children outlive run</strong></td>
+        <td>node/esbuild/dev-server spawned by the run survive run end and hold the worktree locked</td>
+        <td>both</td>
+        <td>should kill the full child-process tree on run end OR failure</td>
+        <td>none — surfaces later as S11</td>
+        <td class="open">OPEN — needs process-tree teardown</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="repeat">3. Running the suite</h2>
+  <p>The deterministic core is repeatable with the backend test project:</p>
+  <ul>
+    <li><code>dotnet test backend.Tests/OrchestratorApi.Tests.csproj --filter "FullyQualifiedName~StrandedRunBackstop|FullyQualifiedName~RunOutcome|FullyQualifiedName~AgentOutcome|FullyQualifiedName~Quarantine|FullyQualifiedName~RunStatus|FullyQualifiedName~Pickup"</code></li>
+    <li>The full suite is the deploy gate (<code>post-build-test-gate</code>); a red invariant blocks the deploy.</li>
+    <li>S1–S5, S7, S8 are locked by pure/contract tests today. S6 is partly covered by <code>CrashRecoveryServiceTests</code>. S9–S12 are open and tracked as tasks below.</li>
+  </ul>
+
+  <h2 id="gaps">4. Open gaps → tasks</h2>
+  <p>Each open/partial row becomes a task. The invariant for every one of them: <em>red-on-violation test behind the gate</em>, so the scenario can never silently regress.</p>
+  <ul>
+    <li><strong>S2/S10 retry-with-cooldown from 2-ready.</strong> A rapid-crash below the quarantine threshold should move the task back to 2-ready (carrying its backoff) so the retry actually fires, instead of relying on a never-re-picked 3-progress task. Today the backstop routes it straight to human-review (no strand, but no retry).</li>
+    <li><strong>S11 self-healing worktree.</strong> Prune + force-recreate an orphaned worktree path before a run. Test: a pickup with an orphan dir at the target path still succeeds.</li>
+    <li><strong>S12 child-process teardown.</strong> Kill the node/esbuild/dev-server tree on run end or failure. Test: after a run ends, no build child has a CWD under the run's worktree.</li>
+    <li><strong>S6 abort visibility.</strong> A host-crash recovery should leave an explicit, user-visible "this run was interrupted and recovered" trace, not just a silent lane transition.</li>
+    <li><strong>S9 codex silent completion.</strong> Move codex off sentinel-scraping onto the official SDK process-exit / App-Server contract (ADR-0013, AGT-833).</li>
+    <li><strong>Integration kill-test harness.</strong> A deterministic ProjectRunner test that drives a fake CLI to fire <code>OnFinished</code> with each abort shape (exit&lt;0, exit=1 no-output, exit=1 with-output) and asserts the resulting lane — end-to-end, not just the pure classifier.</li>
+    <li><strong>CLI-unavailable loud surface.</strong> A missing CLI must HALT loudly (modal + escalation), never pause silently (AGT-1775).</li>
+  </ul>
+  <p class="small">Related: <a href="../operations/haertung-verteilte-ausfuehrung/historie.html">hardening chronicle</a> (the incident log + invariants), <a href="orchestrator-drive-to-conclusion.html">orchestrator-drive-to-conclusion.html</a> (the routing model), <a href="orchestrator-supervision-loop.html">orchestrator-supervision-loop.html</a> (the active loop that should detect &amp; recover these).</p>
+</div>
+</body>
+</html>

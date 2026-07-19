@@ -78,13 +78,13 @@ public sealed class DriftPostStepRunnerTests : IDisposable
             config: BuildConfig(),
             logger: NullLogger<DriftPostStepRunner>.Instance);
 
-    private static ProjectSettings SettingsEnabling(string stepId, string? model)
+    private static ProjectSettings SettingsEnabling(string stepId, string? model, string? cliType = null)
     {
         return new ProjectSettings
         {
             PipelineSteps = new Dictionary<string, PipelineStepSetting>(StringComparer.OrdinalIgnoreCase)
             {
-                [stepId] = new PipelineStepSetting { Enabled = true, Model = model },
+                [stepId] = new PipelineStepSetting { Enabled = true, Model = model, CliType = cliType },
             },
         };
     }
@@ -101,7 +101,7 @@ public sealed class DriftPostStepRunnerTests : IDisposable
         var runner = BuildRunner(driftStore, pipelineLog);
 
         var cliCalls = 0;
-        runner.CliRunner = (_, _, _, _, _, _) =>
+        runner.CliRunner = (_, _, _, _, _, _, _) =>
         {
             Interlocked.Increment(ref cliCalls);
             return Task.FromResult(new DriftCliResult(true, string.Empty, null));
@@ -127,28 +127,31 @@ public sealed class DriftPostStepRunnerTests : IDisposable
         var pipelineLog = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
         var runner = BuildRunner(driftStore, pipelineLog);
 
+        string? capturedCli = null;
         string? capturedModel = null;
         var usage = new OrchestratorTokenUsage
         {
-            Model = "claude-haiku-4-5",
+            Model = ModelIds.Gpt55,
             InputTokens = 1234,
             OutputTokens = 567,
             CacheReadTokens = 89,
         };
-        runner.CliRunner = (model, _, _, _, _, _) =>
+        runner.CliRunner = (cliType, model, _, _, _, _, _) =>
         {
+            capturedCli = cliType;
             capturedModel = model;
             // A short non-JSON narrative parses as Unstructured, which the
             // drift services still turn into a schema-valid evidence-only report.
             return Task.FromResult(new DriftCliResult(true, "No material drift observed.", usage));
         };
 
-        var settings = SettingsEnabling(PipelineCatalogue.DriftAdrCodeStepId, "claude-haiku-4-5");
+        var settings = SettingsEnabling(PipelineCatalogue.DriftAdrCodeStepId, ModelIds.Gpt55, CliTypes.Codex);
         await runner.RunAsync(Project, "job-42", _jobFolder, settings);
 
         // 1. Per-step model routed to the CLI seam (the acceptance "assert the
-        //    call used Haiku").
-        Assert.Equal("claude-haiku-4-5", capturedModel);
+        //    configured Codex/OpenAI pair).
+        Assert.Equal(CliTypes.Codex, capturedCli);
+        Assert.Equal(ModelIds.Gpt55, capturedModel);
 
         // 2. The report landed in the existing store with the Scheduled trigger
         //    (no manual button).
@@ -162,7 +165,7 @@ public sealed class DriftPostStepRunnerTests : IDisposable
         var step = Assert.Single(record!.Steps, s => s.StepId == PipelineCatalogue.DriftAdrCodeStepId);
         Assert.Equal(StepKind.Drift, step.Kind);
         Assert.Equal(PipelineStepStatus.Passed, step.Status);
-        Assert.Equal("claude-haiku-4-5", step.Model);
+        Assert.Equal(ModelIds.Gpt55, step.Model);
         Assert.Equal(1234, step.InputTokens);
         Assert.Equal(567, step.OutputTokens);
         Assert.Equal(89, step.CacheReadTokens);

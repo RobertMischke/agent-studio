@@ -2,10 +2,12 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  OnDestroy,
   computed,
   effect,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -15,6 +17,7 @@ import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { DriftService } from '../../../../services/drift.service';
 import { TaskService } from '../../../../services/task.service';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -25,19 +28,23 @@ import {
   WikiGradingRunStatus,
   WikiNodeType,
   WikiPulse,
+  WikiSearchResponse,
+  WikiSearchResult,
   WikiTree,
-  WikiTreeMetadata,
   WikiTreeNode,
+  WorkbenchListItem,
 } from '../../../../models/project-docs.model';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MenuComponent } from '../../../../components/menu/menu.component';
 import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.types';
-import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
+import { WikiDashboardComponent } from './wiki-dashboard/wiki-dashboard.component';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
-import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
-import { WikiGradePanelComponent } from './wiki-grade-panel/wiki-grade-panel.component';
+import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.component';
+import { WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
+import { WikiSearchResultsComponent } from './wiki-search-results/wiki-search-results.component';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -45,8 +52,20 @@ import {
   flattenWikiTree,
   nodeId,
 } from './wiki-tree';
+import { WikiStarsService } from './wiki-stars.service';
+import {
+  WikiDeepLinkTarget,
+  buildWikiRouteHash,
+  buildWikiRouteUrl,
+  isWikiRouteHash,
+  parseWikiRouteHash,
+  toProjectSlug,
+} from './wiki-deep-link';
+import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
+import { WikiClassMeta, classificationBadges, classificationMeta } from './wiki-classification';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
+const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
 const WIKI_STATE_STORAGE_PREFIX = 'atp.projectWiki.v1.';
 const WIKI_NAV_MIN_WIDTH = 216;
 const WIKI_NAV_MAX_WIDTH = 420;
@@ -55,10 +74,8 @@ const WIKI_CONTEXT_MIN_WIDTH = 232;
 const WIKI_CONTEXT_MAX_WIDTH = 420;
 const WIKI_CONTEXT_DEFAULT_WIDTH = 284;
 const WIKI_RESIZE_STEP = 16;
-
 type WikiViewerTab = 'doc' | 'report' | 'source' | 'edit';
 type WikiResizablePanel = 'nav' | 'context';
-
 interface WikiPersistedState {
   navCollapsed?: boolean;
   contextCollapsed?: boolean;
@@ -89,30 +106,25 @@ interface WikiDocLink {
   kind: 'doc' | 'anchor' | 'external';
 }
 
-type WikiMetricTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
-
-interface WikiMetricChip {
-  key: string;
-  icon: StudioIconName;
-  display: string;
-  label: string;
-  tone: WikiMetricTone;
-  tooltip: string;
-  reportAnchor: string | null;
-}
+const WIKI_SEARCH_DEBOUNCE_MS = 300;
+const WIKI_SEARCH_MIN_LENGTH = 2;
 
 /**
  * Project-level knowledge view backed by the physical docs/ folder hierarchy:
  * the tree is the real folders + .md/.html files on disk (no virtual
  * organisation layer). Categories expand/collapse; the right pane renders the
- * selected page (markdown inline, HTML inside a script-disabled sandboxed
- * iframe). The right context rail carries provenance, the file's git log, and
+ * selected page (markdown inline, HTML inside a script-enabled, opaque-origin
+ * sandboxed iframe). The right context rail carries provenance, the file's git log, and
  * old-revision previews so only one page is open at a time.
  *
  * Structural edits are real git commits in the project repo: a text-only
  * context menu offers New page / New category / Rename / Delete, and dragging a
- * file onto a folder moves it (git mv). The tree re-reads from disk after every
- * mutation, so what you see is the committed state.
+ * file onto a folder moves it (git mv). Dragging a folder onto a sibling
+ * folder reorders the categories; the order persists server-side
+ * (docs/app/config/wiki-order.json) through the same commit-backed mutation channel. The
+ * tree re-reads from disk after every mutation, so what you see is the
+ * committed state. A pinned "Overview" node above the categories reopens the
+ * dashboard landing (the initial no-selection state).
  */
 @Component({
   selector: 'app-project-wiki-section',
@@ -125,23 +137,27 @@ interface WikiMetricChip {
     OverlayPortalDirective,
     StudioIconComponent,
     TooltipDirective,
+    WikiDashboardComponent,
     WikiDocHistoryComponent,
-    WikiPulseComponent,
-    WikiGradePanelComponent,
+    WikiFolderViewComponent,
+    WikiSearchResultsComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
   styleUrl: './project-wiki-section.scss',
 })
-export class ProjectWikiSectionComponent {
+export class ProjectWikiSectionComponent implements OnDestroy {
   readonly projectName = input.required<string>();
+  readonly openWorkbench = output<WorkbenchListItem>();
 
   private readonly docs = inject(ProjectDocsService);
+  private readonly stars = inject(WikiStarsService);
   private readonly drift = inject(DriftService);
   private readonly tasks = inject(TaskService);
   private readonly catalog = inject(CliCatalogStore);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly notifications = inject(NotificationService);
 
   readonly cliTypes = CLI_TYPES;
 
@@ -159,6 +175,12 @@ export class ProjectWikiSectionComponent {
   private gradingPollTimer: ReturnType<typeof setTimeout> | null = null;
   readonly loading = signal(false);
   readonly busy = signal(false);
+  // Bumped after every tree re-read so a *mounted* folder-overview re-fetches
+  // its own contents in place. The folder view self-fetches on projectName /
+  // relPath only, so without this an in-place edit/delete/create under the
+  // shown folder would leave its overview table stale (a soft refresh no longer
+  // remounts it via the loading placeholder).
+  readonly folderReloadNonce = signal(0);
   readonly filter = signal('');
   readonly filterOpen = signal(false);
 
@@ -198,6 +220,24 @@ export class ProjectWikiSectionComponent {
   readonly history = signal<WikiFileHistory | null>(null);
   readonly loadingHistory = signal(false);
 
+  // Folder overview: selecting a folder *name* in the tree shows its overview
+  // page in the content pane (an open page always wins over the selection).
+  readonly selectedFolderRel = signal<string | null>(null);
+
+  // Wiki search (lexical, debounced; optional semantic expansion on demand).
+  readonly searchQuery = signal('');
+  readonly searchResponse = signal<WikiSearchResponse | null>(null);
+  readonly searchLoading = signal(false);
+  readonly searchError = signal<string | null>(null);
+  readonly semanticLoading = signal(false);
+  readonly semanticRequested = signal(false);
+  /** The content pane switches to the result list from 2 characters on. */
+  readonly searchActive = computed(() =>
+    this.searchQuery().trim().length >= WIKI_SEARCH_MIN_LENGTH);
+  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Monotonic guard so a stale (slower) response never overwrites a newer one. */
+  private searchSeq = 0;
+
   // Old-revision preview: when a sha is set, the doc pane shows that revision's
   // content instead of the working-tree content, with a "back to current" banner.
   readonly revisionSha = signal<string | null>(null);
@@ -210,8 +250,9 @@ export class ProjectWikiSectionComponent {
   readonly renamingId = signal<string | null>(null);
   readonly renameValue = signal('');
 
-  // Drag-and-drop (file onto folder).
+  // Drag-and-drop (file onto folder → move; folder onto sibling folder → reorder).
   readonly draggingRel = signal<string | null>(null);
+  readonly draggingFolderRel = signal<string | null>(null);
   readonly dropTargetId = signal<string | null>(null);
 
   readonly driftModalOpen = signal(false);
@@ -233,12 +274,38 @@ export class ProjectWikiSectionComponent {
   private loadedReportPath: string | null = null;
   private resizeState: WikiResizeState | null = null;
 
+  /** Kebab slug used in the wiki rail hash (`#/projects/<slug>/wiki`). */
+  private readonly slug = computed(() => toProjectSlug(this.projectName()));
+  /**
+   * Deep-link target captured from the URL when the project is (re)bound, held
+   * until the tree finishes loading so it can open the exact page/folder. A URL
+   * param wins over the persisted localStorage open; absence falls back to it.
+   */
+  private pendingUrlTarget: WikiDeepLinkTarget | null = null;
+  /**
+   * True while a page/folder is being opened as a restore (URL deep-link,
+   * localStorage, or browser back/forward). Suppresses the extra history push a
+   * user-initiated open makes, so an auto-restore never litters the back stack.
+   */
+  private restoringOpen = false;
+  /**
+   * Subtle hint shown when a deep-linked path is not found in the tree. Carries
+   * the target kind so the wording matches a missing page vs. a missing folder.
+   */
+  readonly deepLinkMissing = signal<{ relPath: string; kind: 'page' | 'folder' } | null>(null);
+  private readonly onHashChange = (): void => this.applyHashTarget();
+
   protected readonly nodeId = nodeId;
+  protected readonly documentMetricChips = documentMetricChips;
+  protected readonly classificationBadges = classificationBadges;
 
   constructor() {
     effect(() => {
       const p = this.projectName();
       if (p) {
+        // Capture the shareable URL target (if any) before the tree loads so
+        // restorePendingOpen can prefer it over the persisted localStorage open.
+        this.pendingUrlTarget = this.captureUrlRestoreTarget();
         this.restorePersistedState(p);
         this.refresh();
         // Seed the grading trigger (maintenance-model default + current run
@@ -247,6 +314,15 @@ export class ProjectWikiSectionComponent {
         this.loadGradingContext();
       }
     });
+    if (typeof window !== 'undefined') {
+      window.addEventListener('hashchange', this.onHashChange);
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('hashchange', this.onHashChange);
+    }
   }
 
   readonly roots = computed<WikiTreeNode[]>(() => this.tree()?.root ?? []);
@@ -276,27 +352,17 @@ export class ProjectWikiSectionComponent {
     const t = this.menuTarget();
     if (!t) return [];
     if (t.type === 'folder') {
-      // A fixed frame area still accepts subpages, but its own shape is locked:
-      // no rename, no delete.
-      if (t.immutable) {
-        return [
-          { kind: 'row', id: 'new-page', label: 'New page' },
-          { kind: 'row', id: 'new-folder', label: 'New category' },
-        ];
-      }
       return [
         { kind: 'row', id: 'new-page', label: 'New page' },
         { kind: 'row', id: 'new-folder', label: 'New category' },
+        { kind: 'row', id: 'copy-link', label: 'Link kopieren' },
         { kind: 'row', id: 'rename', label: 'Rename' },
         { kind: 'separator' },
         { kind: 'row', id: 'delete', label: 'Delete category', danger: true },
       ];
     }
-    // A locked frame landing shell is read-only: only history is offered.
-    if (t.immutable) {
-      return [{ kind: 'row', id: 'history', label: 'View history' }];
-    }
     return [
+      { kind: 'row', id: 'copy-link', label: 'Link kopieren' },
       { kind: 'row', id: 'rename', label: 'Rename' },
       { kind: 'row', id: 'history', label: 'View history' },
       { kind: 'separator' },
@@ -316,7 +382,7 @@ export class ProjectWikiSectionComponent {
   readonly displayContent = computed(() =>
     this.revisionSha() ? this.revisionContent() : this.openedContent());
 
-  /** Trusted srcdoc for an HTML doc — the iframe sandbox (no scripts) isolates it. */
+  /** `allow-scripts` enables interaction; omitted same-origin isolates Studio state and APIs. */
   readonly trustedHtml = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(this.displayContent()));
 
@@ -387,15 +453,183 @@ export class ProjectWikiSectionComponent {
   readonly metaGradeBadge = computed<{ display: string; label: string; tone: WikiMetricTone } | null>(() => {
     const meta = this.openedNode()?.metadata;
     if (!meta) return null;
-    const chip = this.driftChip(meta);
+    const chip = driftChip(meta);
     return { display: chip.display, label: chip.label, tone: chip.tone };
   });
 
+  /**
+   * "Klassifikation" block for the open page's meta rail, resolved from the
+   * already-loaded tree node (relPath lookup, no extra HTTP): the status chip
+   * in tree optics, the spelled-out type, the analysis date, and the successor
+   * link when the page is superseded. Null hides the block entirely.
+   */
+  readonly openedClassification = computed<WikiClassMeta | null>(() =>
+    classificationMeta(this.openedNode()?.classification));
+
+  /** Successor link in the classification block: opens the superseding page. */
+  openSupersededBy(rel: string): void {
+    this.openFile(rel, this.wikiTypeForRel(rel));
+  }
+
   readonly firstDoc = computed(() => this.findFirstDoc(this.roots()));
 
-  /** Open a page picked from the Pulse feed or inbox. */
+  // ---- stars (favourite documents) ----
+
+  /** Mount guard for the landing "Gestarrt" panel (it renders itself from the store). */
+  readonly hasStarred = computed(() => this.stars.entries(this.projectName()).length > 0);
+
+  /** Star state of the open page (drives the viewer-head toggle). */
+  readonly openedStarred = computed(() => {
+    const rel = this.openedRel();
+    return !!rel && this.stars.isStarred(this.projectName(), rel);
+  });
+
+  /** Viewer-head star toggle; the label is the title at the starring moment. */
+  toggleOpenedStar(event: Event): void {
+    event.stopPropagation();
+    const rel = this.openedRel();
+    if (!rel) return;
+    this.stars.toggle(this.projectName(), rel, this.openedTitle());
+  }
+
   onPulseOpen(req: WikiPulseOpenRequest): void {
     this.openFile(req.relPath, req.type);
+  }
+
+  // ---- folder overview (content-pane folder page) ----
+
+  /** Tree folder *name* click: select the folder and show its overview page. */
+  selectFolder(node: WikiTreeNode): void {
+    if (node.type !== 'folder' || !node.relPath) return;
+    this.openFolderOverview(node.relPath);
+  }
+
+  /**
+   * Shows a folder's overview page in the content pane (also used to drill
+   * into subfolders from the overview table and breadcrumb). The folder is
+   * expanded in the tree so the selection stays visible.
+   */
+  openFolderOverview(relPath: string): void {
+    this.resetSearchState();
+    this.deepLinkMissing.set(null);
+    if (this.openedRel()) this.closeFile();
+    if (!relPath) {
+      this.selectedFolderRel.set(null);
+      this.syncDeepLinkUrl('replace');
+      return;
+    }
+    this.expandAncestors(relPath);
+    this.expand(relPath);
+    this.focusedRowId.set(relPath);
+    this.selectedFolderRel.set(relPath);
+    // Folder navigation is pure state-sync (reachable by tree clicks), so it
+    // replaces rather than growing the history stack per click.
+    this.syncDeepLinkUrl('replace');
+  }
+
+  /** Root breadcrumb of the folder overview: back to the Pulse landing. */
+  showWikiLanding(): void {
+    this.selectedFolderRel.set(null);
+    this.deepLinkMissing.set(null);
+    this.syncDeepLinkUrl('replace');
+  }
+
+  // ---- Overview node (pinned tree entry for the dashboard landing) ----
+
+  /** The pinned "Overview" tree node lights up whenever the landing is on screen. */
+  readonly overviewActive = computed(() =>
+    !this.searchActive() && !this.openedRel() && !this.selectedFolderRel());
+
+  /**
+   * Pinned "Overview" node at the top of the tree: drops every selection
+   * (open page, folder overview, search) so the dashboard landing renders -
+   * the same state as the initial view.
+   */
+  openOverview(): void {
+    this.resetSearchState();
+    this.deepLinkMissing.set(null);
+    if (this.openedRel()) this.closeFile();
+    this.selectedFolderRel.set(null);
+    this.syncDeepLinkUrl('replace');
+  }
+
+  // ---- wiki search (debounced lexical, semantic expansion on demand) ----
+
+  onSearchQueryChange(value: string): void {
+    this.searchQuery.set(value);
+    if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
+    this.searchDebounceTimer = null;
+    this.searchSeq++; // invalidate any in-flight response for the old query
+    this.semanticRequested.set(false);
+    this.searchError.set(null);
+    const query = value.trim();
+    if (query.length < WIKI_SEARCH_MIN_LENGTH) {
+      this.searchResponse.set(null);
+      this.searchLoading.set(false);
+      this.semanticLoading.set(false);
+      return;
+    }
+    this.searchLoading.set(true);
+    this.searchDebounceTimer = setTimeout(() => {
+      this.searchDebounceTimer = null;
+      this.runWikiSearch(query, false);
+    }, WIKI_SEARCH_DEBOUNCE_MS);
+  }
+
+  /** "Semantisch erweitern": re-run the current query with semantic=true. */
+  expandSearchSemantically(): void {
+    const query = this.searchQuery().trim();
+    if (query.length < WIKI_SEARCH_MIN_LENGTH || this.semanticLoading()) return;
+    this.semanticRequested.set(true);
+    this.runWikiSearch(query, true);
+  }
+
+  /** Enter in the search box: open the top hit. */
+  openTopSearchResult(): void {
+    const top = this.searchResponse()?.results?.[0];
+    if (top && this.searchActive()) this.openSearchResult(top);
+  }
+
+  openSearchResult(result: WikiSearchResult): void {
+    this.openFile(result.relPath, this.wikiTypeForRel(result.relPath));
+  }
+
+  /** Esc / clearing the box: drop the search, the previous view reappears. */
+  clearSearch(): void {
+    this.resetSearchState();
+  }
+
+  private resetSearchState(): void {
+    if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
+    this.searchDebounceTimer = null;
+    this.searchSeq++;
+    this.searchQuery.set('');
+    this.searchResponse.set(null);
+    this.searchLoading.set(false);
+    this.searchError.set(null);
+    this.semanticLoading.set(false);
+    this.semanticRequested.set(false);
+  }
+
+  private runWikiSearch(query: string, semantic: boolean): void {
+    const seq = ++this.searchSeq;
+    if (semantic) this.semanticLoading.set(true);
+    else this.searchLoading.set(true);
+    this.searchError.set(null);
+    this.docs.searchWiki(this.projectName(), query, { semantic }).subscribe({
+      next: response => {
+        if (seq !== this.searchSeq) return;
+        this.searchResponse.set(response);
+        this.searchLoading.set(false);
+        this.semanticLoading.set(false);
+      },
+      error: () => {
+        if (seq !== this.searchSeq) return;
+        this.searchLoading.set(false);
+        this.semanticLoading.set(false);
+        this.searchError.set('Suche fehlgeschlagen.');
+      },
+    });
   }
 
   /** Open a critical page (from the grade panel) straight to its report tab. */
@@ -528,17 +762,32 @@ export class ProjectWikiSectionComponent {
 
   // ---- loading ----
 
-  refresh(): void {
+  refresh(options: { soft?: boolean; onLoaded?: (tree: WikiTree | null) => void } = {}): void {
     const p = this.projectName();
     if (!p) return;
-    this.loading.set(true);
+    // A soft refresh (post-mutation re-read) swaps the tree data in place: the
+    // rendered rows stay on screen, expand/selection/scroll state is untouched
+    // (it lives in component signals, not in the fetched tree), and folders that
+    // no longer exist simply drop out. The full-flush `loading` placeholder is
+    // reserved for the initial project load, so an edit/delete/rename never
+    // flashes the whole section back to "Loading...". The busy() header chip is
+    // the only movement the user sees.
+    if (options.soft !== true) this.loading.set(true);
     this.docs.getWikiTree(p).subscribe({
       next: t => {
         this.tree.set(t);
         this.restorePendingOpen(t);
         this.loading.set(false);
+        // Nudge a mounted folder-overview to re-read its own contents in place,
+        // then let the caller reconcile the shown surface against the fresh tree
+        // (e.g. steer away from a page/folder the mutation removed or pruned).
+        this.folderReloadNonce.update(n => n + 1);
+        options.onLoaded?.(t);
       },
-      error: () => this.loading.set(false),
+      error: () => {
+        this.loading.set(false);
+        options.onLoaded?.(null);
+      },
     });
     // The Pulse landing view is git-backed and only shown when no page is open,
     // so it loads independently and never blocks the tree render. One composed
@@ -559,6 +808,9 @@ export class ProjectWikiSectionComponent {
   // ---- viewer ----
 
   openFile(rel: string, type: WikiNodeType = 'md', tab: WikiViewerTab = 'doc', reportAnchor: string | null = null): void {
+    this.resetSearchState();
+    this.deepLinkMissing.set(null);
+    this.selectedFolderRel.set(null);
     this.expandAncestors(rel);
     this.focusedRowId.set(rel);
     this.openedRel.set(rel);
@@ -596,6 +848,9 @@ export class ProjectWikiSectionComponent {
       error: () => this.loadingHistory.set(false),
     });
     if (tab === 'report') this.loadReport();
+    // A user-driven page open is a history entry; a restore (URL / storage /
+    // back-forward) only syncs state and must not push a new entry.
+    this.syncDeepLinkUrl(this.restoringOpen ? 'replace' : 'push');
     this.persistState();
   }
 
@@ -614,6 +869,8 @@ export class ProjectWikiSectionComponent {
     this.revisionSha.set(null);
     this.revisionContent.set('');
     this.pendingOpenRestore = null;
+    this.deepLinkMissing.set(null);
+    this.syncDeepLinkUrl('replace');
     this.persistState();
   }
 
@@ -1056,6 +1313,9 @@ export class ProjectWikiSectionComponent {
       case 'new-folder':
         this.promptNewFolder(t.relPath ?? '');
         break;
+      case 'copy-link':
+        this.copyWikiLinkForNode(t);
+        break;
       case 'delete':
         this.deleteNode(t);
         break;
@@ -1094,7 +1354,6 @@ export class ProjectWikiSectionComponent {
   // ---- rename (inline) ----
 
   startRename(node: WikiTreeNode): void {
-    if (node.immutable) return; // frame folders and shells cannot be renamed
     this.renamingId.set(nodeId(node));
     this.renameValue.set(node.name);
     queueMicrotask(() => {
@@ -1124,18 +1383,80 @@ export class ProjectWikiSectionComponent {
   // ---- delete ----
 
   private deleteNode(node: WikiTreeNode): void {
-    if (!node.relPath || node.immutable) return;
+    if (!node.relPath) return;
     const ok = this.confirm(`Delete "${node.name}"? This is committed to the repository.`);
     if (!ok) return;
-    if (this.openedRel() === node.relPath) this.closeFile();
-    this.runMutation(this.docs.deleteWikiNode(this.projectName(), node.relPath));
+    const rel = node.relPath;
+    this.runMutation(this.docs.deleteWikiNode(this.projectName(), rel), tree => {
+      // Drop the now-dead path (and, for a folder, its descendants) from the
+      // favourites store so the landing never renders a star for a gone page.
+      this.stars.removeUnder(this.projectName(), rel);
+      // Reconcile the shown surface against the freshly re-read tree.
+      this.reconcileViewAfterDelete(tree);
+      // The tree context menu (and its Delete) stays reachable while the
+      // search-results pane is showing. When the reconcile did not already
+      // clear the search by steering, re-run the active query so a deleted page
+      // does not linger as a dead, clickable hit.
+      if (this.searchActive()) this.runWikiSearch(this.searchQuery().trim(), this.semanticRequested());
+    });
   }
 
-  // ---- drag and drop (file onto folder → git mv into the folder) ----
+  /**
+   * Keep the content pane on a surface that still exists after a delete + soft
+   * re-read. When the open page or the shown folder overview is gone from the
+   * fresh tree - a direct delete, or a parent folder the backend pruned because
+   * the delete emptied it - fall back to the nearest surviving ancestor folder
+   * overview (rewriting the deep-link to ?folder=<ancestor>), or the dashboard
+   * landing when none survives. A delete of some other, unviewed node matches
+   * neither branch and leaves the current view exactly where it is; the folder
+   * reload nonce refreshes a shown overview in place for that case.
+   */
+  private reconcileViewAfterDelete(tree: WikiTree | null): void {
+    if (!tree) return;
+    const roots = tree.root;
+    const openRel = this.openedRel();
+    if (openRel) {
+      const node = this.findNode(roots, openRel);
+      if (node && node.type !== 'folder') return; // open page still present
+      this.steerToNearestFolder(roots, this.parentDir(openRel));
+      return;
+    }
+    const folderRel = this.selectedFolderRel();
+    if (folderRel) {
+      const node = this.findNode(roots, folderRel);
+      if (node && node.type === 'folder') return; // shown folder still present
+      this.steerToNearestFolder(roots, this.parentDir(folderRel));
+    }
+  }
 
-  onFileDragStart(ev: DragEvent, node: WikiTreeNode): void {
-    if (node.type === 'folder' || !node.relPath || !ev.dataTransfer) return;
-    if (node.immutable) return; // frame shells cannot be moved
+  /** Open the nearest ancestor folder that still exists, else the landing. */
+  private steerToNearestFolder(roots: readonly WikiTreeNode[], startRel: string): void {
+    let cur = startRel;
+    while (cur) {
+      const node = this.findNode(roots, cur);
+      if (node && node.type === 'folder') {
+        this.openFolderOverview(cur);
+        return;
+      }
+      cur = this.parentDir(cur);
+    }
+    this.openOverview();
+  }
+
+  // ---- drag and drop ----
+  // Files dragged onto a folder move into it (git mv, the original mechanism);
+  // folders dragged onto a *sibling* folder reorder the category list, which is
+  // persisted through the docs/app/config/wiki-order.json channel.
+
+  onNodeDragStart(ev: DragEvent, node: WikiTreeNode): void {
+    if (!node.relPath || !ev.dataTransfer) return;
+    if (node.type === 'folder') {
+      ev.dataTransfer.setData(FOLDER_DRAG_TYPE, node.relPath);
+      ev.dataTransfer.setData('text/plain', node.relPath);
+      ev.dataTransfer.effectAllowed = 'move';
+      this.draggingFolderRel.set(node.relPath);
+      return;
+    }
     ev.dataTransfer.setData(FILE_DRAG_TYPE, node.relPath);
     ev.dataTransfer.setData('text/plain', node.relPath);
     ev.dataTransfer.effectAllowed = 'move';
@@ -1144,11 +1465,18 @@ export class ProjectWikiSectionComponent {
 
   onDragEnd(): void {
     this.draggingRel.set(null);
+    this.draggingFolderRel.set(null);
     this.dropTargetId.set(null);
   }
 
   onFolderDragOver(ev: DragEvent, folder: WikiTreeNode): void {
-    if (folder.type !== 'folder' || !this.draggingRel()) return;
+    if (folder.type !== 'folder' || !folder.relPath) return;
+    const draggingFolder = this.draggingFolderRel();
+    if (draggingFolder) {
+      if (!this.isReorderTarget(draggingFolder, folder.relPath)) return;
+    } else if (!this.draggingRel()) {
+      return;
+    }
     ev.preventDefault();
     if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
     this.dropTargetId.set(nodeId(folder));
@@ -1162,28 +1490,68 @@ export class ProjectWikiSectionComponent {
   onFolderDrop(ev: DragEvent, folder: WikiTreeNode): void {
     if (folder.type !== 'folder' || !folder.relPath) return;
     ev.preventDefault();
-    const rel = ev.dataTransfer?.getData(FILE_DRAG_TYPE) || this.draggingRel();
+    const folderRel = ev.dataTransfer?.getData(FOLDER_DRAG_TYPE) || this.draggingFolderRel();
+    const fileRel = ev.dataTransfer?.getData(FILE_DRAG_TYPE) || this.draggingRel();
     this.dropTargetId.set(null);
     this.draggingRel.set(null);
-    if (!rel) return;
-    const name = this.basename(rel);
+    this.draggingFolderRel.set(null);
+    if (folderRel) {
+      this.reorderFolder(folderRel, folder.relPath);
+      return;
+    }
+    if (!fileRel) return;
+    const name = this.basename(fileRel);
     const dest = this.joinRel(folder.relPath, name);
-    if (dest === rel) return;
-    this.runMutation(this.docs.moveWikiNode(this.projectName(), rel, dest));
+    if (dest === fileRel) return;
+    this.runMutation(this.docs.moveWikiNode(this.projectName(), fileRel, dest));
+  }
+
+  /** Reorder is within one parent: a folder only drops onto a *sibling* folder. */
+  private isReorderTarget(draggedRel: string, targetRel: string): boolean {
+    return draggedRel !== targetRel
+      && this.parentDir(draggedRel) === this.parentDir(targetRel);
+  }
+
+  /**
+   * Moves the dragged folder to the drop target's slot within their shared
+   * parent (dragging up lands before the target, dragging down after it) and
+   * persists the resulting sibling order through the same channel the tree
+   * reads it back from.
+   */
+  private reorderFolder(draggedRel: string, targetRel: string): void {
+    if (!this.isReorderTarget(draggedRel, targetRel)) return;
+    const parent = this.parentDir(draggedRel);
+    const siblings = parent
+      ? (this.findNode(this.roots(), parent)?.children ?? [])
+      : this.roots();
+    const names = siblings.filter(n => n.type === 'folder').map(n => n.name);
+    const from = names.indexOf(this.basename(draggedRel));
+    const to = names.indexOf(this.basename(targetRel));
+    if (from < 0 || to < 0 || from === to) return;
+    const [dragged] = names.splice(from, 1);
+    names.splice(to, 0, dragged);
+    this.runMutation(this.docs.setWikiFolderOrder(this.projectName(), parent, names));
   }
 
   // ---- mutation plumbing ----
 
-  private runMutation(obs: { subscribe: (o: { next: () => void; error: () => void }) => unknown }): void {
+  private runMutation(
+    obs: { subscribe: (o: { next: () => void; error: () => void }) => unknown },
+    onSuccess?: (tree: WikiTree | null) => void,
+  ): void {
     this.busy.set(true);
     obs.subscribe({
       next: () => {
         this.busy.set(false);
-        this.refresh();
+        // Reconcile *after* the soft re-read so the callback sees the fresh tree:
+        // it can then steer away from a page/folder the mutation removed (or a
+        // parent the backend pruned because the delete emptied it) instead of
+        // landing on a stale or now-missing target.
+        this.refresh({ soft: true, onLoaded: onSuccess });
       },
       error: () => {
         this.busy.set(false);
-        this.refresh();
+        this.refresh({ soft: true });
       },
     });
   }
@@ -1226,6 +1594,14 @@ export class ProjectWikiSectionComponent {
   }
 
   private restorePendingOpen(tree: WikiTree): void {
+    // A shareable URL param wins over the persisted localStorage open.
+    const urlTarget = this.pendingUrlTarget;
+    this.pendingUrlTarget = null;
+    if (urlTarget) {
+      this.pendingOpenRestore = null;
+      this.applyDeepLinkTarget(tree, urlTarget);
+      return;
+    }
     const pending = this.pendingOpenRestore;
     if (!pending) return;
     this.pendingOpenRestore = null;
@@ -1234,7 +1610,145 @@ export class ProjectWikiSectionComponent {
       this.persistState();
       return;
     }
-    this.openFile(node.relPath, node.type, pending.tab);
+    this.restoringOpen = true;
+    try {
+      this.openFile(node.relPath, node.type, pending.tab);
+    } finally {
+      this.restoringOpen = false;
+    }
+  }
+
+  // ---- shareable deep links (URL <-> open page/folder) ----
+
+  /**
+   * Reconcile the wiki view with the URL hash on a browser back/forward (or an
+   * external hash edit). Off-route hashes (e.g. a studio Hub tab) return null
+   * and are ignored; a wiki route with no tree yet defers to restorePendingOpen.
+   */
+  private applyHashTarget(): void {
+    const slug = this.slug();
+    if (!slug) return;
+    const target = parseWikiRouteHash(window.location.hash, slug);
+    if (!target) return;
+    const tree = this.tree();
+    if (!tree) {
+      this.pendingUrlTarget = target;
+      return;
+    }
+    this.applyDeepLinkTarget(tree, target);
+  }
+
+  /** Open the page/folder named by a deep-link target, tolerating stale paths. */
+  private applyDeepLinkTarget(tree: WikiTree, target: WikiDeepLinkTarget): void {
+    this.restoringOpen = true;
+    try {
+      if (target.kind === 'page') {
+        const node = this.findNode(tree.root, target.relPath);
+        if (!node || node.type === 'folder' || !node.relPath) {
+          this.noteMissingDeepLink(target.relPath, 'page');
+          return;
+        }
+        if (this.openedRel() === node.relPath) return;
+        this.openFile(node.relPath, node.type);
+      } else if (target.kind === 'folder') {
+        const node = this.findNode(tree.root, target.relPath);
+        if (!node || node.type !== 'folder' || !node.relPath) {
+          this.noteMissingDeepLink(target.relPath, 'folder');
+          return;
+        }
+        if (this.selectedFolderRel() === node.relPath && !this.openedRel()) return;
+        this.openFolderOverview(node.relPath);
+      } else {
+        // Overview / landing: drop any open page or folder selection.
+        this.deepLinkMissing.set(null);
+        if (this.openedRel()) this.closeFile();
+        else this.selectedFolderRel.set(null);
+      }
+    } finally {
+      this.restoringOpen = false;
+    }
+  }
+
+  /** Read the shareable target from the URL, ignoring the paramless landing. */
+  private captureUrlRestoreTarget(): WikiDeepLinkTarget | null {
+    if (typeof window === 'undefined') return null;
+    const slug = this.slug();
+    if (!slug) return null;
+    const target = parseWikiRouteHash(window.location.hash, slug);
+    // No param (bare wiki route) leaves localStorage as the fallback.
+    return target && target.kind !== 'overview' ? target : null;
+  }
+
+  /** The wiki target the URL should currently reflect. */
+  private currentDeepLinkTarget(): WikiDeepLinkTarget {
+    const page = this.openedRel();
+    if (page) return { kind: 'page', relPath: page };
+    const folder = this.selectedFolderRel();
+    if (folder) return { kind: 'folder', relPath: folder };
+    return { kind: 'overview' };
+  }
+
+  /**
+   * Write the open page/folder into the wiki rail hash. Only rewrites the URL
+   * when the wiki rail route is the active hash (its deep-link surface) so the
+   * component never hijacks the URL when mounted off-route (studio Hub tab).
+   */
+  private syncDeepLinkUrl(mode: 'push' | 'replace'): void {
+    if (typeof window === 'undefined') return;
+    const slug = this.slug();
+    if (!slug) return;
+    if (!isWikiRouteHash(window.location.hash, slug)) return;
+    const nextHash = buildWikiRouteHash(slug, this.currentDeepLinkTarget());
+    if (window.location.hash === nextHash) return;
+    const url = `${window.location.pathname}${window.location.search}${nextHash}`;
+    try {
+      window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', url);
+    } catch {
+      /* history writes are best-effort; the view still works without them */
+    }
+  }
+
+  /** Land on the wiki landing + a dezent hint, and drop the bad param. */
+  private noteMissingDeepLink(relPath: string, kind: 'page' | 'folder'): void {
+    this.deepLinkMissing.set({ relPath, kind });
+    if (this.openedRel()) this.closeFile();
+    else this.selectedFolderRel.set(null);
+    this.syncDeepLinkUrl('replace');
+  }
+
+  /** Dismiss the "linked page not found" hint. */
+  dismissDeepLinkHint(): void {
+    this.deepLinkMissing.set(null);
+  }
+
+  /** Context-menu "Link kopieren" for a tree node (page or folder). */
+  copyWikiLinkForNode(node: WikiTreeNode): void {
+    if (!node.relPath) return;
+    this.copyWikiLink(node.type === 'folder'
+      ? { kind: 'folder', relPath: node.relPath }
+      : { kind: 'page', relPath: node.relPath });
+  }
+
+  /** Viewer-header copy icon: link to the currently open page. */
+  copyOpenedPageLink(): void {
+    const rel = this.openedRel();
+    if (rel) this.copyWikiLink({ kind: 'page', relPath: rel });
+  }
+
+  /** Folder-overview breadcrumb copy icon: link to the shown folder. */
+  copyFolderLink(relPath: string): void {
+    if (relPath) this.copyWikiLink({ kind: 'folder', relPath });
+  }
+
+  private copyWikiLink(target: WikiDeepLinkTarget): void {
+    if (typeof window === 'undefined') return;
+    const slug = this.slug();
+    if (!slug) return;
+    const url = buildWikiRouteUrl(window.location, slug, target);
+    void copyTextToClipboard(url).then(ok => {
+      if (ok) this.notifications.success('Link kopiert', 'Wiki');
+      else this.notifications.info('Link konnte nicht kopiert werden', 'Wiki');
+    });
   }
 
   private persistState(): void {
@@ -1424,7 +1938,7 @@ ${linked || '- No explicit Markdown or HTML links detected in the selected page.
 3. List evidence refs using repository-relative paths.
 4. Identify whether the page needs edits, a follow-up task, or no action.
 5. Create or update a conceptual page-metadata note for this page. Suggested sidecar path:
-   \`docs/wiki/.drift/${this.toSlug(rel)}.md\`
+   \`docs/.drift/${this.toSlug(rel)}.md\`
 6. If the result should become a project drift report, post the structured response back through:
    \`POST /api/drift/{project}/actions/software-architecture-drift\`
 
@@ -1527,155 +2041,6 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
     if (!rel) return 'root folder';
     const parent = this.parentDir(rel);
     return parent || 'root folder';
-  }
-
-  documentMetricChips(node: WikiTreeNode): WikiMetricChip[] {
-    const meta = node.metadata ?? null;
-    if (!meta) {
-      return [
-        {
-          key: 'unscored',
-          icon: 'file',
-          display: 'None',
-          label: 'Metadata unscored',
-          tone: 'muted',
-          tooltip: 'No adjacent companion metadata file describes this document yet.',
-          reportAnchor: null,
-        },
-      ];
-    }
-
-    const chips = [
-      this.driftChip(meta),
-      this.directionChip(meta.temporalState),
-    ].filter((chip): chip is WikiMetricChip => chip !== null);
-    return chips;
-  }
-
-  private driftChip(meta: WikiTreeMetadata): WikiMetricChip {
-    const cleanGrade = this.cleanGrade(meta.driftGrade);
-    const summary = this.companionTooltipSummary(meta);
-    if (meta.hasDrift === false) {
-      return {
-        key: 'drift',
-        icon: 'check',
-        display: cleanGrade ?? 'A',
-        label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift stable',
-        tone: 'good',
-        tooltip: this.joinTooltip('No drift is currently suspected.', summary),
-        reportAnchor: 'why-drift',
-      };
-    }
-    if (meta.hasDrift === true) {
-      return {
-        key: 'drift',
-        icon: 'diff',
-        display: cleanGrade ?? '?',
-        label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown grade',
-        tone: cleanGrade === 'D' ? 'bad' : 'warn',
-        tooltip: this.joinTooltip('Drift is suspected for this document.', summary),
-        reportAnchor: 'why-drift',
-      };
-    }
-    return {
-      key: 'drift',
-      icon: 'diff',
-      display: cleanGrade ?? '?',
-      label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown',
-      tone: 'muted',
-      tooltip: this.joinTooltip('Drift state is not classified yet.', summary),
-      reportAnchor: 'why-drift',
-    };
-  }
-
-  private directionChip(state: string | null): WikiMetricChip {
-    const normalized = this.normalizeMetric(state);
-    switch (normalized) {
-      case 'present':
-      case 'current':
-      case 'now':
-        return {
-          key: 'direction',
-          icon: 'activity',
-          display: 'Now',
-          label: 'Direction Current',
-          tone: 'muted',
-          tooltip: 'Direction: describes current behavior.',
-          reportAnchor: 'temporal-reasoning',
-        };
-      case 'future':
-      case 'planned':
-      case 'vision':
-        return {
-          key: 'direction',
-          icon: 'branch',
-          display: 'Fut',
-          label: 'Direction Future',
-          tone: 'muted',
-          tooltip: 'Direction: describes planned or future behavior.',
-          reportAnchor: 'temporal-reasoning',
-        };
-      case 'past':
-      case 'historic':
-      case 'obsolete':
-        return {
-          key: 'direction',
-          icon: 'archive',
-          display: 'Past',
-          label: 'Direction Past',
-          tone: 'muted',
-          tooltip: 'Direction: describes past or obsolete behavior.',
-          reportAnchor: 'temporal-reasoning',
-        };
-      case 'mixed':
-      case 'transition':
-        return {
-          key: 'direction',
-          icon: 'diff',
-          display: 'Mix',
-          label: 'Direction Mixed',
-          tone: 'muted',
-          tooltip: 'Direction: mixes current and planned behavior.',
-          reportAnchor: 'temporal-reasoning',
-        };
-      default:
-        return {
-          key: 'direction',
-          icon: 'activity',
-          display: '?',
-          label: 'Direction unknown',
-          tone: 'muted',
-          tooltip: 'Direction has not been classified yet.',
-          reportAnchor: 'temporal-reasoning',
-        };
-    }
-  }
-
-  private cleanGrade(grade: string | null): string | null {
-    const clean = grade?.trim().toUpperCase();
-    return clean && /^[A-D]$/.test(clean) ? clean : null;
-  }
-
-  private normalizeMetric(value: string | null): string {
-    return value?.trim().toLowerCase() ?? '';
-  }
-
-  private joinTooltip(primary: string, summary: string | null): string {
-    const clean = summary?.trim();
-    return clean ? `${primary} ${clean}` : primary;
-  }
-
-  private companionTooltipSummary(meta: WikiTreeMetadata): string | null {
-    const parts: string[] = [];
-    if (meta.sourceChangedSinceReview === true) {
-      parts.push('Source changed since the companion review.');
-    }
-    if (meta.summary?.trim()) parts.push(meta.summary.trim());
-    if (meta.findingsCount && meta.findingsCount > 0) {
-      parts.push(`${meta.findingsCount} finding${meta.findingsCount === 1 ? '' : 's'} in the companion report.`);
-    }
-    if (meta.companionPath?.trim()) parts.push(`Companion: ${meta.companionPath.trim()}.`);
-    return parts.length ? parts.join(' ') : null;
   }
 
   fileTypeLabel(node: WikiTreeNode): string {

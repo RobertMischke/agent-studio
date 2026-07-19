@@ -5,10 +5,14 @@
       <span class="ps-settings__chip">this project</span>
     </div>
     <p class="ps-settings__desc" data-testid="project-settings-desc">
-      Global defaults from Workspace settings, surfaced here so you can see what
-      this project inherits. Per-project overrides below win over them.
+      Edit this project's onboarding values and execution behavior, then review
+      the workspace defaults it inherits.
     </p>
   </header>
+
+  <section class="ps-settings__section" aria-label="Project basics">
+    <app-project-basics-card [projectName]="projectName()" />
+  </section>
 
   <section class="ps-settings__section" aria-labelledby="ps-settings-inherited">
     <header class="ps-settings__section-head">
@@ -17,8 +21,8 @@
         Defaults that apply to every project in this workspace. The Orchestrator
         card is editable here and writes the workspace default (a per-project
         override in the section below still wins). Default agent and usage caps
-        have no per-project override yet, so they stay read-only — open the
-        Workspace settings to change those.
+        remain read-only here. The default agent is the workspace fallback;
+        a project-specific agent selected in Project basics wins over it.
       </p>
     </header>
 
@@ -27,10 +31,10 @@
         <div class="ps-settings__card-head">
           <span class="ps-settings__card-icon" aria-hidden="true">◈</span>
           <span class="ps-settings__card-title">Default agent</span>
-          <span class="ps-settings__badge" data-testid="project-settings-default-agent-inherited">Inherited</span>
+          <span class="ps-settings__badge" data-testid="project-settings-default-agent-inherited">Workspace fallback</span>
         </div>
         <p class="ps-settings__card-desc">
-          The CLI and model new tasks start from unless a task overrides them.
+          Used when Project basics does not set a project-specific agent and the task has no override.
         </p>
         <div class="ps-settings__card-value">
           <app-cli-model-selector

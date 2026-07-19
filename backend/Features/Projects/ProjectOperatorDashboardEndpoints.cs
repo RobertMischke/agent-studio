@@ -37,9 +37,10 @@ public static class ProjectOperatorDashboardEndpoints
 
         app.MapGet("/api/projects/{projectName}/visual-evidence", (
             string projectName,
+            bool? refresh,
             ProjectVisualEvidenceService evidence) =>
         {
-            var queue = evidence.Build(projectName);
+            var queue = evidence.Build(projectName, refresh == true);
             return queue is null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
                 : Results.Ok(queue);

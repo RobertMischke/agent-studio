@@ -61,6 +61,9 @@
               (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
           }
         }
+        @if (overlays.projectShellRail() === 'project-graph') {
+          <app-project-graph [projectName]="projShell" />
+        }
         @defer (when overlays.projectShellRail() === 'drift') {
           @if (overlays.projectShellRail() === 'drift') {
             <app-project-detail

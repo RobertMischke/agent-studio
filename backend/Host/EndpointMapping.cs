@@ -58,6 +58,7 @@ public static class EndpointMapping
         app.MapReviewDecisionsEndpoints();
         app.MapProjectSnapshotEndpoints();
         app.MapProjectOperatorDashboardEndpoints();
+        app.MapProjectGraphEndpoints();
         app.MapPublishEndpoints();
         app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();

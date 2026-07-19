@@ -2,6 +2,7 @@
 
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace AgentStudio.Runner;
@@ -1669,26 +1670,39 @@ public class ProjectRunner
         IntegrationLeaseGrant? integrationLease = null)
     {
         var started = DateTime.UtcNow;
+        var settings = _projectSettings.Get(ProjectName);
+        var step = AgentStudio.Pipeline.PipelineCatalogue.Standard.AllSteps.First(s =>
+            string.Equals(s.Id, AgentStudio.Pipeline.PipelineCatalogue.ConflictResolutionStepId, StringComparison.OrdinalIgnoreCase));
+        var resolverCliType = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveCliType(settings, step)
+            ?? AgentStudio.Pipeline.PipelineStepModelDefaults.DefaultCli;
+        var resolverModel = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveModel(
+            settings, step, AgentStudio.Pipeline.PipelineStepModelDefaults.SupportModel);
+        var resolverThinkingLevel = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
+            settings,
+            step,
+            resolverCliType,
+            resolverModel,
+            AgentStudio.Pipeline.PipelineStepModelDefaults.SupportThinkingLevel);
         RecordConflictResolutionStep(info, PipelineStepStatus.Running, "running",
-            IntegrationSummary("Starting managed Codex conflict-resolution run.", run, workBranch, conflict),
+            IntegrationSummary($"Starting managed {resolverCliType} conflict-resolution run.", run, workBranch, conflict),
             started,
-            model: info.Model);
+            model: resolverModel);
 
         try
         {
-            var resolver = _router.Get(CliTypes.Codex);
+            var resolver = _router.Get(resolverCliType);
             if (resolver.CliType == AgentTypes.Human || !resolver.IsAvailable())
             {
-                var unavailable = $"Codex resolver is unavailable at `{resolver.GetCliPath()}`.";
+                var unavailable = $"{resolverCliType} resolver is unavailable at `{resolver.GetCliPath()}`.";
                 var result = new IntegrationResult(IntegrationOutcome.Conflict, null, unavailable, conflict.ConflictedFiles);
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
-                    IntegrationSummary(unavailable, run, workBranch, result), started, model: info.Model);
+                    IntegrationSummary(unavailable, run, workBranch, result), started, model: resolverModel);
                 return result;
             }
 
             var resolverJobKey = $"{GetJobKey(info.Id)}:conflict-resolution";
-            var permissionMode = _projectSettings.ResolveCliMode(ProjectName, CliTypes.Codex).Mode;
-            var contextMode = _projectSettings.ResolveContextMode(ProjectName, CliTypes.Codex, info.ContextMode).Mode;
+            var permissionMode = _projectSettings.ResolveCliMode(ProjectName, resolverCliType).Mode;
+            var contextMode = _projectSettings.ResolveContextMode(ProjectName, resolverCliType, info.ContextMode).Mode;
             var prompt = BuildConflictResolutionPrompt(info, run, workBranch, conflict);
             var (execution, error) = await resolver.StartAsync(
                 $"{info.Id}-conflict-resolution",
@@ -1697,8 +1711,8 @@ public class ProjectRunner
                 run.WorktreePath!,
                 sessionName: null,
                 resumeSession: false,
-                model: info.Model,
-                thinkingLevel: null,
+                model: resolverModel,
+                thinkingLevel: resolverThinkingLevel,
                 jobFolderPath: info.FolderPath,
                 permissionMode: permissionMode,
                 contextMode: contextMode,
@@ -1711,7 +1725,7 @@ public class ProjectRunner
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
                     IntegrationSummary(failed.Error ?? "Codex resolver failed to start.", run, workBranch, failed),
                     started,
-                    model: info.Model);
+                    model: resolverModel);
                 return failed;
             }
 
@@ -1734,7 +1748,7 @@ public class ProjectRunner
                 var timedOut = new IntegrationResult(IntegrationOutcome.Conflict, null,
                     "Codex conflict resolver timed out.", _git.ListUnmergedFiles(run.WorktreePath!));
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
-                    IntegrationSummary(timedOut.Error!, run, workBranch, timedOut), started, model: final.Model ?? info.Model);
+                    IntegrationSummary(timedOut.Error!, run, workBranch, timedOut), started, model: final.Model ?? resolverModel);
                 return timedOut;
             }
 
@@ -1744,7 +1758,7 @@ public class ProjectRunner
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "lease-lost",
                     IntegrationSummary("Integration lease was lost during conflict-resolution.", run, workBranch, lost),
                     started,
-                    model: final.Model ?? info.Model);
+                    model: final.Model ?? resolverModel);
                 return lost;
             }
 
@@ -1764,7 +1778,7 @@ public class ProjectRunner
                 RecordConflictResolutionStep(info, PipelineStepStatus.Passed, "resolved",
                     $"Conflict resolved and `{run.Branch}` merged into `{workBranch}` at `{retry.IntegratedSha ?? "<unknown>"}`.",
                     started,
-                    model: final.Model ?? info.Model);
+                    model: final.Model ?? resolverModel);
                 return retry;
             }
 
@@ -1777,7 +1791,7 @@ public class ProjectRunner
             RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
                 IntegrationSummary("Integration blocked.", run, workBranch, blocked),
                 started,
-                model: final.Model ?? info.Model);
+                model: final.Model ?? resolverModel);
             return blocked;
         }
         catch (Exception ex)
@@ -1785,7 +1799,7 @@ public class ProjectRunner
             _logger.LogWarning(ex, "[taskboard] conflict-resolution step failed for {Job}", run.JobId);
             var failed = new IntegrationResult(IntegrationOutcome.Conflict, null, ex.Message, conflict.ConflictedFiles);
             RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
-                IntegrationSummary("Integration blocked.", run, workBranch, failed), started, model: info.Model);
+                IntegrationSummary("Integration blocked.", run, workBranch, failed), started, model: resolverModel);
             return failed;
         }
     }
@@ -1983,10 +1997,16 @@ public class ProjectRunner
         }
 
         _processing = true;
+        TaskInfo? admissionInfo = null;
+        var movedToProgressThisCall = false;
+        var claimedRunThisCall = false;
+        var processStartConfirmed = false;
+        string? acquiredPickupLockFolder = null;
         try
         {
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
+            admissionInfo = info;
 
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
@@ -2083,7 +2103,6 @@ public class ProjectRunner
             // otherwise the task is stranded as a zombie in 3-progress while its
             // slot is already free -> the runner picks the next task and ends up
             // with two folders in 3-progress at maxParallelism=1.
-            var movedToProgressThisCall = false;
             if (plan.MoveJobToProgress && info.State != TaskStates.Progress)
             {
                 var move = _states.MoveJob(jobId, TaskStates.Progress, Entry.Path);
@@ -2108,6 +2127,7 @@ public class ProjectRunner
                 jobFolder = info.FolderPath;
                 plan = RebindPlanJobPaths(plan, promptPath, jobFolder);
                 movedToProgressThisCall = true;
+                admissionInfo = info;
             }
 
             // Way 3 (non-deterministic half): an epic card runs a planning /
@@ -2170,11 +2190,13 @@ public class ProjectRunner
                         BusyJobTitle: info.Title));
                 }
                 _activePickupLockFolder = jobFolder;
+                acquiredPickupLockFolder = jobFolder;
             }
 
-            _activeRuns.TryClaim(new ActiveRun
+            claimedRunThisCall = _activeRuns.TryClaim(new ActiveRun
             {
                 JobId = jobId,
+                JobFolder = jobFolder,
                 Intent = intent,
                 Followup = followupPrompt,
                 Plan = plan,
@@ -2182,6 +2204,22 @@ public class ProjectRunner
                 PickupLockFolder = _activePickupLockFolder,
             });
             _activePickupLockFolder = null;
+            if (!claimedRunThisCall)
+            {
+                if (_pickupLock != null && _pickupLockOwner != null && acquiredPickupLockFolder != null)
+                {
+                    var owner = _pickupLockOwner with { ProjectName = ProjectName, JobId = jobId };
+                    _pickupLock.Release(acquiredPickupLockFolder, owner);
+                }
+                if (movedToProgressThisCall)
+                    RevertFailedStartFromProgress(jobId, info, intent);
+                _logger.LogWarning(
+                    "run_admission_duplicate_prevented jobId={JobId} project={Project} reason=active-run-claim-lost",
+                    jobId, ProjectName);
+                return RunOutcome.Reject(new RunRejection(
+                    RunRejectReason.ProjectBusy,
+                    $"Job '{jobId}' was claimed by another launch before admission completed."));
+            }
             // ASS-1732 "always-worktree": a CODING run mutates the source tree, so
             // it ALWAYS executes in its own isolated task/<id> worktree - the
             // primary/sequential slot included, and for every intent (fresh
@@ -2410,7 +2448,7 @@ public class ProjectRunner
             // endpoint uses ("commits made during this run" = git rev-list
             // HeadShaBefore..HeadShaAfter). Best-effort: a missing repo or
             // a git failure leaves the SHAs null and we fall back to the
-            // wall-clock window. See docs/product/design-principles.md for why we
+            // wall-clock window. See docs/quality/design-principles.md for why we
             // treat the software-side change set as a first-class signal.
             var headShaBefore = SafeGetHeadSha(jobId);
 
@@ -2420,42 +2458,6 @@ public class ProjectRunner
             // RenderPrompt + the optional reissue open-items prepend have both
             // run. Stored in its own file (multi-KB), referenced from the event.
             var contextRef = _sessions.PersistRunContext(info.FolderPath, prompt);
-
-            _sessions.AppendSessionEvent(jobId, new SessionEvent
-            {
-                Ts = DateTime.UtcNow,
-                Kind = plan.EventKind,
-                Cli = cli.CliType,
-                InputSessionId = plan.EventInputSessionId,
-                CapturedSessionId = null,
-                // S2 (AGT-1784): record the cwd this session is born in (the
-                // worktree path) so a later reissue can detect a cross-path
-                // resume target and start fresh instead of crashing.
-                Cwd = runWorkingDir,
-                Resumed = plan.ResumeFlag,
-                Reason = plan.EventReason,
-                HeadShaBefore = headShaBefore,
-                ContextRef = contextRef
-            }, Entry.Path);
-
-            // ADR-0049: mirror the run-start onto the unified timeline so the
-            // FE Timeline tab and the Overview strip can render the event
-            // without re-deriving it from session-events.jsonl + cli-output.log.
-            _timeline?.Append(
-                info.FolderPath,
-                TimelineEventKinds.AgentRunStarted,
-                TimelineActors.System,
-                summary: $"{cli.CliType} CLI {plan.EventKind}{(string.IsNullOrWhiteSpace(plan.EventReason) ? "" : $" ({plan.EventReason})")}",
-                runId: plan.EventInputSessionId,
-                details: new()
-                {
-                    ["cli"] = cli.CliType ?? string.Empty,
-                    ["model"] = runModel ?? string.Empty,
-                    ["quotaFallback"] = route?.IsFallback == true ? "true" : "false",
-                    ["fallbackReason"] = route?.Reason ?? string.Empty,
-                    ["intent"] = plan.EventKind ?? string.Empty,
-                    ["resumed"] = plan.ResumeFlag ? "true" : "false",
-                });
 
             // ADR-0052: surface the slot pick-decision + occupancy on the
             // timeline. At MaxParallelism == 1 this is the single sequential
@@ -2535,16 +2537,15 @@ public class ProjectRunner
                 isWorktreeRun, activeRunForSpawn?.WorktreeReused == true, runWorkingDir, sessionBirthCwd);
             var effSessionToResume = canResumeSession ? plan.SessionToResume : null;
             var effResumeFlag = canResumeSession && plan.ResumeFlag;
+            var admittedSessionReason = plan.EventReason;
             if (isWorktreeRun && !canResumeSession && plan.ResumeFlag)
             {
                 var why = !string.IsNullOrWhiteSpace(sessionBirthCwd)
                     ? $"prior session born in {sessionBirthCwd} != this run cwd {runWorkingDir}"
                     : "prior session cwd was not this worktree";
                 _logger.LogInformation("[taskboard] {Job}: starting FRESH session ({Why})", jobId, why);
-                // Keep session-events.jsonl truthful — the start event was written
-                // with Resumed=plan.ResumeFlag before this guard ran.
-                try { _sessions.BackfillLatestSessionEventResumed(jobId, false, why, Entry.Path); }
-                catch (Exception ex) { _logger.LogDebug(ex, "[taskboard] {Job}: resumed-backfill best-effort", jobId); }
+                // Keep the admitted session event truthful about the fallback.
+                admittedSessionReason = why;
             }
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, runWorkingDir,
@@ -2591,6 +2592,40 @@ public class ProjectRunner
                     Reason: RunRejectReason.CliUnavailable,
                     Message: cliError ?? $"Failed to start {cli.CliType} CLI process"));
             }
+            processStartConfirmed = true;
+
+            // A run-start is durable only after the CLI adapter confirms a
+            // process. Neither the canonical session event nor its timeline
+            // projection may exist for a rejected admission, otherwise a later
+            // read invents a historical run that never owned execution.
+            _sessions.AppendSessionEvent(jobId, new SessionEvent
+            {
+                Ts = execution.StartedAt,
+                Kind = plan.EventKind,
+                Cli = cli.CliType,
+                InputSessionId = effSessionToResume,
+                CapturedSessionId = null,
+                Cwd = runWorkingDir,
+                Resumed = effResumeFlag,
+                Reason = admittedSessionReason,
+                HeadShaBefore = headShaBefore,
+                ContextRef = contextRef
+            }, Entry.Path);
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.AgentRunStarted,
+                TimelineActors.System,
+                summary: $"{cli.CliType} CLI {plan.EventKind}{(string.IsNullOrWhiteSpace(plan.EventReason) ? "" : $" ({plan.EventReason})")}",
+                runId: effSessionToResume,
+                details: new()
+                {
+                    ["cli"] = cli.CliType ?? string.Empty,
+                    ["model"] = runModel ?? string.Empty,
+                    ["quotaFallback"] = route?.IsFallback == true ? "true" : "false",
+                    ["fallbackReason"] = route?.Reason ?? string.Empty,
+                    ["intent"] = plan.EventKind ?? string.Empty,
+                    ["resumed"] = effResumeFlag ? "true" : "false",
+                });
 
             // Spawn succeeded; drop the stashed intent (we've consumed it).
             _mutations.DiscardStashedPendingIntent(info.FolderPath);
@@ -2626,6 +2661,40 @@ public class ProjectRunner
                 RecordReissueOpenItemsPreStep(info, reissueOpenItems, execution.StartedAt);
 
             return RunOutcome.Started(execution);
+        }
+        catch (Exception ex) when (!processStartConfirmed)
+        {
+            // Admission is a transaction until StartAsync returns a live
+            // process. Any unexpected fault before that boundary must release
+            // ownership and undo this call's lane move, otherwise Ready becomes
+            // Progress with neither a run nor a bounded wake.
+            if (claimedRunThisCall)
+            {
+                ReleaseRun(jobId);
+            }
+            else if (_pickupLock != null && _pickupLockOwner != null && acquiredPickupLockFolder != null)
+            {
+                var owner = _pickupLockOwner with { ProjectName = ProjectName, JobId = jobId };
+                _pickupLock.Release(acquiredPickupLockFolder, owner);
+            }
+
+            if (admissionInfo != null)
+            {
+                try { WriteSpawnFailureDiagnostic(admissionInfo, admissionInfo.CliType ?? "unknown", ex.Message); }
+                catch (Exception diagnosticEx) { _logger.LogDebug(diagnosticEx, "Could not persist admission-fault diagnostic for {JobId}", jobId); }
+                _mutations.RollbackStashedPendingIntent(admissionInfo.FolderPath);
+                if (movedToProgressThisCall)
+                    RevertFailedStartFromProgress(jobId, admissionInfo, intent);
+            }
+
+            _logger.LogError(
+                ex,
+                "run_admission_failed jobId={JobId} project={Project} movedToProgress={Moved} claimed={Claimed}; ownership released and lane reconciled",
+                jobId, ProjectName, movedToProgressThisCall, claimedRunThisCall);
+            NotifyStatus();
+            return RunOutcome.Reject(new RunRejection(
+                RunRejectReason.CliUnavailable,
+                $"Run admission failed before the CLI started: {ex.Message}"));
         }
         finally
         {
@@ -2936,7 +3005,7 @@ public class ProjectRunner
         // ROOT CAUSE FIX (2026-06-23): the live-stream sentinel scanner used to
         // match SentinelRegex on EVERY raw output line, so a run that merely READ
         // a file containing a [[TASK_DONE]] literal (the backend's own runner
-        // code, AGENTS.md, and docs/contracts/agent-task.md are full of them - the
+        // code, AGENTS.md, and docs/system/contracts/agent-task.md are full of them - the
         // file content rides the "user"/tool-result stream) was killed mid-work as
         // a false "completion". The decision now lives in the tested pure helper
         // LiveSentinelScanner: agent-stream only + standalone sentinel line.
@@ -3225,12 +3294,13 @@ public class ProjectRunner
         if (string.IsNullOrWhiteSpace(jobId)) return false;
         if (_activeRuns.Contains(jobId)) return false;
 
-        var claimed = _activeRuns.TryClaim(new ActiveRun
+        var recoveredRun = new ActiveRun
         {
             JobId = jobId,
             CliType = cliType,
             Intent = RunIntent.AutoPickup,
-        });
+        };
+        var claimed = _activeRuns.TryClaim(recoveredRun);
         if (!claimed) return false;
 
         var slotMax = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism);
@@ -3243,6 +3313,7 @@ public class ProjectRunner
         catch (Exception ex) { _logger.LogDebug(ex, "RegisterRecoveredRun: FindJob threw for {JobId}", jobId); }
         if (info != null && !string.IsNullOrWhiteSpace(info.FolderPath))
         {
+            recoveredRun.JobFolder = info.FolderPath;
             _timeline?.Append(
                 info.FolderPath,
                 TimelineEventKinds.RunnerSlotAdmission,
@@ -3304,6 +3375,19 @@ public class ProjectRunner
     private static bool IsAutoMode(string mode)
         => string.Equals(mode, "auto-continuous", StringComparison.OrdinalIgnoreCase)
         || string.Equals(mode, "auto-single", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A NeedsInput run is unattended when it was auto-picked, even if the
+    /// project mode flipped to manual before the completion callback observed
+    /// the sentinel. Current auto mode also covers automatic continuations.
+    /// This decision deliberately does not depend on a captured run plan: the
+    /// bounded-wait invariant must survive missing optional run metadata.
+    /// </summary>
+    internal static bool ShouldHandleNeedsInputUnattended(
+        AgentOutcomeKind outcomeKind, RunIntent intent, string mode, TaskInfo? activeInfo)
+        => activeInfo != null
+           && outcomeKind == AgentOutcomeKind.NeedsInput
+           && (intent == RunIntent.AutoPickup || IsAutoMode(mode));
 
     /// <summary>
     /// Boot the long-lived orchestrator session for this project (Phase H).
@@ -3562,7 +3646,7 @@ public class ProjectRunner
                 var resumePrompt = BuildOrchestratorResumePrompt(_prompts, info, lastAgentText, attachmentsList);
                 // Rejection-recovery lives on the runner (ResumeWithFallbackAsync)
                 // so the per-job and global-chat orchestrator paths cannot drift
-                // apart again - see docs/contracts/code-patterns.md "orchestrator-resume-with-fallback".
+                // apart again - see docs/system/contracts/code-patterns.md "orchestrator-resume-with-fallback".
                 var resumeRejected = false;
                 result = await _orchestratorRunner.ResumeWithFallbackAsync(
                     session.SessionId,
@@ -4029,27 +4113,6 @@ public class ProjectRunner
                     settings),
                 ProjectName,
                 info.Id);
-            var onboardingStep = AgentStudio.Pipeline.PipelineCatalogue.Standard.Pre.First(s =>
-                s.Id == AgentStudio.Pipeline.PipelineCatalogue.PreWorkstreamOnboardingStepId);
-            if (AgentStudio.Pipeline.PipelineStepConfigResolver.IsEnabled(settings, onboardingStep)
-                && !string.IsNullOrWhiteSpace(Entry.RootPath))
-            {
-                var started = DateTime.UtcNow;
-                var language = AgentStudio.Docs.WorkstreamFrameLanguageResolver.Resolve(
-                    ProjectName, settings.WorkstreamFramePublic);
-                var result = AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner.RecordOnboarding(
-                    Entry.RootPath, info, language, started);
-                _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
-                {
-                    StepId = AgentStudio.Pipeline.PipelineCatalogue.PreWorkstreamOnboardingStepId,
-                    Kind = StepKind.Module,
-                    Status = result.Writes > 0 ? PipelineStepStatus.Passed : PipelineStepStatus.Skipped,
-                    StartedAt = started,
-                    CompletedAt = DateTime.UtcNow,
-                    Verdict = result.Writes > 0 ? "updated" : "skipped",
-                    Reason = $"current development state writes={result.Writes} rejected={result.Rejected}",
-                });
-            }
             // Carry the CORE step's accumulated duration forward. A re-run of
             // the same task reuses one in-flight record, so without preserving
             // this the run-start write would zero the total and the prior
@@ -5272,7 +5335,7 @@ public class ProjectRunner
                     // exhausted into the same rejection; the quarantine breaker
                     // exists precisely to STOP re-running this task. All go
                     // directly to human review.
-                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
+                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.AuthRefreshFailed or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         _projectSettings.Get(ProjectName),
@@ -5387,12 +5450,9 @@ public class ProjectRunner
             // the orchestrator to decide on the user's behalf and feed the
             // decision back as a Continue follow-up. Manual mode keeps
             // today's path: the question stays in the chat for the user.
-            if (capturedPlan != null
-                && (outcome.Kind == AgentOutcomeKind.NeedsInput)
-                && IsAutoMode(_mode)
-                && activeInfo != null)
+            if (ShouldHandleNeedsInputUnattended(outcome.Kind, capturedIntent, _mode, activeInfo))
             {
-                _ = Task.Run(() => RunOrchestratorDecisionAsync(activeInfo, jobId, outcome));
+                _ = Task.Run(() => RunOrchestratorDecisionAsync(activeInfo!, jobId, outcome));
                 return;
             }
 
@@ -5488,7 +5548,7 @@ public class ProjectRunner
                 // that the typed routes above never claimed). A deliberate stop
                 // (status=stopped) and a manual-mode NeedsInput legitimately stay
                 // in progress and are excluded by the guard. See
-                // docs/wiki/concepts/runner-stability-incidents.html.
+                // docs/concepts/runner-stability-incidents.html.
                 var backstopIssueKind = action?.IssueKind is RunIssueKind k and not RunIssueKind.None
                     ? k
                     : RunIssueKind.OrchestratorInconclusive;
@@ -5730,6 +5790,10 @@ public class ProjectRunner
                      // catch-all (AGT-1941: codex model-invalid / claude quota).
                      or RunIssueKind.ModelInvalid
                      or RunIssueKind.QuotaExhausted
+                     // A failed OAuth-session refresh (AGT-2066 breaker) is
+                     // non-retryable and must reach human review with a re-auth
+                     // instruction instead of stranding in 3-progress.
+                     or RunIssueKind.AuthRefreshFailed
                      // A transient environmental fault that persisted after the
                      // bounded retry-with-backoff, and a CLI launch/resume failure
                      // that persisted after the fresh-start retry, both reach human
@@ -5818,6 +5882,7 @@ public class ProjectRunner
         RunIssueKind.ContextOverflow          => "context-overflow",
         RunIssueKind.ModelInvalid             => "model-invalid",
         RunIssueKind.QuotaExhausted           => "quota-exhausted",
+        RunIssueKind.AuthRefreshFailed        => "auth-refresh-failed",
         RunIssueKind.EnvironmentalTransient   => "environmental",
         RunIssueKind.Quarantined              => "quarantined",
         RunIssueKind.AgentGitViolation        => "agent-git-violation",
@@ -5838,6 +5903,7 @@ public class ProjectRunner
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
         RunIssueKind.ModelInvalid       => HumanReviewEscalationCategories.ModelInvalid,
         RunIssueKind.QuotaExhausted     => HumanReviewEscalationCategories.QuotaExhausted,
+        RunIssueKind.AuthRefreshFailed  => HumanReviewEscalationCategories.AuthRefreshFailed,
         RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
         RunIssueKind.AgentGitViolation  => HumanReviewEscalationCategories.AgentGitViolation,
         RunIssueKind.InfraCrash         => HumanReviewEscalationCategories.InfraCrash,
@@ -5945,16 +6011,17 @@ public class ProjectRunner
         var model = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveModel(
             settings,
             AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
-            runtimeDefault: execution.Model ?? activeInfo.Model ?? ModelIds.ClaudeHaiku45);
+            runtimeDefault: AgentStudio.Pipeline.PipelineStepModelDefaults.SupportModel);
         var reviewCliType = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveCliType(
             settings,
-            AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep) ?? cliType;
+            AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep)
+            ?? AgentStudio.Pipeline.PipelineStepModelDefaults.DefaultCli;
         var thinkingLevel = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
             settings,
             AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
             reviewCliType,
             model,
-            execution.ThinkingLevel ?? activeInfo.ThinkingLevel);
+            AgentStudio.Pipeline.PipelineStepModelDefaults.SupportThinkingLevel);
 
         var phase = _phaseByJob.TryGetValue(jobKey, out var snap) ? snap.Phase.ToString() : RunPhase.Unknown.ToString();
         var request = new PostAbortReviewRequest(
@@ -6281,6 +6348,9 @@ public class ProjectRunner
     /// </summary>
     /// <returns>True if the runner was holding this job and the latch was cleared.</returns>
     public bool ClearActiveJobIfMatches(string jobId, string reason)
+        => ClearActiveJobIfMatches(jobId, reason, appendChatLog: true);
+
+    private bool ClearActiveJobIfMatches(string jobId, string reason, bool appendChatLog)
     {
         if (string.IsNullOrEmpty(jobId)) return false;
         if (_activeJobId != jobId) return false;
@@ -6311,11 +6381,14 @@ public class ProjectRunner
         // is gone (delete + folder-rm), we skip silently.
         try
         {
-            var movedInfo = _scanner.FindJob(jobId, Entry.Path);
-            if (movedInfo != null)
+            if (appendChatLog)
             {
-                _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision,
-                    $"Runner active state cleared: {reason}");
+                var movedInfo = _scanner.FindJob(jobId, Entry.Path);
+                if (movedInfo != null)
+                {
+                    _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision,
+                        $"Runner active state cleared: {reason}");
+                }
             }
         }
         catch (Exception ex)
@@ -6332,8 +6405,8 @@ public class ProjectRunner
     /// points at a job whose folder is no longer in <c>3-progress</c>
     /// (deleted, moved by an external script, archived by the boot-time
     /// stuck-folder sweep), release the latch so the next pickup tick can
-    /// choose freely. Cheap when there is no active job; costs one
-    /// <see cref="TaskScannerService.FindJob"/> when there is.
+    /// choose freely. The admission path captures the concrete task folder,
+    /// so this check does not enter the global task index.
     /// </summary>
     /// <returns>True if the latch was held and got cleared by this call.</returns>
     public bool ReconcileActiveJobAgainstDisk()
@@ -6342,42 +6415,57 @@ public class ProjectRunner
         if (jobId == null) return false;
         if (_processing) return false;
 
-        TaskInfo? info = null;
-        try { info = _scanner.FindJob(jobId, Entry.Path); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Reconcile: FindJob threw for {JobId}", jobId); }
+        var folder = _activeRuns.Get(jobId)?.JobFolder;
+        if (string.IsNullOrWhiteSpace(folder))
+            folder = FindLegacyActiveFolder(jobId);
 
-        // Use the PHYSICAL lane, not the scanner's resolved State. The wedge
-        // this guard detects is an external mover (boot-time stuck-folder sweep,
-        // a hand edit) that drags the active folder out of 3-progress WITHOUT
-        // rewriting task.json. The scanner prefers task.json's "state" field, so
-        // it can still report "3-progress" from the stale json even though the
-        // folder now sits under another lane. In the legacy lane layout the
-        // folder's parent directory IS the lane, so that is authoritative; in
-        // the flat layout there is no lane folder and we fall back to State.
-        var physicalLane = ResolvePhysicalLane(info);
-        if (info != null && physicalLane == TaskStates.Progress) return false;
+        var physicalLane = ResolvePhysicalLane(folder);
+        if (physicalLane == TaskStates.Progress) return false;
 
-        var reason = info == null
+        var reason = physicalLane == null
             ? "active job folder no longer exists"
             : $"active job moved out of 3-progress (now in {physicalLane})";
-        return ClearActiveJobIfMatches(jobId, reason);
+        // Do not perform the best-effort chat lookup on a watcher callback:
+        // FindJob would re-enter the just-invalidated global index.
+        return ClearActiveJobIfMatches(jobId, reason, appendChatLog: false);
     }
 
     /// <summary>
-    /// The lane a job physically sits in. In the legacy lane layout
-    /// (<c>&lt;watchPath&gt;/&lt;state&gt;/&lt;slug&gt;</c>) the folder's parent
-    /// directory name is the lane and is authoritative over a possibly-stale
-    /// <c>task.json</c> "state" field. In the flat layout the parent is a
-    /// storage bucket (not a known lane), so the resolved
-    /// <see cref="TaskInfo.State"/> is used instead.
+    /// Finds the legacy lane folder without scanning any sibling task. Runtime
+    /// admissions already carry <see cref="ActiveRun.JobFolder"/>; this fallback
+    /// exists for test seams and old recovered in-memory records only.
     /// </summary>
-    private static string? ResolvePhysicalLane(TaskInfo? info)
+    private string? FindLegacyActiveFolder(string jobId)
     {
-        if (info == null) return null;
-        var parent = Path.GetFileName(Path.GetDirectoryName(info.FolderPath) ?? string.Empty);
+        foreach (var state in TaskStates.All)
+        {
+            var candidate = Path.Combine(Entry.Path, state, jobId);
+            if (Directory.Exists(candidate)) return candidate;
+        }
+        return null;
+    }
+
+    private static string? ResolvePhysicalLane(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return null;
+        var parent = Path.GetFileName(Path.GetDirectoryName(folder) ?? string.Empty);
         if (!string.IsNullOrEmpty(parent) && Array.IndexOf(TaskStates.All, parent) >= 0)
             return parent;
-        return info.State;
+
+        try
+        {
+            var taskJson = Path.Combine(folder, "task.json");
+            if (!File.Exists(taskJson)) return null;
+            using var document = JsonDocument.Parse(File.ReadAllText(taskJson));
+            return document.RootElement.TryGetProperty("state", out var state)
+                   && state.ValueKind == JsonValueKind.String
+                ? state.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>Test seam: lets a unit test prime the active-job latch
@@ -6388,6 +6476,7 @@ public class ProjectRunner
         {
             JobId = jobId,
             CliType = cliType,
+            JobFolder = FindLegacyActiveFolder(jobId),
             Parallelism = predictedScope == null ? TaskParallelism.Default : new TaskParallelism(false, predictedScope)
         });
     }

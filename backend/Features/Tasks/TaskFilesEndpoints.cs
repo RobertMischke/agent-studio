@@ -13,7 +13,7 @@ namespace AgentStudio.Tasks;
 /// <c>attachments/</c> upload/download surface used by the prompt
 /// editor and the read-only <c>results/</c> mirror that backs
 /// <c>status.md</c> image references. See
-/// <c>docs/contracts/protocol-style.md</c> for the storage contract.
+/// <c>docs/system/contracts/protocol-style.md</c> for the storage contract.
 /// </summary>
 public static class TaskFilesEndpoints
 {
@@ -48,10 +48,11 @@ public static class TaskFilesEndpoints
             return FileContentResult(content);
         });
 
-        // Lists every `.md` file directly in the job root (status.md excluded).
-        // Drives the detail view's Files tab (F48): prompt + aspect verdicts +
-        // operator notes surface as a sortable, kind-classified manifest, with
-        // content fetched lazily through `/files/{fileName}`.
+        // Lists supported documents directly in the job root (status.md
+        // excluded). Drives the detail view's Files tab (F48): prompt, aspect
+        // verdicts, operator notes, and interactive isolated HTML surface as a
+        // sortable, kind-classified manifest, with content fetched lazily
+        // through `/files/{fileName}`.
         group.MapGet("/{jobId}/artifacts", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
@@ -119,7 +120,7 @@ public static class TaskFilesEndpoints
         // Read-only mirror of /attachments/ for the job's `results/` folder — the
         // place where agents drop screenshots that should survive past the next
         // Playwright run. The protocol pane resolves `results/<name>` references
-        // in status.md against this URL. See docs/contracts/protocol-style.md.
+        // in status.md against this URL. See docs/system/contracts/protocol-style.md.
         group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);

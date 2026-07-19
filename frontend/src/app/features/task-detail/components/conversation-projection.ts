@@ -35,6 +35,7 @@
  * `stream-json` / Messages-API transport frames.
  */
 import type { CliOutputLine } from '../../../models/task.model';
+import { stripAnsi } from '../../../utils/ansi-text';
 
 /** Compact, English (per AGENTS.md) placeholder shown in place of a raw frame. */
 export const INTERNAL_EVENT_MARKER = '[internal event]';
@@ -221,9 +222,12 @@ export function sanitizeProjectionLines(
   let runDetails: string[] | null = null;
 
   for (const line of lines) {
-    if (isNonRenderableRawLine(line.text)) {
+    const cleanText = stripAnsi(line.text);
+    const cleanLine = cleanText === line.text ? line : { ...line, text: cleanText };
+    if (cleanLine !== line) anyRedacted = true;
+    if (isNonRenderableRawLine(cleanText)) {
       anyRedacted = true;
-      const detail = line.text;
+      const detail = cleanText;
       if (runDetails) {
         // Extend the current marker's run instead of emitting another marker.
         runDetails.push(detail);
@@ -236,8 +240,8 @@ export function sanitizeProjectionLines(
       }
       runDetails = [detail];
       out.push({
-        timestamp: line.timestamp,
-        stream: line.stream,
+        timestamp: cleanLine.timestamp,
+        stream: cleanLine.stream,
         text: INTERNAL_EVENT_MARKER,
         internalDetail: detail,
       });
@@ -245,7 +249,7 @@ export function sanitizeProjectionLines(
     }
 
     runDetails = null;
-    out.push(line);
+    out.push(cleanLine);
   }
 
   return anyRedacted ? out : (lines as CliOutputLine[]);

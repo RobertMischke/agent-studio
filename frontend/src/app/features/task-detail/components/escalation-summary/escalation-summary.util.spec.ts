@@ -6,6 +6,7 @@ import {
   buildDelivery,
   buildEscalationSummaryView,
   deriveEscalationClass,
+  deriveReissues,
   deriveRecommendation,
   gateItemsFromEvidence,
   gateItemsFromFindings,
@@ -274,6 +275,22 @@ describe('buildEscalationSummaryView', () => {
         commits: [],
       },
       statusMarkdown: null,
+      timeline: [
+        {
+          ts: '2026-07-09T18:30:00Z',
+          kind: 'quality_loop_reopened',
+          actor: 'quality-loop',
+          summary: 'Reopened after build gate.',
+          details: { cause: 'build/test gate failed', reason: 'npm test exited with 1' },
+        },
+        {
+          ts: '2026-07-09T19:30:00Z',
+          kind: 'orchestrator_escalated',
+          actor: 'orchestrator',
+          summary: 'Budget exhausted.',
+          details: { attempt: '3', maxAttempts: '3' },
+        },
+      ],
     });
 
     expect(view.gateSource).toBe('follow-up');
@@ -285,8 +302,31 @@ describe('buildEscalationSummaryView', () => {
     expect(view.delivery.filesChanged).toBe(4);
     expect(view.delivery.merge?.main.merged).toBe(true);
     expect(view.recommendation?.kind).toBe('needs-decision');
+    expect(view.reissues[0].trigger).toBe('build/test gate failed: npm test exited with 1');
+    expect(view.stateSentence).toBe(
+      'Delivered and merged; waiting for your decision because the reissue budget is exhausted, and 2 gate points remain open.',
+    );
     // A completion-gate escalation is a logical / quality review, not a give-up.
     expect(view.escalation?.kind).toBe('needs-review');
+  });
+});
+
+describe('deriveReissues', () => {
+  it('numbers reopen events chronologically and explains each trigger', () => {
+    const rows = deriveReissues([
+      {
+        ts: '2026-07-09T10:00:00Z', kind: 'quality_loop_reopened', actor: 'quality-loop',
+        summary: 'reopened', details: { cause: 'build/test gate failed', reason: 'npm test exit 1' },
+      },
+      {
+        ts: '2026-07-09T11:00:00Z', kind: 'quality_loop_reopened', actor: 'quality-loop',
+        summary: 'reopened', details: { reason: 'bundle budget and apply_patch stderr' },
+      },
+    ]);
+    expect(rows.map((row) => [row.index, row.at, row.trigger])).toEqual([
+      [1, '2026-07-09T10:00:00Z', 'build/test gate failed: npm test exit 1'],
+      [2, '2026-07-09T11:00:00Z', 'bundle budget and apply_patch stderr'],
+    ]);
   });
 });
 

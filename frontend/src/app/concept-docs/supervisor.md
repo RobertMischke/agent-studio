@@ -1,7 +1,7 @@
 ---
 concept: supervisor
 title: Supervisor
-learnMore: docs/architecture/decisions/adr-archive.md
+learnMore: docs/system/architecture/decisions/adr-archive.md
 learnMoreLabel: Architecture Decisions (ADR-0017)
 ---
 

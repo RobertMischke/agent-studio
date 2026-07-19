@@ -93,6 +93,60 @@ describe('FilesPaneComponent (smoke)', () => {
     http.verify();
   });
 
+  it('keeps expansion state across artifact poll ticks and new files', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    const prompt = {
+      name: 'prompt.md',
+      sizeBytes: 128,
+      mtime: '2026-07-11T12:00:00Z',
+      kind: 'prompt' as const,
+    };
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('promptContent', '# Prompt');
+    fixture.componentRef.setInput('artifacts', [prompt]);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const promptHeader = root.querySelector<HTMLElement>('[data-testid="file-card-prompt.md"] .file-card__head')!;
+    expect(promptHeader.getAttribute('aria-expanded')).toBe('false');
+    promptHeader.click();
+    fixture.detectChanges();
+    expect(promptHeader.getAttribute('aria-expanded')).toBe('true');
+
+    // A poll tick returns fresh objects for the same manifest.
+    fixture.componentRef.setInput('artifacts', [{ ...prompt }]);
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="file-card-prompt.md"] .file-card__head')?.getAttribute('aria-expanded')).toBe('true');
+
+    // A newly discovered file starts collapsed without disturbing prompt.md.
+    const aspect = {
+      name: 'aspect-code-quality.json',
+      sizeBytes: 256,
+      mtime: '2026-07-11T12:00:10Z',
+      kind: 'aspect' as const,
+      aspectName: 'code-quality',
+    };
+    fixture.componentRef.setInput('artifacts', [{ ...prompt }, aspect]);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController)
+      .expectOne((r) => r.url.includes('/api/tasks/demo-job/files/aspect-code-quality.json'))
+      .flush(utf8Buffer('{"schemaVersion":1,"aspect":"code-quality","status":"pass","summary":"OK"}'));
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="file-card-prompt.md"] .file-card__head')?.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector('[data-testid="file-card-aspect-code-quality.json"] .file-card__head')?.getAttribute('aria-expanded')).toBe('false');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
   it('renders a structured card for an aspect-*.json artefact instead of raw JSON', async () => {
     await TestBed.configureTestingModule({
       imports: [FilesPaneComponent],
@@ -131,7 +185,7 @@ describe('FilesPaneComponent (smoke)', () => {
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
-    // Structured card is rendered (single artefact auto-expands).
+    // Structured card is rendered in the collapsed preview.
     const card = root.querySelector('[data-testid="aspect-json-card"]');
     expect(card).not.toBeNull();
     const badge = root.querySelector('[data-testid="aspect-json-status"]');
@@ -174,6 +228,96 @@ describe('FilesPaneComponent (smoke)', () => {
     const root = fixture.nativeElement as HTMLElement;
     // No structured card for a markdown twin — it renders through the markdown path.
     expect(root.querySelector('[data-testid="aspect-json-card"]')).toBeNull();
+    http.verify();
+  });
+
+  it('renders HTML in a script-enabled opaque-origin sandbox', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('artifacts', [
+      {
+        name: 'interactive-report.html',
+        sizeBytes: 256,
+        mtime: '2026-07-11T08:00:00Z',
+        kind: 'other',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    const html = '<button id="switch">Switch</button><script>document.body.dataset.ran="true"</script>';
+    http.expectOne((r) => r.url.includes('/api/tasks/demo-job/files/interactive-report.html'))
+      .flush(utf8Buffer(html));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="file-card-html-frame"]')).toBeNull();
+    root.querySelector<HTMLElement>('[data-testid="file-card-interactive-report.html"] .file-card__head')!.click();
+    fixture.detectChanges();
+
+    const frame = root.querySelector<HTMLIFrameElement>('[data-testid="file-card-html-frame"]');
+    expect(frame).not.toBeNull();
+    expect(frame?.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame?.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    expect(frame?.getAttribute('srcdoc') ?? '').toContain('dataset.ran');
+    expect(root.querySelector('[data-testid="file-card-html-isolation-chip"]')?.textContent)
+      .toContain('interactive, isolated');
+    http.verify();
+  });
+
+  it('clears cached HTML when switching tasks with the same file name', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    const artifact = {
+      name: 'interactive-report.html',
+      sizeBytes: 256,
+      mtime: '2026-07-11T08:00:00Z',
+      kind: 'other' as const,
+    };
+    fixture.componentRef.setInput('jobId', 'first-job');
+    fixture.componentRef.setInput('artifacts', [artifact]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne((r) => r.url.includes('/api/tasks/first-job/files/interactive-report.html'))
+      .flush(utf8Buffer('<h1>First task</h1>'));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLElement>('[data-testid="file-card-interactive-report.html"] .file-card__head')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector<HTMLIFrameElement>('[data-testid="file-card-html-frame"]')?.getAttribute('srcdoc'))
+      .toContain('First task');
+
+    fixture.componentRef.setInput('jobId', 'second-job');
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="file-card-html-frame"]')).toBeNull();
+    http.expectOne((r) => r.url.includes('/api/tasks/second-job/files/interactive-report.html'))
+      .flush(utf8Buffer('<h1>Second task</h1>'));
+    fixture.detectChanges();
+
+    root.querySelector<HTMLElement>('[data-testid="file-card-interactive-report.html"] .file-card__head')!.click();
+    fixture.detectChanges();
+    const secondFrame = root.querySelector<HTMLIFrameElement>('[data-testid="file-card-html-frame"]');
+    expect(secondFrame?.getAttribute('srcdoc')).toContain('Second task');
+    expect(secondFrame?.getAttribute('srcdoc')).not.toContain('First task');
     http.verify();
   });
 });

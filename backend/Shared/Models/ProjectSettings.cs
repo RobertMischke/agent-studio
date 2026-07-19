@@ -84,7 +84,7 @@ public record ProjectSettings
     /// <c>disabled</c>, <c>fewHours</c>, <c>daily</c>, <c>manualOnly</c>.
     /// Default null = "disabled" for every topic; reports never auto-run
     /// without an explicit opt-in. The contract for execution is documented
-    /// in <c>docs/reports/analysis-reports.md</c>; this struct stores the user's
+    /// in <c>docs/system/reports/analysis-reports.md</c>; this struct stores the user's
     /// cadence choice only.
     /// </summary>
     public Dictionary<string, string>? AnalysisSchedules { get; init; }
@@ -239,17 +239,6 @@ public record ProjectSettings
     /// <c>project-settings.json</c>.
     /// </summary>
     public bool? EpicSubTasksToReady { get; init; }
-
-    /// <summary>
-    /// AGT-2024: language of the self-provisioned Workstream frame shells a
-    /// wiki-writing pipeline step seeds into this project's <c>docs/</c>. True
-    /// (a public / open-source repo) forces English; false opts the project into
-    /// the localized frame. Null uses the heuristic default (English) resolved by
-    /// <see cref="AgentStudio.Docs.WorkstreamFrameLanguageResolver"/>. It only
-    /// affects shells created from now on - existing shells are never rewritten.
-    /// Persisted in <c>project-settings.json</c>.
-    /// </summary>
-    public bool? WorkstreamFramePublic { get; init; }
 
     /// <summary>
     /// AGT-2028: per-project configuration for the opt-in <c>post-task-spawner</c>

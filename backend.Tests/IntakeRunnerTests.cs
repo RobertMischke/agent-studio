@@ -339,6 +339,129 @@ public class IntakeRunnerTests : IDisposable
         Assert.DoesNotContain(manifest.Constraints, c => c.Id == "git-handling-api-not-cli");
     }
 
+    [Fact]
+    public void BuildEnrichmentManifest_CodingTask_IncludesApplicableRepositoryStyleGuide()
+    {
+        var target = new TaskInfo
+        {
+            Id = "angular-card",
+            Title = "Add Angular usage metric component",
+            State = TaskStates.Ready,
+            Mode = TaskModes.Coding,
+            Tags = ["frontend"]
+        };
+        var guide = new ProjectStyleGuide(
+            "angular-components",
+            "Angular component guide",
+            "quality/angular-components.md",
+            "Angular rules",
+            "Use OnPush, stable tracking, semantic tokens, and tabular numbers.",
+            "1",
+            new StyleGuideAppliesTo(["*"], ["angular"], ["frontend"]));
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(
+            target,
+            "Build the Angular component and SCSS for a frontend usage card.",
+            [guide],
+            "snapshot-1");
+
+        var selected = Assert.Single(manifest.Constraints,
+            constraint => constraint.Id == "style-guide:angular-components");
+        Assert.Equal("docs/quality/angular-components.md", selected.Source);
+        Assert.Contains("OnPush", selected.Text);
+        Assert.Equal("constraint-selector-v3-budgeted-style-guides", manifest.Selector);
+        Assert.Equal("snapshot-1", manifest.StyleGuideSnapshotId);
+        Assert.Contains("Style-guide snapshot: `snapshot-1`", IntakeRunner.RenderEnrichedContextMarkdown(manifest));
+    }
+
+    [Fact]
+    public void BuildEnrichmentManifest_ReadOnlyTask_DoesNotInjectCodingStyleGuide()
+    {
+        var target = new TaskInfo
+        {
+            Id = "research-card",
+            Title = "Research Angular rendering",
+            State = TaskStates.Ready,
+            Mode = TaskModes.Research,
+            Tags = ["frontend"]
+        };
+        var guide = new ProjectStyleGuide(
+            "angular-components", "Angular component guide", "quality/angular-components.md",
+            "Angular rules", "Use OnPush.", "1",
+            new StyleGuideAppliesTo(["*"], ["angular"], ["frontend"]));
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(
+            target,
+            "Research the Angular component rendering behavior and write a report.",
+            [guide]);
+
+        Assert.DoesNotContain(manifest.Constraints,
+            constraint => constraint.Id == "style-guide:angular-components");
+    }
+
+    [Fact]
+    public void BuildEnrichmentManifest_TaskAreaWildcardMatchesCodingTaskButEmptyTaskAreasDoNot()
+    {
+        var target = new TaskInfo
+        {
+            Id = "general-coding",
+            Title = "Apply the accepted change",
+            State = TaskStates.Ready,
+            Mode = TaskModes.Coding
+        };
+        var wildcard = new ProjectStyleGuide(
+            "global", "Global guide", "quality/global.md", "Global", "Follow the global rule.", "1",
+            new StyleGuideAppliesTo(["*"], ["dotnet"], ["*"]));
+        var empty = new ProjectStyleGuide(
+            "empty", "Empty guide", "quality/empty.md", "Empty", "Never selected.", "1",
+            new StyleGuideAppliesTo(["*"], ["dotnet"], []));
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(target, "Apply it.", [empty, wildcard]);
+
+        var selected = Assert.Single(manifest.Constraints,
+            constraint => constraint.Id == "style-guide:global");
+        Assert.Equal(["general"], selected.Areas);
+        Assert.DoesNotContain(manifest.Constraints, constraint => constraint.Id == "style-guide:empty");
+    }
+
+    [Fact]
+    public void BuildEnrichmentManifest_EnforcesHardBudgetWithDeterministicOmissionManifest()
+    {
+        var target = new TaskInfo
+        {
+            Id = "large-style-guide-set",
+            Title = "Build Angular frontend components",
+            State = TaskStates.Ready,
+            Mode = TaskModes.Coding,
+            Tags = ["frontend"]
+        };
+        var guides = Enumerable.Range(0, 40)
+            .Select(index => new ProjectStyleGuide(
+                $"guide-{index:00}",
+                $"Guide {index:00}",
+                $"quality/guide-{index:00}.md",
+                "Summary",
+                new string((char)('a' + index % 26), 600),
+                "1",
+                new StyleGuideAppliesTo(["*"], ["angular"], ["frontend"])))
+            .ToList();
+
+        var first = IntakeRunner.BuildEnrichmentManifest(target, "Build the Angular frontend component.", guides);
+        var second = IntakeRunner.BuildEnrichmentManifest(target, "Build the Angular frontend component.", guides.AsEnumerable().Reverse().ToList());
+        var rendered = IntakeRunner.RenderEnrichedContextMarkdown(first);
+
+        Assert.True(rendered.Length <= IntakeRunner.MaxEnrichmentContextCharacters);
+        Assert.Equal(rendered.Length, first.UsedCharacters);
+        Assert.True(first.EstimatedTokens <= IntakeRunner.MaxEnrichmentEstimatedTokens);
+        Assert.NotEmpty(first.Omissions);
+        Assert.True(first.Omissions.Count <= 16);
+        Assert.True(first.Omissions.Count + first.AdditionalOmissionCount > 0);
+        Assert.Equal(first.Constraints.Select(constraint => constraint.Id), second.Constraints.Select(constraint => constraint.Id));
+        Assert.Equal(first.Omissions.Select(omission => omission.Id), second.Omissions.Select(omission => omission.Id));
+        Assert.Equal(first.AdditionalOmissionCount, second.AdditionalOmissionCount);
+        Assert.Contains("Omitted relevant constraints", rendered);
+    }
+
     // ---- RunForJob integration: phase transitions + sidecar ------------------
 
     [Fact]

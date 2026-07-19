@@ -9,7 +9,7 @@
 // `[data-studio-theme='light']` overrides). Both files are loaded globally
 // via `styles.scss` so EVERY component reads from `var(--studio-*)` directly.
 //
-// See `docs/frontend/audits/scss-quality.md` for the Tier-1 / Tier-2 contract and
+// See `docs/quality/frontend/audits/scss-quality.md` for the Tier-1 / Tier-2 contract and
 // the enforced stylelint rules.
 // =========================================================================
 
@@ -1199,6 +1199,12 @@
     // Base .detail carries a 12px top padding; drop it so the first
     // pane sits flush under the tab bar (no outer inset).
     padding-top: 0;
+  }
+
+  // Escalation is a workspace decision strip, so it spans the editor instead
+  // of floating inside the detail view's horizontal content inset.
+  app-escalation-summary {
+    margin-inline: calc(-1 * var(--studio-spacing-3));
   }
 
   .detail__header {

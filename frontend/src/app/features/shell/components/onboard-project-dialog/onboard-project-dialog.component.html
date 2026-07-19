@@ -1,110 +1,83 @@
 @if (manager.onboardProjectOpen()) {
   <app-dialog
-    eyebrow="Project"
-    title="New project"
-    subtitle="The backend chooses the storage folder."
+    eyebrow="Project onboarding"
+    title="Create a project"
+    subtitle="Set up the essentials now, or finish optional code-location details later in Project Settings."
     kind="primary"
+    widthTier="lg"
     testid="onboard-project-dialog"
     (closeRequest)="onCancel()"
     (backdropClick)="onCancel()">
-    <div class="opd__form">
-      <label class="opd__field">
-        <span class="opd__label">Workspace</span>
-        <select class="opd__input"
-                data-testid="onboard-project-workspace"
-                [ngModel]="workspaceId()"
-                (ngModelChange)="workspaceId.set($event)">
-          @for (ws of registryWorkspaces(); track ws.id) {
-            <option [value]="ws.id">{{ ws.displayName }}</option>
-          }
-        </select>
-      </label>
-      <label class="opd__field">
-        <span class="opd__label">Project source</span>
-        <select class="opd__input" data-testid="onboard-project-source"
-                [ngModel]="sourceType()" (ngModelChange)="sourceType.set($event)">
-          @for (source of projectSources(); track source.id) {
-            <option [value]="source.id" [disabled]="!source.available">{{ source.label }}{{ source.available ? '' : ' (coming soon)' }}</option>
-          }
-        </select>
-      </label>
-      <label class="opd__field">
-        <span class="opd__label">Display Name</span>
-        <input #nameInput class="opd__input" type="text"
-               data-testid="onboard-project-display-name"
-               [ngModel]="displayName()"
-               (ngModelChange)="onNameChange($event)" />
-      </label>
-      <label class="opd__field">
-        <span class="opd__label">Short Code</span>
-        <input class="opd__input" type="text" maxlength="6"
-               data-testid="onboard-project-short-code"
-               [ngModel]="shortCode()"
-               (ngModelChange)="onCodeChange($event)" />
-      </label>
-      <label class="opd__field">
-        <span class="opd__label">Repository path (optional)</span>
-        <input class="opd__input" type="text"
-               placeholder="C:\Projects\my-repo"
-               data-testid="onboard-project-root-path"
-               [ngModel]="rootPath()"
-               (ngModelChange)="rootPath.set($event)" />
-        <span class="opd__hint">Absolute checkout path on the selected execution host. The task store remains in the Agent Studio workspace.</span>
-      </label>
-      <label class="opd__field">
-        <span class="opd__label">Repository URL (optional)</span>
-        <input class="opd__input" type="url"
-               placeholder="https://github.com/acme/my-repo"
-               data-testid="onboard-project-repository-url"
-               [ngModel]="repositoryUrl()"
-               (ngModelChange)="repositoryUrl.set($event)" />
-        <span class="opd__hint">Stored as the project's <code>repo</code> URL for navigation and remote checkout.</span>
-      </label>
-      <label class="opd__field">
-        <span class="opd__label">Execution runner</span>
-        <select class="opd__input" data-testid="onboard-project-runner"
-                [ngModel]="executionRunner()" (ngModelChange)="executionRunner.set($event)">
-          <option value="local">Local host</option>
-          @for (host of hostRegistry.hosts(); track host.id) {
-            @if (host.id !== 'local' && host.status !== 'retired') { <option [value]="host.id">{{ host.name }}</option> }
-          }
-        </select>
-      </label>
-      <div class="opd__field">
-        <span class="opd__label">CLI Default</span>
-        <app-cli-model-selector
-          [cliType]="cliDefault()"
-          [model]="modelDefault()"
-          [availableModels]="models()"
-          eyebrow="Project default agent"
-          triggerTestid="onboard-project-agent"
-          pickerTestidPrefix="onboard-project-agent-picker"
-          (commit)="onAgentCommit($event)" />
-      </div>
-      <div class="opd__field">
-        <span class="opd__label">Color</span>
-        <div class="opd__swatches" data-testid="onboard-project-color">
-          @for (swatch of swatches; track swatch) {
-            <button type="button"
-                    class="opd__swatch"
-                    [class.opd__swatch--selected]="color() === swatch"
-                    [style.background]="swatch"
-                    [attr.aria-label]="'Use color ' + swatch"
-                    (click)="color.set(swatch)"></button>
-          }
-        </div>
-      </div>
+    <div class="opd__content">
+      <app-project-basics-form
+        mode="create"
+        testidPrefix="onboard-project"
+        [disabled]="submitting()"
+        [workspaces]="registryWorkspaces()"
+        [projects]="allProjects()"
+        [availableModels]="models()"
+        [(workspaceId)]="workspaceId"
+        [(displayName)]="displayName"
+        [(shortCode)]="shortCode"
+        [(color)]="color"
+        [(repositoryPath)]="repositoryPath"
+        [(rootPath)]="rootPath"
+        [(repositoryUrl)]="repositoryUrl"
+        [(cliDefault)]="cliDefault"
+        [(modelDefault)]="modelDefault" />
+
+      <section class="opd__section" aria-labelledby="onboard-project-execution-title">
+        <header class="opd__section-head">
+          <span class="opd__step" aria-hidden="true">4</span>
+          <div>
+            <h3 id="onboard-project-execution-title" class="opd__section-title">Execution location</h3>
+            <p class="opd__section-desc">Choose where this project's coding tasks run. You can change it later in Project Settings.</p>
+          </div>
+        </header>
+        <label class="opd__field">
+          <span class="opd__label">Execution runner</span>
+          <select class="opd__input"
+                  data-testid="onboard-project-runner"
+                  [disabled]="submitting()"
+                  [ngModel]="executionRunner()"
+                  (ngModelChange)="executionRunner.set($event)">
+            <option value="local">Local host</option>
+            @for (host of hostRegistry.hosts(); track host.id) {
+              @if (host.id !== 'local' && host.status !== 'retired') {
+                <option [value]="host.id" [disabled]="runnerUnavailable(host)">
+                  {{ runnerLabel(host) }}
+                </option>
+              }
+            }
+          </select>
+          <span class="opd__hint">Offline and draining runners stay visible for context but cannot be selected.</span>
+        </label>
+      </section>
+
       <div class="opd__preview" data-testid="onboard-project-preview">
-        Will create as {{ previewProjectId() }} in workspace "{{ currentWorkspaceName() }}".
+        <strong>{{ displayName().trim() || 'New project' }}</strong>
+        will be created in workspace "{{ currentWorkspaceName() }}" with the next stable project ID.
+        Task storage stays in the Agent Studio store, never in the product repository.
       </div>
-      @if (errorMsg(); as msg) {
-        <p class="opd__error" data-testid="onboard-project-error">{{ msg }}</p>
+
+      @if (errorMsg(); as message) {
+        <p class="opd__error" role="alert" data-testid="onboard-project-error">{{ message }}</p>
       }
     </div>
     <div footer class="opd__actions">
-      <button type="button" class="opd__btn" data-testid="onboard-project-cancel" (click)="onCancel()">Cancel</button>
-      <button type="button" class="opd__btn opd__btn--primary" data-testid="onboard-project-submit" [disabled]="!canSubmit()" (click)="onSubmit()">
-        {{ submitting() ? 'Creating...' : 'Create project' }}
+      <button type="button"
+              class="opd__btn"
+              data-testid="onboard-project-cancel"
+              [disabled]="submitting()"
+              (click)="onCancel()">Cancel</button>
+      <button type="button"
+              class="opd__btn opd__btn--primary"
+              data-testid="onboard-project-submit"
+              [appPendingButton]="submitting()"
+              pendingLabel="Creating project..."
+              [disabled]="!canSubmit()"
+              (click)="onSubmit()">
+        Create project
       </button>
     </div>
   </app-dialog>

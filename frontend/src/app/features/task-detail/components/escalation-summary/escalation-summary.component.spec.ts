@@ -81,6 +81,16 @@ describe('EscalationSummaryComponent', () => {
           runAt: '2026-07-09T19:22:02Z',
         },
       ],
+      events: [
+        {
+          ts: '2026-07-09T18:30:00Z', kind: 'quality_loop_reopened', actor: 'quality-loop',
+          summary: 'reopened', details: { cause: 'build/test gate failed', reason: 'npm test exit 1' },
+        },
+        {
+          ts: '2026-07-09T19:30:00Z', kind: 'orchestrator_escalated', actor: 'orchestrator',
+          summary: 'escalated', details: { attempt: '3', maxAttempts: '3' },
+        },
+      ],
     });
     const el: HTMLElement = fixture.nativeElement;
 
@@ -101,6 +111,10 @@ describe('EscalationSummaryComponent', () => {
 
     // Recommendation
     expect(el.querySelector('[data-testid="escalation-recommendation"]')?.textContent?.trim()).toBe('Needs decision');
+    expect(el.querySelector('[data-testid="escalation-state-sentence"]')?.textContent).toContain(
+      'Delivered and merged; waiting for your decision because the reissue budget is exhausted',
+    );
+    expect(el.querySelector('[data-testid="escalation-reissue-1"]')?.textContent).toContain('npm test exit 1');
   });
 
   it('falls back to the escalate timeline findings when no follow-up file exists', () => {
@@ -180,7 +194,7 @@ describe('EscalationSummaryComponent — collapse (AGT-2060)', () => {
     expect(el.querySelector('[data-testid="escalation-body"]')).toBeNull();
   });
 
-  it('carries the single-line essence (grade + merge) in the header', () => {
+  it('carries the reconciled state and grade without duplicating the merge badge', () => {
     const el: HTMLElement = mount({
       reviews: [
         {
@@ -195,6 +209,7 @@ describe('EscalationSummaryComponent — collapse (AGT-2060)', () => {
       ],
     }).nativeElement;
     expect(el.querySelector('[data-testid="escalation-essence-grade"]')?.textContent?.trim()).toBe('B');
-    expect(el.querySelector('[data-testid="escalation-essence-merge"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="escalation-state-sentence"]')?.textContent).toContain('Delivered and merged');
+    expect(el.querySelectorAll('[data-testid="escalation-essence-merge"]')).toHaveLength(1);
   });
 });

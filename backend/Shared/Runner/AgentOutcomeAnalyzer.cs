@@ -164,7 +164,23 @@ public enum RunIssueKind
     /// MSB302x-lock / network signature from the post-processing outcome-taxonomy
     /// (AGT-1944; belege AGT-1945/1929/1930 backend-restart cycles).
     /// </summary>
-    EnvironmentalTransient
+    EnvironmentalTransient,
+    /// <summary>
+    /// The agent CLI could not launch because its OAuth session was expired and
+    /// the token refresh failed ("OAuth session expired and could not be
+    /// refreshed"). This is the AGT-2066 "token roulette" launch signature: a
+    /// dead/rotated refresh token that no re-issue can revive, and - because
+    /// every parallel run shares the same operator credential - one that fails
+    /// EVERY launch identically until the credential is re-authenticated
+    /// centrally. It is NON-RETRYABLE (unlike <see cref="CliLaunchFailed"/>,
+    /// which rebuilds from disk and retries): retrying only burns launch budgets
+    /// on a credential that is still dead. Typed distinctly so the orchestrator
+    /// STOPS immediately with a clear re-auth instruction (the WÄCHTER / breaker
+    /// half of the AGT-2066 fix) instead of the 17-cards-in-minutes cascade the
+    /// 2026-07-10 incident produced, and so it is not mislabelled as a generic
+    /// recoverable launch failure.
+    /// </summary>
+    AuthRefreshFailed
 }
 
 /// <summary>
@@ -206,7 +222,7 @@ public sealed record AgentOutcome(
 ///   (<c>[[TASK_DONE]]</c>, <c>[[TASK_BLOCKED:&lt;reason&gt;]]</c>,
 ///   <c>[[TASK_NEEDS_INPUT:&lt;reason&gt;]]</c>, <c>[[TASK_NOOP]]</c>).
 ///   These are authoritative. The agent contract is documented in
-///   <c>docs/contracts/agent-task.md</c>.</item>
+///   <c>docs/system/contracts/agent-task.md</c>.</item>
 ///   <item>Empty fast exit: empty output buffer or no agent text plus a
 ///   sub-threshold duration. The CLI exited before an agent turn produced
 ///   reviewable output; this is a failed-start issue, not a no-op.</item>
@@ -447,6 +463,31 @@ public static class AgentOutcomeAnalyzer
             { IssueKind = RunIssueKind.EnvironmentalTransient };
         }
 
+        // 1.49) OAuth-refresh launch failure (AGT-2066 WÄCHTER). A failed run
+        //    whose output carries the "OAuth session expired and could not be
+        //    refreshed" signature is the token-roulette launch death: a dead /
+        //    rotated refresh token no re-issue can revive, shared across every
+        //    parallel run, so it fails EVERY launch identically until the
+        //    operator re-authenticates centrally. Checked BEFORE the generic
+        //    CliLaunchFailed branch (1.5) - which would otherwise swallow this
+        //    fast, short failure and RETRY it - so the breaker wins: the policy
+        //    stops immediately with a re-auth instruction instead of burning
+        //    launch budgets (17 cards in minutes, incident 2026-07-10). Gated on
+        //    `failed` so an agent quoting the phrase in a healthy turn is unaffected.
+        if (failed && IsAuthRefreshFailure(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildAuthRefreshFailureSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "OAuth session expired and could not be refreshed before an agent turn (AGT-2066)",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.AuthRefreshFailed };
+        }
+
         // 1.5) CLI launch / resume failure. A failed run that produced no
         //    real agent turn - it died almost instantly (~0s) or the only
         //    output is a recognised CLI launch/resume error fragment (e.g.
@@ -517,7 +558,7 @@ public static class AgentOutcomeAnalyzer
     // (the continuous-decision scanner, post-run policy, supervisor parsing)
     // share one grammar. ADR-0002 anchors the deterministic-orchestration
     // philosophy on a single sentinel regex; this is the single source of truth
-    // referenced from AGENTS.md and docs/contracts/agent-task.md.
+    // referenced from AGENTS.md and docs/system/contracts/agent-task.md.
     public static readonly Regex SentinelRegex = new(
         @"\[\[\s*TASK[\s_-]*(?<keyword>DONE|BLOCKED|NEEDS[\s_-]*INPUT|NOOP)\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -792,6 +833,58 @@ public static class AgentOutcomeAnalyzer
             if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Phrases a CLI emits when it cannot launch because its OAuth session has
+    /// expired and the token refresh failed. The canonical claude form is the
+    /// exact incident line "OAuth session expired and could not be refreshed";
+    /// the shorter fragments cover the codex/gemini and provider variants ("could
+    /// not be refreshed", "failed to refresh"/"unable to refresh" the token/
+    /// session/credentials). Kept specific - and gated on a <c>failed</c> status
+    /// at the call site - so an agent quoting one of these phrases in a healthy
+    /// turn does not trip the breaker. This is the AGT-2066 token-roulette
+    /// launch signature.
+    /// </summary>
+    private static readonly string[] AuthRefreshFailureNeedles =
+    {
+        "oauth session expired and could not be refreshed",
+        "session expired and could not be refreshed",
+        "could not be refreshed",
+        "oauth token expired",
+        "failed to refresh the oauth",
+        "failed to refresh oauth token",
+        "unable to refresh the oauth",
+        "credentials could not be refreshed",
+        "token refresh failed",
+    };
+
+    /// <summary>
+    /// True when the run output carries a recognised OAuth-refresh-failure
+    /// signal. Callers must only invoke this for a <c>failed</c> run so an agent
+    /// that merely discusses token refresh in a healthy turn does not trip it.
+    /// </summary>
+    private static bool IsAuthRefreshFailure(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in AuthRefreshFailureNeedles)
+        {
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static string BuildAuthRefreshFailureSummary(string rawText)
+    {
+        var detail = ExtractFirstMatchingLine(rawText, "could not be refreshed")
+                     ?? ExtractFirstMatchingLine(rawText, "refresh");
+        var head = detail != null
+            ? $"The agent CLI could not launch: its OAuth session expired and the token refresh failed (\"{detail}\")."
+            : "The agent CLI could not launch: its OAuth session expired and the token refresh failed.";
+        return head
+            + " This is NON-RETRYABLE by re-issue and shared across every parallel run: the credential"
+            + " is dead until it is re-authenticated centrally, so further launches would fail identically."
+            + " Re-auth the CLI from the operator shell (refresh ~/.claude/.credentials.json), then re-queue (AGT-2066).";
     }
 
     /// <summary>

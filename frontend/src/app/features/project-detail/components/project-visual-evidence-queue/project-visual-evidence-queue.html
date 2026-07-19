@@ -16,7 +16,7 @@
       <p class="evidence-queue__state" data-testid="project-overview-evidence-empty">No delivered visual evidence yet.</p>
     } @else {
       <ul>
-        @for (item of value.items.slice(0, 3); track item.id) {
+        @for (item of value.items; track item.id) {
           <li [attr.data-status]="item.reviewStatus" [attr.data-testid]="'project-overview-evidence-' + item.id">
             @if (item.url) {
               <button class="evidence-queue__preview" type="button" (click)="inspect(item)" [attr.aria-label]="'Inspect ' + item.caption"><img [src]="item.url" [alt]="item.caption" /></button>
@@ -31,7 +31,6 @@
           </li>
         }
       </ul>
-      @if (value.items.length > 3) { <p class="evidence-queue__more">+ {{ value.items.length - 3 }} more in the project queue</p> }
     }
   }
 </section>

@@ -10,10 +10,7 @@ import {
 } from '@angular/core';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import type { TaskInfo, PublishTarget } from '../../../../models/task.model';
-import type {
-  ProjectDeploymentSummary,
-  ProjectThroughputSummary,
-} from '../../../../models/project-overview.model';
+import type { ProjectDeploymentSummary } from '../../../../models/project-overview.model';
 import type { WikiPulse } from '../../../../models/project-docs.model';
 import type { ProjectTokenUsageSummary } from '../../../project-token-usage';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
@@ -51,7 +48,6 @@ export class ProjectOverviewDashboardComponent {
   private readonly git = inject(ProjectGitService);
   private refreshGeneration = 0;
 
-  readonly throughput = signal<ProjectThroughputSummary | null>(null);
   readonly tokenUsage = signal<ProjectTokenUsageSummary | null>(null);
   readonly deployment = signal<ProjectDeploymentSummary | null>(null);
   readonly wiki = signal<WikiPulse | null>(null);
@@ -98,25 +94,25 @@ export class ProjectOverviewDashboardComponent {
   readonly managedRemoteBranches = computed(() => this.remoteBranches()
     .filter(branch => branch.name === 'main' || branch.name === 'develop' || branch.name.startsWith('task/'))
     .sort((a, b) => a.name.localeCompare(b.name)));
-  readonly hasLargeUnpushedDelta = computed(() => this.managedRemoteBranches().some(branch => branch.ahead > 50));
+  readonly hasLargeSyncDelta = computed(() => this.managedRemoteBranches()
+    .some(branch => branch.ahead > 50 || branch.behind > 50));
 
   constructor() {
     effect(() => this.refresh(this.projectName()));
   }
 
-  refresh(project = this.projectName()): void {
+  refresh(project = this.projectName(), forceEvidenceRefresh = false): void {
     if (!project) return;
-    this.evidenceRefreshGeneration.update(value => value + 1);
+    if (forceEvidenceRefresh) this.evidenceRefreshGeneration.update(value => value + 1);
     const generation = ++this.refreshGeneration;
     this.loading.set(true);
     this.unavailable.set(new Set());
-    this.throughput.set(null);
     this.tokenUsage.set(null);
     this.deployment.set(null);
     this.wiki.set(null);
     this.publishTargets.set([]);
     this.remoteBranches.set([]);
-    let pending = 6;
+    let pending = 5;
     const done = () => {
       pending--;
       if (pending === 0) this.loading.set(false);
@@ -132,10 +128,6 @@ export class ProjectOverviewDashboardComponent {
       done();
     };
 
-    this.tasks.getProjectThroughput(project).subscribe({
-      next: value => accept(() => this.throughput.set(value)),
-      error: () => fail('throughput'),
-    });
     this.tasks.getProjectTokenUsageSummary(project).subscribe({
       next: value => accept(() => this.tokenUsage.set(value)),
       error: () => fail('tokens'),
@@ -160,6 +152,28 @@ export class ProjectOverviewDashboardComponent {
 
   openPlanningTask(task: TaskInfo): void {
     this.openTask.emit({ jobId: task.id, watchPath: task.watchPath });
+  }
+
+  taskForBranch(branch: GitBranchEntry): TaskInfo | null {
+    if (!branch.name.startsWith('task/')) return null;
+    const branchTask = branch.name.slice('task/'.length).toLowerCase();
+    return this.tasks.jobs().find(task => [task.key, task.taskKey, task.id]
+      .filter((value): value is string => Boolean(value))
+      .some(value => branchTask === value.toLowerCase() || branchTask.startsWith(`${value.toLowerCase()}-`))) ?? null;
+  }
+
+  branchKind(branch: GitBranchEntry): string {
+    return branch.category === 'task' ? 'Task branch' : 'Integration branch';
+  }
+
+  pushLabel(branch: GitBranchEntry): string {
+    if (!branch.upstream) return 'Unavailable';
+    return branch.ahead === 0 ? 'Pushed' : `${branch.ahead} to push`;
+  }
+
+  pullLabel(branch: GitBranchEntry): string {
+    if (!branch.upstream) return 'Unavailable';
+    return branch.behind === 0 ? 'Pulled' : `${branch.behind} to pull`;
   }
 
   formatCompact(value: number | null | undefined): string {
