@@ -10,11 +10,11 @@ namespace AgentStudio.Shared;
 /// <b>Why this is a separate, tested helper.</b> The naive version
 /// (<c>SentinelRegex.IsMatch</c> on every raw output line) caused the dominant
 /// "tasks never complete" incident (2026-06-23): the backend's own runner code,
-/// <c>AGENTS.md</c>, and <c>docs/contracts/agent-task.md</c> are FULL of
+/// <c>AGENTS.md</c>, and <c>docs/system/contracts/agent-task.md</c> are FULL of
 /// <c>[[TASK_DONE]]</c> literals, so any run that merely READ such a file (the
 /// file content rides the <c>user</c> / tool-result stream) tripped the scanner
 /// and was killed mid-work as a false "completion". See
-/// <c>docs/wiki/concepts/runner-stability-incidents.html</c>.
+/// <c>docs/concepts/runner-stability-incidents.html</c>.
 /// </para>
 ///
 /// <para>

@@ -472,7 +472,7 @@ public sealed class ProjectRegistry
     /// <summary>
     /// Set (or clear, with null) the project's repository checkout path.
     /// Lives on the registry record so the project↔repo association survives
-    /// configuration loss; the docs/wiki root is always
+    /// configuration loss; the wiki root is always
     /// <c>&lt;RepositoryPath&gt;/docs</c> by convention, never configured
     /// separately.
     /// </summary>
@@ -562,7 +562,7 @@ public sealed class ProjectRegistry
         if (trimmed != null)
         {
             // Containment: the value becomes the authoritative base dir for
-            // docs/wiki reads AND writes, so reject anything that is not a
+            // wiki (docs/) reads AND writes, so reject anything that is not a
             // local, existing git checkout. The UNC check runs before any
             // filesystem probe so validation itself cannot be used to drive
             // SMB connections to attacker-chosen hosts.

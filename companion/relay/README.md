@@ -2,7 +2,7 @@
 
 Tiny ASP.NET 10 minimal API. Holds the last snapshot pushed by the local Agent Software Studio and a small queue of commands the PWA enqueues. No persistence; a restart clears state and the next processor sync repopulates it.
 
-The full V1 contract lives in [`docs/product/companion-app-design.md`](../../docs/product/companion-app-design.md). [ADR-0018](../../docs/architecture/decisions/adr-archive.md) explains the why.
+The full V1 contract lives in [`docs/concepts/companion-app-design.md`](../../docs/concepts/companion-app-design.md). [ADR-0018](../../docs/system/architecture/decisions/adr-archive.md) explains the why.
 
 ## Run locally
 

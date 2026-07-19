@@ -107,9 +107,7 @@ public sealed class WikiGradingService
             }
 
             var wikiDir = Path.GetFullPath(overview.BaseDir);
-            var pages = overview.Files
-                .Where(f => !EngineeringWorkstreamFrame.IsFrameShell(f.RelPath))
-                .ToList();
+            var pages = overview.Files.ToList();
             if (handle.Request.Limit > 0)
                 pages = pages.Take(handle.Request.Limit).ToList();
 

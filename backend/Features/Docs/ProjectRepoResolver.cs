@@ -1,7 +1,7 @@
 namespace AgentStudio.Docs;
 
 /// <summary>
-/// Resolves a project's repository checkout root. The docs/wiki surface is
+/// Resolves a project's repository checkout root. The docs-backed wiki surface is
 /// always <c>&lt;repo&gt;/docs</c> by convention — the docs folder itself is
 /// never a setting. Only the project↔repository association needs a source,
 /// resolved in this order:

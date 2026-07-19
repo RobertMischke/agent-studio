@@ -84,7 +84,7 @@ async function mockSteeringApi(page: Page, projectName: string, watchPath: strin
       kind: 'gatewayTooHeavy',
       message: 'AGENTS.md carries 2,400 bytes of local instructions but links to only 0 wiki pages. Agent docs should stay gateway-style and route durable detail into the project wiki.',
       sourceId: 'agents-md',
-      evidenceRefs: ['AGENTS.md', 'docs/wiki/'],
+      evidenceRefs: ['AGENTS.md', 'docs/'],
     }],
   };
 
@@ -148,8 +148,8 @@ async function mockSteeringApi(page: Page, projectName: string, watchPath: strin
     const url = new URL(route.request().url());
     const relPath = decodeURIComponent(url.pathname.slice(url.pathname.indexOf(marker) + marker.length));
     const content = relPath === 'frontend/AGENTS.md'
-      ? '# Frontend agent rules\n\nFrontend rules route durable details into docs/wiki/.'
-      : '# Root agent rules\n\nUse AGENTS.md as a gateway to docs/wiki/ pages.';
+      ? '# Frontend agent rules\n\nFrontend rules route durable details into docs/.'
+      : '# Root agent rules\n\nUse AGENTS.md as a gateway to docs/ pages.';
     return route.fulfill({
       status: 200,
       contentType: 'application/json',

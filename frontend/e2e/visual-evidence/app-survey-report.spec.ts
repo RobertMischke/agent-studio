@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const reportUrl = pathToFileURL(
-  path.resolve(__dirname, '../../../docs/design/app-survey-2026-07-11.html')
+  path.resolve(__dirname, '../../../docs/quality/design/app-survey-2026-07-11.html')
 ).href;
 
 test('app survey filters, area jumps, and card references remain browsable', async ({ page }, testInfo) => {

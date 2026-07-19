@@ -7,7 +7,7 @@ namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks in the "promote a finished planning task to a coding task" payload
-/// (docs/research/planning-research-task-kinds-2026-05.md): title + prompt
+/// (docs/concepts/planning-research-task-kinds-2026-05.md): title + prompt
 /// extracted from the planning report, copied image attachments from both
 /// <c>results/</c> and <c>attachments/</c>, mode=coding, state=1-preparation.
 /// Split into pure-parser facts (the heading extraction) and scanner-level

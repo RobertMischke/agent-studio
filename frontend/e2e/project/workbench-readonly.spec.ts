@@ -137,7 +137,7 @@ test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real rep
       workbench: {
         id: 'app-survey', title: 'Isolation probe', summary: 'Security-boundary test fixture.',
         status: 'active', phase: 'testing', updatedAtUtc: '2026-07-12T10:00:00Z',
-        entryPath: 'docs/design/app-survey-2026-07-11.html', valid: true, error: null, sourceTaskKeys: [],
+        entryPath: 'docs/quality/design/app-survey-2026-07-11.html', valid: true, error: null, sourceTaskKeys: [],
       },
       html: `<script id="early-probe">
         document.documentElement.dataset.scriptRan = 'true';
@@ -168,7 +168,7 @@ test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real rep
   await expect(isolatedRoot).toHaveAttribute('data-network', 'blocked');
   await expect(page.locator('html')).not.toHaveAttribute('data-workbench-escaped', 'true');
   expect(escapedNetworkRequests).toBe(0);
-  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/design/app-survey-2026-07-11.html');
+  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/quality/design/app-survey-2026-07-11.html');
   await expect(page.getByTestId('workbench-viewer-working-tree')).toContainText('uncommitted');
 
   await page.getByTestId(`studio-explorer-project-wiki-${project.name}`).click();
@@ -183,7 +183,7 @@ test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real rep
   }
 
   await page.getByTestId('project-wiki-pulse-workbench-pipeline-workbench').click();
-  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/domains/pipeline.md.report.html');
+  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/system/domains/pipeline.md.report.html');
   } finally {
     if (createdProjectId) await fetch(`${devBackend.baseUrl}/api/projects/${createdProjectId}`, {
       method: 'DELETE', headers: { 'X-Client-Id': clientId ?? '' },

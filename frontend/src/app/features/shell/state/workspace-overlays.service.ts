@@ -79,7 +79,7 @@ export class WorkspaceOverlaysService {
    * (CLI usage) section has its own dedicated "Usage" status-bar pill, so the
    * "Settings" pill must not also light up while Usage is showing — otherwise
    * both pills carry the single `--studio-accent` active fill at once (see
-   * docs/frontend/design-system.md, "one accent per rail").
+   * docs/quality/frontend/design-system.md, "one accent per rail").
    */
   readonly anyOpenExceptUsage = computed(() => this.settingsOpen() && this.section() !== 'caps');
 

@@ -311,7 +311,7 @@ public record CreateTaskRequest
 /// the modal stays the single source of truth for the create UX. Images
 /// are returned as fetchable references (not inline bytes); the modal
 /// re-uploads them byte-for-byte into the new task's <c>attachments/</c>
-/// on save. See docs/research/planning-research-task-kinds-2026-05.md.
+/// on save. See docs/concepts/planning-research-task-kinds-2026-05.md.
 /// </summary>
 public record PromoteToCodingResponse
 {

@@ -450,6 +450,8 @@ internal static class PromptDescriptionCatalog
             "Generates a concise task title from the task prompt.", "Utility"),
         ["prompt-enhance.md"] = new("Prompt enhancement",
             "Expands / enhances a raw task prompt before it is queued.", "Utility"),
+        ["wiki-search-expand.md"] = new("Wiki search expansion",
+            "Expands a wiki search query with German/English synonyms for the semantic search layer.", "Utility"),
     };
 
     public static Meta Describe(string name)

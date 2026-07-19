@@ -1,0 +1,46 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2076",
+      "title": "Worktree-Orphan-Resilienz: Teardown killt Prozessbaum; Orphan-Busy eskaliert statt endlos zu loopen",
+      "linkedAt": "2026-07-10T23:40:13.0709296Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-1943",
+      "title": "BUG: Post-Build-Test-Gate baut im geteilten Checkout - kollidiert mit laufendem Dev-Backend",
+      "linkedAt": "2026-07-10T23:55:16.7118693Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2079",
+      "title": "Completion-Gate: Doku-only- und Verifikations-Laeufe ohne neue Commits korrekt einordnen (statt falsch eskalieren)",
+      "linkedAt": "2026-07-11T00:28:28.6565887Z",
+      "source": "auto"
+    }
+  ],
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Orchestrator Drive-to-Conclusion &amp; CLI-Crash Resilience",
+  "source": {
+    "path": "docs/concepts/orchestrator-drive-to-conclusion.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "59bcfb99fb142dfed3c27e3ddcc26dbb766f19cdcd29c997bee97f6fd6839998",
+      "sizeBytes": 61150,
+      "lineCount": 931,
+      "capturedAt": "2026-07-18T18:45:50.411Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-18"
+  }
+}

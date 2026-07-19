@@ -53,10 +53,10 @@ public class DocsMarketingDriftAnalysisServiceTests : IDisposable
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "# README\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "ROADMAP.md"), "# ROADMAP\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
-        WriteRepoFile("docs/architecture/decisions/adr-archive.md", "# ADR\n");
-        WriteRepoFile("docs/product/design-principles.md", "# DP\n");
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "quality-system"));
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "next-gen-chat"));
+        WriteRepoFile("docs/system/architecture/decisions/adr-archive.md", "# ADR\n");
+        WriteRepoFile("docs/quality/design-principles.md", "# DP\n");
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "quality-system"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "next-gen-chat"));
 
         var svc = new DocsMarketingDriftAnalysisService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
@@ -65,12 +65,12 @@ public class DocsMarketingDriftAnalysisServiceTests : IDisposable
         Assert.Contains("README.md", docPaths);
         Assert.Contains("ROADMAP.md", docPaths);
         Assert.Contains("AGENTS.md", docPaths);
-        Assert.Contains("docs/architecture/decisions/adr-archive.md", docPaths);
-        Assert.Contains("docs/product/design-principles.md", docPaths);
+        Assert.Contains("docs/system/architecture/decisions/adr-archive.md", docPaths);
+        Assert.Contains("docs/quality/design-principles.md", docPaths);
 
         var mockupPaths = scope.MockupDocs.Select(d => d.Path.Replace('\\', '/')).ToArray();
-        Assert.Contains("docs/mockups/quality-system/", mockupPaths);
-        Assert.Contains("docs/mockups/next-gen-chat/", mockupPaths);
+        Assert.Contains("docs/concepts/mockups/quality-system/", mockupPaths);
+        Assert.Contains("docs/concepts/mockups/next-gen-chat/", mockupPaths);
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class DocsMarketingDriftAnalysisServiceTests : IDisposable
     public void BuildPrompt_RendersAllLoadBearingPlaceholdersWithoutLeavingUnrenderedBraces()
     {
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "# README\n", Encoding.UTF8);
-        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "quality-system"));
+        Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "concepts", "mockups", "quality-system"));
         WriteJob("2-ready", "ready-task", "Ready task");
         WriteJob("6-completed", "shipped-task", "Shipped");
 
@@ -229,7 +229,7 @@ public class DocsMarketingDriftAnalysisServiceTests : IDisposable
         Assert.Contains("agent-taskboard", rendered);
         Assert.Contains("2026-05-05T12:00:00Z", rendered);
         Assert.Contains("README.md", rendered);
-        Assert.Contains("docs/mockups/quality-system/", rendered);
+        Assert.Contains("docs/concepts/mockups/quality-system/", rendered);
         Assert.Contains("2-ready/ready-task", rendered);
         Assert.Contains("6-completed/shipped-task", rendered);
         Assert.Contains("not configured", rendered);
