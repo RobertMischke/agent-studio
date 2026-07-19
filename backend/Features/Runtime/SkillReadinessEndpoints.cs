@@ -13,7 +13,7 @@ public record SkillReadinessFixTaskBody
 }
 
 /// <summary>
-/// Project-level skill readiness surface (docs/product/skills-architecture.md
+/// Project-level skill readiness surface (docs/concepts/skills-architecture.md
 /// "First Product Step"). Three reads + one mutation:
 ///
 /// - <c>GET /api/projects/{projectName}/skill-readiness</c> -- pass / warn /

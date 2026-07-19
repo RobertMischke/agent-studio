@@ -85,6 +85,8 @@ public class CliWatchdogIntegrationTests
         };
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Stop/Finalize-Polling (DateTime.UtcNow-Deadlines) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_PrintsInitThenStalls_RunnerStopsCleanly()
     {
@@ -153,6 +155,8 @@ setInterval(() => {}, 600000);
         Assert.Contains(execAfter!.Status, new[] { "stopped", "cancelled" });
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Event-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_RunStartedAndProcessExited_EventsRaisedOnOnRunEvent()
     {
@@ -190,6 +194,8 @@ setInterval(() => {}, 600000);
         // wiring is per-CLI and tested in ClaudeEventAdapterTests.
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Stop/Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_NoNewlineButAlive_RunnerStillBuffersBytes()
     {
@@ -230,6 +236,8 @@ setInterval(() => {}, 600000);
         Assert.Contains(final, l => l.Stream == "system" && l.Text.Contains("CLI exited"));
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_StderrWritesWhileStdoutSilent_StderrLandsInBuffer()
     {
@@ -264,6 +272,8 @@ setTimeout(() => process.exit(0), 200);
             string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text}")));
     }
 
+    // MachineBound 19.07.: FakeCli-Burst-Spawn (500 Zeilen) + Finalize-Polling flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_FastOutput_NoneDropped()
     {
@@ -300,6 +310,8 @@ process.exit(0);
             (seqLines.Count > 0 ? $"First: {seqLines[0].Text}, last: {seqLines[^1].Text}" : ""));
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Wall-Clock-Timing-Assertion (< 2s Fenster) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task ResetSilenceClock_OnStalledRun_AdvancesLastStreamedToNow()
     {
@@ -365,6 +377,8 @@ setInterval(() => {}, 600000);
         Assert.Null(svc.GetLastStreamedAt("::no-such-job"));
     }
 
+    // MachineBound 19.07.: FakeCli-Prozess-Spawn + Finalize-Polling (DateTime.UtcNow-Deadline) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [SkippableFact]
     public async Task FakeCli_StreamsManyFrames_RunnerCapturesAll()
     {

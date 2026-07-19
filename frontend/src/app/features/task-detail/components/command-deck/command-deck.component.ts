@@ -14,7 +14,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
  * signals; this component only emits intent (start/stop, change project).
  *
  * Migrated 2026-05-29 to use the shared `<app-cli-model-selector>` chip
- * (see `docs/frontend/audits/cli-model-selector-audit.md`) so the toolbar matches the
+ * (see `docs/quality/frontend/audits/cli-model-selector-audit.md`) so the toolbar matches the
  * chat composer, overview Agent row, create-task dialog, status-bar
  * default pickers, and code-review panel.
  */

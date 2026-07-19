@@ -8,6 +8,17 @@
     [closable]="false"
     testid="crash-recovery-prompt">
     <div class="crp" data-testid="crash-recovery-list">
+      <div class="crp__toolbar">
+        <button type="button"
+                class="crp__button crp__button--ghost"
+                data-testid="crash-recovery-dismiss-all"
+                [disabled]="busyId() !== null || busyAll()"
+                (click)="dismissAll()">
+          <app-studio-icon name="archive" [size]="14"></app-studio-icon>
+          <span>{{ busyAll() ? 'Leaving all...' : 'Leave all uncommitted' }}</span>
+        </button>
+      </div>
+
       @if (error(); as msg) {
         <p class="crp__error" data-testid="crash-recovery-error">{{ msg }}</p>
       }

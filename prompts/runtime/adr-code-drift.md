@@ -42,7 +42,7 @@ structure" category.
 
 {{module_boundaries}}
 
-## Schema set (`docs/schemas/`)
+## Schema set (`docs/system/schemas/`)
 
 Each schema is a contract. A drift finding here usually means: a schema
 references fields the code no longer emits, the code emits fields the schema
@@ -86,11 +86,11 @@ A single Markdown reply structured like this:
 4. **Process drift** - cases where code violates an explicit non-goal from
    ROADMAP / AGENTS / design-principles (intra-project parallelism, branch
    orchestration, workflow engines, hidden auto-actions).
-5. **Schema drift** - mismatches between `docs/schemas/*.json` and the code
+5. **Schema drift** - mismatches between `docs/system/schemas/*.json` and the code
    that produces or consumes those records.
 6. **Missing ADRs** - load-bearing decisions visible in recent commits or
    recent task evidence that do not have an entry in
-   `docs/architecture/decisions/adr-archive.md`.
+   `docs/system/architecture/decisions/adr-archive.md`.
 7. **Follow-up task suggestions** - candidate jobs to queue (ADR update,
    code alignment, or architecture review). Suggestions are drafts; the
    user creates the actual job.

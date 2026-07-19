@@ -36,7 +36,7 @@ test.describe('Status bar layout: dense left quota + right dock', () => {
     const right = statusBar.locator('.statusbar__group--right');
     await expect(right).toBeVisible();
     await expect(right.getByTestId('orch-side-sheet-toggle')).toBeVisible();
-    // Per the homogenisation work (docs/frontend/audits/cli-model-selector-audit.md), the
+    // Per the homogenisation work (docs/quality/frontend/audits/cli-model-selector-audit.md), the
     // two separate CLI / model pickers collapsed into the single shared
     // `<app-cli-model-selector>` chip.
     await expect(right.getByTestId('status-bar-defaults')).toBeVisible();

@@ -554,7 +554,7 @@ export class OverviewPaneComponent {
    * Lanes a planning task counts as "finished successfully" for the
    * promote affordance — it has reached review or completion, not a
    * failure / still-running lane. See
-   * docs/research/planning-research-task-kinds-2026-05.md.
+   * docs/concepts/planning-research-task-kinds-2026-05.md.
    */
   private static readonly FINISHED_STATES = new Set<string>([
     TaskState.AutoReview,

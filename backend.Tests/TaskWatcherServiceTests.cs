@@ -87,6 +87,8 @@ public sealed class TaskWatcherServiceTests : IDisposable
             _watchPath, deletedPath, WatcherChangeTypes.Deleted));
     }
 
+    // MachineBound 19.07.: Quiet-Window-Timing (Delay/Stopwatch) flakt unter Parallellast im Karten-Gate.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task RelevantBurst_DispatchesOnceAfterTheQuietWindow()
     {

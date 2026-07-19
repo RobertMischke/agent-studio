@@ -78,8 +78,8 @@
                       (click)="openCritical(item)">
                 <span class="wgrade__row-top">
                   <span class="wgrade__cgrade" [attr.data-tone]="criticalTone(item.grade)">{{ item.grade }}</span>
-                  @if (item.frameAreaTitle) {
-                    <span class="wgrade__area"><app-studio-icon name="pin" [size]="9"></app-studio-icon>{{ item.frameAreaTitle }}</span>
+                  @if (item.areaTitle) {
+                    <span class="wgrade__area"><app-studio-icon name="folder" [size]="9"></app-studio-icon>{{ item.areaTitle }}</span>
                   }
                   @if (item.model) { <span class="wgrade__model">{{ item.model }}</span> }
                 </span>

@@ -25,7 +25,8 @@ public sealed record WikiLearningsRun(
 public sealed record WikiLearningsResult(
     WikiLearningsVerdict Verdict,
     string Reason,
-    string? Slug = null);
+    string? Slug = null,
+    string? RelPath = null);
 
 public enum WikiLearningsVerdict
 {
@@ -40,8 +41,8 @@ public enum WikiLearningsVerdict
 /// <c>post-wiki-learnings</c> pipeline step. After a task's review settles it
 /// folds the derived verdict, the per-aspect orchestrator-review findings, the
 /// agent's own close-out notes, and any typed outcome stumbling block into a
-/// per-task page under <c>docs/wiki/learnings/&lt;task&gt;.md</c> and regenerates
-/// the learnings index - no LLM call. It is idempotent: each distilled run carries
+/// per-task page under <c>docs/operations/learnings/&lt;task&gt;.md</c> and
+/// regenerates the learnings index - no LLM call. It is idempotent: each distilled run carries
 /// a stable signature so a re-invocation on the same run state refreshes the page
 /// timestamp instead of duplicating, while a genuine reissue (new signature)
 /// prepends a fresh dated run block so nothing is lost and git keeps the history.
@@ -65,34 +66,36 @@ public sealed class WikiLearningsPostStepRunner
         TaskInfo task,
         WatchPathEntry entry,
         WikiLearningsRun run,
-        DateTime? nowUtc = null,
-        EngineeringWorkstreamFrameLanguage? frameLanguage = null)
+        DateTime? nowUtc = null)
     {
         var now = nowUtc ?? DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(entry.RootPath))
             return new WikiLearningsResult(WikiLearningsVerdict.Skipped, "project root is not configured");
 
-        // Self-provisioning (AGT-2024): ensure the Workstream frame exists before
-        // this step writes. Activating the step for a project is what creates the
-        // structure - the old "skip when docs/wiki is missing" gate is gone, since
-        // an enabled step now bootstraps its own home under docs/. Idempotent and
-        // never overwriting.
+        // Self-provisioning (AGT-2024): the old "skip when the wiki folder is
+        // missing" gate is gone - an enabled step bootstraps its own home under
+        // docs/. Idempotent and never overwriting.
         var docsRoot = Path.Combine(entry.RootPath, "docs");
-        var language = frameLanguage ?? WorkstreamFrameLanguageResolver.Resolve(entry.Name, isPublicOverride: null);
-        EnsureWorkstreamFrame(docsRoot, language, task, entry);
 
         var slug = PageSlug(task);
         if (string.IsNullOrWhiteSpace(slug))
             return new WikiLearningsResult(WikiLearningsVerdict.Skipped, "task has no usable id for a page slug");
 
+        var relPath = $"{WikiProducerTargets.LearningsFolder}/{slug}.md";
         try
         {
-            var learningsRoot = Path.Combine(docsRoot, "wiki", "learnings");
+            var learningsRoot = Path.Combine(docsRoot, WikiProducerTargets.LearningsFolder.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(learningsRoot);
 
             var pagePath = Path.Combine(learningsRoot, slug + ".md");
             var signature = RunSignature(task, run);
             var verdict = UpsertPage(pagePath, task, run, signature, now);
+            if (verdict == WikiLearningsVerdict.Created)
+                // Metadata convention (2026-07): a generated page is born classified
+                // so it never surfaces as an "unclassified page" on the wiki pulse.
+                new WikiCompanionStore().WriteCreationClassification(
+                    docsRoot, relPath, slug, File.ReadAllText(pagePath, Encoding.UTF8),
+                    ProjectDocsService.DefaultClassificationType(relPath), now);
             RegenerateIndex(learningsRoot, now);
 
             _logger.LogInformation(
@@ -102,31 +105,15 @@ public sealed class WikiLearningsPostStepRunner
             return new WikiLearningsResult(
                 verdict,
                 verdict == WikiLearningsVerdict.Created ? "created learnings page" : "updated learnings page",
-                slug);
+                slug,
+                relPath);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "Wiki learnings failed for {Project}/{JobId} slug={Slug}",
                 entry.Name, task.Id, slug);
-            return new WikiLearningsResult(WikiLearningsVerdict.Error, ex.Message, slug);
-        }
-    }
-
-    /// <summary>
-    /// Runs the shared ensure-frame primitive and logs only when it actually
-    /// materialized (or failed to materialize) frame shells, so a warm project
-    /// where the frame already exists stays quiet.
-    /// </summary>
-    private void EnsureWorkstreamFrame(
-        string docsRoot, EngineeringWorkstreamFrameLanguage language, TaskInfo task, WatchPathEntry entry)
-    {
-        var result = EngineeringWorkstreamFrameSeeder.EnsureFrame(docsRoot, language);
-        if (result.CreatedAnything || result.Failed.Count > 0)
-        {
-            _logger.LogInformation(
-                "Workstream frame ensured for {Project}/{JobId} lang={Language} {Summary} created=[{Created}]",
-                entry.Name, task.Id, language, result.Summary, string.Join(", ", result.Created));
+            return new WikiLearningsResult(WikiLearningsVerdict.Error, ex.Message, slug, relPath);
         }
     }
 
