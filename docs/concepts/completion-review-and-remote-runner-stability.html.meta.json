@@ -119,6 +119,12 @@
       "title": "AGT-2156: [appTooltip]-Direktive bauen \u002B 15 native title-Sites konvertieren (Drift-Regel hat kein Gegenstueck im Code)",
       "linkedAt": "2026-07-20T00:36:14.6540222Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2162",
+      "title": "AGT-2162: Orchestrator-Chat auf Standard-Footer und kanonischen Kontextmechanismus umstellen",
+      "linkedAt": "2026-07-20T00:55:25.29608Z",
+      "source": "auto"
     }
   ],
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
