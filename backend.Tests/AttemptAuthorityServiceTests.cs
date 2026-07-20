@@ -31,7 +31,7 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
             review.ReviewAttempt!.AttemptId, "reviewer", "review-host", 120, "review-claim-1").ReviewAttempt!;
 
         var restarted = NewService(() => now.AddSeconds(30));
-        var projection = restarted.GetTaskProjection("AGT-1");
+        var projection = restarted.GetTaskProjection("agt-1");
 
         Assert.Equal(run.RunAttempt.AttemptId, projection.CurrentRunAttempt!.AttemptId);
         Assert.Equal(run.RunAttempt.LastFence, projection.CurrentRunAttempt.LastFence);
@@ -43,6 +43,10 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(review.ReviewAttempt!.AttemptId, projection.CurrentReviewAttempt!.AttemptId);
         Assert.Equal(reviewLease.LastFence, projection.CurrentReviewAttempt.LastFence);
         Assert.Equal(reviewLease.Lease!.ExpiresAt, projection.CurrentReviewAttempt.Lease!.ExpiresAt);
+
+        var next = restarted.AcquireRun(
+            "agt-1", "PROJ-1", run.RunAttempt.AttemptId, "runner-b", "host-b", 120, "claim-2").RunAttempt!;
+        Assert.True(next.LastFence > reviewLease.LastFence);
     }
 
     [Fact]
@@ -100,16 +104,51 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         var runB = service.AcquireRun("AGT-1", "PROJ-1", oldReview.SourceRunAttemptId, "runner-b", "host-b", 60, "run-b").RunAttempt!;
         service.SettleRun(new AttemptWriteReference(runB.AttemptId, runB.LastFence, runB.AuthorityEpoch, "complete-b"), "done", "sha-b", null);
 
+        var replayedOldCompletion = service.SettleRun(
+            new AttemptWriteReference(oldReview.SourceRunAttemptId, oldClaim.LastFence - 1, oldClaim.AuthorityEpoch, "run-complete"),
+            "done", "sha-a", null);
+
+        service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-1", "PROJ-1", "sha-b", runB.AttemptId, "req", "policy", [], "review-b"));
+
         var late = service.SettleReview(new SettleReviewAttemptRequest(
             new AttemptWriteReference(oldClaim.AttemptId, oldClaim.LastFence, oldClaim.AuthorityEpoch, "late-a"),
             "sha-a", ReviewTerminalOutcome.Pass));
-        service.CreateReviewAttempt(new CreateReviewAttemptRequest(
-            "AGT-1", "PROJ-1", "sha-b", runB.AttemptId, "req", "policy", [], "review-b"));
+        var lateCreate = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-1", "PROJ-1", "sha-a", oldReview.SourceRunAttemptId,
+            "req", "policy", [], "late-review-a"));
         var projection = service.GetTaskProjection("AGT-1");
 
         Assert.Equal(AttemptWriteStatus.Superseded, late.Status);
-        Assert.Contains(projection.ReviewAttempts, x => x.AttemptId == oldReview.AttemptId && x.State == AttemptLifecycleState.Superseded);
+        Assert.Equal(AttemptWriteStatus.Superseded, replayedOldCompletion.Status);
+        Assert.Equal(AttemptWriteStatus.Superseded, lateCreate.Status);
+        var historical = Assert.Single(projection.ReviewAttempts, x => x.AttemptId == oldReview.AttemptId);
+        Assert.Equal(AttemptLifecycleState.Superseded, historical.State);
+        var retainedReport = Assert.Single(historical.Reports);
+        Assert.Equal("late-a", retainedReport.IdempotencyKey);
+        Assert.Equal("sha-a", retainedReport.MaterializedResultSha);
+        Assert.Equal(ReviewTerminalOutcome.Pass, retainedReport.Outcome);
+        Assert.Equal(AttemptWriteStatus.Superseded, retainedReport.AuthorityStatus);
         Assert.Equal("sha-b", projection.CurrentReviewSubject!.ExpectedResultSha);
+    }
+
+    [Fact]
+    public void Idempotency_keys_are_scoped_by_task_and_cannot_alias_another_attempt()
+    {
+        var service = NewService();
+
+        var first = service.AcquireRun("AGT-1", "PROJ-1", null, "runner", "host", 60, "same-key");
+        var second = service.AcquireRun("AGT-2", "PROJ-1", null, "runner", "host", 60, "same-key");
+
+        Assert.Equal(AttemptWriteStatus.Accepted, first.Status);
+        Assert.Equal(AttemptWriteStatus.Accepted, second.Status);
+        Assert.NotEqual(first.AttemptId, second.AttemptId);
+        Assert.Equal("AGT-2", second.RunAttempt!.TaskKey);
+
+        var write = new AttemptWriteReference(
+            first.AttemptId, first.RunAttempt!.LastFence, first.RunAttempt.AuthorityEpoch, "same-key");
+        Assert.Equal(AttemptWriteStatus.Accepted, service.AcceptRunWrite(write).Status);
+        Assert.Equal(AttemptWriteStatus.Duplicate, service.AcceptRunWrite(write).Status);
     }
 
     [Fact]

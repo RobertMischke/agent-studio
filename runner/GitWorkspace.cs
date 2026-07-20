@@ -136,7 +136,7 @@ public sealed class GitWorkspace
         if (!Directory.Exists(RepoPath))
         {
             await TryGit(["worktree", "prune"], SharedRepoPath, ct);
-            return WorktreeTeardownResult.NoWork;
+            return WorktreeTeardownResult.NoResult;
         }
 
         var status = (await Git(["status", "--porcelain=v1", "--untracked-files=all"], RepoPath, ct)).StdOut;
@@ -205,8 +205,8 @@ public sealed class GitWorkspace
         _log($"worktree-teardown-completed path={RepoPath} secured={hasWork} branch={(hasWork ? _workBranch : "none")}");
 
         return hasWork
-            ? new WorktreeTeardownResult(true, _workBranch, head, BuildBranchUrl(_gitRemote!, _workBranch))
-            : WorktreeTeardownResult.NoWork;
+            ? new WorktreeTeardownResult(true, _workBranch, head, BuildBranchUrl(_gitRemote!, _workBranch), head)
+            : WorktreeTeardownResult.Clean(head);
     }
 
     private async Task<bool> HasLocalOnlyCommitsAsync(CancellationToken ct)
@@ -289,9 +289,15 @@ public sealed class GitWorkspace
             : Path.Combine(workDir, SafeSegment(projectId));
 }
 
-public sealed record WorktreeTeardownResult(bool SecuredWork, string? Branch, string? CommitSha, string? BranchUrl)
+public sealed record WorktreeTeardownResult(
+    bool SecuredWork,
+    string? Branch,
+    string? CommitSha,
+    string? BranchUrl,
+    string? ResultSha)
 {
-    public static WorktreeTeardownResult NoWork { get; } = new(false, null, null, null);
+    public static WorktreeTeardownResult NoResult { get; } = new(false, null, null, null, null);
+    public static WorktreeTeardownResult Clean(string resultSha) => new(false, null, null, null, resultSha);
 }
 
 public sealed class WorktreeSalvageException : Exception

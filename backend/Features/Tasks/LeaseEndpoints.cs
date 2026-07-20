@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -46,10 +48,18 @@ public static class LeaseEndpoints
         });
 
         group.MapPost("/renew", (RunLeaseHeartbeatRequest req, RunLeaseService leases) =>
-            Results.Ok(leases.Renew(req)));
+            CanonicalLeaseWritePresent(req.AttemptId, req.AuthorityEpoch, req.IdempotencyKey)
+                ? Results.Ok(leases.Renew(req))
+                : Results.Conflict(new RunLeaseResponse(
+                    "Invalid", false, null,
+                    "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease renewal.")));
 
         group.MapPost("/release", (RunLeaseReleaseRequest req, RunLeaseService leases) =>
-            Results.Ok(leases.Release(req)));
+            CanonicalLeaseWritePresent(req.AttemptId, req.AuthorityEpoch, req.IdempotencyKey)
+                ? Results.Ok(leases.Release(req))
+                : Results.Conflict(new RunLeaseResponse(
+                    "Invalid", false, null,
+                    "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease release.")));
 
         group.MapGet("/{taskKey}", (string taskKey, RunLeaseService leases) =>
             Results.Ok(leases.Peek(taskKey)));
@@ -235,26 +245,31 @@ public static class LeaseEndpoints
                     req.TaskKey, reportedOutcome, TaskStates.Progress,
                     "Outcome must be Done, NoOp, Blocked, NeedsInput, or Unknown."));
 
-            var current = authority.GetTaskProjection(req.TaskKey).CurrentRunAttempt;
-            var attemptId = string.IsNullOrWhiteSpace(req.AttemptId) ? current?.AttemptId : req.AttemptId;
-            var epoch = req.AuthorityEpoch.GetValueOrDefault(current?.AuthorityEpoch ?? 0);
-            if (string.IsNullOrWhiteSpace(attemptId))
+            if (string.IsNullOrWhiteSpace(req.AttemptId)
+                || !req.AuthorityEpoch.HasValue
+                || string.IsNullOrWhiteSpace(req.IdempotencyKey))
             {
                 return Results.Conflict(new RemoteRunCompletionResponse(
                     req.TaskKey, reportedOutcome, TaskStates.Progress,
-                    "Attempt ID, lease ID, fence, authority epoch, or runner ID does not match the current holder.",
-                    RunAttemptId: attemptId,
-                    FailureClassification: "stale-attempt-authority"));
+                    "Attempt ID, fence, authority epoch, and idempotency key are required for Remote completion.",
+                    RunAttemptId: req.AttemptId,
+                    FailureClassification: AttemptWriteStatus.Invalid.ToString()));
             }
 
-            var completionKey = string.IsNullOrWhiteSpace(req.IdempotencyKey)
-                ? $"completion:{attemptId}:{reportedOutcome.Trim().ToLowerInvariant()}:{req.SalvageCommitSha ?? "none"}"
-                : req.IdempotencyKey.Trim();
+            var attemptId = req.AttemptId.Trim();
+            var epoch = req.AuthorityEpoch.Value;
+            var resultSha = string.IsNullOrWhiteSpace(req.ResultSha)
+                ? req.SalvageCommitSha
+                : req.ResultSha;
+            var completionKey = req.IdempotencyKey.Trim();
             var settled = authority.SettleRun(
                 new AttemptWriteReference(attemptId, req.FencingToken, epoch, completionKey),
                 outcome,
-                req.SalvageCommitSha,
-                req.Reason);
+                resultSha,
+                req.Reason,
+                req.RunnerId,
+                req.LeaseId,
+                req.TaskKey);
             if (!settled.Accepted)
             {
                 var response = new RemoteRunCompletionResponse(
@@ -318,6 +333,8 @@ public static class LeaseEndpoints
                     _ => $"TASK_{outcome.ToUpperInvariant()}",
                 },
             };
+            if (!string.IsNullOrWhiteSpace(resultSha))
+                details["resultSha"] = resultSha;
             if (!string.IsNullOrWhiteSpace(req.SalvageBranch))
                 details["salvageBranch"] = req.SalvageBranch;
             if (!string.IsNullOrWhiteSpace(req.SalvageCommitSha))
@@ -329,6 +346,12 @@ public static class LeaseEndpoints
                 details["reviewAttemptId"] = reviewAttempt.AttemptId;
                 details["reviewSubjectId"] = reviewAttempt.Subject.SubjectId;
                 details["expectedResultSha"] = reviewAttempt.Subject.ExpectedResultSha;
+            }
+            var gateFile = WriteGateItems(task.FolderPath, req.GateItems);
+            if (gateFile is not null)
+            {
+                details["gateItems"] = string.Join(" | ", req.GateItems!);
+                artifactCommits.TryCommitArtifactUpload(null, task.Id, task.FolderPath, [gateFile]);
             }
             if (!string.IsNullOrWhiteSpace(req.SalvageBranch)
                 && !string.IsNullOrWhiteSpace(req.SalvageCommitSha))
@@ -387,6 +410,41 @@ public static class LeaseEndpoints
                 ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
         });
     }
+
+    private static string? WriteGateItems(string folderPath, IReadOnlyList<string>? gateItems)
+    {
+        var items = (gateItems ?? [])
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Replace('\r', ' ').Replace('\n', ' ').Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (items.Count == 0) return null;
+
+        const string relativePath = "orchestrator-follow-up.md";
+        var path = Path.Combine(folderPath, relativePath);
+        var existing = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+        var sb = new StringBuilder(existing);
+        if (sb.Length == 0)
+            sb.Append("# Orchestrator follow-up\n\n");
+        else if (!existing.EndsWith("\n\n", StringComparison.Ordinal))
+            sb.Append(existing.EndsWith('\n') ? "\n" : "\n\n");
+        foreach (var item in items)
+        {
+            var row = $"- [ ] {item}";
+            if (!existing.Contains(row, StringComparison.Ordinal))
+                sb.Append(row).Append('\n');
+        }
+        File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+        return relativePath;
+    }
+
+    private static bool CanonicalLeaseWritePresent(
+        string? attemptId,
+        long? authorityEpoch,
+        string? idempotencyKey) =>
+        !string.IsNullOrWhiteSpace(attemptId)
+        && authorityEpoch is > 0
+        && !string.IsNullOrWhiteSpace(idempotencyKey);
 
     /// <summary>
     /// Fill a partial acquire request with this backend's runner identity so a

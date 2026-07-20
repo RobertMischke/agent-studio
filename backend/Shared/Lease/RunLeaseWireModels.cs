@@ -131,9 +131,11 @@ public sealed record RemoteRunCompletionRequest(
     string? SalvageBranch = null,
     string? SalvageCommitSha = null,
     string? SalvageBranchUrl = null,
+    string? ResultSha = null,
     string? AttemptId = null,
     long? AuthorityEpoch = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    IReadOnlyList<string>? GateItems = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

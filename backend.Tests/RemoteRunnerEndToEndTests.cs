@@ -31,6 +31,7 @@ using RArtifact = Runner::AgentRunner.RunnerArtifactUpload;
 using RComplete = Runner::AgentRunner.ExternalCompletionRequest;
 using RDeliverable = Runner::AgentRunner.ExternalDeliverable;
 using RRemoteComplete = Runner::AgentRunner.RemoteRunCompletionRequest;
+using RRemoteCompletionResponse = Runner::AgentRunner.RemoteRunCompletionResponse;
 
 namespace AgentStudio.Tests;
 
@@ -116,7 +117,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var token = lease.Lease.FencingToken;
 
         // 2. Heartbeat renews the lease with the fencing token.
-        var renew = await client.RenewLeaseAsync(new RHeartbeat(TaskKey, leaseId, token, RunnerId), ct);
+        var renew = await client.RenewLeaseAsync(new RHeartbeat(
+            TaskKey, leaseId, token, RunnerId, null,
+            lease.Lease.AttemptId, lease.Lease.AuthorityEpoch, "e2e-renew-1"), ct);
         Assert.True(renew.Granted, $"renew not granted: {renew.Outcome} {renew.Message}");
 
         // 3. Ship CLI output — appended to the task's durable logs/cli-output.log.
@@ -214,10 +217,24 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             "Done",
             Source: ProjectName,
             ExitCode: 0,
-            SalvageCommitSha: "589c462f",
+            ResultSha: "589c462f",
             AttemptId: lease.Lease.AttemptId,
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
             IdempotencyKey: "remote-done-completion");
+
+        var missingAuthority = await http.PostAsJsonAsync(
+            "/api/runner/completion", completionRequest with { AttemptId = null }, ct);
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, missingAuthority.StatusCode);
+        var wrongLease = await http.PostAsJsonAsync(
+            "/api/runner/completion", completionRequest with
+            {
+                LeaseId = "lease-from-another-holder",
+                IdempotencyKey = "remote-done-wrong-lease",
+            }, ct);
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, wrongLease.StatusCode);
+        var wrongLeaseResult = await wrongLease.Content.ReadFromJsonAsync<RRemoteCompletionResponse>(ApiJson, ct);
+        Assert.Equal(AttemptWriteStatus.StaleFence.ToString(), wrongLeaseResult!.FailureClassification);
+
         var completion = await client.CompleteRunAsync(completionRequest, ct);
 
         Assert.NotNull(completion);
@@ -225,6 +242,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(lease.Lease.AttemptId, completion.RunAttemptId);
         Assert.False(string.IsNullOrWhiteSpace(completion.ReviewAttemptId));
         Assert.False(string.IsNullOrWhiteSpace(completion.ReviewSubjectId));
+
+        var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
+            $"/api/attempts/tasks/{TaskKey}", ApiJson, ct);
+        Assert.Equal("589c462f", projection!.CurrentRunAttempt!.ResultSha);
+        Assert.Equal("589c462f", projection.CurrentReviewSubject!.ExpectedResultSha);
 
         var duplicate = await client.CompleteRunAsync(completionRequest, ct);
         Assert.Equal(completion.ReviewAttemptId, duplicate!.ReviewAttemptId);
@@ -277,6 +299,42 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains("idempotencyKey", timeline);
         Assert.DoesNotContain("external_completion", timeline);
         Assert.Equal(1, timeline.Split("agent_run_finished", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public async Task Fenced_worktree_cleanup_failure_routes_to_human_review_with_durable_gate_evidence()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote cleanup failure", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+
+        const string gate = "worktree-blocked: unsecured worktree on runner-host: /runner/worktrees/AGT-100";
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease!.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Blocked",
+            Reason: "salvage push failed",
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "cleanup-blocked-1",
+            GateItems: [gate]), ct);
+
+        Assert.Equal(TaskStates.HumanReview, completion!.TargetState);
+        var moved = Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey);
+        Assert.Contains(gate, File.ReadAllText(Path.Combine(moved, "orchestrator-follow-up.md")));
+        var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
+            $"/api/attempts/tasks/{TaskKey}", ApiJson, ct);
+        Assert.Equal(AttemptLifecycleState.Failed, projection!.CurrentRunAttempt!.State);
+        Assert.Null(projection.CurrentReviewAttempt);
     }
 
     [Fact]

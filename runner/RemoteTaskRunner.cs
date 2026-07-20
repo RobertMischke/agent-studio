@@ -105,7 +105,7 @@ public sealed class RemoteTaskRunner
         }
         catch (WorktreeSalvageException ex)
         {
-            await ReportUnsecuredWorktreeAsync(taskKey, ex);
+            await ReportUnsecuredWorktreeAsync(taskKey, lease, ex);
             handedBack = true;
             return 1;
         }
@@ -136,7 +136,7 @@ public sealed class RemoteTaskRunner
                     // claim over the run's successful outcome.
                     if (!handedBack)
                     {
-                        await ReportUnsecuredWorktreeAsync(taskKey, ex);
+                        await ReportUnsecuredWorktreeAsync(taskKey, lease, ex);
                         handedBack = true;
                     }
                 }
@@ -231,29 +231,34 @@ public sealed class RemoteTaskRunner
             SalvageBranch: teardown.Branch,
             SalvageCommitSha: teardown.CommitSha,
             SalvageBranchUrl: teardown.BranchUrl,
+            ResultSha: teardown.ResultSha,
             AttemptId: lease.AttemptId,
             AuthorityEpoch: lease.AuthorityEpoch,
-            IdempotencyKey: $"completion:{lease.AttemptId}:{outcome.Kind}:{teardown.CommitSha ?? "none"}"), ct);
+            IdempotencyKey: $"completion:{lease.AttemptId}:{outcome.Kind}:{teardown.ResultSha ?? "none"}"), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 
-    private async Task ReportUnsecuredWorktreeAsync(string taskKey, WorktreeSalvageException ex)
+    private async Task ReportUnsecuredWorktreeAsync(
+        string taskKey,
+        RunLeaseInfoDto lease,
+        WorktreeSalvageException ex)
     {
         var gate = $"worktree-blocked: unsecured worktree on {_options.Hostname}: {ex.WorktreePath} " +
                    $"(salvage to {ex.Branch} failed)";
         _log($"worktree-salvage-escalated task={taskKey} host={_options.Hostname} path={ex.WorktreePath} branch={ex.Branch}");
         try
         {
-            await _client.CompleteAsync(taskKey, new ExternalCompletionRequest(
-                Summary: $"Remote runner retained unsecured worktree on {_options.Hostname} after salvage failed.",
-                Deliverables:
-                [
-                    new ExternalDeliverable(
-                        Path: ex.WorktreePath,
-                        Note: $"Host-local worktree retained; intended branch {ex.Branch}.")
-                ],
-                Source: _options.RunnerName,
-                TargetState: "5-human-review",
+            await _client.CompleteRunAsync(new RemoteRunCompletionRequest(
+                taskKey,
+                lease.LeaseId,
+                lease.FencingToken,
+                _options.RunnerId,
+                RunOutcomeKind.Blocked.ToString(),
+                $"Remote runner retained unsecured worktree at {ex.WorktreePath}; intended branch {ex.Branch}.",
+                _options.RunnerName,
+                AttemptId: lease.AttemptId,
+                AuthorityEpoch: lease.AuthorityEpoch,
+                IdempotencyKey: $"completion:{lease.AttemptId}:worktree-blocked",
                 GateItems: [gate]), CancellationToken.None);
         }
         catch (Exception reportEx)

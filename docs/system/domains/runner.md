@@ -89,7 +89,10 @@ state.
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store
   owns stable attempt IDs, repository/task/source identity, leases, per-task
   monotonic fences, authority epoch, heartbeat, terminal facts, evidence digests,
-  and idempotency. It lives under `<TaskRepository>/.metadata/` and performs no
+  and task-and-operation-scoped idempotency. Remote completion carries an
+  explicit immutable Result-SHA independently of optional salvage-branch metadata, and rejected
+  late review reports remain non-authoritative attempt history. It lives under
+  `<TaskRepository>/.metadata/` and performs no
   checkout, build, test, provider CLI, vision, or semantic review work.
   `AgentSession` and process-holder identity remain continuity metadata only;
   neither can mint or recover attempt write authority.

@@ -75,7 +75,19 @@ public sealed record ReviewAttemptDto(
     ReviewTerminalOutcome? Outcome,
     string? FailureClassification,
     string? TestedResultSha,
-    string? TerminalReason);
+    string? TerminalReason,
+    IReadOnlyList<ReviewReportDeliveryDto> Reports);
+
+public sealed record ReviewReportDeliveryDto(
+    string IdempotencyKey,
+    long Fence,
+    long AuthorityEpoch,
+    string MaterializedResultSha,
+    ReviewTerminalOutcome Outcome,
+    string? FailureClassification,
+    string? Reason,
+    AttemptWriteStatus AuthorityStatus,
+    DateTime ReceivedAt);
 
 public sealed record AttemptWriteReference(
     string AttemptId,

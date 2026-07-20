@@ -130,6 +130,19 @@ public sealed class RunLeaseServiceTests
     }
 
     [Fact]
+    public void Renew_WithWrongLeaseId_IsRejectedAsStale()
+    {
+        var service = NewService();
+        var a = service.TryAcquire(Acquire("AGT-1", "runner-a"));
+
+        var forged = a.Lease! with { LeaseId = "lease-from-another-holder" };
+        var renew = service.Renew(Heartbeat(forged));
+
+        Assert.False(renew.Granted);
+        Assert.Equal("StaleToken", renew.Outcome);
+    }
+
+    [Fact]
     public void DifferentTasksDoNotBlockEachOther_AndFenceIndependently()
     {
         var service = NewService();

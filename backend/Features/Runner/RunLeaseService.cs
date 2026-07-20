@@ -64,7 +64,8 @@ public sealed class RunLeaseService
         if (reference is null)
             return new RunLeaseResponse("NotHeld", false, null, "No canonical RunAttempt is held for this task.");
 
-        var result = _authority.RenewRun(reference, request.RunnerId, request.RequestedTtlSeconds);
+        var result = _authority.RenewRun(
+            reference, request.RunnerId, request.RequestedTtlSeconds, request.LeaseId);
         return MapMutation(result, "Renewed");
     }
 
@@ -77,7 +78,7 @@ public sealed class RunLeaseService
         if (reference is null)
             return new RunLeaseResponse("NotHeld", false, null, "No canonical RunAttempt is held for this task.");
 
-        var result = _authority.ReleaseRun(reference, request.RunnerId);
+        var result = _authority.ReleaseRun(reference, request.RunnerId, request.LeaseId);
         var mapped = MapMutation(result, "Released");
         return mapped with { Lease = mapped.Lease ?? ToLease(before) };
     }
