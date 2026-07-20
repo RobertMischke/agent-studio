@@ -360,7 +360,10 @@ public static class OrchestratorChatRoles
 public sealed record SendOrchestratorChatRequest(
     string Text,
     List<OrchestratorChatAttachment>? Attachments,
-    ChatNavigationContext? NavigationContext = null);
+    ChatNavigationContext? NavigationContext = null,
+    string? Model = null,
+    string? ThinkingLevel = null,
+    string? SelectionSource = null);
 
 /// <summary>
 /// Structured navigation context the frontend ships with every project-chat
@@ -386,51 +389,36 @@ public sealed record ChatNavigationContext(
     string? ViewportTimestamp = null);
 
 /// <summary>
-/// Service that turns a user message into an orchestrator reply by resuming
-/// the singleton global Claude session, persisting both turns to the
-/// per-project chat log, and accumulating the call into the global session
-/// usage record.
+/// Service that turns a user message into an orchestrator reply with the
+/// operator-selected Codex model and reasoning level, then persists both
+/// turns to the context-specific chat log.
 ///
 /// <para>
-/// Why we resume the global session and not boot a per-project one:
-/// the global orchestrator already knows the whole watched-project
-/// landscape and is the one source the user actively talks to. Spinning
-/// up another session per project would 1) duplicate the boot cost,
-/// 2) split the orchestrator's memory across N sessions, 3) make
-/// "what does the orchestrator know about my project?" depend on which
-/// project tab the user happened to open. A single session that the
-/// per-project chats prefix with project context keeps the mental model
-/// simple.
+/// This operating mode is GPT-only. Each request carries the effective model
+/// selection from the live Codex catalogue. A non-GPT model is rejected and
+/// the runner has no Claude fallback.
 /// </para>
 /// </summary>
 public class OrchestratorChatService
 {
     private readonly OrchestratorChat _chat;
     private readonly OrchestratorRunner _runner;
-    private readonly GlobalOrchestratorSessionStore _sessionStore;
     private readonly GlobalOrchestratorBootstrap _bootstrap;
     private readonly TaskScannerService _scanner;
-    private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorChatService> _logger;
     private readonly ClientIdentityStore? _identityStore;
     private readonly OrchestratorContextDigestService? _contextDigests;
 
     /// <summary>
-    /// Serializes concurrent <see cref="SendAsync"/> calls because the
-    /// underlying Claude session is a singleton: the resume id, the
-    /// on-disk session usage record, and the CLI's session memory are
-    /// shared. Two parallel <c>claude -r &lt;sessionId&gt;</c> invocations
-    /// race on session state and on the JSON write at
-    /// <see cref="UpdateSessionUsage"/>; the user-visible failure mode is
-    /// "sent a message in tab B while tab A was still thinking, neither
-    /// reply arrived cleanly". The semaphore makes the queueing explicit
-    /// and bounded - the user still sees their pending turn in the UI.
+    /// Serializes concurrent <see cref="SendAsync"/> calls so multiple Codex
+    /// one-shots do not contend for the same orchestrator working directory
+    /// and transcript writes. The user still sees the pending turn while it
+    /// waits.
     ///
     /// <para>
     /// This is a pragmatic correctness guard, not a parallelism win:
-    /// requests across all projects serialize on a single global session.
-    /// Real cross-project parallelism would need per-project (or
-    /// per-conversation) sessions and is out of scope for this fix.
+    /// requests across all projects serialize on this gate. Per-context
+    /// concurrency is outside this footer-selection change.
     /// </para>
     /// </summary>
     private static readonly SemaphoreSlim SessionGate = new(1, 1);
@@ -448,10 +436,8 @@ public class OrchestratorChatService
     {
         _chat = chat;
         _runner = runner;
-        _sessionStore = sessionStore;
         _bootstrap = bootstrap;
         _scanner = scanner;
-        _config = config;
         _logger = logger;
         _identityStore = identityStore;
         _contextDigests = contextDigests;
@@ -521,48 +507,24 @@ public class OrchestratorChatService
         }
         try
         {
-            var session = _sessionStore.Read();
-            if (session == null || string.IsNullOrWhiteSpace(session.SessionId))
-            {
-                var failure = new OrchestratorChatTurn
-                {
-                    Role = OrchestratorChatRoles.Orchestrator,
-                    Text = "",
-                    ErrorMessage = "Global orchestrator session has not booted yet. Try again in a moment, or check the backend logs."
-                };
-                _chat.Append(watchPath, failure, context);
-                return failure;
-            }
-
             var prompt = await BuildPromptAsync(projectName, watchPath, req, clientId, context, ct).ConfigureAwait(false);
-            var modelId = _config["GlobalOrchestrator:Model"] ?? OrchestratorRunner.DefaultModel;
+            var requestedModel = string.IsNullOrWhiteSpace(req.Model)
+                ? ModelMetadataRegistry.DefaultForCli(CliTypes.Codex) ?? ModelIds.Gpt55
+                : req.Model.Trim();
+            if (!requestedModel.StartsWith("gpt-", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The Orchestrator composer accepts GPT models only.");
+            var thinkingLevel = string.IsNullOrWhiteSpace(req.ThinkingLevel)
+                ? ModelMetadataRegistry.DefaultThinkingLevelForCli(CliTypes.Codex, requestedModel)
+                : req.ThinkingLevel.Trim();
             var workingDirectory = ResolveWorkingDirectory(watchPath);
-            var inlineImages = ExtractInlineImages(req.Attachments);
-
-            // Track whether the resume was rejected so we can persist a
-            // fresh session record after a successful fallback instead of
-            // accumulating onto the stale one. The lambda runs synchronously
-            // from inside ResumeWithFallbackAsync before the fallback fires,
-            // so reading the flag after the await is safe.
-            var resumeRejected = false;
             OrchestratorDecisionResult result;
             try
             {
-                result = await _runner.ResumeWithFallbackAsync(
-                    session.SessionId,
-                    prompt,
-                    fallbackPromptBuilder: () => _bootstrap.BuildBootPrompt() + "\n\n" + prompt,
-                    onSessionRejected: () =>
-                    {
-                        _logger.LogWarning(
-                            "[global-orchestrator] resume rejected for {SessionId}; clearing session and re-bootstrapping for project {Project}",
-                            session.SessionId, projectName);
-                        _sessionStore.Clear();
-                        resumeRejected = true;
-                    },
-                    modelId,
+                result = await _runner.DecideCodexAsync(
+                    _bootstrap.BuildBootPrompt() + "\n\n" + prompt,
+                    requestedModel,
+                    thinkingLevel,
                     workingDirectory,
-                    inlineImages,
                     ct);
             }
             catch (Exception ex)
@@ -578,7 +540,6 @@ public class OrchestratorChatService
                     "Orchestrator chat send threw for project {Project} ({ExceptionType}): {Raw}",
                     projectName, ex.GetType().Name, ex.Message);
                 var translation = OrchestratorChatErrorTranslator.Translate(ex.Message);
-                if (translation.SessionLikelyLost) _sessionStore.Clear();
                 var failure = new OrchestratorChatTurn
                 {
                     Role = OrchestratorChatRoles.Orchestrator,
@@ -606,22 +567,6 @@ public class OrchestratorChatService
                     ErrorDetail = translation.RawDetail
                 };
                 _chat.Append(watchPath, failure, context);
-                // Session-bookkeeping policy on failure:
-                //   - resumeRejected: the runner already rebootstrapped via
-                //     onSessionRejected, so we must not touch the session
-                //     record here.
-                //   - SessionLikelyLost (pipe-broken, spawn-failed, session
-                //     expiry that survived the rebootstrap fallback): clear
-                //     the stored session so the next turn boots a fresh one.
-                //     UpdateSessionUsage would otherwise rewrite the same id
-                //     and pin the user on a dead session indefinitely.
-                //   - otherwise (timeout / rate-limit / unknown): record the
-                //     usage tick so the session bookkeeping stays contiguous.
-                if (!resumeRejected)
-                {
-                    if (translation.SessionLikelyLost) _sessionStore.Clear();
-                    else UpdateSessionUsage(session, result);
-                }
                 return failure;
             }
 
@@ -633,56 +578,11 @@ public class OrchestratorChatService
                 TokenUsage = result.TokenUsage
             };
             _chat.Append(watchPath, reply, context);
-
-            if (resumeRejected && !string.IsNullOrWhiteSpace(result.CapturedSessionId))
-            {
-                // Re-bootstrap succeeded: persist the freshly captured
-                // session id so future chat turns resume against it instead
-                // of looping on the stale id. Seed cumulative usage from the
-                // just-finished call so usage accounting stays contiguous.
-                var fresh = new GlobalOrchestratorSession(
-                    SessionId: result.CapturedSessionId!,
-                    Model: result.Model,
-                    BootedAt: DateTime.UtcNow,
-                    BootPromptPreview: "(rebooted after rejected resume)",
-                    BootReplyPreview: TruncatePreview(result.ReplyText, 600),
-                    CumulativeInputTokens: result.TokenUsage?.InputTokens ?? 0,
-                    CumulativeOutputTokens: result.TokenUsage?.OutputTokens ?? 0,
-                    CumulativeCacheReadTokens: result.TokenUsage?.CacheReadTokens ?? 0,
-                    CumulativeCacheCreationTokens: result.TokenUsage?.CacheCreationTokens ?? 0,
-                    Calls: 1,
-                    LastUsedAt: DateTime.UtcNow,
-                    LastError: null);
-                _sessionStore.Write(fresh);
-            }
-            else
-            {
-                UpdateSessionUsage(session, result);
-            }
             return reply;
         }
         finally
         {
             SessionGate.Release();
-        }
-    }
-
-    private static string TruncatePreview(string s, int max)
-    {
-        if (string.IsNullOrEmpty(s)) return "";
-        return s.Length <= max ? s : s[..max] + "...";
-    }
-
-    private void UpdateSessionUsage(GlobalOrchestratorSession previous, OrchestratorDecisionResult result)
-    {
-        try
-        {
-            var next = GlobalOrchestratorSessionStore.AccumulateUsage(previous, result.TokenUsage, result.ErrorMessage);
-            _sessionStore.Write(next);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Could not update global orchestrator session usage after chat turn");
         }
     }
 

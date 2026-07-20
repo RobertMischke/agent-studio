@@ -118,7 +118,11 @@ async function openSideSheetForProject(page: Page): Promise<string> {
 }
 
 test.describe('Project chat fix - silent drop, sluggishness, parallel use', () => {
+<<<<<<< HEAD
   test('silent drop: orchestrator error and submitted message remain visible in canonical chat', async ({ page }) => {
+=======
+  test('silent drop: orchestrator error surfaces AND the user message stays visible', async ({ page }) => {
+>>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
     const project = await openSideSheetForProject(page);
     const state = await installChatMocks(page, project, {
       // Backend errors with an error turn but 200 OK (mirrors the real
@@ -149,10 +153,15 @@ test.describe('Project chat fix - silent drop, sluggishness, parallel use', () =
         .filter({ hasText: 'orchestrator session has not booted' }).first()
     ).toBeVisible({ timeout: 5_000 });
 
-    // The user's typed message must remain visible (not silently dropped).
+    // CONTRACT: the user's typed message must remain visible (not silently
+    // dropped) even when the orchestrator round-trip errors. The former
+    // "Make a task from your message" rescue buttons were retired with the
+    // AGT-2163 standard-footer consolidation; the transcript itself is now
+    // the durable record of the user's intent.
     await expect(
       page.locator('[data-testid="conversation-message-message.user"]').filter({ hasText: 'Ready-Lane' }).first()
     ).toBeVisible();
+<<<<<<< HEAD
 
     // The retired host-only task conversion workflow stays absent even on
     // the failure path. Slash commands remain available through the composer.
@@ -160,6 +169,11 @@ test.describe('Project chat fix - silent drop, sluggishness, parallel use', () =
     await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
 
     await page.screenshot({ path: `${SHOTS}/01-silent-drop-visible.png`, fullPage: false });
+=======
+    await expect(page.getByTestId('orch-side-sheet-make-task-from-yours')).toHaveCount(0);
+
+    await page.screenshot({ path: `${SHOTS}/01-silent-drop-rescued.png`, fullPage: false });
+>>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
 
     // Sanity: the mock saw exactly one POST (the user's send).
     expect(state.turns.filter((t) => t.role === 'user').length).toBe(1);

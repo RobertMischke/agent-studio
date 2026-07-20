@@ -19,7 +19,12 @@ import type { ComposerLocationContext, OrchestratorChatTurn, OrchestratorContext
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
 import { ChatComponent } from 'coding-agent-chat/composer';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
-import { ChatEvent, ChatSubmitEvent, ChatToolbarItem } from 'coding-agent-chat/core';
+import {
+  ChatEvent,
+  ChatModelSelection,
+  ChatSubmitEvent,
+  ChatToolbarItem,
+} from 'coding-agent-chat/core';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
@@ -27,6 +32,7 @@ import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-r
 import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
+import { OrchestratorComposerModelService } from '../../state/orchestrator-composer-model.service';
 import {
   parseBugHashtags,
   resolveAttachmentUrl,
@@ -66,6 +72,7 @@ import {
 })
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly jobService = inject(TaskService);
+  readonly composerModel = inject(OrchestratorComposerModelService);
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
   readonly watchPaths = input<WatchPathEntry[]>([]);
@@ -278,6 +285,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     { id: 'fork',      glyph: '⑂', label: 'Fork into a new thread' },
     { id: 'search',    glyph: '🔍', label: 'Search chat history' },
   ];
+<<<<<<< HEAD
   /**
    * Routing chip shown right-aligned in the composer toolbar — at-a-
    * glance "which model picks this up". Reads the local default-CLI
@@ -294,6 +302,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       return null;
     }
   });
+=======
+  /** Effective GPT-only route and explicit-vs-inherited provenance. */
+  readonly composerRoutingLabel = computed<string>(() =>
+    `GPT-only · ${this.composerModel.sourceLabel()}`);
+
+  onModelCommit(selection: ChatModelSelection): void {
+    this.composerModel.commit(selection);
+  }
+>>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
 
   private pollTimer: VisibleIntervalHandle | null = null;
 
@@ -698,7 +715,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const sendBody = {
       text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined,
-      navigationContext: contextPayload
+      navigationContext: contextPayload,
+      model: this.composerModel.effectiveSelection().model || null,
+      thinkingLevel: this.composerModel.effectiveSelection().thinkingLevel,
+      selectionSource: this.composerModel.selectionSource(),
     };
     const send$ = contextKey
       ? this.jobService.sendOrchestratorChatByContext(contextKey, sendBody)

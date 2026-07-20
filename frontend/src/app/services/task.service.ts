@@ -2191,6 +2191,9 @@ export class TaskService {
         mimeType?: string | null;
       }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+      model?: string | null;
+      thinkingLevel?: string | null;
+      selectionSource?: 'explicit' | 'inherited';
     },
   ) {
     return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
@@ -2218,6 +2221,9 @@ export class TaskService {
         mimeType?: string | null;
       }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+      model?: string | null;
+      thinkingLevel?: string | null;
+      selectionSource?: 'explicit' | 'inherited';
     },
   ) {
     return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(

@@ -97,6 +97,51 @@ public class OrchestratorRunner
         => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: null, inlineImages, ct);
 
     /// <summary>
+    /// Run an operator-selected Codex model for the GPT-only Orchestrator
+    /// composer. This path deliberately has no Claude fallback. The model and
+    /// reasoning values come from the live Codex catalogue exposed by the UI.
+    /// </summary>
+    public virtual async Task<OrchestratorDecisionResult> DecideCodexAsync(
+        string prompt,
+        string model,
+        string? thinkingLevel,
+        string workingDirectory,
+        CancellationToken ct = default)
+    {
+        var oneShot = _oneShotRegistry?.Get(CliTypes.Codex)
+            ?? throw new InvalidOperationException("Codex one-shot execution is not registered.");
+        var result = await oneShot.RunAsync(new CliOneShotRequest(
+            CliType: CliTypes.Codex,
+            Model: model,
+            Prompt: prompt)
+        {
+            ThinkingLevel = thinkingLevel,
+            WorkingDirectory = workingDirectory,
+            Timeout = DefaultTimeout,
+            Source = "orchestrator-chat",
+            RecordUsage = false,
+        }, ct).ConfigureAwait(false);
+
+        if (!result.Ok)
+        {
+            var error = !string.IsNullOrWhiteSpace(result.Stderr)
+                ? result.Stderr.Trim()
+                : result.Error ?? result.Stdout.Trim();
+            return new OrchestratorDecisionResult(false, result.ParsedText, model, result.Usage, null, error)
+            {
+                Latency = result.Latency,
+                ParsedUsage = result.RichUsage,
+            };
+        }
+
+        return new OrchestratorDecisionResult(true, result.ParsedText, model, result.Usage, null, null)
+        {
+            Latency = result.Latency,
+            ParsedUsage = result.RichUsage,
+        };
+    }
+
+    /// <summary>
     /// Resume an existing orchestrator session via <c>claude -r &lt;sessionId&gt;</c>.
     /// The session keeps the boot-time context (project facts, recent
     /// activity) and accumulates conversation history, so subsequent

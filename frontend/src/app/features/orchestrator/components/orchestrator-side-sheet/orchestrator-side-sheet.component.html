@@ -149,6 +149,7 @@
               [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
               [toolbarStart]="composerToolbarStart"
               [routingLabel]="composerRoutingLabel()"
+<<<<<<< HEAD
               (submitMessage)="onSubmit($event)">
               <!-- Canonical location context in CAC's standard footer. Studio
                    derives it once from the active tab; the composer renders it
@@ -175,6 +176,14 @@
                 }
               </ng-container>
             </cac-chat>
+=======
+              [contextLabel]="composerContextLabel()"
+              [modelControl]="composerModel.control()"
+              (submitMessage)="onSubmit($event)"
+              (modelCommit)="onModelCommit($event)"
+              (modelCatalogRequested)="composerModel.requestCatalog()"
+              (modelRefreshRequested)="composerModel.requestCatalog(true)" />
+>>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
           </section>
         } @else {
           <div class="sheet__no-project">No watched projects yet.</div>

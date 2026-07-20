@@ -196,9 +196,9 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
         Assert.Contains("session", reply.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("The pipe is being closed.", reply.ErrorDetail);
 
-        // SessionLikelyLost = true on the pipe shape, so the session
-        // record has been cleared and the next turn will re-bootstrap.
-        Assert.Null(sessionStore.Read());
+        // GPT-only composer calls do not resume or mutate the legacy Claude
+        // session record.
+        Assert.NotNull(sessionStore.Read());
 
         // The chat log on disk must also store the friendly message so
         // re-reading history does not resurrect the raw text.
@@ -257,7 +257,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
         Assert.NotNull(reply.ErrorMessage);
         Assert.DoesNotContain("pipe is being closed", reply.ErrorMessage!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("The pipe is being closed.", reply.ErrorDetail);
-        Assert.Null(sessionStore.Read());
+        Assert.NotNull(sessionStore.Read());
     }
 
     /// <summary>
@@ -281,6 +281,17 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
         {
             _error = error;
         }
+
+        public override Task<OrchestratorDecisionResult> DecideCodexAsync(
+            string prompt, string model, string? thinkingLevel, string workingDirectory,
+            CancellationToken ct = default)
+            => Task.FromResult(new OrchestratorDecisionResult(
+                Success: false,
+                ReplyText: "",
+                Model: model,
+                TokenUsage: null,
+                CapturedSessionId: null,
+                ErrorMessage: _error));
 
         public override Task<OrchestratorDecisionResult> ResumeAsync(
             string sessionId, string prompt, string? model, string workingDirectory,
@@ -315,6 +326,11 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
         {
             _exception = exception;
         }
+
+        public override Task<OrchestratorDecisionResult> DecideCodexAsync(
+            string prompt, string model, string? thinkingLevel, string workingDirectory,
+            CancellationToken ct = default)
+            => throw _exception;
 
         public override Task<OrchestratorDecisionResult> ResumeAsync(
             string sessionId, string prompt, string? model, string workingDirectory,
