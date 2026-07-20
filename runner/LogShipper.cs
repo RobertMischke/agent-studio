@@ -13,13 +13,15 @@ public sealed class LogShipper
 {
     private readonly TaskServerClient _client;
     private readonly string _taskKey;
+    private readonly RunLeaseInfoDto _lease;
     private readonly Action<string> _diag;
     private readonly ConcurrentQueue<CliOutputLine> _pending = new();
 
-    public LogShipper(TaskServerClient client, string taskKey, Action<string> diag)
+    public LogShipper(TaskServerClient client, string taskKey, RunLeaseInfoDto lease, Action<string> diag)
     {
         _client = client;
         _taskKey = taskKey;
+        _lease = lease;
         _diag = diag;
     }
 
@@ -35,7 +37,14 @@ public sealed class LogShipper
 
         try
         {
-            await _client.IngestLogsAsync(new LogIngestRequest(_taskKey, batch), ct);
+            var delivery = string.Join("\n", batch.Select(x => $"{x.Timestamp:o}|{x.Stream}|{x.Text}"));
+            await _client.IngestLogsAsync(new LogIngestRequest(
+                _taskKey,
+                batch,
+                _lease.AttemptId,
+                _lease.FencingToken,
+                _lease.AuthorityEpoch,
+                $"logs:{_lease.AttemptId}:{WireDigest.Hash(delivery)}"), ct);
         }
         catch (Exception ex)
         {

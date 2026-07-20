@@ -25,7 +25,10 @@ public sealed record RunLeaseAcquireRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    string? RepositoryId = null,
+    string? SourceRunAttemptId = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Heartbeat: extends the lease only when lease id + fencing token + runner still match the current holder.</summary>
 public sealed record RunLeaseHeartbeatRequest(
@@ -33,14 +36,20 @@ public sealed record RunLeaseHeartbeatRequest(
     string LeaseId,
     long FencingToken,
     string RunnerId,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Release: drops the lease only for the matching current holder; the fencing token keeps climbing for the next acquire.</summary>
 public sealed record RunLeaseReleaseRequest(
     string TaskKey,
     string LeaseId,
     long FencingToken,
-    string RunnerId);
+    string RunnerId,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Wire projection of the server-held run-lease record.</summary>
 public sealed record RunLeaseInfoDto(
@@ -53,7 +62,9 @@ public sealed record RunLeaseInfoDto(
     string LeaseId,
     long FencingToken,
     DateTime AcquiredAt,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    string? AttemptId = null,
+    long AuthorityEpoch = 0);
 
 /// <summary>
 /// Result of a run-lease operation. <see cref="Outcome"/> is the discriminator
@@ -119,10 +130,17 @@ public sealed record RemoteRunCompletionRequest(
     int? ExitCode = null,
     string? SalvageBranch = null,
     string? SalvageCommitSha = null,
-    string? SalvageBranchUrl = null);
+    string? SalvageBranchUrl = null,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,
     string Outcome,
     string TargetState,
-    string? Message = null);
+    string? Message = null,
+    string? RunAttemptId = null,
+    string? ReviewAttemptId = null,
+    string? ReviewSubjectId = null,
+    string? FailureClassification = null);

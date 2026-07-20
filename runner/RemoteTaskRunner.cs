@@ -76,7 +76,7 @@ public sealed class RemoteTaskRunner
         var heartbeat = new LeaseHeartbeat(_client, _options, lease, _log);
         var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
 
-        var shipper = new LogShipper(_client, taskKey, _log);
+        var shipper = new LogShipper(_client, taskKey, lease, _log);
         var shipperTask = shipper.RunAsync(TimeSpan.FromSeconds(5), stopRun.Token);
 
         var outcome = new RunOutcome(RunOutcomeKind.Unknown, "Runner ended before a terminal outcome was recorded.");
@@ -88,7 +88,7 @@ public sealed class RemoteTaskRunner
         {
             outcome = await ExecuteAsync(taskKey, workspace, shipper, stopRun, shutdown);
             await shipper.FlushAsync(shutdown);
-            await UploadResultsAsync(taskKey, shutdown);
+            await UploadResultsAsync(taskKey, lease, shutdown);
 
             if (heartbeat.LeaseLost)
             {
@@ -193,7 +193,7 @@ public sealed class RemoteTaskRunner
         return outcome;
     }
 
-    private async Task<List<string>> UploadResultsAsync(string taskKey, CancellationToken ct)
+    private async Task<List<string>> UploadResultsAsync(string taskKey, RunLeaseInfoDto lease, CancellationToken ct)
     {
         var resultsDir = ResultsDir(taskKey);
         if (!Directory.Exists(resultsDir)) return [];
@@ -209,7 +209,11 @@ public sealed class RemoteTaskRunner
             uploads.Add(new RunnerArtifactUpload(rel, Convert.ToBase64String(bytes)));
         }
 
-        var resp = await _client.UploadArtifactsAsync(new ArtifactIngestRequest(taskKey, uploads), ct);
+        var digestInput = string.Join("\n", uploads.OrderBy(x => x.Path, StringComparer.Ordinal)
+            .Select(x => $"{x.Path}:{WireDigest.Hash(x.ContentBase64)}"));
+        var resp = await _client.UploadArtifactsAsync(new ArtifactIngestRequest(
+            taskKey, uploads, lease.AttemptId, lease.FencingToken, lease.AuthorityEpoch,
+            $"artifacts:{lease.AttemptId}:{WireDigest.Hash(digestInput)}"), ct);
         _log($"uploaded {resp?.Uploaded ?? 0} artifact(s); commit {resp?.CommitStatus ?? "n/a"}");
         return resp?.Files ?? [];
     }
@@ -226,7 +230,10 @@ public sealed class RemoteTaskRunner
             outcome.Kind.ToString(), outcome.Reason, _options.RunnerName,
             SalvageBranch: teardown.Branch,
             SalvageCommitSha: teardown.CommitSha,
-            SalvageBranchUrl: teardown.BranchUrl), ct);
+            SalvageBranchUrl: teardown.BranchUrl,
+            AttemptId: lease.AttemptId,
+            AuthorityEpoch: lease.AuthorityEpoch,
+            IdempotencyKey: $"completion:{lease.AttemptId}:{outcome.Kind}:{teardown.CommitSha ?? "none"}"), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 
@@ -260,7 +267,9 @@ public sealed class RemoteTaskRunner
         try
         {
             var resp = await _client.ReleaseLeaseAsync(new RunLeaseReleaseRequest(
-                lease.TaskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId), ct);
+                lease.TaskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId,
+                lease.AttemptId, lease.AuthorityEpoch,
+                $"release:{lease.AttemptId}:{lease.LeaseId}"), ct);
             _log($"lease released: {resp.Outcome}");
         }
         catch (Exception ex)

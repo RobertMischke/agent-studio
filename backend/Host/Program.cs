@@ -343,7 +343,10 @@ builder.Services.AddSingleton<IntegrationLeaseService>();
 // RM-3 / ADR-0060: the fenced task-run lease + this backend's runner identity
 // back the productive /api/runner/lease API (§8.2C), the prepared successor to
 // the disk-backed .pickup-lock.json guard.
-builder.Services.AddSingleton<RunLeaseService>();
+builder.Services.AddSingleton<AttemptAuthorityService>();
+builder.Services.AddSingleton(sp => new RunLeaseService(
+    sp.GetRequiredService<ILogger<RunLeaseService>>(),
+    sp.GetRequiredService<AttemptAuthorityService>()));
 builder.Services.AddSingleton(sp => RunnerIdentity.Resolve(sp.GetRequiredService<IConfiguration>()));
 // ASS-1729: keep the host awake while >=1 agent run is active. Default ON;
 // disable via "KeepAwakeDuringRuns": false. Uses the Windows Power Request API

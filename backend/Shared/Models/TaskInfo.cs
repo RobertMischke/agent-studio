@@ -376,8 +376,8 @@ public record TaskInfo
 
 /// <summary>
 /// Card-renderable projection of the runner that holds a task's active run lease
-/// (AGT-2003). Sourced from the in-memory run-lease record; the fencing token and
-/// lease id ride along for the tooltip / audit trail but the card only needs
+/// (AGT-2003). Sourced from the canonical persisted RunAttempt lease; the attempt,
+/// epoch, fencing token, and lease id ride along for the tooltip / audit trail but the card only needs
 /// <see cref="RunnerName"/> and <see cref="IsRemote"/>.
 /// </summary>
 public record TaskRunnerInfo
@@ -400,6 +400,10 @@ public record TaskRunnerInfo
     public string LeaseId { get; init; } = "";
     /// <summary>Monotonic fencing token of the active grant (audit / tooltip only).</summary>
     public long FencingToken { get; init; }
+    /// <summary>Canonical persisted RunAttempt identity.</summary>
+    public string? AttemptId { get; init; }
+    /// <summary>Authority epoch that issued the current fence.</summary>
+    public long AuthorityEpoch { get; init; }
     /// <summary>UTC instant the active lease was acquired.</summary>
     public DateTime AcquiredAt { get; init; }
 }

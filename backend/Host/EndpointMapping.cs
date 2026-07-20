@@ -37,6 +37,7 @@ public static class EndpointMapping
         app.MapOrchestratorSessionEndpoints();
         app.MapOrchestratorContextEndpoints();
         app.MapLeaseEndpoints();
+        app.MapAttemptAuthorityEndpoints();
         app.MapIntegrationLeaseEndpoints();
         app.MapLogIngestionEndpoints();
         app.MapArtifactIngestionEndpoints();

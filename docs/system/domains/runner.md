@@ -84,12 +84,24 @@ state.
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
+  (AGT-2182): the Task Server's persisted control-plane authority for separate
+  `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store
+  owns stable attempt IDs, repository/task/source identity, leases, per-task
+  monotonic fences, authority epoch, heartbeat, terminal facts, evidence digests,
+  and idempotency. It lives under `<TaskRepository>/.metadata/` and performs no
+  checkout, build, test, provider CLI, vision, or semantic review work.
+  `AgentSession` and process-holder identity remain continuity metadata only;
+  neither can mint or recover attempt write authority.
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
-  (AGT-2003): read-time projection of the active run lease onto `TaskInfo.Runner`
+  (AGT-2003, canonicalized by AGT-2182): read-time projection of the active
+  persisted RunAttempt lease onto `TaskInfo.Runner`
   for `3-progress` cards, so the board can show which runner executes a card
   (remote `⇥ <runner>` from the lease owner vs a quiet `lokal` in-process run).
-  A remote runner acquires the run lease; the local in-process runner uses the
-  disk pickup-lock and holds none, which is exactly the lokal-vs-remote signal.
+  The projection includes canonical Attempt ID and authority epoch alongside
+  the lease and fence. A remote runner acquires the run lease; the local
+  in-process runner uses the disk pickup-lock and holds none, which is exactly
+  the lokal-vs-remote signal.
 
 ## Invariants
 

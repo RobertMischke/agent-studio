@@ -43,7 +43,10 @@ public sealed record RunLeaseAcquireRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    string? RepositoryId = null,
+    string? SourceRunAttemptId = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Runner -> Server: heartbeat to extend the lease (/api/runner/lease/renew).</summary>
 public sealed record RunLeaseHeartbeatRequest(
@@ -51,14 +54,20 @@ public sealed record RunLeaseHeartbeatRequest(
     string LeaseId,
     long FencingToken,
     string RunnerId,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Runner -> Server: drop the lease when the run ends (/api/runner/lease/release).</summary>
 public sealed record RunLeaseReleaseRequest(
     string TaskKey,
     string LeaseId,
     long FencingToken,
-    string RunnerId);
+    string RunnerId,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Server projection of the current lease holder + fencing token.</summary>
 public sealed record RunLeaseInfoDto(
@@ -71,7 +80,9 @@ public sealed record RunLeaseInfoDto(
     string LeaseId,
     long FencingToken,
     DateTime AcquiredAt,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    string? AttemptId = null,
+    long AuthorityEpoch = 0);
 
 /// <summary>
 /// Server reply to any lease operation. <see cref="Granted"/> is the boolean the
@@ -135,19 +146,32 @@ public sealed record RemoteRunCompletionRequest(
     int? ExitCode = null,
     string? SalvageBranch = null,
     string? SalvageCommitSha = null,
-    string? SalvageBranchUrl = null);
+    string? SalvageBranchUrl = null,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,
     string Outcome,
     string TargetState,
-    string? Message = null);
+    string? Message = null,
+    string? RunAttemptId = null,
+    string? ReviewAttemptId = null,
+    string? ReviewSubjectId = null,
+    string? FailureClassification = null);
 
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);
 
 /// <summary>Runner -> Server: append output lines to the task's durable cli-output.log (/api/runner/logs).</summary>
-public sealed record LogIngestRequest(string TaskKey, List<CliOutputLine> Lines);
+public sealed record LogIngestRequest(
+    string TaskKey,
+    List<CliOutputLine> Lines,
+    string? AttemptId = null,
+    long? Fence = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record LogIngestResponse(string TaskKey, int Appended, string? Message = null);
 
@@ -155,7 +179,13 @@ public sealed record LogIngestResponse(string TaskKey, int Appended, string? Mes
 public sealed record RunnerArtifactUpload(string Path, string ContentBase64);
 
 /// <summary>Runner -> Server: upload base64 result files (/api/runner/artifacts).</summary>
-public sealed record ArtifactIngestRequest(string TaskKey, List<RunnerArtifactUpload> Artifacts);
+public sealed record ArtifactIngestRequest(
+    string TaskKey,
+    List<RunnerArtifactUpload> Artifacts,
+    string? AttemptId = null,
+    long? Fence = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record ArtifactIngestResponse(
     string TaskKey,

@@ -296,6 +296,8 @@ public class TaskRunnerService : BackgroundService
             IsRemote = isRemote,
             LeaseId = lease.LeaseId,
             FencingToken = lease.FencingToken,
+            AttemptId = lease.AttemptId,
+            AuthorityEpoch = lease.AuthorityEpoch,
             AcquiredAt = lease.AcquiredAt
         };
     }

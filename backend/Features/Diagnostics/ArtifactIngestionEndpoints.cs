@@ -16,6 +16,7 @@ public static class ArtifactIngestionEndpoints
         app.MapPost("/api/runner/artifacts", (
             ArtifactIngestRequest req,
             ITaskScanner scanner,
+            AttemptAuthorityService authority,
             WorkspaceArtifactCommitService artifactCommits,
             ILoggerFactory loggerFactory) =>
         {
@@ -26,6 +27,29 @@ public static class ArtifactIngestionEndpoints
             var task = ResolveTask(scanner, req.TaskKey);
             if (task is null)
                 return Results.NotFound(new ArtifactIngestResponse(req.TaskKey, 0, [], $"No task '{req.TaskKey}'."));
+
+            var projection = authority.GetTaskProjection(req.TaskKey);
+            if (string.IsNullOrWhiteSpace(req.AttemptId) || !req.Fence.HasValue
+                || !req.AuthorityEpoch.HasValue || string.IsNullOrWhiteSpace(req.IdempotencyKey))
+            {
+                if (!projection.LegacyTask)
+                    return Results.Conflict(new AttemptWriteResult(
+                        AttemptWriteStatus.Invalid, req.AttemptId ?? string.Empty,
+                        "Canonical runner writes require AttemptId, Fence, AuthorityEpoch, and IdempotencyKey."));
+            }
+            else
+            {
+                var digestInput = string.Join("\n", req.Artifacts
+                    .OrderBy(x => x.Path, StringComparer.Ordinal)
+                    .Select(x => $"{x.Path}:{AttemptAuthorityService.Hash(x.ContentBase64 ?? string.Empty)}"));
+                var accepted = authority.RecordEvidenceDigest(
+                    new AttemptWriteReference(req.AttemptId, req.Fence.Value, req.AuthorityEpoch.Value, req.IdempotencyKey),
+                    "artifact-set:" + AttemptAuthorityService.Hash(digestInput));
+                if (accepted.Status == AttemptWriteStatus.Duplicate)
+                    return Results.Ok(new ArtifactIngestResponse(req.TaskKey, 0, [], "duplicate delivery"));
+                if (accepted.Status != AttemptWriteStatus.Accepted)
+                    return Results.Conflict(accepted);
+            }
 
             ArtifactIngestResponse written;
             try

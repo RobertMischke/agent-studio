@@ -21,7 +21,7 @@ public static class LogIngestionEndpoints
 {
     public static void MapLogIngestionEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/runner/logs", (LogIngestRequest req, ITaskScanner scanner) =>
+        app.MapPost("/api/runner/logs", (LogIngestRequest req, ITaskScanner scanner, AttemptAuthorityService authority) =>
         {
             if (req.Lines is null || req.Lines.Count == 0)
                 return Results.Ok(new LogIngestResponse(req.TaskKey, 0, "no lines"));
@@ -29,6 +29,15 @@ public static class LogIngestionEndpoints
             var folder = ResolveFolder(scanner, req.TaskKey);
             if (folder is null)
                 return Results.NotFound(new LogIngestResponse(req.TaskKey, 0, $"No task '{req.TaskKey}'."));
+
+            var authorityResult = Authorize(req, authority);
+            if (authorityResult is not null)
+            {
+                if (authorityResult.Status == AttemptWriteStatus.Duplicate)
+                    return Results.Ok(new LogIngestResponse(req.TaskKey, 0, "duplicate delivery"));
+                if (authorityResult.Status != AttemptWriteStatus.Accepted)
+                    return Results.Conflict(authorityResult);
+            }
 
             var logsDir = Path.Combine(folder, "logs");
             Directory.CreateDirectory(logsDir);
@@ -56,6 +65,21 @@ public static class LogIngestionEndpoints
 
             return Results.Ok(new LogIngestResponse(req.TaskKey, req.Lines.Count));
         });
+    }
+
+    private static AttemptWriteResult? Authorize(LogIngestRequest req, AttemptAuthorityService authority)
+    {
+        var projection = authority.GetTaskProjection(req.TaskKey);
+        if (string.IsNullOrWhiteSpace(req.AttemptId) || !req.Fence.HasValue
+            || !req.AuthorityEpoch.HasValue || string.IsNullOrWhiteSpace(req.IdempotencyKey))
+        {
+            return projection.LegacyTask
+                ? null
+                : new AttemptWriteResult(AttemptWriteStatus.Invalid, req.AttemptId ?? string.Empty,
+                    "Canonical runner writes require AttemptId, Fence, AuthorityEpoch, and IdempotencyKey.");
+        }
+        return authority.AcceptRunWrite(new AttemptWriteReference(
+            req.AttemptId, req.Fence.Value, req.AuthorityEpoch.Value, req.IdempotencyKey));
     }
 
     private static string? ResolveFolder(ITaskScanner scanner, string taskKey)
