@@ -1,0 +1,11 @@
+<span class="addr__identity">{{ identity() }}</span>
+<input #field class="addr__url" type="text" spellcheck="false" autocomplete="off"
+       data-testid="url-preview-addr-input"
+       aria-label="Preview URL. Press Enter to navigate the embedded preview."
+       placeholder="Loading URL…"
+       [value]="draft() ?? url() ?? ''"
+       [disabled]="!editable()"
+       (input)="draft.set(field.value)"
+       (keydown.enter)="commit(field); $event.stopPropagation()"
+       (keydown.escape)="cancel(field); $event.stopPropagation()"
+       (blur)="draft.set(null)" />

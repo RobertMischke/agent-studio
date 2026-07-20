@@ -107,7 +107,28 @@ describe('ProjectUrlPreviewTabComponent', () => {
     // Sandbox present, but no top-navigation escape.
     expect(frame?.getAttribute('sandbox')).toContain('allow-scripts');
     expect(frame?.getAttribute('sandbox')).not.toContain('allow-top-navigation');
-    expect(el.querySelector('[data-testid="url-preview-addr"]')?.textContent).toContain('localhost:4201');
+    const addr = el.querySelector('[data-testid="url-preview-addr-input"]') as HTMLInputElement;
+    expect(addr?.value).toBe('http://localhost:4201');
+  });
+
+  it('navigates the embedded frame to a typed URL without touching the registry', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector('[data-testid="url-preview-addr-input"]') as HTMLInputElement;
+    input.value = 'http://localhost:4202/health';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    fixture.detectChanges();
+
+    const frame = fixture.nativeElement.querySelector('[data-testid="url-preview-frame"]') as HTMLIFrameElement;
+    expect(frame?.getAttribute('src')).toBe('http://localhost:4202/health');
+    expect(fixture.componentInstance.urlRecord()?.url).toBe('http://localhost:4202');
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-status"]')?.getAttribute('data-status'))
+      .toBe('custom');
   });
 
   it('shows a contained offline panel with project context and a Start button', () => {

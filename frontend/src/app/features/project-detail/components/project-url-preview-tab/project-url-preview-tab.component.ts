@@ -23,20 +23,16 @@ import {
 import type { RegistryProjectUrl } from '../../../../models/task.model';
 import { ProjectUrlLookupService } from '../../services/project-url-lookup.service';
 import { ProjectUrlProcessController } from '../../services/project-url-process.controller';
+import { ProjectUrlAddressComponent } from '../project-url-address/project-url-address';
 import { ProjectUrlProcessConsoleComponent } from '../project-url-process-console/project-url-process-console';
 import {
   ProjectUrlSettingsDialogComponent,
   type ProjectUrlSettingsValue,
 } from '../project-url-settings-dialog/project-url-settings-dialog';
+import { buildEmbedMenuItems, httpErrorMessage, type StartFailure } from './project-url-preview-tab.helpers';
 
 /** Address-bar status pill vocabulary for the embedded preview. */
-type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' | 'failed';
-
-interface StartFailure {
-  explanation: string;
-  command: string;
-  cwd: string;
-}
+type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' | 'failed' | 'custom';
 
 /**
  * AGT-2067 — embedded Project URL preview tab.
@@ -65,6 +61,7 @@ interface StartFailure {
     StudioIconComponent,
     TooltipDirective,
     MenuComponent,
+    ProjectUrlAddressComponent,
     ProjectUrlProcessConsoleComponent,
     ProjectUrlSettingsDialogComponent,
   ],
@@ -107,6 +104,8 @@ export class ProjectUrlPreviewTabComponent {
   readonly settingsOpen = signal(false);
   readonly settingsSaving = signal(false);
   readonly settingsError = signal<string | null>(null);
+  /** Session-only navigation target typed into the address bar (never persisted). */
+  readonly overrideUrl = signal<string | null>(null);
   /** Bumping this re-navigates the iframe (forces a fresh `[src]` reference). */
   private readonly reloadNonce = signal(0);
 
@@ -129,13 +128,19 @@ export class ProjectUrlPreviewTabComponent {
     return projectId && u ? this.probe.statusFor(projectId, u.id) : 'unknown';
   });
 
-  /** Embed the iframe when the URL resolved and the server is not known-offline
-   *  (running or still-unknown → optimistic load). Offline shows the card. */
+  /** The URL the frame actually shows: the typed override, else the record. */
+  readonly effectiveUrl = computed(() => {
+    const u = this.urlRecord();
+    return u ? this.overrideUrl() ?? u.url : null;
+  });
+
+  /** Embed once resolved and healthy; offline shows the card. A typed
+   *  override embeds unconditionally (readiness probes only the record URL). */
   readonly shouldEmbed = computed(() =>
     this.resolveState() === 'resolved'
       && !this.building()
       && !this.startFailure()
-      && this.readiness().kind === 'healthy',
+      && (this.readiness().kind === 'healthy' || this.overrideUrl() !== null),
   );
 
   readonly readinessPending = computed(() =>
@@ -148,16 +153,17 @@ export class ProjectUrlPreviewTabComponent {
   /** Sandboxed iframe source; recomputes on reload but not on probe re-ticks so
    *  a steady "running" status never remounts a loaded frame. */
   readonly iframeSrc = computed<SafeResourceUrl | null>(() => {
-    const u = this.urlRecord();
-    if (!u) return null;
+    const target = this.effectiveUrl();
+    if (!target) return null;
     void this.reloadNonce();
-    return this.sanitizer.bypassSecurityTrustResourceUrl(u.url);
+    return this.sanitizer.bypassSecurityTrustResourceUrl(target);
   });
 
   readonly statusPill = computed<PreviewPill>(() => {
     if (this.building()) return 'building';
     if (this.startFailure()) return 'failed';
     if (this.resolveState() !== 'resolved') return 'checking';
+    if (this.overrideUrl()) return 'custom';
     if (this.frameState() === 'blocked') return 'blocked';
     const s = this.probeStatus();
     return s === 'unknown' ? 'checking' : s;
@@ -175,26 +181,13 @@ export class ProjectUrlPreviewTabComponent {
   /** While the console shows command/cwd below, the card skips its copy. */
   readonly consoleVisible = computed(() => this.process.consoleOpen() && this.process.session() !== null);
 
-  readonly menuItems = computed<readonly MenuItem[]>(() => {
-    const session = this.process.session();
-    const ownsRunning = session?.state === 'running' || session?.state === 'starting';
-    const hasStartRule = Boolean(this.urlRecord()?.startRule);
-    return [
-      { kind: 'header', label: this.urlRecord()?.label ?? 'Embed' },
-      {
-        kind: 'row',
-        id: 'start',
-        label: this.probeStatus() === 'running' || ownsRunning ? 'Restart' : 'Start',
-        hint: this.urlRecord()?.startRule?.command,
-        disabled: !hasStartRule || this.building() || this.process.stopping(),
-      },
-      { kind: 'row', id: 'console', label: 'Show live console', disabled: !session },
-      { kind: 'row', id: 'stop', label: 'Stop server', danger: true, disabled: !ownsRunning || this.process.stopping() },
-      { kind: 'separator' },
-      { kind: 'row', id: 'settings', label: 'Embed settings', disabled: !this.urlRecord() },
-      { kind: 'row', id: 'external', label: 'Open externally', disabled: !this.urlRecord() },
-    ];
-  });
+  readonly menuItems = computed<readonly MenuItem[]>(() => buildEmbedMenuItems({
+    url: this.urlRecord(),
+    session: this.process.session(),
+    probeRunning: this.probeStatus() === 'running',
+    building: this.building(),
+    stopping: this.process.stopping(),
+  }));
 
   constructor() {
     // Re-resolve whenever the bound project / url changes (established panel
@@ -226,6 +219,7 @@ export class ProjectUrlPreviewTabComponent {
     this.process.reset();
     this.building.set(false);
     this.startFailure.set(null);
+    this.overrideUrl.set(null);
     this.menuOpen.set(false);
     this.settingsOpen.set(false);
     this.resolveState.set('resolving');
@@ -259,9 +253,18 @@ export class ProjectUrlPreviewTabComponent {
   /** iframe finished (loaded a page — we cannot read cross-origin, only that it
    *  navigated). Clears the suspected-block timer. */
   onFrameLoad(): void {
-    if (this.probeStatus() !== 'running') return;
+    if (this.overrideUrl() === null && this.probeStatus() !== 'running') return;
     this.frameState.set('loaded');
     this.clearLoadTimer();
+  }
+
+  /** Enter in the address bar: navigate this preview session only. */
+  onNavigate(target: string): void {
+    const u = this.urlRecord();
+    if (!u) return;
+    this.overrideUrl.set(target === u.url ? null : target);
+    this.frameState.set('loading');
+    this.reloadNonce.update(n => n + 1);
   }
 
   private onLoadTimeout(): void {
@@ -280,9 +283,9 @@ export class ProjectUrlPreviewTabComponent {
     const projectId = this.projectId();
     const url = this.urlRecord();
     if (!projectId || !url) return;
-    const wasRunning = this.probeStatus() === 'running';
+    const remount = this.probeStatus() === 'running' || this.overrideUrl() !== null;
     this.probe.refresh(projectId, url.id);
-    if (wasRunning) {
+    if (remount) {
       this.frameState.set('loading');
       this.reloadNonce.update(n => n + 1);
     }
@@ -329,11 +332,13 @@ export class ProjectUrlPreviewTabComponent {
     this.startFailure.set(null);
     this.process.stop(projectId, url.id).subscribe({
       next: () => this.probe.refresh(projectId, url.id),
-      error: error => this.process.appendError(this.errorMessage(error)),
+      error: error => this.process.appendError(httpErrorMessage(error)),
     });
   }
 
   showMenu(event?: MouseEvent): void {
+    // Right-click on the address input keeps the native menu (copy/paste).
+    if (event?.target instanceof HTMLInputElement) return;
     event?.preventDefault();
     this.menuPosition.set(event ? { x: event.clientX, y: event.clientY } : null);
     this.menuOpen.set(true);
@@ -394,8 +399,8 @@ export class ProjectUrlPreviewTabComponent {
   }
 
   openExternal(): void {
-    const u = this.urlRecord();
-    if (u) window.open(u.url, '_blank', 'noopener');
+    const target = this.effectiveUrl();
+    if (target) window.open(target, '_blank', 'noopener');
   }
 
   onSettings(): void {
@@ -418,19 +423,14 @@ export class ProjectUrlPreviewTabComponent {
     ).subscribe({
       next: () => {
         this.urlRecord.set({ ...current, ...value });
+        this.overrideUrl.set(null);
         this.settingsOpen.set(false);
         this.frameState.set('loading');
         this.reloadNonce.update(n => n + 1);
         this.probe.refresh(projectId, current.id);
       },
-      error: error => this.settingsError.set(this.errorMessage(error)),
+      error: error => this.settingsError.set(httpErrorMessage(error)),
     });
-  }
-
-  private errorMessage(error: unknown): string {
-    const value = error as { error?: string | { error?: string; message?: string }; message?: string };
-    if (typeof value?.error === 'string') return value.error;
-    return value?.error?.error ?? value?.error?.message ?? value?.message ?? 'The operation failed.';
   }
 
   private clearLoadTimer(): void {

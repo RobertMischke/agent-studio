@@ -64,36 +64,15 @@
     border: 1px solid var(--studio-border);
     border-radius: 7px;
     background: var(--studio-bg-editor);
+
+    // The address input inside carries no own outline; the box signals focus.
+    &:focus-within {
+      border-color: var(--studio-accent);
+    }
   }
   &__addr-icon {
     flex: 0 0 auto;
     color: var(--studio-fg-muted);
-  }
-  &__addr-copy {
-    display: flex;
-    flex: 1 1 auto;
-    align-items: baseline;
-    gap: var(--studio-spacing-2);
-    min-width: 0;
-  }
-  &__identity {
-    flex: 0 1 auto;
-    overflow: hidden;
-    color: var(--studio-fg-strong);
-    font-size: 11px;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  &__url {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    color: var(--studio-fg-muted);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   &__pill,
   &__state-badge {
@@ -394,10 +373,6 @@
 
 @media (max-width: 620px) {
   .url-preview {
-    &__identity {
-      display: none;
-    }
-
     &__details div {
       grid-template-columns: 1fr;
       gap: var(--studio-spacing-1);

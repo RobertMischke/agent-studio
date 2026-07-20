@@ -1,0 +1,51 @@
+:host {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+}
+
+.addr__identity {
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--studio-fg-strong);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addr__url {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+
+  &::placeholder {
+    color: var(--studio-fg-muted);
+  }
+
+  &:focus {
+    color: var(--studio-fg);
+    // The enclosing address box signals focus via :focus-within; a second
+    // ring inside the field would double up.
+    outline: none;
+    text-overflow: clip;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+@media (max-width: 620px) {
+  .addr__identity {
+    display: none;
+  }
+}
