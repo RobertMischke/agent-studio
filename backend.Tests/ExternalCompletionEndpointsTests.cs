@@ -16,6 +16,8 @@ namespace AgentStudio.Tests;
 /// stale lifecycle is terminalized, the external timeline entry lands, the
 /// externalCompletion provenance is stamped, and the lane moves.
 /// </summary>
+// MachineBound 20.07.: echte Ordner-Moves+Timeline, unter Gate-Parallellast flaky
+[Trait("Category", "MachineBound")]
 public sealed class ExternalCompletionEndpointsTests : IDisposable
 {
     private const string ProjectName = "external-completion-test";
