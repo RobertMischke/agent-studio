@@ -96,6 +96,19 @@ optional attribution only and grants no access.
 
 ## Runner secret rotation rehearsal
 
+Both runbooks below are executable, not just prose. Rehearse them with
+[`deploy/networked/rehearse-runbooks.sh`](../../../deploy/networked/rehearse-runbooks.sh),
+which writes a secret-free evidence log, and see
+[runbook-rehearsal-evidence.md](../security/runbook-rehearsal-evidence.md) for a
+captured run. The fail-closed invariants are additionally pinned by
+`RunbookRehearsalTests` (rotation + certificate) and `RealTlsTransportTests`
+(real HTTPS Runner credential) in `backend.Tests`.
+
+```bash
+# Live rotation workflow (owner session required); one-time secrets are never logged.
+STUDIO_COOKIE=... STUDIO_CSRF=... deploy/networked/rehearse-runbooks.sh rotate https://tasks.example.com runner_<id>
+```
+
 Rotation is deliberately overlapping and should be rehearsed before the first
 incident.
 
@@ -116,9 +129,15 @@ incident.
 ## Certificate renewal rehearsal
 
 Caddy renews ACME certificates automatically. Exercise the operational path at
-initial deployment and quarterly:
+initial deployment and quarterly. The self-contained self-test needs no
+production certificate and no network — it issues a self-signed cert, simulates
+renewal, and asserts the invariants (serial rotates, expiry extends, cert parses,
+21-day alert threshold); the live check reads the deployed certificate:
 
 ```bash
+deploy/networked/rehearse-runbooks.sh cert-selftest            # self-contained evidence
+deploy/networked/rehearse-runbooks.sh cert-check tasks.example.com  # live certificate
+
 sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
 sudo journalctl -u caddy --since '15 minutes ago' --no-pager

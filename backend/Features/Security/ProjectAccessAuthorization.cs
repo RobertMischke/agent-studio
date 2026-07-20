@@ -33,6 +33,34 @@ public static class ProjectAccessAuthorization
         return tasks.Where(task => Allows(human.User, task.ProjectName, registry));
     }
 
+    /// <summary>
+    /// Membership guard for body-addressed task-set mutations (reorder,
+    /// batch-move). The networked middleware cannot infer a project from routes
+    /// whose target set travels in the request body, so those handlers resolve
+    /// each affected task's project and call this to enforce that a scoped
+    /// non-owner human is a member of every one of them. An owner or an unscoped
+    /// account (empty membership) is always allowed. A null/blank resolved
+    /// project for any item fails closed for a scoped account, so an unresolvable
+    /// id can never smuggle a cross-project mutation through. Returns true when no
+    /// human principal is present (local profile / Runner routes handled upstream).
+    /// </summary>
+    public static bool AllowsTasks(
+        HttpContext context,
+        IEnumerable<string?> taskProjects,
+        ProjectRegistry? registry = null)
+    {
+        if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human)
+            return true;
+        var user = human.User;
+        if (user.Role == StudioRoles.Owner || user.Projects.Count == 0) return true;
+        foreach (var project in taskProjects)
+        {
+            if (string.IsNullOrWhiteSpace(project)) return false;
+            if (!Allows(user, project, registry)) return false;
+        }
+        return true;
+    }
+
     private static bool Matches(ProjectRecord project, string allowed)
         => string.Equals(project.Id, allowed, StringComparison.OrdinalIgnoreCase)
            || string.Equals(project.DisplayName, allowed, StringComparison.OrdinalIgnoreCase)

@@ -63,7 +63,11 @@ that is already allowed to edit that project's checkout.
   A non-empty project membership list restricts project routes. An empty list
   means all projects in this single organization. Workspace task lists,
   Runner status and feed data, registry data, and global search results are
-  filtered to the same allowed-project set.
+  filtered to the same allowed-project set. Body-addressed task-set mutations
+  (reorder, batch-move) carry their targets in the request body, so their
+  handlers enforce membership on every affected task; a single-task route whose
+  project cannot be resolved is denied rather than allowed, so an unresolved
+  project never becomes an authorization bypass.
 - Owners mint short-lived one-time Runner enrollment codes. Enrollment reveals
   one service credential once. The server stores only credential hashes.
   Credentials carry explicit scopes, optional expiry, last-use time, and
@@ -113,6 +117,9 @@ and are returned only by their creation response.
 - **Markdown rendering.** Frontend renders Markdown for status, prompts, and now these security/architecture docs. The renderer is hand-written and avoids `innerHTML` for user input outside the dedicated editor; review it whenever you touch the markdown utility.
 
 Deployment and rotation procedures are in
-[networked-task-server.md](../setup/networked-task-server.md). The detailed
+[networked-task-server.md](../setup/networked-task-server.md), and are exercised
+by [`deploy/networked/rehearse-runbooks.sh`](../../../deploy/networked/rehearse-runbooks.sh)
+with captured evidence in
+[runbook-rehearsal-evidence.md](runbook-rehearsal-evidence.md). The detailed
 target contract and lifecycle matrix are in
 [distributed-agent-studio-target-architecture.md](../../concepts/distributed-agent-studio-target-architecture.md).

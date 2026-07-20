@@ -226,11 +226,26 @@ public sealed class AccessSecurityMiddleware
             var start = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase) + marker.Length;
             requested = path[start..].Split('/', 2)[0];
         }
-        if (string.IsNullOrWhiteSpace(requested) && _scanner is not null && path.StartsWith("/api/tasks/", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(requested) && path.StartsWith("/api/tasks/", StringComparison.OrdinalIgnoreCase))
         {
             var taskId = path["/api/tasks/".Length..].Split('/', 2)[0];
-            if (taskId is not ("archive" or "reorder" or "reference-status" or "move-to-top"))
-                requested = _scanner.FindJob(Uri.UnescapeDataString(taskId), request.Query["watchPath"].FirstOrDefault())?.ProjectName;
+            // Body-addressed and workspace-collection task routes carry their task
+            // set in the request body (reorder, batch-move) or filter their payload
+            // per task (reference-status, archive). Those handlers enforce membership
+            // on every affected task via ProjectAccessAuthorization.AllowsTasks /
+            // FilterTasks, so the middleware defers instead of inferring a single
+            // project from the literal path segment.
+            if (taskId is "reorder" or "batch-move" or "reference-status" or "archive")
+                return true;
+            // Every other /api/tasks/{id}/... route is single-task addressed. A
+            // scoped account may act only on a task whose project it belongs to. If
+            // that project cannot be resolved (unknown id or the scanner is
+            // unavailable), fail closed rather than allow the request through — this
+            // closes the path-/body-addressed mutation gap (move-to-top,
+            // change-project, orphan-folder, …) the review flagged.
+            var project = _scanner?.FindJob(Uri.UnescapeDataString(taskId), request.Query["watchPath"].FirstOrDefault())?.ProjectName;
+            return !string.IsNullOrWhiteSpace(project)
+                   && ProjectAccessAuthorization.Allows(user, project, _projects);
         }
         return string.IsNullOrWhiteSpace(requested)
                || ProjectAccessAuthorization.Allows(user, Uri.UnescapeDataString(requested), _projects);

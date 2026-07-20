@@ -39,7 +39,10 @@ before returning Studio to the login gate.
 
 The only human roles are owner, operator, and viewer. Owner identity operations
 cannot remove the final active owner. Viewer mutations fail. Project membership
-is enforced on project-addressed routes for scoped non-owner accounts. There is
+is enforced on project-addressed routes for scoped non-owner accounts, and on
+body-addressed task-set mutations (reorder, batch-move) for every affected task.
+A single-task route whose project cannot be resolved fails closed rather than
+allowing the request; scope is never granted by an unresolved project. There is
 no tenant boundary, SSO, billing role, or policy language. Workspace-wide task,
 Runner, registry, and search collections must filter out disallowed projects.
 

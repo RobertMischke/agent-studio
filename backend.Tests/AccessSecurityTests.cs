@@ -237,6 +237,74 @@ public sealed class AccessSecurityTests : IDisposable
         Assert.Contains("@debug", caddy);
     }
 
+    [Fact]
+    public async Task Scoped_task_mutations_fail_closed_or_defer_to_handlers()
+    {
+        var (store, config, _) = NewStore();
+        store.Bootstrap(new BootstrapRequest("first.owner", "correct horse battery staple!", null));
+        var user = store.CreateUser(new CreateUserRequest("scoped.op", "Scoped", StudioRoles.Operator, ["PROJ-001"], "temporary scoped phrase!"));
+        var login = store.Login(user.User.Username, user.TemporaryPassword, "scoped|127.0.0.1");
+        store.ChangePassword(new HumanPrincipal(login.User, store.AuthenticateSession(login.SessionToken)!.Session),
+            new ChangePasswordRequest(user.TemporaryPassword, "new scoped password phrase!"));
+
+        // A single-task, path-addressed mutation whose project cannot be inferred
+        // (no scanner wired here) must fail closed, not fall through to the
+        // endpoint. This is the regression guard for the move-to-top / change-project
+        // authorization gap: an unresolved project is denied, never allowed.
+        var moveTop = await Invoke(config, store, "POST", "/api/tasks/AGT-1/move-to-top", login.SessionToken, login.CsrfToken);
+        Assert.Equal(StatusCodes.Status403Forbidden, moveTop.Context.Response.StatusCode);
+        Assert.False(moveTop.Called.Value);
+
+        // Body-addressed task-set mutations carry their targets in the request
+        // body; the middleware defers to the handler, which enforces per-task
+        // membership via ProjectAccessAuthorization.AllowsTasks.
+        var reorder = await Invoke(config, store, "POST", "/api/tasks/reorder", login.SessionToken, login.CsrfToken);
+        Assert.True(reorder.Called.Value);
+        var batch = await Invoke(config, store, "POST", "/api/tasks/batch-move", login.SessionToken, login.CsrfToken);
+        Assert.True(batch.Called.Value);
+    }
+
+    [Fact]
+    public void Body_addressed_task_authorization_enforces_membership_and_fails_closed()
+    {
+        var owner = new StudioUser
+        {
+            Id = "usr_owner", Username = "owner", DisplayName = "Owner",
+            Role = StudioRoles.Owner, PasswordHash = "unused",
+            CreatedAt = DateTime.UtcNow, PasswordChangedAt = DateTime.UtcNow
+        };
+        var scoped = new StudioUser
+        {
+            Id = "usr_scoped", Username = "scoped", DisplayName = "Scoped",
+            Role = StudioRoles.Operator, PasswordHash = "unused", Projects = ["PROJ-001"],
+            CreatedAt = DateTime.UtcNow, PasswordChangedAt = DateTime.UtcNow
+        };
+
+        static HttpContext Ctx(StudioUser user)
+        {
+            var context = new DefaultHttpContext();
+            var session = new StudioSession
+            {
+                Id = "sess", UserId = user.Id, TokenHash = "h", CsrfHash = "h",
+                CreatedAt = DateTime.UtcNow, LastSeenAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddHours(1), AbsoluteExpiresAt = DateTime.UtcNow.AddHours(8)
+            };
+            context.Items[AccessSecurityMiddleware.HumanPrincipalItem] = new HumanPrincipal(user, session);
+            return context;
+        }
+
+        // Owner is never project-scoped, even across a mixed / partly-unresolved set.
+        Assert.True(ProjectAccessAuthorization.AllowsTasks(Ctx(owner), ["PROJ-001", "PROJ-002", null]));
+        // Scoped operator: allowed only when every affected task is inside membership.
+        Assert.True(ProjectAccessAuthorization.AllowsTasks(Ctx(scoped), ["PROJ-001"]));
+        Assert.False(ProjectAccessAuthorization.AllowsTasks(Ctx(scoped), ["PROJ-001", "PROJ-002"]));
+        Assert.False(ProjectAccessAuthorization.AllowsTasks(Ctx(scoped), ["PROJ-002"]));
+        // A task whose project could not be resolved fails closed for a scoped user.
+        Assert.False(ProjectAccessAuthorization.AllowsTasks(Ctx(scoped), new string?[] { null }));
+        // No human principal (local profile / Runner route) is not scoped here.
+        Assert.True(ProjectAccessAuthorization.AllowsTasks(new DefaultHttpContext(), ["PROJ-002"]));
+    }
+
     private (AccessSecurityStore Store, IConfiguration Configuration, MutableTimeProvider Clock) NewStore(Dictionary<string, string?>? overrides = null)
     {
         Directory.CreateDirectory(_root);

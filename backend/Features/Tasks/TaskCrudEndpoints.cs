@@ -383,11 +383,26 @@ public static class TaskCrudEndpoints
         // 200 OK with a per-item status array so the caller can retry just
         // the failures. See AGENTS.md "Job organization rule: API first".
         group.MapPost("/batch-move", async (BatchMoveRequest req,
+            HttpContext ctx,
             TaskTransitionService transitions,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
         {
             if (req?.Items is null || req.Items.Count == 0)
                 return Results.BadRequest(new { error = "items is required and must contain at least one entry" });
+
+            // batch-move is body-addressed, so the networked middleware defers
+            // project-scope enforcement to here. A scoped non-owner human may only
+            // move tasks inside its own projects; resolve every item's project and
+            // fail closed on any that is out of scope or unresolvable.
+            if (!ProjectAccessAuthorization.AllowsTasks(
+                    ctx,
+                    req.Items.Select(i => scanner.FindJob(i.JobId, string.IsNullOrWhiteSpace(i.WatchPath) ? null : i.WatchPath)?.ProjectName),
+                    projects))
+                return Results.Json(
+                    new { error = "project-scope-denied", message = "This account is not a member of every task in the batch." },
+                    statusCode: StatusCodes.Status403Forbidden);
 
             var results = await transitions.BatchMoveAsync(req.Items, ct);
             return Results.Ok(new BatchMoveResponse { Results = results.ToList() });
@@ -511,11 +526,25 @@ public static class TaskCrudEndpoints
             return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
         });
 
-        group.MapPost("/reorder", (ReorderRequest req, TaskStateMachine states) =>
+        group.MapPost("/reorder", (ReorderRequest req, HttpContext ctx, TaskStateMachine states,
+            TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             var jobs = req.Jobs.Count > 0
                 ? req.Jobs
                 : req.JobIds.Select(id => new TaskOrderItem { JobId = id }).ToList();
+
+            // reorder is body-addressed, so the networked middleware defers
+            // project-scope enforcement to here. A scoped non-owner human may only
+            // reorder tasks inside its own projects; resolve every affected task's
+            // project and fail closed on any that is out of scope or unresolvable.
+            if (!ProjectAccessAuthorization.AllowsTasks(
+                    ctx,
+                    jobs.Select(j => scanner.FindJob(j.JobId, string.IsNullOrWhiteSpace(j.WatchPath) ? null : j.WatchPath)?.ProjectName),
+                    projects))
+                return Results.Json(
+                    new { error = "project-scope-denied", message = "This account is not a member of every task in the reorder set." },
+                    statusCode: StatusCodes.Status403Forbidden);
+
             var success = states.ReorderJobs(jobs);
             return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });
