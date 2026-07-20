@@ -440,7 +440,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
     private sealed class FakeBuildTestGateRunner(BuildTestGateResult result) : IBuildTestGateRunner
     {
         public Task<BuildTestGateResult> RunAsync(
-            string repositoryPath,
+            BuildTestGateRequest request,
             IReadOnlyList<string>? changedFiles,
             BuildProfile? profile,
             PostStepMode mode,

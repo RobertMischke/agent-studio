@@ -98,7 +98,7 @@ public sealed class RemoteTaskRunner
 
             teardownAttempted = true;
             var teardown = await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
-            await CompleteAsync(taskKey, lease, outcome, teardown, shutdown);
+            await CompleteAsync(taskKey, lease, outcome, teardown, workspace.RepositoryUrl, shutdown);
             handedBack = true;
             _log($"task '{taskKey}' handed back to the local board: {outcome.Kind}");
             return outcome.Kind is RunOutcomeKind.Done or RunOutcomeKind.NoOp ? 0 : 1;
@@ -125,7 +125,7 @@ public sealed class RemoteTaskRunner
                     var teardown = await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
                     if (!handedBack && !heartbeat.LeaseLost)
                     {
-                        await CompleteAsync(taskKey, lease, outcome, teardown, CancellationToken.None);
+                        await CompleteAsync(taskKey, lease, outcome, teardown, workspace.RepositoryUrl, CancellationToken.None);
                         handedBack = true;
                     }
                 }
@@ -219,6 +219,7 @@ public sealed class RemoteTaskRunner
         RunLeaseInfoDto lease,
         RunOutcome outcome,
         WorktreeTeardownResult teardown,
+        string? repository,
         CancellationToken ct)
     {
         var resp = await _client.CompleteRunAsync(new RemoteRunCompletionRequest(
@@ -226,7 +227,10 @@ public sealed class RemoteTaskRunner
             outcome.Kind.ToString(), outcome.Reason, _options.RunnerName,
             SalvageBranch: teardown.Branch,
             SalvageCommitSha: teardown.CommitSha,
-            SalvageBranchUrl: teardown.BranchUrl), ct);
+            SalvageBranchUrl: teardown.BranchUrl,
+            ResultSha: teardown.ResultSha,
+            AttemptChainId: lease.LeaseId,
+            Repository: repository), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 

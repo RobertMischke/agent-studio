@@ -25,7 +25,20 @@ public sealed record ReviewDecisionRecord(
     string Reason,
     string Prompt,
     string Response,
-    string FollowUp);
+    string FollowUp)
+{
+    /// <summary>Explicit run/review attempt chain. Never reconstructed from reason text.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AttemptChainId { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GateId { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SubjectSha { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FailureFingerprint { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FailureKind { get; init; }
+}
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ReviewDecisionKind
@@ -117,14 +130,16 @@ public static class ReviewDecisionLog
                 {
                     var after = CaptureSnapshot(afterStream!, path, afterStream!.Length);
                     var expectedLength = before.Length + payload.Length;
-                    var identityMatches = !entry.Exists
-                        || before.CreationTimeUtc == after.CreationTimeUtc;
                     var previousContentMatches = !entry.Exists
                         || string.Equals(
                             ComputeFingerprint(afterStream!, before.Length),
                             before.Fingerprint,
                             StringComparison.Ordinal);
-                    if (identityMatches && previousContentMatches && after.Length == expectedLength)
+                    // File.GetCreationTimeUtc maps to inode change time on some
+                    // Unix file systems, so a normal append can change it. The
+                    // previous-content fingerprint plus the exact expected
+                    // length is the stable identity check we need here.
+                    if (previousContentMatches && after.Length == expectedLength)
                     {
                         if (!string.IsNullOrEmpty(record.JobId))
                             entry.Latest = entry.Latest.SetItem(record.JobId, record);
@@ -274,7 +289,6 @@ public static class ReviewDecisionLog
         FileStream stream)
     {
         if (current.Length <= cached.Length) return false;
-        if (current.CreationTimeUtc != cached.CreationTimeUtc) return false;
 
         // LastWriteTime necessarily changes for an append. Validate the bytes
         // that formed the previous snapshot instead. A rotation, truncation,

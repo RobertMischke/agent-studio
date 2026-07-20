@@ -38,6 +38,7 @@ public sealed class GitWorkspace
     public string ProjectCachePath => CachePathForProject(_options.WorkDir, _projectId);
     public string SharedRepoPath => Path.Combine(ProjectCachePath, "repo");
     public string RepoPath => Path.Combine(ProjectCachePath, "worktrees", _safeTaskKey);
+    public string? RepositoryUrl => _gitRemote;
 
     public async Task<string> PrepareAsync(CancellationToken ct)
     {
@@ -205,8 +206,8 @@ public sealed class GitWorkspace
         _log($"worktree-teardown-completed path={RepoPath} secured={hasWork} branch={(hasWork ? _workBranch : "none")}");
 
         return hasWork
-            ? new WorktreeTeardownResult(true, _workBranch, head, BuildBranchUrl(_gitRemote!, _workBranch))
-            : WorktreeTeardownResult.NoWork;
+            ? new WorktreeTeardownResult(true, _workBranch, head, BuildBranchUrl(_gitRemote!, _workBranch), head)
+            : new WorktreeTeardownResult(false, null, null, null, head);
     }
 
     private async Task<bool> HasLocalOnlyCommitsAsync(CancellationToken ct)
@@ -289,9 +290,14 @@ public sealed class GitWorkspace
             : Path.Combine(workDir, SafeSegment(projectId));
 }
 
-public sealed record WorktreeTeardownResult(bool SecuredWork, string? Branch, string? CommitSha, string? BranchUrl)
+public sealed record WorktreeTeardownResult(
+    bool SecuredWork,
+    string? Branch,
+    string? CommitSha,
+    string? BranchUrl,
+    string? ResultSha)
 {
-    public static WorktreeTeardownResult NoWork { get; } = new(false, null, null, null);
+    public static WorktreeTeardownResult NoWork { get; } = new(false, null, null, null, null);
 }
 
 public sealed class WorktreeSalvageException : Exception

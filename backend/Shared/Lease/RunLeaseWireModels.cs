@@ -119,7 +119,10 @@ public sealed record RemoteRunCompletionRequest(
     int? ExitCode = null,
     string? SalvageBranch = null,
     string? SalvageCommitSha = null,
-    string? SalvageBranchUrl = null);
+    string? SalvageBranchUrl = null,
+    string? ResultSha = null,
+    string? AttemptChainId = null,
+    string? Repository = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

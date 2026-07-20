@@ -145,6 +145,80 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
     }
 
     [Fact]
+    public async Task HistoricalReasonTextFromAnotherAttemptCannotFormDoubleFailure()
+    {
+        const string slug = "build-new-attempt";
+        var currentSha = new string('b', 40);
+        SeedReviewJobWithDone(slug,
+            "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n");
+        WriteRemoteSubject(slug, currentSha, "lease-new");
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            DateTime.UtcNow.AddMinutes(-5), slug, Project, ReviewDecisionKind.Reissue,
+            ReviewDecisionOrchestrator.BuildTestGateReissueReasonPrefix
+            + $"attempt=lease-new;subject={currentSha};gate={PipelineCatalogue.BuildTestGateStepId};fingerprint=code:stable",
+            "old", "old failure", "old follow-up")
+        {
+            AttemptChainId = "lease-old",
+            GateId = PipelineCatalogue.BuildTestGateStepId,
+            SubjectSha = new string('a', 40),
+            FailureFingerprint = "code:stable",
+            FailureKind = BuildTestGateFailureKind.Code.ToString(),
+        });
+        var result = new BuildTestGateResult(
+            BuildTestGateVerdict.Fail, 1, 10, "new compile error", "dotnet build exit 1", true, false)
+        {
+            FailureKind = BuildTestGateFailureKind.Code,
+            FailureFingerprint = "code:stable",
+        };
+        var orchestrator = BuildOrchestrator(
+            new CountingAspect().Cli, maxReissues: 3, new FakeBuildTestGateRunner(result));
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, slug)));
+        var decisions = ReviewDecisionLog.ReadAll(_workspace, Project).Where(d => d.JobId == slug).ToList();
+        Assert.Equal(2, decisions.Count);
+        Assert.Equal("lease-new", decisions[^1].AttemptChainId);
+        Assert.Equal(currentSha, decisions[^1].SubjectSha);
+    }
+
+    [Fact]
+    public async Task InfrastructureFailureRetriesSameSubjectWithoutCodingReissue()
+    {
+        const string slug = "build-infrastructure";
+        var sha = new string('c', 40);
+        SeedReviewJobWithDone(slug,
+            "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n");
+        WriteRemoteSubject(slug, sha, "lease-infra");
+        var result = new BuildTestGateResult(
+            BuildTestGateVerdict.Fail, null, 10,
+            "error MSB3027: file is locked", "dotnet build exit n/a", true, false)
+        {
+            FailureKind = BuildTestGateFailureKind.Lock,
+            FailureFingerprint = "lock:stable",
+        };
+        var gate = new FakeBuildTestGateRunner(result);
+        var orchestrator = BuildOrchestrator(new CountingAspect().Cli, maxReissues: 3, gate);
+        orchestrator.BuildTestGateRetryBackoff = _ => TimeSpan.Zero;
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(3, gate.CallCount);
+        Assert.All(gate.Requests, request =>
+        {
+            Assert.Equal(sha, request.ExpectedSha);
+            Assert.Equal("lease-infra", request.AttemptChainId);
+        });
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, slug)));
+        var decision = Assert.Single(ReviewDecisionLog.ReadAll(_workspace, Project).Where(d => d.JobId == slug));
+        Assert.Equal(ReviewDecisionKind.Escalate, decision.Kind);
+        Assert.StartsWith(ReviewDecisionOrchestrator.BuildTestGateInfrastructureReasonPrefix, decision.Reason);
+        Assert.Equal("lease-infra", decision.AttemptChainId);
+    }
+
+    [Fact]
     public async Task TaskDone_BuildTestGateGreen_ContinuesToAspects()
     {
         SeedReviewJobWithDone("build-green-job",
@@ -166,7 +240,7 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
     }
 
     [Fact]
-    public async Task TaskDone_SharedCheckoutBuildIsLocked_BuildGateUsesTaskWorktree()
+    public async Task TaskDone_BuildGateRequiresExactSubjectWithoutSharedCheckoutCommandFallback()
     {
         const string slug = "build-worktree-job";
         SeedReviewJobWithDone(slug,
@@ -177,22 +251,16 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         RunGit(_watchPath, "branch", WorktreeTaskLifecycle.BranchFor(slug));
         RunGit(_watchPath, "worktree", "add", worktree, WorktreeTaskLifecycle.BranchFor(slug));
 
-        // Model the observed Windows failure deterministically: the shared
-        // checkout is red because its running backend holds OrchestratorApi.exe,
-        // while the task worktree is green. The gate must never invoke the red
-        // shared-checkout branch for a worktree run.
-        var buildGate = new FakeBuildTestGateRunner(repositoryPath =>
-            string.Equals(Path.GetFullPath(repositoryPath), Path.GetFullPath(worktree), StringComparison.OrdinalIgnoreCase)
-                ? new BuildTestGateResult(BuildTestGateVerdict.Ok, 0, 10, "build passed", "build gate passed", true, false)
-                : new BuildTestGateResult(BuildTestGateVerdict.Fail, 1, 10,
-                    "error MSB3026: Could not copy OrchestratorApi.exe because it is being used by another process",
-                    "dotnet build exit 1", true, false));
+        var buildGate = new FakeBuildTestGateRunner(_ =>
+            new BuildTestGateResult(BuildTestGateVerdict.Ok, 0, 10,
+                "build passed in detached exact-subject workspace", "build gate passed", true, false));
         var aspect = new CountingAspect();
         var orchestrator = BuildOrchestrator(aspect.Cli, maxReissues: 3, buildGate);
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        Assert.Equal(Path.GetFullPath(worktree), Path.GetFullPath(buildGate.LastRepositoryPath!));
+        Assert.Equal(Path.GetFullPath(_watchPath), Path.GetFullPath(buildGate.LastRequest!.RepositoryPath));
+        Assert.True(buildGate.LastRequest.RequireExactSubject);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, slug)),
             "a lock in the shared checkout must not make the task-worktree gate red");
         Assert.True(aspect.Invocations > 0);
@@ -232,27 +300,34 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
 
     private sealed class FakeBuildTestGateRunner : IBuildTestGateRunner
     {
-        private readonly Func<string, BuildTestGateResult> _result;
+        private readonly Func<BuildTestGateRequest, BuildTestGateResult> _result;
+        private int _callCount;
 
         public string? LastRepositoryPath { get; private set; }
+        public BuildTestGateRequest? LastRequest { get; private set; }
+        public int CallCount => Volatile.Read(ref _callCount);
+        public List<BuildTestGateRequest> Requests { get; } = [];
 
         public FakeBuildTestGateRunner(BuildTestGateResult result)
         {
             _result = _ => result;
         }
 
-        public FakeBuildTestGateRunner(Func<string, BuildTestGateResult> result) => _result = result;
+        public FakeBuildTestGateRunner(Func<BuildTestGateRequest, BuildTestGateResult> result) => _result = result;
 
         public Task<BuildTestGateResult> RunAsync(
-            string repositoryPath,
+            BuildTestGateRequest request,
             IReadOnlyList<string>? changedFiles,
             BuildProfile? profile,
             PostStepMode mode,
             TimeSpan timeout,
             CancellationToken ct)
         {
-            LastRepositoryPath = repositoryPath;
-            return Task.FromResult(_result(repositoryPath));
+            LastRepositoryPath = request.RepositoryPath;
+            LastRequest = request;
+            Interlocked.Increment(ref _callCount);
+            lock (Requests) Requests.Add(request);
+            return Task.FromResult(_result(request));
         }
     }
 
@@ -294,6 +369,22 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
             $"[12:00:01.000] [stdout] [[TASK_DONE]]{Environment.NewLine}");
+    }
+
+    private void WriteRemoteSubject(string slug, string sha, string attemptChainId)
+    {
+        ReviewSubjectStore.Write(Path.Combine(_watchPath, TaskStates.AutoReview, slug), new ReviewSubjectRecord
+        {
+            TaskKey = slug,
+            Project = Project,
+            Repository = "https://example.invalid/repo.git",
+            ResultSha = sha,
+            AttemptChainId = attemptChainId,
+            Executor = "remote-test",
+            LeaseId = attemptChainId,
+            FencingToken = 1,
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
     }
 
     private ReviewDecisionOrchestrator BuildOrchestrator(

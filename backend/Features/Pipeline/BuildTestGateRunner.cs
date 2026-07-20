@@ -1,6 +1,8 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using AgentStudio.Git;
 using AgentStudio.Runner;
 
@@ -14,6 +16,48 @@ public enum BuildTestGateVerdict
     Fail,
 }
 
+public enum BuildTestGateFailureKind
+{
+    None,
+    Code,
+    Lock,
+    Timeout,
+    OutOfMemory,
+    ProcessLaunch,
+    Cancellation,
+    MissingSource,
+    ReviewModel,
+}
+
+public sealed record BuildTestGateRequest(
+    string RepositoryPath,
+    string? ExpectedSha,
+    string Executor,
+    bool RequireExactSubject = true)
+{
+    public string GateId { get; init; } = PipelineCatalogue.BuildTestGateStepId;
+    public string? AttemptChainId { get; init; }
+    public string? SubjectRef { get; init; }
+    public TimeSpan InfrastructureTimeout { get; init; } = TimeSpan.FromMinutes(2);
+}
+
+public sealed record BuildTestGateProcessEvidence
+{
+    public string Command { get; init; } = "";
+    public string FileName { get; init; } = "";
+    public IReadOnlyList<string> Arguments { get; init; } = [];
+    public string WorkingDirectory { get; init; } = "";
+    public DateTimeOffset StartedAtUtc { get; init; }
+    public DateTimeOffset CompletedAtUtc { get; init; }
+    public int? ExitCode { get; init; }
+    public string? TerminationSignal { get; init; }
+    public bool TimedOut { get; init; }
+    public bool Cancelled { get; init; }
+    public string? LaunchError { get; init; }
+    public string StandardOutput { get; init; } = "";
+    public string StandardError { get; init; } = "";
+}
+
 public sealed record BuildTestGateResult(
     BuildTestGateVerdict Verdict,
     int? ExitCode,
@@ -21,12 +65,32 @@ public sealed record BuildTestGateResult(
     string Output,
     string Reason,
     bool RanBackendBuild,
-    bool RanFrontendBuild);
+    bool RanFrontendBuild)
+{
+    public string? GateRunId { get; init; }
+    public DateTimeOffset? GateStartedAtUtc { get; init; }
+    public DateTimeOffset? GateCompletedAtUtc { get; init; }
+    public long GateQueueWaitMs { get; init; }
+    public bool GateCollisionDetected { get; init; }
+    public string GateId { get; init; } = PipelineCatalogue.BuildTestGateStepId;
+    public string? Repository { get; init; }
+    public string? ExpectedSha { get; init; }
+    public string? TestedSha { get; init; }
+    public string? AttemptChainId { get; init; }
+    public string? Executor { get; init; }
+    public string? Workspace { get; init; }
+    public string? TerminationSignal { get; init; }
+    public BuildTestGateFailureKind FailureKind { get; init; }
+    public string? FailureFingerprint { get; init; }
+    public IReadOnlyList<BuildTestGateProcessEvidence> Processes { get; init; } = [];
+    public bool IsInfrastructureFailure => FailureKind is not BuildTestGateFailureKind.None
+        and not BuildTestGateFailureKind.Code;
+}
 
 public interface IBuildTestGateRunner
 {
     Task<BuildTestGateResult> RunAsync(
-        string repositoryPath,
+        BuildTestGateRequest request,
         IReadOnlyList<string>? changedFiles,
         BuildProfile? profile,
         PostStepMode mode,
@@ -35,33 +99,29 @@ public interface IBuildTestGateRunner
 }
 
 /// <summary>
-/// Deterministic build/test post-step. It verifies the repository itself, so the
-/// orchestrator never accepts a self-reported Success while the committed code is
-/// broken.
-///
-/// <para>
-/// The verify commands are <b>derived per project</b> by
-/// <see cref="VerifyCommandPlanner"/> instead of hardcoded: an explicit build
-/// profile is the override, otherwise the commands come from the repo layout
-/// (bare <c>dotnet build</c>/<c>dotnet test</c> for a root <c>.sln</c>/<c>.csproj</c>,
-/// <c>npm</c> scripts for a <c>package.json</c>). When nothing is derivable the
-/// gate runs without a build check and says so in the verdict, rather than fail
-/// against a path that does not exist (the TE-2 / AGT-2065 lesson: the old
-/// hardcoded <c>backend/OrchestratorApi.csproj</c> broke on every project with a
-/// different layout).
-/// </para>
-///
-/// <para>
-/// Verification command loops are serialized per Git repository. Parallel
-/// reviews may still prepare and run model-backed aspects concurrently, but
-/// they must not launch duplicate full builds/tests against the same checkout
-/// or sibling linked worktrees. The repository identity is resolved from the
-/// Git common directory without spawning another process.
-/// </para>
+/// Runs deterministic verification against one exact Git subject. Real command
+/// loops are serialized by one machine-wide lock without reducing coding slots.
+/// The Task Server checkout only supplies Git objects and is never a command
+/// workspace.
 /// </summary>
 public sealed class BuildTestGateRunner : IBuildTestGateRunner
 {
-    public const int MaxOutputLines = 80;
+    public const int MaxOutputLines = 300;
+
+    private static readonly SemaphoreSlim ProcessGate = new(1, 1);
+    internal static readonly string MachineGateLockPath = Path.Combine(
+        Path.GetTempPath(), "agentstudio-build-test-gate.lock");
+    internal static readonly string ReviewWorkspaceRoot = Path.Combine(
+        Path.GetTempPath(), "agentstudio-review-gates");
+
+    private static readonly Regex SafeSha = new(
+        "^[0-9a-fA-F]{40,64}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex VolatileHex = new(
+        "\\b[0-9a-fA-F]{7,64}\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex VolatileNumber = new(
+        "\\b\\d+\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex Whitespace = new(
+        "\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly string[] CodeExtensions =
     [
@@ -71,8 +131,6 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
     private readonly ILogger<BuildTestGateRunner> _logger;
     private readonly ILoadThrottleGate? _loadThrottle;
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _repositoryAdmissions =
-        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     public BuildTestGateRunner(
         ILogger<BuildTestGateRunner> logger,
@@ -83,121 +141,810 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     }
 
     public async Task<BuildTestGateResult> RunAsync(
-        string repositoryPath,
+        BuildTestGateRequest request,
         IReadOnlyList<string>? changedFiles,
         BuildProfile? profile,
         PostStepMode mode,
         TimeSpan timeout,
         CancellationToken ct)
     {
-        if (mode == PostStepMode.Off)
-            return Skipped("mode=off");
-
-        if (!Directory.Exists(repositoryPath))
-            return Skipped($"repository not found: {repositoryPath}");
-
-        // ProcessStartInfo accepts relative working directories, but resolves
-        // them against the backend process cwd. Freeze the repository root here
-        // so a gate selected from a job folder or supervisor session cannot
-        // accidentally run a target-less command outside the task checkout.
-        repositoryPath = Path.GetFullPath(repositoryPath);
-
+        if (mode == PostStepMode.Off) return Skipped("mode=off");
         if (changedFiles is { Count: > 0 } && !HasCodeDiff(changedFiles))
             return Skipped("no code diff");
 
-        // Derive the verify set per project rather than hardcoding a command.
-        var plan = VerifyCommandPlanner.Plan(repositoryPath, profile);
-        if (plan.IsEmpty)
-        {
-            // Honest fallback: no build profile, no root .sln/.csproj, no usable
-            // package.json scripts. Run the gate without a build check and say so,
-            // instead of failing against a path that does not exist.
-            _logger.LogInformation(
-                "BuildTestGateRunner: no verify commands derivable for {Repo}; gate runs without a build check",
-                repositoryPath);
-            return new BuildTestGateResult(
-                BuildTestGateVerdict.Skipped, null, 0, "", "no verify commands derivable",
-                RanBackendBuild: false, RanFrontendBuild: false);
-        }
-
-        // Node commands scoped to a subdir only run when a changed file touches
-        // that subdir (preserves the old "frontend build only if frontend
-        // changed" optimization); root-level commands run once past the diff gate.
-        var toRun = plan.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
-        if (toRun.Count == 0)
-            return Skipped($"no verify commands apply to the changed files ({plan.Source})");
-
-        var admissionKey = ResolveAdmissionKey(repositoryPath);
-        var admission = _repositoryAdmissions.GetOrAdd(admissionKey, static _ => new SemaphoreSlim(1, 1));
-        var admissionWait = Stopwatch.StartNew();
-        if (admission.CurrentCount == 0)
-        {
-            _logger.LogInformation(
-                "build_test_gate_admission_waiting repository={Repository} admission_key={AdmissionKey}",
-                repositoryPath, admissionKey);
-        }
-        await admission.WaitAsync(ct).ConfigureAwait(false);
-        admissionWait.Stop();
+        var repositoryPath = Path.GetFullPath(request.RepositoryPath);
+        var gateRunId = Guid.NewGuid().ToString("N");
+        var startedAt = DateTimeOffset.UtcNow;
+        var infrastructureTimeout = request.InfrastructureTimeout > TimeSpan.Zero
+            ? request.InfrastructureTimeout
+            : TimeSpan.FromMinutes(2);
         _logger.LogInformation(
-            "build_test_gate_admission_acquired repository={Repository} admission_key={AdmissionKey} wait_ms={WaitMs}",
-            repositoryPath, admissionKey, admissionWait.ElapsedMilliseconds);
+            "build_test_gate_started gate_run_id={GateRunId} gate_id={GateId} started_at_utc={StartedAtUtc:o} repository={Repository} expected_sha={ExpectedSha} attempt_chain_id={AttemptChainId} executor={Executor}",
+            gateRunId, request.GateId, startedAt, repositoryPath,
+            request.ExpectedSha ?? "missing", request.AttemptChainId ?? "missing", request.Executor);
 
+        MachineGateLease? machineLease = null;
+        ExactWorkspaceLease? workspaceLease = null;
+        BuildTestGateResult? completed = null;
+        string? workspace = null;
+        string? testedSha = null;
         try
         {
-            if (_loadThrottle != null)
+            if (_loadThrottle is not null)
             {
                 await _loadThrottle.WaitUntilReadyAsync(
                     $"build-test-gate:{Path.GetFileName(repositoryPath)}", ct).ConfigureAwait(false);
             }
 
-            // Admission wait is intentionally outside the command timeout. A
-            // queued task receives the same verification budget as the leader
-            // once host and repository capacity are available.
-            var sw = Stopwatch.StartNew();
-            var output = new BoundedOutput(MaxOutputLines);
-            output.AppendLine($"# verify plan: {plan.Source} ({toRun.Count} command(s))");
-
-            var ranBackend = false;
-            var ranFrontend = false;
-
-            foreach (var cmd in toRun)
+            var acquisition = await AcquireMachineGateAsync(infrastructureTimeout, ct).ConfigureAwait(false);
+            if (acquisition.Lease is null)
             {
-                var workingDir = ResolveWorkingDirectory(repositoryPath, cmd);
-                if (!Directory.Exists(workingDir))
-                {
-                    output.AppendLine($"! skipped {Describe(cmd)} (missing directory)");
-                    continue;
-                }
-
-                // Node -> frontend flag; dotnet and verbatim build-profile commands
-                // -> backend flag, so the log line still shows the gate did real work.
-                if (cmd.Ecosystem == VerifyEcosystem.Node) ranFrontend = true;
-                else ranBackend = true;
-
+                completed = InfrastructureFailure(
+                    BuildTestGateFailureKind.Timeout, acquisition.Reason, acquisition.Reason);
+            }
+            else
+            {
+                machineLease = acquisition.Lease;
                 _logger.LogInformation(
-                    "build_test_gate_command_started repository={Repository} working_directory={WorkingDirectory} command={Command}",
-                    repositoryPath, workingDir, cmd.Command);
-                output.AppendLine($"# working directory: {workingDir}");
-                var exit = await RunShellAsync(workingDir, cmd.Command, Remaining(timeout, sw.Elapsed), output, ct);
-                if (exit != 0)
+                    "build_test_gate_acquired gate_run_id={GateRunId} repository={Repository} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
+                    gateRunId, repositoryPath, machineLease.CollisionDetected, machineLease.QueueWaitMs);
+            }
+
+            if (completed is null && request.RequireExactSubject)
+            {
+                var prepared = await PrepareExactWorkspaceAsync(
+                    repositoryPath, request.ExpectedSha, request.SubjectRef, gateRunId,
+                    infrastructureTimeout, ct).ConfigureAwait(false);
+                if (prepared.Lease is null)
                 {
-                    sw.Stop();
-                    var verdict = mode == PostStepMode.Fail ? BuildTestGateVerdict.Fail : BuildTestGateVerdict.Warn;
-                    return new BuildTestGateResult(verdict, exit, sw.ElapsedMilliseconds,
-                        output.Text, $"{Describe(cmd)} exit {exit?.ToString() ?? "n/a"}", ranBackend, ranFrontend);
+                    completed = InfrastructureFailure(
+                        prepared.FailureKind, prepared.Reason, prepared.Output);
+                }
+                else
+                {
+                    workspaceLease = prepared.Lease;
+                    workspace = workspaceLease.Path;
+                    testedSha = workspaceLease.TestedSha;
+                }
+            }
+            else if (completed is null && !Directory.Exists(repositoryPath))
+            {
+                completed = InfrastructureFailure(
+                    BuildTestGateFailureKind.MissingSource,
+                    $"repository not found: {repositoryPath}", string.Empty);
+            }
+            else if (completed is null)
+            {
+                workspace = repositoryPath;
+                testedSha = await ReadHeadShaAsync(repositoryPath, infrastructureTimeout, ct).ConfigureAwait(false);
+            }
+
+            if (completed is null)
+            {
+                var plan = VerifyCommandPlanner.Plan(workspace!, profile);
+                if (plan.IsEmpty)
+                {
+                    _logger.LogInformation(
+                        "BuildTestGateRunner: no verify commands derivable for {Repo}; gate runs without a build check",
+                        workspace);
+                    completed = Skipped("no verify commands derivable");
+                }
+                else
+                {
+                    var commands = plan.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
+                    completed = commands.Count == 0
+                        ? Skipped($"no verify commands apply to the changed files ({plan.Source})")
+                        : await RunCommandsAsync(workspace!, commands, plan.Source, mode, timeout, ct)
+                            .ConfigureAwait(false);
                 }
             }
 
-            sw.Stop();
-            return new BuildTestGateResult(BuildTestGateVerdict.Ok, 0, sw.ElapsedMilliseconds,
-                output.Text, $"verify gate passed ({plan.Source})", ranBackend, ranFrontend);
+            if (workspaceLease is not null)
+            {
+                var cleanupError = await workspaceLease.RemoveAsync(
+                    infrastructureTimeout, CancellationToken.None).ConfigureAwait(false);
+                workspaceLease = null;
+                if (cleanupError is not null)
+                {
+                    completed = InfrastructureFailure(
+                        cleanupError.FailureKind,
+                        "exact review workspace cleanup failed after bounded retries",
+                        cleanupError.Evidence) with { Processes = completed.Processes };
+                }
+            }
+
+            completed = completed with
+            {
+                GateRunId = gateRunId,
+                GateId = request.GateId,
+                GateStartedAtUtc = startedAt,
+                GateCompletedAtUtc = DateTimeOffset.UtcNow,
+                GateQueueWaitMs = machineLease?.QueueWaitMs ?? acquisition.QueueWaitMs,
+                GateCollisionDetected = machineLease?.CollisionDetected ?? acquisition.CollisionDetected,
+                Repository = repositoryPath,
+                ExpectedSha = request.ExpectedSha,
+                TestedSha = testedSha,
+                AttemptChainId = request.AttemptChainId,
+                Executor = request.Executor,
+                Workspace = workspace,
+            };
+            return completed;
         }
         finally
         {
-            admission.Release();
+            if (workspaceLease is not null)
+                await workspaceLease.RemoveBestEffortAsync(infrastructureTimeout).ConfigureAwait(false);
+            var completedAt = completed?.GateCompletedAtUtc ?? DateTimeOffset.UtcNow;
+            _logger.LogInformation(
+                "build_test_gate_completed gate_run_id={GateRunId} gate_id={GateId} completed_at_utc={CompletedAtUtc:o} repository={Repository} expected_sha={ExpectedSha} tested_sha={TestedSha} attempt_chain_id={AttemptChainId} executor={Executor} workspace={Workspace} verdict={Verdict} exit={ExitCode} signal={Signal} failure_kind={FailureKind} failure_fingerprint={FailureFingerprint} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
+                gateRunId, request.GateId, completedAt, repositoryPath,
+                request.ExpectedSha ?? "missing", completed?.TestedSha ?? testedSha ?? "missing",
+                request.AttemptChainId ?? "missing", request.Executor,
+                completed?.Workspace ?? workspace ?? "missing", completed?.Verdict.ToString() ?? "interrupted",
+                completed?.ExitCode?.ToString() ?? "n/a", completed?.TerminationSignal ?? "n/a",
+                completed?.FailureKind.ToString() ?? BuildTestGateFailureKind.Cancellation.ToString(),
+                completed?.FailureFingerprint ?? "none",
+                machineLease?.CollisionDetected ?? false, machineLease?.QueueWaitMs ?? 0);
+            machineLease?.Dispose();
         }
     }
 
+    private async Task<BuildTestGateResult> RunCommandsAsync(
+        string repositoryPath,
+        IReadOnlyList<VerifyCommand> commands,
+        string planSource,
+        PostStepMode mode,
+        TimeSpan timeout,
+        CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        var output = new RingOutput(MaxOutputLines);
+        var evidence = new List<BuildTestGateProcessEvidence>();
+        output.AppendLine($"# verify plan: {planSource} ({commands.Count} command(s))");
+        var ranBackend = false;
+        var ranFrontend = false;
+
+        foreach (var command in commands)
+        {
+            var workingDirectory = ResolveWorkingDirectory(repositoryPath, command);
+            if (!Directory.Exists(workingDirectory))
+            {
+                return WithFailure(new BuildTestGateResult(
+                    BuildTestGateVerdict.Fail, null, sw.ElapsedMilliseconds, output.Text,
+                    $"verify command directory is missing: {workingDirectory}", ranBackend, ranFrontend)
+                {
+                    Processes = evidence,
+                }, BuildTestGateFailureKind.MissingSource);
+            }
+
+            if (command.Ecosystem == VerifyEcosystem.Node) ranFrontend = true;
+            else ranBackend = true;
+            output.AppendLine($"# working directory: {workingDirectory}");
+
+            var process = await RunShellAsync(
+                workingDirectory, command.Command, Remaining(timeout, sw.Elapsed), output, ct)
+                .ConfigureAwait(false);
+            evidence.Add(process);
+            if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
+            {
+                sw.Stop();
+                var kind = ClassifyFailure(process);
+                var verdict = kind == BuildTestGateFailureKind.Code && mode != PostStepMode.Fail
+                    ? BuildTestGateVerdict.Warn
+                    : BuildTestGateVerdict.Fail;
+                var reason = $"{Describe(command)} exit {process.ExitCode?.ToString() ?? "n/a"}";
+                return WithFailure(new BuildTestGateResult(
+                    verdict, process.ExitCode, sw.ElapsedMilliseconds, output.Text,
+                    reason, ranBackend, ranFrontend)
+                {
+                    Processes = evidence,
+                    TerminationSignal = process.TerminationSignal,
+                }, kind);
+            }
+        }
+
+        sw.Stop();
+        return new BuildTestGateResult(
+            BuildTestGateVerdict.Ok, 0, sw.ElapsedMilliseconds, output.Text,
+            $"verify gate passed ({planSource})", ranBackend, ranFrontend)
+        {
+            Processes = evidence,
+        };
+    }
+
+    private static async Task<MachineGateAcquisition> AcquireMachineGateAsync(
+        TimeSpan timeout,
+        CancellationToken ct)
+    {
+        var wait = Stopwatch.StartNew();
+        var collision = !await ProcessGate.WaitAsync(0, ct).ConfigureAwait(false);
+        var ownsProcessGate = !collision;
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        bounded.CancelAfter(timeout);
+        try
+        {
+            if (!ownsProcessGate)
+            {
+                await ProcessGate.WaitAsync(bounded.Token).ConfigureAwait(false);
+                ownsProcessGate = true;
+            }
+
+            while (true)
+            {
+                bounded.Token.ThrowIfCancellationRequested();
+                try
+                {
+                    var stream = new FileStream(
+                        MachineGateLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite,
+                        OperatingSystem.IsWindows() ? FileShare.None : FileShare.ReadWrite,
+                        bufferSize: 1, FileOptions.None);
+                    if (!OperatingSystem.IsWindows() && !NativeFileLock.TryAcquireExclusive(stream))
+                    {
+                        stream.Dispose();
+                        collision = true;
+                        await Task.Delay(TimeSpan.FromMilliseconds(100), bounded.Token).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    wait.Stop();
+                    return MachineGateAcquisition.Acquired(
+                        new MachineGateLease(stream, wait.ElapsedMilliseconds, collision));
+                }
+                catch (IOException)
+                {
+                    collision = true;
+                    await Task.Delay(TimeSpan.FromMilliseconds(100), bounded.Token).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            if (ownsProcessGate) ProcessGate.Release();
+            wait.Stop();
+            return MachineGateAcquisition.TimedOut(wait.ElapsedMilliseconds, collision,
+                $"machine build/test gate wait exceeded infrastructure SLA of {timeout.TotalSeconds:F0}s");
+        }
+        catch
+        {
+            if (ownsProcessGate) ProcessGate.Release();
+            throw;
+        }
+    }
+
+    private static class NativeFileLock
+    {
+        private const int LockExclusive = 2;
+        private const int LockNonBlocking = 4;
+
+        [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
+        private static extern int Flock(int fileDescriptor, int operation);
+
+        public static bool TryAcquireExclusive(FileStream stream)
+        {
+            if (Flock(stream.SafeFileHandle.DangerousGetHandle().ToInt32(),
+                    LockExclusive | LockNonBlocking) == 0)
+                return true;
+            var error = Marshal.GetLastPInvokeError();
+            if (error is 4 or 11 or 35) return false;
+            throw new InvalidOperationException(
+                $"Could not acquire the build/test machine lock (flock errno {error}).");
+        }
+    }
+
+    private sealed record MachineGateAcquisition(
+        MachineGateLease? Lease,
+        long QueueWaitMs,
+        bool CollisionDetected,
+        string Reason)
+    {
+        public static MachineGateAcquisition Acquired(MachineGateLease lease)
+            => new(lease, lease.QueueWaitMs, lease.CollisionDetected, string.Empty);
+
+        public static MachineGateAcquisition TimedOut(long waitMs, bool collision, string reason)
+            => new(null, waitMs, collision, reason);
+    }
+
+    private sealed class MachineGateLease : IDisposable
+    {
+        private readonly FileStream _stream;
+        private bool _disposed;
+
+        public MachineGateLease(FileStream stream, long queueWaitMs, bool collisionDetected)
+        {
+            _stream = stream;
+            QueueWaitMs = queueWaitMs;
+            CollisionDetected = collisionDetected;
+        }
+
+        public long QueueWaitMs { get; }
+        public bool CollisionDetected { get; }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            try { _stream.Dispose(); }
+            finally { ProcessGate.Release(); }
+        }
+    }
+
+    private async Task<WorkspacePreparation> PrepareExactWorkspaceAsync(
+        string repositoryPath,
+        string? expectedSha,
+        string? subjectRef,
+        string gateRunId,
+        TimeSpan infrastructureTimeout,
+        CancellationToken ct)
+    {
+        if (!Directory.Exists(repositoryPath))
+            return WorkspacePreparation.Failed(BuildTestGateFailureKind.MissingSource,
+                $"repository not found: {repositoryPath}");
+        if (string.IsNullOrWhiteSpace(expectedSha) || !SafeSha.IsMatch(expectedSha))
+            return WorkspacePreparation.Failed(BuildTestGateFailureKind.MissingSource,
+                "exact review subject SHA is missing or invalid");
+
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        bounded.CancelAfter(infrastructureTimeout);
+        try
+        {
+            Directory.CreateDirectory(ReviewWorkspaceRoot);
+            var available = await RunGitAsync(
+                repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"], bounded.Token)
+                .ConfigureAwait(false);
+            if (available.ExitCode != 0)
+            {
+                var fetchTarget = string.IsNullOrWhiteSpace(subjectRef) ? expectedSha : subjectRef;
+                var fetch = await RunGitAsync(
+                    repositoryPath, ["fetch", "--no-tags", "origin", fetchTarget!], bounded.Token)
+                    .ConfigureAwait(false);
+                if (fetch.ExitCode != 0)
+                {
+                    var fetchEvidence = fetch.StandardOutput + "\n" + fetch.StandardError;
+                    return WorkspacePreparation.Failed(
+                        ClassifyInfrastructureOrMissing(fetchEvidence),
+                        "exact review subject could not be fetched", fetchEvidence);
+                }
+            }
+
+            var workspace = Path.Combine(ReviewWorkspaceRoot, gateRunId);
+            var add = await RunGitAsync(
+                repositoryPath, ["worktree", "add", "--detach", workspace, expectedSha], bounded.Token)
+                .ConfigureAwait(false);
+            if (add.ExitCode != 0)
+            {
+                var addEvidence = add.StandardOutput + "\n" + add.StandardError;
+                return WorkspacePreparation.Failed(
+                    ClassifyInfrastructureOrMissing(addEvidence),
+                    "exact review workspace could not be created", addEvidence);
+            }
+
+            var lease = new ExactWorkspaceLease(repositoryPath, workspace, "missing", _logger);
+            string? testedSha;
+            try
+            {
+                testedSha = await ReadHeadShaAsync(workspace, infrastructureTimeout, bounded.Token)
+                    .ConfigureAwait(false);
+                lease.SetTestedSha(testedSha ?? "missing");
+            }
+            catch
+            {
+                await lease.RemoveBestEffortAsync(infrastructureTimeout).ConfigureAwait(false);
+                throw;
+            }
+            if (!string.Equals(expectedSha, testedSha, StringComparison.OrdinalIgnoreCase))
+            {
+                await lease.RemoveBestEffortAsync(infrastructureTimeout).ConfigureAwait(false);
+                return WorkspacePreparation.Failed(BuildTestGateFailureKind.MissingSource,
+                    $"exact review subject mismatch: expected {expectedSha}, tested {testedSha ?? "missing"}");
+            }
+
+            _logger.LogInformation(
+                "build_test_gate_workspace_ready repository={Repository} expected_sha={ExpectedSha} tested_sha={TestedSha} workspace={Workspace}",
+                repositoryPath, expectedSha, testedSha, workspace);
+            return WorkspacePreparation.Ready(lease);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return WorkspacePreparation.Failed(BuildTestGateFailureKind.Timeout,
+                $"exact review subject materialization exceeded infrastructure SLA of {infrastructureTimeout.TotalSeconds:F0}s");
+        }
+    }
+
+    private static BuildTestGateFailureKind ClassifyInfrastructureOrMissing(string evidence)
+    {
+        var classified = ClassifyFailure(evidence);
+        return classified == BuildTestGateFailureKind.None
+            ? BuildTestGateFailureKind.MissingSource
+            : classified;
+    }
+
+    private static async Task<string?> ReadHeadShaAsync(
+        string path,
+        TimeSpan timeout,
+        CancellationToken ct)
+    {
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        bounded.CancelAfter(timeout);
+        var result = await RunGitAsync(path, ["rev-parse", "HEAD"], bounded.Token).ConfigureAwait(false);
+        return result.ExitCode == 0 ? result.StandardOutput.Trim() : null;
+    }
+
+    private static async Task<GitCommandResult> RunGitAsync(
+        string workingDirectory,
+        IReadOnlyList<string> args,
+        CancellationToken ct)
+    {
+        Process? process = null;
+        try
+        {
+            var psi = new ProcessStartInfo("git")
+            {
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (var arg in args) psi.ArgumentList.Add(arg);
+            process = Process.Start(psi);
+            if (process is null)
+                return new GitCommandResult(null, string.Empty, "Process.Start returned null");
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
+            return new GitCommandResult(process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
+        }
+        catch (OperationCanceledException)
+        {
+            if (process is not null)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception ex) { SilentCatch.Note(ex, "BuildTestGateRunner: bounded Git process kill"); }
+            }
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new GitCommandResult(null, string.Empty, $"Process.Start failed: {ex.Message}");
+        }
+        finally
+        {
+            process?.Dispose();
+        }
+    }
+
+    private sealed record GitCommandResult(int? ExitCode, string StandardOutput, string StandardError);
+
+    private sealed record WorkspacePreparation(
+        ExactWorkspaceLease? Lease,
+        BuildTestGateFailureKind FailureKind,
+        string Reason,
+        string Output)
+    {
+        public static WorkspacePreparation Ready(ExactWorkspaceLease lease)
+            => new(lease, BuildTestGateFailureKind.None, string.Empty, string.Empty);
+
+        public static WorkspacePreparation Failed(
+            BuildTestGateFailureKind kind, string reason, string output = "")
+            => new(null, kind, reason, output);
+    }
+
+    private sealed record WorkspaceCleanupError(
+        BuildTestGateFailureKind FailureKind,
+        string Evidence);
+
+    private sealed class ExactWorkspaceLease
+    {
+        private readonly string _repositoryPath;
+        private readonly ILogger _logger;
+        private bool _removed;
+
+        public ExactWorkspaceLease(string repositoryPath, string path, string testedSha, ILogger logger)
+        {
+            _repositoryPath = repositoryPath;
+            Path = path;
+            TestedSha = testedSha;
+            _logger = logger;
+        }
+
+        public string Path { get; }
+        public string TestedSha { get; private set; }
+
+        public void SetTestedSha(string testedSha)
+            => TestedSha = testedSha;
+
+        public async Task<WorkspaceCleanupError?> RemoveAsync(TimeSpan timeout, CancellationToken ct)
+        {
+            if (_removed) return null;
+            using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            bounded.CancelAfter(timeout);
+            var evidence = new StringBuilder();
+            try
+            {
+                for (var attempt = 1; attempt <= 3; attempt++)
+                {
+                    var remove = await RunGitAsync(
+                        _repositoryPath, ["worktree", "remove", "--force", Path], bounded.Token)
+                        .ConfigureAwait(false);
+                    if (remove.ExitCode == 0)
+                    {
+                        _removed = true;
+                        return null;
+                    }
+                    evidence.AppendLine($"cleanup attempt {attempt}: {remove.StandardOutput} {remove.StandardError}".Trim());
+
+                    if (attempt < 3)
+                        await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt), bounded.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return new WorkspaceCleanupError(BuildTestGateFailureKind.Timeout,
+                    evidence.Append("cleanup infrastructure SLA expired").ToString());
+            }
+            return new WorkspaceCleanupError(
+                ClassifyInfrastructureOrMissing(evidence.ToString()), evidence.ToString().Trim());
+        }
+
+        public async Task RemoveBestEffortAsync(TimeSpan timeout)
+        {
+            try
+            {
+                var error = await RemoveAsync(timeout, CancellationToken.None).ConfigureAwait(false);
+                if (error is not null)
+                {
+                    _logger.LogWarning(
+                        "BuildTestGateRunner: exact workspace cleanup failed for {Workspace}: {Error}",
+                        Path, error.Evidence);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "BuildTestGateRunner: exact workspace cleanup threw for {Workspace}", Path);
+            }
+        }
+    }
+
+    private Task<BuildTestGateProcessEvidence> RunShellAsync(
+        string workingDirectory,
+        string command,
+        TimeSpan timeout,
+        RingOutput output,
+        CancellationToken ct)
+    {
+        var (fileName, args) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", (IReadOnlyList<string>)["/c", command])
+            : ("/bin/sh", (IReadOnlyList<string>)["-c", command]);
+        return RunProcessAsync(workingDirectory, command, fileName, args, timeout, output, ct);
+    }
+
+    private async Task<BuildTestGateProcessEvidence> RunProcessAsync(
+        string workingDirectory,
+        string command,
+        string fileName,
+        IReadOnlyList<string> args,
+        TimeSpan timeout,
+        RingOutput output,
+        CancellationToken ct)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        output.AppendLine($"> {fileName} {string.Join(' ', args)}");
+
+        Process? process;
+        try
+        {
+            process = Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "BuildTestGateRunner: Process.Start failed for {FileName}", fileName);
+            output.AppendLine(ex.Message);
+            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory) with
+            {
+                CompletedAtUtc = DateTimeOffset.UtcNow,
+                LaunchError = ex.Message,
+            };
+        }
+        if (process is null)
+        {
+            const string error = "Process.Start returned null";
+            output.AppendLine(error);
+            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory) with
+            {
+                CompletedAtUtc = DateTimeOffset.UtcNow,
+                LaunchError = error,
+            };
+        }
+
+        using (process)
+        using (var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct))
+        {
+            bounded.CancelAfter(timeout);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            var timedOut = false;
+            var cancelled = false;
+            try
+            {
+                await process.WaitForExitAsync(bounded.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = ct.IsCancellationRequested;
+                timedOut = !cancelled;
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception ex) { SilentCatch.Note(ex, "BuildTestGateRunner: process tree kill"); }
+                try { await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false); }
+                catch (Exception ex) { SilentCatch.Note(ex, "BuildTestGateRunner: process exit after kill"); }
+            }
+
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            var stderr = await stderrTask.ConfigureAwait(false);
+            output.AppendBlock("stdout", stdout);
+            output.AppendBlock("stderr", stderr);
+            if (timedOut) output.AppendLine($"{fileName} timed out after {timeout.TotalSeconds:F0}s");
+            if (cancelled) output.AppendLine($"{fileName} was cancelled");
+            int? exitCode = process.HasExited ? process.ExitCode : null;
+            var signal = ResolveTerminationSignal(exitCode, timedOut, cancelled);
+            return NewProcessEvidence(startedAt, command, fileName, args, workingDirectory) with
+            {
+                CompletedAtUtc = DateTimeOffset.UtcNow,
+                ExitCode = exitCode,
+                TerminationSignal = signal,
+                TimedOut = timedOut,
+                Cancelled = cancelled,
+                StandardOutput = stdout,
+                StandardError = stderr,
+            };
+        }
+    }
+
+    private static BuildTestGateProcessEvidence NewProcessEvidence(
+        DateTimeOffset startedAt,
+        string command,
+        string fileName,
+        IReadOnlyList<string> args,
+        string workingDirectory)
+        => new()
+        {
+            Command = command,
+            FileName = fileName,
+            Arguments = args.ToArray(),
+            WorkingDirectory = workingDirectory,
+            StartedAtUtc = startedAt,
+            CompletedAtUtc = startedAt,
+        };
+
+    private static string? ResolveTerminationSignal(int? exitCode, bool timedOut, bool cancelled)
+    {
+        if (timedOut) return "timeout";
+        if (cancelled) return "cancellation";
+        if (OperatingSystem.IsWindows() || exitCode is null || exitCode < 128) return null;
+        return exitCode switch
+        {
+            137 => "SIGKILL",
+            143 => "SIGTERM",
+            _ => "signal-" + (exitCode - 128),
+        };
+    }
+
+    internal static BuildTestGateFailureKind ClassifyFailure(BuildTestGateProcessEvidence process)
+    {
+        if (process.LaunchError is not null) return BuildTestGateFailureKind.ProcessLaunch;
+        if (process.Cancelled) return BuildTestGateFailureKind.Cancellation;
+        if (process.TimedOut) return BuildTestGateFailureKind.Timeout;
+        if (process.ExitCode == 137 || string.Equals(process.TerminationSignal, "SIGKILL", StringComparison.Ordinal))
+            return BuildTestGateFailureKind.OutOfMemory;
+        var classified = ClassifyFailure(process.StandardError + "\n" + process.StandardOutput);
+        return classified == BuildTestGateFailureKind.None
+            ? BuildTestGateFailureKind.Code
+            : classified;
+    }
+
+    internal static BuildTestGateFailureKind ClassifyFailure(string? text)
+    {
+        var value = text ?? string.Empty;
+        if (ContainsAny(value,
+                "being used by another process", "file is locked", "cannot access the file",
+                "resource temporarily unavailable", "sharing violation", "MSB3026", "MSB3027"))
+            return BuildTestGateFailureKind.Lock;
+        if (ContainsAny(value,
+                "out of memory", "outofmemoryexception", "cannot allocate memory", "heap limit"))
+            return BuildTestGateFailureKind.OutOfMemory;
+        if (ContainsAny(value,
+                "timed out after", "deadline exceeded", "operation exceeded its time limit"))
+            return BuildTestGateFailureKind.Timeout;
+        if (ContainsAny(value,
+                "process.start failed", "process.start returned null", "failed to start process",
+                "executable file not found"))
+            return BuildTestGateFailureKind.ProcessLaunch;
+        if (ContainsAny(value, "operation was cancelled", "operation was canceled", "operationcanceledexception"))
+            return BuildTestGateFailureKind.Cancellation;
+        if (ContainsAny(value,
+                "repository not found", "missing source", "bad object", "not a git repository",
+                "unknown revision", "not a valid object name", "couldn't find remote ref"))
+            return BuildTestGateFailureKind.MissingSource;
+        if (ContainsAny(value, "review model", "model not found", "invalid model", "no parseable verdict"))
+            return BuildTestGateFailureKind.ReviewModel;
+        return BuildTestGateFailureKind.None;
+    }
+
+    private static bool ContainsAny(string value, params string[] needles)
+        => needles.Any(needle => value.Contains(needle, StringComparison.OrdinalIgnoreCase));
+
+    internal static string Fingerprint(BuildTestGateFailureKind kind, string evidence)
+    {
+        var normalized = VolatileNumber.Replace(
+            VolatileHex.Replace(evidence.ToLowerInvariant(), "<sha>"), "<n>");
+        normalized = Whitespace.Replace(normalized, " ").Trim();
+        if (normalized.Length > 8_192) normalized = normalized[^8_192..];
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))
+            .ToLowerInvariant()[..16];
+        return $"{kind.ToString().ToLowerInvariant()}:{hash}";
+    }
+
+    private static BuildTestGateResult Skipped(string reason)
+        => new(BuildTestGateVerdict.Skipped, null, 0, string.Empty, reason, false, false);
+
+    private static BuildTestGateResult InfrastructureFailure(
+        BuildTestGateFailureKind kind,
+        string reason,
+        string output)
+        => WithFailure(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail, null, 0, output, reason, false, false), kind);
+
+    private static BuildTestGateResult WithFailure(
+        BuildTestGateResult result,
+        BuildTestGateFailureKind kind)
+    {
+        var processEvidence = string.Join("\n", result.Processes.Select(p =>
+            $"{p.Command}\nexit={p.ExitCode}\nsignal={p.TerminationSignal}\nlaunch={p.LaunchError}\n{p.StandardOutput}\n{p.StandardError}"));
+        return result with
+        {
+            FailureKind = kind,
+            FailureFingerprint = Fingerprint(kind, result.Reason + "\n" + result.Output + "\n" + processEvidence),
+            TerminationSignal = result.TerminationSignal
+                ?? (result.ExitCode is null ? kind.ToString().ToLowerInvariant() : null),
+        };
+    }
+
+    private static bool ShouldRunForChange(VerifyCommand command, IReadOnlyList<string>? changedFiles)
+    {
+        if (changedFiles is null) return true;
+        if (command.Ecosystem != VerifyEcosystem.Node || string.IsNullOrEmpty(command.WorkingSubdir))
+            return true;
+        var prefix = command.WorkingSubdir.Replace('\\', '/').TrimEnd('/') + "/";
+        return changedFiles.Any(file =>
+            file.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string Describe(VerifyCommand command)
+    {
+        var location = string.IsNullOrEmpty(command.WorkingSubdir) ? string.Empty : $" ({command.WorkingSubdir})";
+        return $"`{command.Command}`{location}";
+    }
+
+    internal static string ResolveWorkingDirectory(string repositoryPath, VerifyCommand command)
+    {
+        var repositoryRoot = Path.GetFullPath(repositoryPath);
+        return string.IsNullOrEmpty(command.WorkingSubdir)
+            ? repositoryRoot
+            : Path.GetFullPath(Path.Combine(repositoryRoot, command.WorkingSubdir));
+    }
+
+    // Retained as a diagnostic compatibility helper. Admission itself is now
+    // machine-wide, but callers can still compare linked checkout identities.
     internal static string ResolveAdmissionKey(string repositoryPath)
     {
         var canonical = Path.TrimEndingDirectorySeparator(Path.GetFullPath(repositoryPath));
@@ -205,60 +952,6 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         return commonGitDirectory is null
             ? canonical
             : Path.TrimEndingDirectorySeparator(Path.GetFullPath(commonGitDirectory));
-    }
-
-    private static BuildTestGateResult Skipped(string reason) =>
-        new(BuildTestGateVerdict.Skipped, null, 0, "", reason,
-            RanBackendBuild: false, RanFrontendBuild: false);
-
-    /// <summary>
-    /// Whether a derived command applies to this change set. A null change list is
-    /// conservative (run everything). A node command scoped to a subdir runs only
-    /// when a changed file lives under that subdir; every other command runs once
-    /// the top-level code-diff gate has passed.
-    /// </summary>
-    private static bool ShouldRunForChange(VerifyCommand cmd, IReadOnlyList<string>? changedFiles)
-    {
-        if (changedFiles is null) return true;
-        if (cmd.Ecosystem != VerifyEcosystem.Node || string.IsNullOrEmpty(cmd.WorkingSubdir))
-            return true;
-
-        var prefix = cmd.WorkingSubdir.Replace('\\', '/').TrimEnd('/') + "/";
-        return changedFiles.Any(f =>
-            f.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string Describe(VerifyCommand cmd)
-    {
-        var where = string.IsNullOrEmpty(cmd.WorkingSubdir) ? "" : $" ({cmd.WorkingSubdir})";
-        return $"`{cmd.Command}`{where}";
-    }
-
-    /// <summary>
-    /// Resolves every command cwd from the selected checkout root. In
-    /// particular, target-less dotnet commands have an empty subdirectory and
-    /// therefore execute exactly at the worktree root where discovery found the
-    /// solution.
-    /// </summary>
-    internal static string ResolveWorkingDirectory(string repositoryPath, VerifyCommand cmd)
-    {
-        var repositoryRoot = Path.GetFullPath(repositoryPath);
-        return string.IsNullOrEmpty(cmd.WorkingSubdir)
-            ? repositoryRoot
-            : Path.GetFullPath(Path.Combine(repositoryRoot, cmd.WorkingSubdir));
-    }
-
-    private Task<int?> RunShellAsync(
-        string workingDirectory,
-        string command,
-        TimeSpan timeout,
-        BoundedOutput output,
-        CancellationToken ct)
-    {
-        var (fileName, args) = OperatingSystem.IsWindows()
-            ? ("cmd.exe", (IReadOnlyList<string>)["/c", command])
-            : ("/bin/sh", (IReadOnlyList<string>)["-c", command]);
-        return RunProcessAsync(workingDirectory, fileName, args, timeout, output, ct);
     }
 
     internal static bool HasCodeDiff(IReadOnlyList<string> changedFiles)
@@ -276,63 +969,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         if (normalized.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)) return false;
         if (normalized.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)) return false;
         if (normalized.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)) return false;
-        var ext = Path.GetExtension(normalized);
-        return CodeExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private async Task<int?> RunProcessAsync(
-        string workingDirectory,
-        string fileName,
-        IReadOnlyList<string> args,
-        TimeSpan timeout,
-        BoundedOutput output,
-        CancellationToken ct)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (var arg in args) psi.ArgumentList.Add(arg);
-
-        output.AppendLine($"> {fileName} {string.Join(' ', args)}");
-
-        Process? p;
-        try { p = Process.Start(psi); }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "BuildTestGateRunner: Process.Start failed for {FileName}", fileName);
-            output.AppendLine(ex.Message);
-            return null;
-        }
-        if (p == null)
-        {
-            output.AppendLine("Process.Start returned null");
-            return null;
-        }
-
-        p.OutputDataReceived += (_, e) => output.AppendLine(e.Data);
-        p.ErrorDataReceived += (_, e) => output.AppendLine(e.Data);
-        p.BeginOutputReadLine();
-        p.BeginErrorReadLine();
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(timeout);
-        try
-        {
-            await p.WaitForExitAsync(cts.Token);
-            return p.ExitCode;
-        }
-        catch (OperationCanceledException)
-        {
-            try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "BuildTestGateRunner: best effort"); /* best effort */ }
-            output.AppendLine($"{fileName} timed out after {timeout.TotalSeconds:F0}s");
-            return null;
-        }
+        var extension = Path.GetExtension(normalized);
+        return CodeExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 
     private static TimeSpan Remaining(TimeSpan timeout, TimeSpan elapsed)
@@ -341,34 +979,36 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         return remaining > TimeSpan.FromSeconds(10) ? remaining : TimeSpan.FromSeconds(10);
     }
 
-    private sealed class BoundedOutput
+    private sealed class RingOutput
     {
-        private readonly int _maxLines;
-        private readonly StringBuilder _builder = new();
+        private readonly int _capacity;
+        private readonly Queue<string> _lines = new();
         private readonly object _lock = new();
-        private int _lineCount;
 
-        public BoundedOutput(int maxLines)
-        {
-            _maxLines = maxLines;
-        }
+        public RingOutput(int capacity) => _capacity = capacity;
 
         public string Text
         {
             get
             {
-                lock (_lock) return _builder.ToString().TrimEnd();
+                lock (_lock) return string.Join(Environment.NewLine, _lines);
             }
+        }
+
+        public void AppendBlock(string stream, string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            using var reader = new StringReader(text);
+            while (reader.ReadLine() is { } line) AppendLine($"[{stream}] {line}");
         }
 
         public void AppendLine(string? line)
         {
-            if (line == null) return;
+            if (line is null) return;
             lock (_lock)
             {
-                if (_lineCount >= _maxLines) return;
-                _builder.AppendLine(line);
-                _lineCount++;
+                _lines.Enqueue(line);
+                while (_lines.Count > _capacity) _lines.Dequeue();
             }
         }
     }
