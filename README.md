@@ -1,6 +1,15 @@
 # agent-orchestrator
 
-**A control plane for your coding-agent CLIs.** Drive your Claude Code, Codex, Copilot, and Gemini CLIs through a managed **pre/core/post pipeline** — with a **deterministic orchestrator** that owns the queue, **project context** the agents can rely on, and **per-step token spend** you can see. It runs on the subscriptions and execution environments you already trust.
+**A control plane for coding-agent CLIs.** Agent Studio gives you the human
+surface, Task Server keeps the durable task and orchestration truth, and Agent
+Runner executes work in controlled host environments. Claude Code, Codex,
+GitHub Copilot, and Gemini remain the coding engines you already know and pay
+for.
+
+The product wraps each coding run in an explicit pre, core, and post pipeline.
+It owns queueing, admission, evidence, review handoff, and deterministic outcome
+policy. The provider CLI owns the model session, tools, approvals, and code
+editing loop.
 
 ![The board: every watched project and every task state in one place](./docs/assets/images/board-overview.png)
 
@@ -42,41 +51,40 @@ Inference spend is a first-class signal on every surface that touches a model. P
 
 ## Security first
 
-agent-orchestrator makes security work repeatable instead of heroic. A human reviewer can miss an edge case because they are tired, rushed, or carrying the context in their head. A queued agent can spend millions of tokens on the same class of review every time, write down what it checked, preserve evidence, and leave a durable protocol for human review.
+agent-orchestrator treats security review as repeatable work with a task scope,
+known inputs, durable evidence, and an explicit human decision. The goal is not
+to trust model prose. The goal is to make the process inspectable: which model
+ran, what it checked, what changed, which tests and screenshots exist, and which
+risks remain.
 
-That is the product bet: **with enough inference budget, the right process, and documented evidence, AI-assisted review can become more thorough than ordinary human-only security review.** The goal is not to trust a model blindly. The goal is to put frontier cyber capability inside a controlled workflow: clear task scope, project conventions, repeatable skills, logs, screenshots, summaries, and review gates.
+The separated Task Server is deliberately loopback-only in its initial slice.
+Do not expose it to a public network until the authentication, authorization,
+Runner identity, and TLS work in the distributed architecture program is
+complete. Its current management API is an operational boundary, not a public
+internet security boundary. See the
+[distributed target architecture](./docs/concepts/distributed-agent-studio-target-architecture.md)
+and the [Task Server runbook](./docs/operations/setup/task-server.md).
 
-This also makes a second pattern more realistic: for small, well-scoped internal libraries, it can be safer to regenerate or modernize the library behind a strong review process than to carry stale, under-tested legacy code forever. That is not a blanket rule. Highly sensitive primitives such as PKI, TLS, cryptography, authentication boundaries, and certificate handling need stronger human review, specialist skills, and often conservative patching rather than casual generation.
+## The bottleneck is you
 
-The external signal is getting hard to ignore. UK AISI's April 30, 2026 evaluation of OpenAI GPT-5.5 found it to be one of the strongest models they had tested on cyber tasks, with a 71.4% average pass rate on Expert-level advanced cyber tasks at a 50M-token budget, and the second model to complete one of their multi-step cyber-attack simulations end-to-end. AISI also notes that performance on the 32-step range continued to scale with inference compute. That supports the central premise here: security quality depends on model capability, sufficient token budget, and a process that captures what happened.
+Modern coding agents can run for hours, but hand-feeding one prompt at a time
+leaves most of that capacity idle. The queue keeps work moving and reserves your
+attention for decisions and review.
 
-Source: [UK AISI evaluation of OpenAI GPT-5.5 cyber capabilities](https://www.aisi.gov.uk/blog/our-evaluation-of-openais-gpt-5-5-cyber-capabilities).
+```text
+WITHOUT A QUEUE                         WITH agent-orchestrator
 
----
-
-## Keep the agents busy
-
-Modern coding agents can run for hours. They don't get tired, they don't context-switch — they just need a steady queue of work. Hand-feeding them one prompt at a time leaves the subscription you already pay for mostly idle; a queue the runner picks up automatically keeps the token bucket working, and shrinks your part to review.
-
+you -> prompt -> agent -> review        queue -> Runner -> review
+ ^                        |               |  ^                |
+ |       idle gap         |               |  |                |
+ +------------------------+               |  +----------------+
+                                           |
+                                           +-> next admitted task
 ```
-  WITHOUT a queue                          WITH agent-orchestrator
-  ───────────────                          ─────────────────────────
 
-  you ──► prompt ──► agent ──► review      queue ──► agent ──► review
-   ▲                            │            │ ▲                │
-   │       (idle, you blink)    │            │ │                │
-   └────────────────────────────┘            │ └────────────────┘
-                                             │   (auto pickup)
-   utilization: ~10–20% of the hour          │
-                                             ▼
-                                          next task
-
-                                          utilization: ~95% of the hour
-```
-
-The board exists to make the queue the only thing you maintain. Tasks land in `2-ready`, the runner walks them through `3-progress → 4-review` automatically, and your role shrinks to **review**, the one part that actually needs you.
-
----
+Tasks are sequential within a project by default. A project may opt into
+bounded parallelism only through orchestrator admission and isolated task
+worktrees. Parallelism across projects is supported.
 
 ## Principles
 
@@ -104,37 +112,53 @@ Building a custom coding agent is not a forbidden idea. Many projects do it. It 
 
 | What it skips | Why |
 |---|---|
-| Default worktrees | Worktrees are only created for opted-in parallel coding tasks; a normal serial project keeps the low-overhead path. |
-| Virtualization / sandboxes | Adds startup latency and forces the agent to re-discover the workspace every run. |
-| General workflow engines | Task admission, branch/worktree setup, commit, merge, and cleanup are explicit pipeline steps, not an unbounded DAG product. |
-| API-key-based execution | Subscriptions already cover this. Paying twice is silly. |
-| Custom API-backed coding agent loop | Existing agents already package the hard product work: tools, approvals, session history, auth, model routing, and IDE fallback. |
+| Provider CLIs stay the execution engines | No hidden raw-model coding runtime and no second model-billing layer. |
+| Deterministic policy beats prompt trust | Typed sentinels, fences, state transitions, and evidence decide outcomes. |
+| One durable task truth | Studio and Runner use the Task Server API; Runner keeps execution worktrees and bounded delivery state, not a task store. |
+| Execution belongs on Runner hosts | CLI processes, host probes, repositories, worktrees, build tools, and Playwright stay outside Task Server. |
+| Human review stays explicit | Post-processing may recommend, reissue, or escalate, but `5-human-review` is the final product gate. |
+| Sequential is the safe default | Intra-project concurrency is opt-in, bounded, and worktree-isolated. |
+| Evidence is part of the result | Logs, events, artifacts, screenshots, diffs, audit, and run identity survive UI restarts. |
+| Small, typed components beat a workflow engine | Shared contracts and deterministic policy libraries support three runtime products without unbounded fan-out. |
 
-The product is small on purpose. Parallel coding is a controlled mode, not a blanket invitation to fan out agents until conflicts become inevitable.
+The fuller UX contract lives in
+[design principles](./docs/product/design-principles.md). Load-bearing
+architecture decisions are preserved in the
+[ADR archive](./docs/architecture/decisions/adr-archive.md).
 
----
+## What you see
 
-## Today's capabilities
+### Board
 
-What the application currently provides.
+The board projects task state across projects and lanes, with compact signals
+for task type, phase, Runner, model, review, token usage, Git state, and recent
+activity. Workspace and component scopes can evolve without turning filesystem
+paths into public identity.
 
-### Board: every watched project, every state
+![Board overview](./docs/assets/images/board-overview.png)
 
-The lanes (`0-backlog`, `1-preparation`, `1a-orchestrator-prep`, `2-ready`, `3-progress`, `4-auto-review` / `5-human-review`, `6-completed`, `7-archive`) are driven directly off the filesystem state. Each card carries up to thirteen chip types: task type, state, phase, execution, pending intent, auto-loop, review verdict, agent, model, token spend (with hover popover), git pill, last commit, last activity. The header strip shows free-text search, faceted filters across owner / project / type / tag with URL deep-links, lane collapse, and per-container focus mode. Drag-and-drop is optimistic with a snapshot-revert path.
+### Task detail
 
-### Detail panel: prompt + protocol + live git + triage
+The detail surface keeps task intent and run evidence together. Prompt history,
+the pre/core/post pipeline, status projection, timeline, output, artifacts,
+screenshots, and Git evidence remain inspectable instead of disappearing into a
+terminal scrollback.
 
-![Task detail: the pre/core/post pipeline on the left, the parsed run protocol on the right](./docs/assets/images/detail-protocol.png)
+![Task detail protocol](./docs/assets/images/detail-protocol.png)
 
-*The task detail. Left: the pre/core/post pipeline (loop check → agent execution → orchestrator review with per-aspect gates → merge). Right: the parsed `status.md` protocol with what the run did and what's still open.*
+### Three-pane inspection
 
-Per-task side panel that hosts ten sub-panes you can show, hide, and maximize: prompt editor (rich markdown), protocol view (parsed `status.md` + activity log + telemetry chips), live git pane with `diff2html` rendering, hygiene strip (committed / clean / synced), triage panel with `j` / `k` peer navigation and lane-decision actions (move / move-to-top / delete / start), command deck for the chat-compose strip, run timeline (one card per CLI invocation between user inputs), screenshot strip from `results/`, log overlay for the raw CLI buffer, and a verbose-debug overlay for read-only deep inspection.
+Dense inspection surfaces keep the task, its protocol, and the changed software
+close enough to compare without hiding the full evidence. Summary first and
+drill-down second is the default interaction pattern.
 
-### Project page: dedicated rails for project workstreams
+![Task detail three-pane inspection](./docs/assets/images/detail-protocol.png)
 
-Per-project shell with rails for the workstreams that matter beyond a single task: Security baseline + review history, Architecture drift with marble diagram and per-element scores, UX/UI design loops with screenshot evidence + council critique, project Token Usage with heatmap and expensive-jobs drill-down, Observability over the Agent Message Bus, Product Runtime telemetry, Steering Docs viewer, and Project URLs — an optional, ordered list of the links a project actually needs while it runs (preview host, workbench, demo app), each with an optional start command, surfaced both as its own Project Hub rail and as rows in the workspace Explorer tree for one-click access. Cross-rail follow-ups (Security / UX/UI panels create tasks) flow into the create-job-dialog with pre-filled prompt + title.
+### Review handoff
 
-### CLI integration: four agents through one boundary
+A task is review-ready when the outcome, changed files, tests, artifacts,
+remaining gate items, and exact run identity agree. An agent saying "done" is
+not enough.
 
 Claude Code, Codex, GitHub Copilot, Gemini. Per-CLI model catalogue from `/api/cli/{type}/models`. The status bar provides a compact quota glance. Workspace Settings is the single management destination: its CLI Management section combines models, environments, completion contracts, sessions, usage caps, and token spend at `#/workspace/settings/caps`. Cross-CLI fallback is available when a session is stuck on one provider.
 
@@ -184,15 +208,22 @@ Failed or stopped runs stay in `3-progress` so the user can inspect, restart, or
 
 ## Deterministic orchestration over prompt trust
 
-A second product principle, separate from the queue model: **the orchestrator is a deterministic arbiter, not a passive logger.** What the agent says about its own run is one input among several, never the only one.
+Agents classify their result with a terminal sentinel:
 
-This matters because prompt-based steering ("treat this as a continuation", "don't say done unless you actually did the work") fails silently. An agent that no-ops a follow-up after a session loss and replies "task done" used to slip through. The fix is structural:
+- `[[TASK_DONE]]`
+- `[[TASK_BLOCKED:<reason>]]`
+- `[[TASK_NEEDS_INPUT:<reason>]]`
+- `[[TASK_NOOP]]`
 
 1. **Hard signals from the agent.** Every prompt template asks the agent to end its run with one of `[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, or `[[TASK_NOOP]]`. These tokens are parsed from the output buffer and treated as authoritative. The full agent contract lives in [docs/system/contracts/agent-task.md](./docs/system/contracts/agent-task.md).
 2. **Deterministic post-run policy.** When the agent's report contradicts structural evidence (no edits, near-zero duration, after a recovery with a user follow-up), the orchestrator re-issues the work itself with a sharper framing instead of accepting the inconsistency. The decision tree is in `backend/Features/Runner/RunOutcomePolicy.cs` and is unit-tested as a matrix.
 3. **An orchestrator voice in the chat.** The orchestrator is a first-class participant in the activity log (alongside `You` and the agent). When it re-issues a follow-up, accepts a heuristic verdict, or gives up after a retry, it says so in the chat so the user can see what the system decided and why. Heuristic fallback always surfaces a warning, so the user notices when the deterministic contract did not match.
 
-The chat surface described above extends this idea into a multi-actor conversation: user, task agent, orchestrator, supervisor, supporting agents, tools, and system warnings render as separate participants inside `<cac-conversation-view>`. The original design target is documented in [docs/mockups/chat-window-next-gen/](docs/mockups/chat-window-next-gen/); the current, shipped shape is the `coding-agent-chat` library adoption described in [frontend/AGENTS.md](./frontend/AGENTS.md) under "Chat surfaces", which replaced the in-app bridge implementation rather than layering on top of it.
+Task Server owns durable orchestration state, admission, leases, monotonic
+fences, events, artifacts, audit, and management operations. A restart restores
+that authority before readiness. Any previously active attempt becomes
+`process-unknown` and blocks replacement until an operator supplies positive
+containment proof. Lease expiry alone never proves that a process stopped.
 
 Prompt wording remains the easiest way to steer behavior, but it is not the load-bearing layer anymore. The product treats orchestrator-to-CLI communication as a core capability.
 
@@ -220,7 +251,10 @@ Direct-agent maintenance follows the same ownership boundary as managed task run
 
 ## Portable skills, not CLI-local silos
 
-Skills are reusable specialist workflows: security review, Playwright visual verification, Angular UI work, backend API changes, log analysis, release preparation, and project-specific playbooks. They are **not** core lifecycle rules. Core orchestration is always active; skills are optional context that helps an agent do a situational workflow well.
+Skills are repository-visible workflows, not private knowledge trapped inside
+one CLI. Managed runs can attach them deterministically, and direct CLI sessions
+can discover the same instructions through repository guidance. CLI-native
+skill formats are adapters, not the source of truth.
 
 The skill model has two layers:
 
@@ -244,55 +278,86 @@ The system is layered:
 3. **Services and clients consume the API.** The runner, the supervisor, the frontend PWA, the meta-cycle, and external scripts go through the API. They do not touch the lane folders directly. The same boundary mirrors mutations onto the [agent message bus](./docs/system/architecture/bus/agent-message-bus.md) so every cross-cutting structured signal lands in one observable timeline.
 
 ```text
-┌─────────────────────────────┐      ┌──────────────────────────────────┐
-│ Agent Studio app            │      │ Central TaskRepository           │
-│ backend/ + frontend/        │─────►│ projects/PROJ-NNN/tasks/         │
-│ Hosts the Task Access API   │      │ lane/task metadata and evidence  │
-└──────────────┬──────────────┘      └──────────────────────────────────┘
-               │ starts the CLI in RootPath
-               ▼
-┌─────────────────────────────┐
-│ Product checkout            │
-│ source code + project docs  │
-│ no Agent Studio task store  │
-└─────────────────────────────┘
+Agent Studio SPA
+      |
+      | HTTPS or loopback HTTP during local development
+      v
+optional Studio BFF --------------+
+      |                            |
+      +----------------------------+
+                                   v
+                         +---------------------+
+                         | Task Server         |
+                         | durable control     |
+                         | plane and truth     |
+                         +----------+----------+
+                                    |
+                                    | versioned Runner API
+                                    v
+                         +---------------------+
+                         | Agent Runner        |
+                         | CLI and host work   |
+                         +----------+----------+
+                                    |
+                                    v
+                         Git repositories and
+                         isolated worktrees
 ```
 
-| Location | Contents |
-|----------|----------|
-| `agent-taskboard/` | App source, prompts, docs, Task Access API host |
-| `<TaskRepository>/projects/PROJ-NNN/tasks/` | Central task metadata, prompts, logs, results, and review evidence |
-| Product `RepositoryPath` | Source code and project-owned docs only; never Agent Studio task data |
+| Source package | Boundary |
+|---|---|
+| `contracts/TaskServer.Contracts` | Versioned DTOs and compatibility range shared by Studio, Server, and Runner. |
+| `task-server` | Independently installable control-plane service with SQLite migrations, health, backup/restore, modes, stable IDs, and durable fences. |
+| `studio-bff` | Optional stateless proxy. It has no task persistence and no process ownership. |
+| `runner` | Standalone execution service. It negotiates protocol v1 before registration or claim. |
+| `frontend` | Angular view composition and local UI state. |
 
-One task processor, many targets. The board watches several projects in parallel. Inside each project, coding is serial by default and may become bounded parallel work only when the project opts into `maxParallelism`, the orchestrator admits the task, and the worktree isolation steps are active.
+Protocol fixtures under `contracts/fixtures/` pin supported mixed product
+versions. A separated Task Server rejects a missing or unsupported Runner
+protocol with HTTP 426 before registration or claim. The Runner retains a
+protocol-v0 adapter only for the local migration window; new wire behavior uses
+the shared contract package.
 
----
+Legacy filesystem task stores remain migration input until an operator performs
+the rehearsed single-writer cutover. After cutover, neither the legacy Studio
+backend nor a Runner may act as a second durable task authority.
 
-## Task Access API
+## Running
 
-The Task Access API is the canonical reference for every task operation. Agents, scripts, the frontend, the supervisor, and the meta-cycle all go through it. Direct filesystem reads or mutations are reserved for the API host process and for migrations or recovery work that deliberately exercise the on-disk contract.
+For the established local development stack:
 
-Mutations require an `X-Client-Id` header so the layer can attribute the change to a registered client. Reads do not.
+```bash
+./api.sh
+cd frontend
+npm install
+npm start
+```
 
-Canonical endpoints:
+The dev backend is offline by default in managed test runs. Follow
+[AGENTS.md](AGENTS.md) and the
+[setup guide](./docs/operations/setup/getting-started.md) for the supported
+lifecycle.
 
-**Task lifecycle**
+To run the separated components from source on loopback:
 
-- `POST /api/tasks` - create a task. `CreateTaskRequest` accepts `targetState` to land directly in `1-preparation` or `2-ready`.
-- `POST /api/tasks/{id}/move?watchPath=...` - move a task to another lane.
-- `PUT /api/tasks/{id}/state` - drive a task through a typed state transition.
-- `POST /api/tasks/reorder` - reorder tasks within a lane.
-- `DELETE /api/tasks/{id}?watchPath=...` - delete a task.
-- `DELETE /api/tasks/orphan-folder` - delete a scanner-invisible terminal-lane residue folder with body `{"watchPath":"...","lane":"7-archive","folder":"..."}`. It refuses non-terminal lanes and folders that contain `job.json`, and logs `task-orphan-folder-deleted` / `task-orphan-folder-delete-failed`.
-- `GET /api/tasks`, `GET /api/tasks/grouped`, `GET /api/tasks/{id}` - list and read.
+```bash
+dotnet run --project task-server/TaskServer.csproj
+dotnet run --project studio-bff/StudioBff.csproj
+dotnet run --project runner/AgentRunner.csproj -- --poll
+```
 
-**Task runner and content**
+Set `TASK_SERVER_PROFILE=local-compatibility` for a zero-argument Task Server on
+`127.0.0.1:5031` using the current user's application-data directory. Production
+installation, systemd supervision, drain, safe shutdown, migration,
+backup/restore, and upgrade rehearsal are in the
+[Task Server runbook](./docs/operations/setup/task-server.md).
 
-- `POST /api/tasks/{id}/start`, `POST /api/tasks/{id}/stop`, `POST /api/tasks/{id}/continue` - process lifecycle.
-- `PUT /api/tasks/{id}/title`, `PUT /api/tasks/{id}/model`, `PUT /api/tasks/{id}/cli-type` - typed field updates.
-- Git, attachments, run history, and per-run diff endpoints under the same `/api/tasks/{id}` group.
+## Dev vs stable checkout
 
-**Clients**
+Stable is the supervisor seat. The active dev checkout or assigned task
+worktree is where changes are made and verified. Never edit
+`agent-taskboard-stable/` from a managed task. Stable updates happen only at a
+verified quiet boundary through the repository's update process.
 
 - `POST /api/clients/register` - register a client identity and obtain the `X-Client-Id` value.
 - `GET /api/clients`, `GET /api/clients/{id}`, `DELETE /api/clients/{id}` - list, inspect, and retire clients.

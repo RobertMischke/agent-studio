@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>AgentStudio.TaskServer.Contracts</PackageId>
+    <Description>Versioned wire contracts shared by Agent Studio, Task Server, and Agent Runner.</Description>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\fixtures\**\*" Pack="true" PackagePath="fixtures\" />
+  </ItemGroup>
+
+</Project>

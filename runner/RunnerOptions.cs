@@ -8,6 +8,8 @@ namespace AgentRunner;
 /// </summary>
 public sealed class RunnerOptions
 {
+    public const int ProtocolVersion = AgentStudio.TaskServer.Contracts.TaskServerProtocol.Current;
+
     /// <summary>Central Task Server base URL, e.g. http://127.0.0.1:5030 or the reverse-proxied central URL.</summary>
     public required string ServerUrl { get; init; }
 

@@ -1263,3 +1263,58 @@ Remaining loose ends tracked for follow-ups (not blocking this ADR): (1) `Resolv
 **Implementation pointers.** Builder: [backend/Features/Orchestrator/OrchestratorContextDigestService.cs](../../../../backend/Features/Orchestrator/OrchestratorContextDigestService.cs) (`BuildAsync`, `ScopeTasks`, `ValidateProjectScope`, `RenderDigest`, the `TransitionLimit`/`RunLimit`/`DecisionLimit`/`QuotaWindowLimit` caps). Inspectable endpoints: [backend/Features/Orchestrator/OrchestratorContextEndpoints.cs](../../../../backend/Features/Orchestrator/OrchestratorContextEndpoints.cs) (`GET` + `POST .../refresh` per scope, `KeyNotFoundException` to `404`). Shared consumers: [backend/Features/Runner/OrchestratorChat.cs](../../../../backend/Features/Runner/OrchestratorChat.cs) (side-sheet turn) and [backend/Features/Orchestrator/OrchestratorTurnService.cs](../../../../backend/Features/Orchestrator/OrchestratorTurnService.cs) (session turn), both holding an optional `OrchestratorContextDigestService?`. Thread-safe watcher health projection: [backend/Features/Tasks/TaskWatcherService.cs](../../../../backend/Features/Tasks/TaskWatcherService.cs) (`GetHealthSnapshot` / `TaskWatcherHealthSnapshot`). Wiring: [backend/Host/Program.cs](../../../../backend/Host/Program.cs) (`AddSingleton<OrchestratorContextDigestService>`) and [backend/Host/EndpointMapping.cs](../../../../backend/Host/EndpointMapping.cs) (`MapOrchestratorContextEndpoints`). Frontend: [frontend/src/app/features/orchestrator/state/orchestrator-context-digest.service.ts](../../../../frontend/src/app/features/orchestrator/state/orchestrator-context-digest.service.ts) and the side-sheet Refresh action + real capture-time label in [frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts](../../../../frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts). Product/domain docs: [docs/concepts/orchestrator-chat.md](../../../concepts/orchestrator-chat.md#application-read-context-orch-1) and [docs/system/domains/runner.md](../../domains/runner.md). Tests: [backend.Tests/OrchestratorContextDigestServiceTests.cs](../../../../backend.Tests/OrchestratorContextDigestServiceTests.cs), [backend.Tests/OrchestratorContextEndpointsTests.cs](../../../../backend.Tests/OrchestratorContextEndpointsTests.cs), [frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.digest.spec.ts](../../../../frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.digest.spec.ts).
 
 **Status.** Accepted. ORCH-1 "Sight" is implemented and shared across both chat paths; ORCH-2 "Hands" (journaled intervention tools) and ORCH-3 "Anchor" (standing-orders policy plus outside anchor) remain future slices gated in that order, per [docs/concepts/orchestrator-in-app.md](../../../concepts/orchestrator-in-app.md) and the [In-App Orchestrator](../../../../ROADMAP.md) roadmap theme.
+
+---
+
+## ADR-0063 - Task Server is the independently deployed durable control plane (2026-07-17)
+
+**Decision.** Agent Studio, Task Server, and Agent Runner are separate runtime
+products. Task Server is the only durable task and orchestration authority.
+Studio is a client, optionally through a stateless BFF. Runner negotiates a
+versioned API before registration or claim and owns execution only.
+
+**Context.** The legacy Studio backend combined Angular-facing APIs, task-folder
+persistence, orchestration, lease authority, host probes, repository worktrees,
+and coding-agent process execution. Closing or upgrading that host could stop
+work, and the in-memory run lease forgot its authority on restart. The canonical
+[distributed target architecture](../../../concepts/distributed-agent-studio-target-architecture.md)
+separates the human surface, durable control plane, and execution plane so
+Studio can detach without stopping work and Runner never needs a second task
+store.
+
+**Non-goals.**
+
+- No autonomous Runner-side task store or claims while Task Server is absent.
+- No CLI processes, host probes, repository materialization, worktrees, or
+  Angular view composition inside Task Server.
+- No public network exposure before the security and identity slice is
+  complete.
+- No repository split requirement. Independent packages, versions, data roots,
+  processes, and tests establish the boundary inside the monorepo.
+- No lease-expiry-only takeover. Restarted or expired authority fails closed as
+  `process-unknown` until positive containment proof is audited.
+
+**Reasoning style.** Separate authority from execution and prove the separation
+with process topology and durability tests. Public resources use stable server,
+workspace, project, task, run, and Runner IDs. Legacy absolute paths are accepted
+only by the migration workflow. Schema migration, backup, restore, maintenance,
+drain, safe shutdown preparation, leases, fence counters, events, artifacts, and
+audit move together because splitting them would recreate two sources of truth.
+Compatibility changes are additive first and pinned by shared contract fixtures.
+
+**Implementation pointers.** Shared v1 DTOs and compatibility fixtures:
+[`contracts/TaskServer.Contracts/`](../../../../contracts/TaskServer.Contracts/) and
+[`contracts/fixtures/`](../../../../contracts/fixtures/). Service process and
+durable SQLite authority store: [`task-server/`](../../../../task-server/).
+Stateless Studio proxy: [`studio-bff/`](../../../../studio-bff/). Runner protocol
+negotiation and v1 adapter:
+[`runner/TaskServerClient.cs`](../../../../runner/TaskServerClient.cs). Supervised
+deployment and migration/backup recovery:
+[`docs/operations/setup/task-server.md`](../../../operations/setup/task-server.md).
+Acceptance suite: [`task-server.Tests/`](../../../../task-server.Tests/).
+
+**Status.** Accepted. The separated service boundary, versioned contracts,
+durable authority store, local compatibility profile, Runner client, migration
+rehearsal, backup/restore, and independent-process topology proof ship in
+AGT-2192. Authenticated management recovery and the full cross-product golden
+path remain owned by the follow-up delivery tasks named in the canonical target.
