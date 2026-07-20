@@ -138,8 +138,8 @@ test('screenshot tour — task detail + activity chat composer', async ({ page }
   await activityTab.click();
   const compose = page.getByTestId('activity-chat-compose');
   await expect(compose).toBeVisible({ timeout: 10_000 });
-  await expect(compose.getByTestId('chat-compose-model')).toBeVisible();
-  await expect(compose.getByTestId('chat-compose-context')).toBeVisible();
+  await expect(compose.getByTestId('activity-chat-input')).toBeVisible();
+  await expect(compose.getByTestId('activity-chat-send')).toBeVisible();
   await page.waitForTimeout(400);
   await captureBoth(page, testInfo, 'task-detail-activity-chat-composer');
 });

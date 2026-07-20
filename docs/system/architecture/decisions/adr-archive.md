@@ -71,16 +71,18 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 
 **Decision.** `ContinueJobRequest.Mode` is a typed string with four values: `continue`, `steer`, `extend`, `newTask`. Each value selects a prompt frame in `RunPlanner.BuildContinuePrompt`. Extend mode also writes a new `prompt-N.md` (1-based) into the same job folder; the original `prompt.md` is never overwritten. The Task Description pane renders the timeline blog-style.
 
+**Task-detail UI amendment (2026-07-13).** The four modes remain backend and API contracts for orchestrator and other non-UI callers. The task-detail Activity composer intentionally exposes only a message input and Send. It always submits `continue`, inherits the open task and its configured execution settings, and performs pause-then-send when the task is running. The removed mode, model, reasoning, permission, and context controls are not relocated elsewhere inside task chat.
+
 **Context.** The user's actual workflow is a living chat session: continue, course-correct, extend the task, or open a new sub-task without losing context. Treating every follow-up as a generic next message produced "I'll wait for your request" no-ops on extensions. A single mode value carries the user's intent through the whole run.
 
 **Non-goals.**
 - Spawning a new job folder per extension. Same folder, blog-style timeline.
 - Editing `prompt.md` in place when the user extends. Extensions are append-only.
-- Hiding the mode behind a hotkey or hover menu. The pill row is intentionally loud.
+- Removing the typed mode contract from backend, orchestrator, or other non-UI callers. The task-detail UI amendment changes only that composer.
 
 **Reasoning style.** UX state is backend state too: the mode is a typed wire field, not a frontend-only flag. Extensions are evidence on disk, not just turns in a chat buffer, so any restart, log inspection, or Haiku summary can read the full timeline.
 
-**Implementation pointers.** [backend/Models/JobModels.cs](../../../backend/Models/JobModels.cs) (`ContinueModes`, `JobPromptHistoryEntry`); [backend/Services/Runner/RunPlanner.cs](../../../backend/Services/Runner/RunPlanner.cs) `BuildContinuePrompt`; [backend/Services/TaskRunnerService.cs](../../../backend/Services/TaskRunnerService.cs) prompt-history append; [frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts](../../../frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts) (mode pills); [frontend/src/app/components/job-detail/prompt-pane/prompt-pane.component.html](../../../frontend/src/app/components/job-detail/prompt-pane/prompt-pane.component.html) (history block).
+**Implementation pointers.** [backend/Shared/Models/CliModels.cs](../../../backend/Shared/Models/CliModels.cs) (`ContinueModes`); [backend/Shared/Models/TaskDetail.cs](../../../backend/Shared/Models/TaskDetail.cs) (`TaskPromptHistoryEntry`); [backend/Features/Runner/RunPlanner.cs](../../../backend/Features/Runner/RunPlanner.cs) `BuildContinuePrompt`; [backend/Features/Runner/TaskRunnerService.cs](../../../backend/Features/Runner/TaskRunnerService.cs) prompt-history append; [frontend/src/app/features/task-detail/task-detail.ts](../../../frontend/src/app/features/task-detail/task-detail.ts) (task-chat Continue and pause-then-send flow); [frontend/src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.html](../../../frontend/src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.html) (message-only composer); [frontend/src/app/features/task-detail/components/prompt-pane/prompt-pane.component.html](../../../frontend/src/app/features/task-detail/components/prompt-pane/prompt-pane.component.html) (history block).
 
 **Status.** Accepted.
 

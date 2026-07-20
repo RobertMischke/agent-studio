@@ -4,6 +4,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { signal } from '@angular/core';
+import { Subject, of, throwError } from 'rxjs';
+import { vi } from 'vitest';
 import { TaskDetailComponent } from './task-detail';
 
 /**
@@ -46,5 +49,96 @@ describe('TaskDetailComponent (smoke)', () => {
       console.warn('[smoke] TaskDetailComponent TestBed setup skipped:', (e as Error).message);
       expect(TaskDetailComponent).toBeTruthy();
     }
+  });
+});
+
+describe('TaskDetailComponent task-chat send flow', () => {
+  function continueHarness(response = of({ status: 'queued' as const })) {
+    const continueJob = vi.fn(() => response);
+    return {
+      component: {
+        followupPrompt: signal('  Keep the regression focused.  '),
+        errorMsg: signal<string | null>(null),
+        chatError: signal<string | null>(null),
+        continuing: signal(false),
+        queuedFollowUp: signal(false),
+        detail: () => ({ info: { id: 'AGT-2188', watchPath: '/workspace' } }),
+        jobService: { continueJob },
+        cliPoll: {
+          appendOptimisticUserMessage: vi.fn(),
+          beginContinuation: vi.fn(),
+        },
+        sessionEventsPoll: { refresh: vi.fn() },
+        showError: vi.fn(() => 'The message could not be sent.'),
+      },
+      continueJob,
+    };
+  }
+
+  it('sends canonical Continue without overriding task or project configuration', () => {
+    const { component, continueJob } = continueHarness();
+
+    TaskDetailComponent.prototype.continueJob.call(
+      component as unknown as TaskDetailComponent,
+    );
+
+    expect(continueJob).toHaveBeenCalledWith(
+      'AGT-2188',
+      'Keep the regression focused.',
+      '/workspace',
+      undefined,
+      undefined,
+      undefined,
+      'continue',
+    );
+    expect(component.cliPoll.appendOptimisticUserMessage)
+      .toHaveBeenCalledWith('Keep the regression focused.');
+    expect(component.followupPrompt()).toBe('');
+    expect(component.queuedFollowUp()).toBe(true);
+  });
+
+  it('pauses a running task before sending through the same Continue flow', () => {
+    const stopped = new Subject<void>();
+    const continueJob = vi.fn();
+    const stopJob = vi.fn(() => stopped.asObservable());
+    const component = {
+      followupPrompt: signal('Send after pause'),
+      continuing: signal(false),
+      isRunning: signal(true),
+      errorMsg: signal<string | null>(null),
+      chatError: signal<string | null>(null),
+      detail: () => ({ info: { id: 'AGT-2188', watchPath: '/workspace' } }),
+      jobService: { stopJob },
+      continueJob,
+      showError: vi.fn(() => 'The message could not be sent.'),
+    };
+
+    TaskDetailComponent.prototype.sendChatMessage.call(
+      component as unknown as TaskDetailComponent,
+    );
+
+    expect(stopJob).toHaveBeenCalledWith('AGT-2188', '/workspace', 'followup');
+    expect(continueJob).not.toHaveBeenCalled();
+    expect(component.continuing()).toBe(true);
+
+    stopped.next();
+    stopped.complete();
+
+    expect(component.isRunning()).toBe(false);
+    expect(continueJob).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the draft retryable when the Continue request fails', () => {
+    const failure = { status: 503, statusText: 'Unavailable' };
+    const { component } = continueHarness(throwError(() => failure));
+
+    TaskDetailComponent.prototype.continueJob.call(
+      component as unknown as TaskDetailComponent,
+    );
+
+    expect(component.continuing()).toBe(false);
+    expect(component.followupPrompt()).toBe('Keep the regression focused.');
+    expect(component.showError).toHaveBeenCalledWith(failure);
+    expect(component.chatError()).toBe('The message could not be sent.');
   });
 });

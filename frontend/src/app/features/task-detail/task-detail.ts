@@ -21,7 +21,6 @@ import type {
   WatchPathEntry,
   CliSettings,
   CliType,
-  ContinueMode,
   ReviewEvidenceEntry,
 } from '../../models/task.model';
 import { CLI_TYPES, TaskState } from '../../models/task.model';
@@ -298,7 +297,7 @@ export class TaskDetailComponent implements OnDestroy {
   private regenStartedAt = 0;
   readonly followupPrompt = signal('');
   readonly queuedFollowUp = signal(false);
-  readonly continueMode = signal<ContinueMode>('continue');
+  readonly chatError = signal<string | null>(null);
   readonly modelDraft = signal('');
   readonly thinkingLevelDraft = signal<string | null>(null);
   readonly availableModels = signal<CliModelInfo[]>([]);
@@ -500,6 +499,7 @@ export class TaskDetailComponent implements OnDestroy {
       this.savingTitle.set(false);
       this.followupPrompt.set('');
       this.queuedFollowUp.set(false);
+      this.chatError.set(null);
       this.setupExpandedDuringRun.set(false);
       this.cliPoll.resetForJobSwitch();
       this.lastShownFailureKey = null;
@@ -783,23 +783,22 @@ export class TaskDetailComponent implements OnDestroy {
     if (!prompt) return;
 
     this.errorMsg.set(null);
+    this.chatError.set(null);
     this.continuing.set(true);
     // Echo the user's message into the activity log immediately so the chat
     // feels responsive — the backend writes the same line to cli-output.log
     // on success, and the next poll dedupes the optimistic copy.
     this.cliPoll.appendOptimisticUserMessage(prompt);
     this.followupPrompt.set('');
-    const model = this.modelDraft().trim() || undefined;
-    const thinkingLevel = this.thinkingLevelDraft() ?? undefined;
     this.jobService
       .continueJob(
         this.detail().info.id,
         prompt,
         this.detail().info.watchPath,
-        model,
         undefined,
-        thinkingLevel,
-        this.continueMode(),
+        undefined,
+        undefined,
+        'continue',
       )
       .subscribe({
         next: (resp) => {
@@ -823,7 +822,7 @@ export class TaskDetailComponent implements OnDestroy {
           // leave on screen permanently. We keep it visible for now (so the user
           // can see what they tried) but the inline error banner explains why.
           this.followupPrompt.set(prompt);
-          this.showError(err);
+          this.chatError.set(this.showError(err));
         },
       });
   }
@@ -835,8 +834,7 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   chatSendLabel(): string {
-    if (this.continuing()) return '⏳ Sending...';
-    return this.isRunning() ? '⏸ Pause & Send' : '▶ Send';
+    return this.continuing() ? 'Sending…' : 'Send';
   }
 
   sendChatMessage(): void {
@@ -854,6 +852,7 @@ export class TaskDetailComponent implements OnDestroy {
     // 'failed', exitCode -1) so applyExecutionState below does not pop a
     // crash modal between the kill and the follow-up start.
     this.errorMsg.set(null);
+    this.chatError.set(null);
     this.continuing.set(true);
     this.jobService
       .stopJob(this.detail().info.id, this.detail().info.watchPath, 'followup')
@@ -865,7 +864,7 @@ export class TaskDetailComponent implements OnDestroy {
         },
         error: (err) => {
           this.continuing.set(false);
-          this.showError(err);
+          this.chatError.set(this.showError(err));
         },
       });
   }
@@ -1003,7 +1002,7 @@ export class TaskDetailComponent implements OnDestroy {
     else if (thinkingChanged) thinkingPut();
   }
 
-  private showError(err: unknown): void {
+  private showError(err: unknown): string {
     const detail = err as { status?: number; statusText?: string; message?: string; error?: unknown };
     const bodyError =
       typeof detail.error === 'object' && detail.error !== null && 'error' in detail.error
@@ -1022,6 +1021,7 @@ export class TaskDetailComponent implements OnDestroy {
       source: `Task ${this.detail().info.id}`,
       canOpenCliConfig: this.canOpenCliConfigForCurrentJob(message),
     });
+    return message;
   }
 
   private applyExecutionState(
