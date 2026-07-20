@@ -5,6 +5,12 @@
       "title": "Remote runner must reconcile divergent salvage branches without requeue loops",
       "linkedAt": "2026-07-20T02:54:59.9528137Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2190",
+      "title": "BUG: Quelltext-Detailansicht - Splitter b\u00FCndig und gut greifbar machen, Pfad-Artefakte entfernen",
+      "linkedAt": "2026-07-20T03:00:30.8754729Z",
+      "source": "auto"
     }
   ]
 }

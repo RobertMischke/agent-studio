@@ -131,6 +131,12 @@
       "title": "AGT-2159: Tatsaechlichen Ausfuehrungsort an Task-Karte und Detailansicht live sichtbar machen",
       "linkedAt": "2026-07-20T02:35:47.2595754Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2190",
+      "title": "BUG: Quelltext-Detailansicht - Splitter b\u00FCndig und gut greifbar machen, Pfad-Artefakte entfernen",
+      "linkedAt": "2026-07-20T03:00:30.8754729Z",
+      "source": "auto"
     }
   ],
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
