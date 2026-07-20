@@ -159,43 +159,47 @@
                 </span>
               </header>
 
-              <p class="url-preview__state-note url-preview__state-note--wide">
-                @if (readiness().kind === 'http-error') {
-                  The server responded with <strong>HTTP {{ readiness().statusCode }}</strong> at
-                  <code>{{ urlRecord()?.url }}</code>. The error document was not loaded in the preview.
-                } @else if (readiness().kind === 'frame-blocked') {
-                  The server returned HTTP {{ readiness().statusCode }}, but its response policy refuses this
-                  cross-origin iframe. {{ readiness().detail }}
-                } @else if (readiness().kind === 'timeout') {
-                  The server did not return an HTTP response before the readiness timeout at
-                  <code>{{ urlRecord()?.url }}</code>.
-                } @else {
-                  No server is responding at <code>{{ urlRecord()?.url }}</code>.
-                }
-              </p>
+              @if (!startFailure() && !building()) {
+                <p class="url-preview__state-note url-preview__state-note--wide">
+                  @if (readiness().kind === 'http-error') {
+                    The server responded with <strong>HTTP {{ readiness().statusCode }}</strong> at
+                    <code>{{ urlRecord()?.url }}</code>. The error document was not loaded in the preview.
+                  } @else if (readiness().kind === 'frame-blocked') {
+                    The server returned HTTP {{ readiness().statusCode }}, but its response policy refuses this
+                    cross-origin iframe. {{ readiness().detail }}
+                  } @else if (readiness().kind === 'timeout') {
+                    The server did not return an HTTP response before the readiness timeout at
+                    <code>{{ urlRecord()?.url }}</code>.
+                  } @else {
+                    No server is responding at <code>{{ urlRecord()?.url }}</code>.
+                  }
+                </p>
+              }
 
               @if (startFailure(); as failure) {
                 <div class="url-preview__failure" role="alert" data-testid="url-preview-start-error">
                   {{ failure.explanation }}
                 </div>
               } @else if (building()) {
-                <div class="url-preview__progress" role="status">
+                <div class="url-preview__progress" role="status" data-testid="url-preview-starting">
                   <span class="url-preview__spinner url-preview__spinner--small" aria-hidden="true"></span>
-                  Waiting for the server to accept connections
+                  <span>Waiting for <code>{{ urlRecord()?.url }}</code> to accept connections</span>
                 </div>
               }
 
               @if (urlRecord()?.startRule; as rule) {
-                <dl class="url-preview__details" data-testid="url-preview-start-details">
-                  <div>
-                    <dt>Command</dt>
-                    <dd><code>{{ rule.command }}</code></dd>
-                  </div>
-                  <div>
-                    <dt>Working directory</dt>
-                    <dd><code>{{ effectiveCwd() }}</code></dd>
-                  </div>
-                </dl>
+                @if (!consoleVisible()) {
+                  <dl class="url-preview__details" data-testid="url-preview-start-details">
+                    <div>
+                      <dt>Command</dt>
+                      <dd><code>{{ rule.command }}</code></dd>
+                    </div>
+                    <div>
+                      <dt>Working directory</dt>
+                      <dd><code>{{ effectiveCwd() }}</code></dd>
+                    </div>
+                  </dl>
+                }
               } @else {
                 <p class="url-preview__state-note url-preview__state-note--wide">
                   No start command is configured. Start the server manually, then reload.
@@ -203,28 +207,25 @@
               }
 
               <div class="url-preview__state-actions">
+                @if (urlRecord()?.startRule && !building()) {
+                  @if (startFailure()) {
+                    <button type="button" class="url-preview__btn url-preview__btn--primary"
+                            data-testid="url-preview-retry"
+                            (click)="start()">Retry</button>
+                  } @else if (readiness().kind === 'http-error' || readiness().kind === 'frame-blocked') {
+                    <button type="button" class="url-preview__btn url-preview__btn--primary"
+                            data-testid="url-preview-restart"
+                            (click)="start()">Restart preview</button>
+                  } @else {
+                    <button type="button" class="url-preview__btn url-preview__btn--primary"
+                            data-testid="url-preview-start"
+                            (click)="start()">Start preview</button>
+                  }
+                }
                 @if (!building()) {
                   <button type="button" class="url-preview__btn url-preview__btn--ghost"
                           data-testid="url-preview-failure-reload"
                           (click)="reload()">Reload</button>
-                }
-                @if (urlRecord()?.startRule) {
-                  @if (!building() && (readiness().kind === 'http-error' || readiness().kind === 'frame-blocked')) {
-                    <button type="button" class="url-preview__btn url-preview__btn--primary"
-                            data-testid="url-preview-restart"
-                            (click)="start()">Restart preview</button>
-                  } @else if (startFailure()) {
-                    <button type="button" class="url-preview__btn url-preview__btn--primary"
-                            data-testid="url-preview-retry"
-                            (click)="start()">Retry</button>
-                  } @else {
-                    <button type="button" class="url-preview__btn url-preview__btn--primary"
-                            data-testid="url-preview-start"
-                            [disabled]="building()"
-                            (click)="start()">
-                      {{ building() ? 'Starting…' : 'Start preview' }}
-                    </button>
-                  }
                 }
                 <button type="button" class="url-preview__btn url-preview__btn--ghost"
                         data-testid="url-preview-failure-open-external"

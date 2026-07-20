@@ -173,9 +173,13 @@ describe('ProjectUrlPreviewTabComponent', () => {
 
     fixture.componentInstance.start();
     fixture.detectChanges();
-    const startButton = fixture.nativeElement.querySelector('[data-testid="url-preview-start"]') as HTMLButtonElement;
-    expect(startButton.disabled).toBe(true);
-    expect(startButton.textContent).toContain('Starting');
+    // While starting, the progress row is the single pending indicator; the
+    // Start button leaves the action row instead of duplicating it as
+    // a disabled "Starting…" state.
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-start"]')).toBeFalsy();
+    const starting: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-starting"]');
+    expect(starting?.textContent).toContain('accept connections');
+    expect(starting?.textContent).toContain('http://localhost:4202');
     const post = http.expectOne(req => req.method === 'POST' && req.url.endsWith('/PROJ-001/urls/url-1/start'));
     expect(post.request.method).toBe('POST');
     post.flush(processSnapshot());
@@ -204,9 +208,13 @@ describe('ProjectUrlPreviewTabComponent', () => {
 
     const failed: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-start-failed"]');
     expect(failed?.textContent).toContain('Working directory does not exist');
-    expect(failed?.textContent).toContain('npm run website');
-    expect(failed?.textContent).toContain('c:/missing');
     expect(failed?.querySelector('[data-testid="url-preview-retry"]')).toBeTruthy();
+    // Command and cwd live in the console below the card (the card drops its
+    // duplicate copy while the console is visible).
+    expect(failed?.querySelector('[data-testid="url-preview-start-details"]')).toBeFalsy();
+    const consoleEl: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-process-console"]');
+    expect(consoleEl?.textContent).toContain('npm run website');
+    expect(consoleEl?.textContent).toContain('c:/missing');
 
     (failed?.querySelector('[data-testid="url-preview-edit-settings"]') as HTMLButtonElement).click();
     expect(fixture.componentInstance.settingsOpen()).toBe(true);
@@ -226,7 +234,8 @@ describe('ProjectUrlPreviewTabComponent', () => {
 
     const failed: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-start-failed"]');
     expect(failed?.textContent).toContain('did not become reachable');
-    expect(failed?.textContent).toContain('c:/demo');
+    const consoleEl: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-process-console"]');
+    expect(consoleEl?.textContent).toContain('c:/demo');
   });
 
   it('shows bounded live output in place and stops the owned process explicitly', () => {

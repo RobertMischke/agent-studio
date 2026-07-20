@@ -91,6 +91,13 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
     await expect(open).toBeVisible();
     expect(await start.evaluate(element => element.tagName)).toBe('BUTTON');
     expect(await open.evaluate(element => element.tagName)).toBe('BUTTON');
+    // Regression: the shell's `.studio button` reset (0,1,1) must not flatten
+    // the card's action buttons into plain text. The primary keeps its accent
+    // fill and padding; the ghost keeps a visible border.
+    expect(await start.evaluate(element => getComputedStyle(element).backgroundColor))
+      .not.toBe('rgba(0, 0, 0, 0)');
+    expect(await start.evaluate(element => getComputedStyle(element).paddingLeft)).not.toBe('0px');
+    expect(await open.evaluate(element => getComputedStyle(element).borderTopWidth)).not.toBe('0px');
   }
 
   await page.getByTestId('url-preview-menu').click();

@@ -271,12 +271,20 @@
     border-color: color-mix(in srgb, var(--studio-accent) 30%, var(--studio-border));
     background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-card-bg));
     color: var(--studio-fg);
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
   }
   &__state-actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--studio-spacing-2);
     align-items: center;
+    padding-top: var(--studio-spacing-4);
+    border-top: 1px solid var(--studio-border);
   }
   &__overlay {
     z-index: 1;
