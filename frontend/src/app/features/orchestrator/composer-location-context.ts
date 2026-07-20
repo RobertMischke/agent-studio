@@ -3,7 +3,6 @@ import { projectRailLabel } from '../project-detail';
 import type { StudioTab } from '../studio-shell';
 
 /**
-<<<<<<< HEAD
  * Presentational location context the host feeds into the composer's
  * standard footer: the large scope (project), the active surface, and an
  * optional identity detail (task key, URL id, commit…).
@@ -13,13 +12,6 @@ import type { StudioTab } from '../studio-shell';
  * remote-runner outage, so the side sheet projects this value into the
  * library's `[chat-foot-start]` footer slot instead. Once the library grows
  * the input, this type collapses into CAC's `ChatComposerContext`.
-=======
- * Presentational "where is the operator right now" context for the
- * orchestrator composer. The chat library currently exposes a plain
- * `contextLabel` string on `cac-chat` (no structured context input), so the
- * host keeps the structured value and renders it via
- * {@link composerLocationLabel}.
->>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
  */
 export interface ComposerLocationContext {
   project: string | null;
@@ -27,15 +19,12 @@ export interface ComposerLocationContext {
   detail?: string;
 }
 
-<<<<<<< HEAD
-=======
 /** Canonical `contextLabel` rendering: `surface` or `surface · detail`. */
 export function composerLocationLabel(context: ComposerLocationContext | null): string | null {
   if (!context) return null;
   return context.detail ? `${context.surface} · ${context.detail}` : context.surface;
 }
 
->>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
 function taskFor(tabKey: string, tasks: readonly TaskInfo[]): TaskInfo | undefined {
   return tasks.find(task => task.taskKey === tabKey || task.displayKey === tabKey || task.key === tabKey);
 }
@@ -65,11 +54,8 @@ export function buildComposerLocationContext(
       return { project: tab.projectName === '__all__' ? null : tab.projectName, surface: 'Board' };
     case 'task':
       return taskContext('Task', tab.taskKey, tasks);
-<<<<<<< HEAD
     case 'workbench':
       return { project: tab.projectName, surface: 'Workbench', detail: tab.title ?? tab.workbenchId };
-=======
->>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
     case 'activity':
       return taskContext('Activity', tab.taskKey, tasks);
     case 'epic':
@@ -83,11 +69,6 @@ export function buildComposerLocationContext(
       };
     case 'url-preview':
       return { project: tab.projectName, surface: 'URL preview', detail: tab.urlId };
-<<<<<<< HEAD
-=======
-    case 'workbench':
-      return { project: tab.projectName, surface: 'Workbench', detail: tab.title ?? tab.workbenchId };
->>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
     case 'diff':
       return { project: null, surface: 'Diff', detail: tab.commitSha.slice(0, 8) };
     case 'workspace-settings':

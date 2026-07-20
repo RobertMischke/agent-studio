@@ -29,12 +29,8 @@ export type {
   ChatNavigationContext,
 } from './models/orchestrator.model';
 export { buildChatNavigationContext } from './chat-navigation-context';
-<<<<<<< HEAD
-export { buildComposerLocationContext, type ComposerLocationContext } from './composer-location-context';
-=======
 export {
   buildComposerLocationContext,
   composerLocationLabel,
   type ComposerLocationContext,
 } from './composer-location-context';
->>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
