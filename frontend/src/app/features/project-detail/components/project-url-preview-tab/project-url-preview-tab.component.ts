@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  ViewEncapsulation,
   computed,
   effect,
   inject,
@@ -44,10 +43,9 @@ interface StartFailure {
  *
  * Renders a configured Project URL inside a **sandboxed `<iframe>`** as its own
  * editor tab (one tab per URL), replacing the old `window.open` browser jump.
- * Opening the Orchestrator side sheet beside it *is* the split view — this
- * component owns only the left pane: a read-only address bar (URL + live status
- * pill, reload, open-externally, settings deep link) plus the iframe and its
- * load / offline / blocked state machine.
+ * Opening the Orchestrator side sheet beside it *is* the split view — this pane
+ * owns the address bar (URL, status pill, reload, open-externally, settings)
+ * plus the iframe and its load / offline / blocked state machine.
  *
  * State machine (concept §1.3), driven by {@link ProjectUrlProbeService} plus
  * the iframe `load` event and a load-timeout heuristic:
@@ -72,7 +70,8 @@ interface StartFailure {
   ],
   providers: [ProjectUrlProcessController],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
+  // Emulated encapsulation on purpose: the shell's `.studio button` reset
+  // outranks bare classes and would flatten the card's action buttons.
   templateUrl: './project-url-preview-tab.component.html',
   styleUrl: './project-url-preview-tab.component.scss',
 })
@@ -173,6 +172,8 @@ export class ProjectUrlPreviewTabComponent {
   });
 
   readonly canReload = computed(() => this.resolveState() === 'resolved' && !this.building());
+  /** While the console shows command/cwd below, the card skips its copy. */
+  readonly consoleVisible = computed(() => this.process.consoleOpen() && this.process.session() !== null);
 
   readonly menuItems = computed<readonly MenuItem[]>(() => {
     const session = this.process.session();
@@ -445,5 +446,4 @@ export class ProjectUrlPreviewTabComponent {
       this.startTimer = null;
     }
   }
-
 }

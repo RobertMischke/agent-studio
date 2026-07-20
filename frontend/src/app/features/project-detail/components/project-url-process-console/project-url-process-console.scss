@@ -76,18 +76,24 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--studio-spacing-2) var(--studio-spacing-4);
+  align-items: baseline;
   margin: 0;
   font-size: 10px;
 }
 
 .process-console__facts div {
   display: flex;
-  gap: var(--studio-spacing-1);
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
   min-width: 0;
 }
 
 .process-console__facts dt {
+  flex: 0 0 auto;
   color: var(--studio-fg-muted);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .process-console__facts dd {
