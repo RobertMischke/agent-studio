@@ -468,13 +468,7 @@
   color: var(--studio-fg-dim);
 }
 
-/*
- * Split layout: when the pane is maximized the user wants the tree on
- * the left and the diff on the right (the user's "fullscreen, links die
- * Dateien, rechts der Datei-Inhalt" ask). The split-body container
- * keeps the tree and diff side-by-side; outside maximize it falls back
- * to the previous stacked layout so narrow side panels stay readable.
- */
+/* Maximized panes place the file tree beside the diff. */
 .git-view__split-body {
   display: flex;
   flex-direction: column;
@@ -482,53 +476,54 @@
   min-height: 0;
   flex: 1;
 }
-.git-view--split { min-height: 0; height: 100%; }
+.git-view.git-view--split {
+  min-height: 0;
+  height: 100%;
+  padding-bottom: 0;
+  overflow: hidden;
+}
 .git-view--split .git-view__split-body {
   flex: 1;
   flex-direction: row;
   align-items: stretch;
-  gap: var(--studio-spacing-2);
+  gap: 0;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 .git-view--split .git-view__tree-col {
   // Width is driven by the draggable splitter through the
   // `--git-tree-width` custom property (px, set on .git-view__split-body).
-  // The min-width floor mirrors MIN_TREE_PX in the component so the CSS
-  // minimum never overrides the flex-basis mid-drag; the upper bound is
-  // enforced in JS (container width minus the diff's floor), so no
-  // max-width cap here.
-  flex: 0 0 var(--git-tree-width, 32%);
-  min-width: 200px;
+  // Under pressure both columns shrink toward proportional floors, matching
+  // clampTreeWidth(), so a persisted width cannot paint across the diff.
+  flex: 0 1 var(--git-tree-width, 32%);
+  min-width: min(200px, 39%);
   display: flex;
   min-height: 0;
+  overflow: hidden;
+  contain: paint;
 }
 /*
- * Draggable divider between the file-change tree (left) and the diff
- * window (right). Only meaningful in the split (pane-maximized) row
- * layout - in the stacked in-pane layout the tree sits above the diff so
- * the splitter is hidden. A thin visible line with a wider pointer
- * hit-box (::before) so a near-miss still starts the drag; hover / drag
- * turn it accent-orange, matching the outer pane splitter.
+ * Draggable divider for the maximized tree/diff layout. The element paints
+ * the one-pixel line; ::before extends a transparent hit area over both panes
+ * without inserting a visually empty gutter between them.
  */
 .git-view__splitter { display: none; }
 .git-view--split .git-view__splitter {
-  flex: 0 0 2px;
+  flex: 0 0 1px;
   align-self: stretch;
   position: relative;
+  z-index: 2;
   display: block;
   cursor: col-resize;
   touch-action: none;
-  border-radius: 2px;
   background: var(--studio-border);
-  transition: background 120ms ease;
 }
 .git-view--split .git-view__splitter::before {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--studio-spacing-1) * -1);
-  right: calc(var(--studio-spacing-1) * -1);
+  inset: 0 calc(var(--studio-spacing-2) * -1);
   cursor: col-resize;
 }
 .git-view--split .git-view__splitter:hover,
@@ -541,15 +536,19 @@
 }
 .git-view--split .git-view__tree-col app-git-file-tree {
   flex: 1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 .git-view--split .git-view__diff-col {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 320px;
+  min-width: min(320px, 60%);
   display: flex;
   min-height: 0;
+  overflow: hidden;
 }
 .git-view--split .git-view__diff-col--empty {
   align-items: center;

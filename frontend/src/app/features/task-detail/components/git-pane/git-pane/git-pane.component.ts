@@ -19,6 +19,7 @@ import { formatCompactDateTime, formatDateTime } from '../../../../../services/f
 import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
 import { coalesceDiffByFile } from '../../../../../utils/coalesce-diff';
 import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../../utils/diff2html-lazy';
+import { clampTreeWidth, MIN_TREE_PX } from './git-pane-splitter.util';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
 // loaded lazily the first time a non-empty diff arrives. The pre-Cycle-7f
 // import was static, which dragged the whole library into the initial
@@ -461,21 +462,10 @@ const HEAD_COLLAPSED_KEY = 'taskboard.gitPane.headCollapsed';
 const DIFF_VIEW_MODE_KEY = 'taskboard.gitPane.diffViewMode';
 const TREE_WIDTH_KEY = 'taskboard.gitPane.treeWidth';
 
-// Splitter clamp: the tree may not drop below MIN_TREE_PX nor squeeze the
-// diff below MIN_DIFF_PX. Keyboard arrows nudge by TREE_RESIZE_STEP. The
-// tree floor mirrors the SCSS `min-width` on `.git-view__tree-col` so the
-// CSS minimum never fights the flex-basis mid-drag (the spring-back bug the
-// pane splitter documents in layout-panes.service).
-const MIN_TREE_PX = 200;
-const MIN_DIFF_PX = 320;
+// Splitter clamping shares the SCSS fixed/proportional floors; keyboard
+// arrows nudge the preferred width by TREE_RESIZE_STEP.
 const TREE_WIDTH_DEFAULT = 300;
 const TREE_RESIZE_STEP = 16;
-
-/** Clamp a proposed tree width against its floor and the diff's floor. */
-export function clampTreeWidth(raw: number, containerWidth: number): number {
-  const upper = containerWidth > 0 ? Math.max(MIN_TREE_PX, containerWidth - MIN_DIFF_PX) : Number.POSITIVE_INFINITY;
-  return Math.round(Math.max(MIN_TREE_PX, Math.min(upper, raw)));
-}
 
 function readCommitHeaderCollapsed(): boolean {
   try { return localStorage.getItem(COMMIT_HEADER_COLLAPSED_KEY) === '1'; }
