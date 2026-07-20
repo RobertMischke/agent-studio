@@ -81,8 +81,8 @@
   <tbody>
     <tr><td><b>Arbeitsverlust</b></td><td>Phantom-Welle, Teardown-Vernichtung</td>
         <td><span class="pill done">geschlossen</span> verified-push-before-completion, Worktree bleibt bei Fehler</td></tr>
-    <tr><td><b>Falscher Review-Scope</b></td><td>Grade D auf leeren Diffs</td>
-        <td><span class="pill part">teilweise</span> Reconciliation erledigt; strukturell erst mit Result-SHA-Vertrag (Phase 1)</td></tr>
+    <tr><td><b>Falscher Review-Scope</b></td><td>Grade D auf leeren Diffs; divergente Runner-Lineage (AGT-2177, 15× Grade D)</td>
+        <td><span class="pill part">teilweise</span> Reconciliation erledigt; strukturell erst mit Result-SHA-Vertrag (Phase 1) — Review muss gegen Task-Branch-Tip diffen</td></tr>
     <tr><td><b>Lost-Update / Races</b></td><td>DeleteJob vs. Move; Salvage-Kontamination</td>
         <td><span class="pill part">teilweise</span> DeleteJob-Fix gemergt; Attempt-Fencing (AGT-2182) ausstehend</td></tr>
     <tr><td><b>Unhermetische Gates</b></td><td>Watcher-/Timing-Flakes, Logger-Freeze</td>
@@ -93,6 +93,10 @@
         <td><span class="pill open">offen</span> Board-Watchdog + Steer-Timeout noch nicht eingerichtet</td></tr>
     <tr><td><b>Unvalidierte Registry-Writes</b></td><td>PROJ-017-Korruption</td>
         <td><span class="pill open">offen</span> Validierung + Bereinigung ausstehend</td></tr>
+    <tr><td><b>Zombie-Worktrees / External-Completion-Loop</b></td><td>AGT-2155: gestrandeter Host-Worktree blockiert Salvage, Requeue wiederholt den Zyklus</td>
+        <td><span class="pill part">teilweise</span> Einzelfall gesichert + rekonstruiert (2177-Muster); kein automatischer Zombie-Worktree-Check</td></tr>
+    <tr><td><b>Fehlende Datensicherung</b></td><td>snap.sh deckte neues Per-Projekt-Worktree-Layout nicht ab; Platte 91 % voll</td>
+        <td><span class="pill done">geschlossen</span> snap.sh deckt beide Layouts + Retention (20.07.); 374 GB → 1,1 GB, Platte 6 %</td></tr>
   </tbody>
 </table>
 
@@ -405,6 +409,59 @@
     <dt>Referenzen</dt><dd><code>backend/Features/Docs/WikiProducerTargets.cs</code>,
       <code>backend.Tests/Architecture/WikiPathCentralizationGuardTests.cs</code>,
       <code>docs/start/wiki-conventions.md</code></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>AGT-2177: Review-Basis-Bug bei divergenter Runner-Lineage („15-Runden-Loop“)</h3><span class="date">20.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Das Code-Review-Grading identifiziert „task commits“ aus der
+      <code>runner/</code>-Branch-Historie; bei divergenter Lineage (Runner arbeitet auf
+      <code>runner/agent-runner-01/AGT-*</code>, nie auf <code>task/*</code>) bewertete es
+      develop-Snapshot-Commits statt der echten Implementierung → 15× Grade D für vollständige Arbeit.</dd>
+    <dt>Root Cause</dt><dd>Verschärfung: Bootstrap-Deadlock — AGT-2177 ist selbst der Fix für die
+      Divergenz-Reconciliation, kann die kaputte Maschinerie aber nicht passieren, da genau dieselbe
+      fehlerhafte Review-Basis auch die eigene Karte bewertet.</dd>
+    <dt>Maßnahme</dt><dd>Branch als Einzel-Commit auf develop-Tip rekonstruiert (<code>1228d87e</code>);
+      Host-Lineage-Angleich nach Rundenende.</dd>
+    <dt>Status</dt><dd><span class="pill part">Einzelfall entstuckt</span>
+      <span class="pill open">strukturell offen</span> — Review muss gegen den Task-Branch-Tip diffen,
+      nicht gegen abgeleitete Commit-Listen.</dd>
+    <dt>Referenzen</dt><dd>AGT-2177 · Bezug „Kreuzkontaminierte Salvage-Branches“ (17.07.),
+      Result-SHA-Vertrag (Phase 1)</dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Backup-Lücke + Plattenfüllstand am Runner-Host</h3><span class="date">20.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd><code>~/salvage/snap.sh</code> (5-Min-Loop seit 11.07.) überwachte nur den
+      Legacy-Pfad <code>~/runner-work/worktrees/</code>, nie das neue Per-Projekt-Layout
+      <code>~/runner-work/PROJ-002/worktrees/</code> — alle aktuellen Worktrees liefen ohne automatische
+      Sicherung. Zugleich 9647 Snapshots = 374 GB, Platte 91 % voll (Ausfallrisiko für alle Remote-Läufe).</dd>
+    <dt>Root Cause</dt><dd>Snapshot-Skript nicht an die Layout-Migration auf Per-Projekt-Pfade
+      nachgezogen; keine Retention-Politik, daher unkontrolliertes Snapshot-Wachstum.</dd>
+    <dt>Maßnahme</dt><dd>Fix 20.07.: <code>snap.sh</code> deckt beide Layouts ab + Retention (3 neueste
+      Snapshots je Worktree); 374 GB → 1,1 GB, Platte 6 %.</dd>
+    <dt>Status</dt><dd><span class="pill done">geschlossen</span></dd>
+    <dt>Referenzen</dt><dd><code>~/salvage/snap.sh</code></dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>AGT-2155: Der External-Completion-Zyklus</h3><span class="date">20.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Ein zurückgebliebener Host-Worktree ließ jeden Remote-Lauf mit
+      „salvage failed“ scheitern → Daemon stempelt External-Completion (Mechanismus aus AGT-1917) →
+      Karte flippt automatisch nach 5-human-review; jeder Requeue wiederholt denselben Zyklus.</dd>
+    <dt>Root Cause</dt><dd>Im gestrandeten Worktree lag die komplette, nie gepushte Implementierung
+      (<code>ca414abc</code>, 17 Dateien, +1846/−312) — der External-Completion-Pfad markiert bei
+      Salvage-Fehlschlag reflexhaft „erledigt“, ohne den blockierenden Worktree-Zustand aufzulösen.</dd>
+    <dt>Maßnahme</dt><dd>Sicherung (Tar + <code>refs/salvage/AGT-2155-20260720</code>), Worktree geräumt,
+      Branch-Rekonstruktion nach 2177-Muster.</dd>
+    <dt>Status</dt><dd><span class="pill part">Einzelfall behoben</span>
+      <span class="pill open">strukturell offen</span> — kein automatischer Zombie-Worktree-Check.</dd>
+    <dt>Referenzen</dt><dd>AGT-2155 · Bezug AGT-1917 (External-Completion), AGT-2177 (Rekonstruktionsmuster)</dd>
   </dl>
 </div>
 
