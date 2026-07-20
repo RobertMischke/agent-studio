@@ -9,9 +9,13 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 export const sessionSecurityInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthSessionState);
   if (!req.url.startsWith('/api/')) return next(req);
+  // Ueber HTTPS heisst der Cookie __Host-agentstudio-csrf, ueber HTTP (lokaler
+  // Dev-Betrieb) agentstudio-csrf - __Host- ist dort browserseitig unmoeglich.
   const csrf = typeof document === 'undefined'
     ? null
-    : document.cookie.split('; ').find((item) => item.startsWith('__Host-agentstudio-csrf='))?.split('=', 2)[1];
+    : document.cookie.split('; ')
+      .find((item) => item.startsWith('__Host-agentstudio-csrf=') || item.startsWith('agentstudio-csrf='))
+      ?.split('=', 2)[1];
   const secured = SAFE_METHODS.has(req.method.toUpperCase())
     ? req.clone({ withCredentials: true })
     : req.clone({

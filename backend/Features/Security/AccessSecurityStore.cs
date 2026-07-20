@@ -11,6 +11,9 @@ namespace AgentStudio.Security;
 public sealed class AccessSecurityStore
 {
     public const string SessionCookieName = "__Host-agentstudio-session";
+    // __Host- verlangt Secure+HTTPS; im lokalen HTTP-Dev-Betrieb verwirft der
+    // Browser solche Cookies stumm. HTTP-Requests bekommen daher diese Namen.
+    public const string InsecureSessionCookieName = "agentstudio-session";
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,

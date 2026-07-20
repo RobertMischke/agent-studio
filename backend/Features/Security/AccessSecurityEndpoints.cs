@@ -43,8 +43,10 @@ public static class AccessSecurityEndpoints
         auth.MapPost("/logout", (HttpContext context, AccessSecurityStore store) =>
         {
             store.Logout(RequireHuman(context).Session);
-            context.Response.Cookies.Delete(AccessSecurityStore.SessionCookieName, SessionCookieOptions());
-            context.Response.Cookies.Delete("__Host-agentstudio-csrf", CsrfCookieOptions());
+            context.Response.Cookies.Delete(AccessSecurityStore.SessionCookieName, SessionCookieOptions(https: true));
+            context.Response.Cookies.Delete("__Host-agentstudio-csrf", CsrfCookieOptions(https: true));
+            context.Response.Cookies.Delete(AccessSecurityStore.InsecureSessionCookieName, SessionCookieOptions(https: false));
+            context.Response.Cookies.Delete("agentstudio-csrf", CsrfCookieOptions(https: false));
             return Results.NoContent();
         });
 
@@ -139,24 +141,32 @@ public static class AccessSecurityEndpoints
 
     private static void SetSessionCookies(HttpContext context, string token, string csrfToken)
     {
-        context.Response.Cookies.Append(AccessSecurityStore.SessionCookieName, token, SessionCookieOptions());
-        context.Response.Cookies.Append("__Host-agentstudio-csrf", csrfToken, CsrfCookieOptions());
+        // __Host--Cookies erfordern Secure+HTTPS; ueber HTTP (lokaler Dev-Betrieb
+        // via ng-serve-Proxy) wuerde der Browser sie stumm verwerfen und der Login
+        // bliebe wirkungslos. Namen und Secure-Flag folgen daher dem Schema.
+        var https = context.Request.IsHttps;
+        context.Response.Cookies.Append(
+            https ? AccessSecurityStore.SessionCookieName : AccessSecurityStore.InsecureSessionCookieName,
+            token, SessionCookieOptions(https));
+        context.Response.Cookies.Append(
+            https ? "__Host-agentstudio-csrf" : "agentstudio-csrf",
+            csrfToken, CsrfCookieOptions(https));
         context.Response.Headers.CacheControl = "no-store";
     }
 
-    private static CookieOptions SessionCookieOptions() => new()
+    private static CookieOptions SessionCookieOptions(bool https) => new()
     {
         HttpOnly = true,
-        Secure = true,
+        Secure = https,
         SameSite = SameSiteMode.Strict,
         IsEssential = true,
         Path = "/"
     };
 
-    private static CookieOptions CsrfCookieOptions() => new()
+    private static CookieOptions CsrfCookieOptions(bool https) => new()
     {
         HttpOnly = false,
-        Secure = true,
+        Secure = https,
         SameSite = SameSiteMode.Strict,
         IsEssential = true,
         Path = "/"

@@ -49,7 +49,9 @@ public sealed class AccessSecurityMiddleware
         context.Items[AttributionClientIdItem] = context.Request.Headers["X-Client-Id"].FirstOrDefault();
         if (path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase))
             context.Response.Headers.CacheControl = "no-store";
-        var human = _store.AuthenticateSession(context.Request.Cookies[AccessSecurityStore.SessionCookieName]);
+        var human = _store.AuthenticateSession(
+            context.Request.Cookies[AccessSecurityStore.SessionCookieName]
+            ?? context.Request.Cookies[AccessSecurityStore.InsecureSessionCookieName]);
         var bearer = ReadBearer(context.Request.Headers.Authorization.FirstOrDefault());
         var runner = _store.AuthenticateRunner(bearer);
         if (human is not null)
