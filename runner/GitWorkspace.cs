@@ -17,6 +17,9 @@ public sealed class GitWorkspace
     private readonly string _workBranch;
     private string? _startedHead;
     private bool _startedFromSalvage;
+    private SalvageReconciliationResult? _pickupReconciliation;
+
+    private const int MaxSalvagePublishAttempts = 3;
 
     public GitWorkspace(
         RunnerOptions options,
@@ -38,6 +41,7 @@ public sealed class GitWorkspace
     public string ProjectCachePath => CachePathForProject(_options.WorkDir, _projectId);
     public string SharedRepoPath => Path.Combine(ProjectCachePath, "repo");
     public string RepoPath => Path.Combine(ProjectCachePath, "worktrees", _safeTaskKey);
+    public SalvageReconciliationResult? PickupReconciliation => _pickupReconciliation;
 
     public async Task<string> PrepareAsync(CancellationToken ct)
     {
@@ -64,13 +68,25 @@ public sealed class GitWorkspace
             if (!string.IsNullOrWhiteSpace(_options.GitPushRemote))
                 await Git(["remote", "set-url", "--push", "origin", _options.GitPushRemote], SharedRepoPath, ct);
 
+            // Reclaim debris from a process crash before creating the new
+            // linked checkout. A crashed process may have left its only copy of
+            // the work here, so the same salvage invariant as normal teardown
+            // applies before anything is removed.
+            if (Directory.Exists(RepoPath))
+            {
+                var retained = await SecureAndRemoveAsync("Unknown", ct);
+                _pickupReconciliation = retained.Reconciliation;
+            }
+            await TryGit(["worktree", "prune"], SharedRepoPath, ct);
+
+            // Resolve the pickup branch after retained work is secured. That
+            // salvage may have created the canonical runner ref, which must be
+            // the authoritative continuation base instead of the requested
+            // project branch.
             var requested = string.IsNullOrWhiteSpace(_options.Branch) ? _baseBranch : _options.Branch!;
             string branch;
             if (await BranchExistsOnOrigin(_workBranch, ct))
             {
-                // Requeues continue from the durable salvage branch. Resetting
-                // to base here would make the next secure push non-fast-forward
-                // and would hide the prior run from the new checkout.
                 branch = _workBranch;
                 _log($"resuming task from existing salvage branch 'origin/{_workBranch}'");
             }
@@ -83,17 +99,12 @@ public sealed class GitWorkspace
             if (branch != requested && branch != _workBranch)
                 _log($"branch '{requested}' not found on origin; falling back to base branch '{branch}'");
 
-            // Reclaim debris from a process crash before creating the new
-            // linked checkout. A crashed process may have left its only copy of
-            // the work here, so the same salvage invariant as normal teardown
-            // applies before anything is removed.
-            if (Directory.Exists(RepoPath))
-                await SecureAndRemoveAsync("Unknown", ct);
-            await TryGit(["worktree", "prune"], SharedRepoPath, ct);
-
             await TryGit(["branch", "-D", _workBranch], SharedRepoPath, ct);
-            _log($"git worktree add {RepoPath} on {_workBranch} from origin/{branch}");
-            await Git(["worktree", "add", "-B", _workBranch, RepoPath, $"origin/{branch}"], SharedRepoPath, ct);
+            var authoritativeBase = await FetchRemoteBranchHeadAsync(branch, ct)
+                ?? throw new InvalidOperationException($"Authoritative pickup branch 'origin/{branch}' disappeared during preparation.");
+            _log($"worktree-authoritative-base branch=refs/heads/{branch} sha={authoritativeBase} path={RepoPath}");
+            _log($"git worktree add {RepoPath} on {_workBranch} from refs/heads/{branch} at {ShortSha(authoritativeBase)}");
+            await Git(["worktree", "add", "-B", _workBranch, RepoPath, authoritativeBase], SharedRepoPath, ct);
 
             _startedFromSalvage = string.Equals(branch, _workBranch, StringComparison.Ordinal);
             _startedHead = (await Git(["rev-parse", "HEAD"], RepoPath, ct)).StdOut.Trim();
@@ -113,7 +124,8 @@ public sealed class GitWorkspace
         {
             try
             {
-                return await SecureAndRemoveAsync(outcome, ct);
+                var secured = await SecureAndRemoveAsync(outcome, ct);
+                return secured with { Reconciliation = _pickupReconciliation ?? secured.Reconciliation };
             }
             catch (WorktreeSalvageException)
             {
@@ -159,6 +171,7 @@ public sealed class GitWorkspace
             && !string.Equals(_startedHead, head, StringComparison.OrdinalIgnoreCase);
         var hasWork = wasDirty || changedDuringRun || _startedFromSalvage;
         string? remoteHead = null;
+        SalvageReconciliationResult? reconciliation = null;
 
         // A checkout which is still exactly at its recorded start commit is
         // provably clean and needs no remote query. Crash debris has no start
@@ -168,7 +181,7 @@ public sealed class GitWorkspace
             try
             {
                 var hasLocalOnlyCommits = await HasLocalOnlyCommitsAsync(ct);
-                remoteHead = await RemoteBranchHeadAsync(ct);
+                remoteHead = await RemoteBranchHeadAsync(_workBranch, ct);
                 hasWork = hasWork || hasLocalOnlyCommits || remoteHead is not null;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -178,23 +191,18 @@ public sealed class GitWorkspace
             }
         }
 
-        if (hasWork && !string.Equals(remoteHead, head, StringComparison.OrdinalIgnoreCase))
+        if (hasWork)
         {
-            _log($"worktree-salvage-push-started branch={_workBranch} sha={ShortSha(head)} path={RepoPath}");
             try
             {
-                await Git(["push", "--set-upstream", "origin", $"HEAD:refs/heads/{_workBranch}"], RepoPath, ct);
-                remoteHead = await RemoteBranchHeadAsync(ct);
-                if (!string.Equals(remoteHead, head, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException(
-                        $"origin/{_workBranch} resolved to '{remoteHead ?? "missing"}' after push, expected '{head}'.");
+                reconciliation = await ReconcileSalvageAsync(head, remoteHead, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _log($"worktree-salvage-push-failed branch={_workBranch} path={RepoPath} error={OneLine(ex.Message)}");
-                throw new WorktreeSalvageException(RepoPath, _workBranch, ex);
+                throw ex as WorktreeSalvageException
+                    ?? new WorktreeSalvageException(RepoPath, _workBranch, ex, head, remoteHead);
             }
-            _log($"worktree-salvage-push-completed branch={_workBranch} sha={ShortSha(head)} path={RepoPath}");
         }
 
         // Force-removal is permitted only after all work is present on the
@@ -205,9 +213,93 @@ public sealed class GitWorkspace
         _log($"worktree-teardown-completed path={RepoPath} secured={hasWork} branch={(hasWork ? _workBranch : "none")}");
 
         return hasWork
-            ? new WorktreeTeardownResult(true, _workBranch, head, BuildBranchUrl(_gitRemote!, _workBranch))
+            ? new WorktreeTeardownResult(true, _workBranch,
+                reconciliation?.AuthoritativeBaseSha ?? head,
+                BuildBranchUrl(_gitRemote!, _workBranch), reconciliation)
             : WorktreeTeardownResult.NoWork;
     }
+
+    private async Task<SalvageReconciliationResult> ReconcileSalvageAsync(
+        string localHead, string? observedRemoteHead, CancellationToken ct)
+    {
+        Exception? lastError = null;
+        var remoteHead = observedRemoteHead;
+        for (var attempt = 1; attempt <= MaxSalvagePublishAttempts; attempt++)
+        {
+            try
+            {
+                remoteHead = await FetchRemoteBranchHeadAsync(_workBranch, ct);
+                if (remoteHead is null)
+                {
+                    await PushAndVerifyAsync(_workBranch, localHead, ct);
+                    return Reconciliation("local-ahead", localHead, localHead);
+                }
+
+                if (string.Equals(remoteHead, localHead, StringComparison.OrdinalIgnoreCase))
+                    return Reconciliation("equal", remoteHead, localHead);
+
+                if (await IsAncestorAsync(remoteHead, localHead, ct))
+                {
+                    await PushAndVerifyAsync(_workBranch, localHead, ct);
+                    return Reconciliation("local-ahead", localHead, localHead);
+                }
+
+                if (await IsAncestorAsync(localHead, remoteHead, ct))
+                    return Reconciliation("remote-ahead", remoteHead, localHead);
+
+                var recoveryBranch = RecoveryBranch(localHead, remoteHead);
+                await PushAndVerifyAsync(recoveryBranch, localHead, ct);
+                var result = new SalvageReconciliationResult(
+                    "divergent", _workBranch, remoteHead, localHead,
+                    recoveryBranch, localHead, _workBranch, remoteHead);
+                _log($"worktree-salvage-reconciled kind=divergent canonicalRef=refs/heads/{_workBranch} canonicalSha={remoteHead} localSha={localHead} recoveryRef=refs/heads/{recoveryBranch} recoverySha={localHead} authoritativeBaseRef=refs/heads/{_workBranch} authoritativeBaseSha={remoteHead}");
+                return result;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lastError = ex;
+                _log($"worktree-salvage-publish-retry branch={_workBranch} localSha={localHead} remoteSha={remoteHead ?? "missing"} attempt={attempt}/{MaxSalvagePublishAttempts} error={OneLine(ex.Message)}");
+            }
+        }
+
+        throw new WorktreeSalvageException(
+            RepoPath, _workBranch,
+            lastError ?? new InvalidOperationException("Salvage reconciliation exhausted its retry budget."),
+            localHead, remoteHead);
+
+        SalvageReconciliationResult Reconciliation(string kind, string canonicalHead, string retainedLocalHead)
+        {
+            var result = new SalvageReconciliationResult(
+                kind, _workBranch, canonicalHead, retainedLocalHead,
+                null, null, _workBranch, canonicalHead);
+            _log($"worktree-salvage-reconciled kind={kind} canonicalRef=refs/heads/{_workBranch} canonicalSha={canonicalHead} localSha={retainedLocalHead} recoveryRef=none recoverySha=none authoritativeBaseRef=refs/heads/{_workBranch} authoritativeBaseSha={canonicalHead}");
+            return result;
+        }
+    }
+
+    private async Task PushAndVerifyAsync(string branch, string expectedHead, CancellationToken ct)
+    {
+        _log($"worktree-salvage-push-started branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
+        await Git(["push", "origin", $"HEAD:refs/heads/{branch}"], RepoPath, ct);
+        var published = await RemoteBranchHeadAsync(branch, ct);
+        if (!string.Equals(published, expectedHead, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"origin/{branch} resolved to '{published ?? "missing"}' after push, expected '{expectedHead}'.");
+        _log($"worktree-salvage-push-completed branch={branch} sha={ShortSha(expectedHead)} path={RepoPath}");
+    }
+
+    private async Task<bool> IsAncestorAsync(string ancestor, string descendant, CancellationToken ct)
+    {
+        var result = await ProcessRunner.RunAsync(
+            "git", ["merge-base", "--is-ancestor", ancestor, descendant], workingDirectory: RepoPath, ct: ct);
+        if (result.ExitCode == 0) return true;
+        if (result.ExitCode == 1) return false;
+        throw new InvalidOperationException(
+            $"git merge-base --is-ancestor {ancestor} {descendant} failed ({result.ExitCode}): {result.StdErr.Trim()}");
+    }
+
+    private string RecoveryBranch(string localHead, string remoteHead)
+        => $"{_workBranch}-collision-{localHead}-{remoteHead}";
 
     private async Task<bool> HasLocalOnlyCommitsAsync(CancellationToken ct)
     {
@@ -215,16 +307,28 @@ public sealed class GitWorkspace
         return int.TryParse(result.StdOut.Trim(), out var count) && count > 0;
     }
 
-    private async Task<string?> RemoteBranchHeadAsync(CancellationToken ct)
+    private async Task<string?> RemoteBranchHeadAsync(string branch, CancellationToken ct)
     {
         var result = await ProcessRunner.RunAsync(
-            "git", ["ls-remote", "--heads", "origin", $"refs/heads/{_workBranch}"],
-            workingDirectory: RepoPath, ct: ct);
+            "git", ["ls-remote", "--heads", "origin", $"refs/heads/{branch}"],
+            workingDirectory: SharedRepoPath, ct: ct);
         if (!result.Success)
             throw new InvalidOperationException(
-                $"git ls-remote origin {_workBranch} failed ({result.ExitCode}): {result.StdErr.Trim()}");
+                $"git ls-remote origin {branch} failed ({result.ExitCode}): {result.StdErr.Trim()}");
         var first = result.StdOut.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         return string.IsNullOrWhiteSpace(first) ? null : first;
+    }
+
+    private async Task<string?> FetchRemoteBranchHeadAsync(string branch, CancellationToken ct)
+    {
+        var remoteHead = await RemoteBranchHeadAsync(branch, ct);
+        if (remoteHead is null) return null;
+        await Git(["fetch", "origin", $"refs/heads/{branch}"], SharedRepoPath, ct);
+        var fetched = (await Git(["rev-parse", "FETCH_HEAD"], SharedRepoPath, ct)).StdOut.Trim();
+        if (!string.Equals(fetched, remoteHead, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"origin/{branch} changed while fetching: observed '{remoteHead}', fetched '{fetched}'.");
+        return fetched;
     }
 
     private async Task<bool> BranchExistsOnOrigin(string branch, CancellationToken ct)
@@ -289,20 +393,44 @@ public sealed class GitWorkspace
             : Path.Combine(workDir, SafeSegment(projectId));
 }
 
-public sealed record WorktreeTeardownResult(bool SecuredWork, string? Branch, string? CommitSha, string? BranchUrl)
+public sealed record WorktreeTeardownResult(
+    bool SecuredWork,
+    string? Branch,
+    string? CommitSha,
+    string? BranchUrl,
+    SalvageReconciliationResult? Reconciliation = null)
 {
     public static WorktreeTeardownResult NoWork { get; } = new(false, null, null, null);
 }
 
+public sealed record SalvageReconciliationResult(
+    string Kind,
+    string CanonicalBranch,
+    string CanonicalCommitSha,
+    string LocalCommitSha,
+    string? RecoveryBranch,
+    string? RecoveryCommitSha,
+    string AuthoritativeBaseBranch,
+    string AuthoritativeBaseSha);
+
 public sealed class WorktreeSalvageException : Exception
 {
-    public WorktreeSalvageException(string worktreePath, string branch, Exception innerException)
+    public WorktreeSalvageException(
+        string worktreePath,
+        string branch,
+        Exception innerException,
+        string? localCommitSha = null,
+        string? remoteCommitSha = null)
         : base($"Could not secure worktree '{worktreePath}' on origin branch '{branch}'.", innerException)
     {
         WorktreePath = worktreePath;
         Branch = branch;
+        LocalCommitSha = localCommitSha;
+        RemoteCommitSha = remoteCommitSha;
     }
 
     public string WorktreePath { get; }
     public string Branch { get; }
+    public string? LocalCommitSha { get; }
+    public string? RemoteCommitSha { get; }
 }

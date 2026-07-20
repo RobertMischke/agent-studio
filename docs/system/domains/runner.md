@@ -207,6 +207,18 @@ state.
   is verified before removal. A failed check or push keeps the worktree and
   records a `worktree-blocked` gate item with host and path. Successful salvage
   branches are linked from the card's `results/deliverables.md`.
+- Retained remote-runner worktree pickup reconciles the local and canonical
+  salvage tips by ancestry before reuse. Equal and remote-ahead tips keep the
+  canonical remote ref, and local-ahead tips advance it with a normal
+  fast-forward push. Divergent tips never rewrite that ref: the runner publishes
+  the local tip to
+  `runner/<runner-id>/<task-key>-collision-<local-sha>-<remote-sha>`, verifies
+  both exact SHAs, and recreates the checkout from the explicit canonical SHA so
+  the CLI can start. The collision ref and both tips are recorded in typed runner
+  completion and operator deliverables. Publishing retries at most three times;
+  an exhausted or genuinely unrecoverable git failure retains the worktree and
+  uses the existing `worktree-blocked` escalation with the preserved tips and
+  next safe action (AGT-2177).
 - Remote daemon admission is write-capability gated. Startup keeps the fetch URL
   and Git `pushurl` separate, performs one push dry-run, and publishes the result
   on its client identity. A reported `read-only` identity receives no claims;

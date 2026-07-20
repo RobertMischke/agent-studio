@@ -135,7 +135,14 @@ public sealed record RemoteRunCompletionRequest(
     int? ExitCode = null,
     string? SalvageBranch = null,
     string? SalvageCommitSha = null,
-    string? SalvageBranchUrl = null);
+    string? SalvageBranchUrl = null,
+    string? SalvageResolution = null,
+    string? SalvageLocalCommitSha = null,
+    string? SalvageRecoveryBranch = null,
+    string? SalvageRecoveryCommitSha = null,
+    string? SalvageRecoveryBranchUrl = null,
+    string? SalvageAuthoritativeBaseBranch = null,
+    string? SalvageAuthoritativeBaseSha = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

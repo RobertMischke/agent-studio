@@ -157,6 +157,17 @@ public sealed class RemoteTaskRunner
     {
         var branch = await workspace.PrepareAsync(shutdown);
         shipper.Add("system", $"[runner] working tree ready on branch '{branch}'");
+        if (workspace.PickupReconciliation is { } recovery)
+        {
+            shipper.Add("system",
+                $"[runner] salvage-reconciliation kind={recovery.Kind} " +
+                $"canonicalRef=refs/heads/{recovery.CanonicalBranch} canonicalSha={recovery.CanonicalCommitSha} " +
+                $"localSha={recovery.LocalCommitSha} " +
+                $"recoveryRef={(recovery.RecoveryBranch is null ? "none" : $"refs/heads/{recovery.RecoveryBranch}")} " +
+                $"recoverySha={recovery.RecoveryCommitSha ?? "none"} " +
+                $"authoritativeBaseRef=refs/heads/{recovery.AuthoritativeBaseBranch} " +
+                $"authoritativeBaseSha={recovery.AuthoritativeBaseSha}");
+        }
 
         var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
                          ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
@@ -226,24 +237,35 @@ public sealed class RemoteTaskRunner
             outcome.Kind.ToString(), outcome.Reason, _options.RunnerName,
             SalvageBranch: teardown.Branch,
             SalvageCommitSha: teardown.CommitSha,
-            SalvageBranchUrl: teardown.BranchUrl), ct);
+            SalvageBranchUrl: teardown.BranchUrl,
+            SalvageResolution: teardown.Reconciliation?.Kind,
+            SalvageLocalCommitSha: teardown.Reconciliation?.LocalCommitSha,
+            SalvageRecoveryBranch: teardown.Reconciliation?.RecoveryBranch,
+            SalvageRecoveryCommitSha: teardown.Reconciliation?.RecoveryCommitSha,
+            SalvageRecoveryBranchUrl: null,
+            SalvageAuthoritativeBaseBranch: teardown.Reconciliation?.AuthoritativeBaseBranch,
+            SalvageAuthoritativeBaseSha: teardown.Reconciliation?.AuthoritativeBaseSha), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 
     private async Task ReportUnsecuredWorktreeAsync(string taskKey, WorktreeSalvageException ex)
     {
+        var refs = $"canonical refs/heads/{ex.Branch} at {ex.RemoteCommitSha ?? "unknown"}; " +
+                   $"retained local HEAD {ex.LocalCommitSha ?? "unknown"}";
+        var failure = ex.InnerException?.Message.Replace('\r', ' ').Replace('\n', ' ').Trim()
+                      ?? ex.Message;
         var gate = $"worktree-blocked: unsecured worktree on {_options.Hostname}: {ex.WorktreePath} " +
-                   $"(salvage to {ex.Branch} failed)";
-        _log($"worktree-salvage-escalated task={taskKey} host={_options.Hostname} path={ex.WorktreePath} branch={ex.Branch}");
+                   $"({refs}; failure: {failure}). No ref was overwritten. Restore origin push access, publish the retained HEAD to a new ref, then requeue.";
+        _log($"worktree-salvage-escalated task={taskKey} host={_options.Hostname} path={ex.WorktreePath} branch={ex.Branch} localSha={ex.LocalCommitSha ?? "unknown"} remoteSha={ex.RemoteCommitSha ?? "unknown"}");
         try
         {
             await _client.CompleteAsync(taskKey, new ExternalCompletionRequest(
-                Summary: $"Remote runner retained unsecured worktree on {_options.Hostname} after salvage failed.",
+                Summary: $"Remote runner preserved the host-local worktree on {_options.Hostname} after bounded salvage reconciliation failed. No remote ref was overwritten.",
                 Deliverables:
                 [
                     new ExternalDeliverable(
                         Path: ex.WorktreePath,
-                        Note: $"Host-local worktree retained; intended branch {ex.Branch}.")
+                        Note: $"Host-local worktree retained at {ex.LocalCommitSha ?? "unknown"}; canonical refs/heads/{ex.Branch} is {ex.RemoteCommitSha ?? "unknown"}. Next safe action: restore push access and publish retained HEAD to a new ref before requeueing.")
                 ],
                 Source: _options.RunnerName,
                 TargetState: "5-human-review",

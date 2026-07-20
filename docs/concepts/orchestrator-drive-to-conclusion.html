@@ -647,6 +647,28 @@
           </td>
         </tr>
         <tr>
+          <td>2026-07-12</td>
+          <td><code>AGT-2177</code><br><span class="small">divergent remote salvage ref pickup loop<br>(observed on <code>AGT-2157</code>; risk on <code>AGT-2160</code>/<code>AGT-2161</code>)</span></td>
+          <td>
+            Re-picking AGT-2157 found a retained clean worktree at local tip <code>b6f23a3f</code> and canonical remote salvage
+            tip <code>09faf1b7</code>. The histories had diverged, so the safe non-force push was rejected as non-fast-forward
+            before the CLI started. Every requeue repeated the same short failure and returned the card to Human Review.
+          </td>
+          <td>
+            Crash-debris preparation assumed every retained local salvage tip could fast-forward the one canonical runner ref.
+            It had a fail-closed teardown path but no ancestry classification, alternate durable ref, or authoritative next-pickup
+            base for the valid case where both reachable tips must survive.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> retained tips are classified as equal, local-ahead, remote-ahead, or divergent.
+            Divergence publishes the local tip to deterministic
+            <code>runner/&lt;runner&gt;/&lt;task&gt;-collision-&lt;local-sha&gt;-&lt;remote-sha&gt;</code> without rewriting the canonical ref,
+            verifies both SHAs, and prepares the new checkout from the exact canonical SHA so the CLI starts. Typed completion
+            evidence and operator deliverables name both refs and tips. Publishing has a three-attempt bound; genuine git failure
+            still retains the worktree and reaches <code>worktree-blocked</code> with the preserved state and next safe action.
+          </td>
+        </tr>
+        <tr>
           <td>2026-07-11</td>
           <td><code>AGT-2148</code><br><span class="small">remote daemon runs omitted terminal sentinels</span></td>
           <td>

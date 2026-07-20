@@ -110,12 +110,135 @@ public sealed class GitWorkspaceTests : IDisposable
         Assert.Equal(salvaged.CommitSha, result.CommitSha);
     }
 
+    [Fact]
+    public async Task Retained_local_ahead_tip_fast_forwards_canonical_salvage_ref_and_starts_pickup()
+    {
+        await SeedOriginAsync();
+        const string branch = "runner/runner-test/AGT-2147";
+        await GitAsync(_origin, "branch", branch, "main");
+        var retained = CreateWorkspace();
+        await retained.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(retained.RepoPath, "local.txt", "local ahead", "local ahead");
+        var localHead = (await GitAsync(retained.RepoPath, "rev-parse", "HEAD")).StdOut;
+
+        var pickup = CreateWorkspace();
+        var source = await pickup.PrepareAsync(CancellationToken.None);
+
+        Assert.Equal(branch, source);
+        Assert.Equal(localHead, (await GitAsync(_origin, "rev-parse", $"refs/heads/{branch}")).StdOut);
+        Assert.Equal("local ahead", await File.ReadAllTextAsync(Path.Combine(pickup.RepoPath, "local.txt")));
+    }
+
+    [Fact]
+    public async Task Retained_tip_creates_missing_canonical_ref_and_uses_it_as_authoritative_base()
+    {
+        await SeedOriginAsync();
+        const string branch = "runner/runner-test/AGT-2147";
+        var retained = CreateWorkspace();
+        await retained.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(retained.RepoPath, "retained.txt", "retained history", "retained side");
+        var retainedHead = (await GitAsync(retained.RepoPath, "rev-parse", "HEAD")).StdOut;
+
+        var pickup = CreateWorkspace();
+        var source = await pickup.PrepareAsync(CancellationToken.None);
+
+        Assert.Equal(branch, source);
+        Assert.Equal(retainedHead, (await GitAsync(_origin, "rev-parse", $"refs/heads/{branch}")).StdOut);
+        Assert.Equal(retainedHead, (await GitAsync(pickup.RepoPath, "rev-parse", "HEAD")).StdOut);
+        Assert.Equal("retained history", await File.ReadAllTextAsync(Path.Combine(pickup.RepoPath, "retained.txt")));
+        Assert.Equal("local-ahead", pickup.PickupReconciliation?.Kind);
+        Assert.Equal(retainedHead, pickup.PickupReconciliation?.AuthoritativeBaseSha);
+    }
+
+    [Fact]
+    public async Task Retained_remote_ahead_tip_uses_remote_tip_as_authoritative_base_without_republishing_local()
+    {
+        await SeedOriginAsync();
+        const string branch = "runner/runner-test/AGT-2147";
+        await GitAsync(_origin, "branch", branch, "main");
+        var retained = CreateWorkspace();
+        await retained.PrepareAsync(CancellationToken.None);
+        var localHead = (await GitAsync(retained.RepoPath, "rev-parse", "HEAD")).StdOut;
+        var remoteHead = await PublishRemoteCommitAsync(branch, "remote.txt", "remote ahead", "remote ahead");
+
+        var pickup = CreateWorkspace();
+        var source = await pickup.PrepareAsync(CancellationToken.None);
+
+        Assert.Equal(branch, source);
+        Assert.NotEqual(localHead, remoteHead);
+        Assert.Equal(remoteHead, (await GitAsync(pickup.RepoPath, "rev-parse", "HEAD")).StdOut);
+        Assert.Equal("remote ahead", await File.ReadAllTextAsync(Path.Combine(pickup.RepoPath, "remote.txt")));
+    }
+
+    [Fact]
+    public async Task Divergent_retained_tip_is_published_to_deterministic_collision_ref_and_pickup_is_idempotent()
+    {
+        await SeedOriginAsync();
+        const string branch = "runner/runner-test/AGT-2147";
+        await GitAsync(_origin, "branch", branch, "main");
+        var retained = CreateWorkspace();
+        await retained.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(retained.RepoPath, "local.txt", "valuable local history", "local side");
+        await File.WriteAllTextAsync(Path.Combine(retained.RepoPath, "dirty.txt"), "valuable dirty work");
+        var remoteHead = await PublishRemoteCommitAsync(branch, "remote.txt", "canonical remote history", "remote side");
+        var logs = new List<string>();
+
+        var pickup = CreateWorkspace(logs.Add);
+        var source = await pickup.PrepareAsync(CancellationToken.None);
+        var collisionRefs = await CollisionRefsAsync(branch);
+
+        Assert.Equal(branch, source);
+        var collisionRef = Assert.Single(collisionRefs);
+        var collisionHead = (await GitAsync(_origin, "rev-parse", collisionRef)).StdOut;
+        Assert.Equal(remoteHead, (await GitAsync(_origin, "rev-parse", $"refs/heads/{branch}")).StdOut);
+        Assert.Equal("canonical remote history", await File.ReadAllTextAsync(Path.Combine(pickup.RepoPath, "remote.txt")));
+        Assert.Equal("valuable local history", (await GitAsync(_origin, "show", $"{collisionRef}:local.txt")).StdOut);
+        Assert.Equal("valuable dirty work", (await GitAsync(_origin, "show", $"{collisionRef}:dirty.txt")).StdOut);
+        Assert.Contains(logs, line =>
+            line.Contains("worktree-salvage-reconciled kind=divergent", StringComparison.Ordinal)
+            && line.Contains($"canonicalSha={remoteHead}", StringComparison.Ordinal)
+            && line.Contains($"recoveryRef={collisionRef}", StringComparison.Ordinal)
+            && line.Contains($"recoverySha={collisionHead}", StringComparison.Ordinal));
+
+        var repeated = CreateWorkspace();
+        await repeated.PrepareAsync(CancellationToken.None);
+
+        Assert.Equal(remoteHead, (await GitAsync(repeated.RepoPath, "rev-parse", "HEAD")).StdOut);
+        Assert.Equal(collisionRefs, await CollisionRefsAsync(branch));
+        Assert.Equal("valuable local history", (await GitAsync(_origin, "show", $"{collisionRef}:local.txt")).StdOut);
+    }
+
+    [Fact]
+    public async Task Clean_divergent_retained_tip_preserves_both_histories_and_starts_from_canonical_tip()
+    {
+        await SeedOriginAsync();
+        const string branch = "runner/runner-test/AGT-2147";
+        await GitAsync(_origin, "branch", branch, "main");
+        var retained = CreateWorkspace();
+        await retained.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(retained.RepoPath, "clean-local.txt", "clean local history", "clean local side");
+        Assert.Equal(string.Empty, (await GitAsync(retained.RepoPath, "status", "--porcelain")).StdOut);
+        var localHead = (await GitAsync(retained.RepoPath, "rev-parse", "HEAD")).StdOut;
+        var remoteHead = await PublishRemoteCommitAsync(
+            branch, "clean-remote.txt", "clean canonical history", "clean remote side");
+
+        var pickup = CreateWorkspace();
+        await pickup.PrepareAsync(CancellationToken.None);
+
+        var collisionRef = Assert.Single(await CollisionRefsAsync(branch));
+        Assert.Equal(localHead, (await GitAsync(_origin, "rev-parse", collisionRef)).StdOut);
+        Assert.Equal(remoteHead, (await GitAsync(_origin, "rev-parse", $"refs/heads/{branch}")).StdOut);
+        Assert.Equal(remoteHead, (await GitAsync(pickup.RepoPath, "rev-parse", "HEAD")).StdOut);
+        Assert.Equal("clean local history", (await GitAsync(_origin, "show", $"{collisionRef}:clean-local.txt")).StdOut);
+        Assert.Equal("clean canonical history", await File.ReadAllTextAsync(Path.Combine(pickup.RepoPath, "clean-remote.txt")));
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
     }
 
-    private GitWorkspace CreateWorkspace()
+    private GitWorkspace CreateWorkspace(Action<string>? log = null)
         => new(new RunnerOptions
         {
             ServerUrl = "http://localhost",
@@ -128,7 +251,32 @@ public sealed class GitWorkspaceTests : IDisposable
             BaseBranch = "main",
             CliBin = "test",
             CliArgs = "",
-        }, "AGT-2147", _ => { });
+        }, "AGT-2147", log ?? (_ => { }));
+
+    private async Task CommitFileAsync(string repo, string path, string content, string message)
+    {
+        await File.WriteAllTextAsync(Path.Combine(repo, path), content);
+        await GitAsync(repo, "add", "--all");
+        await GitAsync(repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+            "commit", "-m", message);
+    }
+
+    private async Task<string> PublishRemoteCommitAsync(string branch, string path, string content, string message)
+    {
+        var publisher = Path.Combine(_root, "publisher-" + Guid.NewGuid().ToString("N"));
+        await GitAsync(_root, "clone", _origin, publisher);
+        await GitAsync(publisher, "checkout", "-B", "publish", $"origin/{branch}");
+        await CommitFileAsync(publisher, path, content, message);
+        await GitAsync(publisher, "push", "origin", $"HEAD:refs/heads/{branch}");
+        return (await GitAsync(publisher, "rev-parse", "HEAD")).StdOut;
+    }
+
+    private async Task<List<string>> CollisionRefsAsync(string branch)
+    {
+        var refs = await GitAsync(_origin, "for-each-ref", "--format=%(refname)",
+            $"refs/heads/{branch}-collision-*");
+        return refs.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
+    }
 
     private async Task SeedOriginAsync()
     {
