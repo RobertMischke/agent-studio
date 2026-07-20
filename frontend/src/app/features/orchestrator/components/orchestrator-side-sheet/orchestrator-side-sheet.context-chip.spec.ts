@@ -2,8 +2,10 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
+import { ChatComponent } from 'coding-agent-chat/composer';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
 import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.component';
 
@@ -75,5 +77,49 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     expect(root.querySelector('[data-testid="orch-side-sheet-pin"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="orch-side-sheet-settings"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="orch-side-sheet-refresh"]')).not.toBeNull();
+  });
+
+  it('renders the standard composer footer once and removes both host task workflows', async () => {
+    const fixture = await makeFixture();
+    fixture.componentRef.setInput('composerContext', { project: 'Agent Studio', surface: 'Board' });
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelectorAll('[data-testid="chat-composer-foot"]')).toHaveLength(1);
+    expect(root.querySelector('[data-testid="chat-composer-context-project"]')?.textContent?.trim())
+      .toBe('Agent Studio');
+    expect(root.querySelector('[data-testid="chat-composer-context-surface"]')?.textContent?.trim())
+      .toBe('Board');
+    expect(root.textContent).not.toContain('Make a task from your message');
+    expect(root.textContent).not.toContain('Make a task from this reply');
+    expect(root.querySelector('[data-testid="orch-side-sheet-draft-actions"]')).toBeNull();
+    expect(root.querySelector('[data-testid="chat-toolbar-task"]')).toBeNull();
+  });
+
+  it('forwards live active-tab context without remounting CAC or losing its draft', async () => {
+    const fixture = await makeFixture();
+    fixture.componentRef.setInput('composerContext', { project: 'Agent Studio', surface: 'Board' });
+    fixture.detectChanges();
+    const firstChat = fixture.debugElement.query(By.directive(ChatComponent)).componentInstance as ChatComponent;
+    const textarea = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLTextAreaElement>('[data-testid="chat-input"]')!;
+    textarea.value = 'Draft survives navigation';
+    textarea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    fixture.componentRef.setInput('composerContext', {
+      project: 'Agent Studio',
+      surface: 'Task',
+      detail: 'AGT-2162',
+    });
+    fixture.detectChanges();
+
+    const secondChat = fixture.debugElement.query(By.directive(ChatComponent)).componentInstance as ChatComponent;
+    expect(secondChat).toBe(firstChat);
+    expect(textarea.value).toBe('Draft survives navigation');
+    expect((fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="chat-composer-context-surface"]')?.textContent?.trim()).toBe('Task');
+    expect((fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="chat-composer-context-detail"]')?.textContent?.trim()).toBe('AGT-2162');
   });
 });

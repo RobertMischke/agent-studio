@@ -2,6 +2,7 @@
   display: block;
   position: relative;
   width: 0;
+  max-width: 96vw;
   overflow: hidden;
   flex: 0 0 auto;
   transition: width 0.22s ease;
@@ -81,7 +82,6 @@
 
 .sheet__context-badge:focus-visible,
 .sheet__context-actions button:focus-visible,
-.sheet__draft-btn:focus-visible,
 .sheet__event-action:focus-visible {
   outline: 2px solid var(--studio-accent);
   outline-offset: 2px;
@@ -274,47 +274,41 @@
   min-height: 0;
 }
 
+/* Location context projected into CAC's standard composer footer:
+   "project · surface · detail", muted, single line, ellipsized. */
+.sheet__composer-context {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--studio-fg-dim);
+  white-space: nowrap;
+}
+
+.sheet__composer-context > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sheet__composer-context > span + span::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--studio-fg-dim);
+}
+
+.sheet__composer-context-project {
+  color: var(--studio-fg);
+  font-weight: 500;
+}
+
 .sheet__event-action {
   align-self: flex-start;
 }
 
-.sheet__draft-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--studio-spacing-1);
-}
-
-.sheet__draft-btn {
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border: 1px solid var(--studio-border);
-  border-radius: 6px;
-  background: var(--studio-bg-hover);
-  color: var(--studio-fg);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.sheet__draft-btn:hover:not(:disabled) {
-  background: var(--studio-bg-elevated);
-  color: var(--studio-fg-strong);
-}
-
-.sheet__draft-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.sheet__draft-btn--primary {
-  border-color: var(--studio-accent);
-  background: var(--studio-accent);
-  color: var(--studio-on-accent);
-}
-
 @media (max-width: 720px) {
   :host(.is-open) {
-    width: min(100vw, 460px);
+    width: min(96vw, 460px);
   }
 
   .sheet__context-menu-head {

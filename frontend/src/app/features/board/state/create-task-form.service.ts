@@ -10,9 +10,9 @@ import { CLIENT_ID } from '../../../services/client-id.interceptor';
 
 /**
  * Cycle 10a board-feature service: owns every field the create-job
- * dialog binds, plus the four open-prefilled entry points the shell
+ * dialog binds, plus the prefilled entry points the shell
  * used to host inline (default open, security-follow-up,
- * uxui-follow-up, orchestrator-draft-follow-up).
+ * uxui-follow-up, and planning-task promotion).
  *
  * Lifted out of `app.ts` per ADR-0034. The shell now just renders
  * `<app-create-job-dialog>` against this service's bound fields and
@@ -131,24 +131,6 @@ export class CreateTaskFormService {
     this.newWatchPath = watchEntry.path;
     this.newPrompt = event.prefill;
     this.newTitle = event.title;
-    this.loadCreateModels(this.newCliType);
-    this.visible.set(true);
-  }
-
-  /**
-   * Orchestrator-draft "Create task from this draft" action. Title is
-   * derived from the prompt's first non-empty line.
-   */
-  openOrchestratorDraftFollowUp(
-    event: { projectName: string; promptText: string },
-    watchPaths: readonly WatchPathEntry[],
-  ): void {
-    const watchEntry = watchPaths.find((wp) => wp.name === event.projectName);
-    if (!watchEntry) return;
-    this.newTargetState = TaskState.Preparation;
-    this.newWatchPath = watchEntry.path;
-    this.newPrompt = event.promptText;
-    this.newTitle = deriveDraftTitle(event.promptText);
     this.loadCreateModels(this.newCliType);
     this.visible.set(true);
   }
@@ -393,16 +375,6 @@ function readDefaultModelPref(cliType: CliType): string {
 
 function readDefaultThinkingLevelPref(cliType: CliType): string | null {
   return localStorage.getItem('defaultThinkingLevel:' + cliType) ?? null;
-}
-
-function deriveDraftTitle(text: string): string {
-  if (!text) return '';
-  for (const raw of text.split('\n')) {
-    const line = raw.replace(/^#+\s*/, '').replace(/[*_`]/g, '').trim();
-    if (line.length === 0) continue;
-    return line.length > 80 ? line.slice(0, 77).trim() + '...' : line;
-  }
-  return '';
 }
 
 function escapeRegex(s: string): string {

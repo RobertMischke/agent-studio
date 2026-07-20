@@ -48,6 +48,7 @@ import {
   type TriageButton,
 } from './features/task-detail';
 import {
+  buildComposerLocationContext,
   OrchestratorSideSheetComponent,
 } from './features/orchestrator';
 import {
@@ -213,6 +214,10 @@ export class App implements OnInit, OnDestroy {
   readonly updateClient = inject(UpdateClientService);
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
+  readonly orchestratorComposerContext = computed(() => buildComposerLocationContext(
+    this.studioTabState.activeTab(),
+    this.jobService.jobs(),
+  ));
   private readonly studioPanelState = inject(StudioPanelStateService);
   private readonly nowTick = inject(NowTickService).now;
 
@@ -1696,13 +1701,6 @@ export class App implements OnInit, OnDestroy {
   }
 
   /**
-   * Phase 5: orchestrator side sheet emitted "make a task from this".
-   * Picks the watch path that matches the named project, opens the
-   * existing create-task dialog with the orchestrator reply seeded into
-   * the prompt, and lets a short heuristic title fall out of the first
-   * non-empty line.
-   */
-  /**
    * Phase: Verbose Debug. The orchestrator side sheet's "🐞" header button
    * fires this with the active task's id + watch path. We fetch the
    * evidence (cli output, run timeline, screenshots, plus the latest job
@@ -2033,10 +2031,6 @@ export class App implements OnInit, OnDestroy {
   onUxuiActionQueued(event: { projectName: string; action: string; jobId: string }): void {
     void event;
     this.refresh();
-  }
-
-  onCreateTaskFromOrchestratorDraft(event: { projectName: string; promptText: string }): void {
-    this.createJobForm.openOrchestratorDraftFollowUp(event, this.watchPaths());
   }
 
   private pickOrchFeedProject(): string | null {

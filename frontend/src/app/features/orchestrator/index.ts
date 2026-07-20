@@ -29,3 +29,4 @@ export type {
   ChatNavigationContext,
 } from './models/orchestrator.model';
 export { buildChatNavigationContext } from './chat-navigation-context';
+export { buildComposerLocationContext, type ComposerLocationContext } from './composer-location-context';

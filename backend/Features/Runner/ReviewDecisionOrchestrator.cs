@@ -5655,7 +5655,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var value = cli?.Trim();
         if (string.IsNullOrWhiteSpace(value)) return CliTypes.Codex;
 
-        var fileName = Path.GetFileNameWithoutExtension(value);
+        // Config can be shared across Windows and Linux runners. Normalize both
+        // separator styles before asking the current platform for the file name.
+        var fileName = Path.GetFileNameWithoutExtension(value.Replace('\\', '/'));
         if (fileName.Equals(CliTypes.Codex, StringComparison.OrdinalIgnoreCase)) return CliTypes.Codex;
         if (fileName.Equals(CliTypes.Gemini, StringComparison.OrdinalIgnoreCase)) return CliTypes.Gemini;
         if (fileName.Equals(CliTypes.Claude, StringComparison.OrdinalIgnoreCase)) return CliTypes.Claude;

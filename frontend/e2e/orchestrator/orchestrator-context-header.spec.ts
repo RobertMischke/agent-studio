@@ -1,4 +1,6 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 /**
  * Regression coverage for the orchestrator "where am I right now" header
@@ -21,6 +23,23 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 const PROJECT = 'project-neuen';
 const RUNNING_TASK_ID = 'run-task-1';
 const RUNNING_TASK_TITLE = 'Wire up the orchestrator header';
+const RESULTS = process.env.JOB_RESULTS_DIR
+  ? resolve(process.env.JOB_RESULTS_DIR)
+  : resolve(process.cwd(), '..', 'results', 'AGT-2162');
+
+mkdirSync(RESULTS, { recursive: true });
+
+async function seedActiveTab(
+  page: Page,
+  tab: Record<string, unknown>,
+  activeKey: string,
+  theme: 'light' | 'dark',
+): Promise<void> {
+  await page.addInitScript(({ tab, activeKey, theme }) => {
+    localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({ v: 1, tabs: [tab], activeKey }));
+    localStorage.setItem('atp.studio.theme', theme);
+  }, { tab, activeKey, theme });
+}
 
 async function fulfillKnownGet(route: Route, body: unknown, unexpectedRequests: string[]) {
   const request = route.request();
@@ -113,6 +132,9 @@ async function stubBoardBootstrap(page: Page): Promise<string[]> {
   await page.route(/\/api\/tasks\/archive(?:\?.*)?$/, async (route) => {
     await fulfillKnownGet(route, { items: [], total: 0, offset: 0, limit: 50 }, unexpectedRequests);
   });
+  await page.route(/\/api\/bus\/[^/]+\/messages(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, [], unexpectedRequests);
+  });
 
   // The live hub is outside this mocked regression's scope. Aborting the hub
   // is the established hermetic-suite behavior and avoids retrying a fake 404.
@@ -171,10 +193,26 @@ async function stubWorkspace(page: Page, opts: { withRunningTask: boolean }): Pr
     const project = projectMatch ? decodeURIComponent(projectMatch[1]) : '';
     await fulfillKnownGet(route, { project, turns: [] }, unexpectedRequests);
   });
+
+  if (opts.withRunningTask) {
+    // The active task tab and composer context resolve from the canonical tab
+    // plus the already-loaded task list. Keep the heavy task-detail request
+    // pending so unrelated detail-pane subresources cannot open an error
+    // dialog over this focused composer regression.
+    await page.route(new RegExp(`/api/tasks/${RUNNING_TASK_ID}(?:\\?.*)?$`), async () => {});
+    await page.route(new RegExp(`/api/orchestrator/context/task:${PROJECT}/AGT-1916$`), async (route) => {
+      await fulfillKnownGet(route, {
+        contextKey: `task:${PROJECT}/AGT-1916`,
+        capturedAt: '2026-07-11T10:00:00Z',
+        digest: 'task: AGT-1916 | health: ok',
+        sources: [],
+      }, unexpectedRequests);
+    });
+  }
   return unexpectedRequests;
 }
 
-async function openSideSheet(page: Page) {
+async function openSideSheet(page: Page, openContextMenu = true) {
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
@@ -182,8 +220,10 @@ async function openSideSheet(page: Page) {
   await expect(toggle).toBeVisible({ timeout: 10_000 });
   await toggle.click();
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
-  await page.getByTestId('orch-context-badge').click();
-  await expect(page.getByTestId('orch-context-menu')).toBeVisible();
+  if (openContextMenu) {
+    await page.getByTestId('orch-context-badge').click();
+    await expect(page.getByTestId('orch-context-menu')).toBeVisible();
+  }
 }
 
 test.describe('Orchestrator context header · where am I', () => {
@@ -219,5 +259,61 @@ test.describe('Orchestrator context header · where am I', () => {
       fullPage: false,
     });
     expect(unexpectedRequests).toEqual([]);
+  });
+
+  test('standard footer receives Board context and keeps canonical keyboard order in light theme', async ({ page }) => {
+    await seedActiveTab(page, { kind: 'board', projectName: PROJECT }, `board:${PROJECT}`, 'light');
+    const unexpectedRequests = await stubWorkspace(page, { withRunningTask: false });
+    await openSideSheet(page, false);
+
+    const sheet = page.getByTestId('orch-side-sheet');
+    await expect(page.getByTestId('chat-composer-foot')).toHaveCount(1);
+    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
+    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Board');
+    await expect(page.getByTestId('chat-composer-context')).toHaveAttribute(
+      'aria-label',
+      `Message context: project ${PROJECT}, Board`,
+    );
+    await expect(page.getByText('Make a task from your message', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
+
+    const input = page.getByTestId('chat-input');
+    await input.fill('Keyboard order draft');
+    await input.focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByTestId('chat-toolbar-search')).toBeFocused();
+    await input.focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('chat-attach')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('chat-send')).toBeFocused();
+
+    await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-board-context-light.png') });
+    expect(unexpectedRequests).toEqual([]);
+  });
+
+  test('standard footer receives Task context at mobile width in dark theme', async ({ page }) => {
+    const task = runningTask();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedActiveTab(
+      page,
+      { kind: 'task', taskKey: task.taskKey },
+      `task:${task.taskKey}`,
+      'dark',
+    );
+    await stubWorkspace(page, { withRunningTask: true });
+    await openSideSheet(page, false);
+
+    const sheet = page.getByTestId('orch-side-sheet');
+    await expect(page.getByTestId('chat-composer-context-project')).toHaveText(PROJECT);
+    await expect(page.getByTestId('chat-composer-context-surface')).toHaveText('Task');
+    await expect(page.getByTestId('chat-composer-context-detail')).toHaveText('AGT-1916');
+    await expect(page.getByTestId('chat-composer-context')).toHaveAttribute(
+      'aria-label',
+      `Message context: project ${PROJECT}, Task: AGT-1916`,
+    );
+    const box = await sheet.boundingBox();
+    expect(box?.width ?? 999).toBeLessThanOrEqual(390);
+    await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-task-context-dark-mobile.png') });
   });
 });

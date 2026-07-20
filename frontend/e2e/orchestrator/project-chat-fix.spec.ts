@@ -2,8 +2,8 @@ import { test, expect, Page } from '@playwright/test';
 import { startLongTaskRecorder } from '../helpers/timing';
 
 /**
- * Regression spec for the project-chat fix-up: reliable task creation from
- * the chat path, soft responsiveness during slow orchestrator replies, and
+ * Regression spec for project chat: visible failures,
+ * soft responsiveness during slow orchestrator replies, and
  * parallel-use isolation. Mocks the orchestrator-chat endpoints so the spec
  * runs without burning quota and without depending on the singleton claude
  * session being booted.
@@ -14,10 +14,8 @@ import { startLongTaskRecorder } from '../helpers/timing';
  * mocks let us reproduce each scenario deterministically.
  *
  * What we lock down:
- *   1. SILENT-DROP: When the orchestrator errors, the user sees the error
- *      AND can still convert their typed message into a task (the
- *      "Make a task from your message" affordance is not gated on the
- *      orchestrator reply).
+ *   1. SILENT-DROP: When the orchestrator errors, both the error and the
+ *      submitted user turn remain visible in the canonical chat transcript.
  *   2. SOFT FEEL: While a slow orchestrator reply is pending, the
  *      composer's pending state is visible and the cumulative LongTask
  *      budget over the wait stays under a clear threshold.
@@ -120,7 +118,7 @@ async function openSideSheetForProject(page: Page): Promise<string> {
 }
 
 test.describe('Project chat fix - silent drop, sluggishness, parallel use', () => {
-  test('silent drop: orchestrator error surfaces AND user can still make a task from their message', async ({ page }) => {
+  test('silent drop: orchestrator error and submitted message remain visible in canonical chat', async ({ page }) => {
     const project = await openSideSheetForProject(page);
     const state = await installChatMocks(page, project, {
       // Backend errors with an error turn but 200 OK (mirrors the real
@@ -156,23 +154,12 @@ test.describe('Project chat fix - silent drop, sluggishness, parallel use', () =
       page.locator('[data-testid="conversation-message-message.user"]').filter({ hasText: 'Ready-Lane' }).first()
     ).toBeVisible();
 
-    // CONTRACT: the side-sheet exposes a "Make a task from your message"
-    // button that pre-fills the create-task dialog with the user's last
-    // typed text - independent of the orchestrator reply. Without this,
-    // a failed orchestrator reply silently drops the user's intent.
-    const makeFromYours = page.getByTestId('orch-side-sheet-make-task-from-yours');
-    await expect(makeFromYours).toBeVisible();
-    await expect(makeFromYours).toBeEnabled();
+    // The retired host-only task conversion workflow stays absent even on
+    // the failure path. Slash commands remain available through the composer.
+    await expect(page.getByText('Make a task from your message', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Make a task from this reply', { exact: true })).toHaveCount(0);
 
-    await makeFromYours.click();
-
-    // The create-task dialog opens with the user's text seeded into the
-    // prompt textarea (data-testid="create-prompt").
-    const promptArea = page.getByTestId('create-prompt');
-    await expect(promptArea).toBeVisible({ timeout: 4_000 });
-    await expect(promptArea).toHaveValue(/Ready-Lane/);
-
-    await page.screenshot({ path: `${SHOTS}/01-silent-drop-rescued.png`, fullPage: false });
+    await page.screenshot({ path: `${SHOTS}/01-silent-drop-visible.png`, fullPage: false });
 
     // Sanity: the mock saw exactly one POST (the user's send).
     expect(state.turns.filter((t) => t.role === 'user').length).toBe(1);
