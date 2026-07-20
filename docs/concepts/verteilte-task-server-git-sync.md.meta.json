@@ -22,5 +22,13 @@
     "supersededBy": null,
     "type": "konzept",
     "analyzedAt": "2026-07-19"
-  }
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2192",
+      "title": "Task Server: extract an independently deployable control-plane service",
+      "linkedAt": "2026-07-19T18:46:20.8621274Z",
+      "source": "auto"
+    }
+  ]
 }

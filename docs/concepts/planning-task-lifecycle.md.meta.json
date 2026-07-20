@@ -11,6 +11,12 @@
       "title": "Task-Referenz-Mikrokarten: Kuerzel im Wiki/Chat werden lebende Mini-Cards",
       "linkedAt": "2026-07-10T23:25:46.6707827Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-1915",
+      "title": "Projekt-URL als iframe einbetten (statt Absprung) \u002B optionaler Orchestrator im Split-View",
+      "linkedAt": "2026-07-19T23:46:42.5916839Z",
+      "source": "auto"
     }
   ]
 }

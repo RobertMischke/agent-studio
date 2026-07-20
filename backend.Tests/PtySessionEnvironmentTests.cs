@@ -15,6 +15,8 @@ namespace AgentStudio.Tests;
 /// what <c>ProcessStartInfo.Environment</c> already does for free on the real task-run
 /// spawn path — is what lets the CLI find its credential store.
 /// </summary>
+// MachineBound 19.07.: spawnt echte PTY-Prozesse, env-Uebernahme unter Last flaky
+[Trait("Category", "MachineBound")]
 public class PtySessionEnvironmentTests
 {
     [Fact]

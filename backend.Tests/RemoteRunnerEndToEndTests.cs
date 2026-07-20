@@ -56,6 +56,8 @@ namespace AgentStudio.Tests;
 /// manual mode and never races the runner for the seeded card.
 /// </para>
 /// </summary>
+// MachineBound 20.07.: E2E ueber Server-API+Prozesse, lastabhaengig
+[Trait("Category", "MachineBound")]
 [Collection(WebApplicationFactorySerialCollection.Name)]
 public sealed class RemoteRunnerEndToEndTests : IDisposable
 {
