@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Die drei Einheiten: Agent Studio, Task Server, Agent Runner — Konzept</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --accent: #2a78d6;       /* Agent Studio */
+    --ok: #1a7d3a;           /* Task Server */
+    --warn-c: #b5651d;       /* Agent Runner */
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+    --runner-soft: #fbeee1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --accent: #3987e5;
+      --ok: #4eae4e;
+      --warn-c: #d98a4f;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+      --runner-soft: #362a1f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 66ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 19px; margin: 34px 0 6px; scroll-margin-top: 20px; }
+  h4 { font-size: 15.5px; margin: 22px 0 4px; }
+  p  { max-width: 78ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 12.5px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; word-break: break-word; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--accent); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 78ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+
+  /* ---- Struktur-Diagramme als HTML/CSS-Boxen (keine SVG) ---- */
+  figure { margin: 26px 0; }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 88ch; }
+  figcaption b { color: var(--ink-1); }
+  .diagram {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1);
+    padding: 26px 22px; overflow-x: auto;
+  }
+  .d-row {
+    display: grid; grid-template-columns: 1fr 96px 1fr 96px 1fr;
+    align-items: stretch; gap: 4px; min-width: 760px;
+  }
+  .d-box {
+    border: 1.5px solid var(--line); border-radius: 10px; padding: 14px 16px;
+    background: var(--surface-2);
+  }
+  .d-box h5 { margin: 0 0 8px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .d-box h5 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--c); flex: none; }
+  .d-box ul { margin: 0; padding-left: 17px; font-size: 12.5px; color: var(--ink-2); }
+  .d-box li { margin: 3px 0; }
+  .d-box.studio  { --c: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .d-box.ts      { --c: var(--ok);     background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+  .d-box.runner  { --c: var(--warn-c); background: var(--runner-soft); border-color: color-mix(in srgb, var(--warn-c) 45%, var(--line)); }
+  .d-link { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 2px; padding: 0 2px; }
+  .d-link .arrow { font-size: 20px; line-height: 1; color: var(--ink-2); }
+  .d-link .txt { font-size: 10.5px; color: var(--ink-3); line-height: 1.35; }
+  .d-mid {
+    grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 96px 1fr 96px 1fr;
+    min-width: 760px; margin-top: 4px;
+  }
+  .d-drop { display: flex; flex-direction: column; align-items: center; }
+  .d-drop .arrow { font-size: 18px; color: var(--ink-2); line-height: 1; }
+  .d-drop .txt { font-size: 10.5px; color: var(--ink-3); text-align: center; margin-top: 2px; line-height: 1.3; }
+  .d-origin {
+    grid-column: 1 / -1; margin-top: 4px; border: 1.5px dashed var(--line); border-radius: 10px;
+    padding: 12px 16px; background: var(--surface-3); text-align: center; min-width: 760px;
+  }
+  .d-origin b { font-size: 14px; }
+  .d-origin span { display: block; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Konzept · Agent-Studio-Wiki</p>
+  <h1>Die drei Einheiten: Agent Studio, Task Server, Agent Runner</h1>
+  <p class="lede">Ein Produkt, drei unabhängig deploybare Rollen. Heute laufen zwei der drei noch in
+  einem Prozess zusammen; die Trennung ist im Gange (AGT-2192, AGT-2193). Diese Seite beschreibt, was
+  jede Einheit heute im Code tatsächlich besitzt, was sich gerade herauslöst — und räumt mit der
+  häufigsten Verwechslung auf: dem Doppelleben des Agent Runners.</p>
+  <div class="meta">
+    <span><b>Stand:</b> 20.07.2026, verifiziert gegen <code>agent-taskboard.sln</code> auf <code>main</code></span>
+    <span><b>Ziel-Architektur (kanonisch):</b> <a href="../concepts/distributed-agent-studio-target-architecture.md">distributed-agent-studio-target-architecture.md</a></span>
+    <span><b>Extraktion:</b> AGT-2192 + AGT-2193, offene Branches</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#tldr">TL;DR — die drei Einheiten in fünf Sätzen</a></li>
+    <li><a href="#studio">§1 Agent Studio — Bedien- und Orchestrierungsebene</a></li>
+    <li><a href="#taskserver">§2 Task Server — die Control Plane</a></li>
+    <li><a href="#runner">§3 Agent Runner — die Doppelnatur</a></li>
+    <li><a href="#diagramm">§4 Diagramm: drei Einheiten, drei Kommunikationsrichtungen</a></li>
+    <li><a href="#missverstaendnis">§5 Häufiges Missverständnis</a></li>
+    <li><a href="#extraktion">§6 Stand der Extraktion: AGT-2192 / AGT-2193</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>TL;DR — die drei Einheiten in fünf Sätzen</h4>
+  <ul>
+    <li><b>Agent Studio</b> ist die Bedienebene: Board, Wiki, Reviews, Gates, Orchestrator — Angular-Frontend
+        plus <code>backend/OrchestratorApi.csproj</code>. Sie soll austauschbar sein: Studio schließen darf
+        Arbeit nicht stoppen.</li>
+    <li><b>Task Server</b> ist die dauerhafte Control Plane — Task-Zustand, API, Identitäten/Auth. Heute steckt
+        er noch <i>im selben Prozess</i> wie Studio; AGT-2192 löst ihn als eigenständig deploybare Einheit heraus,
+        AGT-2193 liefert dafür Login, Runner-Identitäten und TLS nach.</li>
+    <li><b>Agent Runner hat eine echte Doppelnatur</b> — aber nicht als eine geteilte Programmbibliothek,
+        sondern als zwei separat implementierte Code-Pfade für dieselbe Rolle: lokal eingebettet in Studios
+        Backend (<code>ProjectRunner</code>, <code>WorktreeTaskLifecycle</code>, <code>BuildTestGateRunner</code>)
+        und als eigenständiger Daemon (<code>runner/</code>, Deployment <code>agent-runner-01</code>).</li>
+    <li><b>Autonomie ist Design, nicht Zufall:</b> der Daemon claimt, führt aus, pusht und meldet kontinuierlich
+        ohne Studio-Attach. Ein angehängtes Terminal (PTY/Chat) ist optionale Beobachtung, nie Voraussetzung
+        für Fortschritt.</li>
+    <li><b>Git trägt den Code, die API trägt die Wahrheit.</b> Task-Zustand, Leases und Events laufen über den
+        Task Server; Quelltext wandert ausschließlich über <code>origin</code> — die drei Einheiten teilen sich
+        nie ein Dateisystem.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<h2 id="studio"><span class="no">§1</span>Agent Studio — Bedien- und Orchestrierungsebene</h2>
+<p>Agent Studio ist die menschliche Oberfläche auf das System: das Angular-Frontend
+(<code>frontend/src/app</code>) plus der heutige Backend-Monolith <code>backend/OrchestratorApi.csproj</code>
+(lokal Port 5030). Fünf Fähigkeiten tragen die tägliche Arbeit:</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Fähigkeit</th><th>Frontend</th><th>Backend</th></tr></thead>
+  <tbody>
+    <tr><td><b>Board</b></td><td><code>frontend/src/app/features/board</code></td>
+        <td><code>backend/Features/Tasks</code> (<code>TaskCrudEndpoints.cs</code>, <code>LeaseEndpoints.cs</code>);
+        Live-Updates über <code>backend/Host/Hubs/TaskHub.cs</code> (SignalR: <code>jobsChanged</code>,
+        <code>cliOutput</code>, <code>runnerStatusChanged</code> …)</td></tr>
+    <tr><td><b>Wiki</b></td><td><code>frontend/src/app/concept-docs</code></td>
+        <td><code>backend/Features/Docs</code> (<code>ConceptDocsService.cs</code>, <code>ProjectDocsService.cs</code>),
+        ergänzt um <code>Features/Drift</code>, <code>Features/Companion</code>, <code>Features/GeneratedFiles</code>
+        (die <code>*.meta.json</code>-Sidecar-Ebene, der auch diese Seite folgt)</td></tr>
+    <tr><td><b>Reviews</b></td><td><code>frontend/src/app/components/aspect-findings</code></td>
+        <td><code>backend/Features/Review</code> (<code>CodeReviewGrade.cs</code>, <code>ReviewDecisionsEndpoints.cs</code>),
+        <code>backend/Features/Runner/ReviewDecisionOrchestrator.cs</code></td></tr>
+    <tr><td><b>Gates</b></td><td>Pipeline-/Task-Detail-Ansicht (<code>features/task-pipeline</code>)</td>
+        <td><code>backend/Features/Pipeline</code> (<code>BuildTestGateRunner.cs</code>, <code>PipelineCatalogue.cs</code>),
+        <code>Features/Runner/EvidenceGate.cs</code>, <code>Features/Runner/SolutionQualityGate.cs</code></td></tr>
+    <tr><td><b>Orchestrator</b></td><td><code>frontend/src/app/features/orchestrator</code></td>
+        <td><code>backend/Features/Runner</code> (<code>OrchestratorRunner.cs</code>, <code>OrchestratorChat.cs</code>,
+        <code>OrchestratorSession.cs</code>, <code>GlobalOrchestratorSession.cs</code>)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="dim">Wichtig für das Bild als „drei Einheiten“: heute sind Board und Wiki nicht nur Studios
+Oberfläche über fremde Daten — <code>backend/OrchestratorApi.csproj</code> <i>ist</i> zugleich der
+Prozess, der Task-Zustand hält, den lokalen Runner einbettet (<code>ProjectRunner</code>) und die Wiki-Dateien
+auf Platte verwaltet. Studio und Task Server sind heute ein Deployment. Genau diese Kopplung löst AGT-2192
+(§6) auf.</p>
+
+<div class="box">
+  <h4>Zielbild (noch nicht Ist-Zustand)</h4>
+  <p style="margin:0">„<b>Agent Studio</b> is the replaceable human surface. […] Closing it must not stop
+  work.“ — <a href="../concepts/distributed-agent-studio-target-architecture.md">distributed-agent-studio-target-architecture.md</a>,
+  §1. Solange Studio und Task Server einen Prozess teilen, stimmt der zweite Satz noch nicht: ein Neustart
+  von <code>backend/OrchestratorApi.csproj</code> unterbricht heute auch die Control Plane.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="taskserver"><span class="no">§2</span>Task Server — die Control Plane</h2>
+<p>Der Task Server ist im Zielbild die immer verfügbare, dauerhafte Autorität: Nutzer und Autorisierung,
+Task- und Orchestrierungszustand, Leases/Fences, Events/Artefakte, Audit und Management-API
+(<a href="../concepts/distributed-agent-studio-target-architecture.md">Zielarchitektur</a> §4). Heute ist er
+noch nicht eigenständig — er steckt, wie in §1 beschrieben, in <code>backend/OrchestratorApi.csproj</code>.
+AGT-2192 löst ihn als eigenes Deployment heraus, AGT-2193 sichert diese Einheit netzwerkfähig ab.</p>
+
+<h3>Was AGT-2192 tatsächlich anlegt</h3>
+<p class="dim">Verifiziert auf Branch <code>task/extract-standalone-task-server-control-plane</code>
+(<code>ea8c8161</code>), noch nicht in <code>develop</code>/<code>main</code> gemergt.</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Paket</th><th>Laufzeit-Verantwortung</th><th>Dauerhafte Daten</th></tr></thead>
+  <tbody>
+    <tr><td><code>contracts/TaskServer.Contracts</code></td>
+        <td>Versionierte Resource-, Runner-, Event-, Artefakt-, Management- und Kompatibilitäts-DTOs</td>
+        <td>keine</td></tr>
+    <tr><td><code>task-server</code></td>
+        <td>Stabile Identitäten, Tasks, Runs, Events, Artefakte, Audit, Migrationen, Backup/Restore, Leases,
+        Fences, Management-API — <code>TaskServerStore.cs</code> (1304 Zeilen), <code>TaskServerEndpoints.cs</code>,
+        <code>TaskServerOptions.cs</code>, <code>LegacyMigrationService.cs</code></td>
+        <td>eigenes konfiguriertes Datenverzeichnis</td></tr>
+    <tr><td><code>studio-bff</code></td>
+        <td>Optionaler, zustandsloser Same-Origin-Proxy für Agent Studio</td><td>keine</td></tr>
+    <tr><td><code>runner</code></td>
+        <td>Host-Probes, Git-Worktrees, CLI-Prozesse, gebundene Ausführung, Auslieferung über Protokoll v1</td>
+        <td>nur Host-Worktrees + gebundener Auslieferungszustand</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Die Grenze ist nicht nur Diagrammabsicht — sie ist als Test hart verdrahtet.
+<code>task-server.Tests/ArchitectureBoundaryTests.cs</code> prüft, dass
+<code>task-server/TaskServer.csproj</code> weder <code>frontend</code> noch
+<code>OrchestratorApi.csproj</code> noch <code>AgentRunner.csproj</code> noch <code>CodingAgentRunner</code>
+referenziert, und durchsucht jede Quelldatei unter <code>task-server/</code> darauf, dass sie weder
+<code>System.Diagnostics.Process</code> noch den String <code>"AgentRunner"</code> noch <code>"Angular"</code>
+enthält. Der Task Server kann also strukturell keine Prozesse starten, keine Worktrees anfassen und keine
+UI-Zustände kennen.</p>
+
+<p>Deployment-Form laut <code>docs/operations/setup/task-server.md</code> (auf demselben Branch): eigener
+systemd-Unit (<code>deploy/systemd/agent-task-server.service</code>), Standard-Listener
+<code>http://127.0.0.1:5071</code> (der heutige Monolith läuft lokal auf <code>5030</code>),
+<code>GET /healthz</code> + <code>GET /readyz</code>, Modi <code>Normal</code>/<code>Draining</code>/
+<code>ReadOnly</code>/<code>Maintenance</code> über <code>PUT /api/v1/management/mode</code>,
+Protokoll-Versionierung per <code>X-Task-Protocol-Version</code>-Header (HTTP 426 bei Mismatch), und
+Backup/Restore über SQLite-Backup + SHA-256-Integritätsprüfung.</p>
+
+<div class="box warn">
+  <h4>Ohne AGT-2193 bewusst noch nicht netzwerkfähig</h4>
+  <p style="margin:0">Der Runbook-Text auf dem Extraktions-Branch ist explizit: „Do not expose this initial
+  service beyond loopback or an SSH-only private tunnel until AGT-2193 supplies authentication and TLS.“
+  Die Extraktion (AGT-2192) trennt den Prozess; die Absicherung (AGT-2193) macht ihn erst netzwerkfähig.</p>
+</div>
+
+<h3>Was AGT-2193 nachliefert</h3>
+<p class="dim">Verifiziert am Commit <code>ce541586</code> „feat(AGT-2193): task-server security — human
+login, runner identities, tls“ auf Branch <code>task/task-server-human-auth-runner-service-identities-tls</code>,
+laut Commit-Message ein aus einem verlorenen Salvage-Branch geretteter Squash (Nachwirkung des
+Remote-Runner-Ausfalls vom 11.07.). Ebenfalls noch nicht gemergt.</p>
+<ul>
+  <li><b>Human Login:</b> Nutzer mit Rollen <code>owner</code> / <code>operator</code> / <code>viewer</code>,
+      Auth-Profile <code>local</code> (kein Login nötig) vs. <code>networked</code> (Login + Bootstrap-Flow für
+      den ersten Owner) — <code>backend/Features/Security/AccessSecurityEndpoints.cs</code>,
+      <code>AccessSecurityStore.cs</code>, <code>PasswordSecretHasher.cs</code>; frontend
+      <code>components/auth-gate</code> + <code>services/auth.service.ts</code>.</li>
+  <li><b>Runner-Service-Identities:</b> ein Runner bekommt nie ein Menschen-Passwort. Sein Credential kommt
+      ausschließlich über <code>RUNNER_AUTH_TOKEN_FILE</code> oder <code>RUNNER_AUTH_TOKEN</code> — die
+      Kommandozeilen-Option <code>--auth-token</code> wirft absichtlich einen Fehler, damit kein Token in der
+      Shell-History landet (<code>runner/RunnerOptions.cs</code>). Autorisierung serverseitig über
+      <code>backend/Features/Security/RunnerLeaseAuthorization.cs</code>.</li>
+  <li><b>TLS:</b> <code>RunnerOptions</code> verlangt für jede nicht-loopback <code>RUNNER_SERVER_URL</code>
+      zwingend <code>https</code> und ein gesetztes Auth-Token — ein Runner verweigert den Start gegen eine
+      unverschlüsselte, nicht-lokale Server-Adresse.</li>
+</ul>
+
+<p>Zusammen sind AGT-2192 und AGT-2193 das <b>Remote-Ready</b>-Ziel: eine zentrale, TLS-gesicherte
+Task-Server-URL, gegen die jeder Studio-Client und jeder Runner-Host spricht — statt des heutigen
+Eins-Prozess-Zustands mit Tunnel/LAN-Notlösungen.</p>
+
+<!-- ============================================================ -->
+<h2 id="runner"><span class="no">§3</span>Agent Runner — die Doppelnatur</h2>
+<p>Der Agent Runner ist keine einzelne Sache, sondern eine Rolle, die zweimal gebaut ist: einmal
+<b>eingebettet</b> in Studios Backend für lokale Ausführung, einmal als <b>eigenständiger Daemon</b> für
+pull-basierte Remote-Ausführung. Empfohlene Sprechweise, um beide Seiten sauber zu benennen:
+<b>Runner Core</b> (die Rolle/das Verhalten, library-förmig) und <b>Runner Daemon</b> (die deploybare
+Einheit). Der genaue Code-Befund dazu steht in §5.</p>
+
+<h3>(a) Runner Core — die eingebettete Rolle</h3>
+<p>Für lokale Ausführung (der Fall, in dem das Studio-Backend selbst claimt und ausführt) lebt dieselbe
+konzeptionelle Verantwortung direkt in <code>backend/Features/Runner</code> und
+<code>backend/Features/Pipeline</code>:</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Verantwortung</th><th>Lokal, eingebettet (<code>AgentStudio.*</code>)</th><th>Remote, Daemon (<code>AgentRunner</code>)</th></tr></thead>
+  <tbody>
+    <tr><td>Git-Workspace / Worktree</td>
+        <td><code>backend/Features/Runner/WorktreeTaskLifecycle.cs</code> (Branch <code>task/&lt;id&gt;</code>)</td>
+        <td><code>runner/GitWorkspace.cs</code> (Branch <code>runner/&lt;runner-id&gt;/&lt;task-key&gt;</code>)</td></tr>
+    <tr><td>CLI-Hosting</td>
+        <td><code>backend/Features/Cli/Execution/*</code> (<code>CliExecutionServiceBase.cs</code>,
+        <code>BuiltInCliBehaviors.cs</code>, <code>ClaudeOneShot.cs</code>, <code>CodexOneShot.cs</code>)</td>
+        <td><code>runner/AgentCliProcess.cs</code></td></tr>
+    <tr><td>Pickup / Lebenszyklus</td>
+        <td><code>backend/Features/Runner/ProjectRunner.cs</code></td>
+        <td><code>runner/RemoteTaskRunner.cs</code> + <code>runner/RemoteRunnerDaemon.cs</code></td></tr>
+    <tr><td>Build/Test-Gate</td>
+        <td colspan="2"><code>backend/Features/Pipeline/BuildTestGateRunner.cs</code> — läuft <b>ausschließlich
+        zentral im Backend</b>, als Pipeline-Post-Step, unabhängig davon, ob der Coding-Run lokal oder remote
+        lief. Der Daemon führt selbst kein Gate aus.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Was die beiden Seiten wirklich teilen, ist nicht Quellcode, sondern der <b>Datenvertrag</b>: „Remote
+pickup ownership lives in the project record (<code>executionRunner</code> plus
+<code>remoteExecutionEnabled</code>). The remote claim endpoint and local ProjectRunner consult the same
+record“ (<code>docs/system/domains/runner.md</code>). Beide Pfade münden außerdem in denselben zentralen
+Pipeline-Post-Steps (Gate, Review-Grade, Aspect-Findings) — ein Remote-Run liefert nur Evidenz per API an,
+das Urteil fällt immer im Backend.</p>
+
+<h3>(b) Runner Daemon — die deploybare Einheit</h3>
+<p>Der Daemon ist ein abhängigkeitsfreier .NET-Konsolenprozess (<code>runner/AgentRunner.csproj</code>),
+heute als <code>agent-runner-01</code> auf einem Linux-Host (Hetzner) deployt. Er besitzt keinen Task-Zustand
+— alles, was er über den Zustand einer Aufgabe weiß, kommt aus der jeweils letzten API-Antwort.</p>
+<ul>
+  <li><b>Pull-basiert:</b> <code>RemoteRunnerDaemon.RunAsync</code> ruft in einer Schleife
+      <code>POST /api/runner/claim</code>, solange freie Slots da sind (<code>HostMaxParallelism</code>,
+      Standard 2); ohne Claim wartet er <code>PollSeconds</code> und fragt erneut.</li>
+  <li><b>Nur ausgehende Verbindungen, keine offenen Ports:</b> der Testhost ist heute nur per
+      SSH-Tunnel oder LAN-Adresse erreichbar (<code>docs/operations/setup/linux-runner-host.md</code>); eine
+      zentrale, TLS-gesicherte URL (§2) ist das Zielbild, keine offene Inbound-Regel.</li>
+  <li><b>Läuft auf jedem Host mit git + Agent-CLIs:</b> welche CLI-Binary und welche Flags, ist konfigurierbar
+      (<code>RUNNER_CLI_BIN</code>, Standard <code>claude</code>; <code>RUNNER_CLI_ARGS</code>, Standard
+      <code>-p</code>) — kein Hardcoding auf ein CLI.</li>
+</ul>
+
+<div class="box ok">
+  <h4>Autonomie ist Design</h4>
+  <p>Aus dem Klassenkommentar von <code>runner/RemoteTaskRunner.cs</code>: „acquire the fenced lease, start
+  heartbeating, prepare the git working tree, spawn the agent CLI […], ship its output to the server, upload
+  the results/ evidence, post a fenced runner completion […], and always release the lease.“ Dieser gesamte
+  Zyklus läuft ohne jedes Studio-Attach. Teardown ist fail-closed: <code>GitWorkspace</code> prüft bei jeder
+  Beendigungsart den Status, committet Änderungen notfalls als
+  <code>wip(runner): salvage before teardown</code> und pusht sie nach
+  <code>runner/&lt;runner-id&gt;/&lt;task-key&gt;</code>, bevor der Worktree entfernt wird
+  (<code>docs/system/domains/runner.md</code>). Ein angehängtes Terminal (PTY/Chat, Frontend-Features
+  <code>session-events</code> / <code>visible-cli-task</code>) beobachtet diesen Ablauf nur — es setzt ihn nie
+  voraus.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="diagramm"><span class="no">§4</span>Diagramm: drei Einheiten, drei Kommunikationsrichtungen</h2>
+<p>Studio und Task Server sprechen heute noch im selben Prozess miteinander (der Pfeil existiert schon als
+API-Vertrag, aber ohne Netzwerkgrenze dazwischen). Der Runner spricht den Task Server ausschließlich pull
+— er nimmt nie eine eingehende Verbindung an. Quelltext nimmt einen dritten Weg: ausschließlich über
+<code>git origin</code>, nie über die Task-API.</p>
+
+<figure>
+<div class="diagram">
+  <div class="d-row">
+    <div class="d-box studio">
+      <h5><span class="dot"></span>Agent Studio</h5>
+      <ul>
+        <li>Angular-Frontend</li>
+        <li><code>OrchestratorApi.csproj</code></li>
+        <li>Board · Wiki · Reviews</li>
+        <li>Gates · Orchestrator</li>
+      </ul>
+    </div>
+    <div class="d-link">
+      <span class="arrow">&#8596;</span>
+      <span class="txt">HTTPS / same-process<br>Board, Wiki, Reviews,<br>Gates, Orchestrator</span>
+    </div>
+    <div class="d-box ts">
+      <h5><span class="dot"></span>Task Server</h5>
+      <ul>
+        <li>Task-Zustand, API</li>
+        <li>Identitäten / Auth</li>
+        <li>Leases, Fences, Events</li>
+        <li>AGT-2192 / AGT-2193</li>
+      </ul>
+    </div>
+    <div class="d-link">
+      <span class="arrow">&#8592;</span>
+      <span class="txt">pull, nur ausgehend<br><code>/api/runner/claim</code>,<br>lease, logs, artifacts,<br>completion</span>
+    </div>
+    <div class="d-box runner">
+      <h5><span class="dot"></span>Agent Runner</h5>
+      <ul>
+        <li>Runner Core (Library-Rolle)</li>
+        <li>Runner Daemon<br>(<code>agent-runner-01</code>)</li>
+        <li>git + Agent-CLIs</li>
+        <li>keine offenen Ports</li>
+      </ul>
+    </div>
+  </div>
+  <div class="d-mid">
+    <div class="d-drop">
+      <span class="arrow">&#8595;</span>
+      <span class="txt">liest Code,<br>zeigt Diff/PR</span>
+    </div>
+    <div></div><div></div><div></div>
+    <div class="d-drop">
+      <span class="arrow">&#8593;</span>
+      <span class="txt">pusht <code>runner/&lt;id&gt;/&lt;key&gt;</code>,<br>fetcht <code>task/&lt;slug&gt;</code></span>
+    </div>
+  </div>
+  <div class="d-origin">
+    <b>git <code>origin</code></b>
+    <span>Austauschmedium der Artefakte — trägt Code, nie Task-Wahrheit. Studio und Runner teilen sich hier nie ein Dateisystem, nur den Remote.</span>
+  </div>
+</div>
+</figure>
+<figcaption><b>Abb. 1 — Kommunikationsrichtungen.</b> Studio&#8596;Task-Server ist heute intraprozessual
+(kein Netzwerksprung, aber bereits ein API-förmiger Vertrag); Runner&#8594;Task-Server ist strikt pull und
+ausgehend; Code läuft ausschließlich über <code>origin</code>, orthogonal zu beiden API-Kanälen.</figcaption>
+
+<!-- ============================================================ -->
+<h2 id="missverstaendnis"><span class="no">§5</span>Häufiges Missverständnis</h2>
+
+<div class="box warn">
+  <h4>„Runner = nur Library“ vs. „Runner läuft überall“</h4>
+  <p><b>Beide Sätze sind wahr — aber sie beschreiben zwei verschiedene Packagings derselben Rolle, nicht
+  einen Widerspruch.</b> Wer sagt „der Runner ist nur eine Bibliothek“, meint <b>Runner Core</b>: die
+  Verantwortung (Git-Workspace, CLI-Hosting, Pickup-Lebenszyklus), wie sie <i>library-förmig</i> in Studios
+  Backend eingebettet ist und dort für <code>ProjectRunner</code>-getriebene lokale Ausführung sorgt. Wer
+  sagt „der Runner läuft überall“, meint <b>Runner Daemon</b>: die eigenständig deploybare Einheit
+  (<code>runner/AgentRunner.csproj</code>), die auf jedem Host mit .NET, git und einer Agent-CLI installiert
+  werden kann — heute <code>agent-runner-01</code>, morgen jeder weitere Linux- oder Windows-Host.</p>
+  <p><b>Verifizierte Präzisierung, die beim Debuggen zählt:</b> „Library“ heißt hier <i>nicht</i> eine einzige
+  kompilierte Assembly, die beide Seiten referenzieren. Es gibt heute keine <code>ProjectReference</code>
+  zwischen <code>runner/AgentRunner.csproj</code> und <code>backend/OrchestratorApi.csproj</code>, und die
+  Namespaces laufen auseinander (<code>AgentRunner</code> vs. <code>AgentStudio.Runner</code> /
+  <code>AgentStudio.Pipeline</code> / <code>AgentStudio.Cli</code>). <code>GitWorkspace.cs</code> existiert nur
+  im Daemon, <code>WorktreeTaskLifecycle.cs</code> nur im Backend — zwei unabhängig gepflegte
+  Implementierungen derselben Aufgabe, verbunden über einen gemeinsamen Datenvertrag (§3), nicht über
+  gemeinsamen Code. Ein Fix in <code>runner/GitWorkspace.cs</code> repariert also nicht automatisch den
+  analogen Pfad in <code>WorktreeTaskLifecycle.cs</code>, und umgekehrt.</p>
+  <p style="margin-bottom:0"><b>Empfohlene Sprechweise:</b> <code>Runner Core</code> für die Rolle/Library-Seite,
+  <code>Runner Daemon</code> für die deploybare Prozess-Einheit. Wenn eine Änderung „den Runner“ betrifft,
+  zuerst klären: Core-Verhalten (beide Implementierungen prüfen) oder Daemon-Deployment (nur
+  <code>runner/</code> und der Host)?</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="extraktion"><span class="no">§6</span>Stand der Extraktion: AGT-2192 / AGT-2193</h2>
+<p class="dim">Beide Branches existieren nur auf <code>origin</code>, keiner ist Vorfahre von
+<code>develop</code> oder <code>main</code> — Stand dieser Seite. Zeilenzahlen und Dateilisten sind
+Diffstat gegen <code>main</code> bzw. der Commit selbst.</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Karte</th><th>Branch</th><th>Kernstücke</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><b>AGT-2192</b><br>Extraktion Control Plane</td>
+        <td><code>task/extract-standalone-<br>task-server-control-plane</code><br><span class="mono">ea8c8161</span></td>
+        <td><code>task-server/TaskServerStore.cs</code> (1304 Zeilen), <code>TaskServerEndpoints.cs</code>,
+        <code>LegacyMigrationService.cs</code>, <code>contracts/TaskServer.Contracts</code>,
+        <code>studio-bff/</code>, <code>task-server.Tests/</code> inkl.
+        <code>ArchitectureBoundaryTests.cs</code></td>
+        <td><span class="pill open">offen</span> — 47 Dateien, +3828/&#8722;339</td></tr>
+    <tr><td><b>AGT-2193</b><br>Security: Login, Identities, TLS</td>
+        <td><code>task/task-server-human-auth-<br>runner-service-identities-tls</code><br><span class="mono">ce541586</span></td>
+        <td><code>backend/Features/Security/*</code> (<code>AccessSecurityEndpoints.cs</code>,
+        <code>AccessSecurityMiddleware.cs</code>, <code>AccessSecurityStore.cs</code>,
+        <code>PasswordSecretHasher.cs</code>, <code>RunnerLeaseAuthorization.cs</code>), Frontend
+        <code>auth-gate</code> + <code>auth.service.ts</code>, <code>runner/RunnerOptions.cs</code>
+        (HTTPS- + Token-Pflicht)</td>
+        <td><span class="pill open">offen</span> — geretteter Squash-Commit aus dem 11.07.-Salvage,
+        Karte selbst noch nicht wieder aufgenommen</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="dim" style="margin-top: 40px;">Quellen: <code>agent-taskboard.sln</code> ·
+<code>backend/Features/{Tasks,Docs,Review,Pipeline,Runner,Cli,Security}</code> · <code>runner/*</code> ·
+<code>docs/system/domains/runner.md</code> ·
+<code>docs/concepts/distributed-agent-studio-target-architecture.md</code> ·
+<code>docs/operations/setup/linux-runner-host.md</code> ·
+Branches <code>task/extract-standalone-task-server-control-plane</code> (<span class="mono">ea8c8161</span>)
+und <code>task/task-server-human-auth-runner-service-identities-tls</code>
+(<span class="mono">ce541586</span>), jeweils auf <code>origin</code>, Stand 20.07.2026.</p>
+
+</main>
+</body>
+</html>

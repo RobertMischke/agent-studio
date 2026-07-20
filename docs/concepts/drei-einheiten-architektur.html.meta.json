@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Die drei Einheiten: Agent Studio, Task Server, Agent Runner",
+  "source": {
+    "path": "docs/concepts/drei-einheiten-architektur.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "aceb3ce55099b3e11b950823f96182c790056a10d61fc9c8466a813afa27f83f",
+      "sizeBytes": 32235,
+      "lineCount": 531,
+      "capturedAt": "2026-07-20T13:42:46.000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "unknown",
+    "implementationState": "unknown",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-20"
+  }
+}
