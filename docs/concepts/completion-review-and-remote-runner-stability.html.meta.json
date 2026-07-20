@@ -107,6 +107,12 @@
       "title": "Remote runner must support Epic planning and decomposition",
       "linkedAt": "2026-07-19T21:58:36.9822235Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2180",
+      "title": "URL Preview: redesign offline UI, actionable diagnostics, and Settings quick setup",
+      "linkedAt": "2026-07-20T00:10:53.1978208Z",
+      "source": "auto"
     }
   ],
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
