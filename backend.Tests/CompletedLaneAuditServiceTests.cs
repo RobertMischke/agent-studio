@@ -97,6 +97,8 @@ public class CompletedLaneAuditServiceTests : IDisposable
         Assert.Equal(ReEvaluateStatus.WrongLane, outcome.Status);
     }
 
+    // MachineBound 20.07.: Completed-Lane-Scan sensitiv gegenueber live mutierendem Board/Last, flaked unter Gate-Parallellast (AGT-2177 Gate-23), solo gruen.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAudit_ProcessesAllCompletedCards()
     {
