@@ -1,0 +1,10 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-1775",
+      "title": "Visuelles Konzept: CLI nicht nutzbar -\u003E klarer, unuebersehbarer Fehler (statt stiller Pause)",
+      "linkedAt": "2026-07-20T02:42:40.5819737Z",
+      "source": "auto"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
   "schemaVersion": "wiki-document-companion/v1",
-  "title": "Process Termination &amp; Abort Scenarios — Test Suite",
+  "title": "Process Termination \u0026amp; Abort Scenarios \u2014 Test Suite",
   "source": {
     "path": "docs/concepts/process-termination-scenarios.html",
     "type": "html",
@@ -22,5 +22,13 @@
     "supersededBy": null,
     "type": "contract",
     "analyzedAt": "2026-07-18"
-  }
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-1775",
+      "title": "Visuelles Konzept: CLI nicht nutzbar -\u003E klarer, unuebersehbarer Fehler (statt stiller Pause)",
+      "linkedAt": "2026-07-20T02:42:40.5819737Z",
+      "source": "auto"
+    }
+  ]
 }
