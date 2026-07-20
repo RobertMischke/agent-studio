@@ -35,18 +35,33 @@ export class TaskServerManagementPanelComponent {
   readonly results = input<readonly ManagementActionResult[]>([]);
   /** The sweep currently running, or null when idle. */
   readonly busyAction = input<ManagementActionKind | null>(null);
-  readonly run = output<ManagementActionKind>();
+  readonly run = output<{ kind: ManagementActionKind; confirmed: boolean }>();
 
   readonly actions: readonly ManagementAction[] = [
-    { kind: 'archive-sweep', label: 'Archive sweep', description: 'Move settled tasks past the retention threshold into the archive.', danger: false },
-    { kind: 'orphan-scan', label: 'Orphan scan', description: 'Find worktrees and job folders with no owning task.', danger: false },
-    { kind: 'fixture-cleanup', label: 'Fixture cleanup', description: 'Remove leftover e2e fixture tasks and scratch data.', danger: true },
+    { kind: 'archive-sweep', label: 'Archive sweep', description: 'Move completed tasks into the authoritative archive.', danger: false },
+    { kind: 'orphan-sweep', label: 'Orphan sweep', description: 'Remove terminal folders that have no owning task.', danger: true },
+    { kind: 'fixture-sweep', label: 'Fixture sweep', description: 'Remove tasks explicitly marked or identified as test fixtures.', danger: true },
+    { kind: 'backup-create', label: 'Create backup', description: 'Create, hash, open, and retain a server data-directory backup.', danger: false },
+    { kind: 'restore-verify', label: 'Verify restore', description: 'Extract the newest backup into isolated staging and validate it without touching live data.', danger: false },
+    { kind: 'backup-retention', label: 'Apply retention', description: 'Retain the configured number of newest verified backups.', danger: true },
+    { kind: 'maintenance-enter', label: 'Enter maintenance', description: 'Drain new work and expose the server as not ready.', danger: true },
+    { kind: 'maintenance-read-only', label: 'Enter read-only', description: 'Keep reads available while refusing normal mutations.', danger: true },
+    { kind: 'maintenance-exit', label: 'Exit maintenance', description: 'Return a prepared server to normal admission.', danger: false },
   ];
 
   actionLabel(kind: ManagementActionKind): string { return managementActionLabel(kind); }
 
-  emit(kind: ManagementActionKind): void {
+  preview(kind: ManagementActionKind): void {
     if (this.busyAction()) return;
-    this.run.emit(kind);
+    this.run.emit({ kind, confirmed: false });
+  }
+
+  confirm(kind: ManagementActionKind): void {
+    if (this.busyAction()) return;
+    this.run.emit({ kind, confirmed: true });
+  }
+
+  hasPreview(kind: ManagementActionKind): boolean {
+    return this.results().some(result => result.kind === kind && result.dryRun);
   }
 }

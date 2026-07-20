@@ -1,157 +1,145 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import type {
   ManagementActionKind,
   ManagementActionResult,
   TaskServerStatus,
 } from '../models/task-server.model';
-import { seedTaskServerStatus } from './task-server.seed';
+import { isLocalUrl } from '../models/task-server.model';
 
-/**
- * Status + management-action service for the Task-Server page (AGT-1924).
- *
- * UI-first, mirroring {@link RemoteHostsService}: the status snapshot is served
- * from a static seed ({@link seedTaskServerStatus}) shaped like the future
- * `GET /api/task-server/status` endpoint. When that endpoint lands, only
- * {@link reload} changes - it swaps the seed for an HTTP call and the component
- * keeps reading `status()` unchanged. The connected URL is the one live value:
- * it is read from the serving origin so the page shows the real URL the SPA is
- * talking to.
- *
- * The Archive-sweep / Orphan-scan / Fixture-cleanup functions are applied
- * optimistically against the in-memory snapshot (there is no backend command
- * surface yet) and emit structured `task-server.*` console events so the
- * behaviour is observable in the browser log ahead of real wiring.
- */
+interface ApiStatus {
+  server: { id: string; url: string; version: string; protocolMinimum: string; protocolMaximum: string; uptimeSeconds: number };
+  health: { state: 'healthy' | 'degraded' | 'maintenance'; ready: boolean };
+  store: { sizeBytes: number; projectCount: number; taskCount: number; archivedTaskCount: number; eventCount: number; artifactCount: number; identityCount: number };
+  evidence: { state: string; eventFiles: number; artifactFiles: number; lastWriteAt: string | null };
+  maintenance: TaskServerStatus['maintenance'];
+  migrations: TaskServerStatus['migrations'];
+  runners: readonly {
+    id: string; displayName: string; state: string; lastUsedAt: string | null;
+    activeSlots: number; drainRequested: boolean; retireRequested: boolean;
+  }[];
+  backups: TaskServerStatus['backups'];
+  security: TaskServerStatus['security'];
+}
+
+interface ApiCommandResult {
+  commandId: string; kind: ManagementActionKind; dryRun: boolean; state: string;
+  matched: number; affected: number; summary: string; completedAt: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class TaskServerService {
-  /** The current status snapshot, or null before the first load. */
+  private readonly http = inject(HttpClient);
   readonly status = signal<TaskServerStatus | null>(null);
-  readonly loading = signal<boolean>(false);
+  readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  /** Which management sweep is currently running, or null when idle. */
   readonly busyAction = signal<ManagementActionKind | null>(null);
-
-  /** Recent management-sweep outcomes, newest first (mirrors the snapshot). */
-  readonly recentResults = computed<readonly ManagementActionResult[]>(
-    () => this.status()?.recentResults ?? [],
-  );
-
+  readonly recentResults = computed<readonly ManagementActionResult[]>(() => this.status()?.recentResults ?? []);
   private loaded = false;
 
-  /** Simulated latency for the optimistic sweeps (ms). */
-  private static readonly ACTION_DELAY_MS = 650;
+  ensureLoaded(): void { if (!this.loaded) void this.reload(); }
 
-  /** Load once on first mount; explicit reloads re-read the origin + re-seed. */
-  ensureLoaded(): void {
-    if (this.loaded) return;
-    this.reload();
-  }
-
-  reload(): void {
+  async reload(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
-      // Static snapshot for now (UI-first). This is the single line that becomes
-      // an HTTP fetch once `GET /api/task-server/status` exists. The origin is
-      // the real URL the SPA is served from, so the connected URL is genuine.
-      const origin = this.resolveOrigin();
-      // Preserve any results the operator produced this session across a reload.
-      const priorResults = this.status()?.recentResults ?? [];
-      const seeded = seedTaskServerStatus(Date.now(), origin);
-      this.status.set({ ...seeded, recentResults: priorResults });
+      const api = await firstValueFrom(this.http.get<ApiStatus>('/api/v1/management/status'));
+      const prior = this.status()?.recentResults ?? [];
+      this.status.set(this.mapStatus(api, prior));
       this.loaded = true;
-      this.log('loaded', { url: origin, clients: seeded.clients.length });
-    } catch (e) {
-      this.error.set('Failed to load the task-server status.');
-      this.log('load-failed', { message: (e as Error)?.message ?? 'unknown' });
+    } catch {
+      this.error.set('The authenticated Task Server management API is unavailable.');
     } finally {
       this.loading.set(false);
     }
   }
 
-  /** Run the Archive-sweep management function. */
-  archiveSweep(): void { this.runAction('archive-sweep'); }
-
-  /** Run the Orphan-scan management function. */
-  orphanScan(): void { this.runAction('orphan-scan'); }
-
-  /** Run the Fixture-cleanup management function. */
-  fixtureCleanup(): void { this.runAction('fixture-cleanup'); }
-
-  /**
-   * Apply a management sweep optimistically: flag it busy, then commit a result
-   * row after a short simulated delay. Concurrent sweeps are ignored while one
-   * is in flight so the buttons cannot pile up work.
-   */
-  private runAction(kind: ManagementActionKind): void {
-    if (this.busyAction() || !this.status()) return;
-
+  async runAction(kind: ManagementActionKind, confirmed = false): Promise<void> {
+    if (this.busyAction()) return;
     this.busyAction.set(kind);
-    this.log('action', { kind });
-
-    setTimeout(() => {
+    this.error.set(null);
+    try {
+      const idempotencyKey = crypto.randomUUID();
+      const body = {
+        kind,
+        dryRun: !confirmed,
+        confirmation: confirmed ? kind : null,
+        idempotencyKey,
+      };
+      const result = await firstValueFrom(this.http.post<ApiCommandResult>(
+        '/api/v1/management/commands', body,
+        { headers: new HttpHeaders({ 'Idempotency-Key': idempotencyKey }) },
+      ));
       const snapshot = this.status();
-      if (!snapshot) { this.busyAction.set(null); return; }
-
-      const result = this.buildResult(kind, snapshot);
-      this.status.set({ ...snapshot, recentResults: [result, ...snapshot.recentResults].slice(0, 6) });
+      if (snapshot) {
+        const mapped: ManagementActionResult = {
+          kind: result.kind,
+          ranAt: result.completedAt,
+          summary: result.summary,
+          affected: result.affected,
+          matched: result.matched,
+          dryRun: result.dryRun,
+          commandId: result.commandId,
+          state: result.state,
+        };
+        this.status.set({ ...snapshot, recentResults: [mapped, ...snapshot.recentResults].slice(0, 12) });
+      }
+      if (confirmed) await this.reload();
+    } catch {
+      this.error.set(`The ${kind} command failed. No server files were changed by the console.`);
+    } finally {
       this.busyAction.set(null);
-      this.log('action-applied', { kind, affected: result.affected });
-    }, TaskServerService.ACTION_DELAY_MS);
-  }
-
-  /**
-   * Derive a deterministic sweep outcome from the current snapshot so the same
-   * store produces the same result (no `Math.random()`); the `ranAt` stamp is
-   * the only live value.
-   */
-  private buildResult(kind: ManagementActionKind, snapshot: TaskServerStatus): ManagementActionResult {
-    const store = snapshot.store;
-    const ranAt = new Date().toISOString();
-    switch (kind) {
-      case 'archive-sweep': {
-        const affected = Math.round(store.taskCount * 0.05);
-        return {
-          kind, ranAt, affected,
-          summary: affected > 0
-            ? `Swept ${affected} settled ${plural(affected, 'task', 'tasks')} into the archive.`
-            : 'Nothing to sweep - no settled tasks past the archive threshold.',
-        };
-      }
-      case 'orphan-scan': {
-        const affected = 1;
-        return {
-          kind, ranAt, affected,
-          summary: `Scanned ${store.taskCount} ${plural(store.taskCount, 'task', 'tasks')}; found ${affected} orphaned worktree with no owning task.`,
-        };
-      }
-      case 'fixture-cleanup': {
-        const affected = 0;
-        return {
-          kind, ranAt, affected,
-          summary: 'Cleaned up 0 leftover e2e fixtures; the store is already clean.',
-        };
-      }
     }
   }
 
-  /** The URL the SPA is served from; falls back to a loopback dev origin. */
-  private resolveOrigin(): string {
-    try {
-      const origin = window.location.origin;
-      if (origin && origin !== 'null') return origin;
-    } catch { /* non-browser context (unit tests) */ }
-    return 'http://localhost:4010';
-  }
-
-  private log(event: string, detail: Record<string, unknown>): void {
-    // Stable event names so the browser log reads as a domain feed while the
-    // real backend command surface is still being built.
-    console.info(`[task-server] ${event}`, { event: `task-server.${event}`, ...detail });
+  private mapStatus(api: ApiStatus, recentResults: readonly ManagementActionResult[]): TaskServerStatus {
+    const health = api.health.state === 'maintenance' ? 'degraded' : api.health.state;
+    return {
+      connection: {
+        id: api.server.id,
+        url: api.server.url,
+        phase: isLocalUrl(api.server.url) ? 'local' : 'central',
+        health,
+        version: api.server.version,
+        uptimeLabel: formatUptime(api.server.uptimeSeconds),
+        protocolMinimum: api.server.protocolMinimum,
+        protocolMaximum: api.server.protocolMaximum,
+        ready: api.health.ready,
+        authMode: 'Authenticated session / scoped Runner credential',
+      },
+      store: { ...api.store, root: 'Server-owned data directory (path is not exposed)' },
+      evidence: {
+        branch: 'server evidence store',
+        state: api.evidence.state === 'available' ? 'clean' : 'dirty',
+        uncommittedFiles: 0,
+        ahead: 0,
+        behind: 0,
+        lastCommitSha: null,
+        lastCommitSubject: `${api.evidence.eventFiles} event files · ${api.evidence.artifactFiles} artifact files`,
+        lastCommitAt: api.evidence.lastWriteAt,
+      },
+      clients: api.runners.map(runner => ({
+        id: runner.id,
+        displayName: runner.displayName,
+        emoji: null,
+        kind: runner.state === 'retired' ? 'retired' : 'agent-instance',
+        lastSeenAt: runner.lastUsedAt,
+        ownedTaskCount: runner.activeSlots,
+        managementState: runner.state,
+      })),
+      maintenance: api.maintenance,
+      migrations: api.migrations,
+      backups: api.backups,
+      security: api.security,
+      recentResults,
+    };
   }
 }
 
-/** English pluralisation helper for sweep summaries. */
-function plural(n: number, one: string, many: string): string {
-  return n === 1 ? one : many;
+function formatUptime(totalSeconds: number): string {
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  return days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 }

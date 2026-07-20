@@ -62,7 +62,7 @@ describe('task-server.model helpers', () => {
       expect(clientKindLabel('agent-instance')).toBe('Agent');
       expect(clientKindLabel('retired')).toBe('Retired');
       expect(managementActionLabel('archive-sweep')).toBe('Archive sweep');
-      expect(managementActionLabel('fixture-cleanup')).toBe('Fixture cleanup');
+      expect(managementActionLabel('fixture-sweep')).toBe('Fixture sweep');
     });
   });
 

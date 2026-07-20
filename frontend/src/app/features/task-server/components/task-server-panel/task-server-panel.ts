@@ -78,13 +78,9 @@ export class TaskServerPanelComponent implements OnInit, OnDestroy {
     if (this.tickHandle) clearInterval(this.tickHandle);
   }
 
-  reload(): void { this.service.reload(); }
+  reload(): void { void this.service.reload(); }
 
-  onRun(kind: ManagementActionKind): void {
-    switch (kind) {
-      case 'archive-sweep': this.service.archiveSweep(); break;
-      case 'orphan-scan': this.service.orphanScan(); break;
-      case 'fixture-cleanup': this.service.fixtureCleanup(); break;
-    }
+  onRun(event: { kind: ManagementActionKind; confirmed: boolean }): void {
+    void this.service.runAction(event.kind, event.confirmed);
   }
 }

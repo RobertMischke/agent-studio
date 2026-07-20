@@ -12,9 +12,9 @@ import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
  * workspace store it owns, the git-backed evidence status, the registered
  * client identities, and the management sweeps (archive / orphan / fixture).
  *
- * The page renders from a static frontend snapshot (UI-first, no backend
- * dependency; only the connected URL is live from the serving origin), so this
- * spec stubs the shell's background polls and drives the rail. It asserts:
+ * The page renders from the authenticated management API, shared with the
+ * server-hosted recovery console. This spec stubs that wire contract and drives
+ * the rail. It asserts:
  *   - the rail exposes the "Task Server" section and the overview card;
  *   - the section renders the connection / store / evidence blocks, the client
  *     registry, and the management panel;
@@ -25,6 +25,20 @@ import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
  */
 
 const SHOT_DIR = process.env.OVERLAY_SHOT_DIR ?? 'test-results';
+const MANAGEMENT_STATUS = {
+  server: { id: 'task-server-e2e', url: 'http://localhost:4010', version: '2026.07.20', protocolMinimum: '1.0', protocolMaximum: '1.0', uptimeSeconds: 7200 },
+  health: { state: 'healthy', ready: true },
+  store: { sizeBytes: 2048, projectCount: 2, taskCount: 12, archivedTaskCount: 8, eventCount: 42, artifactCount: 6, identityCount: 2 },
+  evidence: { state: 'available', eventFiles: 4, artifactFiles: 6, lastWriteAt: '2026-07-20T10:00:00Z' },
+  maintenance: { mode: 'normal', drainRequested: false, shutdownPrepared: false, reason: null },
+  migrations: [] as { id: string; state: string; startedAt: string | null; detail: string | null }[],
+  runners: [
+    { id: 'runner-1', displayName: 'Runner 1', state: 'running', lastUsedAt: '2026-07-20T10:00:00Z', activeSlots: 1, drainRequested: false, retireRequested: false },
+    { id: 'runner-2', displayName: 'Runner 2', state: 'draining', lastUsedAt: '2026-07-20T09:00:00Z', activeSlots: 0, drainRequested: true, retireRequested: false },
+  ],
+  backups: { directory: '/srv/agent-studio-backups', retentionCount: 7, lastFailure: null as string | null, items: [{ id: 'backup-1', sizeBytes: 1024, createdAt: '2026-07-20T08:00:00Z', verificationState: 'verified' }] },
+  security: { available: true, userCount: 2, credentialRunnerCount: 2, sessionUrl: '/api/auth/session', usersUrl: '/api/auth/users', runnerCredentialsUrl: '/api/auth/runners', integration: 'Shared AGT-2193 authority' },
+};
 
 function settingsHome(page: Page) {
   return page.locator(
@@ -44,6 +58,17 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/clients', json([]));
   await page.route('**/api/dev-tools/flags', json({ updateStableEnabled: false, deleteE2EJobsEnabled: false }));
   await page.route('**/api/workspaces*', json([]));
+  await page.route('**/api/v1/management/status', json(MANAGEMENT_STATUS));
+  await page.route('**/api/v1/management/commands', async route => {
+    const request = route.request().postDataJSON() as { kind: string; dryRun: boolean };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      commandId: `cmd-${request.kind}-${request.dryRun ? 'preview' : 'apply'}`,
+      kind: request.kind, dryRun: request.dryRun, state: 'completed', matched: 2,
+      affected: request.dryRun ? 0 : 2,
+      summary: request.dryRun ? '2 items would be changed.' : 'Changed 2 items.',
+      completedAt: '2026-07-20T10:30:00Z',
+    }) });
+  });
 }
 
 test.describe('Task Server settings section', () => {
@@ -81,8 +106,7 @@ test.describe('Task Server settings section', () => {
     await expect(page.getByTestId('task-server-evidence')).toBeVisible();
     await expect(page.getByTestId('task-server-management')).toBeVisible();
 
-    // The connected URL is the live serving origin.
-    await expect(page.getByTestId('task-server-url')).toContainText(new URL(page.url()).origin);
+    await expect(page.getByTestId('task-server-url')).toContainText('http://localhost:4010');
 
     // Summary client count reconciles to the visible client rows (R3).
     const rows = page.locator('[data-testid="task-server-clients"] > li');
@@ -101,9 +125,11 @@ test.describe('Task Server settings section', () => {
     await page.getByTestId('task-server-management-section').scrollIntoViewIfNeeded();
     await page.getByTestId('task-server-action-archive-sweep').click();
     await expect(page.getByTestId('task-server-result-archive-sweep')).toBeVisible({ timeout: 3_000 });
-    // A second sweep so the results list shows more than one settled outcome.
-    await page.getByTestId('task-server-action-orphan-scan').click();
-    await expect(page.getByTestId('task-server-result-orphan-scan')).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByTestId('task-server-confirm-archive-sweep')).toBeVisible();
+    await page.getByTestId('task-server-confirm-archive-sweep').click();
+    // A second preview so the results list shows more than one settled outcome.
+    await page.getByTestId('task-server-action-orphan-sweep').click();
+    await expect(page.getByTestId('task-server-result-orphan-sweep')).toBeVisible({ timeout: 3_000 });
     await page.getByTestId('task-server-management-section').scrollIntoViewIfNeeded();
     await page.screenshot({ path: join(SHOT_DIR, 'task-server-management--mocked.png'), fullPage: false });
   });
@@ -123,5 +149,29 @@ test.describe('Task Server settings section', () => {
     await expect(page.getByTestId('task-server-panel')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('task-server-connection')).toBeVisible();
     await page.screenshot({ path: join(SHOT_DIR, 'task-server-section-light--mocked.png'), fullPage: false });
+  });
+
+  test('captures degraded, maintenance, migration, credential rotation, and failed backup states in both themes', async ({ page }) => {
+    const states = [
+      { name: 'degraded', patch: { health: { state: 'degraded', ready: false } } },
+      { name: 'maintenance', patch: { health: { state: 'maintenance', ready: false }, maintenance: { mode: 'maintenance', drainRequested: true, shutdownPrepared: false, reason: 'Operator rehearsal' } } },
+      { name: 'migration', patch: { health: { state: 'maintenance', ready: false }, migrations: [{ id: 'schema-42', state: 'running', startedAt: '2026-07-20T10:00:00Z', detail: 'Adding audit index' }] } },
+      { name: 'credential-rotation', patch: { runners: MANAGEMENT_STATUS.runners.map((runner, index) => index === 0 ? { ...runner, state: 'credential-rotated' } : runner) } },
+      { name: 'failed-backup', patch: { backups: { ...MANAGEMENT_STATUS.backups, lastFailure: 'Archive checksum mismatch' } } },
+    ];
+    for (const state of states) {
+      await page.unroute('**/api/v1/management/status');
+      await page.route('**/api/v1/management/status', route => route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ ...MANAGEMENT_STATUS, ...state.patch }),
+      }));
+      for (const theme of ['dark', 'light'] as const) {
+        await page.goto('/#/workspace/settings/task-server');
+        await page.reload();
+        await setTheme(page, theme);
+        await expect(page.getByTestId('task-server-panel')).toBeVisible({ timeout: 5_000 });
+        await page.screenshot({ path: join(SHOT_DIR, `task-server-${state.name}-${theme}.png`), fullPage: false });
+      }
+    }
   });
 });

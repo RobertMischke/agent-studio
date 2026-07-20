@@ -1,7 +1,7 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskServerPanelComponent } from './task-server-panel';
@@ -13,9 +13,6 @@ import { TaskServerPanelComponent } from './task-server-panel';
  * rows (R3 sum invariant), and running a sweep produces a result row.
  */
 describe('TaskServerPanelComponent', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
   async function mount() {
     await TestBed.configureTestingModule({
       imports: [TaskServerPanelComponent],
@@ -27,6 +24,20 @@ describe('TaskServerPanelComponent', () => {
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(TaskServerPanelComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/v1/management/status').flush({
+      server: { id: 'ts-1', url: 'http://localhost:4010', version: '1.0', protocolMinimum: '1.0', protocolMaximum: '1.0', uptimeSeconds: 60 },
+      health: { state: 'healthy', ready: true },
+      store: { sizeBytes: 1, projectCount: 1, taskCount: 2, archivedTaskCount: 0, eventCount: 3, artifactCount: 4, identityCount: 2 },
+      evidence: { state: 'available', eventFiles: 1, artifactFiles: 1, lastWriteAt: null },
+      maintenance: { mode: 'normal', drainRequested: false, shutdownPrepared: false, reason: null }, migrations: [],
+      runners: [
+        { id: 'r1', displayName: 'R1', state: 'running', lastUsedAt: null, activeSlots: 0, drainRequested: false, retireRequested: false },
+        { id: 'r2', displayName: 'R2', state: 'running', lastUsedAt: null, activeSlots: 1, drainRequested: false, retireRequested: false },
+      ], backups: { directory: '/tmp/backups', retentionCount: 7, lastFailure: null, items: [] },
+      security: { available: true, userCount: 1, credentialRunnerCount: 2, sessionUrl: '/api/auth/session', usersUrl: '/api/auth/users', runnerCredentialsUrl: '/api/auth/runners', integration: 'shared' },
+    });
+    await fixture.whenStable();
     fixture.detectChanges();
     return fixture;
   }
@@ -41,9 +52,9 @@ describe('TaskServerPanelComponent', () => {
     expect(el.querySelector('[data-testid="task-server-evidence"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="task-server-management"]')).toBeTruthy();
 
-    // The connected URL is the live origin.
+    // The connected URL is reported by the Task Server.
     expect(el.querySelector('[data-testid="task-server-url"]')?.textContent)
-      .toContain(window.location.origin);
+      .toContain('http://localhost:4010');
 
     fixture.destroy();
   });
@@ -72,7 +83,11 @@ describe('TaskServerPanelComponent', () => {
 
     const btn = el.querySelector('[data-testid="task-server-action-archive-sweep"]') as HTMLButtonElement;
     btn.click();
-    vi.advanceTimersByTime(700);
+    TestBed.inject(HttpTestingController).expectOne('/api/v1/management/commands').flush({
+      commandId: 'cmd_1', kind: 'archive-sweep', dryRun: true, state: 'completed', matched: 2, affected: 0,
+      summary: '2 tasks would be archived.', completedAt: '2026-07-20T00:00:00Z',
+    });
+    await fixture.whenStable();
     fixture.detectChanges();
 
     expect(el.querySelector('[data-testid="task-server-result-archive-sweep"]')).toBeTruthy();

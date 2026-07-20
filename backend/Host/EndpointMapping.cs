@@ -82,5 +82,6 @@ public static class EndpointMapping
         app.MapProjectChatEndpoints();
         app.MapConceptDocsEndpoints();
         app.MapGlobalSearchEndpoints();
+        app.MapManagementEndpoints();
     }
 }

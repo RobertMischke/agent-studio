@@ -47,6 +47,12 @@
   cursor: pointer;
   min-width: 72px;
 }
+
+.mgmt__buttons {
+  display: flex;
+  gap: var(--studio-spacing-2);
+  align-items: center;
+}
 .mgmt__btn:hover:not(:disabled) { background: var(--studio-bg-selected); }
 .mgmt__btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .mgmt__btn:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }

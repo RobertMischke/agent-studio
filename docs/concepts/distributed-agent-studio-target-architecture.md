@@ -218,6 +218,14 @@ Every Task Server exposes an authenticated management surface for:
 - audit search and export;
 - maintenance mode, read-only mode, and safe shutdown preparation.
 
+The first live contract is rooted at `/api/v1/management`. `GET /status` and
+`GET /diagnostics` provide the shared read model. `POST /commands` accepts a
+command kind, dry-run flag, exact confirmation, and idempotency key. Applied
+commands append durable evidence to the server audit ledger. Backup archives
+live outside the active data directory and are hash-checked and opened before
+the server reports success. Runner rows are projections of the existing Runner
+service-identity registry; this API does not maintain another client list.
+
 ### Management consoles
 
 Two surfaces use the same API:
@@ -228,6 +236,10 @@ Two surfaces use the same API:
    Agent Studio is unavailable.
 
 Neither console bypasses authorization or writes server files directly.
+The server-hosted console is available at `/recovery`. It can establish the
+first owner or an authenticated owner session, then uses the same management
+routes as Agent Studio. It reports the systemd, container, or service-manager
+lifecycle boundary and never offers a fictional self-start operation.
 
 ## 8. Security baseline for an internet-reachable server
 

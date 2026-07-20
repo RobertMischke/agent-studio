@@ -5,7 +5,7 @@
       <p class="ts__subtitle">
         The durable task server the whole platform talks to. Read its connected
         URL, the workspace store it owns, the git-backed evidence status, and the
-        registered clients - then run a maintenance sweep from Management.
+        registered Runners, backups, migrations, and maintenance state.
       </p>
     </div>
     <button class="ts__refresh"
@@ -49,6 +49,9 @@
               <dd>{{ phaseLabel(c.phase) }} <span class="ts__hint">{{ c.phase === 'local' ? 'loopback only' : 'authenticated HTTPS' }}</span></dd>
             </div>
             <div class="ts__row"><dt>Version</dt><dd>{{ c.version || '-' }}</dd></div>
+            <div class="ts__row"><dt>Identity</dt><dd class="ts__mono">{{ c.id }}</dd></div>
+            <div class="ts__row"><dt>Protocol</dt><dd>{{ c.protocolMinimum }} - {{ c.protocolMaximum }}</dd></div>
+            <div class="ts__row"><dt>Readiness</dt><dd>{{ c.ready ? 'Ready' : 'Not ready' }}</dd></div>
             <div class="ts__row"><dt>Uptime</dt><dd>{{ c.uptimeLabel || '-' }}</dd></div>
             <div class="ts__row"><dt>Auth</dt><dd>{{ c.authMode }}</dd></div>
           </dl>
@@ -70,6 +73,8 @@
             <div class="ts__row"><dt>Active tasks</dt><dd>{{ st.taskCount }}</dd></div>
             <div class="ts__row"><dt>Archived</dt><dd>{{ st.archivedTaskCount }}</dd></div>
             <div class="ts__row"><dt>Identities</dt><dd>{{ st.identityCount }}</dd></div>
+            <div class="ts__row"><dt>Events</dt><dd>{{ st.eventCount }}</dd></div>
+            <div class="ts__row"><dt>Artifacts</dt><dd>{{ st.artifactCount }}</dd></div>
           </dl>
         </section>
       }
@@ -101,6 +106,42 @@
       }
     </div>
 
+    <div class="ts__blocks">
+      <section class="ts__block" data-testid="task-server-maintenance">
+        <header class="ts__block-head"><h3 class="ts__block-title">Maintenance</h3><span class="ts__badge">{{ s.maintenance.mode }}</span></header>
+        <dl class="ts__rows">
+          <div class="ts__row"><dt>Drain</dt><dd>{{ s.maintenance.drainRequested ? 'Requested' : 'Open' }}</dd></div>
+          <div class="ts__row"><dt>Shutdown</dt><dd>{{ s.maintenance.shutdownPrepared ? 'Prepared' : 'Service manager owned' }}</dd></div>
+          <div class="ts__row"><dt>Reason</dt><dd>{{ s.maintenance.reason || '-' }}</dd></div>
+        </dl>
+      </section>
+      <section class="ts__block" data-testid="task-server-migrations">
+        <header class="ts__block-head"><h3 class="ts__block-title">Migrations</h3><span class="ts__badge">{{ s.migrations.length }} active</span></header>
+        <dl class="ts__rows">
+          @for (migration of s.migrations; track migration.id) {
+            <div class="ts__row"><dt>{{ migration.id }}</dt><dd>{{ migration.state }}</dd></div>
+          } @empty { <div class="ts__row"><dt>State</dt><dd>No active migrations</dd></div> }
+        </dl>
+      </section>
+      <section class="ts__block" data-testid="task-server-backups" [attr.data-tone]="s.backups.lastFailure ? 'error' : 'ok'">
+        <header class="ts__block-head"><h3 class="ts__block-title">Backups</h3><span class="ts__badge" [attr.data-tone]="s.backups.lastFailure ? 'error' : 'ok'">{{ s.backups.items.length }} retained</span></header>
+        <dl class="ts__rows">
+          <div class="ts__row"><dt>Retention</dt><dd>{{ s.backups.retentionCount }}</dd></div>
+          <div class="ts__row"><dt>Latest</dt><dd>{{ s.backups.items[0]?.verificationState || 'None' }}</dd></div>
+          <div class="ts__row"><dt>Failure</dt><dd>{{ s.backups.lastFailure || '-' }}</dd></div>
+        </dl>
+      </section>
+      <section class="ts__block" data-testid="task-server-security">
+        <header class="ts__block-head"><h3 class="ts__block-title">Access security</h3><span class="ts__badge">{{ s.security.available ? 'Integrated' : 'Pending dependency' }}</span></header>
+        <dl class="ts__rows">
+          <div class="ts__row"><dt>Users</dt><dd>{{ s.security.userCount }}</dd></div>
+          <div class="ts__row"><dt>Runner credentials</dt><dd>{{ s.security.credentialRunnerCount }}</dd></div>
+          <div class="ts__row"><dt>Sessions</dt><dd class="ts__mono">{{ s.security.sessionUrl }}</dd></div>
+          <div class="ts__row"><dt>Authority</dt><dd>{{ s.security.integration }}</dd></div>
+        </dl>
+      </section>
+    </div>
+
     <section class="ts__section" data-testid="task-server-clients-section">
       <header class="ts__section-head">
         <h3 class="ts__section-title">Client registry</h3>
@@ -115,8 +156,7 @@
       <header class="ts__section-head">
         <h3 class="ts__section-title">Management</h3>
         <span class="ts__section-desc">
-          Store-maintenance sweeps. Applied optimistically while the backend
-          command surface is built - outcomes appear below each run.
+          Audited server commands. Preview first, then explicitly confirm an apply.
         </span>
       </header>
       <app-task-server-management-panel

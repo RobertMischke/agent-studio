@@ -3,7 +3,6 @@ export { TaskServerPanelComponent } from './components/task-server-panel/task-se
 export { TaskServerClientsCardComponent } from './components/task-server-clients-card/task-server-clients-card';
 export { TaskServerManagementPanelComponent } from './components/task-server-management-panel/task-server-management-panel';
 export { TaskServerService } from './services/task-server.service';
-export { seedTaskServerStatus } from './services/task-server.seed';
 export type {
   TaskServerStatus,
   TaskServerConnection,
