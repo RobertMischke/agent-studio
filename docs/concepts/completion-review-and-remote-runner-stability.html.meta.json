@@ -125,6 +125,12 @@
       "title": "AGT-2162: Orchestrator-Chat auf Standard-Footer und kanonischen Kontextmechanismus umstellen",
       "linkedAt": "2026-07-20T00:55:25.29608Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2159",
+      "title": "AGT-2159: Tatsaechlichen Ausfuehrungsort an Task-Karte und Detailansicht live sichtbar machen",
+      "linkedAt": "2026-07-20T02:35:47.2595754Z",
+      "source": "auto"
     }
   ],
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
