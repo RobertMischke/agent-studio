@@ -285,24 +285,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     { id: 'fork',      glyph: '⑂', label: 'Fork into a new thread' },
     { id: 'search',    glyph: '🔍', label: 'Search chat history' },
   ];
-<<<<<<< HEAD
-  /**
-   * Routing chip shown right-aligned in the composer toolbar — at-a-
-   * glance "which model picks this up". Reads the local default-CLI
-   * pref (set from the status bar) so it stays in sync with the rest
-   * of the workspace. No-op when nothing is set.
-   */
-  readonly composerRoutingLabel = computed<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const defaultCli = window.localStorage?.getItem('defaultCliType');
-      if (!defaultCli) return null;
-      return `routing: ${defaultCli}`;
-    } catch {
-      return null;
-    }
-  });
-=======
   /** Effective GPT-only route and explicit-vs-inherited provenance. */
   readonly composerRoutingLabel = computed<string>(() =>
     `GPT-only · ${this.composerModel.sourceLabel()}`);
@@ -310,7 +292,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   onModelCommit(selection: ChatModelSelection): void {
     this.composerModel.commit(selection);
   }
->>>>>>> origin/task/agt-2163-orchestrator-full-model-picker
 
   private pollTimer: VisibleIntervalHandle | null = null;
 
