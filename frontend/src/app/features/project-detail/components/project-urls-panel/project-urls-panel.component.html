@@ -60,6 +60,7 @@
                 {{ host(u.url) }}
                 @if (u.startRule; as rule) {
                   · <code>{{ rule.command }}</code>
+                  · <span [attr.data-testid]="'project-urls-source-' + u.id">{{ rule.source }}</span>
                 }
               </div>
             </div>
@@ -146,9 +147,53 @@
           <input id="project-urls-form-command" type="text" data-testid="project-urls-form-command"
                  placeholder="npm run start"
                  [ngModel]="formCommand()" (ngModelChange)="formCommand.set($event)" />
+          <label for="project-urls-form-cwd">Working directory</label>
+          <input id="project-urls-form-cwd" type="text" data-testid="project-urls-form-cwd"
+                 placeholder="Project root, or e.g. 04-angular-static-final"
+                 [ngModel]="formCwd()" (ngModelChange)="formCwd.set($event)" />
+          <label for="project-urls-form-port">Port</label>
+          <input id="project-urls-form-port" type="number" data-testid="project-urls-form-port"
+                 min="1" max="65535" placeholder="4184"
+                 [ngModel]="formPort()" (ngModelChange)="formPort.set($event || null)" />
+          <label for="project-urls-form-health">URL / health target</label>
+          <input id="project-urls-form-health" type="text" data-testid="project-urls-form-health"
+                 placeholder="Defaults to the preview URL"
+                 [ngModel]="formHealthUrl()" (ngModelChange)="formHealthUrl.set($event)" />
+          <label for="project-urls-form-timeout">Readiness timeout (seconds)</label>
+          <input id="project-urls-form-timeout" type="number" data-testid="project-urls-form-timeout"
+                 min="2" max="120"
+                 [ngModel]="formTimeout()" (ngModelChange)="formTimeout.set($event)" />
+          <p class="project-urls__add-hint" data-testid="project-urls-form-provenance">
+            Configuration source: <b>{{ formSource() }}</b>
+          </p>
+          @if (testDiagnostic(); as result) {
+            <div class="project-urls__test-result"
+                 [attr.data-state]="result.classification"
+                 data-testid="project-urls-test-result">
+              <b>{{ result.classification }}</b>
+              <span>{{ result.summary }}</span>
+              <details data-testid="project-urls-test-details">
+                <summary>Technical details</summary>
+                <dl>
+                  <div><dt>Command</dt><dd><code>{{ result.command ?? 'Not configured' }}</code></dd></div>
+                  <div><dt>Working directory</dt><dd><code>{{ result.cwd ?? 'Project root' }}</code></dd></div>
+                  <div><dt>Port / HTTP</dt><dd>{{ result.configuredPort ?? 'From URL' }} / {{ result.httpStatus ?? 'none' }}</dd></div>
+                  <div><dt>Process</dt><dd>{{ result.processCreated ? 'Created' : 'Not created' }} @if (result.exitCode !== null) { · exit {{ result.exitCode }} }</dd></div>
+                  <div><dt>Embedded page</dt><dd>{{ result.iframeReady === false ? 'Blocked or not renderable' : result.contentReady ? 'Content ready' : 'Not ready' }}</dd></div>
+                </dl>
+                @if (result.framePolicy) { <pre><code>{{ result.framePolicy }}</code></pre> }
+                @if (result.stdoutTail) { <pre><code>{{ result.stdoutTail }}</code></pre> }
+                @if (result.stderrTail) { <pre><code>{{ result.stderrTail }}</code></pre> }
+              </details>
+            </div>
+          }
           <div class="project-urls__form-actions">
             <button type="button" class="project-urls__btn project-urls__btn--link"
                     (click)="closeAdd()">Cancel</button>
+            <button type="button" class="project-urls__btn project-urls__btn--link"
+                    data-testid="project-urls-form-test"
+                    [disabled]="!canSave || testing()"
+                    (click)="testSetup()">{{ testing() ? 'Testing…' : 'Test setup' }}</button>
             <button type="button" class="project-urls__btn project-urls__btn--primary"
                     data-testid="project-urls-form-save"
                     [disabled]="!canSave || saving()"

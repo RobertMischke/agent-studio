@@ -462,6 +462,19 @@ public static class RegistryEndpoints
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
 
+        // AGT-2180: full actionable diagnosis (process, TCP, HTTP, content) in
+        // the bounded, redacted diagnostic contract consumed by the Preview
+        // offline card and the Settings quick setup.
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/diagnostic",
+            async (string projId, string urlId, ProjectRegistry projects, ProjectUrlProcessService procs, CancellationToken ct) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null) return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var url = record.Urls.FirstOrDefault(u => string.Equals(u.Id, urlId, StringComparison.Ordinal));
+            if (url == null) return Results.NotFound(new { error = $"Unknown url id '{urlId}'" });
+            return Results.Ok(await procs.ProbeAsync(record, url, ct));
+        });
+
         // Start/restart, inspect, and stop the owned dev-server lifecycle. The
         // bounded snapshot output powers the embed's in-place live console.
         app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/start",
@@ -529,6 +542,23 @@ public static class RegistryEndpoints
                 studioOrigin = referer.GetLeftPart(UriPartial.Authority);
             return Results.Ok(await readiness.ProbeAsync(
                 record, url, studioOrigin, cancellationToken));
+        });
+
+        // AGT-2180: Settings quick setup — validate a candidate configuration
+        // with a bounded start + readiness run whose process never outlives
+        // the request. Returns the diagnostic contract, never a saved URL.
+        app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/test",
+            async (string projId, TestProjectUrlRequest body, ProjectRegistry projects, ProjectUrlProcessService procs, CancellationToken ct) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            var record = projects.FindById(projId);
+            if (record == null) return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var candidate = new ProjectUrlRecord
+            {
+                Id = "setup-test", Label = body.Label ?? "URL Preview setup", Url = body.Url ?? "",
+                StartRule = body.StartRule,
+            };
+            return Results.Ok(await procs.TestAsync(record, candidate, ct));
         });
     }
 
@@ -633,6 +663,14 @@ public sealed record RegistryCreateProjectRequest
     /// <see cref="ProjectRecord.RootPath"/>).
     /// </summary>
     public string? RootPath { get; init; }
+}
+
+/// <summary>AGT-2180 — POST /api/projects/{id}/urls/test payload (quick setup validation).</summary>
+public sealed record TestProjectUrlRequest
+{
+    public string? Label { get; init; }
+    public string? Url { get; init; }
+    public ProjectUrlStartRule? StartRule { get; init; }
 }
 
 public static class ProjectSourceTypes

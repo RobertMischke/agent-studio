@@ -14,6 +14,20 @@
     <app-project-basics-card [projectName]="projectName()" />
   </section>
 
+  <section class="ps-settings__section ps-settings__section--preview"
+           id="url-preview-quick-setup"
+           aria-labelledby="ps-settings-url-preview"
+           data-testid="url-preview-quick-setup">
+    <header class="ps-settings__section-head">
+      <h3 id="ps-settings-url-preview" class="ps-settings__section-title">URL Preview quick setup</h3>
+      <p class="ps-settings__section-desc">
+        Detect, test, and save the command and readiness target used by embedded previews.
+      </p>
+    </header>
+    <app-project-urls-panel [projectName]="projectName()" [quickSetup]="true" />
+  </section>
+
+
   <section class="ps-settings__section" aria-labelledby="ps-settings-inherited">
     <header class="ps-settings__section-head">
       <h3 id="ps-settings-inherited" class="ps-settings__section-title">Workspace defaults</h3>

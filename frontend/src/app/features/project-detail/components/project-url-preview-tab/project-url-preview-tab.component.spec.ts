@@ -11,10 +11,13 @@ import {
   type ProjectUrlStatus,
 } from '../../../../services/project-url-probe.service';
 import type {
+  ProjectUrlDiagnostic,
   ProjectUrlProcessSnapshot,
+  ProjectUrlSuggestion,
   RegistryWorkspaceListItem,
   RegistryProjectUrl,
 } from '../../../../models/task.model';
+import { ProjectUrlRecoveryService } from '../../services/project-url-recovery.service';
 
 /** Signal-backed probe stub so tests drive running/offline without a real fetch. */
 class ProbeStub {
@@ -91,6 +94,22 @@ function processSnapshot(
     output,
   };
 }
+
+function diagnostic(classification: ProjectUrlDiagnostic['classification']): ProjectUrlDiagnostic {
+  return {
+    classification, summary: 'Diagnostic summary', recommendedAction: 'Recommended action', command: 'npm run website',
+    cwd: 'c:/demo', url: 'http://localhost:4202', configuredPort: 4202, processCreated: false,
+    exitCode: null, stdoutTail: '', stderrTail: '', timedOut: false, portReachable: classification === 'running',
+    httpStatus: classification === 'running' ? 200 : null, contentReady: classification === 'running',
+    checkedAt: '2026-07-13T00:00:00Z',
+  };
+}
+
+const README_SUGGESTION: ProjectUrlSuggestion = {
+  label: 'Agent Studio Website', url: 'http://localhost:4184',
+  command: 'npm start -- --host 127.0.0.1 --port 4184', cwd: 'c:/demo/04-angular-static-final',
+  port: 4184, source: 'readme',
+};
 
 describe('ProjectUrlPreviewTabComponent', () => {
   afterEach(() => vi.useRealTimers());
@@ -344,5 +363,81 @@ describe('ProjectUrlPreviewTabComponent', () => {
 
     expect(fixture.componentInstance.urlRecord()?.url).toBe('http://localhost:4300');
     expect(fixture.componentInstance.urlRecord()?.startRule?.cwd).toBe('c:/demo/web');
+  });
+
+  // ── AGT-2180: actionable diagnostics + quick setup handoff ─────────────
+
+  it('enriches the offline card with backend diagnosis, recommendation, and technical details', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    http.expectOne(req => req.url.endsWith('/PROJ-001/urls/url-1/diagnostic')).flush({
+      ...diagnostic('invalid-cwd'), summary: 'The configured working directory does not exist.',
+      recommendedAction: 'Open Settings and choose an existing project folder.', stderrTail: 'missing folder',
+    });
+    http.expectOne(req => req.url.endsWith('/PROJ-001/url-suggestions')).flush([]);
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('[data-testid="url-preview-offline"]')?.getAttribute('data-diagnosis')).toBe('invalid-cwd');
+    expect(el.textContent).toContain('The working directory is invalid');
+    expect(el.querySelector('[data-testid="url-preview-recommendation"]')?.textContent)
+      .toContain('Open Settings and choose an existing project folder.');
+    expect(el.querySelector('[data-testid="url-preview-open-setup"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="url-preview-details"]')?.textContent).toContain('missing folder');
+    expect(el.querySelector('[data-testid="url-preview-copy-diagnostics"]')).toBeTruthy();
+  });
+
+  it('applies a matching detected setup and starts it without leaving Preview', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    http.expectOne(req => req.url.endsWith('/PROJ-001/urls/url-1/diagnostic')).flush(diagnostic('invalid-cwd'));
+    http.expectOne(req => req.url.endsWith('/PROJ-001/url-suggestions')).flush([README_SUGGESTION]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-apply-setup"]')).toBeTruthy();
+    fixture.componentInstance.applyDetectedSetup();
+
+    const put = http.expectOne(req => req.method === 'PUT' && req.url.endsWith('/PROJ-001/urls/url-1'));
+    expect(put.request.body.startRule).toMatchObject({
+      command: README_SUGGESTION.command, cwd: README_SUGGESTION.cwd, port: 4184, source: 'readme',
+    });
+    const corrected: RegistryProjectUrl = {
+      ...STARTABLE_URL,
+      startRule: {
+        command: README_SUGGESTION.command, cwd: README_SUGGESTION.cwd, port: 4184,
+        healthUrl: 'http://localhost:4184', readinessTimeoutSeconds: 20, source: 'readme',
+      },
+    };
+    put.flush({ ...workspacesWith([corrected])[0].projects[0] });
+    fixture.detectChanges();
+
+    http.expectOne(req => req.method === 'POST' && req.url.endsWith('/PROJ-001/urls/url-1/start'))
+      .flush(processSnapshot());
+    expect(fixture.componentInstance.urlRecord()?.startRule?.source).toBe('readme');
+  });
+
+  it('hands the failing URL and detected suggestion to the Settings quick setup', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    let emitted: { projectName: string } | null = null;
+    fixture.componentInstance.openSettings.subscribe(value => emitted = value);
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    http.expectOne(req => req.url.endsWith('/PROJ-001/urls/url-1/diagnostic')).flush(diagnostic('invalid-cwd'));
+    http.expectOne(req => req.url.endsWith('/PROJ-001/url-suggestions')).flush([README_SUGGESTION]);
+    fixture.detectChanges();
+
+    fixture.componentInstance.openQuickSetup();
+    expect(emitted).toEqual({ projectName: 'Demo' });
+    expect(TestBed.inject(ProjectUrlRecoveryService).takeQuickSetupRequest()).toEqual({
+      urlId: 'url-1', suggestion: README_SUGGESTION,
+    });
   });
 });

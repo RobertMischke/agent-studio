@@ -160,17 +160,27 @@ public sealed class ProjectUrlDetectionService
 
     private static void DetectFromReadme(string repoRoot, List<ProjectUrlSuggestion> results, HashSet<string> seen)
     {
-        var path = Directory.EnumerateFiles(repoRoot)
-            .FirstOrDefault(f => string.Equals(Path.GetFileName(f), "README.md", StringComparison.OrdinalIgnoreCase));
-        if (path == null) return;
-
-        var text = File.ReadAllText(path);
-        foreach (var block in ExtractFencedBlocks(text))
+        var readmes = Directory.EnumerateFiles(repoRoot, "README.md", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .Take(40);
+        foreach (var path in readmes)
         {
+          var text = File.ReadAllText(path);
+          foreach (var block in ExtractFencedBlocks(text))
+          {
+            string? cwd = Path.GetDirectoryName(path) == repoRoot
+                ? null
+                : Path.GetRelativePath(repoRoot, Path.GetDirectoryName(path)!);
             foreach (var rawLine in block.Split('\n'))
             {
                 var line = rawLine.Trim().TrimStart('$', ' ', '>').Trim();
                 if (line.Length == 0) continue;
+                if (line.StartsWith("cd ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var folder = line[3..].Trim().Trim('"', '\'');
+                    cwd = cwd == null ? folder : Path.Combine(cwd, folder);
+                    continue;
+                }
                 if (!RunKeywords.Any(k => line.Contains(k, StringComparison.OrdinalIgnoreCase))) continue;
                 // Skip install-only lines that merely mention npm.
                 if (line.StartsWith("npm install", StringComparison.OrdinalIgnoreCase) ||
@@ -178,18 +188,19 @@ public sealed class ProjectUrlDetectionService
                     continue;
 
                 var port = ExtractPort(line) ?? ExtractPort(block);
-                var key = $"readme:{line}";
+                var key = $"readme:{cwd}:{line}";
                 if (!seen.Add(key)) continue;
                 results.Add(new ProjectUrlSuggestion
                 {
                     Label = "From README",
                     Url = port.HasValue ? $"http://localhost:{port.Value}" : null,
                     Command = line,
-                    Cwd = repoRoot,
+                    Cwd = cwd == null ? repoRoot : Path.GetFullPath(Path.Combine(repoRoot, cwd)),
                     Port = port,
                     Source = "readme",
                 });
             }
+          }
         }
     }
 

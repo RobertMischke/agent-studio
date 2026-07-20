@@ -24,6 +24,7 @@ import {
 } from '../../../../services/workspace-orchestrator-settings.service';
 import { ExecutionAssignmentCardComponent } from '../execution-assignment-card/execution-assignment-card';
 import { ProjectBasicsCardComponent } from '../project-basics-card/project-basics-card.component';
+import { ProjectUrlsPanelComponent } from '../project-urls-panel/project-urls-panel.component';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -85,6 +86,7 @@ interface WorkspaceListItemLite {
     TooltipDirective,
     ExecutionAssignmentCardComponent,
     ProjectBasicsCardComponent,
+    ProjectUrlsPanelComponent,
   ],
   templateUrl: './project-settings-panel.component.html',
   styleUrl: './project-settings-panel.component.scss',

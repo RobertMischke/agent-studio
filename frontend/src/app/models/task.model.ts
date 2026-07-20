@@ -993,6 +993,8 @@ export interface ProjectUrlStartRule {
   command: string;
   cwd: string | null;
   port: number | null;
+  healthUrl?: string | null;
+  readinessTimeoutSeconds?: number;
   /** `manual` | `package-json` | `readme`. */
   source: string;
 }
@@ -1034,6 +1036,37 @@ export interface ProjectUrlSuggestion {
 
 /** Compatibility name retained for existing start-only consumers. */
 export type ProjectUrlStartResponse = ProjectUrlProcessSnapshot;
+
+/** AGT-2180 — stable classification vocabulary for URL Preview diagnostics. */
+export type ProjectUrlDiagnosisClass =
+  | 'not-started' | 'starting' | 'command-unavailable' | 'invalid-cwd'
+  | 'process-exited' | 'port-never-opened' | 'timeout' | 'http-error-response'
+  | 'content-not-renderable' | 'invalid-configuration' | 'running';
+
+/** AGT-2180 — bounded, redacted evidence snapshot behind the offline card. */
+export interface ProjectUrlDiagnostic {
+  classification: ProjectUrlDiagnosisClass;
+  summary: string;
+  recommendedAction: string;
+  command: string | null;
+  cwd: string | null;
+  url: string | null;
+  configuredPort: number | null;
+  processCreated: boolean;
+  exitCode: number | null;
+  stdoutTail: string;
+  stderrTail: string;
+  timedOut: boolean;
+  portReachable: boolean;
+  httpStatus: number | null;
+  contentReady: boolean;
+  /** Browser embedding evidence when response headers or the iframe can decide it. */
+  iframeReady?: boolean | null;
+  /** Bounded blocking X-Frame-Options/CSP evidence, when present. */
+  framePolicy?: string | null;
+  checkedAt: string;
+}
+
 
 /**
  * F45a / ADR-0042 — flat project summary returned by `GET /api/projects`

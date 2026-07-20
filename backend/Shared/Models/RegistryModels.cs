@@ -31,6 +31,10 @@ public record ProjectUrlStartRule
     public string? Cwd { get; init; }
     /// <summary>Port the server listens on, when known.</summary>
     public int? Port { get; init; }
+    /// <summary>Optional HTTP readiness target; defaults to the URL itself.</summary>
+    public string? HealthUrl { get; init; }
+    /// <summary>Maximum bounded startup validation time. Defaults to 20 seconds.</summary>
+    public int ReadinessTimeoutSeconds { get; init; } = 20;
     /// <summary>Where the rule came from: <c>manual</c> | <c>package-json</c> | <c>readme</c>.</summary>
     public string Source { get; init; } = "manual";
 }

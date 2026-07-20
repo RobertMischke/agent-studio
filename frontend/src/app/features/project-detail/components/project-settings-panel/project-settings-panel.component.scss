@@ -43,6 +43,12 @@
   flex-direction: column;
   gap: var(--studio-spacing-3);
 }
+.ps-settings__section--preview {
+  padding: var(--studio-spacing-4);
+  border: 1px solid color-mix(in srgb, var(--studio-accent) 55%, var(--studio-border-strong));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--studio-accent) 6%, var(--studio-bg-hover));
+}
 .ps-settings__section-head {
   display: flex;
   flex-direction: column;

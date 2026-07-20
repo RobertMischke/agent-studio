@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import { ProjectUrlsPanelComponent } from './project-urls-panel.component';
 import type { RegistryWorkspaceListItem } from '../../../../models/task.model';
+import { ProjectUrlRecoveryService } from '../../services/project-url-recovery.service';
 
 function workspacesWith(urls: RegistryWorkspaceListItem['projects'][number]['urls']): RegistryWorkspaceListItem[] {
   return [{
@@ -85,5 +86,64 @@ describe('ProjectUrlsPanelComponent', () => {
 
     const el: HTMLElement = fixture.nativeElement;
     expect(el.querySelector('[data-testid="project-urls-row-url-1"]')?.textContent).toContain('Stable');
+  });
+
+  it('prefills, tests, and saves the detected Agent Studio Website setup', () => {
+    const { fixture, http } = mount();
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([]));
+    fixture.componentInstance.openAdd();
+    http.expectOne(req => req.url.endsWith('/PROJ-001/url-suggestions')).flush([{
+      label: 'Agent Studio Website', url: 'http://localhost:4184',
+      command: 'npm start -- --host 127.0.0.1 --port 4184', cwd: '04-angular-static-final',
+      port: 4184, source: 'readme',
+    }]);
+    fixture.componentInstance.fillFromSuggestion(fixture.componentInstance.suggestions()[0]);
+
+    expect(fixture.componentInstance.formCommand()).toBe('npm start -- --host 127.0.0.1 --port 4184');
+    expect(fixture.componentInstance.formCwd()).toBe('04-angular-static-final');
+    expect(fixture.componentInstance.formPort()).toBe(4184);
+    fixture.componentInstance.testSetup();
+    const test = http.expectOne(req => req.method === 'POST' && req.url.endsWith('/PROJ-001/urls/test'));
+    expect(test.request.body.startRule).toMatchObject({ cwd: '04-angular-static-final', port: 4184, source: 'readme' });
+    test.flush({
+      classification: 'running', summary: 'Ready', recommendedAction: 'None', command: fixture.componentInstance.formCommand(),
+      cwd: fixture.componentInstance.formCwd(), url: fixture.componentInstance.formUrl(), configuredPort: 4184,
+      processCreated: true, exitCode: null, stdoutTail: '', stderrTail: '', timedOut: false,
+      portReachable: true, httpStatus: 200, contentReady: true, checkedAt: '2026-07-13T00:00:00Z',
+    });
+    expect(fixture.componentInstance.testDiagnostic()?.classification).toBe('running');
+
+    fixture.componentInstance.save();
+    const save = http.expectOne(req => req.method === 'POST' && req.url.endsWith('/PROJ-001/urls'));
+    expect(save.request.body.startRule).toMatchObject({
+      command: 'npm start -- --host 127.0.0.1 --port 4184',
+      cwd: '04-angular-static-final', port: 4184, source: 'readme',
+    });
+    save.flush(workspacesWith([{
+      id: 'url-1', label: 'Agent Studio Website', url: 'http://localhost:4184', sortOrder: 0,
+      startRule: save.request.body.startRule,
+    }])[0].projects[0]);
+  });
+
+  it('opens the requested failing URL and prefills its detected setup', () => {
+    const { fixture, http } = mount();
+    fixture.componentRef.setInput('quickSetup', true);
+    TestBed.inject(ProjectUrlRecoveryService).requestQuickSetup('url-1', {
+      label: 'Agent Studio Website', url: 'http://localhost:4184',
+      command: 'npm start -- --host 127.0.0.1 --port 4184', cwd: '04-angular-static-final',
+      port: 4184, source: 'readme',
+    });
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([{
+      id: 'url-1', label: 'Preview', url: 'http://127.0.0.1:4184', sortOrder: 0,
+      startRule: { command: 'broken-command', cwd: 'missing', port: 4184, source: 'manual' },
+    }]));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editingId()).toBe('url-1');
+    expect(fixture.componentInstance.formLabel()).toBe('Preview');
+    expect(fixture.componentInstance.formUrl()).toBe('http://127.0.0.1:4184');
+    expect(fixture.componentInstance.formCommand()).toBe('npm start -- --host 127.0.0.1 --port 4184');
+    expect(fixture.componentInstance.formCwd()).toBe('04-angular-static-final');
+    expect(fixture.componentInstance.formSource()).toBe('readme');
   });
 });
