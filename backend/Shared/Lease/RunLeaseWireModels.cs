@@ -122,6 +122,13 @@ public sealed record RemoteRunCompletionRequest(
     string? SalvageBranchUrl = null,
     string? ResultSha = null,
     string? AttemptChainId = null,
+    string? SalvageResolution = null,
+    string? SalvageLocalCommitSha = null,
+    string? SalvageRecoveryBranch = null,
+    string? SalvageRecoveryCommitSha = null,
+    string? SalvageRecoveryBranchUrl = null,
+    string? SalvageAuthoritativeBaseBranch = null,
+    string? SalvageAuthoritativeBaseSha = null,
     string? Repository = null);
 
 public sealed record RemoteRunCompletionResponse(

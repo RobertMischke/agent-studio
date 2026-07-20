@@ -380,12 +380,24 @@ next process starts:
 4. Remove the linked worktree only after that verification. A clean checkout
    at its original commit needs no salvage branch.
 
+On a later pickup, the retained local tip and the existing canonical salvage
+ref are compared by ancestry. Local-ahead is published by normal fast-forward;
+remote-ahead remains authoritative. If the tips diverge, the runner leaves the
+canonical ref unchanged and publishes the retained local tip to the deterministic
+collision ref
+`runner/<runner-id>/<task-key>-collision-<local-sha>-<remote-sha>`. It verifies
+both exact tips, then prepares the new checkout from the canonical SHA and starts
+the CLI. Repeating the pickup reuses the same collision ref and creates no extra
+history. No force push is used.
+
 The runner-completion deliverables link a successful salvage branch and its
-commit. If the remote check or push fails, the runner leaves the worktree in
-place and records an open `worktree-blocked` gate item containing the host,
-path, and intended branch. Do not delete that path manually. Restore origin
-access, push or otherwise secure the branch, and close the gate only after the
-remote ref is verified.
+commit. A divergent recovery also records the collision ref, canonical and
+local SHAs, and which canonical SHA was the next pickup base. Publishing is
+bounded to three attempts. If the remote check or push still fails, the runner
+leaves the worktree in place and records an open `worktree-blocked` gate item
+containing the host, path, exact known tips, failure, and next safe action. Do
+not delete that path manually. Restore origin access, publish the retained tip
+to a new ref, and close the gate only after that ref is verified.
 
 ### Client identity registration (required)
 

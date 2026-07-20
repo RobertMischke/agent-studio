@@ -258,6 +258,20 @@ public static class LeaseEndpoints
                 details["resultSha"] = req.ResultSha;
             if (!string.IsNullOrWhiteSpace(req.AttemptChainId))
                 details["attemptChainId"] = req.AttemptChainId;
+            if (!string.IsNullOrWhiteSpace(req.SalvageResolution))
+                details["salvageResolution"] = req.SalvageResolution;
+            if (!string.IsNullOrWhiteSpace(req.SalvageLocalCommitSha))
+                details["salvageLocalCommitSha"] = req.SalvageLocalCommitSha;
+            if (!string.IsNullOrWhiteSpace(req.SalvageRecoveryBranch))
+                details["salvageRecoveryBranch"] = req.SalvageRecoveryBranch;
+            if (!string.IsNullOrWhiteSpace(req.SalvageRecoveryCommitSha))
+                details["salvageRecoveryCommitSha"] = req.SalvageRecoveryCommitSha;
+            if (!string.IsNullOrWhiteSpace(req.SalvageRecoveryBranchUrl))
+                details["salvageRecoveryBranchUrl"] = req.SalvageRecoveryBranchUrl;
+            if (!string.IsNullOrWhiteSpace(req.SalvageAuthoritativeBaseBranch))
+                details["salvageAuthoritativeBaseBranch"] = req.SalvageAuthoritativeBaseBranch;
+            if (!string.IsNullOrWhiteSpace(req.SalvageAuthoritativeBaseSha))
+                details["salvageAuthoritativeBaseSha"] = req.SalvageAuthoritativeBaseSha;
             if (!string.IsNullOrWhiteSpace(req.SalvageBranch)
                 && !string.IsNullOrWhiteSpace(req.SalvageCommitSha))
             {
@@ -267,10 +281,21 @@ public static class LeaseEndpoints
                 var branchRef = !string.IsNullOrWhiteSpace(req.SalvageBranchUrl)
                     ? $"[{req.SalvageBranch}]({req.SalvageBranchUrl})"
                     : $"`{req.SalvageBranch}`";
+                var recoveryLine = !string.IsNullOrWhiteSpace(req.SalvageRecoveryBranch)
+                    && !string.IsNullOrWhiteSpace(req.SalvageRecoveryCommitSha)
+                    ? $"- Divergent local history preserved on " +
+                      (!string.IsNullOrWhiteSpace(req.SalvageRecoveryBranchUrl)
+                          ? $"[{req.SalvageRecoveryBranch}]({req.SalvageRecoveryBranchUrl})"
+                          : $"`{req.SalvageRecoveryBranch}`") +
+                      $" at `{req.SalvageRecoveryCommitSha}`; " +
+                      $"`{req.SalvageAuthoritativeBaseBranch ?? req.SalvageBranch}` at " +
+                      $"`{req.SalvageAuthoritativeBaseSha ?? req.SalvageCommitSha}` was the authoritative pickup base.{Environment.NewLine}"
+                    : string.Empty;
                 File.WriteAllText(
                     deliverablesPath,
                     $"# Remote runner deliverables{Environment.NewLine}{Environment.NewLine}" +
-                    $"- Salvage branch {branchRef} at `{req.SalvageCommitSha}`.{Environment.NewLine}",
+                    $"- Salvage branch {branchRef} at `{req.SalvageCommitSha}`.{Environment.NewLine}" +
+                    recoveryLine,
                     System.Text.Encoding.UTF8);
                 artifactCommits.TryCommitArtifactUpload(
                     null, task.Id, task.FolderPath, ["results/deliverables.md"]);

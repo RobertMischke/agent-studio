@@ -347,6 +347,58 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Runner_completion_records_divergent_salvage_refs_and_shas_as_operator_evidence()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote salvage collision", "Continue safely.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        const string canonical = "runner/agent-runner-e2e/AGT-RUNNER-E2E";
+        const string canonicalSha = "09faf1b709faf1b709faf1b709faf1b709faf1b7";
+        const string localSha = "b6f23a3fb6f23a3fb6f23a3fb6f23a3fb6f23a3f";
+        const string recovery = canonical + "-collision-" + localSha + "-" + canonicalSha;
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease!.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            SalvageBranch: canonical,
+            SalvageCommitSha: canonicalSha,
+            SalvageResolution: "divergent",
+            SalvageLocalCommitSha: localSha,
+            SalvageRecoveryBranch: recovery,
+            SalvageRecoveryCommitSha: localSha,
+            SalvageAuthoritativeBaseBranch: canonical,
+            SalvageAuthoritativeBaseSha: canonicalSha), ct);
+
+        Assert.NotNull(completion);
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
+        var timeline = File.ReadAllText(Path.Combine(moved, "logs", "timeline.jsonl"));
+        Assert.Contains($"\"salvageBranch\":\"{canonical}\"", timeline);
+        Assert.Contains($"\"salvageCommitSha\":\"{canonicalSha}\"", timeline);
+        Assert.Contains("\"salvageResolution\":\"divergent\"", timeline);
+        Assert.Contains($"\"salvageLocalCommitSha\":\"{localSha}\"", timeline);
+        Assert.Contains($"\"salvageRecoveryBranch\":\"{recovery}\"", timeline);
+        Assert.Contains($"\"salvageAuthoritativeBaseBranch\":\"{canonical}\"", timeline);
+        Assert.Contains($"\"salvageAuthoritativeBaseSha\":\"{canonicalSha}\"", timeline);
+        var deliverables = File.ReadAllText(Path.Combine(moved, "results", "deliverables.md"));
+        Assert.Contains($"`{canonical}` at `{canonicalSha}`", deliverables);
+        Assert.Contains($"`{recovery}` at `{localSha}`", deliverables);
+        Assert.Contains($"`{canonical}` at `{canonicalSha}` was the authoritative pickup base", deliverables);
+    }
+
+    [Fact]
     public async Task Second_runner_is_refused_while_the_lease_is_held()
     {
         SeedTask(TaskStates.Progress, TaskKey, "Contended", "Prompt.");
