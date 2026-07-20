@@ -29,6 +29,12 @@
       "title": "Task Server security: human login, Runner service identities, authorization, and HTTPS",
       "linkedAt": "2026-07-20T14:01:27.9117806Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2192",
+      "title": "Task Server: extract an independently deployable control-plane service",
+      "linkedAt": "2026-07-20T14:21:00.7002655Z",
+      "source": "auto"
     }
   ]
 }
