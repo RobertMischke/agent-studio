@@ -113,7 +113,7 @@
                     <span class="psd__chevron-spacer"></span>
                     <button class="psd__label psd__label--doc"
                             type="button"
-                            [attr.title]="src.relPath"
+                            [appTooltip]="src.relPath"
                             [attr.data-testid]="'project-steering-docs-file-' + src.relPath"
                             (click)="openSource(src)">
                       <app-studio-icon name="file" [size]="13"></app-studio-icon>

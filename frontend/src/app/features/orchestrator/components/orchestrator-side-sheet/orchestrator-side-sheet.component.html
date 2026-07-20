@@ -89,7 +89,7 @@
                   aria-current="true"
                   data-testid="orch-context-scope">{{ contextDigestState.scopeLabel() }}</span>
             <span class="sheet__memory"
-                  [attr.title]="contextDigestState.statusTitle()"
+                  [appTooltip]="contextDigestState.statusTitle()"
                   data-testid="orch-context-freshness">{{ contextDigestState.statusText() }}</span>
           </nav>
         </div>

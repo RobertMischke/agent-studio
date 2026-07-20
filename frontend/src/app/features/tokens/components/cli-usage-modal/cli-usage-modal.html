@@ -28,7 +28,7 @@
           @for (w of windowViews(); track w.label) {
             <li class="cum__win" data-testid="cli-usage-window" [attr.data-tone]="w.tone">
               <div class="cum__win-top">
-                <span class="cum__win-label" [title]="w.label">{{ w.label }}</span>
+                <span class="cum__win-label" [appTooltip]="w.label">{{ w.label }}</span>
                 <span class="cum__win-pct">{{ w.pctLabel }}</span>
               </div>
               <div class="cum__gauge">

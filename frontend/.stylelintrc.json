@@ -187,6 +187,7 @@
       "files": [
         "src/app/components/async-feedback/loading-surface/loading-surface.component.scss",
         "src/app/components/project-basics-form/project-basics-form.component.scss",
+        "src/app/components/tooltip/tooltip.scss",
         "src/app/features/board/components/create-task-dialog/create-task-dialog.component.scss",
         "src/app/features/board/components/task-column/task-column.scss",
         "src/app/features/project-detail/components/execution-assignment-card/execution-assignment-card.scss",

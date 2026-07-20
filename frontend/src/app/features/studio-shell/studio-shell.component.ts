@@ -46,6 +46,7 @@ import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './c
 import { deriveProjectPulseByName, type ProjectPulseState } from './studio-shell.pulse';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { AppTooltipDirective } from '../../components/tooltip/app-tooltip.directive';
 import { TaskStatusPopoverDirective } from '../../components/task-status-card';
 import { buildProjectPickerItems, buildTabCtxMenuItems } from './studio-shell.menu-builders';
 import { StudioTabStateService } from './services/studio-tab-state.service';
@@ -89,7 +90,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, ProjectDetailComponent, GlobalSearchComponent],
+  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, AppTooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, ProjectDetailComponent, GlobalSearchComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',

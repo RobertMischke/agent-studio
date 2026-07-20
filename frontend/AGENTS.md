@@ -197,7 +197,7 @@ CSS linting runs with `npm run lint:css` (Stylelint, configured in `.stylelintrc
 
 ## Chat surfaces (`coding-agent-chat` — `<cac-chat>` is canonical)
 
-The chat stack lives in the standalone **`coding-agent-chat`** Angular library (source: `C:\Projects\coding-agent-chat`, built to `dist/coding-agent-chat`). The app is a **host**: it consumes the library and owns only the app-specific wiring. The former in-app copies (`components/chat/**`, `components/chat-row/`, `components/markdown-view/`, `components/markdown-utils.ts`, `components/tooltip/`, `directives/markdown-image-lightbox.directive.ts`, `features/project-chat/`, `features/workforce/`, the `parseActivityLog`/`buildConversationTurns` halves of `activity-log.parser.ts`) were deleted when the host adoption landed — do not re-create them; change the library instead.
+The chat stack lives in the standalone **`coding-agent-chat`** Angular library (source: `C:\Projects\coding-agent-chat`, built to `dist/coding-agent-chat`). The app is a **host**: it consumes the library and owns only the app-specific wiring. The former in-app copies (`components/chat/**`, `components/chat-row/`, `components/markdown-view/`, `components/markdown-utils.ts`, `directives/markdown-image-lightbox.directive.ts`, `features/project-chat/`, `features/workforce/`, the `parseActivityLog`/`buildConversationTurns` halves of `activity-log.parser.ts`) were deleted when the host adoption landed — do not re-create them; change the library instead.
 
 Dependency: `"coding-agent-chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`. The registry version replaces the `file:` path after the library's first npm publish. `.npmrc` sets `install-links=true` so the `file:` dep is installed as a physical copy (a symlink would make the bundler/vitest resolve a second `@angular/core` from the library workspace). After rebuilding the library dist, re-run `npm install` here to pick up changes.
 
@@ -207,7 +207,12 @@ Entry points and what the app uses from them:
 - `coding-agent-chat/core` — pure kernel: `ChatMessage`/`ChatEvent` types, `ConversationEvent` wire contract, `projectConversation(...)` (note: its context field is `task:`, not `job:`), `parseActivityLog`, `buildConversationTurns`, `mergeByTimestamp`, session/rate-limit meta parsing.
 - `coding-agent-chat/markdown` — `<cac-markdown>` (`MarkdownViewComponent`, the canonical markdown surface), `markdownToHtml`/`htmlToMarkdown`/`sanitizeHtml`, `MarkdownTaskReference`.
 - `coding-agent-chat/history` — `<cac-chat-row>`, `<cac-project-chat-list>` (virtualised history), `<cac-project-chat-rail>`, `<cac-phase-summary-list>`, the `PROJECT_CHAT_DATA_SOURCE` + `CHAT_HISTORY_CONFIRM` seams, `ProjectChatTurn` + scroll/search/stats/turn response types.
-- `coding-agent-chat/shared` — `[cacTooltip]` (`TooltipDirective`), `[cacStickToBottom]`, `[cacMarkdownLightbox]`, `CHAT_MEDIA_LIGHTBOX`.
+- `coding-agent-chat/shared` — `[cacTooltip]` (`TooltipDirective`) for library-owned surfaces, `[cacStickToBottom]`, `[cacMarkdownLightbox]`, `CHAT_MEDIA_LIGHTBOX`.
+
+Studio-owned Angular templates use the lightweight standalone `[appTooltip]`
+directive in `src/app/components/tooltip/`. Keep `[cacTooltip]` inside library
+surfaces and at existing library integration points; do not recreate the old
+chat-owned tooltip controller or component in the host app.
 
 Host wiring (all in `src/app/app.config.ts`):
 - `provideCodingAgentChat({ taskReferences: TaskReferenceNavigationService, mediaLightbox: MediaLightboxService })` — markdown task-key auto-linking + click-to-enlarge images.

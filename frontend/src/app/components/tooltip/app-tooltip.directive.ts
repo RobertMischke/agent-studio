@@ -1,0 +1,108 @@
+import { DOCUMENT } from '@angular/common';
+import { Directive, ElementRef, OnDestroy, inject, input } from '@angular/core';
+
+let nextTooltipId = 0;
+
+@Directive({
+  selector: '[appTooltip]',
+  standalone: true,
+  host: {
+    '(mouseenter)': 'scheduleShow()',
+    '(mouseleave)': 'hide()',
+    '(focusin)': 'scheduleShow()',
+    '(focusout)': 'onFocusOut($event)',
+    '(keydown.escape)': 'hide()',
+  },
+})
+export class AppTooltipDirective implements OnDestroy {
+  readonly appTooltip = input<string | null>(null);
+
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  private readonly document = inject(DOCUMENT);
+  private readonly tooltipId = `app-tooltip-${++nextTooltipId}`;
+  private showTimer: ReturnType<typeof setTimeout> | null = null;
+  private overlay: HTMLElement | null = null;
+
+  scheduleShow(): void {
+    this.cancelShow();
+    if (!this.appTooltip()?.trim()) return;
+    this.showTimer = setTimeout(() => this.show(), 300);
+  }
+
+  onFocusOut(event: FocusEvent): void {
+    if (event.relatedTarget instanceof Node && this.host.contains(event.relatedTarget)) return;
+    this.hide();
+  }
+
+  hide(): void {
+    this.cancelShow();
+    if (!this.overlay) return;
+    this.document.defaultView?.removeEventListener('resize', this.position);
+    this.document.removeEventListener('scroll', this.position, true);
+    this.overlay.remove();
+    this.overlay = null;
+    this.removeDescription();
+  }
+
+  ngOnDestroy(): void {
+    this.hide();
+  }
+
+  private show(): void {
+    this.showTimer = null;
+    const content = this.appTooltip()?.trim();
+    if (!content || this.overlay) return;
+
+    const overlay = this.document.createElement('div');
+    overlay.id = this.tooltipId;
+    overlay.className = 'app-tooltip-overlay';
+    overlay.setAttribute('role', 'tooltip');
+    overlay.textContent = content;
+    this.document.body.append(overlay);
+    this.overlay = overlay;
+    this.addDescription();
+    this.position();
+    this.document.defaultView?.addEventListener('resize', this.position);
+    this.document.addEventListener('scroll', this.position, true);
+  }
+
+  private readonly position = (): void => {
+    const overlay = this.overlay;
+    if (!overlay) return;
+    const hostRect = this.host.getBoundingClientRect();
+    const overlayRect = overlay.getBoundingClientRect();
+    const viewportWidth = this.document.documentElement.clientWidth;
+    const viewportHeight = this.document.documentElement.clientHeight;
+    const edge = 8;
+    const gap = 8;
+    const preferredTop = hostRect.top - overlayRect.height - gap;
+    const placeBelow = preferredTop < edge && hostRect.bottom + gap + overlayRect.height <= viewportHeight - edge;
+    const top = placeBelow ? hostRect.bottom + gap : Math.max(edge, preferredTop);
+    const centeredLeft = hostRect.left + (hostRect.width - overlayRect.width) / 2;
+    const left = Math.min(Math.max(edge, centeredLeft), Math.max(edge, viewportWidth - overlayRect.width - edge));
+
+    overlay.dataset['placement'] = placeBelow ? 'bottom' : 'top';
+    overlay.style.left = `${Math.round(left)}px`;
+    overlay.style.top = `${Math.round(top)}px`;
+  };
+
+  private addDescription(): void {
+    const ids = (this.host.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
+    if (!ids.includes(this.tooltipId)) ids.push(this.tooltipId);
+    this.host.setAttribute('aria-describedby', ids.join(' '));
+  }
+
+  private removeDescription(): void {
+    const ids = (this.host.getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .filter(id => id && id !== this.tooltipId);
+    if (ids.length) this.host.setAttribute('aria-describedby', ids.join(' '));
+    else this.host.removeAttribute('aria-describedby');
+  }
+
+  private cancelShow(): void {
+    if (this.showTimer === null) return;
+    clearTimeout(this.showTimer);
+    this.showTimer = null;
+  }
+}

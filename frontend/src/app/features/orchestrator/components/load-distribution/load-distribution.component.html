@@ -31,7 +31,7 @@
               <div><strong>{{ label }}</strong><span class="load__num">{{ windowPct(row, $any(label)) === null ? 'unavailable' : windowPct(row, $any(label)) + '% used' }}</span><small>{{ resetLabel(row, $any(label)) }}</small></div>
               <div class="load__burn" [attr.data-risk]="(projection(row, $any(label)) ?? 0) > 100 ? 'high' : 'ok'">
                 <span [style.width.%]="windowPct(row, $any(label)) ?? 0"></span>
-                @if (projection(row, $any(label)); as projected) { <i [style.left.%]="projected > 100 ? 100 : projected" [attr.title]="'Projected ' + projected.toFixed(0) + '% at reset'"></i> }
+                @if (projection(row, $any(label)); as projected) { <i [style.left.%]="projected > 100 ? 100 : projected" [appTooltip]="'Projected ' + projected.toFixed(0) + '% at reset'"></i> }
               </div>
               <p>{{ projectionLabel(row, $any(label)) }}</p>
             </div>
@@ -51,7 +51,7 @@
             <line x1="0" y1="38" x2="100" y2="38"></line><polyline [attr.points]="row.points"></polyline>
           </svg>
           <div class="load__effort" aria-label="Reasoning effort split">
-            @for (effort of row.effort; track effort.level) { <span [style.width.%]="effort.pct" [attr.title]="effort.level + ': ' + formatTokens(effort.tokens)"></span> }
+            @for (effort of row.effort; track effort.level) { <span [style.width.%]="effort.pct" [appTooltip]="effort.level + ': ' + formatTokens(effort.tokens)"></span> }
           </div>
           <footer><span>{{ row.calls }} captured calls</span><span>@for (effort of row.effort; track effort.level) { {{ effort.level }} {{ effort.pct.toFixed(0) }}%&nbsp; }</span></footer>
         </article>

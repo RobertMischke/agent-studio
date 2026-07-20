@@ -4,6 +4,7 @@ import type { CliUsageQuotaRow, TokenSummaryByModel } from '../../../tokens';
 import type { OrchestratorLogEntry } from '../../models/orchestrator.model';
 import { TaskService } from '../../../../services/task.service';
 import { taskNavigationHref } from '../../../task-detail/state/task-url';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 
 type Period = '1h' | '24h' | '7d';
 interface UsageEvent { ts: number; tokens: number; }
@@ -19,6 +20,7 @@ interface ModelRow {
 @Component({
   selector: 'app-load-distribution',
   standalone: true,
+  imports: [AppTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './load-distribution.component.html',
   styleUrl: './load-distribution.component.scss',

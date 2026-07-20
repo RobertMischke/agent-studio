@@ -349,7 +349,7 @@
           } @else if (previewKind() === 'html' && previewHtmlDoc(); as doc) {
             <iframe class="git-view__preview-frame"
                     data-testid="git-preview-html"
-                    title="HTML preview"
+                    aria-label="HTML preview" appTooltip="HTML preview"
                     sandbox="allow-scripts"
                     [srcdoc]="doc"></iframe>
           } @else {

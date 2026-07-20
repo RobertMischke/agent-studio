@@ -400,7 +400,7 @@
     <!-- Editor area with tabs -->
     <section class="studio-editor"
              data-testid="studio-editor">
-      <div class="studio-tabbar">
+      <div class="studio-tabbar" data-testid="studio-tabbar">
         <div class="studio-tabbar__list"
              role="tablist"
              (dragover)="onTabListDragOver($event)"
@@ -420,7 +420,7 @@
                  [class.studio-tab--drop-before]="dragOverTabKey() === tabKey(t) && draggingTabKey() !== tabKey(t)"
                  [attr.aria-selected]="activeKey() === tabKey(t) ? 'true' : 'false'"
                  [attr.aria-label]="tabLabel(t)"
-                 [attr.title]="tabTooltip(t)"
+                 [appTooltip]="tabTooltip(t)"
                  [attr.data-testid]="'studio-tab-' + tabKey(t)"
                  [attr.data-tab-key]="tabKey(t)"
                  (click)="selectTab(tabKey(t))"
@@ -447,7 +447,7 @@
               @if (tabIcon(t); as icon) {
                 <app-studio-icon [name]="icon" [size]="13"></app-studio-icon>
               }
-              <span class="studio-tab__title" [attr.title]="tabTooltip(t)">{{ tabLabel(t) }}</span>
+              <span class="studio-tab__title">{{ tabLabel(t) }}</span>
               <button type="button"
                       class="studio-tab__close"
                       aria-label="Close tab"

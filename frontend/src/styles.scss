@@ -8,6 +8,7 @@
 @use 'styles/components-semantic';
 @use 'styles/markdown-body';
 @use 'styles/empty-state';
+@use 'app/components/tooltip/tooltip';
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }

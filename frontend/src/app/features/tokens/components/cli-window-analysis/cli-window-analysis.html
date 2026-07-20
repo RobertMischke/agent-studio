@@ -24,7 +24,7 @@
           <header><strong>{{ window.label }}</strong><span>{{ window.usedPct === null ? 'Usage unavailable' : window.usedPct + '% used' }}</span></header>
           <div class="cwa__meter"><span [style.width.%]="window.usedPct ?? 0"></span>
             @if (projected(window, windowHours(window.label)); as projection) {
-              <i [style.left.%]="projection > 100 ? 100 : projection" [attr.title]="projection.toFixed(0) + '% projected at reset'"></i>
+              <i [style.left.%]="projection > 100 ? 100 : projection" [appTooltip]="projection.toFixed(0) + '% projected at reset'"></i>
             }
           </div>
           <dl><div><dt>Reset</dt><dd>{{ window.resetLabel ?? 'Unknown' }}</dd></div><div><dt>Burn rate</dt><dd>{{ formatPct(windowBurn(window, windowHours(window.label))) }}</dd></div><div><dt>Projected</dt><dd>{{ projected(window, windowHours(window.label)) === null ? 'Unavailable' : projected(window, windowHours(window.label))!.toFixed(0) + '%' }}</dd></div></dl>
@@ -41,7 +41,7 @@
       </div>
     </div>
     <div class="cwa__trend" [attr.aria-label]="'Captured token trend for ' + period()">
-      @for (point of trend(); track point.label) { <span [style.height.%]="point.height" [attr.title]="point.label + ': ' + formatTokens(point.total)"></span> }
+      @for (point of trend(); track point.label) { <span [style.height.%]="point.height" [appTooltip]="point.label + ': ' + formatTokens(point.total)"></span> }
     </div>
   </section>
 

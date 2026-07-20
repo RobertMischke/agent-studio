@@ -17,6 +17,7 @@ import { finalize } from 'rxjs';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../../components/menu';
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { TaskService } from '../../../../services/task.service';
 import {
   ProjectUrlProbeService,
@@ -58,6 +59,7 @@ type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' |
   imports: [
     StudioIconComponent,
     TooltipDirective,
+    AppTooltipDirective,
     MenuComponent,
     ProjectUrlAddressComponent,
     ProjectUrlProcessConsoleComponent,

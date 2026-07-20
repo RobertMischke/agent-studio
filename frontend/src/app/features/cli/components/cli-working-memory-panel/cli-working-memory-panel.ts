@@ -3,6 +3,7 @@ import { TaskService } from '../../../../services/task.service';
 import type { CliWorkingMemoryEntry, CliWorkingMemoryReport } from '../../../../features/cli';
 import type { CliType } from '../../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel, formatRelativeTime } from '../../../../services/format.util';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 
 /**
  * Per-CLI Working-Memory panel for the Admin/CLI page (ASS-1748 / T1c). For each
@@ -19,7 +20,7 @@ import { cliTypeIcon, cliTypeLabel, formatRelativeTime } from '../../../../servi
 @Component({
   selector: 'app-cli-working-memory-panel',
   standalone: true,
-  imports: [],
+  imports: [AppTooltipDirective],
   templateUrl: './cli-working-memory-panel.html',
   styleUrl: './cli-working-memory-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

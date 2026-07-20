@@ -21,6 +21,7 @@ import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { CLI_TYPES, CliType, TaskState } from '../../../../models/task.model';
 import {
   WikiFileSaveResult,
@@ -137,6 +138,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     OverlayPortalDirective,
     StudioIconComponent,
     TooltipDirective,
+    AppTooltipDirective,
     WikiDashboardComponent,
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
