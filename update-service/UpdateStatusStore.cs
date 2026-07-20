@@ -125,6 +125,11 @@ public sealed class UpdateStatusStore
         }
     }
 
+    public void SetReleaseComparison(ReleaseComparison comparison)
+    {
+        lock (_lock) _status = _status with { ReleaseComparison = comparison };
+    }
+
     /// <summary>
     /// Phase transition. Phases that imply "in-flight" (anything that is not
     /// idle / done / failed) flip <c>IsRunning=true</c> so the FE block-modal

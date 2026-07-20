@@ -52,6 +52,7 @@ builder.Services.AddSingleton<IBackendProbe>(sp =>
 });
 
 builder.Services.AddSingleton<UpdateVerifier>();
+builder.Services.AddSingleton<ReleasePreflightService>();
 
 builder.Services.AddSingleton(sp =>
 {
@@ -88,12 +89,16 @@ app.MapGet("/healthz", () => Results.Text("\"ok\"", "application/json"));
 app.MapGet("/update/health", () => Results.Text("\"ok\"", "application/json"));
 
 var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+jsonOpts.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 
 app.MapGet("/update/status", (UpdateStatusStore store) =>
     Results.Json(store.Get(), jsonOpts));
 
 app.MapGet("/update/history", (UpdateStatusStore store, int? max) =>
     Results.Json(store.ReadHistory(max.GetValueOrDefault(20)), jsonOpts));
+
+app.MapGet("/update/preflight", async (ReleasePreflightService preflight, CancellationToken ct) =>
+    Results.Json(await preflight.EvaluateAsync(allowDowngrade: false, ct), jsonOpts));
 
 app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, UpdateServiceOptions opt, IHostApplicationLifetime lifetime, CancellationToken ct) =>
 {

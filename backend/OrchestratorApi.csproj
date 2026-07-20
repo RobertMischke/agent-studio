@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,7 +44,7 @@
        xhigh/ultra instead of being normalized down to medium. This card
        (detection + default + UI) builds on that ladder. -->
   <ItemGroup>
-    <PackageReference Include="CodingAgentRunner" Version="0.5.0" />
+    <PackageReference Include="CodingAgentRunner" Version="[0.5.0]" />
   </ItemGroup>
 
   <!-- TokenEconomy integration seam (AGT-2146). Local co-development follows
@@ -127,6 +129,7 @@
 
   <ItemGroup>
     <Content Include="..\prompts\runtime\*.md" Link="prompts\runtime\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\build-manifest.json" Link="build-manifest.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\build-manifest.json')" />
   </ItemGroup>
 
 </Project>

@@ -17,7 +17,8 @@ function documentFor(theme: 'dark' | 'light'): string {
     h2 { margin:0 0 12px;color:var(--dim);font-size:11px;letter-spacing:.08em;text-transform:uppercase }.commit { display:grid;grid-template-columns:auto 1fr;gap:12px;padding:12px;border-radius:10px;background:var(--card) }
   </style></head><body><aside class="center" data-testid="update-center">
     <header><div><h1>Update Center</h1><p>Runtime truth, release branches and deploy history in one place.</p></div><span>↻ &nbsp; ×</span></header>
-    <section class="hero" data-testid="update-center-runtime"><div class="eyebrow"><span class="dot"></span>Running Agent Studio</div><strong class="version">2026.07.10-1000+a1b2c3d</strong><div class="meta"><code>a1b2c3d</code><span>Deployed Jul 10, 2026, 12:00</span></div><span class="pill">Update available</span></section>
+    <section class="hero" data-testid="update-center-runtime"><div class="eyebrow"><span class="dot"></span>Running Agent Studio</div><strong class="version">v1.2.0</strong><div class="meta"><code>a1b2c3d</code><span>Built Jul 10, 2026, 12:00</span></div><div class="meta" data-testid="update-center-artifact-identity"><span>CAR 0.5.0 · 7d6b1c92</span><span>CAC 0.1.0 · 462a9c1</span></div><span class="pill">Update available</span></section>
+    <section class="branch" data-testid="update-center-release-comparison"><strong>upgrade</strong><span>Latest approved: v1.3.0</span></section>
     <section class="branches"><article class="branch" data-testid="update-center-main-version"><div class="branch-head"><span>main</span><code>d4e5f6a</code></div><strong>3 ahead of running</strong><small>Jul 11, 2026, 14:30</small></article><article class="branch" data-testid="update-center-develop-version"><div class="branch-head"><span>develop</span><code>f7a8b9c</code></div><strong>7 ahead of running</strong><small>Jul 11, 2026, 14:45</small></article></section>
     <section><h2>What changes with the next deploy</h2><div class="commit"><code>d4e5f6a</code><span>Polish workspace navigation</span></div><div class="commit"><code>c3d4e5f</code><span>Harden deploy verification</span></div></section>
   </aside></body></html>`;
@@ -26,7 +27,10 @@ function documentFor(theme: 'dark' | 'light'): string {
 for (const theme of ['dark', 'light'] as const) {
   test(`shows running, main and develop truth in ${theme} theme`, async ({ page }) => {
     await page.setContent(documentFor(theme));
-    await expect(page.getByTestId('update-center-runtime')).toContainText('2026.07.10-1000+a1b2c3d');
+    await expect(page.getByTestId('update-center-runtime')).toContainText('v1.2.0');
+    await expect(page.getByTestId('update-center-artifact-identity')).toContainText('CAR 0.5.0');
+    await expect(page.getByTestId('update-center-artifact-identity')).toContainText('CAC 0.1.0');
+    await expect(page.getByTestId('update-center-release-comparison')).toContainText('Latest approved: v1.3.0');
     await expect(page.getByTestId('update-center-main-version')).toContainText('3 ahead of running');
     await expect(page.getByTestId('update-center-develop-version')).toContainText('7 ahead of running');
     if (evidenceDir) await page.getByTestId('update-center').screenshot({ path: `${evidenceDir}/update-center-${theme}--mocked.png` });

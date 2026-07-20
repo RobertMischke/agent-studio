@@ -39,30 +39,26 @@ public static class SystemEndpoints
             return Results.Ok(new { isDev, devTools });
         });
 
-        // Runtime identity is taken from the loaded backend assembly, not from
-        // the checkout on disk. This remains truthful when main has advanced or
-        // files were pulled without restarting the running process.
-        app.MapGet("/api/system/version", () =>
-        {
-            var assembly = typeof(SystemEndpoints).Assembly;
-            var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            var deployedAt = File.GetLastWriteTimeUtc(assembly.Location);
-            var configuredSha = Environment.GetEnvironmentVariable("ATP_DEPLOY_SHA");
-            var configuredAt = Environment.GetEnvironmentVariable("ATP_DEPLOYED_AT");
-            var sourceSha = !string.IsNullOrWhiteSpace(configuredSha)
-                ? configuredSha
-                : informational?.Split('+', 2).ElementAtOrDefault(1)?.Split('.', 2)[0] ?? "unknown";
-            var builtAt = DateTime.TryParse(configuredAt, out var parsedAt)
-                ? parsedAt.ToUniversalTime()
-                : deployedAt;
-            return Results.Ok(new
-            {
-                version = $"{builtAt:yyyy.MM.dd-HHmm}+{sourceSha[..Math.Min(8, sourceSha.Length)]}",
-                commit = sourceSha,
-                deployedAt = builtAt,
-                informationalVersion = informational
-            });
-        });
+        // Runtime identity comes only from the immutable manifest copied beside
+        // the running backend. Checkout state and folder timestamps are not
+        // evidence of what this process loaded.
+        // Capture once at process start. Re-reading a mutable file on every
+        // request would report the checkout/cache identity rather than the
+        // code this process actually loaded.
+        var buildIdentity = BuildIdentity.Load(app.Configuration);
+        BuildIdentity ReadBuildIdentity() => buildIdentity;
+        object About() {
+            var identity = ReadBuildIdentity();
+            return new {
+                identity.SchemaVersion, identity.Application, identity.Tag,
+                identity.Version, identity.Commit, identity.Dirty,
+                identity.BuiltAt, deployedAt = identity.BuiltAt,
+                identity.Integrity, identity.CodingAgentRunner,
+                identity.CodingAgentChat, identity.Legacy
+            };
+        }
+        app.MapGet("/api/system/version", () => Results.Ok(About()));
+        app.MapGet("/api/system/about", () => Results.Ok(About()));
 
         // Lists the centrally-managed agent-rule files that are appended as a
         // system-prompt overlay to every Claude job. Used by the Job Detail
@@ -176,6 +172,12 @@ public static class SystemEndpoints
                 : Results.BadRequest(new { error = result.Error ?? "Could not run cleanup." });
         });
 
-        app.MapGet("/healthz", () => Results.Ok("ok"));
+        app.MapGet("/healthz", (HttpContext context) =>
+        {
+            var identity = ReadBuildIdentity();
+            context.Response.Headers["X-Agent-Studio-Tag"] = identity.Tag;
+            context.Response.Headers["X-Agent-Studio-Commit"] = identity.Commit;
+            return Results.Ok("ok");
+        });
     }
 }

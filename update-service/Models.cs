@@ -36,10 +36,21 @@ public sealed record UpdateStatus(
     bool AutoRollbackEnabled,        // mirrors UpdateServiceOptions.AutoRollback so the FE can show the right copy.
     RuntimeVersion? RunningVersion = null,
     BranchVersion? MainVersion = null,
-    BranchVersion? DevelopVersion = null
+    BranchVersion? DevelopVersion = null,
+    ReleaseComparison? ReleaseComparison = null
 );
 
-public sealed record RuntimeVersion(string Version, string Commit, DateTime DeployedAt);
+public sealed record RuntimeVersion(
+    string Version,
+    string Commit,
+    DateTime? DeployedAt,
+    string? Tag = null,
+    bool Dirty = false,
+    DateTimeOffset? BuiltAt = null,
+    string? Integrity = null,
+    ReleaseArtifact? CodingAgentRunner = null,
+    ReleaseArtifact? CodingAgentChat = null,
+    bool Legacy = false);
 public sealed record BranchVersion(string Branch, string Commit, DateTime? CommitAt, int AheadBy, int BehindBy);
 
 public sealed record CommitInfo(string Sha, string Subject, string Author, DateTime AuthorDate);
@@ -62,7 +73,13 @@ public sealed record UpdateHistoryEntry(
     string Trigger,                  // "manual" | "scheduled" | "api"
     IReadOnlyList<VerificationFailure>? VerificationFailures = null,
     string? RollbackStatus = null,   // "ok" | "failed" | null (no rollback ran)
-    string? RunFolder = null
+    string? RunFolder = null,
+    string? IntendedTag = null,
+    string? ObservedTag = null,
+    string? ReleaseDirection = null,
+    string? ManifestIntegrity = null,
+    ReleaseManifest? IntendedRelease = null,
+    ReleaseManifest? ObservedRelease = null
 );
 
 public sealed record TriggerRequest(string? Reason, bool Force);

@@ -29,17 +29,32 @@
 
       <section class="upd-center__hero" data-testid="update-center-runtime">
         <div class="upd-center__eyebrow"><span class="upd-center__dot"></span> Running Agent Studio</div>
-        <strong class="upd-center__version">{{ status()?.runningVersion?.version ?? status()?.productVersion ?? 'Version unknown' }}</strong>
+        <strong class="upd-center__version">{{ status()?.runningVersion?.tag ?? status()?.runningVersion?.version ?? status()?.productVersion ?? 'Version unknown' }}</strong>
         <div class="upd-center__runtime-meta">
           <code>{{ shortSha(status()?.runningVersion?.commit ?? status()?.headLocal) }}</code>
-          <span>Deployed {{ formatDate(status()?.runningVersion?.deployedAt) }}</span>
+          <span>Built {{ formatDate(status()?.runningVersion?.builtAt ?? status()?.runningVersion?.deployedAt) }}</span>
         </div>
+        @if (status()?.runningVersion; as runtime) {
+          <div class="upd-center__runtime-meta" data-testid="update-center-artifact-identity">
+            <span>CAR {{ runtime.codingAgentRunner?.version ?? 'unverified' }} · {{ shortSha(runtime.codingAgentRunner?.commit) }}</span>
+            <span>CAC {{ runtime.codingAgentChat?.version ?? 'unverified' }} · {{ shortSha(runtime.codingAgentChat?.commit) }}</span>
+            @if (runtime.dirty || runtime.legacy) { <span>Unreleased build</span> }
+          </div>
+        }
         @if ((status()?.mainVersion?.behindBy ?? status()?.behindBy ?? 0) === 0) {
           <span class="upd-center__pill upd-center__pill--ok">Matches main</span>
         } @else {
           <span class="upd-center__pill upd-center__pill--behind">Update available</span>
         }
       </section>
+
+      @if (status()?.releaseComparison; as comparison) {
+        <section class="upd-center__service-warning" data-testid="update-center-release-comparison">
+          <strong>{{ comparison.summary }}</strong>
+          <span>Latest approved: {{ comparison.latestApprovedTag ?? 'unknown' }}</span>
+          @if (comparison.errors.length > 0) { <span>{{ comparison.errors.join(' · ') }}</span> }
+        </section>
+      }
 
       <section class="upd-center__branches" aria-label="Branch versions">
         <article class="upd-center__branch" data-testid="update-center-main-version">
@@ -80,6 +95,7 @@
                   {{ h.status }}
                 </span>
                 <code>{{ h.headBefore }} → {{ h.headAfter }}</code>
+                @if (h.intendedTag) { <span>{{ h.releaseDirection }} · {{ h.intendedTag }}</span> }
                 <span class="upd-center__dim">{{ h.durationSeconds }}s</span>
               </li>
             }
