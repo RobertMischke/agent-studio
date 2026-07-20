@@ -498,6 +498,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Assert.Equal(BuildTestGateVerdict.Ok, (await leader).Verdict);
     }
 
+    // MachineBound 20.07.: cmd.exe for /L emittiert nur line-1 auf Windows-Hosts - auf Linux-Runner validiert
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task LateLockEvidenceSurvivesRingBufferAndTimeoutTestNameIsNotMisclassified()
     {
