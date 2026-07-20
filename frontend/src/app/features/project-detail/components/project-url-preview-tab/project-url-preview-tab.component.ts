@@ -2,12 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  type ElementRef,
   computed,
   effect,
   inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
@@ -23,6 +25,7 @@ import {
 import type { RegistryProjectUrl } from '../../../../models/task.model';
 import { ProjectUrlLookupService } from '../../services/project-url-lookup.service';
 import { ProjectUrlProcessController } from '../../services/project-url-process.controller';
+import { ProjectUrlEmbedNavigationController } from '../../services/project-url-embed-navigation.controller';
 import { ProjectUrlAddressComponent } from '../project-url-address/project-url-address';
 import { ProjectUrlProcessConsoleComponent } from '../project-url-process-console/project-url-process-console';
 import {
@@ -31,7 +34,6 @@ import {
 } from '../project-url-settings-dialog/project-url-settings-dialog';
 import { buildEmbedMenuItems, httpErrorMessage, type StartFailure } from './project-url-preview-tab.helpers';
 
-/** Address-bar status pill vocabulary for the embedded preview. */
 type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' | 'failed' | 'custom';
 
 /**
@@ -44,15 +46,11 @@ type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' |
  * plus the iframe and its load / offline / blocked state machine.
  *
  * State machine (concept §1.3), driven by {@link ProjectUrlProbeService} plus
- * the iframe `load` event and a load-timeout heuristic:
- * - `resolving` → looking the URL record up in the registry;
- * - `not-found` → the URL was removed from the project (no stuck spinner);
- * - resolved + `offline` → "Not running" card with a **Start** button when the
- *   URL has a start rule, else a note that it has no start command;
- * - resolved + `running`/`unknown` → mount the iframe; a spinner overlays it
- *   until `load` fires, and if `load` never fires within {@link LOAD_TIMEOUT_MS}
- *   while the server is reachable we surface a "may refuse to be embedded"
- *   banner (X-Frame-Options / CSP) with an always-available browser escape hatch.
+ * the iframe `load` event and a load-timeout heuristic: `resolving` (registry
+ * lookup), `not-found` (URL removed), resolved + offline ("Not running" card,
+ * Start button when a start rule exists), resolved + healthy (mount the
+ * iframe; if `load` never fires within {@link LOAD_TIMEOUT_MS} while the
+ * server is reachable, surface an embed-refusal banner, X-Frame-Options/CSP).
  */
 @Component({
   selector: 'app-project-url-preview-tab',
@@ -65,7 +63,7 @@ type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' |
     ProjectUrlProcessConsoleComponent,
     ProjectUrlSettingsDialogComponent,
   ],
-  providers: [ProjectUrlProcessController],
+  providers: [ProjectUrlProcessController, ProjectUrlEmbedNavigationController],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Emulated encapsulation on purpose: the shell's `.studio button` reset
   // outranks bare classes and would flatten the card's action buttons.
@@ -84,9 +82,9 @@ export class ProjectUrlPreviewTabComponent {
   private readonly taskService = inject(TaskService);
   private readonly sanitizer = inject(DomSanitizer);
   readonly process = inject(ProjectUrlProcessController);
+  readonly nav = inject(ProjectUrlEmbedNavigationController);
 
-  /** ~6s: a framed dev server that has not fired `load` by now, while the probe
-   *  says it is reachable, is treated as "probably refuses embedding". */
+  /** ~6s without `load` while reachable reads as "probably refuses embedding". */
   private readonly LOAD_TIMEOUT_MS = 6000;
   private readonly START_READY_TIMEOUT_MS = 20_000;
   private readonly START_POLL_MS = 750;
@@ -104,10 +102,9 @@ export class ProjectUrlPreviewTabComponent {
   readonly settingsOpen = signal(false);
   readonly settingsSaving = signal(false);
   readonly settingsError = signal<string | null>(null);
-  /** Session-only navigation target typed into the address bar (never persisted). */
-  readonly overrideUrl = signal<string | null>(null);
   /** Bumping this re-navigates the iframe (forces a fresh `[src]` reference). */
   private readonly reloadNonce = signal(0);
+  private readonly frameRef = viewChild<ElementRef<HTMLIFrameElement>>('frame');
 
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
@@ -121,7 +118,6 @@ export class ProjectUrlPreviewTabComponent {
       : { kind: 'unknown', statusCode: null, framePolicy: 'unknown', detail: null, durationMs: null };
   });
 
-  /** Live probe status for the resolved URL (`unknown` before it resolves). */
   readonly probeStatus = computed(() => {
     const projectId = this.projectId();
     const u = this.urlRecord();
@@ -131,8 +127,11 @@ export class ProjectUrlPreviewTabComponent {
   /** The URL the frame actually shows: the typed override, else the record. */
   readonly effectiveUrl = computed(() => {
     const u = this.urlRecord();
-    return u ? this.overrideUrl() ?? u.url : null;
+    return u ? this.nav.overrideUrl() ?? u.url : null;
   });
+
+  /** Address-bar text: the embed-reported live URL wins over the mounted one. */
+  readonly displayUrl = computed(() => this.nav.reportedUrl() ?? this.effectiveUrl());
 
   /** Embed once resolved and healthy; offline shows the card. A typed
    *  override embeds unconditionally (readiness probes only the record URL). */
@@ -140,7 +139,7 @@ export class ProjectUrlPreviewTabComponent {
     this.resolveState() === 'resolved'
       && !this.building()
       && !this.startFailure()
-      && (this.readiness().kind === 'healthy' || this.overrideUrl() !== null),
+      && (this.readiness().kind === 'healthy' || this.nav.overrideUrl() !== null),
   );
 
   readonly readinessPending = computed(() =>
@@ -150,8 +149,7 @@ export class ProjectUrlPreviewTabComponent {
       && this.readiness().kind === 'unknown',
   );
 
-  /** Sandboxed iframe source; recomputes on reload but not on probe re-ticks so
-   *  a steady "running" status never remounts a loaded frame. */
+  /** Sandboxed iframe source; recomputes on reload, never on probe re-ticks. */
   readonly iframeSrc = computed<SafeResourceUrl | null>(() => {
     const target = this.effectiveUrl();
     if (!target) return null;
@@ -163,7 +161,7 @@ export class ProjectUrlPreviewTabComponent {
     if (this.building()) return 'building';
     if (this.startFailure()) return 'failed';
     if (this.resolveState() !== 'resolved') return 'checking';
-    if (this.overrideUrl()) return 'custom';
+    if (this.nav.overrideUrl()) return 'custom';
     if (this.frameState() === 'blocked') return 'blocked';
     const s = this.probeStatus();
     return s === 'unknown' ? 'checking' : s;
@@ -190,23 +188,26 @@ export class ProjectUrlPreviewTabComponent {
   }));
 
   constructor() {
-    // Re-resolve whenever the bound project / url changes (established panel
-    // pattern: an effect that fires an HTTP refresh on input change).
+    // Re-resolve whenever the bound project / url inputs change.
     effect(() => {
       const name = this.projectName();
       const id = this.urlId();
       this.resolveRecord(name, id);
     });
 
-    // Arm (or clear) the load-timeout heuristic whenever the iframe (re)mounts.
+    // On every (re)mount: re-arm the load timeout, drop the embed-reported URL.
     effect(() => {
       const embed = this.shouldEmbed();
       this.reloadNonce(); // re-arm on reload
       this.clearLoadTimer();
+      this.nav.clearReported();
       if (!embed) return;
       this.frameState.set('loading');
       this.loadTimer = setTimeout(() => this.onLoadTimeout(), this.LOAD_TIMEOUT_MS);
     });
+
+    // Trust embed-reported navigations only from the mounted preview iframe.
+    effect(() => this.nav.attachFrame(this.frameRef()?.nativeElement ?? null));
 
     inject(DestroyRef).onDestroy(() => {
       this.clearLoadTimer();
@@ -219,7 +220,7 @@ export class ProjectUrlPreviewTabComponent {
     this.process.reset();
     this.building.set(false);
     this.startFailure.set(null);
-    this.overrideUrl.set(null);
+    this.nav.reset();
     this.menuOpen.set(false);
     this.settingsOpen.set(false);
     this.resolveState.set('resolving');
@@ -250,10 +251,9 @@ export class ProjectUrlPreviewTabComponent {
     });
   }
 
-  /** iframe finished (loaded a page — we cannot read cross-origin, only that it
-   *  navigated). Clears the suspected-block timer. */
+  /** iframe navigated (content unreadable cross-origin); clears the block timer. */
   onFrameLoad(): void {
-    if (this.overrideUrl() === null && this.probeStatus() !== 'running') return;
+    if (this.nav.overrideUrl() === null && this.probeStatus() !== 'running') return;
     this.frameState.set('loaded');
     this.clearLoadTimer();
   }
@@ -262,7 +262,7 @@ export class ProjectUrlPreviewTabComponent {
   onNavigate(target: string): void {
     const u = this.urlRecord();
     if (!u) return;
-    this.overrideUrl.set(target === u.url ? null : target);
+    this.nav.navigate(target, u.url);
     this.frameState.set('loading');
     this.reloadNonce.update(n => n + 1);
   }
@@ -283,7 +283,7 @@ export class ProjectUrlPreviewTabComponent {
     const projectId = this.projectId();
     const url = this.urlRecord();
     if (!projectId || !url) return;
-    const remount = this.probeStatus() === 'running' || this.overrideUrl() !== null;
+    const remount = this.probeStatus() === 'running' || this.nav.overrideUrl() !== null;
     this.probe.refresh(projectId, url.id);
     if (remount) {
       this.frameState.set('loading');
@@ -399,7 +399,7 @@ export class ProjectUrlPreviewTabComponent {
   }
 
   openExternal(): void {
-    const target = this.effectiveUrl();
+    const target = this.displayUrl();
     if (target) window.open(target, '_blank', 'noopener');
   }
 
@@ -423,7 +423,7 @@ export class ProjectUrlPreviewTabComponent {
     ).subscribe({
       next: () => {
         this.urlRecord.set({ ...current, ...value });
-        this.overrideUrl.set(null);
+        this.nav.reset();
         this.settingsOpen.set(false);
         this.frameState.set('loading');
         this.reloadNonce.update(n => n + 1);

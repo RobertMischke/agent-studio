@@ -111,6 +111,33 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(addr?.value).toBe('http://localhost:4201');
   });
 
+  it('mirrors embed-reported navigations in the address bar without remounting', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('running');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([RUNNING_URL]));
+    fixture.detectChanges();
+
+    const frame = fixture.nativeElement.querySelector('[data-testid="url-preview-frame"]') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      origin: 'http://localhost:4201',
+      data: { source: 'url-preview-embed', type: 'navigation', url: 'http://localhost:4201/?path=src/Program.cs' },
+    }));
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector('[data-testid="url-preview-addr-input"]') as HTMLInputElement;
+    expect(input.value).toBe('http://localhost:4201/?path=src/Program.cs');
+    expect(frame.getAttribute('src')).toBe('http://localhost:4201');
+
+    // A message that does not come from the preview iframe is ignored.
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: 'http://localhost:4201',
+      data: { source: 'url-preview-embed', type: 'navigation', url: 'http://localhost:4201/forged' },
+    }));
+    fixture.detectChanges();
+    expect(input.value).toBe('http://localhost:4201/?path=src/Program.cs');
+  });
+
   it('navigates the embedded frame to a typed URL without touching the registry', () => {
     const { fixture, http, probe } = mount();
     probe.status.set('offline');
