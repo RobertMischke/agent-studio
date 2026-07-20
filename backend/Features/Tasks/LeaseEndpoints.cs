@@ -1,3 +1,5 @@
+using AgentStudio.Pipeline;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -223,6 +225,16 @@ public static class LeaseEndpoints
                     req.TaskKey, reportedOutcome, TaskStates.Progress,
                     "Outcome must be Done, NoOp, Blocked, NeedsInput, or Unknown."));
 
+            if (targetState == TaskStates.AutoReview
+                && (!ReviewSubjectStore.IsValidResultSha(req.ResultSha)
+                    || string.IsNullOrWhiteSpace(req.AttemptChainId)
+                    || !string.Equals(req.AttemptChainId, req.LeaseId, StringComparison.Ordinal)))
+            {
+                return Results.BadRequest(new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, TaskStates.Progress,
+                    "Done/NoOp completion requires a full fenced ResultSha and AttemptChainId equal to the current lease id."));
+            }
+
             var source = string.IsNullOrWhiteSpace(req.Source) ? req.RunnerId : req.Source.Trim();
             var details = new Dictionary<string, string>
             {
@@ -242,6 +254,10 @@ public static class LeaseEndpoints
                 details["salvageCommitSha"] = req.SalvageCommitSha;
             if (!string.IsNullOrWhiteSpace(req.SalvageBranchUrl))
                 details["salvageBranchUrl"] = req.SalvageBranchUrl;
+            if (!string.IsNullOrWhiteSpace(req.ResultSha))
+                details["resultSha"] = req.ResultSha;
+            if (!string.IsNullOrWhiteSpace(req.AttemptChainId))
+                details["attemptChainId"] = req.AttemptChainId;
             if (!string.IsNullOrWhiteSpace(req.SalvageBranch)
                 && !string.IsNullOrWhiteSpace(req.SalvageCommitSha))
             {
@@ -258,6 +274,33 @@ public static class LeaseEndpoints
                     System.Text.Encoding.UTF8);
                 artifactCommits.TryCommitArtifactUpload(
                     null, task.Id, task.FolderPath, ["results/deliverables.md"]);
+            }
+            if (targetState == TaskStates.AutoReview)
+            {
+                try
+                {
+                    ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
+                    {
+                        TaskKey = req.TaskKey,
+                        Project = task.ProjectName,
+                        Repository = req.Repository?.Trim() ?? string.Empty,
+                        ResultSha = req.ResultSha!,
+                        AttemptChainId = req.AttemptChainId!,
+                        Executor = source,
+                        LeaseId = req.LeaseId,
+                        FencingToken = req.FencingToken,
+                        ResultRef = req.SalvageBranch,
+                        CompletedAtUtc = DateTimeOffset.UtcNow,
+                    });
+                }
+                catch (Exception ex)
+                {
+                    loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogError(
+                        ex, "remote-runner-completion could not persist review subject for {TaskKey}", req.TaskKey);
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey, reportedOutcome, TaskStates.Progress,
+                        "Canonical review subject could not be persisted; completion failed closed."));
+                }
             }
             timeline.Append(
                 task.FolderPath,

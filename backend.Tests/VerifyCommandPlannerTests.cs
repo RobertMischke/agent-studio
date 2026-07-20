@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
 
 using Xunit;
 
@@ -317,7 +318,9 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         BuildProfile? profile,
         IReadOnlyList<string>? changedFiles = null,
         PostStepMode mode = PostStepMode.Fail)
-        => _runner.RunAsync(_root, changedFiles, profile, mode, TimeSpan.FromSeconds(30), CancellationToken.None);
+        => _runner.RunAsync(
+            new BuildTestGateRequest(_root, null, "test", RequireExactSubject: false),
+            changedFiles, profile, mode, TimeSpan.FromSeconds(30), CancellationToken.None);
 
     [Fact]
     public async Task ModeOff_Skips()
@@ -367,7 +370,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         var profile = new BuildProfile { BuildCmds = [printWorkingDirectory] };
 
         var r = await _runner.RunAsync(
-            relativeRoot, changedFiles: null, profile, PostStepMode.Fail,
+            new BuildTestGateRequest(relativeRoot, null, "test", RequireExactSubject: false),
+            changedFiles: null, profile, PostStepMode.Fail,
             TimeSpan.FromSeconds(30), CancellationToken.None);
 
         Assert.Equal(BuildTestGateVerdict.Ok, r.Verdict);
@@ -396,6 +400,123 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
 
         Assert.Equal(BuildTestGateVerdict.Warn, r.Verdict);
         Assert.Equal(3, r.ExitCode);
+    }
+
+    [Fact]
+    public async Task ThreeParallelExactSubjectGatesSerializeAndUseDistinctWorkspaces()
+    {
+        var sha = InitializeGitRepository();
+        var profile = new BuildProfile
+        {
+            BuildCmds =
+            [
+                OperatingSystem.IsWindows()
+                    ? "ping 127.0.0.1 -n 2 > nul"
+                    : "sleep 1",
+            ],
+        };
+        var tasks = Enumerable.Range(1, 3).Select(index => _runner.RunAsync(
+            new BuildTestGateRequest(_root, sha, $"executor-{index}")
+            {
+                AttemptChainId = $"attempt-{index}",
+                InfrastructureTimeout = TimeSpan.FromSeconds(15),
+            },
+            changedFiles: null,
+            profile,
+            PostStepMode.Fail,
+            TimeSpan.FromSeconds(10),
+            CancellationToken.None)).ToArray();
+
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(results, result =>
+        {
+            Assert.Equal(BuildTestGateVerdict.Ok, result.Verdict);
+            Assert.Equal(sha, result.ExpectedSha);
+            Assert.Equal(sha, result.TestedSha);
+            Assert.False(string.IsNullOrWhiteSpace(result.Workspace));
+            Assert.NotEqual(Path.GetFullPath(_root), Path.GetFullPath(result.Workspace!));
+        });
+        Assert.Equal(3, results.Select(result => result.Workspace).Distinct().Count());
+        Assert.True(results.Count(result => result.GateCollisionDetected) >= 2);
+        Assert.True(results.Where(result => result.GateCollisionDetected).All(result => result.GateQueueWaitMs > 0));
+        Assert.Empty(Directory.EnumerateDirectories(BuildTestGateRunner.ReviewWorkspaceRoot));
+    }
+
+    [Fact]
+    public async Task MissingExactSubjectFailsClosedAsReviewInfrastructure()
+    {
+        InitializeGitRepository();
+
+        var result = await _runner.RunAsync(
+            new BuildTestGateRequest(_root, null, "executor"),
+            changedFiles: null,
+            new BuildProfile { BuildCmds = ["exit 0"] },
+            PostStepMode.Fail,
+            TimeSpan.FromSeconds(10),
+            CancellationToken.None);
+
+        Assert.Equal(BuildTestGateVerdict.Fail, result.Verdict);
+        Assert.Equal(BuildTestGateFailureKind.MissingSource, result.FailureKind);
+        Assert.True(result.IsInfrastructureFailure);
+        Assert.Empty(result.Processes);
+        Assert.Null(result.Workspace);
+    }
+
+    [Fact]
+    public async Task MachineGateWaitIsBoundedByInfrastructureSla()
+    {
+        const string activeFile = "machine-gate-sla-active.tmp";
+        var leader = Run(new BuildProfile
+        {
+            BuildCmds =
+            [
+                OperatingSystem.IsWindows()
+                    ? $"type nul > {activeFile} & ping 127.0.0.1 -n 3 > nul & del {activeFile}"
+                    : $"touch {activeFile}; sleep 2; rm -f {activeFile}",
+            ],
+        });
+        var activePath = Path.Combine(_root, activeFile);
+        for (var index = 0; index < 100 && !File.Exists(activePath); index++)
+            await Task.Delay(25);
+        Assert.True(File.Exists(activePath));
+
+        var follower = await _runner.RunAsync(
+            new BuildTestGateRequest(_root, null, "bounded", RequireExactSubject: false)
+            {
+                InfrastructureTimeout = TimeSpan.FromMilliseconds(100),
+            },
+            changedFiles: null,
+            new BuildProfile { BuildCmds = ["exit 0"] },
+            PostStepMode.Fail,
+            TimeSpan.FromSeconds(10),
+            CancellationToken.None);
+
+        Assert.Equal(BuildTestGateFailureKind.Timeout, follower.FailureKind);
+        Assert.True(follower.GateCollisionDetected);
+        Assert.True(follower.GateQueueWaitMs >= 50);
+        Assert.Equal(BuildTestGateVerdict.Ok, (await leader).Verdict);
+    }
+
+    // MachineBound 20.07.: cmd.exe for /L emittiert nur line-1 auf Windows-Hosts - auf Linux-Runner validiert
+    [Trait("Category", "MachineBound")]
+    [Fact]
+    public async Task LateLockEvidenceSurvivesRingBufferAndTimeoutTestNameIsNotMisclassified()
+    {
+        var command = OperatingSystem.IsWindows()
+            ? "for /L %i in (1,1,350) do @echo line-%i & echo error MSB3027: file is locked 1>&2 & exit /b 1"
+            : "i=1; while [ $i -le 350 ]; do echo line-$i; i=$((i+1)); done; echo 'error MSB3027: file is locked' >&2; exit 1";
+
+        var result = await Run(new BuildProfile { BuildCmds = [command] });
+
+        Assert.Equal(BuildTestGateFailureKind.Lock, result.FailureKind);
+        Assert.Contains("MSB3027", result.Output);
+        Assert.DoesNotContain("line-1\n", result.Output);
+        var process = Assert.Single(result.Processes);
+        Assert.Contains("line-1", process.StandardOutput);
+        Assert.Contains("line-350", process.StandardOutput);
+        Assert.Equal(BuildTestGateFailureKind.None,
+            BuildTestGateRunner.ClassifyFailure("TimeoutBehaviorTests passed"));
     }
 
     [Fact]
@@ -437,7 +558,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         using var firstCancellation = new CancellationTokenSource();
 
         var canceled = runner.RunAsync(
-            _root, changedFiles: null, profile, PostStepMode.Fail,
+            new BuildTestGateRequest(_root, null, "test", RequireExactSubject: false),
+            changedFiles: null, profile, PostStepMode.Fail,
             TimeSpan.FromSeconds(30), firstCancellation.Token);
         await loadThrottle.FirstWaitEntered.WaitAsync(TimeSpan.FromSeconds(5));
         firstCancellation.Cancel();
@@ -445,7 +567,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
 
         using var followupCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var followup = await runner.RunAsync(
-            _root, changedFiles: null, profile, PostStepMode.Fail,
+            new BuildTestGateRequest(_root, null, "test", RequireExactSubject: false),
+            changedFiles: null, profile, PostStepMode.Fail,
             TimeSpan.FromSeconds(30), followupCancellation.Token);
 
         Assert.Equal(BuildTestGateVerdict.Ok, followup.Verdict);
@@ -473,7 +596,8 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
 
         using var queuedCancellation = new CancellationTokenSource();
         var queued = _runner.RunAsync(
-            _root, changedFiles: null, new BuildProfile { BuildCmds = ["exit 0"] },
+            new BuildTestGateRequest(_root, null, "test", RequireExactSubject: false),
+            changedFiles: null, new BuildProfile { BuildCmds = ["exit 0"] },
             PostStepMode.Fail, TimeSpan.FromSeconds(30), queuedCancellation.Token);
         queuedCancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await queued);
@@ -502,5 +626,35 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             _firstWaitEntered.TrySetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, ct);
         }
+    }
+
+    private string InitializeGitRepository()
+    {
+        RunGit("init", "-q", "-b", "main");
+        RunGit("config", "user.email", "test@example.invalid");
+        RunGit("config", "user.name", "Gate Test");
+        File.WriteAllText(Path.Combine(_root, "subject.txt"), "exact subject");
+        RunGit("add", "subject.txt");
+        RunGit("commit", "-q", "-m", "exact subject");
+        return RunGit("rev-parse", "HEAD").Trim();
+    }
+
+    private string RunGit(params string[] args)
+    {
+        var psi = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = _root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("git did not start");
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)} failed: {stderr}");
+        return stdout;
     }
 }

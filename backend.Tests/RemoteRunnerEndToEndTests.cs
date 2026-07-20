@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
 
@@ -209,7 +210,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             RunnerId,
             "Done",
             Source: ProjectName,
-            ExitCode: 0), ct);
+            ExitCode: 0,
+            ResultSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            AttemptChainId: lease.Lease.LeaseId,
+            Repository: "https://example.invalid/agent-studio.git"), ct);
 
         Assert.NotNull(completion);
         Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
@@ -220,7 +224,126 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.DoesNotContain("externalCompletion", taskJson, StringComparison.OrdinalIgnoreCase);
         var timeline = File.ReadAllText(Path.Combine(moved, "logs", "timeline.jsonl"));
         Assert.Contains("agent_run_finished", timeline);
+        Assert.Contains("resultSha", timeline);
         Assert.DoesNotContain("external_completion", timeline);
+        var subject = ReviewSubjectStore.Read(moved);
+        Assert.NotNull(subject);
+        Assert.Equal("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", subject!.ResultSha);
+        Assert.Equal(lease.Lease.LeaseId, subject.AttemptChainId);
+    }
+
+    [Fact]
+    public async Task Remote_done_without_fenced_result_sha_fails_closed_before_review()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote done", "Make a trivial change.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+
+        var error = await Assert.ThrowsAsync<Runner::AgentRunner.TaskServerException>(() =>
+            client.CompleteRunAsync(new RRemoteComplete(
+                TaskKey,
+                lease.Lease!.LeaseId,
+                lease.Lease.FencingToken,
+                RunnerId,
+                "Done",
+                Source: ProjectName,
+                ExitCode: 0), ct));
+
+        Assert.Equal(400, error.StatusCode);
+        var retainedTask = Assert.Single(Directory.GetDirectories(
+            _watchPath, TaskKey, SearchOption.AllDirectories));
+        Assert.NotEqual(TaskStates.AutoReview, Directory.GetParent(retainedTask)!.Name);
+        Assert.False(File.Exists(ReviewSubjectStore.PathFor(retainedTask)));
+    }
+
+    [Fact]
+    public async Task July_gate_storm_replay_uses_three_real_remote_subjects_without_false_reissues()
+    {
+        var taskKeys = new[] { "AGT-STORM-A", "AGT-STORM-B", "AGT-STORM-C" };
+        foreach (var taskKey in taskKeys)
+        {
+            SeedTask(TaskStates.Progress, taskKey, taskKey, "Verify exact remote subject.");
+            File.WriteAllText(
+                Path.Combine(_watchPath, TaskStates.Progress, taskKey, "status.md"),
+                "## Summary\nRemote work completed.\n\nResult: Success\n\n## Open Items\nNone\n");
+        }
+        InitializeGitRepository();
+        var resultSha = RunGit("rev-parse", "HEAD").Trim();
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        var attemptChains = new Dictionary<string, string>();
+        foreach (var taskKey in taskKeys)
+        {
+            var lease = await client.AcquireLeaseAsync(new RAcquire(
+                taskKey, RunnerId, ProjectName, "storm-host", 4242, "codex"), CancellationToken.None);
+            Assert.True(lease.Granted);
+            await client.IngestLogsAsync(new RLogIngest(taskKey,
+            [
+                new RCliLine(DateTime.UtcNow, "stdout", "Remote implementation verified."),
+                new RCliLine(DateTime.UtcNow, "stdout", "[[TASK_DONE]]"),
+            ]), CancellationToken.None);
+            var completion = await client.CompleteRunAsync(new RRemoteComplete(
+                taskKey,
+                lease.Lease!.LeaseId,
+                lease.Lease.FencingToken,
+                RunnerId,
+                "Done",
+                Source: "storm-remote",
+                ExitCode: 0,
+                ResultSha: resultSha,
+                AttemptChainId: lease.Lease.LeaseId,
+                Repository: _watchPath), CancellationToken.None);
+            Assert.NotNull(completion);
+            Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+            attemptChains[taskKey] = lease.Lease.LeaseId;
+        }
+
+        var sharedMarker = Path.Combine(_workspace, "gate-storm-active.tmp");
+        var marker = sharedMarker.Replace("'", "'\\''", StringComparison.Ordinal);
+        var command = OperatingSystem.IsWindows()
+            ? $"if exist \"{sharedMarker}\" exit /b 91 & type nul > \"{sharedMarker}\" & ping 127.0.0.1 -n 2 > nul & del \"{sharedMarker}\""
+            : $"test ! -e '{marker}'; touch '{marker}'; sleep 1; rm '{marker}'";
+        var orchestrator = BuildReviewOrchestrator(
+            new BuildProfile { BuildCmds = [command] });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var workspaces = new HashSet<string>(StringComparer.Ordinal);
+        var collisions = 0;
+        foreach (var taskKey in taskKeys)
+        {
+            var folder = Path.Combine(_watchPath, TaskStates.HumanReview, taskKey);
+            Assert.True(Directory.Exists(folder), $"{taskKey} did not reach human review");
+            var subject = ReviewSubjectStore.Read(folder);
+            Assert.NotNull(subject);
+            Assert.Equal(resultSha, subject!.ResultSha);
+            Assert.Equal(attemptChains[taskKey], subject.AttemptChainId);
+            var gateLog = Assert.Single(Directory.EnumerateFiles(
+                Path.Combine(folder, "post-steps"), "build-test-gate-*.log"));
+            var text = File.ReadAllText(gateLog);
+            Assert.Contains($"expectedSha={resultSha} testedSha={resultSha}", text);
+            Assert.Contains($"attemptChainId={attemptChains[taskKey]}", text);
+            var workspaceLine = text.Split('\n').Single(line => line.StartsWith("attemptChainId=", StringComparison.Ordinal));
+            workspaces.Add(workspaceLine[(workspaceLine.IndexOf(" workspace=", StringComparison.Ordinal) + 11)..].Trim());
+            if (text.Contains("collision=True", StringComparison.Ordinal)) collisions++;
+        }
+
+        Assert.Equal(3, workspaces.Count);
+        Assert.True(collisions >= 2, $"expected at least two queued gates, observed {collisions}");
+        Assert.False(File.Exists(sharedMarker));
+        Assert.DoesNotContain(ReviewDecisionLog.ReadAll(_workspace, ProjectName),
+            decision => decision.Kind == ReviewDecisionKind.Reissue
+                        || decision.Kind == ReviewDecisionKind.Escalate);
     }
 
     [Fact]
@@ -389,9 +512,94 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                         ["WatchPaths:0:Name"] = ProjectName,
                         ["WatchPaths:0:Path"] = _watchPath,
                         ["WatchPaths:0:RootPath"] = _watchPath,
+                        ["WatchPaths:0:RepositoryPath"] = _watchPath,
+                        ["ReviewDecisionOrchestrator:Enabled"] = "false",
                     });
                 });
             });
+
+    private ReviewDecisionOrchestrator BuildReviewOrchestrator(BuildProfile profile)
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TaskRepository"] = _workspace,
+            ["WatchPaths:0:Name"] = ProjectName,
+            ["WatchPaths:0:Path"] = _watchPath,
+            ["WatchPaths:0:RootPath"] = _watchPath,
+            ["WatchPaths:0:RepositoryPath"] = _watchPath,
+            ["ReviewDecisionOrchestrator:Enabled"] = "true",
+            ["ReviewDecisionOrchestrator:CallsPerHour"] = "100",
+            ["ReviewDecisionOrchestrator:AspectsEnabled"] = "true",
+            ["ReviewDecisionOrchestrator:MaxParallelReviews"] = "4",
+            ["ReviewDecisionOrchestrator:MaxAutoReissueAttempts"] = "3",
+        }).Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var stateMachine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var aspects = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance)
+        {
+            CliRunner = (_, _, _, _, _, _) =>
+                Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"),
+        };
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var mutations = new TaskMutationService(
+            scanner,
+            new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
+            new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
+            new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+            NullLogger<TaskMutationService>.Instance);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        settings.SetBuildProfile(ProjectName, profile);
+        var transitions = new TaskTransitionService(
+            scanner, stateMachine, mutations, git, settings,
+            NullLogger<TaskTransitionService>.Instance);
+        var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
+            scanner, mutations, stateMachine, transitions, indexCache,
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
+
+        return new ReviewDecisionOrchestrator(
+            scanner, stateMachine, taskAccess, chatLog, prompts, aspects,
+            new AutoReviewStatusSnapshot(), config,
+            NullLogger<ReviewDecisionOrchestrator>.Instance,
+            git: git,
+            pipelineLog: new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance),
+            buildTestGateRunner: new BuildTestGateRunner(NullLogger<BuildTestGateRunner>.Instance),
+            projectSettings: settings);
+    }
+
+    private void InitializeGitRepository()
+    {
+        RunGit("init", "-q", "-b", "main");
+        RunGit("config", "user.email", "test@example.invalid");
+        RunGit("config", "user.name", "Remote Replay");
+        File.WriteAllText(Path.Combine(_watchPath, "remote-subject.txt"), "remote exact subject");
+        RunGit("add", ".");
+        RunGit("commit", "-q", "-m", "remote exact subject");
+    }
+
+    private string RunGit(params string[] args)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("git")
+        {
+            WorkingDirectory = _watchPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        using var process = System.Diagnostics.Process.Start(psi)
+            ?? throw new InvalidOperationException("git did not start");
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)} failed: {stderr}");
+        return stdout;
+    }
 
     private static async Task AddRepositoryUrlAsync(HttpClient http, string repositoryUrl)
     {

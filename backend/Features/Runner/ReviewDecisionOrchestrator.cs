@@ -134,6 +134,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     public Func<string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
 
+    internal Func<int, TimeSpan> BuildTestGateRetryBackoff { get; set; }
+        = PostProcessingOutcomeTaxonomy.RetryBackoff;
+
     private readonly AgentStudio.AdHoc.AdHocUsageRecorder? _usage;
     private readonly AgentStudio.Cli.CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
@@ -182,6 +185,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
     internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
+    internal const string BuildTestGateInfrastructureReasonPrefix = "build-test-gate review infrastructure: ";
 
     /// <summary>
     /// Stable prefix on the <c>Reason</c> field of the <see cref="ReviewDecisionKind.Escalate"/>
@@ -1573,6 +1577,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var buildGateResult = await RunBuildTestGatePostStepAsync(workspace, entry, current, ct);
         if (buildGateResult?.Verdict == BuildTestGateVerdict.Fail)
         {
+            if (buildGateResult.IsInfrastructureFailure)
+            {
+                await HandleBuildTestGateInfrastructureFailureAsync(
+                    workspace, entry, current, buildGateResult);
+                return;
+            }
             // The quality grade is reporting evidence, not a success gate. A
             // red deterministic build must stay loud and still receive that
             // evidence before the task is reissued / escalated. The aspect pool
@@ -2538,32 +2548,58 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return result;
     }
 
-    /// <summary>
-    /// The build gate must verify the checkout that produced the task result.
-    /// A parallel coding run owns a registered <c>task/&lt;id&gt;</c> worktree;
-    /// building the shared checkout can collide with a dev backend that has its
-    /// output executable open and can also verify different source. Sequential
-    /// and legacy runs have no live task worktree and keep the shared-checkout
-    /// fallback.
-    /// </summary>
-    private string ResolveBuildTestGateRepositoryPath(WatchPathEntry entry, TaskInfo current)
+    private static string ResolveBuildTestGateRepositoryPath(WatchPathEntry entry)
+        => string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+
+    private BuildTestGateSubject ResolveBuildTestGateSubject(TaskInfo current, string? watchPath)
     {
-        var sharedRepoPath = string.IsNullOrWhiteSpace(entry.RepositoryPath)
-            ? entry.RootPath
-            : entry.RepositoryPath;
-        if (_git == null || string.IsNullOrWhiteSpace(sharedRepoPath))
-            return sharedRepoPath;
+        var remote = ReviewSubjectStore.Read(current.FolderPath);
+        RunRecord? local = null;
+        if (_sessions is not null)
+        {
+            var events = _sessions.ReadSessionEvents(current.Id, watchPath);
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(current.FolderPath));
+            local = SelectLastSuccessfulReviewRun(
+                RunTimelineBuilder.Build(events, lines, DateTime.UtcNow).Runs);
+        }
 
-        var taskBranch = WorktreeTaskLifecycle.BranchFor(current.Id);
-        var worktreePath = _git.WorktreePathForBranch(sharedRepoPath, taskBranch);
-        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
-            return sharedRepoPath;
+        // A Remote completion is authoritative for its fenced attempt. Local
+        // session events are considered only when they describe a later local
+        // completion, never as a way to infer a missing Remote subject.
+        if (remote is not null
+            && (local?.EndedAt is null || remote.CompletedAtUtc.UtcDateTime >= local.EndedAt.Value))
+        {
+            return new BuildTestGateSubject(
+                remote.ResultSha,
+                remote.AttemptChainId,
+                remote.Executor,
+                remote.ResultRef,
+                IsRemote: true);
+        }
 
-        _logger.LogInformation(
-            "build_test_gate_worktree_selected project={Project} job={JobId} branch={Branch} repository={Repository}",
-            entry.Name, current.Id, taskBranch, worktreePath);
-        return worktreePath;
+        if (local is null)
+        {
+            return new BuildTestGateSubject(
+                null, null, $"{Environment.MachineName}:{Environment.ProcessId}", null, IsRemote: false);
+        }
+
+        var attemptChainId = local.CapturedSessionId
+            ?? local.InputSessionId
+            ?? $"local:{local.StartedAt:O}:{local.Index}";
+        return new BuildTestGateSubject(
+            local.HeadShaAfter,
+            attemptChainId,
+            $"{Environment.MachineName}:{Environment.ProcessId}",
+            null,
+            IsRemote: false);
     }
+
+    private sealed record BuildTestGateSubject(
+        string? Sha,
+        string? AttemptChainId,
+        string Executor,
+        string? SubjectRef,
+        bool IsRemote);
 
     private void RecordLintScssStep(
         string jobFolderPath,
@@ -2633,27 +2669,99 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 "mode=off", false, false);
         }
 
-        var repoPath = ResolveBuildTestGateRepositoryPath(entry, current);
+        var repoPath = ResolveBuildTestGateRepositoryPath(entry);
+        var subject = ResolveBuildTestGateSubject(current, entry.Path);
         var timeoutSeconds = _configuration.GetValue($"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:TimeoutSeconds", 300);
+        var infrastructureTimeoutSeconds = _configuration.GetValue(
+            $"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:InfrastructureTimeoutSeconds", 120);
         var changedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
+        if (subject.IsRemote) changedFiles = null;
 
-        BuildTestGateResult result;
-        try
+        var request = new BuildTestGateRequest(
+            repoPath,
+            subject.Sha,
+            subject.Executor,
+            RequireExactSubject: true)
         {
-            // The declared build profile (if any) is the verify-command override;
-            // otherwise the runner derives the commands from the repo layout.
-            result = await _buildTestGateRunner.RunAsync(
-                repoPath, changedFiles, settings?.BuildProfile, mode, TimeSpan.FromSeconds(timeoutSeconds), ct);
-        }
-        catch (Exception ex)
+            AttemptChainId = subject.AttemptChainId,
+            SubjectRef = subject.SubjectRef,
+            InfrastructureTimeout = TimeSpan.FromSeconds(Math.Max(1, infrastructureTimeoutSeconds)),
+        };
+
+        BuildTestGateResult? result = null;
+        for (var infrastructureRetry = 0;
+             infrastructureRetry <= PostProcessingOutcomeTaxonomy.DefaultMaxEnvironmentalRetries;
+             infrastructureRetry++)
         {
-            _logger.LogWarning(ex,
-                "ReviewDecisionOrchestrator: build-test gate post-step threw for {Project}/{JobId}; treating as skipped",
-                entry.Name, current.Id);
-            RecordBuildTestGateStep(current.FolderPath, PipelineStepStatus.Skipped,
-                durationMs: 0, verdictToken: "error", reason: ex.Message);
-            return null;
+            try
+            {
+                result = await _buildTestGateRunner.RunAsync(
+                    request, changedFiles, settings?.BuildProfile, mode,
+                    TimeSpan.FromSeconds(timeoutSeconds), ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "ReviewDecisionOrchestrator: build-test gate threw for {Project}/{JobId}; classifying as review infrastructure",
+                    entry.Name, current.Id);
+                result = new BuildTestGateResult(
+                    BuildTestGateVerdict.Fail, null, 0, ex.ToString(),
+                    "build-test gate runner threw", false, false)
+                {
+                    GateId = request.GateId,
+                    Repository = repoPath,
+                    ExpectedSha = subject.Sha,
+                    AttemptChainId = subject.AttemptChainId,
+                    Executor = subject.Executor,
+                    FailureKind = BuildTestGateFailureKind.ProcessLaunch,
+                    FailureFingerprint = BuildTestGateRunner.Fingerprint(
+                        BuildTestGateFailureKind.ProcessLaunch, ex.ToString()),
+                    TerminationSignal = "processlaunch",
+                };
+            }
+
+            var normalizedKind = result.Verdict == BuildTestGateVerdict.Fail
+                                 && result.FailureKind == BuildTestGateFailureKind.None
+                ? BuildTestGateRunner.ClassifyFailure(result.Output + "\n" + result.Reason)
+                : result.FailureKind;
+            if (result.Verdict == BuildTestGateVerdict.Fail
+                && normalizedKind == BuildTestGateFailureKind.None)
+                normalizedKind = BuildTestGateFailureKind.Code;
+            result = result with
+            {
+                GateId = request.GateId,
+                Repository = result.Repository ?? repoPath,
+                ExpectedSha = result.ExpectedSha ?? subject.Sha,
+                AttemptChainId = result.AttemptChainId ?? subject.AttemptChainId,
+                Executor = result.Executor ?? subject.Executor,
+                FailureKind = normalizedKind,
+                FailureFingerprint = result.FailureFingerprint
+                    ?? (normalizedKind == BuildTestGateFailureKind.None
+                        ? null
+                        : BuildTestGateRunner.Fingerprint(
+                            normalizedKind, result.Reason + "\n" + result.Output)),
+            };
+
+            WriteBuildTestGateLog(current.FolderPath, result, changedFiles);
+            if (!result.IsInfrastructureFailure
+                || infrastructureRetry >= PostProcessingOutcomeTaxonomy.DefaultMaxEnvironmentalRetries)
+                break;
+
+            var retryNumber = infrastructureRetry + 1;
+            var backoff = BuildTestGateRetryBackoff(retryNumber);
+            _logger.LogWarning(
+                "build_test_gate_infrastructure_retry project={Project} job_id={JobId} expected_sha={ExpectedSha} attempt_chain_id={AttemptChainId} gate_id={GateId} failure_kind={FailureKind} failure_fingerprint={FailureFingerprint} retry={Retry} backoff_ms={BackoffMs}",
+                entry.Name, current.Id, subject.Sha ?? "missing", subject.AttemptChainId ?? "missing",
+                result.GateId, result.FailureKind, result.FailureFingerprint ?? "missing",
+                retryNumber, backoff.TotalMilliseconds);
+            if (backoff > TimeSpan.Zero) await Task.Delay(backoff, ct);
         }
+
+        if (result is null) return null;
 
         var status = result.Verdict switch
         {
@@ -2672,7 +2780,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _ => "skipped",
         };
         RecordBuildTestGateStep(current.FolderPath, status, result.DurationMs, verdictToken, result.Reason);
-        WriteBuildTestGateLog(current.FolderPath, result, changedFiles);
 
         _logger.LogInformation(
             "ReviewDecisionOrchestrator: build-test gate {Verdict} for {Project}/{JobId} in {DurationMs}ms (backend={Backend} frontend={Frontend} changedFiles={ChangedFiles})",
@@ -2760,11 +2867,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Directory.CreateDirectory(dir);
             var index = Directory.EnumerateFiles(dir, "build-test-gate-*.log").Count() + 1;
             var path = Path.Combine(dir, $"build-test-gate-{index}.log");
-            var body = $"verdict={result.Verdict} exit={result.ExitCode?.ToString() ?? "n/a"} durationMs={result.DurationMs}\n" +
+            var processEvidence = JsonSerializer.Serialize(result.Processes, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            });
+            var body = $"verdict={result.Verdict} exit={result.ExitCode?.ToString() ?? "n/a"} signal={result.TerminationSignal ?? "n/a"} durationMs={result.DurationMs}\n" +
+                       $"gateId={result.GateId} failureKind={result.FailureKind} failureFingerprint={result.FailureFingerprint ?? "n/a"}\n" +
+                       $"gateRunId={result.GateRunId ?? "n/a"} startedAtUtc={result.GateStartedAtUtc?.ToString("O") ?? "n/a"} completedAtUtc={result.GateCompletedAtUtc?.ToString("O") ?? "n/a"}\n" +
+                       $"collision={result.GateCollisionDetected} queueWaitMs={result.GateQueueWaitMs}\n" +
+                       $"repository={result.Repository ?? "n/a"} expectedSha={result.ExpectedSha ?? "n/a"} testedSha={result.TestedSha ?? "n/a"}\n" +
+                       $"attemptChainId={result.AttemptChainId ?? "n/a"} executor={result.Executor ?? "n/a"} workspace={result.Workspace ?? "n/a"}\n" +
                        $"reason={result.Reason}\n" +
                        $"backend={result.RanBackendBuild} frontend={result.RanFrontendBuild}\n" +
                        $"changedFiles={(changedFiles == null ? "unknown" : string.Join(", ", changedFiles.Take(50)))}\n" +
-                       "---\n" +
+                       "--- process-evidence.json ---\n" +
+                       processEvidence + "\n" +
+                       "--- last-300-lines ---\n" +
                        result.Output;
             File.WriteAllText(path, body);
         }
@@ -4013,6 +4131,80 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         };
     }
 
+    private Task HandleBuildTestGateInfrastructureFailureAsync(
+        string workspace,
+        WatchPathEntry entry,
+        TaskInfo current,
+        BuildTestGateResult result)
+    {
+        _pipelineLog?.Complete(current.FolderPath);
+        var reason = BuildTestGateInfrastructureReasonPrefix
+            + $"{result.FailureKind} persisted for exact subject {result.ExpectedSha ?? "missing"} "
+            + $"in attempt chain {result.AttemptChainId ?? "missing"} after "
+            + $"{PostProcessingOutcomeTaxonomy.DefaultMaxEnvironmentalRetries} retries "
+            + $"(fingerprint {result.FailureFingerprint ?? "missing"}); coding reissue budget was not consumed.";
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        if (move.Status == MoveJobStatus.Success)
+        {
+            var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
+            var escalated = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
+            RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Failed,
+                DecisionVerdictEscalate, reason);
+            WritePostProcessingOutcome(escalated, PostProcessingOutcomes.FailedPostProcessing,
+                summary: reason,
+                performer: PostProcessingPerformers.Tool,
+                stepId: PipelineCatalogue.BuildTestGateStepId,
+                evidenceRef: "post-steps/");
+            _chatLog.AppendSupervisor(escalated, "escalate",
+                $"Build/test review infrastructure failed for exact subject `{result.ExpectedSha ?? "missing"}` "
+                + "after bounded retries. The coding work was not reissued. "
+                + $"Failure: {result.FailureKind} ({result.FailureFingerprint ?? "missing"}).");
+            EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
+                TimelineActors.Orchestrator, reason,
+                BuildBuildTestGateInfrastructureDetails(result, reason));
+        }
+        else
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to escalate {JobId} after build-test review infrastructure failure: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+
+        _statusSnapshot.RecordEscalate();
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: reason,
+            Prompt: "(deterministic exact-subject build-test gate post-step)",
+            Response: result.Output,
+            FollowUp: string.Empty)
+        {
+            AttemptChainId = result.AttemptChainId,
+            GateId = result.GateId,
+            SubjectSha = result.ExpectedSha,
+            FailureFingerprint = result.FailureFingerprint,
+            FailureKind = result.FailureKind.ToString(),
+        }, current.FolderPath, move.NewFolderPath);
+        return Task.CompletedTask;
+    }
+
+    private static Dictionary<string, string> BuildBuildTestGateInfrastructureDetails(
+        BuildTestGateResult result,
+        string reason)
+        => new()
+        {
+            ["cause"] = "build-test-gate-infrastructure",
+            ["environmental"] = "true",
+            ["issueKind"] = RunIssueKind.InfraCrash.ToString(),
+            ["failureKind"] = result.FailureKind.ToString(),
+            ["fingerprint"] = result.FailureFingerprint ?? "missing",
+            ["subjectSha"] = result.ExpectedSha ?? "missing",
+            ["attemptChainId"] = result.AttemptChainId ?? "missing",
+            ["reason"] = Truncate(reason, 600),
+        };
+
     private async Task HandleBuildTestGateFailureAsync(
         string workspace,
         WatchPathEntry entry,
@@ -4025,15 +4217,23 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             current.FolderPath,
             pendingStepReason: "Not run because the build/test gate stopped this pipeline attempt: " + result.Reason);
 
-        var priorBuildGateReissues = ReviewDecisionLog.ReadAll(workspace, entry.Name)
-            .Count(r => r.JobId == current.Id
-                        && r.Kind == ReviewDecisionKind.Reissue
-                        && r.Reason != null
-                        && r.Reason.StartsWith(BuildTestGateReissueReasonPrefix, StringComparison.Ordinal));
+        var decisions = ReviewDecisionLog.ReadAll(workspace, entry.Name);
+        var priorBuildGateReissues = decisions.Count(r =>
+            r.JobId == current.Id
+            && r.Kind == ReviewDecisionKind.Reissue
+            && string.Equals(r.AttemptChainId, result.AttemptChainId, StringComparison.Ordinal)
+            && string.Equals(r.GateId, result.GateId, StringComparison.Ordinal)
+            && string.Equals(r.SubjectSha, result.ExpectedSha, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(r.FailureFingerprint, result.FailureFingerprint, StringComparison.Ordinal));
+        var taskReissueCeilingReached = CountPriorReissues(workspace, entry.Name, current.Id)
+            >= ConfiguredMaxReissues();
+        var failureIdentity = BuildTestGateFailureIdentity(result);
 
-        if (priorBuildGateReissues >= 1)
+        if (priorBuildGateReissues >= 1 || taskReissueCeilingReached)
         {
-            var reason = $"build-test gate failed twice in a row ({result.Reason}); escalating per post-step loop guard.";
+            var reason = priorBuildGateReissues >= 1
+                ? $"build-test gate failed twice for the same product retry identity ({failureIdentity}; {result.Reason}); escalating per post-step loop guard."
+                : $"build-test gate failed and the task-level anti-churn ceiling was reached ({failureIdentity}; {result.Reason}).";
             var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status == MoveJobStatus.Success)
             {
@@ -4068,7 +4268,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Reason: reason,
                 Prompt: "(deterministic build-test gate post-step)",
                 Response: result.Output,
-                FollowUp: string.Empty),
+                FollowUp: string.Empty)
+            {
+                AttemptChainId = result.AttemptChainId,
+                GateId = result.GateId,
+                SubjectSha = result.ExpectedSha,
+                FailureFingerprint = result.FailureFingerprint,
+                FailureKind = result.FailureKind.ToString(),
+            },
                 current.FolderPath,
                 move.NewFolderPath);
             return;
@@ -4078,9 +4285,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (moved == null) return;
 
         RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
-            DecisionVerdictReissue, BuildTestGateReissueReasonPrefix + result.Reason);
+            DecisionVerdictReissue, BuildTestGateReissueReasonPrefix + failureIdentity + "; " + result.Reason);
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.FailedPostProcessing,
-            summary: BuildTestGateReissueReasonPrefix + result.Reason,
+            summary: BuildTestGateReissueReasonPrefix + failureIdentity + "; " + result.Reason,
             performer: PostProcessingPerformers.Tool,
             stepId: PipelineCatalogue.BuildTestGateStepId,
             evidenceRef: "post-steps/build-test-gate.log");
@@ -4105,13 +4312,23 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             JobId: current.Id,
             Project: entry.Name,
             Kind: ReviewDecisionKind.Reissue,
-            Reason: BuildTestGateReissueReasonPrefix + result.Reason,
+            Reason: BuildTestGateReissueReasonPrefix + failureIdentity + "; " + result.Reason,
             Prompt: "(deterministic build-test gate post-step)",
             Response: result.Output,
-            FollowUp: followUp),
+            FollowUp: followUp)
+        {
+            AttemptChainId = result.AttemptChainId,
+            GateId = result.GateId,
+            SubjectSha = result.ExpectedSha,
+            FailureFingerprint = result.FailureFingerprint,
+            FailureKind = result.FailureKind.ToString(),
+        },
             current.FolderPath,
             moved.FolderPath);
     }
+
+    internal static string BuildTestGateFailureIdentity(BuildTestGateResult result)
+        => $"attempt={result.AttemptChainId ?? "missing"};subject={result.ExpectedSha ?? "missing"};gate={result.GateId};fingerprint={result.FailureFingerprint ?? "missing"}";
 
     private static string BuildBuildTestGateFollowUp(BuildTestGateResult result)
     {
