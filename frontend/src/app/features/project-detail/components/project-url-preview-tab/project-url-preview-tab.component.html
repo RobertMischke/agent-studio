@@ -11,12 +11,11 @@
 
     <div class="url-preview__addr" data-testid="url-preview-addr">
       <app-studio-icon class="url-preview__addr-icon" name="link" [size]="12" />
-      <div class="url-preview__addr-copy">
-        <span class="url-preview__identity">
-          {{ projectName() }} / {{ urlRecord()?.label ?? urlId() }}
-        </span>
-        <span class="url-preview__url">{{ urlRecord()?.url ?? 'Loading URL…' }}</span>
-      </div>
+      <app-project-url-address
+        [identity]="projectName() + ' / ' + (urlRecord()?.label ?? urlId())"
+        [url]="effectiveUrl()"
+        [editable]="!!urlRecord()"
+        (navigate)="onNavigate($event)" />
       <span class="url-preview__pill"
             [attr.data-status]="statusPill()"
             data-testid="url-preview-status">{{ statusPill() }}</span>

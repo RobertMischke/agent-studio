@@ -115,6 +115,21 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   await expect(page.getByTestId('url-preview-process-output')).toContainText('ready in 412 ms');
   await expect(page.getByTestId('url-preview-frame')).toBeAttached();
 
+  // The address bar is a real input: its URL can be selected (copy) and a
+  // typed target navigates the embedded preview without touching the registry.
+  const addr = page.getByTestId('url-preview-addr-input');
+  await expect(addr).toHaveValue(url.url);
+  await addr.click();
+  await addr.press('ControlOrMeta+a');
+  expect(await addr.evaluate(element => {
+    const field = element as HTMLInputElement;
+    return (field.selectionEnd ?? 0) - (field.selectionStart ?? 0);
+  })).toBe(url.url.length);
+  await addr.fill(`${url.url}/docs`);
+  await addr.press('Enter');
+  await expect(page.getByTestId('url-preview-frame')).toHaveAttribute('src', `${url.url}/docs`);
+  await expect(page.getByTestId('url-preview-status')).toHaveText('custom');
+
   await page.getByTestId('url-preview-process-stop').click();
   await expect(page.getByTestId('url-preview-process-status')).toContainText('Stopped');
   expect(processState).toBe('stopped');
