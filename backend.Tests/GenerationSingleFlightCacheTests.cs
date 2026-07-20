@@ -6,6 +6,8 @@ namespace AgentStudio.Tests;
 
 public sealed class GenerationSingleFlightCacheTests
 {
+    // MachineBound 20.07.: Single-Flight-Cache-Concurrency-Timing flaked unter Gate-Parallellast (AGT-2192 Gate-11), solo gruen.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ConcurrentMisses_RunFactoryOnceAndShareResult()
     {
