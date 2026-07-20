@@ -13,7 +13,7 @@
       <app-studio-icon class="url-preview__addr-icon" name="link" [size]="12" />
       <app-project-url-address
         [identity]="projectName() + ' / ' + (urlRecord()?.label ?? urlId())"
-        [url]="effectiveUrl()"
+        [url]="displayUrl()"
         [editable]="!!urlRecord()"
         (navigate)="onNavigate($event)" />
       <span class="url-preview__pill"
@@ -79,7 +79,7 @@
       }
       @default {
         @if (shouldEmbed()) {
-          <iframe class="url-preview__frame"
+          <iframe #frame class="url-preview__frame"
                   data-testid="url-preview-frame"
                   [src]="iframeSrc()"
                   title="Embedded preview of {{ urlRecord()?.url }}"

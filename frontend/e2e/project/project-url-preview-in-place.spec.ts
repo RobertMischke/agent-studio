@@ -28,9 +28,17 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
       : ['[studio] Process stopped by operator.'],
   });
 
-  await page.route('http://localhost:4202/**', route => processState === 'running'
-    ? route.fulfill({ status: 200, contentType: 'text/html', body: '<main>Embedded website is running</main>' })
-    : route.abort('connectionrefused'));
+  await page.route('http://localhost:4202/**', route => {
+    if (processState !== 'running') return route.abort('connectionrefused');
+    // The /docs page reports its live URL via the url-preview-embed contract.
+    const reporter = new URL(route.request().url()).pathname.startsWith('/docs')
+      ? '<script>parent.postMessage({ source: "url-preview-embed", type: "navigation", url: location.href + "#reported" }, "*")</script>'
+      : '';
+    return route.fulfill({
+      status: 200, contentType: 'text/html',
+      body: `<main>Embedded website is running</main>${reporter}`,
+    });
+  });
   await page.route('**/api/**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -129,6 +137,10 @@ test('keeps start, settings, live output, and stop in the embed in both themes',
   await addr.press('Enter');
   await expect(page.getByTestId('url-preview-frame')).toHaveAttribute('src', `${url.url}/docs`);
   await expect(page.getByTestId('url-preview-status')).toHaveText('custom');
+  // The embedded page reported its live URL; the address bar mirrors it while
+  // the frame src stays on the mounted URL (display only, no remount).
+  await expect(addr).toHaveValue(`${url.url}/docs#reported`);
+  await expect(page.getByTestId('url-preview-frame')).toHaveAttribute('src', `${url.url}/docs`);
 
   await page.getByTestId('url-preview-process-stop').click();
   await expect(page.getByTestId('url-preview-process-status')).toContainText('Stopped');
