@@ -57,6 +57,22 @@ describe('ProtocolVerdictBannerComponent', () => {
     expect(detail!.textContent).toContain('completed successfully');
   });
 
+  it('keeps interim status in the running banner and allows dismissing it', async () => {
+    const fixture = await build(verdict({ kind: 'unclear', label: 'Running' }));
+    fixture.componentRef.setInput('running', true);
+    fixture.componentRef.setInput('canRequestInterim', true);
+    fixture.detectChanges();
+    const html = fixture.nativeElement as HTMLElement;
+    let requested = false;
+    fixture.componentInstance.requestInterim.subscribe(() => (requested = true));
+
+    html.querySelector<HTMLButtonElement>('[data-testid="protocol-interim-summary"]')!.click();
+    expect(requested).toBe(true);
+    html.querySelector<HTMLButtonElement>('[data-testid="protocol-running-dismiss"]')!.click();
+    fixture.detectChanges();
+    expect(html.querySelector('[data-testid="protocol-verdict-unclear"]')).toBeNull();
+  });
+
   it('offers an expand toggle for a long reason and unclamps on click (BEFUND 1)', async () => {
     const fixture = await build(verdict({ kind: 'problem', emoji: '🔴', label: 'Blocked', detail: LONG_REASON }));
     const c = fixture.componentInstance;

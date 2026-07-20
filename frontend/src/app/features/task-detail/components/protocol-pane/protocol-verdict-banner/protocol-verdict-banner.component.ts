@@ -31,6 +31,10 @@ import type { ChainEvidenceLink, VerdictChain } from '../protocol-verdict-chain'
 })
 export class ProtocolVerdictBannerComponent {
   readonly verdict = input.required<ProtocolVerdict>();
+  readonly running = input(false);
+  readonly canRequestInterim = input(false);
+  readonly interimInFlight = input(false);
+  readonly interimElapsedSeconds = input(0);
 
   /**
    * The four-step verdict chain (Run → Gate → Review → Lane) with evidence
@@ -42,9 +46,11 @@ export class ProtocolVerdictBannerComponent {
 
   /** Emitted when the user clicks an evidence link in the chain. */
   readonly openEvidence = output<ChainEvidenceLink>();
+  readonly requestInterim = output<void>();
 
   /** Whether the reason (and any superseded history) is shown in full. */
   readonly expanded = signal(false);
+  readonly dismissed = signal(false);
 
   /**
    * Only offer the expand affordance when there is genuinely more to read: a
@@ -65,12 +71,17 @@ export class ProtocolVerdictBannerComponent {
       if (key !== previousKey) {
         previousKey = key;
         this.expanded.set(false);
+        this.dismissed.set(false);
       }
     });
   }
 
   toggle(): void {
     this.expanded.update((x) => !x);
+  }
+
+  dismiss(): void {
+    this.dismissed.set(true);
   }
 
   onEvidence(link: ChainEvidenceLink): void {

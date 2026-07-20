@@ -80,25 +80,6 @@
           }
         </span>
       }
-      @if (isRunning()) {
-        <button type="button"
-                class="pane__interim-btn"
-                data-testid="protocol-interim-summary"
-                [disabled]="!canRequestInterim()"
-                [cacTooltip]="interimInFlight()
-                  ? ('Asking Haiku for an interim status... ' + interimElapsedSeconds() + 's')
-                  : 'Generate an interim status summary from the current run output. Does not touch status.md.'"
-                (click)="requestInterimSummary()"
-                aria-label="Interim status">
-          @if (interimInFlight()) {
-            <span class="spinner-ring" aria-hidden="true"></span>
-            <span>Interim ({{ interimElapsedSeconds() }}s)</span>
-          } @else {
-            <span aria-hidden="true">📊</span>
-            <span>Interim status</span>
-          }
-        </button>
-      }
       @if (featureFlags.vsCodeLayout()) {
         <button type="button"
                 class="pane-header__btn"
@@ -117,6 +98,11 @@
       <app-protocol-verdict-banner
         [verdict]="v"
         [chain]="verdictChain()"
+        [running]="isRunning()"
+        [canRequestInterim]="canRequestInterim()"
+        [interimInFlight]="interimInFlight()"
+        [interimElapsedSeconds]="interimElapsedSeconds()"
+        (requestInterim)="requestInterimSummary()"
         (openEvidence)="onVerdictChainEvidence($event)" />
     }
     @if (interimSummary(); as s) {
@@ -321,10 +307,10 @@
           <div class="inspector__stack">
             <section class="activity-panel" data-testid="activity-panel">
               <div class="activity-panel__header activity-panel__header--compact">
-                @if (cliOutput().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
+                @if (planAvailable()) {
                   <app-pane-tabs variant="pill"
                                  class="activity-view-toggle"
-                                 ariaLabel="Plan / CLI"
+                                 ariaLabel="Plan"
                                  [tabs]="activityPrimaryTabs()"
                                  [activeTabId]="activityPrimaryTabId()"
                                  (tabChange)="onActivityPrimaryTabChange($event)" />

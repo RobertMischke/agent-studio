@@ -1,3 +1,4 @@
+@if (!dismissed()) {
 @let v = verdict();
 <div class="protocol-verdict"
      [attr.data-kind]="v.kind"
@@ -36,6 +37,23 @@
       <span class="protocol-verdict__duration-value">{{ v.duration }}</span>
     </span>
   }
+  @if (running()) {
+    <span class="protocol-verdict__actions">
+      <button type="button"
+              class="protocol-verdict__interim"
+              data-testid="protocol-interim-summary"
+              [disabled]="!canRequestInterim()"
+              (click)="requestInterim.emit()">
+        {{ interimInFlight() ? 'Interim ' + interimElapsedSeconds() + 's' : 'Interim status' }}
+      </button>
+      <button type="button"
+              class="protocol-verdict__dismiss"
+              data-testid="protocol-running-dismiss"
+              aria-label="Dismiss running status"
+              [cacTooltip]="'Dismiss running status'"
+              (click)="dismiss()">×</button>
+    </span>
+  }
 </div>
 @if (v.superseded; as sup) {
   <!-- BEFUND 2 + 3: a Blocked/Failed run outcome the accepted stand has
@@ -59,6 +77,7 @@
          data-testid="protocol-verdict-superseded-detail">{{ sup.detail }}</p>
     }
   </div>
+}
 }
 @if (chain(); as c) {
   <!-- BEFUND 2: the visible verdict chain (Run → Gate → Review aspects → Lane
