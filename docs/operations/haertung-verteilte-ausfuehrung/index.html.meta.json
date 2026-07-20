@@ -11,6 +11,12 @@
       "title": "BUG: Quelltext-Detailansicht - Splitter b\u00FCndig und gut greifbar machen, Pfad-Artefakte entfernen",
       "linkedAt": "2026-07-20T03:00:30.8754729Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2155",
+      "title": "AGT-2155: KRITISCH Verify-/Build-Gates kollidieren bei Parallelbetrieb - serialisieren oder im Worktree bauen (2080-Wirksamkeit widerlegt, 10\u002B Falsch-Eskalationen 11./12.07.)",
+      "linkedAt": "2026-07-20T13:52:25.0679626Z",
+      "source": "auto"
     }
   ]
 }

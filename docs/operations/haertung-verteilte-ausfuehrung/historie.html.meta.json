@@ -11,6 +11,12 @@
       "title": "Remote runner must reconcile divergent salvage branches without requeue loops",
       "linkedAt": "2026-07-20T02:54:59.9528137Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2155",
+      "title": "AGT-2155: KRITISCH Verify-/Build-Gates kollidieren bei Parallelbetrieb - serialisieren oder im Worktree bauen (2080-Wirksamkeit widerlegt, 10\u002B Falsch-Eskalationen 11./12.07.)",
+      "linkedAt": "2026-07-20T13:52:25.0679626Z",
+      "source": "auto"
     }
   ]
 }

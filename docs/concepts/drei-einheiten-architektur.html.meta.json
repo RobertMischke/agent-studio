@@ -22,5 +22,13 @@
     "supersededBy": null,
     "type": "konzept",
     "analyzedAt": "2026-07-20"
-  }
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2193",
+      "title": "Task Server security: human login, Runner service identities, authorization, and HTTPS",
+      "linkedAt": "2026-07-20T14:01:27.9117806Z",
+      "source": "auto"
+    }
+  ]
 }
