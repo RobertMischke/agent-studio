@@ -25,7 +25,11 @@ public sealed record RunLeaseAcquireRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null)
+{
+    /// <summary>Authenticated task API client identity when acquisition came through a daemon claim.</summary>
+    public string? ClientId { get; init; }
+}
 
 /// <summary>Heartbeat: extends the lease only when lease id + fencing token + runner still match the current holder.</summary>
 public sealed record RunLeaseHeartbeatRequest(
@@ -53,7 +57,12 @@ public sealed record RunLeaseInfoDto(
     string LeaseId,
     long FencingToken,
     DateTime AcquiredAt,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt)
+{
+    /// <summary>Most recent successful acquire/re-entry/renewal activity.</summary>
+    public DateTime LastHeartbeatAt { get; init; } = AcquiredAt;
+    public string? ClientId { get; init; }
+}
 
 /// <summary>
 /// Result of a run-lease operation. <see cref="Outcome"/> is the discriminator

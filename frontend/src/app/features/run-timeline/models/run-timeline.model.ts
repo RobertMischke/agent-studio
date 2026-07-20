@@ -9,7 +9,7 @@
  * filter does not have to re-derive the boundaries.
  */
 import type { TaskTokenSummary } from '../../tokens';
-import type { ContextUsageMetric } from '../../../models/task.model';
+import type { ContextUsageMetric, TaskExecutionLocation } from '../../../models/task.model';
 
 export interface RunRecord {
   index: number;
@@ -18,6 +18,7 @@ export interface RunRecord {
   endedAt: string | null;
   status: string; // 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown'
   cli: string | null;
+  executionLocation?: TaskExecutionLocation | null;
   exitCode: number | null;
   durationSeconds: number | null;
   inputSessionId: string | null;

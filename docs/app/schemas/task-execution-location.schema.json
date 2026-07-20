@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/task-execution-location.schema.json",
+  "title": "Task execution location",
+  "description": "Canonical TaskInfo executionLocation projection. Runtime process and fenced lease facts describe actual ownership; configuredRunnerId is routing context only.",
+  "type": "object",
+  "required": ["state", "executionKind", "connectionState", "leaseState", "trustReason", "historical"],
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": ["local-running", "remote-running", "remote-disconnected", "queued-remote", "recovering", "no-active-execution"],
+      "description": "Operator-facing execution and health state."
+    },
+    "executionKind": { "type": "string", "enum": ["local", "remote", "none"], "description": "Actual location kind, or none when no runtime owns the task." },
+    "runnerId": { "type": ["string", "null"], "description": "Stable identity of the actual lease or process owner." },
+    "clientId": { "type": ["string", "null"], "description": "Task API client identity associated with the owner." },
+    "hostDisplayName": { "type": ["string", "null"], "description": "Human-readable execution host or runner name." },
+    "configuredRunnerId": { "type": ["string", "null"], "description": "Project routing target. This never overrides actual runtime ownership." },
+    "startedAt": { "type": ["string", "null"], "format": "date-time", "description": "Current or captured run start time." },
+    "lastHeartbeat": { "type": ["string", "null"], "format": "date-time", "description": "Latest accepted fenced lease heartbeat." },
+    "lastActivityAt": { "type": ["string", "null"], "format": "date-time", "description": "Latest runtime, client, or task activity signal." },
+    "processId": { "type": ["integer", "null"], "minimum": 1, "description": "Host-scoped process identity when safe to expose." },
+    "sessionId": { "type": ["string", "null"], "description": "CLI session identity when available." },
+    "branch": { "type": ["string", "null"], "description": "Task branch from persisted provenance." },
+    "worktreePath": { "type": ["string", "null"], "description": "Task or run worktree provenance path." },
+    "connectionState": { "type": "string", "description": "Connected, disconnected, queued, recovering, historical, or none." },
+    "leaseState": { "type": "string", "description": "Active, expired, released, local-process, or none." },
+    "trustReason": { "type": "string", "minLength": 1, "description": "Explanation of which authoritative runtime fact supports the projection." },
+    "historical": { "type": "boolean", "description": "True for captured settled run attribution, which must render quietly." }
+  },
+  "additionalProperties": false
+}

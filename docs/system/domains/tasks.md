@@ -177,6 +177,20 @@ cannot erase an operator decision.
 - Direct filesystem access by app code is restricted to the bounded service
   layer and covered by architecture tests.
 
+## Execution location on task reads
+
+`GET /api/tasks`, `GET /api/tasks/grouped`, task detail, and SignalR task
+updates carry `TaskInfo.executionLocation`. Consumers must use its actual
+`runnerId`, `executionKind`, lease state, and heartbeat for live attribution.
+The project `executionRunner` setting appears only as `configuredRunnerId` for
+comparison and queued-remote display. Cards in `3-progress`, the detail header,
+and Overview share the same projection, so concurrent cards each retain their
+own lease owner rather than inheriting a project-wide runner status.
+
+Settled session events preserve the same projection as historical run evidence.
+Historical entries never reuse disconnected warning treatment. See the
+[execution location schema](../schemas/task-execution-location.schema.json).
+
 ## Verification
 
 - API and mutation changes need endpoint tests plus task-access or service tests

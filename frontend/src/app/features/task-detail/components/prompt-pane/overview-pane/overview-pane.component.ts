@@ -55,6 +55,7 @@ import { CostBreakdownTriggerDirective } from '../../../../tokens';
 import { NotificationService } from '../../../../../services/notification.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
+import { ExecutionLocationBadgeComponent } from '../../../../../components/execution-location-badge/execution-location-badge.component';
 import {
   buildPipelineGroups,
   groupAriaLabel,
@@ -474,12 +475,11 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
     'A pipeline step.';
   return { title: label, body };
 }
-
 @Component({
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })

@@ -361,6 +361,14 @@ public record TaskInfo
     public TaskRunnerInfo? Runner { get; init; }
 
     /// <summary>
+    /// Canonical read-time projection of where the current execution actually
+    /// runs. Runtime process and fenced lease facts lead; project routing is
+    /// included only as configured context. Unlike <see cref="Runner"/>, this
+    /// projection also represents queues, recovery, and stale remote owners.
+    /// </summary>
+    public TaskExecutionLocation? ExecutionLocation { get; init; }
+
+    /// <summary>
     /// AGT-2069 — read-time spawn-visibility + spawn-contract projection for a
     /// planning task (<c>Mode == planning</c>): which follow-up cards it spawned
     /// (AGT-2028 ledger), whether the operator declared "no follow-up intended",
@@ -402,6 +410,38 @@ public record TaskRunnerInfo
     public long FencingToken { get; init; }
     /// <summary>UTC instant the active lease was acquired.</summary>
     public DateTime AcquiredAt { get; init; }
+}
+
+public static class TaskExecutionStates
+{
+    public const string LocalRunning = "local-running";
+    public const string RemoteRunning = "remote-running";
+    public const string RemoteDisconnected = "remote-disconnected";
+    public const string QueuedRemote = "queued-remote";
+    public const string Recovering = "recovering";
+    public const string NoActiveExecution = "no-active-execution";
+}
+
+/// <summary>Canonical execution ownership and health projection for task APIs.</summary>
+public record TaskExecutionLocation
+{
+    public string State { get; init; } = TaskExecutionStates.NoActiveExecution;
+    public string ExecutionKind { get; init; } = "none";
+    public string? RunnerId { get; init; }
+    public string? ClientId { get; init; }
+    public string? HostDisplayName { get; init; }
+    public string? ConfiguredRunnerId { get; init; }
+    public DateTime? StartedAt { get; init; }
+    public DateTime? LastHeartbeat { get; init; }
+    public DateTime? LastActivityAt { get; init; }
+    public int? ProcessId { get; init; }
+    public string? SessionId { get; init; }
+    public string? Branch { get; init; }
+    public string? WorktreePath { get; init; }
+    public string ConnectionState { get; init; } = "none";
+    public string LeaseState { get; init; } = "none";
+    public string TrustReason { get; init; } = "No active runtime process or fenced run lease is present.";
+    public bool Historical { get; init; }
 }
 
 /// <summary>

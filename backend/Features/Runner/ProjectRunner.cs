@@ -2598,11 +2598,38 @@ public class ProjectRunner
             // process. Neither the canonical session event nor its timeline
             // projection may exist for a rejected admission, otherwise a later
             // read invents a historical run that never owned execution.
+            // AGT-2159: capture the actual execution owner (runner host +
+            // backend from the pickup-lock owner) on the durable run-start
+            // event so card + detail can show where the run really executes.
+            var executionHost = string.IsNullOrWhiteSpace(_pickupLockOwner?.Hostname)
+                ? System.Environment.MachineName
+                : _pickupLockOwner!.Hostname;
+            var executionBackend = string.IsNullOrWhiteSpace(_pickupLockOwner?.BackendName)
+                ? "local"
+                : _pickupLockOwner!.BackendName;
+            var localRunnerId = $"{executionBackend}@{executionHost}".ToLowerInvariant();
             _sessions.AppendSessionEvent(jobId, new SessionEvent
             {
                 Ts = execution.StartedAt,
                 Kind = plan.EventKind,
                 Cli = cli.CliType,
+                ExecutionLocation = new TaskExecutionLocation
+                {
+                    State = TaskExecutionStates.LocalRunning,
+                    ExecutionKind = "local",
+                    RunnerId = localRunnerId,
+                    ClientId = localRunnerId,
+                    HostDisplayName = executionHost,
+                    ConfiguredRunnerId = _projectSettings.Get(ProjectName).ExecutionRunner,
+                    StartedAt = execution.StartedAt,
+                    LastActivityAt = execution.StartedAt,
+                    SessionId = effSessionToResume,
+                    Branch = info.Provenance?.Branch,
+                    WorktreePath = runWorkingDir,
+                    ConnectionState = "connected",
+                    LeaseState = "local-process",
+                    TrustReason = "Captured from the local pickup owner and worktree at confirmed CLI process start.",
+                },
                 InputSessionId = effSessionToResume,
                 CapturedSessionId = null,
                 Cwd = runWorkingDir,

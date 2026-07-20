@@ -203,6 +203,7 @@ internal static class TaskEndpointHelpers
             OutcomeIssue = outcomeIssue,
             RunActivity = runActivity,
             Runner = runner,
+            ExecutionLocation = runners.ResolveExecutionLocation(job, exec, runActivity),
             AutoLoop = loop == null ? null : new AutoLoopSnapshot
             {
                 Iteration = loop.IterationCount,

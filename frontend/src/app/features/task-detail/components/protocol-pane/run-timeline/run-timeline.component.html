@@ -66,7 +66,9 @@
                   <h4 class="run-detail__title">{{ prompt.label || ('Prompt #' + prompt.index) }}</h4>
                   <div class="run-detail__subtitle">
                     Run #{{ r.index }} · {{ intentLabel(r.intent) }} · started {{ formatTime(r.startedAt) }}
-                    @if (runnerAttribution(r); as rn) {
+                    @if (r.executionLocation && r.executionLocation.executionKind !== 'none') {
+                      · <app-execution-location-badge [execution]="r.executionLocation" />
+                    } @else if (runnerAttribution(r); as rn) {
                       · <span class="run-detail__runner"
                               [class]="'run-detail__runner--' + rn.kind"
                               [attr.data-testid]="'run-runner-' + r.index"

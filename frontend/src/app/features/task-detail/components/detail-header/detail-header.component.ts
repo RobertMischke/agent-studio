@@ -29,19 +29,19 @@ import { buildThinkingLevelIndicator } from '../../../../services/thinking-level
 import { shortModelName } from '../../../../services/format.util';
 import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
 import { PendingButtonDirective } from '../../../../components/async-feedback';
-/** Top header of the job-detail view: back button, editable title,
- * state pill, and — top-right — the lane's primary triage action plus
+import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
+/** Top header of the job-detail view: back button, editable title, state pill,
+ * and the lane's primary triage action plus
  * an overflow menu of the remaining lane actions. The bottom-of-detail
  * triage bar that used to host these is gone (the operator reported the
- * "Human Review v" trigger row still rendering after the first attempt
- * at folding it up). Title-edit state is owned by the parent and passed
+ * "Human Review v" trigger row still rendering after the first attempt at folding it up). Title-edit state is owned by the parent and passed
  * via inputs/outputs.
  */
 @Component({
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ThinkingLevelIndicatorComponent, PendingButtonDirective],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ThinkingLevelIndicatorComponent, PendingButtonDirective, ExecutionLocationBadgeComponent],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })

@@ -72,7 +72,7 @@ public sealed class RunLeaseService
             {
                 if (SameRunner(current, runnerId))
                 {
-                    slot.Current = current with { ExpiresAt = now.Add(ttl) };
+                    slot.Current = current with { ExpiresAt = now.Add(ttl), LastHeartbeatAt = now };
                     return new RunLeaseResponse("AlreadyOwn", true, ToDto(slot.Current));
                 }
 
@@ -113,6 +113,8 @@ public sealed class RunLeaseService
             if (slot.Current.ExpiresAt <= now)
             {
                 var expired = slot.Current;
+                slot.Last = expired;
+                slot.LastState = "expired";
                 slot.Current = null;
                 _logger.LogWarning(
                     "[run-lease] heartbeat rejected expired {TaskKey} lease={LeaseId} token={FencingToken}",
@@ -128,7 +130,7 @@ public sealed class RunLeaseService
                 return new RunLeaseResponse("StaleToken", false, ToDto(slot.Current), "Lease id, fencing token, or runner id does not match the current holder.");
             }
 
-            slot.Current = slot.Current with { ExpiresAt = now.Add(ttl) };
+            slot.Current = slot.Current with { ExpiresAt = now.Add(ttl), LastHeartbeatAt = now };
             return new RunLeaseResponse("Renewed", true, ToDto(slot.Current));
         }
     }
@@ -153,6 +155,8 @@ public sealed class RunLeaseService
                 return new RunLeaseResponse("StaleToken", false, ToDto(slot.Current), "Lease id, fencing token, or runner id does not match the current holder.");
 
             var released = slot.Current;
+            slot.Last = released;
+            slot.LastState = "released";
             slot.Current = null;
             _logger.LogInformation(
                 "[run-lease] released {TaskKey} from runner={RunnerId} lease={LeaseId} token={FencingToken}",
@@ -171,6 +175,25 @@ public sealed class RunLeaseService
             if (!_slots.TryGetValue(key, out var slot)) return new RunLeaseResponse("Free", false, null);
             PruneExpired(slot, key, _utcNow());
             return new RunLeaseResponse(slot.Current is null ? "Free" : "Held", false, ToDto(slot.Current));
+        }
+    }
+
+    /// <summary>
+    /// Read-side inspection that retains the most recent expired or released
+    /// owner for health and historical attribution. It never grants authority:
+    /// only <see cref="Peek"/> and <see cref="IsCurrent"/> describe a live lease.
+    /// </summary>
+    public RunLeaseInspection Inspect(string taskKey)
+    {
+        if (Blank(taskKey)) return new RunLeaseInspection("none", null);
+        var key = Normalize(taskKey);
+        lock (_gate)
+        {
+            if (!_slots.TryGetValue(key, out var slot)) return new RunLeaseInspection("none", null);
+            PruneExpired(slot, key, _utcNow());
+            return slot.Current is not null
+                ? new RunLeaseInspection("active", ToDto(slot.Current))
+                : new RunLeaseInspection(slot.Last is null ? "none" : slot.LastState, ToDto(slot.Last));
         }
     }
 
@@ -207,11 +230,15 @@ public sealed class RunLeaseService
             Normalize(request.Hostname),
             request.Pid,
             Normalize(request.BackendName),
+            Normalize(request.ClientId),
             Guid.NewGuid().ToString("N"),
             slot.LastFencingToken,
             now,
+            now,
             now.Add(ttl));
         slot.Current = lease;
+        slot.Last = lease;
+        slot.LastState = "active";
         return lease;
     }
 
@@ -231,6 +258,8 @@ public sealed class RunLeaseService
         _logger.LogWarning(
             "[run-lease] expired {TaskKey} lease={LeaseId} token={FencingToken}; reclaimable",
             key, slot.Current.LeaseId, slot.Current.FencingToken);
+        slot.Last = slot.Current;
+        slot.LastState = "expired";
         slot.Current = null;
     }
 
@@ -269,7 +298,7 @@ public sealed class RunLeaseService
             lease.LeaseId,
             lease.FencingToken,
             lease.AcquiredAt,
-            lease.ExpiresAt);
+            lease.ExpiresAt) { LastHeartbeatAt = lease.LastHeartbeatAt, ClientId = string.IsNullOrWhiteSpace(lease.ClientId) ? null : lease.ClientId };
 
     private static string Normalize(string? value) => (value ?? "").Trim();
     private static bool Blank(string? value) => string.IsNullOrWhiteSpace(value);
@@ -281,14 +310,20 @@ public sealed class RunLeaseService
         string Hostname,
         int Pid,
         string BackendName,
+        string ClientId,
         string LeaseId,
         long FencingToken,
         DateTime AcquiredAt,
+        DateTime LastHeartbeatAt,
         DateTime ExpiresAt);
 
     private sealed class RunLeaseSlot
     {
         public RunLeaseRecord? Current { get; set; }
+        public RunLeaseRecord? Last { get; set; }
+        public string LastState { get; set; } = "none";
         public long LastFencingToken { get; set; }
     }
 }
+
+public sealed record RunLeaseInspection(string State, RunLeaseInfoDto? Lease);
