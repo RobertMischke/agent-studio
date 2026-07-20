@@ -1,0 +1,41 @@
+{
+	email {$ACME_EMAIL}
+}
+
+http://{$STUDIO_DOMAIN} {
+	redir https://{$STUDIO_DOMAIN}{uri} permanent
+}
+
+{$STUDIO_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	request_body {
+		max_size 25MB
+	}
+
+	@debug path /api/devtools* /api/_internal* /api/filesystem-layer* /api/diagnostics*
+	respond @debug 404
+
+	@task_server path /api/* /hubs/* /healthz
+	handle @task_server {
+		reverse_proxy 127.0.0.1:5030 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	handle {
+		root * /srv/agent-studio/frontend/browser
+		try_files {path} /index.html
+		file_server
+	}
+}

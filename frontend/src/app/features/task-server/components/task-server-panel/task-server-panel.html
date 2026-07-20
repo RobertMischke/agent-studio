@@ -46,7 +46,7 @@
             </div>
             <div class="ts__row">
               <dt>Phase</dt>
-              <dd>{{ phaseLabel(c.phase) }} <span class="ts__hint">{{ c.phase === 'local' ? 'localhost today' : 'central URL' }}</span></dd>
+              <dd>{{ phaseLabel(c.phase) }} <span class="ts__hint">{{ c.phase === 'local' ? 'loopback only' : 'authenticated HTTPS' }}</span></dd>
             </div>
             <div class="ts__row"><dt>Version</dt><dd>{{ c.version || '-' }}</dd></div>
             <div class="ts__row"><dt>Uptime</dt><dd>{{ c.uptimeLabel || '-' }}</dd></div>

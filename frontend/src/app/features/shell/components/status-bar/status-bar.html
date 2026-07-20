@@ -47,6 +47,11 @@
                         testid="status-bar-settings"
                         [active]="settingsOpen()"
                         (activated)="toggleSettings.emit()" />
+    @if (showSignOut()) {
+      <app-statusbar-item icon="close" label="Sign out" [tooltip]="'Sign out ' + signedInLabel()"
+                          testid="status-bar-sign-out"
+                          (activated)="signOut.emit()" />
+    }
 
     <span class="statusbar__sep" aria-hidden="true"></span>
 

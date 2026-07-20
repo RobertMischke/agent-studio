@@ -207,6 +207,7 @@ public sealed class JobsHubTests : IDisposable
         _ = new TaskHubBroadcaster(
             new FakeHubContext(new FakeHubClients(proxy)),
             scanner,
+            new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
             notifier,
             NullLogger<TaskHubBroadcaster>.Instance);
         return (notifier, scanner, machine, proxy);

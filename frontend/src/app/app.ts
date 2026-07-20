@@ -123,7 +123,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from './components/menu';
 import { CostBreakdownDialogComponent, type TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
 import { LoadingSurfaceComponent, PendingButtonDirective } from './components/async-feedback';
-
+import { AuthGateComponent, AuthService } from './components/auth-gate/auth-gate';
 interface VerboseDebugContext {
   lines: CliOutputLine[];
   runTimeline: RunTimeline | null;
@@ -131,19 +131,16 @@ interface VerboseDebugContext {
   tokenSummary: TaskTokenSummary | null;
   job: TaskInfo | null;
 }
-
 interface ShellPanesVisible {
   prompt: boolean;
   protocol: boolean;
   git: boolean;
 }
-
 const SHELL_PANES_FALLBACK: ShellPanesVisible = {
   prompt: false,
   protocol: false,
   git: false,
 };
-
 @Component({
   selector: 'app-root',
   imports: [
@@ -186,6 +183,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     ProjectUrlPreviewTabComponent,
     WorkbenchViewerComponent,
     StudioIconComponent,
+    AuthGateComponent,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
@@ -204,6 +202,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
   styleUrl: './app.scss',
 })
 export class App implements OnInit, OnDestroy {
+  readonly auth = inject(AuthService); private studioInitialized = false;
   readonly jobService = inject(TaskService);
   readonly errorDialog = inject(ErrorDialogService);
   readonly devTools = inject(DevToolsService);
@@ -900,6 +899,12 @@ export class App implements OnInit, OnDestroy {
   readonly justCreatedJobId = signal<string | null>(null);
 
   constructor() {
+    effect(() => {
+      const allowed = this.auth.studioAllowed();
+      const statusKnown = this.auth.status() !== null;
+      if (allowed && !this.studioInitialized) untracked(() => this.initializeStudio());
+      else if (statusKnown && !allowed && this.studioInitialized) untracked(() => this.teardownStudio());
+    });
     // Cycle 10a: refresh the kanban after a successful create — the
     // CreateTaskFormService doesn't call jobService.refresh itself
     // because that orchestration concern lives here. F2: also flag the
@@ -1125,8 +1130,9 @@ export class App implements OnInit, OnDestroy {
     });
 
   }
-
-  ngOnInit() {
+  ngOnInit() { this.auth.initialize(); }
+  private initializeStudio(): void {
+    if (this.studioInitialized) return; this.studioInitialized = true;
     // Backlog-lane spec: hydrate the filter bar from the URL hash before
     // rendering so a bookmark or copy-paste lands on the same view.
     this.boardFilters.hydrateFromUrl();
@@ -1215,7 +1221,8 @@ export class App implements OnInit, OnDestroy {
 
   }
 
-  ngOnDestroy() {
+  private teardownStudio(): void {
+    this.jobService.stopLiveUpdates();
     if (this.hashListener) {
       window.removeEventListener('hashchange', this.hashListener);
       this.hashListener = null;
@@ -1228,7 +1235,10 @@ export class App implements OnInit, OnDestroy {
       clearInterval(this.nowMsTickHandle);
       this.nowMsTickHandle = null;
     }
+    this.studioInitialized = false;
   }
+
+  ngOnDestroy() { this.teardownStudio(); }
 
   onE2EDidDelete(): void {
     this.jobService.refresh(true);

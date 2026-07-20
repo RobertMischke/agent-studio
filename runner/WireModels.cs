@@ -155,7 +155,12 @@ public sealed record RemoteRunCompletionResponse(
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);
 
 /// <summary>Runner -> Server: append output lines to the task's durable cli-output.log (/api/runner/logs).</summary>
-public sealed record LogIngestRequest(string TaskKey, List<CliOutputLine> Lines);
+public sealed record LogIngestRequest(
+    string TaskKey,
+    List<CliOutputLine> Lines,
+    string? RunnerId = null,
+    string? LeaseId = null,
+    long FencingToken = 0);
 
 public sealed record LogIngestResponse(string TaskKey, int Appended, string? Message = null);
 
@@ -163,7 +168,12 @@ public sealed record LogIngestResponse(string TaskKey, int Appended, string? Mes
 public sealed record RunnerArtifactUpload(string Path, string ContentBase64);
 
 /// <summary>Runner -> Server: upload base64 result files (/api/runner/artifacts).</summary>
-public sealed record ArtifactIngestRequest(string TaskKey, List<RunnerArtifactUpload> Artifacts);
+public sealed record ArtifactIngestRequest(
+    string TaskKey,
+    List<RunnerArtifactUpload> Artifacts,
+    string? RunnerId = null,
+    string? LeaseId = null,
+    long FencingToken = 0);
 
 public sealed record ArtifactIngestResponse(
     string TaskKey,

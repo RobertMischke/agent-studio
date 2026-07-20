@@ -18,6 +18,7 @@ public static class TaskCrudEndpoints
         // cached, and merge membership is calculated once for the whole requested
         // set, never once per key.
         group.MapPost("/reference-status", (TaskReferenceStatusRequest req,
+            HttpContext context,
             TaskScannerService scanner,
             BoardMergeStatusService mergeStatus,
             AgentStudio.Registry.ProjectRegistry projects,
@@ -31,11 +32,15 @@ public static class TaskCrudEndpoints
                 .Take(200)
                 .ToArray();
 
-            var registry = projects.List();
+            var registry = projects.List()
+                .Where(project => context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human
+                                  || ProjectAccessAuthorization.Allows(human.User, project.Id, projects))
+                .ToList();
             var knownCodes = registry
                 .Where(p => !string.IsNullOrWhiteSpace(p.ShortCode))
                 .ToDictionary(p => p.ShortCode, StringComparer.OrdinalIgnoreCase);
-            var jobs = scanner.ScanAllJobsWithArchive();
+            var jobs = ProjectAccessAuthorization.FilterTasks(
+                context, scanner.ScanAllJobsWithArchive(), projects).ToList();
             var byKey = jobs
                 .Where(j => !string.IsNullOrWhiteSpace(j.Key))
                 .GroupBy(j => j.Key!, StringComparer.OrdinalIgnoreCase)
@@ -66,9 +71,9 @@ public static class TaskCrudEndpoints
             return Results.Ok(new TaskReferenceStatusResponse(items!));
         });
 
-        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
+        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus, AgentStudio.Registry.ProjectRegistry projects) =>
         {
-            var raw = scanner.ScanAllJobs();
+            var raw = ProjectAccessAuthorization.FilterTasks(ctx, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
@@ -89,9 +94,9 @@ public static class TaskCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
+        group.MapGet("/grouped", (bool? includeFixtures, HttpContext context, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus, AgentStudio.Registry.ProjectRegistry projects) =>
         {
-            var raw = scanner.ScanAllJobs();
+            var raw = ProjectAccessAuthorization.FilterTasks(context, scanner.ScanAllJobs(), projects).ToList();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
@@ -179,7 +184,7 @@ public static class TaskCrudEndpoints
         // archived card renders. Query: watchPath (optional project filter),
         // offset/limit (paging), search (case-insensitive title/key/id), and
         // includeFixtures (default false, mirroring the board endpoints).
-        group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures,
+        group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures, HttpContext context,
             TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, ILoggerFactory loggerFactory) =>
         {
             var projectRequested = !string.IsNullOrWhiteSpace(project);
@@ -191,7 +196,7 @@ public static class TaskCrudEndpoints
                 return Results.NotFound(new { error = $"Unknown project '{project}'" });
             var logger = loggerFactory.CreateLogger("TaskArchiveEndpoint");
             var sw = Stopwatch.StartNew();
-            var all = scanner.ScanArchivedJobs();
+            var all = ProjectAccessAuthorization.FilterTasks(context, scanner.ScanArchivedJobs(), projects).ToList();
             IEnumerable<TaskInfo> archived = all;
 
             if (!string.IsNullOrWhiteSpace(watchPath))
@@ -378,11 +383,26 @@ public static class TaskCrudEndpoints
         // 200 OK with a per-item status array so the caller can retry just
         // the failures. See AGENTS.md "Job organization rule: API first".
         group.MapPost("/batch-move", async (BatchMoveRequest req,
+            HttpContext ctx,
             TaskTransitionService transitions,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
         {
             if (req?.Items is null || req.Items.Count == 0)
                 return Results.BadRequest(new { error = "items is required and must contain at least one entry" });
+
+            // batch-move is body-addressed, so the networked middleware defers
+            // project-scope enforcement to here. A scoped non-owner human may only
+            // move tasks inside its own projects; resolve every item's project and
+            // fail closed on any that is out of scope or unresolvable.
+            if (!ProjectAccessAuthorization.AllowsTasks(
+                    ctx,
+                    req.Items.Select(i => scanner.FindJob(i.JobId, string.IsNullOrWhiteSpace(i.WatchPath) ? null : i.WatchPath)?.ProjectName),
+                    projects))
+                return Results.Json(
+                    new { error = "project-scope-denied", message = "This account is not a member of every task in the batch." },
+                    statusCode: StatusCodes.Status403Forbidden);
 
             var results = await transitions.BatchMoveAsync(req.Items, ct);
             return Results.Ok(new BatchMoveResponse { Results = results.ToList() });
@@ -479,15 +499,21 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations) =>
+        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             if (string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest("Title is required");
 
-            // Header X-Client-Id wins when the body does not name an owner.
-            // The middleware has already validated the header against the
-            // ClientIdentityStore, so we trust it here.
-            if (string.IsNullOrWhiteSpace(req.OwnerClientId))
+            // A networked human principal is the initiating identity. The
+            // attribution header must never override the authenticated user.
+            if (ctx.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
+            {
+                var requestedProject = string.IsNullOrWhiteSpace(req.Project) ? req.WatchPath : req.Project;
+                if (!ProjectAccessAuthorization.Allows(human.User, requestedProject, projects))
+                    return Results.Json(new { error = "project-scope-denied", message = "This account is not a member of the requested project." }, statusCode: StatusCodes.Status403Forbidden);
+                req = req with { OwnerClientId = human.User.Id };
+            }
+            else if (string.IsNullOrWhiteSpace(req.OwnerClientId))
             {
                 var headerOwner = ctx.Request.Headers["X-Client-Id"].FirstOrDefault();
                 if (!string.IsNullOrWhiteSpace(headerOwner))
@@ -500,11 +526,25 @@ public static class TaskCrudEndpoints
             return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
         });
 
-        group.MapPost("/reorder", (ReorderRequest req, TaskStateMachine states) =>
+        group.MapPost("/reorder", (ReorderRequest req, HttpContext ctx, TaskStateMachine states,
+            TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             var jobs = req.Jobs.Count > 0
                 ? req.Jobs
                 : req.JobIds.Select(id => new TaskOrderItem { JobId = id }).ToList();
+
+            // reorder is body-addressed, so the networked middleware defers
+            // project-scope enforcement to here. A scoped non-owner human may only
+            // reorder tasks inside its own projects; resolve every affected task's
+            // project and fail closed on any that is out of scope or unresolvable.
+            if (!ProjectAccessAuthorization.AllowsTasks(
+                    ctx,
+                    jobs.Select(j => scanner.FindJob(j.JobId, string.IsNullOrWhiteSpace(j.WatchPath) ? null : j.WatchPath)?.ProjectName),
+                    projects))
+                return Results.Json(
+                    new { error = "project-scope-denied", message = "This account is not a member of every task in the reorder set." },
+                    statusCode: StatusCodes.Status403Forbidden);
+
             var success = states.ReorderJobs(jobs);
             return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });

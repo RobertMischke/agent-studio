@@ -10,16 +10,25 @@ namespace AgentStudio.Diagnostics;
 public static class ArtifactIngestionEndpoints
 {
     private static readonly Regex UnsafeSegment = new(@"(^|[\\/])\.\.([\\/]|$)", RegexOptions.Compiled);
+    private static readonly Regex WindowsRootedPath = new(@"^[A-Za-z]:[\\/]", RegexOptions.Compiled);
+    private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".txt", ".log", ".md", ".json", ".jsonl", ".yaml", ".yml", ".xml", ".csv"
+    };
 
     public static void MapArtifactIngestionEndpoints(this WebApplication app)
     {
         app.MapPost("/api/runner/artifacts", (
             ArtifactIngestRequest req,
+            HttpContext context,
             ITaskScanner scanner,
+            RunLeaseService leases,
             WorkspaceArtifactCommitService artifactCommits,
             ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Diagnostics.ArtifactIngestionEndpoints");
+            if (!RunnerLeaseAuthorization.IsCurrent(context, leases, req.TaskKey, req.RunnerId, req.LeaseId, req.FencingToken))
+                return Results.Conflict(new ArtifactIngestResponse(req.TaskKey, 0, [], "The authenticated Runner does not hold the current fenced lease."));
             if (req.Artifacts is null || req.Artifacts.Count == 0)
                 return Results.Ok(new ArtifactIngestResponse(req.TaskKey, 0, [], "no artifacts"));
 
@@ -34,11 +43,11 @@ public static class ArtifactIngestionEndpoints
             }
             catch (ArtifactIngestException ex)
             {
-                return Results.BadRequest(new ArtifactIngestResponse(req.TaskKey, 0, [], ex.Message));
+                return Results.BadRequest(new ArtifactIngestResponse(req.TaskKey, 0, [], CredentialRedactor.Redact(ex.Message)));
             }
             catch (Exception ex)
             {
-                return Results.Problem($"Failed to ingest artifacts for '{req.TaskKey}': {ex.Message}");
+                return Results.Problem(CredentialRedactor.Redact($"Failed to ingest artifacts for '{req.TaskKey}': {ex.Message}"));
             }
 
             var commit = artifactCommits.TryCommitArtifactUpload(
@@ -89,6 +98,8 @@ public static class ArtifactIngestionEndpoints
                 throw new ArtifactIngestException($"Artifact content is not valid base64: {artifact.Path}");
             }
 
+            bytes = RedactTextArtifact(rel, bytes);
+
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             File.WriteAllBytes(destination, bytes);
             files.Add(rel.Replace('\\', '/'));
@@ -97,13 +108,27 @@ public static class ArtifactIngestionEndpoints
         return new ArtifactIngestResponse(req.TaskKey, files.Count, files);
     }
 
+    private static byte[] RedactTextArtifact(string path, byte[] bytes)
+    {
+        if (!TextExtensions.Contains(Path.GetExtension(path))) return bytes;
+        try
+        {
+            var utf8 = new System.Text.UTF8Encoding(false, true);
+            return utf8.GetBytes(CredentialRedactor.Redact(utf8.GetString(bytes)));
+        }
+        catch (System.Text.DecoderFallbackException)
+        {
+            throw new ArtifactIngestException($"Text artifact is not valid UTF-8: {path}");
+        }
+    }
+
     internal static string NormalizeResultsPath(string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArtifactIngestException("Artifact path is required.");
 
         var normalized = path.Trim().Replace('\\', '/');
-        if (Path.IsPathRooted(normalized) || UnsafeSegment.IsMatch(normalized))
+        if (Path.IsPathRooted(normalized) || WindowsRootedPath.IsMatch(normalized) || UnsafeSegment.IsMatch(normalized))
             throw new ArtifactIngestException($"Artifact path must stay under results/: {path}");
 
         normalized = normalized.StartsWith("results/", StringComparison.OrdinalIgnoreCase)

@@ -1,0 +1,20 @@
+{
+  "Urls": "http://127.0.0.1:5030",
+  "Security": {
+    "Profile": "networked",
+    "MaxRequestBodyBytes": 26214400,
+    "Session": {
+      "IdleMinutes": 480,
+      "AbsoluteMinutes": 10080
+    },
+    "LoginThrottle": {
+      "MaxFailures": 5,
+      "WindowMinutes": 15,
+      "LockoutMinutes": 15
+    }
+  },
+  "ErrorHandling": {
+    "IncludeExceptionDetails": false
+  },
+  "AllowedHosts": "tasks.example.com"
+}

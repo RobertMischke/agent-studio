@@ -9,7 +9,12 @@ namespace AgentStudio.Shared;
 /// what lets the server aggregate a remote Runner's output for history and
 /// cross-machine viewing.
 /// </summary>
-public sealed record LogIngestRequest(string TaskKey, List<CliOutputLine> Lines);
+public sealed record LogIngestRequest(
+    string TaskKey,
+    List<CliOutputLine> Lines,
+    string? RunnerId = null,
+    string? LeaseId = null,
+    long FencingToken = 0);
 
 public sealed record LogIngestResponse(string TaskKey, int Appended, string? Message = null);
 
@@ -18,7 +23,12 @@ public sealed record LogIngestResponse(string TaskKey, int Appended, string? Mes
 /// durable review evidence such as screenshots and Playwright output, and the
 /// server writes it under the task's <c>results/</c> folder.
 /// </summary>
-public sealed record ArtifactIngestRequest(string TaskKey, List<RunnerArtifactUpload> Artifacts);
+public sealed record ArtifactIngestRequest(
+    string TaskKey,
+    List<RunnerArtifactUpload> Artifacts,
+    string? RunnerId = null,
+    string? LeaseId = null,
+    long FencingToken = 0);
 
 public sealed record RunnerArtifactUpload(string Path, string ContentBase64);
 

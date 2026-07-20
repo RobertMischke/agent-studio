@@ -59,6 +59,7 @@ namespace AgentStudio.Tests;
 /// </summary>
 // MachineBound 20.07.: E2E ueber Server-API+Prozesse, lastabhaengig
 [Trait("Category", "MachineBound")]
+[Collection(WebApplicationFactorySerialCollection.Name)]
 public sealed class RemoteRunnerEndToEndTests : IDisposable
 {
     private const string ProjectName = "agent-runner-01";

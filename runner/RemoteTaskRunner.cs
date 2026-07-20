@@ -76,7 +76,7 @@ public sealed class RemoteTaskRunner
         var heartbeat = new LeaseHeartbeat(_client, _options, lease, _log);
         var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
 
-        var shipper = new LogShipper(_client, taskKey, _log);
+        var shipper = new LogShipper(_client, taskKey, lease, _log);
         var shipperTask = shipper.RunAsync(TimeSpan.FromSeconds(5), stopRun.Token);
 
         var outcome = new RunOutcome(RunOutcomeKind.Unknown, "Runner ended before a terminal outcome was recorded.");
@@ -88,7 +88,7 @@ public sealed class RemoteTaskRunner
         {
             outcome = await ExecuteAsync(taskKey, workspace, shipper, stopRun, shutdown);
             await shipper.FlushAsync(shutdown);
-            await UploadResultsAsync(taskKey, shutdown);
+            await UploadResultsAsync(taskKey, lease, shutdown);
 
             if (heartbeat.LeaseLost)
             {
@@ -105,7 +105,7 @@ public sealed class RemoteTaskRunner
         }
         catch (WorktreeSalvageException ex)
         {
-            await ReportUnsecuredWorktreeAsync(taskKey, ex);
+            await ReportUnsecuredWorktreeAsync(taskKey, lease, ex);
             handedBack = true;
             return 1;
         }
@@ -136,7 +136,7 @@ public sealed class RemoteTaskRunner
                     // claim over the run's successful outcome.
                     if (!handedBack)
                     {
-                        await ReportUnsecuredWorktreeAsync(taskKey, ex);
+                        await ReportUnsecuredWorktreeAsync(taskKey, lease, ex);
                         handedBack = true;
                     }
                 }
@@ -204,7 +204,7 @@ public sealed class RemoteTaskRunner
         return outcome;
     }
 
-    private async Task<List<string>> UploadResultsAsync(string taskKey, CancellationToken ct)
+    private async Task<List<string>> UploadResultsAsync(string taskKey, RunLeaseInfoDto lease, CancellationToken ct)
     {
         var resultsDir = ResultsDir(taskKey);
         if (!Directory.Exists(resultsDir)) return [];
@@ -220,7 +220,8 @@ public sealed class RemoteTaskRunner
             uploads.Add(new RunnerArtifactUpload(rel, Convert.ToBase64String(bytes)));
         }
 
-        var resp = await _client.UploadArtifactsAsync(new ArtifactIngestRequest(taskKey, uploads), ct);
+        var resp = await _client.UploadArtifactsAsync(new ArtifactIngestRequest(
+            taskKey, uploads, lease.RunnerId, lease.LeaseId, lease.FencingToken), ct);
         _log($"uploaded {resp?.Uploaded ?? 0} artifact(s); commit {resp?.CommitStatus ?? "n/a"}");
         return resp?.Files ?? [];
     }
@@ -252,7 +253,7 @@ public sealed class RemoteTaskRunner
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 
-    private async Task ReportUnsecuredWorktreeAsync(string taskKey, WorktreeSalvageException ex)
+    private async Task ReportUnsecuredWorktreeAsync(string taskKey, RunLeaseInfoDto lease, WorktreeSalvageException ex)
     {
         var refs = $"canonical refs/heads/{ex.Branch} at {ex.RemoteCommitSha ?? "unknown"}; " +
                    $"retained local HEAD {ex.LocalCommitSha ?? "unknown"}";

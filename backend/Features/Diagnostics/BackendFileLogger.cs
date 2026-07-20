@@ -332,7 +332,7 @@ public static class LogRedactor
     public static string Scrub(string? input)
     {
         if (string.IsNullOrEmpty(input)) return input ?? string.Empty;
-        var s = input;
+        var s = AgentStudio.Security.CredentialRedactor.Redact(input);
         s = Bearer.Replace(s, "Bearer [REDACTED]");
         s = AnthropicKey.Replace(s, "sk-ant-[REDACTED]");
         s = OpenAiKey.Replace(s, "sk-[REDACTED]");

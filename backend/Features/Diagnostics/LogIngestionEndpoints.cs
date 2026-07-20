@@ -21,8 +21,10 @@ public static class LogIngestionEndpoints
 {
     public static void MapLogIngestionEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/runner/logs", (LogIngestRequest req, ITaskScanner scanner) =>
+        app.MapPost("/api/runner/logs", (LogIngestRequest req, HttpContext context, ITaskScanner scanner, RunLeaseService leases) =>
         {
+            if (!RunnerLeaseAuthorization.IsCurrent(context, leases, req.TaskKey, req.RunnerId, req.LeaseId, req.FencingToken))
+                return Results.Conflict(new LogIngestResponse(req.TaskKey, 0, "The authenticated Runner does not hold the current fenced lease."));
             if (req.Lines is null || req.Lines.Count == 0)
                 return Results.Ok(new LogIngestResponse(req.TaskKey, 0, "no lines"));
 
@@ -35,7 +37,7 @@ public static class LogIngestionEndpoints
             var logPath = Path.Combine(logsDir, "cli-output.log");
 
             var rendered = string.Join(Environment.NewLine,
-                req.Lines.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {AnsiText.Strip(l.Text)}"));
+                req.Lines.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {CredentialRedactor.Redact(AnsiText.Strip(l.Text))}"));
 
             try
             {
@@ -51,7 +53,7 @@ public static class LogIngestionEndpoints
             }
             catch (Exception ex)
             {
-                return Results.Problem($"Failed to ingest logs for '{req.TaskKey}': {ex.Message}");
+                return Results.Problem(CredentialRedactor.Redact($"Failed to ingest logs for '{req.TaskKey}': {ex.Message}"));
             }
 
             return Results.Ok(new LogIngestResponse(req.TaskKey, req.Lines.Count));

@@ -1,7 +1,5 @@
-    <!-- Backend-offline warning: app-wide, fixed top strip shown whenever the
-         SignalR socket has been down past the grace window. Lives outside both
-         layout branches so it is present in the VS-Code shell and the legacy
-         layout alike. Additive: cached data stays visible behind it. -->
+@if (auth.studioAllowed()) {
+    <!-- Backend-offline warning shown whenever the SignalR socket is down. Present in both layout branches. -->
     <app-offline-banner />
     @if (featureFlags.vsCodeLayout()) {
       <!--
@@ -38,10 +36,13 @@
           [orchestratorOpen]="orchSideSheet.open()"
           [feedOpen]="orchFeedProject() !== null"
           [settingsOpen]="workspaceSettingsOpen()"
+          [showSignOut]="auth.networkedAuthenticated()"
+          [signedInLabel]="auth.status()?.user?.displayName ?? ''"
           (toggleUsage)="toggleCliAdmin()"
           (toggleOrchestrator)="toggleOrchestratorChat()"
           (toggleFeed)="toggleOrchFeed()"
           (toggleSettings)="toggleWorkspaceSettings()"
+          (signOut)="auth.logout().subscribe()"
           (openCliAdmin)="openCliAdmin()"
           (defaultCliChange)="onDefaultCliChange($event)"
           (defaultModelChange)="onDefaultModelChange($event)" />
@@ -805,10 +806,13 @@
         [orchestratorOpen]="orchSideSheet.open()"
         [feedOpen]="orchFeedProject() !== null"
         [settingsOpen]="workspaceSettingsOpen()"
+        [showSignOut]="auth.networkedAuthenticated()"
+        [signedInLabel]="auth.status()?.user?.displayName ?? ''"
         (toggleUsage)="toggleCliAdmin()"
         (toggleOrchestrator)="toggleOrchestratorChat()"
         (toggleFeed)="toggleOrchFeed()"
         (toggleSettings)="toggleWorkspaceSettings()"
+        (signOut)="auth.logout().subscribe()"
         (openCliAdmin)="openCliAdmin()"
         (defaultCliChange)="onDefaultCliChange($event)"
         (defaultModelChange)="onDefaultModelChange($event)" />
@@ -899,3 +903,4 @@
       }
     </div>
     }
+} @else { <app-auth-gate /> }

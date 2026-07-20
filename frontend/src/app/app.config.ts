@@ -5,6 +5,7 @@ import { provideCodingAgentChat } from 'coding-agent-chat';
 import { ModalErrorHandler } from './services/error-dialog.service';
 import { clientIdInterceptor } from './services/client-id.interceptor';
 import { offlineGuardInterceptor } from './services/offline-guard.interceptor';
+import { sessionSecurityInterceptor } from './services/session-security.interceptor';
 import { TaskReferenceNavigationService } from './services/task-reference-navigation.service';
 import { MediaLightboxService } from './services/media-lightbox.service';
 import { TaskReferenceMicrocardHydratorService } from './services/task-reference-microcard-hydrator.service';
@@ -12,7 +13,7 @@ import { TaskReferenceMicrocardHydratorService } from './services/task-reference
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideHttpClient(withInterceptors([offlineGuardInterceptor, clientIdInterceptor])),
+    provideHttpClient(withInterceptors([offlineGuardInterceptor, sessionSecurityInterceptor, clientIdInterceptor])),
     { provide: ErrorHandler, useClass: ModalErrorHandler },
     // coding-agent-chat host seams: markdown task-reference auto-linking and
     // click-to-enlarge images route into the app's existing root services.

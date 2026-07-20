@@ -28,18 +28,31 @@ public static class LeaseEndpoints
     {
         var group = app.MapGroup("/api/runner/lease");
 
-        group.MapPost("/acquire", (RunLeaseAcquireRequest req, ITaskScanner scanner, RunLeaseService leases, RunnerIdentity identity) =>
+        group.MapPost("/acquire", (RunLeaseAcquireRequest req, HttpContext context, ITaskScanner scanner, ProjectSettingsService settings, RunLeaseService leases, RunnerIdentity identity) =>
         {
-            if (!TaskExists(scanner, req.TaskKey))
+            if (!RunnerMatches(context, req.RunnerId, req.RunnerName)) return Results.Unauthorized();
+            var task = FindTask(scanner, req.TaskKey);
+            if (task is null)
                 return Results.NotFound(new RunLeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
+            if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal principal)
+            {
+                var project = settings.Get(task.ProjectName);
+                var assigned = project.ExecutionRunner;
+                if (!project.RemoteExecutionEnabled || string.IsNullOrWhiteSpace(assigned)
+                    || !(string.Equals(assigned, principal.RunnerId, StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(assigned, principal.RunnerName, StringComparison.OrdinalIgnoreCase)))
+                    return Results.Json(new RunLeaseResponse(
+                        "ProjectDenied", false, null,
+                        "The Runner is not assigned to this remote-enabled project."), statusCode: StatusCodes.Status403Forbidden);
+            }
             return Results.Ok(leases.TryAcquire(StampIdentity(req, identity)));
         });
 
-        group.MapPost("/renew", (RunLeaseHeartbeatRequest req, RunLeaseService leases) =>
-            Results.Ok(leases.Renew(req)));
+        group.MapPost("/renew", (RunLeaseHeartbeatRequest req, HttpContext context, RunLeaseService leases) =>
+            RunnerMatches(context, req.RunnerId) ? Results.Ok(leases.Renew(req)) : Results.Unauthorized());
 
-        group.MapPost("/release", (RunLeaseReleaseRequest req, RunLeaseService leases) =>
-            Results.Ok(leases.Release(req)));
+        group.MapPost("/release", (RunLeaseReleaseRequest req, HttpContext context, RunLeaseService leases) =>
+            RunnerMatches(context, req.RunnerId) ? Results.Ok(leases.Release(req)) : Results.Unauthorized());
 
         group.MapGet("/{taskKey}", (string taskKey, RunLeaseService leases) =>
             Results.Ok(leases.Peek(taskKey)));
@@ -58,14 +71,17 @@ public static class LeaseEndpoints
             HttpContext context,
             AgentStudio.Clients.ClientIdentityStore clients,
             AgentStudio.Clients.HostTelemetryStore telemetry,
+            AccessSecurityStore accessSecurity,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerClaim");
             if (string.IsNullOrWhiteSpace(req.RunnerId) || string.IsNullOrWhiteSpace(req.RunnerName))
                 return Results.BadRequest(new RunnerClaimResponse(RunnerClaimStatus.Invalid, Message: "runnerId and runnerName are required."));
+            if (!RunnerMatches(context, req.RunnerId, req.RunnerName))
+                return Results.Unauthorized();
 
-            var clientId = context.Request.Headers["X-Client-Id"].ToString();
+            var clientId = context.Items["ClientId"] as string ?? context.Request.Headers["X-Client-Id"].ToString();
             if (req.Telemetry is not null && !string.IsNullOrWhiteSpace(clientId))
                 telemetry.Append(clientId, req.Telemetry);
             int? activeSlots = req.Telemetry is null
@@ -173,6 +189,13 @@ public static class LeaseEndpoints
                         (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
                         Math.Max(0, req.AvailableSlots - 1),
                         claimed: true);
+                if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal runnerPrincipal)
+                {
+                    accessSecurity.AppendRunAudit(new RunSecurityAuditEvent(
+                        DateTime.UtcNow, "claim", taskKey, candidate.ProjectName,
+                        InitiatingPrincipal(candidate.OwnerClientId), runnerPrincipal.RunnerId, runnerPrincipal.CredentialId,
+                        acquire.Lease.FencingToken));
+                }
                 return Results.Ok(new RunnerClaimResponse(
                     RunnerClaimStatus.Claimed,
                     taskKey,
@@ -191,14 +214,17 @@ public static class LeaseEndpoints
 
         app.MapPost("/api/runner/completion", async (
             RemoteRunCompletionRequest req,
+            HttpContext context,
             TaskScannerService scanner,
             TaskTransitionService transitions,
             RunLeaseService leases,
             TimelineLog timeline,
+            AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
+            if (!RunnerMatches(context, req.RunnerId)) return Results.Unauthorized();
             var reportedOutcome = req.Outcome ?? string.Empty;
             if (!leases.IsCurrent(req.TaskKey, req.LeaseId, req.FencingToken, req.RunnerId))
                 return Results.Conflict(new RemoteRunCompletionResponse(
@@ -235,7 +261,11 @@ public static class LeaseEndpoints
                     "Done/NoOp completion requires a full fenced ResultSha and AttemptChainId equal to the current lease id."));
             }
 
-            var source = string.IsNullOrWhiteSpace(req.Source) ? req.RunnerId : req.Source.Trim();
+            var source = CredentialRedactor.Redact(string.IsNullOrWhiteSpace(req.Source) ? req.RunnerId : req.Source.Trim());
+            var salvageBranch = CredentialRedactor.Redact(req.SalvageBranch);
+            var salvageCommitSha = CredentialRedactor.Redact(req.SalvageCommitSha);
+            var salvageBranchUrl = CredentialRedactor.Redact(req.SalvageBranchUrl);
+            var salvageRecoveryBranchUrl = CredentialRedactor.Redact(req.SalvageRecoveryBranchUrl);
             var details = new Dictionary<string, string>
             {
                 ["cli"] = "remote-runner",
@@ -248,12 +278,12 @@ public static class LeaseEndpoints
                     _ => $"TASK_{outcome.ToUpperInvariant()}",
                 },
             };
-            if (!string.IsNullOrWhiteSpace(req.SalvageBranch))
-                details["salvageBranch"] = req.SalvageBranch;
-            if (!string.IsNullOrWhiteSpace(req.SalvageCommitSha))
-                details["salvageCommitSha"] = req.SalvageCommitSha;
-            if (!string.IsNullOrWhiteSpace(req.SalvageBranchUrl))
-                details["salvageBranchUrl"] = req.SalvageBranchUrl;
+            if (!string.IsNullOrWhiteSpace(salvageBranch))
+                details["salvageBranch"] = salvageBranch;
+            if (!string.IsNullOrWhiteSpace(salvageCommitSha))
+                details["salvageCommitSha"] = salvageCommitSha;
+            if (!string.IsNullOrWhiteSpace(salvageBranchUrl))
+                details["salvageBranchUrl"] = salvageBranchUrl;
             if (!string.IsNullOrWhiteSpace(req.ResultSha))
                 details["resultSha"] = req.ResultSha;
             if (!string.IsNullOrWhiteSpace(req.AttemptChainId))
@@ -266,35 +296,35 @@ public static class LeaseEndpoints
                 details["salvageRecoveryBranch"] = req.SalvageRecoveryBranch;
             if (!string.IsNullOrWhiteSpace(req.SalvageRecoveryCommitSha))
                 details["salvageRecoveryCommitSha"] = req.SalvageRecoveryCommitSha;
-            if (!string.IsNullOrWhiteSpace(req.SalvageRecoveryBranchUrl))
-                details["salvageRecoveryBranchUrl"] = req.SalvageRecoveryBranchUrl;
+            if (!string.IsNullOrWhiteSpace(salvageRecoveryBranchUrl))
+                details["salvageRecoveryBranchUrl"] = salvageRecoveryBranchUrl;
             if (!string.IsNullOrWhiteSpace(req.SalvageAuthoritativeBaseBranch))
                 details["salvageAuthoritativeBaseBranch"] = req.SalvageAuthoritativeBaseBranch;
             if (!string.IsNullOrWhiteSpace(req.SalvageAuthoritativeBaseSha))
                 details["salvageAuthoritativeBaseSha"] = req.SalvageAuthoritativeBaseSha;
-            if (!string.IsNullOrWhiteSpace(req.SalvageBranch)
-                && !string.IsNullOrWhiteSpace(req.SalvageCommitSha))
+            if (!string.IsNullOrWhiteSpace(salvageBranch)
+                && !string.IsNullOrWhiteSpace(salvageCommitSha))
             {
                 var resultsDir = TaskPaths.ResultsDir(task.FolderPath);
                 Directory.CreateDirectory(resultsDir);
                 var deliverablesPath = Path.Combine(resultsDir, "deliverables.md");
-                var branchRef = !string.IsNullOrWhiteSpace(req.SalvageBranchUrl)
-                    ? $"[{req.SalvageBranch}]({req.SalvageBranchUrl})"
-                    : $"`{req.SalvageBranch}`";
+                var branchRef = !string.IsNullOrWhiteSpace(salvageBranchUrl)
+                    ? $"[{salvageBranch}]({salvageBranchUrl})"
+                    : $"`{salvageBranch}`";
                 var recoveryLine = !string.IsNullOrWhiteSpace(req.SalvageRecoveryBranch)
                     && !string.IsNullOrWhiteSpace(req.SalvageRecoveryCommitSha)
                     ? $"- Divergent local history preserved on " +
-                      (!string.IsNullOrWhiteSpace(req.SalvageRecoveryBranchUrl)
-                          ? $"[{req.SalvageRecoveryBranch}]({req.SalvageRecoveryBranchUrl})"
+                      (!string.IsNullOrWhiteSpace(salvageRecoveryBranchUrl)
+                          ? $"[{req.SalvageRecoveryBranch}]({salvageRecoveryBranchUrl})"
                           : $"`{req.SalvageRecoveryBranch}`") +
                       $" at `{req.SalvageRecoveryCommitSha}`; " +
-                      $"`{req.SalvageAuthoritativeBaseBranch ?? req.SalvageBranch}` at " +
-                      $"`{req.SalvageAuthoritativeBaseSha ?? req.SalvageCommitSha}` was the authoritative pickup base.{Environment.NewLine}"
+                      $"`{req.SalvageAuthoritativeBaseBranch ?? salvageBranch}` at " +
+                      $"`{req.SalvageAuthoritativeBaseSha ?? salvageCommitSha}` was the authoritative pickup base.{Environment.NewLine}"
                     : string.Empty;
                 File.WriteAllText(
                     deliverablesPath,
                     $"# Remote runner deliverables{Environment.NewLine}{Environment.NewLine}" +
-                    $"- Salvage branch {branchRef} at `{req.SalvageCommitSha}`.{Environment.NewLine}" +
+                    $"- Salvage branch {branchRef} at `{salvageCommitSha}`.{Environment.NewLine}" +
                     recoveryLine,
                     System.Text.Encoding.UTF8);
                 artifactCommits.TryCommitArtifactUpload(
@@ -344,6 +374,13 @@ public static class LeaseEndpoints
             loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogInformation(
                 "remote-runner-completion project={Project} task={TaskKey} runner={Runner} outcome={Outcome} targetState={TargetState} token={FencingToken}",
                 task.ProjectName, req.TaskKey, source, outcome, targetState, req.FencingToken);
+            if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal runnerPrincipal)
+            {
+                accessSecurity.AppendRunAudit(new RunSecurityAuditEvent(
+                    DateTime.UtcNow, "completion", req.TaskKey, task.ProjectName,
+                    InitiatingPrincipal(task.OwnerClientId), runnerPrincipal.RunnerId, runnerPrincipal.CredentialId,
+                    req.FencingToken, outcome));
+            }
             return Results.Ok(new RemoteRunCompletionResponse(req.TaskKey, reportedOutcome, targetState));
         });
     }
@@ -364,12 +401,22 @@ public static class LeaseEndpoints
         Pid = req.Pid == 0 ? Environment.ProcessId : req.Pid,
     };
 
-    private static bool TaskExists(ITaskScanner scanner, string taskKey)
+    private static TaskInfo? FindTask(ITaskScanner scanner, string taskKey)
     {
-        if (string.IsNullOrWhiteSpace(taskKey)) return false;
-        return scanner.ScanAllJobs().Any(t =>
+        if (string.IsNullOrWhiteSpace(taskKey)) return null;
+        return scanner.ScanAllJobs().FirstOrDefault(t =>
             string.Equals(t.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(t.Key, taskKey, StringComparison.OrdinalIgnoreCase));
     }
+
+    private static bool RunnerMatches(HttpContext context, string runnerId, string? runnerName = null)
+    {
+        if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is not RunnerPrincipal principal) return true;
+        return string.Equals(principal.RunnerId, runnerId, StringComparison.Ordinal)
+               && (runnerName is null || string.Equals(principal.RunnerName, runnerName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string InitiatingPrincipal(string? ownerClientId)
+        => string.IsNullOrWhiteSpace(ownerClientId) ? "automation:unknown" : ownerClientId;
 }

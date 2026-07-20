@@ -24,18 +24,19 @@ public sealed class TaskServerClient : IDisposable
     private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
     private bool _useV1;
+    private readonly bool _usesServiceCredential;
 
     public TaskServerClient(RunnerOptions options)
     {
         _options = options;
         _http = new HttpClient { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
         _configuredClientId = options.ClientId;
+        _usesServiceCredential = !string.IsNullOrWhiteSpace(options.AuthToken);
         if (!string.IsNullOrWhiteSpace(options.AuthToken))
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.AuthToken);
-        // The server treats X-Client-Id as a registration boundary; seed it with
-        // the provisional runner id so reads (and the registration POST itself)
-        // are attributed. RegisterAsync swaps in the server-assigned id before the
-        // first write, since an unregistered id is rejected 401 on mutations.
+        // X-Client-Id is attribution only. Seed it with the configured label or
+        // Runner id; authentication is supplied independently by the service
+        // credential in the networked profile.
         SetClientId(options.ClientId ?? options.RunnerId);
         _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.HeaderName, RunnerOptions.ProtocolVersion.ToString());
         _http.DefaultRequestHeaders.Add(Contract.TaskServerProtocol.ClientVersionHeaderName, typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0");
@@ -43,15 +44,18 @@ public sealed class TaskServerClient : IDisposable
 
     /// <summary>
     /// Test seam: drive the client against an already-configured <see cref="HttpClient"/>
-    /// — e.g. one produced by the backend's in-memory WebApplicationFactory — so the
+    /// such as one produced by the backend's in-memory WebApplicationFactory, so the
     /// runner's real HTTP + WireModels round-trip is exercised end-to-end against the
     /// live server endpoints without a socket. Not for production use; the production
     /// path is the <see cref="RunnerOptions"/> constructor above.
     /// </summary>
-    internal TaskServerClient(HttpClient http, string runnerId, string? configuredClientId = null)
+    internal TaskServerClient(HttpClient http, string runnerId, string? configuredClientId = null, string? authToken = null)
     {
         _http = http;
         _configuredClientId = configuredClientId;
+        _usesServiceCredential = !string.IsNullOrWhiteSpace(authToken);
+        if (_usesServiceCredential)
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
         SetClientId(configuredClientId ?? runnerId);
     }
 
@@ -112,6 +116,12 @@ public sealed class TaskServerClient : IDisposable
             SetClientId(runnerId);
             return runnerId;
         }
+
+        // Networked-profile runners are enrolled by an owner. Their bearer
+        // credential is the authentication boundary; X-Client-Id remains an
+        // optional attribution label and open self-registration is forbidden.
+        if (_usesServiceCredential)
+            return ClientId;
 
         if (!string.IsNullOrWhiteSpace(_configuredClientId))
         {
@@ -267,6 +277,12 @@ public sealed class TaskServerClient : IDisposable
     public async Task ReportGitCapabilityAsync(string clientId, RunnerGitCapabilityRequest request, CancellationToken ct)
     {
         if (_useV1) return;
+        // This endpoint belongs to the localhost client registry. Networked
+        // Runner identities prove git capability locally before claiming work;
+        // they do not gain access to legacy host administration routes.
+        if (_usesServiceCredential)
+            return;
+
         _ = await PostJsonAsync<RunnerGitCapabilityRequest, object>(
             $"/api/clients/{Uri.EscapeDataString(clientId)}/runner-git-capability", request, ct);
     }

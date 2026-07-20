@@ -273,6 +273,53 @@ make an internet-facing task system safe without real identity boundaries.
 
 `X-Client-Id` remains useful attribution. It is not authentication.
 
+### Principal and data flow
+
+```text
+Browser
+  username/password once
+  <- Secure HttpOnly session cookie
+  -> same-origin /api and /hubs with CSRF on mutations
+
+Owner
+  -> one-time enrollment code
+Runner
+  enrollment code once
+  <- one-time service bearer
+  -> outbound HTTPS claim, lease, logs/events, artifacts, completion
+
+Task Server
+  password hashes, session hashes, Runner secret hashes
+  task state, fenced leases, dual-principal run audit
+```
+
+### Lifecycle matrix
+
+| Identity or credential | Created by | Plaintext visibility | Normal use | Expiry | Rotation or reset | Revocation |
+|---|---|---|---|---|---|---|
+| First owner | Anonymous one-time bootstrap over HTTPS, only while no users exist | Password exists only in the browser request | Login and owner administration | Account does not auto-expire | Owner changes password | Another owner disables account; final active owner is protected |
+| Human password | Owner at user creation or reset; user on change | Creation/reset response only for temporary value | Login only | Policy-driven, no scheduled expiry in the small-org baseline | Change verifies current password; reset revokes sessions and forces change | Disable user and revoke sessions |
+| Human session | Task Server after successful login | Cookie only; HttpOnly prevents Angular access | Same-origin Studio API and hubs | Sliding idle and absolute deadline | New login creates a new independent session | Logout, password reset, disable, or expiry |
+| CSRF value | Task Server with session | Secure SameSite cookie readable by Angular | Header on browser mutations | Session lifetime | Reissued with a new session | Invalid when its session ends |
+| Runner enrollment code | Owner | One creation response and operator handoff | One enrollment call | Default 15 minutes, maximum 24 hours | Create another code | Single use or expiry |
+| Runner credential | Task Server during enrollment or rotation | One response only, then Runner secret store | Only endpoints allowed by explicit scopes | Optional credential deadline | Add overlapping credential, prove daemon, revoke old credential | Individual credential or whole Runner identity |
+| Fenced run lease | Task Server after scoped claim/acquire | Authenticated Runner response | Heartbeat and completion for one task | Short TTL renewed by heartbeat | New holder increments fencing token | Release, expiry, or fenced takeover |
+
+### Authorization matrix
+
+| Capability | Owner | Operator | Viewer | Runner |
+|---|---:|---:|---:|---:|
+| Read allowed projects | Yes | Yes | Yes | Claimed task input only |
+| Mutate allowed projects | Yes | Yes | No | Scoped run protocol only |
+| Manage users and Runner identities | Yes | No | No | No |
+| Connect Studio SignalR stream | Yes | Yes | Yes | No |
+| Claim and execute work | No | No | No | Required per-route scope |
+
+Detailed controls live in
+[security requirements](../operations/security/requirements.md), and the
+operator deployment is
+[networked Task Server](../operations/setup/networked-task-server.md).
+
 ## 9. Organizing one large product
 
 Recursive subprojects are not the recommended model. They mix navigation,
