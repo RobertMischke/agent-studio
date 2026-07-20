@@ -29,6 +29,8 @@ public sealed class HostTelemetryStoreTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_root, "telemetry", "runner-01.json")));
     }
 
+    // MachineBound 20.07.: Zeitbasierte Expiry-/Downsampling-Kompaktierung flaked unter Gate-Parallellast (AGT-2177 Gate-22), solo gruen.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void Compact_DropsExpiredPoints_AndDownsamplesHistoricPoints()
     {
