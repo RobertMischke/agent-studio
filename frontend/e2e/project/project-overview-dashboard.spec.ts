@@ -165,10 +165,17 @@ async function resolveRealProject(backendBaseUrl: string): Promise<string | null
   return watchPaths.find(item => /agent.?task/i.test(item.name))?.name ?? watchPaths[0].name;
 }
 
-async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; taskRequested: () => boolean }> {
+async function mockDashboard(page: Page): Promise<{
+  startedUrl: () => boolean;
+  taskRequested: () => boolean;
+  validCompilePending: () => boolean;
+  releaseValidCompile: () => void;
+}> {
   let offlineStarted = false;
   let planningTaskRequested = false;
   let evidenceReviewed = false;
+  let validCompilePending = false;
+  let releaseValidCompile: (() => void) | null = null;
   await page.route('http://127.0.0.1:4310/**', route => route.fulfill({ status: 200, body: 'ok' }));
   await page.route('http://127.0.0.1:4311/**', route => offlineStarted
     ? route.fulfill({ status: 200, body: 'ok' })
@@ -197,6 +204,27 @@ async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; t
   await page.route('**/api/crash-recovery/pending', route => fulfillJson(route, { pending: [] }));
   await page.route('**/api/projects/*/token-usage/summary', route => fulfillJson(route, tokenSummary));
   await page.route('**/api/projects/*/deployment/summary', route => fulfillJson(route, deployment));
+  await page.route('**/api/projects/*/deployment/compile', async route => {
+    const request = route.request().postDataJSON() as { prompt?: string };
+    if (request.prompt?.includes('Command: npm run deploy')) {
+      return fulfillJson(route, {
+        title: 'Deployment for Operator Demo', summary: 'Definition needs attention.',
+        command: null, parameters: [], runnable: false,
+        warnings: ['The command must be a repository-owned scripts/*.sh path with typed slots and no shell chaining or redirection.'],
+      });
+    }
+    validCompilePending = true;
+    await new Promise<void>(resolve => { releaseValidCompile = resolve; });
+    validCompilePending = false;
+    return fulfillJson(route, {
+      title: 'Deployment for Operator Demo', summary: 'Definition valid.',
+      command: 'bash scripts/deploy.sh --branch {{branch}}', runnable: true, warnings: [],
+      parameters: [
+        { name: 'branch', type: 'branch', required: true, default: null, options: [] },
+        { name: 'confirm', type: 'boolean', required: true, default: false, options: [] },
+      ],
+    });
+  });
   await page.route('**/api/projects/*/wiki/pulse**', route => fulfillJson(route, wikiPulse));
   await page.route('**/api/projects/*/snapshot', route => fulfillJson(route, snapshot));
   await page.route('**/api/git/inventory**', route => fulfillJson(route, {
@@ -262,6 +290,8 @@ async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; t
   return {
     startedUrl: () => offlineStarted,
     taskRequested: () => planningTaskRequested,
+    validCompilePending: () => validCompilePending,
+    releaseValidCompile: () => releaseValidCompile?.(),
   };
 }
 
@@ -367,6 +397,85 @@ test.describe('Project Overview · operator dashboard', () => {
     await expect(page.getByTestId('project-deployment-targets').locator('button')).toHaveCount(2);
     await expect(page.getByTestId('project-deployment-panel')).toContainText('a1f4b29');
     await expect(page.getByTestId('project-deployment-panel')).not.toContainText('Run deployment');
+    await expect(page.getByTestId('project-deployment-panel')).not.toContainText('Compile typed UI');
+    await expect(page.getByTestId('project-deployment-launcher')).toContainText('Stable environment');
+    await expect(page.getByTestId('project-deployment-launcher')).toContainText('Idle required');
+    await expect(page.getByTestId('project-deployment-launcher')).toContainText('Require the stable environment to be idle before deployment');
+    const visibleTask = page.getByTestId('deployment-visible-task');
+    await expect(visibleTask).toBeChecked();
+    const runDeployment = page.getByTestId('project-deployment-run');
+    await expect(runDeployment).toHaveText('Start deployment task');
+    await expect(runDeployment).toBeDisabled();
+    await visibleTask.uncheck();
+    await expect(page.getByTestId('project-deployment-launcher')).toContainText('Visible task execution is required for this workflow.');
+    await expect(runDeployment).toHaveAttribute('aria-describedby', 'deployment-visible-task-required');
+    await visibleTask.check();
+    await expect(page.getByTestId('deployment-definition-result')).toContainText('Preview not generated');
+    const stableIdle = page.getByRole('checkbox', { name: /Require the stable environment to be idle/ });
+    await expect(stableIdle).toBeVisible();
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.getByTestId('project-deployment-launcher').screenshot({
+        path: path.join(RESULTS_DIR, `deployment-selected-target-unconfirmed--${theme}--mocked.png`),
+      });
+    }
+    await stableIdle.check();
+    await expect(page.getByTestId('project-deployment-launcher')).toContainText('Idle confirmed');
+    await expect(runDeployment).toBeEnabled();
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.getByTestId('project-deployment-launcher').screenshot({
+        path: path.join(RESULTS_DIR, `deployment-selected-target--${theme}--mocked.png`),
+      });
+    }
+
+    const commandField = page.getByTestId('deployment-command');
+    await commandField.focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('deployment-add-parameter')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('deployment-parameter-name-0')).toHaveValue('branch');
+    await expect(page.getByTestId('deployment-parameter-label-0')).toHaveValue('Branch to deploy');
+    await commandField.fill('bash scripts/deploy.sh --branch {{branch}}');
+    await page.getByTestId('deployment-preview-form').click();
+    await expect.poll(mocked.validCompilePending).toBe(true);
+    await expect(page.getByTestId('deployment-preview-form')).toHaveAttribute('data-pending-label', 'Validating definition...');
+    await expect(page.getByTestId('deployment-preview-form')).toHaveAttribute('aria-busy', 'true');
+    await expect(page.getByTestId('deployment-definition-result')).toContainText('Validating definition...');
+    await expect(page.getByTestId('deployment-definition-result')).toHaveAttribute('aria-busy', 'true');
+    mocked.releaseValidCompile();
+    await expect(page.getByTestId('deployment-definition-result')).toContainText('Definition valid');
+    await expect(page.getByTestId('deployment-form-preview')).toContainText('Branch to deploy *');
+    await expect(page.getByTestId('deployment-form-preview').getByRole('textbox').first()).toHaveValue('develop');
+    await expect(page.getByTestId('deployment-form-preview')).toContainText('Confirm deployment *');
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, `deployment-definition-valid--${theme}--mocked.png`),
+        fullPage: true,
+      });
+    }
+
+    await commandField.fill('npm run deploy -- {{branch}}');
+    await page.getByTestId('deployment-preview-form').click();
+    await expect(page.getByTestId('deployment-definition-result')).toContainText('Definition needs attention');
+    await expect(page.getByTestId('deployment-command-error')).toContainText('repository-owned scripts/*.sh');
+    await expect(commandField).toHaveAttribute('aria-invalid', 'true');
+    await expect(commandField).toHaveAttribute('aria-describedby', /deployment-command-error/);
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, `deployment-definition-invalid--${theme}--mocked.png`),
+        fullPage: true,
+      });
+    }
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await setTheme(page, 'light');
+    expect(await page.getByTestId('deployment-definition-editor').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await page.getByTestId('deployment-definition-editor').screenshot({
+      path: path.join(RESULTS_DIR, 'deployment-definition-compact--light--mocked.png'),
+    });
+    await page.setViewportSize({ width: 1536, height: 1200 });
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);
       await page.screenshot({

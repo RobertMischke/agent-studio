@@ -1,0 +1,185 @@
+<section class="definition" aria-labelledby="deployment-command-title" data-testid="deployment-definition-editor">
+  <header class="definition__header">
+    <div>
+      <p class="definition__eyebrow">Deployment definition</p>
+      <h2 id="deployment-command-title">Deployment command</h2>
+      <p>Define the repository script to run and the values operators must provide.</p>
+    </div>
+  </header>
+
+  <div class="definition__field">
+    <label for="deployment-command">Command</label>
+    <input id="deployment-command" type="text" data-testid="deployment-command"
+      [placeholder]="commandPlaceholder"
+      [class.is-invalid]="commandError()" [attr.aria-invalid]="!!commandError()"
+      [attr.aria-describedby]="commandError() ? 'deployment-command-help deployment-command-error' : 'deployment-command-help'"
+      [ngModel]="command()" (ngModelChange)="updateCommand($event)" />
+    <small id="deployment-command-help">Run a script stored in this repository. Use <code>{{ '{{name}}' }}</code> where an operator value belongs.</small>
+    @if (commandError(); as error) {
+      <p class="definition__field-error" id="deployment-command-error" data-testid="deployment-command-error">{{ error }}</p>
+    }
+  </div>
+
+  <section class="definition__parameters" aria-labelledby="deployment-parameters-title">
+    <header>
+      <div>
+        <h3 id="deployment-parameters-title">Parameters</h3>
+        <p>Each placeholder becomes a labelled field in the operator form.</p>
+      </div>
+      <button type="button" class="definition__secondary" data-testid="deployment-add-parameter" (click)="addParameter()">Add parameter</button>
+    </header>
+
+    @if (parameters().length === 0) {
+      <div class="definition__parameter-empty" data-testid="deployment-parameters-empty">
+        <strong>No parameters yet</strong>
+        <span>Add one when the command includes a value such as <code>{{ '{{branch}}' }}</code>.</span>
+      </div>
+    } @else {
+      <div class="definition__parameter-list" data-testid="deployment-parameter-list">
+        @for (parameter of parameters(); track parameter.id; let index = $index) {
+          <fieldset class="definition__parameter" [class.is-invalid]="hasParameterErrors(parameter.id)">
+            <legend>Parameter {{ index + 1 }}</legend>
+            <div class="definition__parameter-grid">
+              <label>
+                <span>Name</span>
+                <input type="text" [attr.data-testid]="'deployment-parameter-name-' + index"
+                  [attr.aria-invalid]="parameterFieldErrors(parameter.id, 'name').length ? 'true' : null"
+                  [attr.aria-describedby]="parameterFieldErrors(parameter.id, 'name').length ? 'deployment-parameter-name-errors-' + parameter.id : null"
+                  [ngModel]="parameter.name" (ngModelChange)="updateParameter(parameter.id, { name: $event })" />
+                @if (parameterFieldErrors(parameter.id, 'name').length) {
+                  <ul class="definition__field-error" [id]="'deployment-parameter-name-errors-' + parameter.id" role="alert">
+                    @for (error of parameterFieldErrors(parameter.id, 'name'); track error) { <li>{{ error }}</li> }
+                  </ul>
+                }
+              </label>
+              <label>
+                <span>Type</span>
+                <select [attr.data-testid]="'deployment-parameter-type-' + index" [ngModel]="parameter.type"
+                  (ngModelChange)="changeType(parameter.id, $event)">
+                  <option value="string">Text</option>
+                  <option value="branch">Branch</option>
+                  <option value="boolean">Yes / no</option>
+                  <option value="enum">Choice list</option>
+                  <option value="secret-ref">Secret reference</option>
+                </select>
+              </label>
+              <label class="definition__check">
+                <input type="checkbox" [checked]="parameter.required"
+                  (change)="updateParameter(parameter.id, { required: $any($event.target).checked })" />
+                <span>Required</span>
+              </label>
+              <label [attr.for]="'deployment-parameter-default-' + parameter.id">
+                <span>Default value</span>
+                @if (parameter.type === 'boolean') {
+                  <select [id]="'deployment-parameter-default-' + parameter.id" [ngModel]="parameter.defaultValue" (ngModelChange)="updateParameter(parameter.id, { defaultValue: $event })">
+                    <option [ngValue]="false">No</option><option [ngValue]="true">Yes</option>
+                  </select>
+                } @else {
+                  <input [id]="'deployment-parameter-default-' + parameter.id" type="text" [ngModel]="parameter.defaultValue" [disabled]="parameter.type === 'secret-ref'"
+                    [attr.aria-invalid]="parameterFieldErrors(parameter.id, 'defaultValue').length ? 'true' : null"
+                    [attr.aria-describedby]="parameterFieldErrors(parameter.id, 'defaultValue').length ? 'deployment-parameter-default-errors-' + parameter.id : null"
+                    [placeholder]="parameter.type === 'secret-ref' ? 'Resolved on execution host' : 'Optional'"
+                    (ngModelChange)="updateParameter(parameter.id, { defaultValue: $event })" />
+                }
+                @if (parameterFieldErrors(parameter.id, 'defaultValue').length) {
+                  <ul class="definition__field-error" [id]="'deployment-parameter-default-errors-' + parameter.id" role="alert">
+                    @for (error of parameterFieldErrors(parameter.id, 'defaultValue'); track error) { <li>{{ error }}</li> }
+                  </ul>
+                }
+              </label>
+              @if (parameter.type === 'enum') {
+                <label>
+                  <span>Options</span>
+                  <input type="text" placeholder="staging, production" [ngModel]="parameter.options"
+                    [attr.aria-invalid]="parameterFieldErrors(parameter.id, 'options').length ? 'true' : null"
+                    [attr.aria-describedby]="parameterFieldErrors(parameter.id, 'options').length ? 'deployment-parameter-options-errors-' + parameter.id : null"
+                    (ngModelChange)="updateParameter(parameter.id, { options: $event })" />
+                  @if (parameterFieldErrors(parameter.id, 'options').length) {
+                    <ul class="definition__field-error" [id]="'deployment-parameter-options-errors-' + parameter.id" role="alert">
+                      @for (error of parameterFieldErrors(parameter.id, 'options'); track error) { <li>{{ error }}</li> }
+                    </ul>
+                  }
+                </label>
+              }
+              <label>
+                <span>Operator label</span>
+                <input type="text" [attr.data-testid]="'deployment-parameter-label-' + index"
+                  [attr.aria-invalid]="parameterFieldErrors(parameter.id, 'label').length ? 'true' : null"
+                  [attr.aria-describedby]="parameterFieldErrors(parameter.id, 'label').length ? 'deployment-parameter-label-errors-' + parameter.id : null"
+                  placeholder="Branch to deploy" [ngModel]="parameter.label"
+                  (ngModelChange)="updateParameter(parameter.id, { label: $event })" />
+                @if (parameterFieldErrors(parameter.id, 'label').length) {
+                  <ul class="definition__field-error" [id]="'deployment-parameter-label-errors-' + parameter.id" role="alert">
+                    @for (error of parameterFieldErrors(parameter.id, 'label'); track error) { <li>{{ error }}</li> }
+                  </ul>
+                }
+              </label>
+              <label class="definition__wide">
+                <span>Help text <small>Optional</small></span>
+                <input type="text" placeholder="Explain what the operator should choose."
+                  [ngModel]="parameter.help" (ngModelChange)="updateParameter(parameter.id, { help: $event })" />
+              </label>
+            </div>
+            <button type="button" class="definition__remove" [attr.aria-label]="'Remove parameter ' + (index + 1)"
+              (click)="removeParameter(parameter.id)">Remove</button>
+          </fieldset>
+        }
+      </div>
+    }
+  </section>
+
+  <details class="definition__advanced" data-testid="deployment-advanced-definition">
+    <summary>Advanced definition</summary>
+    <p>This read-only source is generated from the controls above and sent to the repository command validator.</p>
+    <pre><code>{{ advancedDefinition() }}</code></pre>
+  </details>
+
+  <div class="definition__action-row">
+    <button type="button" class="definition__primary" data-testid="deployment-preview-form"
+      [appPendingButton]="state() === 'loading'"
+      pendingLabel="Validating definition..." (click)="previewForm()">Preview deployment form</button>
+    <p>Validates the command and builds the operator form.</p>
+  </div>
+
+  <div class="definition__result" [attr.data-state]="state()" [attr.aria-busy]="state() === 'loading'"
+    aria-live="polite" data-testid="deployment-definition-result">
+    @switch (state()) {
+      @case ('loading') {
+        <strong>Validating definition...</strong>
+        <p>Checking the repository command and building its operator fields.</p>
+      }
+      @case ('valid') {
+        <header><span class="definition__status-dot" aria-hidden="true"></span><strong>Definition valid</strong></header>
+        <p>The generated form is ready to review before this definition is saved or run.</p>
+        <div class="definition__preview" data-testid="deployment-form-preview">
+          @for (parameter of preview(); track parameter.id) {
+            <label [attr.for]="'deployment-preview-parameter-' + parameter.id">
+              <span>{{ parameter.label }}{{ parameter.required ? ' *' : '' }}</span>
+              @if (parameter.type === 'boolean') {
+                <input [id]="'deployment-preview-parameter-' + parameter.id" type="checkbox" [checked]="parameter.defaultValue === true" />
+              } @else if (parameter.type === 'enum') {
+                <select [id]="'deployment-preview-parameter-' + parameter.id" [value]="parameter.defaultValue">
+                  @for (option of parameter.optionsList; track option) { <option [value]="option">{{ option }}</option> }
+                </select>
+              } @else {
+                <input [id]="'deployment-preview-parameter-' + parameter.id" [type]="parameter.type === 'secret-ref' ? 'password' : 'text'" [value]="parameter.defaultValue" />
+              }
+              @if (parameter.help) { <small>{{ parameter.help }}</small> }
+            </label>
+          }
+        </div>
+      }
+      @case ('invalid') {
+        <header><span class="definition__status-dot" aria-hidden="true"></span><strong>Definition needs attention</strong></header>
+        <p>Correct the highlighted command or parameter fields, then preview again.</p>
+        @if (generalErrors().length) {
+          <ul role="alert">@for (error of generalErrors(); track error) { <li>{{ error }}</li> }</ul>
+        }
+      }
+      @default {
+        <strong>Preview not generated</strong>
+        <p>Enter a repository script, add any operator values, then preview to validate the definition.</p>
+      }
+    }
+  </div>
+</section>
