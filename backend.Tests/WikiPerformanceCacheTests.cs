@@ -26,6 +26,8 @@ namespace AgentStudio.Tests;
 /// A separate <see cref="TreeAndRecent_Benchmark_PrintsColdVsWarm"/> prints the
 /// cold-vs-warm wall-clock numbers that back the results note.
 /// </summary>
+// MachineBound 20.07.: git-spawn-/Cache-Timing, Perf-Charakter
+[Trait("Category", "MachineBound")]
 public class WikiPerformanceCacheTests : IDisposable
 {
     private readonly string _tempDir;

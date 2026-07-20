@@ -117,6 +117,12 @@
       "title": "EW-2: Engineering Workstream - Collector als Pipeline-Step",
       "linkedAt": "2026-07-11T00:17:57.9295611Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-1782",
+      "title": "Pipeline-Step: AGENTS.md \u003C-\u003E Wiki-Sync \u002B Themen-Stand sammeln (gegen \u0027im Kreis drehen\u0027)",
+      "linkedAt": "2026-07-19T23:28:13.1574952Z",
+      "source": "auto"
     }
   ]
 }
