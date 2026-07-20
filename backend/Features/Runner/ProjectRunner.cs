@@ -5863,7 +5863,7 @@ public class ProjectRunner
         => "The previous run for this task was cut off by the runner watchdog (a transient timeout), not by your own decision, "
          + "so the work was never finished. Continue the task to completion. "
          + "If you run a long operation (dev server, build, test wait, poll loop), narrate progress periodically so the watchdog can tell you are still alive. "
-         + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]].\n\n"
+         + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:missing-dependency-xyz]], [[TASK_NEEDS_INPUT:choose-primary-column]], or [[TASK_NOOP]]. Replace the example reason with the actual short reason.\n\n"
          + $"Task: {info.Title}";
 
     private static string ToIssueTopic(RunIssueKind issueKind) => issueKind switch
@@ -6165,7 +6165,7 @@ public class ProjectRunner
         return head
              + (string.IsNullOrWhiteSpace(reason) ? string.Empty : $"Review note: {reason!.Trim()} ")
              + "If a long-running operation (dev server, build, test wait, poll loop) is expected, narrate progress so the watchdog can tell you are alive. "
-             + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]].\n\n"
+             + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:missing-dependency-xyz]], [[TASK_NEEDS_INPUT:choose-primary-column]], or [[TASK_NOOP]]. Replace the example reason with the actual short reason.\n\n"
              + $"Task: {info.Title}";
     }
 
@@ -6603,7 +6603,7 @@ public class ProjectRunner
         if (decision.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate)
         {
             sb.AppendLine(
-                "This task has already been reissued multiple times. Resolve only these findings in this run, or stop with `[[TASK_BLOCKED:<reason>]]`.");
+                "This task has already been reissued multiple times. Resolve only these findings in this run, or stop with `[[TASK_BLOCKED:missing-dependency-xyz]]`, replacing the example reason with the actual short reason.");
             sb.AppendLine();
         }
         foreach (var item in decision.OpenItems)

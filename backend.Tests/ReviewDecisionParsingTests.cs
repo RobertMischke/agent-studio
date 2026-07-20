@@ -142,6 +142,25 @@ public class ReviewDecisionParsingTests
         Assert.Null(state!.Reason);
     }
 
+    [Theory]
+    [InlineData("[[TASK_BLOCKED:<short reason>]]")]
+    [InlineData("[[TASK_BLOCKED: ]]")]
+    [InlineData("[[TASK_BLOCKED]]")]
+    public void FindUnresolvedBlocked_MissingReason_UsesLastAgentParagraph(string sentinel)
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] I checked the configured package sources.",
+            "[12:00:01.000] [stdout] ",
+            "[12:00:02.000] [stdout] The required Contoso SDK is unavailable from every configured feed.",
+            $"[12:00:03.000] [stdout] {sentinel}",
+            "[12:00:04.000] [system] [taskboard] CLI exited");
+
+        var state = ReviewDecisionParsing.FindUnresolvedBlocked(log);
+
+        Assert.NotNull(state);
+        Assert.Equal("The required Contoso SDK is unavailable from every configured feed.", state!.Reason);
+    }
+
     [Fact]
     public void FindUnresolvedDone_IgnoresRunnerActiveStateClearedMarker()
     {

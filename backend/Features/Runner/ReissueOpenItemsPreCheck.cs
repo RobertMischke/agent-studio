@@ -222,7 +222,7 @@ public static class ReissueOpenItemsPreCheck
             sb.AppendLine(
                 "This task has been sent back multiple times and the items below are still open. " +
                 "Address ONLY these items in this run. If you cannot resolve them, stop and end with " +
-                "`[[TASK_BLOCKED:<reason>]]` so a human can step in - do not start unrelated work.");
+                "`[[TASK_BLOCKED:missing-dependency-xyz]]`, replacing the example reason with the actual short reason, so a human can step in - do not start unrelated work.");
         }
         else
         {

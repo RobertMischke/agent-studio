@@ -201,8 +201,10 @@ public class TaskRunnerPromptTests
                 ["mode_framing"] = ""
             });
             Assert.Contains("[[TASK_DONE]]", rendered);
-            Assert.Contains("[[TASK_BLOCKED", rendered);
-            Assert.Contains("[[TASK_NEEDS_INPUT", rendered);
+            Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", rendered);
+            Assert.Contains("[[TASK_NEEDS_INPUT:choose-primary-column]]", rendered);
+            Assert.Contains("Replace the example reason", rendered);
+            Assert.DoesNotContain("<short reason>", rendered);
         }
     }
 

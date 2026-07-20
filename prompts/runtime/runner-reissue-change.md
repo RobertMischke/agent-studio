@@ -4,7 +4,7 @@
 
 The previous run delivered work, but auto-review sent this task back. The review findings below are the primary task for this run. Fix them directly before doing any other work. Do not restart from the original prompt as if no review happened.
 
-If a finding cannot be resolved, stop and end with `[[TASK_BLOCKED:<reason>]]`. If the findings are resolved and the task is genuinely complete, end with `[[TASK_DONE]]`.
+If a finding cannot be resolved, stop and end with `[[TASK_BLOCKED:missing-dependency-xyz]]`, replacing the example reason with the actual short reason. If the findings are resolved and the task is genuinely complete, end with `[[TASK_DONE]]`.
 
 ## Review findings to fix now
 
@@ -39,4 +39,4 @@ Build-time observability (when your change affects product behavior):
 - For new meaningful behavior, emit structured logs or domain events with stable event names and useful error context, and add timing around expensive or user-visible paths when it would help future debugging or review.
 - Skip instrumentation for tiny helpers, pure refactors, doc-only edits, and throwaway code. Observability is not a reason to bloat simple changes.
 
-When you finish, end your reply with one of these tokens on its own line: `[[TASK_DONE]]`, `[[TASK_BLOCKED:<short reason>]]`, `[[TASK_NEEDS_INPUT:<short reason>]]`, or `[[TASK_NOOP]]`. The orchestrator parses this token to decide what happens next.
+When you finish, end your reply with one of these tokens on its own line: `[[TASK_DONE]]`, `[[TASK_BLOCKED:missing-dependency-xyz]]`, `[[TASK_NEEDS_INPUT:choose-primary-column]]`, or `[[TASK_NOOP]]`. Replace the example reason with the actual short reason; never emit the example text unchanged. The orchestrator parses this token to decide what happens next.

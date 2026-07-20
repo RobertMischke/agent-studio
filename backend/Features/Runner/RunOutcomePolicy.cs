@@ -610,7 +610,7 @@ public static class RunOutcomePolicy
         return DiffOnlySteeringRule + "\n\n"
              + head
              + "Do not reply 'task done' unless you have actually performed the work the user asked for. "
-             + "If you genuinely cannot perform the request, emit [[TASK_BLOCKED:<reason>]] and explain why."
+             + "If you genuinely cannot perform the request, emit [[TASK_BLOCKED:missing-dependency-xyz]], replacing the example reason with the actual short reason, and explain why."
              + RenderPriorCommitsBlock(priorCommits)
              + "\n\nUser request:\n"
              + (originalFollowup ?? string.Empty).Trim();
@@ -676,7 +676,7 @@ public static class RunOutcomePolicy
          + "Your previous turn ended without the required terminal sentinel and the task still has open work. "
          + "Finish the remaining items now - do not re-investigate from scratch, build on what you already did. "
          + "When the work is genuinely complete, end with exactly one terminal sentinel on its own line: "
-         + "[[TASK_DONE]] (or [[TASK_BLOCKED:<short reason>]] if you truly cannot finish). "
+         + "[[TASK_DONE]] (or [[TASK_BLOCKED:missing-dependency-xyz]] if you truly cannot finish). Replace the example reason with the actual short reason. "
          + $"The orchestrator's summary of your previous turn was: {outcome.Summary ?? "unclassified"}."
          + RenderPriorCommitsBlock(priorCommits);
 
@@ -691,7 +691,7 @@ public static class RunOutcomePolicy
          + "The previous attempt failed on a TRANSIENT environmental fault (a host file lock or a network glitch), "
          + "not on your changes. The condition has cleared. Resume the open work and finish it. "
          + "When the work is genuinely complete, end with exactly one terminal sentinel on its own line: "
-         + "[[TASK_DONE]] (or [[TASK_BLOCKED:<short reason>]] if you truly cannot finish). "
+         + "[[TASK_DONE]] (or [[TASK_BLOCKED:missing-dependency-xyz]] if you truly cannot finish). Replace the example reason with the actual short reason. "
          + $"The previous run's diagnosis was: {outcome.Summary ?? "transient environmental fault"}."
          + RenderPriorCommitsBlock(priorCommits);
 
@@ -707,7 +707,7 @@ public static class RunOutcomePolicy
          + "Rebuild your context from the job folder on disk (prompt.md, status.md, logs/) and carry out the task it "
          + "describes, end to end. Do not treat the missing history as a reason to stop. "
          + "When you finish, end with exactly one terminal sentinel on its own line: "
-         + "[[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]]."
+         + "[[TASK_DONE]], [[TASK_BLOCKED:missing-dependency-xyz]], [[TASK_NEEDS_INPUT:choose-primary-column]], or [[TASK_NOOP]]. Replace the example reason with the actual short reason."
          + RenderPriorCommitsBlock(priorCommits);
 
     /// <summary>Human-readable backoff, e.g. "30 s" or "2 min", for a meta message.</summary>
@@ -720,7 +720,7 @@ public static class RunOutcomePolicy
         => "The previous attempt hit one or more tool permission errors. "
          + "Do not ask for additional permissions again. Find a solution using only the available permissions and the context already accessible in this run. "
          + "If a command or path is unavailable, try a narrower read, use existing repository files, inspect the task folder evidence, or reason from the visible output. "
-         + "When you finish, end with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]].";
+         + "When you finish, end with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:missing-dependency-xyz]], [[TASK_NEEDS_INPUT:choose-primary-column]], or [[TASK_NOOP]]. Replace the example reason with the actual short reason.";
 
     public static string BuildMissingSentinelInterventionPrompt(AgentOutcome outcome, IReadOnlyList<string>? priorCommits = null)
         => BuildMissingSentinelInterventionPrompt(outcome.Summary, priorCommits);
@@ -735,7 +735,7 @@ public static class RunOutcomePolicy
         => DiffOnlySteeringRule + "\n\n"
          + "Your previous reply did not include the terminal sentinel required by this taskboard. "
          + "Continue the task if work remains; otherwise close it out now. "
-         + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]]. "
+         + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:missing-dependency-xyz]], [[TASK_NEEDS_INPUT:choose-primary-column]], or [[TASK_NOOP]]. Replace the example reason with the actual short reason. "
          + $"The orchestrator's current summary of your previous reply was: {previousSummary ?? "unclassified"}."
          + RenderPriorCommitsBlock(priorCommits);
 }

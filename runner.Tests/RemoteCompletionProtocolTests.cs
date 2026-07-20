@@ -13,8 +13,10 @@ public sealed class RemoteCompletionProtocolTests
         Assert.StartsWith("Make the requested trivial change.", prompt);
         Assert.Contains("MUST end with exactly one", prompt);
         Assert.Contains("[[TASK_DONE]]", prompt);
-        Assert.Contains("[[TASK_BLOCKED:<reason>]]", prompt);
-        Assert.Contains("[[TASK_NEEDS_INPUT:<reason>]]", prompt);
+        Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", prompt);
+        Assert.Contains("[[TASK_NEEDS_INPUT:choose-primary-column]]", prompt);
+        Assert.Contains("Replace the example reason", prompt);
+        Assert.DoesNotContain("<reason>", prompt);
         Assert.Contains("[[TASK_NOOP]]", prompt);
         Assert.EndsWith(Environment.NewLine, prompt);
     }
