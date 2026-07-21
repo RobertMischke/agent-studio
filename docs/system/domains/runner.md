@@ -96,6 +96,12 @@ state.
   checkout, build, test, provider CLI, vision, or semantic review work.
   `AgentSession` and process-holder identity remain continuity metadata only;
   neither can mint or recover attempt write authority.
+- Canonical Remote ReviewAttempts are excluded from the legacy
+  `ReviewDecisionOrchestrator` scan. They remain visibly in Auto Review until a
+  fenced Remote Review Executor claims them. This is the fail-closed bootstrap
+  boundary: the Task Server never substitutes its checkout or local
+  `session-events.jsonl` for the ReviewSubject. Legacy tasks without attempt
+  authority continue through the established local compatibility path.
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
   (AGT-2003, canonicalized by AGT-2182): read-time projection of the active
   persisted RunAttempt lease onto `TaskInfo.Runner`

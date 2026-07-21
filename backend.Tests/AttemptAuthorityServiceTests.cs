@@ -43,6 +43,8 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(review.ReviewAttempt!.AttemptId, projection.CurrentReviewAttempt!.AttemptId);
         Assert.Equal(reviewLease.LastFence, projection.CurrentReviewAttempt.LastFence);
         Assert.Equal(reviewLease.Lease!.ExpiresAt, projection.CurrentReviewAttempt.Lease!.ExpiresAt);
+        Assert.Equal(AttemptWriteStatus.Duplicate, restarted.ClaimReview(
+            review.ReviewAttempt.AttemptId, "reviewer", "review-host", 120, "review-claim-1").Status);
 
         var next = restarted.AcquireRun(
             "agt-1", "PROJ-1", run.RunAttempt.AttemptId, "runner-b", "host-b", 120, "claim-2").RunAttempt!;
@@ -66,6 +68,26 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(AttemptWriteStatus.Superseded, stale.Status);
         Assert.Equal(AttemptWriteStatus.Accepted, accepted.Status);
         Assert.Equal(AttemptWriteStatus.Duplicate, duplicate.Status);
+    }
+
+    [Fact]
+    public void Replayed_acquire_after_takeover_cannot_restore_superseded_authority()
+    {
+        var now = new DateTime(2026, 7, 20, 10, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var first = service.AcquireRun(
+            "AGT-1", "PROJ-1", null, "runner-a", "host-a", 30, "claim-a").RunAttempt!;
+        now = now.AddSeconds(31);
+        var replacement = service.AcquireRun(
+            "AGT-1", "PROJ-1", first.AttemptId, "runner-b", "host-b", 30, "claim-b");
+
+        var replay = service.AcquireRun(
+            "AGT-1", "PROJ-1", null, "runner-a", "host-a", 30, "claim-a");
+
+        Assert.Equal(AttemptWriteStatus.Accepted, replacement.Status);
+        Assert.Equal(AttemptWriteStatus.Superseded, replay.Status);
+        Assert.Equal(first.AttemptId, replay.AttemptId);
+        Assert.Equal(replacement.AttemptId, service.GetTaskProjection("AGT-1").CurrentRunAttempt!.AttemptId);
     }
 
     [Fact]
@@ -95,14 +117,48 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public void Review_takeover_on_same_attempt_rejects_old_claim_and_renewal_replays()
+    {
+        var now = new DateTime(2026, 7, 20, 10, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var (_, review) = CompletedRunWithReview(service, "sha-a");
+        var first = service.ClaimReview(
+            review.AttemptId, "reviewer", "host", 30, "claim-first").ReviewAttempt!;
+        var renew = new AttemptWriteReference(
+            first.AttemptId, first.LastFence, first.AuthorityEpoch, "renew-first");
+        Assert.Equal(AttemptWriteStatus.Accepted, service.RenewReview(renew, "reviewer", 30).Status);
+        Assert.Equal(AttemptWriteStatus.Duplicate,
+            service.ClaimReview(review.AttemptId, "reviewer", "host", 30, "claim-first").Status);
+
+        now = now.AddSeconds(31);
+        var takeover = service.ClaimReview(
+            review.AttemptId, "reviewer", "host", 30, "claim-second").ReviewAttempt!;
+        var oldClaim = service.ClaimReview(
+            review.AttemptId, "reviewer", "host", 30, "claim-first");
+        var oldRenew = service.RenewReview(renew, "reviewer", 30);
+
+        Assert.True(takeover.LastFence > first.LastFence);
+        Assert.Equal(AttemptWriteStatus.StaleFence, oldClaim.Status);
+        Assert.Equal(AttemptWriteStatus.StaleFence, oldRenew.Status);
+    }
+
+    [Fact]
     public void New_result_supersedes_old_review_and_late_report_is_retained_but_cannot_settle()
     {
         var service = NewService();
         var (_, oldReview) = CompletedRunWithReview(service, "sha-a");
         var oldClaim = service.ClaimReview(oldReview.AttemptId, "reviewer-a", "host-a", 60, "claim-old").ReviewAttempt!;
+        var oldRenewWrite = new AttemptWriteReference(
+            oldClaim.AttemptId, oldClaim.LastFence, oldClaim.AuthorityEpoch, "renew-old");
+        Assert.Equal(AttemptWriteStatus.Accepted,
+            service.RenewReview(oldRenewWrite, "reviewer-a", 60).Status);
 
         var runB = service.AcquireRun("AGT-1", "PROJ-1", oldReview.SourceRunAttemptId, "runner-b", "host-b", 60, "run-b").RunAttempt!;
         service.SettleRun(new AttemptWriteReference(runB.AttemptId, runB.LastFence, runB.AuthorityEpoch, "complete-b"), "done", "sha-b", null);
+
+        var replayedClaim = service.ClaimReview(
+            oldReview.AttemptId, "reviewer-a", "host-a", 60, "claim-old");
+        var replayedRenew = service.RenewReview(oldRenewWrite, "reviewer-a", 60);
 
         var replayedOldCompletion = service.SettleRun(
             new AttemptWriteReference(oldReview.SourceRunAttemptId, oldClaim.LastFence - 1, oldClaim.AuthorityEpoch, "run-complete"),
@@ -122,6 +178,8 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(AttemptWriteStatus.Superseded, late.Status);
         Assert.Equal(AttemptWriteStatus.Superseded, replayedOldCompletion.Status);
         Assert.Equal(AttemptWriteStatus.Superseded, lateCreate.Status);
+        Assert.Equal(AttemptWriteStatus.Superseded, replayedClaim.Status);
+        Assert.Equal(AttemptWriteStatus.Superseded, replayedRenew.Status);
         var historical = Assert.Single(projection.ReviewAttempts, x => x.AttemptId == oldReview.AttemptId);
         Assert.Equal(AttemptLifecycleState.Superseded, historical.State);
         var retainedReport = Assert.Single(historical.Reports);

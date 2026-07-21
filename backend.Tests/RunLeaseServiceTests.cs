@@ -53,9 +53,20 @@ public sealed class RunLeaseServiceTests
         var now = new DateTime(2026, 7, 8, 12, 0, 0, DateTimeKind.Utc);
         var service = NewService(() => now);
 
-        var a = service.TryAcquire(Acquire("AGT-1", "runner-a", ttlSeconds: 120));
+        var requestA = Acquire("AGT-1", "runner-a", ttlSeconds: 120) with
+        {
+            IdempotencyKey = "claim-a",
+        };
+        var a = service.TryAcquire(requestA);
         Assert.True(a.Granted);
         Assert.Equal(1, a.Lease!.FencingToken);
+        var heartbeatA = Heartbeat(a.Lease) with
+        {
+            AttemptId = a.Lease.AttemptId,
+            AuthorityEpoch = a.Lease.AuthorityEpoch,
+            IdempotencyKey = "heartbeat-a",
+        };
+        Assert.Equal("Renewed", service.Renew(heartbeatA).Outcome);
 
         // A misses its heartbeat window; the lease lapses.
         now = now.AddSeconds(121);
@@ -74,6 +85,15 @@ public sealed class RunLeaseServiceTests
         Assert.Equal("runner-b", staleHeartbeat.Lease!.RunnerId);
 
         Assert.Equal("StaleToken", staleRelease.Outcome);
+
+        // Replaying the original claim delivery is also fenced. It must not be
+        // mapped back to AlreadyOwn after a replacement attempt became current.
+        var replayedAcquire = service.TryAcquire(requestA);
+        Assert.False(replayedAcquire.Granted);
+        Assert.Equal(AttemptWriteStatus.Superseded.ToString(), replayedAcquire.Outcome);
+        var replayedHeartbeat = service.Renew(heartbeatA);
+        Assert.False(replayedHeartbeat.Granted);
+        Assert.Equal("StaleToken", replayedHeartbeat.Outcome);
 
         // The write gate agrees: A is no longer current, B is.
         Assert.False(service.IsCurrent("AGT-1", a.Lease.LeaseId, a.Lease.FencingToken, a.Lease.RunnerId));

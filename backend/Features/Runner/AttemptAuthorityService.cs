@@ -73,7 +73,23 @@ public sealed class AttemptAuthorityService
             var deliveryKey = DeliveryKey("acquire", idempotencyKey);
             var duplicate = FindIdempotentRun(taskKey, deliveryKey);
             if (duplicate is not null)
+            {
+                var replayedAt = _utcNow();
+                if (!IsCurrentRun(duplicate) || duplicate.State == AttemptLifecycleState.Superseded)
+                    return new AttemptWriteResult(AttemptWriteStatus.Superseded, duplicate.AttemptId, RunAttempt: ToDto(duplicate));
+                if (duplicate.AuthorityEpoch != _state.AuthorityEpoch)
+                    return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, duplicate.AttemptId, RunAttempt: ToDto(duplicate));
+                if (duplicate.State != AttemptLifecycleState.Leased)
+                    return new AttemptWriteResult(AttemptWriteStatus.InvalidState, duplicate.AttemptId,
+                        $"RunAttempt is {duplicate.State} and cannot be reacquired by replaying an old delivery.",
+                        RunAttempt: ToDto(duplicate));
+                if (duplicate.Lease is null || duplicate.Lease.ExpiresAt <= replayedAt)
+                    return new AttemptWriteResult(AttemptWriteStatus.LeaseExpired, duplicate.AttemptId, RunAttempt: ToDto(duplicate));
+                if (!Same(duplicate.Lease.ExecutorId, executorId))
+                    return new AttemptWriteResult(AttemptWriteStatus.StaleFence, duplicate.AttemptId,
+                        "The acquire delivery belongs to another executor.", RunAttempt: ToDto(duplicate));
                 return new AttemptWriteResult(AttemptWriteStatus.Duplicate, duplicate.AttemptId, RunAttempt: ToDto(duplicate));
+            }
 
             var now = _utcNow();
             var current = CurrentRun(taskKey);
@@ -137,6 +153,12 @@ public sealed class AttemptAuthorityService
     {
         lock (_gate)
         {
+            var replayed = FindRun(write.AttemptId);
+            if (replayed is not null
+                && replayed.IdempotencyKeys.Contains(DeliveryKey("renew", write.IdempotencyKey)))
+            {
+                return ClassifyRunLeaseReplay(replayed, write, executorId, leaseId);
+            }
             var validation = ValidateRunWriteLocked(
                 write, executorId, recordIdempotency: false, idempotencyScope: "renew", leaseId: leaseId);
             if (validation.Status != AttemptWriteStatus.Accepted) return validation;
@@ -327,7 +349,13 @@ public sealed class AttemptAuthorityService
             var deliveryKey = DeliveryKey("create", request.IdempotencyKey);
             var duplicate = FindIdempotentReview(request.TaskKey, deliveryKey);
             if (duplicate is not null)
+            {
+                if (!IsCurrentReview(duplicate) || duplicate.State == AttemptLifecycleState.Superseded)
+                    return new AttemptWriteResult(AttemptWriteStatus.Superseded, duplicate.AttemptId, ReviewAttempt: ToDto(duplicate));
+                if (duplicate.AuthorityEpoch != _state.AuthorityEpoch)
+                    return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, duplicate.AttemptId, ReviewAttempt: ToDto(duplicate));
                 return new AttemptWriteResult(AttemptWriteStatus.Duplicate, duplicate.AttemptId, ReviewAttempt: ToDto(duplicate));
+            }
 
             var run = FindRun(request.SourceRunAttemptId);
             var expectedSha = Normalize(request.ExpectedResultSha).ToLowerInvariant();
@@ -425,7 +453,7 @@ public sealed class AttemptAuthorityService
             if (review is null) return new AttemptWriteResult(AttemptWriteStatus.NotFound, write.AttemptId);
             var deliveryKey = DeliveryKey("renew", write.IdempotencyKey);
             if (review.IdempotencyKeys.Contains(deliveryKey))
-                return new AttemptWriteResult(AttemptWriteStatus.Duplicate, review.AttemptId, ReviewAttempt: ToDto(review));
+                return ClassifyReviewLeaseReplay(review, executorId, write: write);
             var validation = ValidateReviewWriteLocked(write, "renew");
             if (validation.Status != AttemptWriteStatus.Accepted) return validation;
             if (!Same(review.Lease!.ExecutorId, executorId))
@@ -452,7 +480,7 @@ public sealed class AttemptAuthorityService
             if (review is null) return new AttemptWriteResult(AttemptWriteStatus.NotFound, Normalize(attemptId));
             var deliveryKey = DeliveryKey("claim", idempotencyKey);
             if (review.IdempotencyKeys.Contains(deliveryKey))
-                return new AttemptWriteResult(AttemptWriteStatus.Duplicate, review.AttemptId, ReviewAttempt: ToDto(review));
+                return ClassifyReviewLeaseReplay(review, executorId, claimDeliveryKey: deliveryKey);
             if (!IsCurrentReview(review) || Terminal(review.State))
                 return new AttemptWriteResult(AttemptWriteStatus.Superseded, review.AttemptId, ReviewAttempt: ToDto(review));
             var now = _utcNow();
@@ -464,6 +492,7 @@ public sealed class AttemptAuthorityService
             review.AuthorityEpoch = _state.AuthorityEpoch;
             review.State = AttemptLifecycleState.Leased;
             review.Lease = NewLease(executorId, hostId, fence, requestedTtlSeconds, now);
+            review.CurrentClaimDeliveryKey = deliveryKey;
             review.IdempotencyKeys.Add(deliveryKey);
             PersistLocked();
             return new AttemptWriteResult(AttemptWriteStatus.Accepted, review.AttemptId, ReviewAttempt: ToDto(review));
@@ -617,6 +646,53 @@ public sealed class AttemptAuthorityService
         return new AttemptWriteResult(AttemptWriteStatus.Accepted, run.AttemptId, RunAttempt: ToDto(run));
     }
 
+    private AttemptWriteResult ClassifyRunLeaseReplay(
+        RunAttemptRecord run,
+        AttemptWriteReference write,
+        string executorId,
+        string? leaseId)
+    {
+        if (write.AuthorityEpoch != _state.AuthorityEpoch || run.AuthorityEpoch != _state.AuthorityEpoch)
+            return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, run.AttemptId, RunAttempt: ToDto(run));
+        if (!IsCurrentRun(run) || run.State == AttemptLifecycleState.Superseded)
+            return new AttemptWriteResult(AttemptWriteStatus.Superseded, run.AttemptId, RunAttempt: ToDto(run));
+        if (write.Fence != run.LastFence)
+            return new AttemptWriteResult(AttemptWriteStatus.StaleFence, run.AttemptId, RunAttempt: ToDto(run));
+        if (run.State != AttemptLifecycleState.Leased)
+            return new AttemptWriteResult(AttemptWriteStatus.InvalidState, run.AttemptId, RunAttempt: ToDto(run));
+        if (run.Lease is null || run.Lease.ExpiresAt <= _utcNow())
+            return new AttemptWriteResult(AttemptWriteStatus.LeaseExpired, run.AttemptId, RunAttempt: ToDto(run));
+        if (!Same(run.Lease.ExecutorId, executorId)
+            || (!Blank(leaseId) && !Same(run.Lease.LeaseId, leaseId)))
+            return new AttemptWriteResult(AttemptWriteStatus.StaleFence, run.AttemptId, RunAttempt: ToDto(run));
+        return new AttemptWriteResult(AttemptWriteStatus.Duplicate, run.AttemptId, RunAttempt: ToDto(run));
+    }
+
+    private AttemptWriteResult ClassifyReviewLeaseReplay(
+        ReviewAttemptRecord review,
+        string executorId,
+        AttemptWriteReference? write = null,
+        string? claimDeliveryKey = null)
+    {
+        if (review.AuthorityEpoch != _state.AuthorityEpoch
+            || (write is not null && write.AuthorityEpoch != _state.AuthorityEpoch))
+            return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, review.AttemptId, ReviewAttempt: ToDto(review));
+        if (!IsCurrentReview(review) || review.State == AttemptLifecycleState.Superseded)
+            return new AttemptWriteResult(AttemptWriteStatus.Superseded, review.AttemptId, ReviewAttempt: ToDto(review));
+        if (write is not null && write.Fence != review.LastFence)
+            return new AttemptWriteResult(AttemptWriteStatus.StaleFence, review.AttemptId, ReviewAttempt: ToDto(review));
+        if (review.State != AttemptLifecycleState.Leased)
+            return new AttemptWriteResult(AttemptWriteStatus.InvalidState, review.AttemptId, ReviewAttempt: ToDto(review));
+        if (review.Lease is null || review.Lease.ExpiresAt <= _utcNow())
+            return new AttemptWriteResult(AttemptWriteStatus.LeaseExpired, review.AttemptId, ReviewAttempt: ToDto(review));
+        if (!Same(review.Lease.ExecutorId, executorId))
+            return new AttemptWriteResult(AttemptWriteStatus.StaleFence, review.AttemptId, ReviewAttempt: ToDto(review));
+        if (!Blank(claimDeliveryKey) && !Same(review.CurrentClaimDeliveryKey, claimDeliveryKey))
+            return new AttemptWriteResult(AttemptWriteStatus.StaleFence, review.AttemptId,
+                "The claim delivery belongs to an older review lease.", ReviewAttempt: ToDto(review));
+        return new AttemptWriteResult(AttemptWriteStatus.Duplicate, review.AttemptId, ReviewAttempt: ToDto(review));
+    }
+
     private AttemptWriteResult ValidateReviewWriteLocked(AttemptWriteReference write, string idempotencyScope)
     {
         var review = FindReview(write.AttemptId);
@@ -729,6 +805,19 @@ public sealed class AttemptAuthorityService
                     review.IdempotencyKeys, ["create", "renew", "claim", "settle"]);
             review.Reports ??= [];
             review.Subject.EvidenceDigestInputs ??= [];
+            if (Blank(review.CurrentClaimDeliveryKey)
+                && review.State == AttemptLifecycleState.Leased)
+            {
+                var historicalClaims = review.IdempotencyKeys
+                    .Where(key => key.StartsWith("claim:", StringComparison.Ordinal))
+                    .Take(2)
+                    .ToList();
+                // A single historical claim is unambiguous and can retain
+                // restart idempotency. Multiple claims imply a takeover chain;
+                // leave it unset so any old replay fails closed.
+                if (historicalClaims.Count == 1)
+                    review.CurrentClaimDeliveryKey = historicalClaims[0];
+            }
         }
         _state.SchemaVersion = 2;
     }
@@ -863,6 +952,7 @@ public sealed class AttemptAuthorityService
         public string? FailureClassification { get; set; }
         public string? TestedResultSha { get; set; }
         public string? TerminalReason { get; set; }
+        public string? CurrentClaimDeliveryKey { get; set; }
         public HashSet<string> IdempotencyKeys { get; set; } = [];
         public List<ReviewReportDeliveryRecord> Reports { get; set; } = [];
     }
