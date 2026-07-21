@@ -515,6 +515,11 @@ builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddSingleton<ReviewDecisionOrchestrator>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewDecisionOrchestrator>());
 builder.Services.AddHostedService<AutoReviewPostProcessingWorker>();
+// One-shot boot scan that re-drives any 4-auto-review card whose post-processing
+// enqueue was lost when the backend last restarted (the queue is a volatile
+// in-memory channel). Runs after the scanner has warmed; only touches
+// 4-auto-review and is fully idempotent (the worker self-gates per card).
+builder.Services.AddHostedService<AgentStudio.Runner.AutoReviewPostProcessingRecoveryService>();
 // Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per
 // project; see ProjectSettings.IntakeEnabled. The hosted service is cheap
 // (heuristic only, no LLM) and skips projects that have not opted in.

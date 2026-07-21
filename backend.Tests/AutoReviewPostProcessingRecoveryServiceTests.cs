@@ -1,0 +1,271 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+
+using Xunit;
+
+namespace AgentStudio.Tests;
+
+/// <summary>
+/// Covers the startup-recovery scan that re-drives 4-auto-review cards whose
+/// volatile post-processing enqueue was lost on a backend restart
+/// (<see cref="AgentStudio.Runner.AutoReviewPostProcessingRecoveryService"/>).
+/// </summary>
+public sealed class AutoReviewPostProcessingRecoveryServiceTests : IDisposable
+{
+    private const string Project = "demo";
+    private readonly string _workspace;
+    private readonly string _watchPath;
+
+    public AutoReviewPostProcessingRecoveryServiceTests()
+    {
+        _workspace = Path.Combine(Path.GetTempPath(), "auto-review-recovery-" + Guid.NewGuid().ToString("N"));
+        _watchPath = Path.Combine(_workspace, "projects", Project);
+        foreach (var state in TaskStates.All)
+        {
+            Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        }
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_workspace, recursive: true); } catch { }
+    }
+
+    // ---- End-to-end scan against a real workspace + scanner + queue -------------
+
+    [Fact]
+    public void RunRecoveryScan_ReEnqueuesAutoReviewCardWithNoFreshOutcome()
+    {
+        var enteredLaneAt = DateTime.UtcNow.AddMinutes(-30);
+        // Card entered post-processing (entry marker written) but never reached a
+        // decision - exactly the lost-queue-entry hang the scan repairs.
+        SeedAutoReviewJob("stuck-task", enteredLaneAt, writeEntryMarker: true, writeDecision: false);
+        // A second card with no outcome log at all (crash before the first append).
+        SeedAutoReviewJob("stuck-bare", enteredLaneAt, writeEntryMarker: false, writeDecision: false);
+
+        var deps = BuildDeps();
+        var summary = AgentStudio.Runner.AutoReviewPostProcessingRecoveryService.RunRecoveryScan(
+            deps.Scanner, deps.Transitions, NullLogger.Instance);
+
+        var enqueued = Drain(deps.Queue);
+        Assert.Equal(2, summary.ReEnqueued);
+        Assert.Equal(0, summary.Skipped);
+        Assert.Equal(0, summary.Failed);
+        Assert.Equal(
+            new[] { "stuck-bare", "stuck-task" },
+            enqueued.Select(r => r.JobId).OrderBy(x => x).ToArray());
+        Assert.All(enqueued, r => Assert.Equal("startup-recovery", r.Source));
+    }
+
+    [Fact]
+    public void RunRecoveryScan_SkipsAutoReviewCardWithCompletedOutcome()
+    {
+        var enteredLaneAt = DateTime.UtcNow.AddMinutes(-30);
+        // Post-processing already produced a decision after the card entered the
+        // lane: it must not be re-enqueued (no double processing).
+        SeedAutoReviewJob("done-task", enteredLaneAt, writeEntryMarker: true, writeDecision: true);
+
+        var deps = BuildDeps();
+        var summary = AgentStudio.Runner.AutoReviewPostProcessingRecoveryService.RunRecoveryScan(
+            deps.Scanner, deps.Transitions, NullLogger.Instance);
+
+        var enqueued = Drain(deps.Queue);
+        Assert.Empty(enqueued);
+        Assert.Equal(0, summary.ReEnqueued);
+        Assert.Equal(1, summary.Skipped);
+        Assert.Equal(1, summary.Scanned);
+    }
+
+    [Fact]
+    public void RunRecoveryScan_NeverTouchesHumanReviewLane()
+    {
+        var enteredLaneAt = DateTime.UtcNow.AddMinutes(-30);
+        // A human-review card with no decision outcome would look "unfinished" by
+        // the same heuristic, but the scan must only ever act on 4-auto-review.
+        SeedJobInState(TaskStates.HumanReview, "human-card", enteredLaneAt, writeEntryMarker: false, writeDecision: false);
+        SeedJobInState(TaskStates.Escalated, "escalated-card", enteredLaneAt, writeEntryMarker: false, writeDecision: false);
+
+        var deps = BuildDeps();
+        var summary = AgentStudio.Runner.AutoReviewPostProcessingRecoveryService.RunRecoveryScan(
+            deps.Scanner, deps.Transitions, NullLogger.Instance);
+
+        Assert.Empty(Drain(deps.Queue));
+        Assert.Equal(0, summary.Scanned);
+        Assert.Equal(0, summary.ReEnqueued);
+    }
+
+    // ---- Pure heuristic boundary tests -----------------------------------------
+
+    [Fact]
+    public void NeedsPostProcessingRecovery_FreshDecision_IsComplete()
+    {
+        var t0 = new DateTime(2026, 07, 20, 12, 00, 00, DateTimeKind.Utc);
+        var job = AutoReviewInfo(t0);
+        var outcomes = new List<PostProcessingOutcomeRecord>
+        {
+            EntryMarker(t0),
+            Decision(t0.AddSeconds(45)),
+        };
+        Assert.False(AgentStudio.Runner.AutoReviewPostProcessingRecoveryService
+            .NeedsPostProcessingRecovery(job, outcomes));
+    }
+
+    [Fact]
+    public void NeedsPostProcessingRecovery_StaleDecisionFromEarlierOccupancy_NeedsRecovery()
+    {
+        var t0 = new DateTime(2026, 07, 20, 12, 00, 00, DateTimeKind.Utc);
+        var job = AutoReviewInfo(t0);
+        // Decision predates the latest entry into the lane (card was reissued
+        // 4 -> 3 -> 4 after this decision): does not count as fresh.
+        var outcomes = new List<PostProcessingOutcomeRecord>
+        {
+            Decision(t0.AddMinutes(-10)),
+            EntryMarker(t0),
+        };
+        Assert.True(AgentStudio.Runner.AutoReviewPostProcessingRecoveryService
+            .NeedsPostProcessingRecovery(job, outcomes));
+    }
+
+    [Fact]
+    public void NeedsPostProcessingRecovery_OnlyEntryMarker_NeedsRecovery()
+    {
+        var t0 = new DateTime(2026, 07, 20, 12, 00, 00, DateTimeKind.Utc);
+        var job = AutoReviewInfo(t0);
+        var outcomes = new List<PostProcessingOutcomeRecord> { EntryMarker(t0) };
+        Assert.True(AgentStudio.Runner.AutoReviewPostProcessingRecoveryService
+            .NeedsPostProcessingRecovery(job, outcomes));
+    }
+
+    [Fact]
+    public void NeedsPostProcessingRecovery_NonAutoReviewState_IsFalse()
+    {
+        var t0 = new DateTime(2026, 07, 20, 12, 00, 00, DateTimeKind.Utc);
+        var job = AutoReviewInfo(t0) with { State = TaskStates.HumanReview };
+        Assert.False(AgentStudio.Runner.AutoReviewPostProcessingRecoveryService
+            .NeedsPostProcessingRecovery(job, new List<PostProcessingOutcomeRecord>()));
+    }
+
+    // ---- Fixture helpers -------------------------------------------------------
+
+    private static TaskInfo AutoReviewInfo(DateTime enteredLaneAt) => new()
+    {
+        Id = "job",
+        State = TaskStates.AutoReview,
+        ProjectName = Project,
+        WatchPath = "watch",
+        FolderPath = "folder",
+        EnteredLaneAt = enteredLaneAt,
+    };
+
+    private static PostProcessingOutcomeRecord EntryMarker(DateTime at) => new()
+    {
+        At = at,
+        JobId = "job",
+        Project = Project,
+        Outcome = PostProcessingOutcomes.FindingsAdded,
+        Performer = PostProcessingPerformers.Orchestrator,
+        StepId = PipelineCatalogue.GitCommitAttributionStepId,
+        Summary = "Entered orchestrator post-processing after task execution.",
+    };
+
+    private static PostProcessingOutcomeRecord Decision(DateTime at) => new()
+    {
+        At = at,
+        JobId = "job",
+        Project = Project,
+        Outcome = PostProcessingOutcomes.PassToHumanReview,
+        Performer = PostProcessingPerformers.Orchestrator,
+        StepId = PipelineCatalogue.OrchestratorDecisionStepId,
+        Summary = "Auto-review decision complete.",
+    };
+
+    private static List<AgentStudio.Runner.AutoReviewPostProcessingRequest> Drain(
+        AgentStudio.Runner.AutoReviewPostProcessingQueue queue)
+    {
+        var items = new List<AgentStudio.Runner.AutoReviewPostProcessingRequest>();
+        while (queue.Reader.TryRead(out var request)) items.Add(request);
+        return items;
+    }
+
+    private void SeedAutoReviewJob(string slug, DateTime enteredLaneAt, bool writeEntryMarker, bool writeDecision)
+        => SeedJobInState(TaskStates.AutoReview, slug, enteredLaneAt, writeEntryMarker, writeDecision);
+
+    private void SeedJobInState(string state, string slug, DateTime enteredLaneAt, bool writeEntryMarker, bool writeDecision)
+    {
+        var dir = Path.Combine(_watchPath, state, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "task.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"enteredLaneAt\":\"{enteredLaneAt:o}\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nWork body.\n");
+
+        if (writeEntryMarker)
+        {
+            PostProcessingOutcomeLog.Append(dir, new PostProcessingOutcomeRecord
+            {
+                At = enteredLaneAt,
+                JobId = slug,
+                Project = Project,
+                Outcome = PostProcessingOutcomes.FindingsAdded,
+                Performer = PostProcessingPerformers.Orchestrator,
+                StepId = PipelineCatalogue.GitCommitAttributionStepId,
+                Summary = "Entered orchestrator post-processing after task execution.",
+            }, NullLogger.Instance);
+        }
+
+        if (writeDecision)
+        {
+            PostProcessingOutcomeLog.Append(dir, new PostProcessingOutcomeRecord
+            {
+                At = enteredLaneAt.AddSeconds(45),
+                JobId = slug,
+                Project = Project,
+                Outcome = PostProcessingOutcomes.PassToHumanReview,
+                Performer = PostProcessingPerformers.Orchestrator,
+                StepId = PipelineCatalogue.OrchestratorDecisionStepId,
+                Summary = "Auto-review decision complete.",
+            }, NullLogger.Instance);
+        }
+    }
+
+    private Deps BuildDeps()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+                ["WatchPaths:0:Name"] = Project,
+                ["WatchPaths:0:Path"] = _watchPath,
+                ["WatchPaths:0:RootPath"] = _watchPath,
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var stateMachine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(
+            scanner,
+            new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
+            new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
+            new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+            NullLogger<TaskMutationService>.Instance);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        var queue = new AgentStudio.Runner.AutoReviewPostProcessingQueue();
+        var transitions = new TaskTransitionService(
+            scanner,
+            stateMachine,
+            mutations,
+            git,
+            settings,
+            NullLogger<TaskTransitionService>.Instance,
+            autoReviewQueue: queue);
+
+        return new Deps(scanner, transitions, queue);
+    }
+
+    private sealed record Deps(
+        TaskScannerService Scanner,
+        TaskTransitionService Transitions,
+        AgentStudio.Runner.AutoReviewPostProcessingQueue Queue);
+}

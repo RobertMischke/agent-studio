@@ -522,30 +522,48 @@ public sealed class TaskTransitionService
         }
     }
 
-    private void EnqueueAutoReviewPostProcessing(TaskInfo moved)
+    /// <summary>
+    /// Re-drives auto-review post-processing for a card the startup-recovery
+    /// scan found parked in <c>4-auto-review</c> with unfinished post-processing.
+    /// The <see cref="IAutoReviewPostProcessingQueue"/> is intentionally volatile
+    /// (an in-memory channel), so an entry that was enqueued on the normal
+    /// <c>3-progress -&gt; 4-auto-review</c> transition is lost when the backend
+    /// restarts before the worker drains it - the card then hangs in the lane
+    /// with no trigger. This routes through the exact same queue path as the
+    /// live transition (only the <c>Source</c> differs), so the downstream worker
+    /// re-runs the orchestrator decision. Idempotent: the worker re-scans the
+    /// whole lane and self-gates on each card's real state, so a redundant
+    /// re-enqueue is a no-op. Returns whether the request was accepted onto the
+    /// queue.
+    /// </summary>
+    public bool RequeueAutoReviewPostProcessing(TaskInfo info, string source = "startup-recovery")
+        => EnqueueAutoReviewPostProcessing(info, source);
+
+    private bool EnqueueAutoReviewPostProcessing(TaskInfo moved, string source = "progress-to-auto-review")
     {
         var queue = _autoReviewQueue;
-        if (queue == null) return;
+        if (queue == null) return false;
 
         var accepted = queue.Enqueue(new AutoReviewPostProcessingRequest(
             ProjectName: moved.ProjectName,
             JobId: moved.Id,
             WatchPath: moved.WatchPath,
             EnqueuedAtUtc: DateTime.UtcNow,
-            Source: "progress-to-auto-review"));
+            Source: source));
 
         if (accepted)
         {
             _logger.LogInformation(
-                "auto-review-postprocessing-enqueued project={Project} job={JobId} source=progress-to-auto-review",
-                moved.ProjectName, moved.Id);
+                "auto-review-postprocessing-enqueued project={Project} job={JobId} source={Source}",
+                moved.ProjectName, moved.Id, source);
         }
         else
         {
             _logger.LogWarning(
-                "auto-review-postprocessing-enqueue-failed project={Project} job={JobId}",
-                moved.ProjectName, moved.Id);
+                "auto-review-postprocessing-enqueue-failed project={Project} job={JobId} source={Source}",
+                moved.ProjectName, moved.Id, source);
         }
+        return accepted;
     }
 
     private async Task<TaskCommitInfo?> TryAutoCommitAsync(string jobId, string? watchPath, CancellationToken ct)
