@@ -399,9 +399,10 @@
     <!-- Editor area with tabs -->
     <section class="studio-editor"
              data-testid="studio-editor">
-      <div class="studio-tabbar">
+      <div class="studio-tabbar" data-testid="studio-tabbar">
         <div class="studio-tabbar__list"
              role="tablist"
+             data-testid="studio-tab-list"
              (dragover)="onTabListDragOver($event)"
              (drop)="onTabListDrop($event)">
           @if (tabs().length === 0) {
@@ -410,7 +411,8 @@
             </div>
           }
           @for (t of tabs(); track tabKey(t)) {
-            <div class="studio-tab"
+            <div #studioTab
+                 class="studio-tab"
                  role="tab"
                  tabindex="0"
                  draggable="true"
