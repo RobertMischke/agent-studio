@@ -13,6 +13,9 @@ public static class AttemptAuthorityEndpoints
         group.MapGet("/runs/{attemptId}", (string attemptId, AttemptAuthorityService authority) =>
             authority.GetRun(attemptId) is { } run ? Results.Ok(run) : Results.NotFound());
 
+        group.MapGet("/reviews/{attemptId}", (string attemptId, AttemptAuthorityService authority) =>
+            authority.GetReview(attemptId) is { } review ? Results.Ok(review) : Results.NotFound());
+
         group.MapPost("/reviews", (CreateReviewAttemptRequest request, AttemptAuthorityService authority) =>
             ToHttp(authority.CreateReviewAttempt(request)));
 

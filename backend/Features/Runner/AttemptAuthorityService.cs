@@ -203,28 +203,52 @@ public sealed class AttemptAuthorityService
     }
 
     public AttemptWriteResult AcceptRunWrite(AttemptWriteReference write)
-    {
-        lock (_gate)
-        {
-            var result = ValidateRunWriteLocked(
-                write, null, recordIdempotency: true, idempotencyScope: "write");
-            if (result.Status == AttemptWriteStatus.Accepted) PersistLocked();
-            return result;
-        }
-    }
+        => ExecuteRunWrite(write, "write", expectedTaskKey: null, static () => { });
 
     public AttemptWriteResult RecordEvidenceDigest(AttemptWriteReference write, string digest)
     {
         if (Blank(digest)) return InvalidRun("Evidence digest is required.");
+        return ExecuteRunWrite(
+            write, "evidence", expectedTaskKey: null, static () => { }, digest);
+    }
+
+    /// <summary>
+    /// Validates one fenced delivery and performs its Task Server side effect
+    /// inside the same authority critical section. The idempotency key is only
+    /// persisted after the side effect succeeds, so an I/O failure can retry
+    /// the same delivery instead of being mistaken for a completed duplicate.
+    /// </summary>
+    public AttemptWriteResult ExecuteRunWrite(
+        AttemptWriteReference write,
+        string operation,
+        string? expectedTaskKey,
+        Action sideEffect,
+        string? evidenceDigest = null)
+    {
+        if (Blank(operation)) return InvalidRun("Write operation is required.");
+        ArgumentNullException.ThrowIfNull(sideEffect);
+
         lock (_gate)
         {
             var result = ValidateRunWriteLocked(
-                write, null, recordIdempotency: true, idempotencyScope: "evidence");
+                write,
+                null,
+                recordIdempotency: false,
+                idempotencyScope: operation,
+                expectedTaskKey: expectedTaskKey);
             if (result.Status != AttemptWriteStatus.Accepted) return result;
+
+            sideEffect();
             var run = FindRun(write.AttemptId)!;
-            if (!run.EvidenceDigests.Contains(digest, StringComparer.Ordinal)) run.EvidenceDigests.Add(digest);
+            run.IdempotencyKeys.Add(DeliveryKey(operation, write.IdempotencyKey));
+            if (!Blank(evidenceDigest)
+                && !run.EvidenceDigests.Contains(evidenceDigest!, StringComparer.Ordinal))
+            {
+                run.EvidenceDigests.Add(evidenceDigest!);
+            }
             PersistLocked();
-            return result with { RunAttempt = ToDto(run) };
+            return new AttemptWriteResult(
+                AttemptWriteStatus.Accepted, run.AttemptId, RunAttempt: ToDto(run));
         }
     }
 
@@ -528,6 +552,11 @@ public sealed class AttemptAuthorityService
     public RunAttemptDto? GetRun(string attemptId)
     {
         lock (_gate) return FindRun(attemptId) is { } run ? ToDto(run) : null;
+    }
+
+    public ReviewAttemptDto? GetReview(string attemptId)
+    {
+        lock (_gate) return FindReview(attemptId) is { } review ? ToDto(review) : null;
     }
 
     public AttemptAuthorityProjection GetTaskProjection(string taskKey)

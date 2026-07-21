@@ -184,6 +184,37 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.True(replacement.LastFence > old.LastFence);
     }
 
+    [Fact]
+    public void Failed_side_effect_does_not_consume_delivery_and_attempt_cannot_write_to_another_task()
+    {
+        var service = NewService();
+        var run = service.AcquireRun(
+            "AGT-1", "PROJ-1", null, "runner-a", "host-a", 60, "run-a").RunAttempt!;
+        var write = new AttemptWriteReference(
+            run.AttemptId, run.LastFence, run.AuthorityEpoch, "log-batch-1");
+        var calls = 0;
+
+        Assert.Throws<IOException>(() => service.ExecuteRunWrite(
+            write,
+            "log",
+            "AGT-1",
+            () =>
+            {
+                calls++;
+                throw new IOException("disk unavailable");
+            }));
+
+        var retried = service.ExecuteRunWrite(write, "log", "AGT-1", () => calls++);
+        var duplicate = service.ExecuteRunWrite(write, "log", "AGT-1", () => calls++);
+        var wrongTask = service.ExecuteRunWrite(
+            write with { IdempotencyKey = "wrong-task" }, "log", "AGT-2", () => calls++);
+
+        Assert.Equal(AttemptWriteStatus.Accepted, retried.Status);
+        Assert.Equal(AttemptWriteStatus.Duplicate, duplicate.Status);
+        Assert.Equal(AttemptWriteStatus.SubjectMismatch, wrongTask.Status);
+        Assert.Equal(2, calls);
+    }
+
     private (RunAttemptDto Run, ReviewAttemptDto Review) CompletedRunWithReview(AttemptAuthorityService service, string sha)
     {
         var run = service.AcquireRun("AGT-1", "PROJ-1", null, "runner", "host", 60, "run-create").RunAttempt!;

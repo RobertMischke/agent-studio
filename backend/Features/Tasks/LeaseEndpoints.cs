@@ -258,9 +258,9 @@ public static class LeaseEndpoints
 
             var attemptId = req.AttemptId.Trim();
             var epoch = req.AuthorityEpoch.Value;
-            var resultSha = string.IsNullOrWhiteSpace(req.ResultSha)
-                ? req.SalvageCommitSha
-                : req.ResultSha;
+            // Result-SHA is independent authority. A salvage commit is useful
+            // evidence, but it must never be promoted into the review subject.
+            var resultSha = req.ResultSha;
             var completionKey = req.IdempotencyKey.Trim();
             var settled = authority.SettleRun(
                 new AttemptWriteReference(attemptId, req.FencingToken, epoch, completionKey),

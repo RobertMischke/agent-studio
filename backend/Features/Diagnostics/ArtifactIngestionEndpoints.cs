@@ -29,6 +29,8 @@ public static class ArtifactIngestionEndpoints
                 return Results.NotFound(new ArtifactIngestResponse(req.TaskKey, 0, [], $"No task '{req.TaskKey}'."));
 
             var projection = authority.GetTaskProjection(req.TaskKey);
+            AttemptWriteReference? write = null;
+            string? evidenceDigest = null;
             if (string.IsNullOrWhiteSpace(req.AttemptId) || !req.Fence.HasValue
                 || !req.AuthorityEpoch.HasValue || string.IsNullOrWhiteSpace(req.IdempotencyKey))
             {
@@ -42,19 +44,33 @@ public static class ArtifactIngestionEndpoints
                 var digestInput = string.Join("\n", req.Artifacts
                     .OrderBy(x => x.Path, StringComparer.Ordinal)
                     .Select(x => $"{x.Path}:{AttemptAuthorityService.Hash(x.ContentBase64 ?? string.Empty)}"));
-                var accepted = authority.RecordEvidenceDigest(
-                    new AttemptWriteReference(req.AttemptId, req.Fence.Value, req.AuthorityEpoch.Value, req.IdempotencyKey),
-                    "artifact-set:" + AttemptAuthorityService.Hash(digestInput));
-                if (accepted.Status == AttemptWriteStatus.Duplicate)
-                    return Results.Ok(new ArtifactIngestResponse(req.TaskKey, 0, [], "duplicate delivery"));
-                if (accepted.Status != AttemptWriteStatus.Accepted)
-                    return Results.Conflict(accepted);
+                write = new AttemptWriteReference(
+                    req.AttemptId, req.Fence.Value, req.AuthorityEpoch.Value, req.IdempotencyKey);
+                evidenceDigest = "artifact-set:" + AttemptAuthorityService.Hash(digestInput);
             }
 
             ArtifactIngestResponse written;
             try
             {
-                written = WriteArtifacts(task, req);
+                ArtifactIngestResponse? sideEffectResult = null;
+                if (write is null)
+                {
+                    written = WriteArtifacts(task, req);
+                }
+                else
+                {
+                    var accepted = authority.ExecuteRunWrite(
+                        write,
+                        "artifact",
+                        req.TaskKey,
+                        () => sideEffectResult = WriteArtifacts(task, req),
+                        evidenceDigest);
+                    if (accepted.Status == AttemptWriteStatus.Duplicate)
+                        return Results.Ok(new ArtifactIngestResponse(req.TaskKey, 0, [], "duplicate delivery"));
+                    if (accepted.Status != AttemptWriteStatus.Accepted)
+                        return Results.Conflict(accepted);
+                    written = sideEffectResult!;
+                }
             }
             catch (ArtifactIngestException ex)
             {

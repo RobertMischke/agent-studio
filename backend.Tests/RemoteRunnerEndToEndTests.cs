@@ -235,6 +235,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var wrongLeaseResult = await wrongLease.Content.ReadFromJsonAsync<RRemoteCompletionResponse>(ApiJson, ct);
         Assert.Equal(AttemptWriteStatus.StaleFence.ToString(), wrongLeaseResult!.FailureClassification);
 
+        var salvageIsNotResultAuthority = await http.PostAsJsonAsync(
+            "/api/runner/completion", completionRequest with
+            {
+                ResultSha = null,
+                SalvageCommitSha = "salvage-is-evidence-only",
+                IdempotencyKey = "remote-done-missing-result-sha",
+            }, ct);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, salvageIsNotResultAuthority.StatusCode);
+        var missingResult = await salvageIsNotResultAuthority.Content.ReadFromJsonAsync<RRemoteCompletionResponse>(ApiJson, ct);
+        Assert.Equal(AttemptWriteStatus.Invalid.ToString(), missingResult!.FailureClassification);
+
         var completion = await client.CompleteRunAsync(completionRequest, ct);
 
         Assert.NotNull(completion);
@@ -299,6 +310,42 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains("idempotencyKey", timeline);
         Assert.DoesNotContain("external_completion", timeline);
         Assert.Equal(1, timeline.Split("agent_run_finished", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public async Task Failed_artifact_write_can_retry_the_same_idempotency_key()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote artifact retry", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+
+        var invalid = new RArtifactIngest(TaskKey,
+        [
+            new RArtifact("retry.txt", "not-base64"),
+        ], lease.Lease!.AttemptId, lease.Lease.FencingToken, lease.Lease.AuthorityEpoch, "artifact-retry-1");
+        var invalidResponse = await http.PostAsJsonAsync("/api/runner/artifacts", invalid, ct);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+
+        var corrected = invalid with
+        {
+            Artifacts = [new RArtifact(
+                "retry.txt", Convert.ToBase64String(Encoding.UTF8.GetBytes("durable evidence")))],
+        };
+        var retryResponse = await http.PostAsJsonAsync("/api/runner/artifacts", corrected, ct);
+        retryResponse.EnsureSuccessStatusCode();
+        var retry = await retryResponse.Content.ReadFromJsonAsync<ArtifactIngestResponse>(ApiJson, ct);
+
+        Assert.Equal(1, retry!.Uploaded);
+        var artifactPath = Assert.Single(Directory.GetFiles(
+            _watchPath, "retry.txt", SearchOption.AllDirectories));
+        Assert.Equal("durable evidence", File.ReadAllText(artifactPath));
     }
 
     [Fact]
