@@ -91,6 +91,24 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public void Live_run_cannot_be_renewed_by_reacquiring_with_only_the_same_executor_identity()
+    {
+        var now = new DateTime(2026, 7, 21, 10, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var first = service.AcquireRun(
+            "AGT-1", "PROJ-1", null, "runner-a", "host-a", 30, "claim-a").RunAttempt!;
+        var originalExpiry = first.Lease!.ExpiresAt;
+        now = now.AddSeconds(10);
+
+        var reacquire = service.AcquireRun(
+            "AGT-1", "PROJ-1", null, "runner-a", "host-a", 120, "claim-b");
+
+        Assert.Equal(AttemptWriteStatus.InvalidState, reacquire.Status);
+        Assert.Equal(first.AttemptId, reacquire.AttemptId);
+        Assert.Equal(originalExpiry, service.GetRun(first.AttemptId)!.Lease!.ExpiresAt);
+    }
+
+    [Fact]
     public void Infrastructure_retry_creates_new_review_attempt_for_same_subject_without_new_run()
     {
         var service = NewService();
@@ -188,6 +206,38 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(ReviewTerminalOutcome.Pass, retainedReport.Outcome);
         Assert.Equal(AttemptWriteStatus.Superseded, retainedReport.AuthorityStatus);
         Assert.Equal("sha-b", projection.CurrentReviewSubject!.ExpectedResultSha);
+    }
+
+    [Fact]
+    public void Replayed_review_settlement_is_superseded_after_a_new_subject_becomes_current()
+    {
+        var service = NewService();
+        var (_, reviewA) = CompletedRunWithReview(service, "sha-a");
+        var claimA = service.ClaimReview(
+            reviewA.AttemptId, "reviewer-a", "host-a", 60, "claim-a").ReviewAttempt!;
+        var settlement = new SettleReviewAttemptRequest(
+            new AttemptWriteReference(
+                claimA.AttemptId, claimA.LastFence, claimA.AuthorityEpoch, "settle-a"),
+            "sha-a",
+            ReviewTerminalOutcome.Pass);
+        Assert.Equal(AttemptWriteStatus.Accepted, service.SettleReview(settlement).Status);
+
+        var runB = service.AcquireRun(
+            "AGT-1", "PROJ-1", reviewA.SourceRunAttemptId,
+            "runner-b", "host-b", 60, "run-b").RunAttempt!;
+        service.SettleRun(
+            new AttemptWriteReference(
+                runB.AttemptId, runB.LastFence, runB.AuthorityEpoch, "complete-b"),
+            "done", "sha-b", null);
+        service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-1", "PROJ-1", "sha-b", runB.AttemptId,
+            "req", "policy", [], "review-b"));
+
+        var replay = service.SettleReview(settlement);
+
+        Assert.Equal(AttemptWriteStatus.Superseded, replay.Status);
+        Assert.Equal(reviewA.AttemptId, replay.AttemptId);
+        Assert.Equal("sha-b", service.GetTaskProjection("AGT-1").CurrentReviewSubject!.ExpectedResultSha);
     }
 
     [Fact]

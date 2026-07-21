@@ -91,7 +91,10 @@ state.
   monotonic fences, authority epoch, heartbeat, terminal facts, evidence digests,
   and task-and-operation-scoped idempotency. Remote completion carries an
   explicit immutable Result-SHA independently of optional salvage-branch metadata, and rejected
-  late review reports remain non-authoritative attempt history. It lives under
+  late review reports remain non-authoritative attempt history. Only an exact
+  acquire-delivery replay is idempotent; a new acquire from the same executor
+  cannot renew a live lease without the canonical attempt and fence. Replayed
+  review settlements become superseded once another subject is current. It lives under
   `<TaskRepository>/.metadata/` and performs no
   checkout, build, test, provider CLI, vision, or semantic review work.
   `AgentSession` and process-holder identity remain continuity metadata only;

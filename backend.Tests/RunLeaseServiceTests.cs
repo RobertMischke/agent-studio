@@ -33,7 +33,7 @@ public sealed class RunLeaseServiceTests
     public void SameRunner_ReacquireIsIdempotent_AndKeepsLeaseAndToken()
     {
         var service = NewService();
-        var request = Acquire("AGT-1", "runner-a");
+        var request = Acquire("AGT-1", "runner-a") with { IdempotencyKey = "claim-a" };
 
         var first = service.TryAcquire(request);
         var again = service.TryAcquire(request);
@@ -43,6 +43,28 @@ public sealed class RunLeaseServiceTests
         Assert.Equal("AlreadyOwn", again.Outcome);
         Assert.Equal(first.Lease!.LeaseId, again.Lease!.LeaseId);
         Assert.Equal(first.Lease.FencingToken, again.Lease.FencingToken);
+    }
+
+    [Fact]
+    public void SameRunner_NewAcquireDeliveryCannotActAsAnUnfencedHeartbeat()
+    {
+        var now = new DateTime(2026, 7, 21, 10, 0, 0, DateTimeKind.Utc);
+        var service = NewService(() => now);
+        var first = service.TryAcquire(Acquire("AGT-1", "runner-a", ttlSeconds: 30) with
+        {
+            IdempotencyKey = "claim-a",
+        });
+        var originalExpiry = first.Lease!.ExpiresAt;
+        now = now.AddSeconds(10);
+
+        var reacquire = service.TryAcquire(Acquire("AGT-1", "runner-a", ttlSeconds: 120) with
+        {
+            IdempotencyKey = "claim-b",
+        });
+
+        Assert.False(reacquire.Granted);
+        Assert.Equal("Held", reacquire.Outcome);
+        Assert.Equal(originalExpiry, reacquire.Lease!.ExpiresAt);
     }
 
     // §8.2C: Runner A loses heartbeat, Runner B acquires a higher fenced lease,

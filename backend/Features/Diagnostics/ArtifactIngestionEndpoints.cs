@@ -10,6 +10,7 @@ namespace AgentStudio.Diagnostics;
 public static class ArtifactIngestionEndpoints
 {
     private static readonly Regex UnsafeSegment = new(@"(^|[\\/])\.\.([\\/]|$)", RegexOptions.Compiled);
+    private static readonly Regex WindowsDriveRoot = new(@"^[A-Za-z]:/", RegexOptions.Compiled);
 
     public static void MapArtifactIngestionEndpoints(this WebApplication app)
     {
@@ -143,7 +144,9 @@ public static class ArtifactIngestionEndpoints
             throw new ArtifactIngestException("Artifact path is required.");
 
         var normalized = path.Trim().Replace('\\', '/');
-        if (Path.IsPathRooted(normalized) || UnsafeSegment.IsMatch(normalized))
+        if (Path.IsPathRooted(normalized)
+            || WindowsDriveRoot.IsMatch(normalized)
+            || UnsafeSegment.IsMatch(normalized))
             throw new ArtifactIngestException($"Artifact path must stay under results/: {path}");
 
         normalized = normalized.StartsWith("results/", StringComparison.OrdinalIgnoreCase)

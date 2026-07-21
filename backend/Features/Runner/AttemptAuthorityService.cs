@@ -97,15 +97,6 @@ public sealed class AttemptAuthorityService
                 && current.Lease.ExpiresAt > now
                 && current.AuthorityEpoch == _state.AuthorityEpoch)
             {
-                if (Same(current.Lease.ExecutorId, executorId))
-                {
-                    current.Lease.ExpiresAt = now.Add(NormalizeTtl(requestedTtlSeconds));
-                    current.Lease.LastHeartbeat = now;
-                    current.IdempotencyKeys.Add(deliveryKey);
-                    PersistLocked();
-                    return new AttemptWriteResult(AttemptWriteStatus.Duplicate, current.AttemptId, RunAttempt: ToDto(current));
-                }
-
                 return new AttemptWriteResult(
                     AttemptWriteStatus.InvalidState,
                     current.AttemptId,
@@ -514,7 +505,17 @@ public sealed class AttemptAuthorityService
             if (review is null) return new AttemptWriteResult(AttemptWriteStatus.NotFound, request.Write.AttemptId);
             var deliveryKey = DeliveryKey("settle", request.Write.IdempotencyKey);
             if (review.IdempotencyKeys.Contains(deliveryKey))
-                return new AttemptWriteResult(AttemptWriteStatus.Duplicate, review.AttemptId, ReviewAttempt: ToDto(review));
+            {
+                var replayStatus = request.Write.AuthorityEpoch != _state.AuthorityEpoch
+                                   || review.AuthorityEpoch != _state.AuthorityEpoch
+                    ? AttemptWriteStatus.AuthorityEpochMismatch
+                    : !IsCurrentReview(review) || review.State == AttemptLifecycleState.Superseded
+                        ? AttemptWriteStatus.Superseded
+                        : request.Write.Fence != review.LastFence
+                            ? AttemptWriteStatus.StaleFence
+                            : AttemptWriteStatus.Duplicate;
+                return new AttemptWriteResult(replayStatus, review.AttemptId, ReviewAttempt: ToDto(review));
+            }
             var validation = ValidateReviewWriteLocked(request.Write, "settle");
             if (validation.Status != AttemptWriteStatus.Accepted)
             {
