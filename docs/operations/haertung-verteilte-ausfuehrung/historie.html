@@ -93,8 +93,8 @@
         <td><span class="pill open">offen</span> Board-Watchdog + Steer-Timeout noch nicht eingerichtet</td></tr>
     <tr><td><b>Unvalidierte Registry-Writes</b></td><td>PROJ-017-Korruption</td>
         <td><span class="pill open">offen</span> Validierung + Bereinigung ausstehend</td></tr>
-    <tr><td><b>Zombie-Worktrees / External-Completion-Loop</b></td><td>AGT-2155: gestrandeter Host-Worktree blockiert Salvage, Requeue wiederholt den Zyklus</td>
-        <td><span class="pill part">teilweise</span> Einzelfall gesichert + rekonstruiert (2177-Muster); kein automatischer Zombie-Worktree-Check</td></tr>
+    <tr><td><b>Zombie-Worktrees / External-Completion-Loop</b></td><td>AGT-2155: gestrandeter Host-Worktree blockiert Salvage, Requeue wiederholt den Zyklus; Zombie-Leases nach Daemon-Neustart (AGT-2182/2194/2198): Lease-Adoption ohne Prozess-Verifikation, 8h Stillstand trotz „gesundem“ Heartbeat</td>
+        <td><span class="pill part">teilweise</span> Einzelfall gesichert + rekonstruiert (2177-Muster); kein automatischer Zombie-Worktree-Check; Lease-Adoption verifiziert Prozess-Existenz nicht (Fix ausstehend, verwandt AGT-2182-Fencing)</td></tr>
     <tr><td><b>Fehlende Datensicherung</b></td><td>snap.sh deckte neues Per-Projekt-Worktree-Layout nicht ab; Platte 91 % voll</td>
         <td><span class="pill done">geschlossen</span> snap.sh deckt beide Layouts + Retention (20.07.); 374 GB → 1,1 GB, Platte 6 %</td></tr>
   </tbody>
@@ -462,6 +462,31 @@
     <dt>Status</dt><dd><span class="pill part">Einzelfall behoben</span>
       <span class="pill open">strukturell offen</span> — kein automatischer Zombie-Worktree-Check.</dd>
     <dt>Referenzen</dt><dd>AGT-2155 · Bezug AGT-1917 (External-Completion), AGT-2177 (Rekonstruktionsmuster)</dd>
+  </dl>
+</div>
+
+<div class="entry">
+  <header><h3>Zombie-Leases nach Daemon-Neustart („8-Stunden-Stillstand“)</h3><span class="date">20.–21.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Zwei schnelle Daemon-Neustarts (22:57/22:58, Deploy des neuen Binaries mit
+      AGT-2177-Reconciliation) killten die Sekunden zuvor geclaimten Runs (AGT-2182/2194/2198). Der neue
+      Daemon übernahm die Leases als aktiv und erneuerte Heartbeats, startete aber nie Prozesse — 4/4
+      Slots belegt, keine Claims, 8h Stillstand bei „gesundem“ Heartbeat. Diagnose-Signatur:
+      3-progress-Karten + frischer Heartbeat + NULL Prozesse in den Host-Worktrees
+      (<code>/proc</code>-cwd-Scan).</dd>
+    <dt>Root Cause</dt><dd>Lease-Adoption beim Daemon-Start prüft nur den DB-Zustand (Lease-Eintrag aktiv,
+      Heartbeat erneuerbar), nicht die Prozess-Realität — ein Neustart unmittelbar nach frisch geclaimten,
+      vom sterbenden Vorgänger-Prozess mitgerissenen Runs übernimmt deren Leases als laufend, obwohl nie
+      ein Prozess dafür startet.</dd>
+    <dt>Maßnahme</dt><dd>Sofortmaßnahme: betroffene Leases per Move 3-progress→2-ready aufgebrochen —
+      der Daemon claimte sofort neu und startete echte Prozesse. Strukturell offen: Lease-Adoption muss
+      Prozess-Existenz verifizieren statt dem DB-Zustand zu vertrauen (verwandt mit dem
+      AGT-2182-Fencing-Scope); neue Deploy-Runbook-Regel: Daemon-Neustarts nur bei bestätigtem Leerlauf,
+      sonst Leases vorher explizit freigeben.</dd>
+    <dt>Status</dt><dd><span class="pill part">Einzelfall behoben</span>
+      <span class="pill open">strukturell offen</span> — keine Prozess-Verifikation bei Lease-Adoption.</dd>
+    <dt>Referenzen</dt><dd>AGT-2182/2194/2198 · Bezug AGT-2177 (Deploy-Auslöser), AGT-2182-Fencing-Scope
+      (Attempt-Fencing)</dd>
   </dl>
 </div>
 
