@@ -2680,6 +2680,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var timeoutSeconds = _configuration.GetValue($"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:TimeoutSeconds", 300);
         var infrastructureTimeoutSeconds = _configuration.GetValue(
             $"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:InfrastructureTimeoutSeconds", 120);
+        // The machine gate is held for a whole build+test run, so a card queued
+        // behind a running gate must be willing to wait roughly one full run - not
+        // the short infra-op SLA. Default to run-timeout + infra-timeout so waiting
+        // behind a legitimate 15-25 min gate never escalates as "Timeout persisted"
+        // (AGT-2182, 21.07.); still overridable for a saturated host.
+        var queueWaitTimeoutSeconds = _configuration.GetValue(
+            $"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:QueueWaitTimeoutSeconds",
+            timeoutSeconds + infrastructureTimeoutSeconds);
         var changedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
         if (subject.IsRemote) changedFiles = null;
 
@@ -2692,6 +2700,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             AttemptChainId = subject.AttemptChainId,
             SubjectRef = subject.SubjectRef,
             InfrastructureTimeout = TimeSpan.FromSeconds(Math.Max(1, infrastructureTimeoutSeconds)),
+            QueueWaitTimeout = TimeSpan.FromSeconds(Math.Max(1, queueWaitTimeoutSeconds)),
         };
 
         BuildTestGateResult? result = null;

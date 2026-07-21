@@ -38,7 +38,25 @@ public sealed record BuildTestGateRequest(
     public string GateId { get; init; } = PipelineCatalogue.BuildTestGateStepId;
     public string? AttemptChainId { get; init; }
     public string? SubjectRef { get; init; }
+
+    /// <summary>
+    /// Budget for the true infrastructure operations that MUST be quick regardless
+    /// of how long a verify run takes: materializing the exact-subject worktree
+    /// (fetch + <c>worktree add</c>), reading HEAD, and tearing the worktree down.
+    /// </summary>
     public TimeSpan InfrastructureTimeout { get; init; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Budget for WAITING in the machine-gate queue for the one running gate ahead
+    /// to finish. This is deliberately separate from <see cref="InfrastructureTimeout"/>:
+    /// the machine lock is held for a gate's entire build+test run (15-25 min in
+    /// production), so a queued card must be willing to wait roughly one full run,
+    /// not the short infra-op budget. Budgeting the queue wait against the infra SLA
+    /// made every card queued behind a running gate escalate with a spurious
+    /// "Timeout persisted" after 120 s (AGT-2182, 21.07.). When unset the runner
+    /// derives run-timeout + infra-timeout.
+    /// </summary>
+    public TimeSpan? QueueWaitTimeout { get; init; }
 }
 
 public sealed record BuildTestGateProcessEvidence
@@ -158,6 +176,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         var infrastructureTimeout = request.InfrastructureTimeout > TimeSpan.Zero
             ? request.InfrastructureTimeout
             : TimeSpan.FromMinutes(2);
+        var queueWaitTimeout = ResolveQueueWaitTimeout(
+            request.QueueWaitTimeout, timeout, infrastructureTimeout);
         _logger.LogInformation(
             "build_test_gate_started gate_run_id={GateRunId} gate_id={GateId} started_at_utc={StartedAtUtc:o} repository={Repository} expected_sha={ExpectedSha} attempt_chain_id={AttemptChainId} executor={Executor}",
             gateRunId, request.GateId, startedAt, repositoryPath,
@@ -176,7 +196,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     $"build-test-gate:{Path.GetFileName(repositoryPath)}", ct).ConfigureAwait(false);
             }
 
-            var acquisition = await AcquireMachineGateAsync(infrastructureTimeout, ct).ConfigureAwait(false);
+            var acquisition = await AcquireMachineGateAsync(queueWaitTimeout, ct).ConfigureAwait(false);
             if (acquisition.Lease is null)
             {
                 completed = InfrastructureFailure(
@@ -352,15 +372,38 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         };
     }
 
+    /// <summary>
+    /// The budget for WAITING in the machine-gate queue for the one running gate
+    /// ahead to finish. The machine lock is held for a gate's entire build+test run
+    /// (15-25 min in production), so a queued card must be willing to wait roughly
+    /// one full run - NOT the short infra-op SLA. Budgeting the queue wait against
+    /// the infra SLA made every card queued behind a running gate escalate as
+    /// "Timeout persisted" after 120 s (AGT-2182, 21.07.). An explicit
+    /// <paramref name="configured"/> value wins; otherwise derive run-timeout plus
+    /// infra-timeout so one full run ahead is tolerated.
+    /// </summary>
+    internal static TimeSpan ResolveQueueWaitTimeout(
+        TimeSpan? configured,
+        TimeSpan runTimeout,
+        TimeSpan infrastructureTimeout)
+    {
+        if (configured is { } value && value > TimeSpan.Zero)
+            return value;
+        var run = runTimeout > TimeSpan.Zero ? runTimeout : TimeSpan.Zero;
+        var infra = infrastructureTimeout > TimeSpan.Zero ? infrastructureTimeout : TimeSpan.Zero;
+        var derived = run + infra;
+        return derived > TimeSpan.Zero ? derived : TimeSpan.FromMinutes(2);
+    }
+
     private static async Task<MachineGateAcquisition> AcquireMachineGateAsync(
-        TimeSpan timeout,
+        TimeSpan queueWaitTimeout,
         CancellationToken ct)
     {
         var wait = Stopwatch.StartNew();
         var collision = !await ProcessGate.WaitAsync(0, ct).ConfigureAwait(false);
         var ownsProcessGate = !collision;
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        bounded.CancelAfter(timeout);
+        bounded.CancelAfter(queueWaitTimeout);
         try
         {
             if (!ownsProcessGate)
@@ -402,7 +445,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             if (ownsProcessGate) ProcessGate.Release();
             wait.Stop();
             return MachineGateAcquisition.TimedOut(wait.ElapsedMilliseconds, collision,
-                $"machine build/test gate wait exceeded infrastructure SLA of {timeout.TotalSeconds:F0}s");
+                $"machine build/test gate queue wait exceeded SLA of {queueWaitTimeout.TotalSeconds:F0}s");
         }
         catch
         {
@@ -846,11 +889,36 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         if (process.TimedOut) return BuildTestGateFailureKind.Timeout;
         if (process.ExitCode == 137 || string.Equals(process.TerminationSignal, "SIGKILL", StringComparison.Ordinal))
             return BuildTestGateFailureKind.OutOfMemory;
-        var classified = ClassifyFailure(process.StandardError + "\n" + process.StandardOutput);
-        return classified == BuildTestGateFailureKind.None
-            ? BuildTestGateFailureKind.Code
-            : classified;
+        var evidence = process.StandardError + "\n" + process.StandardOutput;
+        var classified = ClassifyFailure(evidence);
+        if (classified == BuildTestGateFailureKind.None)
+            return BuildTestGateFailureKind.Code;
+        // A verify command that ran to completion and returned an exit code was NOT
+        // prevented from running by the host: whatever lock / OOM / timeout string it
+        // printed is its own reported result - e.g. a test that logs an
+        // IOException "... because it is being used by another process" on its temp
+        // DB files (AGT-2110, 21.07.). Treating such a DETERMINISTIC test failure as
+        // review infrastructure poisoned the environmental-retry budget: the same
+        // 15-25 min build+test was re-run twice more, each time holding the machine
+        // gate and starving every queued card, before escalating "Lock persisted".
+        // Only a genuine MSBuild build-output lock (MSB3026/MSB3027) is a real,
+        // retryable host fault; every other string from a completed process is a
+        // code/test defect that must flow through the normal reissue path instead.
+        if (CompletedNormally(process) && !IsGenuineBuildOutputLock(evidence))
+            return BuildTestGateFailureKind.Code;
+        return classified;
     }
+
+    private static bool CompletedNormally(BuildTestGateProcessEvidence process)
+        => process.LaunchError is null
+           && !process.TimedOut
+           && !process.Cancelled
+           && process.ExitCode is not null
+           && process.ExitCode != 137;
+
+    private static bool IsGenuineBuildOutputLock(string evidence)
+        => evidence.Contains("MSB3026", StringComparison.OrdinalIgnoreCase)
+           || evidence.Contains("MSB3027", StringComparison.OrdinalIgnoreCase);
 
     internal static BuildTestGateFailureKind ClassifyFailure(string? text)
     {

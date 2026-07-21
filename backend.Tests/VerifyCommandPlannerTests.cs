@@ -463,8 +463,11 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Assert.Null(result.Workspace);
     }
 
+    // MachineBound 21.07.: leader-hold vs 100 ms queue-budget is a wall-clock race
+    // that flakes when the shared machine gate is under real load on the host.
+    [Trait("Category", "MachineBound")]
     [Fact]
-    public async Task MachineGateWaitIsBoundedByInfrastructureSla()
+    public async Task MachineGateWaitIsBoundedByExplicitQueueWaitTimeout()
     {
         const string activeFile = "machine-gate-sla-active.tmp";
         var leader = Run(new BuildProfile
@@ -481,10 +484,15 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             await Task.Delay(25);
         Assert.True(File.Exists(activePath));
 
+        // The queue wait is now budgeted separately from the run/infra SLA: a card
+        // that explicitly caps its queue wait below the leader's hold still times
+        // out. (AGT-2182 fix: the DEFAULT budget derives run-timeout+infra so a card
+        // queued behind a real 15-25 min gate does NOT time out - see the sibling
+        // QueuedGateWaitsThroughLongLeader... test.)
         var follower = await _runner.RunAsync(
             new BuildTestGateRequest(_root, null, "bounded", RequireExactSubject: false)
             {
-                InfrastructureTimeout = TimeSpan.FromMilliseconds(100),
+                QueueWaitTimeout = TimeSpan.FromMilliseconds(100),
             },
             changedFiles: null,
             new BuildProfile { BuildCmds = ["exit 0"] },
@@ -495,6 +503,52 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Assert.Equal(BuildTestGateFailureKind.Timeout, follower.FailureKind);
         Assert.True(follower.GateCollisionDetected);
         Assert.True(follower.GateQueueWaitMs >= 50);
+        Assert.Equal(BuildTestGateVerdict.Ok, (await leader).Verdict);
+    }
+
+    // MachineBound 21.07.: the queued follower must out-wait a ~2 s leader hold; the
+    // leader-hold vs queue-budget race is host-timing-sensitive under parallel load.
+    [Trait("Category", "MachineBound")]
+    [Fact]
+    public async Task QueuedGateWaitsThroughLongLeaderWhenQueueBudgetExceedsInfraTimeout()
+    {
+        // Regression for the "Timeout persisted" cascade (AGT-2182, 21.07.): a card
+        // with a SHORT infra-op SLA (100 ms) that queues behind a legitimately
+        // running gate must wait the run out and pass - the queue wait is budgeted
+        // against the run timeout, not the infra SLA. Before the fix the 100 ms infra
+        // SLA also bounded the queue wait, so this follower escalated as Timeout.
+        const string activeFile = "queue-budget-active.tmp";
+        var leader = Run(new BuildProfile
+        {
+            BuildCmds =
+            [
+                OperatingSystem.IsWindows()
+                    ? $"type nul > {activeFile} & ping 127.0.0.1 -n 3 > nul & del {activeFile}"
+                    : $"touch {activeFile}; sleep 2; rm -f {activeFile}",
+            ],
+        });
+        var activePath = Path.Combine(_root, activeFile);
+        for (var index = 0; index < 100 && !File.Exists(activePath); index++)
+            await Task.Delay(25);
+        Assert.True(File.Exists(activePath));
+
+        var follower = await _runner.RunAsync(
+            new BuildTestGateRequest(_root, null, "queued", RequireExactSubject: false)
+            {
+                // Short infra SLA, but no explicit queue cap: the derived budget is
+                // run-timeout (10 s) + infra (0.1 s), which comfortably covers the
+                // ~2 s leader hold.
+                InfrastructureTimeout = TimeSpan.FromMilliseconds(100),
+            },
+            changedFiles: null,
+            new BuildProfile { BuildCmds = ["exit 0"] },
+            PostStepMode.Fail,
+            TimeSpan.FromSeconds(10),
+            CancellationToken.None);
+
+        Assert.Equal(BuildTestGateVerdict.Ok, follower.Verdict);
+        Assert.NotEqual(BuildTestGateFailureKind.Timeout, follower.FailureKind);
+        Assert.True(follower.GateCollisionDetected);
         Assert.Equal(BuildTestGateVerdict.Ok, (await leader).Verdict);
     }
 
@@ -518,6 +572,12 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         Assert.Equal(BuildTestGateFailureKind.None,
             BuildTestGateRunner.ClassifyFailure("TimeoutBehaviorTests passed"));
     }
+
+    // NB: the AGT-2110 "Lock" misclassification and the AGT-2182 queue-budget fixes
+    // are proven deterministically (no shared machine gate) in
+    // BuildTestGateClassificationTests / BuildTestGateQueueBudgetTests below. Running
+    // the fix end-to-end here would acquire the real machine-wide gate lock, which on
+    // a busy host contends with the operator's live gates and flakes.
 
     [Fact]
     public async Task ConcurrentRuns_ForSameRepository_DoNotOverlapCommands()
@@ -656,5 +716,176 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
         process.WaitForExit();
         Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)} failed: {stderr}");
         return stdout;
+    }
+}
+
+/// <summary>
+/// Deterministic coverage for the AGT-2110 fix: a verify command that ran to
+/// completion and merely PRINTED a lock / OOM string in its own output is a
+/// code/test defect, not review infrastructure - so it never poisons the
+/// environmental-retry budget. Only a genuine MSBuild build-output lock
+/// (MSB3026/MSB3027) or a hard process signal (timeout / kill / launch failure)
+/// stays infrastructure. Pure calls into
+/// <see cref="BuildTestGateRunner.ClassifyFailure(BuildTestGateProcessEvidence)"/>
+/// so the assertions never touch the shared machine gate.
+/// </summary>
+public sealed class BuildTestGateClassificationTests
+{
+    private static BuildTestGateProcessEvidence Evidence(
+        int? exitCode = 1,
+        string stdout = "",
+        string stderr = "",
+        bool timedOut = false,
+        bool cancelled = false,
+        string? launchError = null,
+        string? terminationSignal = null)
+        => new()
+        {
+            Command = "dotnet test",
+            FileName = "cmd.exe",
+            ExitCode = exitCode,
+            StandardOutput = stdout,
+            StandardError = stderr,
+            TimedOut = timedOut,
+            Cancelled = cancelled,
+            LaunchError = launchError,
+            TerminationSignal = terminationSignal,
+        };
+
+    [Fact]
+    public void CompletedTestRun_LoggingAFileLockException_IsCode()
+    {
+        // The exact AGT-2110 signature: a finished test process (exit 1) whose
+        // stdout carries a temp-file IOException. Before the fix this became Lock =
+        // infrastructure and was retried twice (2x ~16 min) before escalating.
+        var evidence = Evidence(exitCode: 1, stdout:
+            "  Failed! System.IO.IOException : The process cannot access the file "
+            + "'20260721101251571-acceptance-abc.db' because it is being used by another process.");
+
+        var kind = BuildTestGateRunner.ClassifyFailure(evidence);
+
+        Assert.Equal(BuildTestGateFailureKind.Code, kind);
+    }
+
+    [Theory]
+    [InlineData("error MSB3027: Could not write to output file 'App.dll' because it is being used by another process.")]
+    [InlineData("error MSB3026: Could not copy 'App.dll' to 'bin'. The file is locked by another process.")]
+    public void CompletedBuild_WithGenuineMsbOutputLock_StaysLock(string stderr)
+    {
+        // A real build-output lock (a running service holding the DLL) IS a
+        // retryable host fault and must remain infrastructure even though the build
+        // process exited normally.
+        var kind = BuildTestGateRunner.ClassifyFailure(Evidence(exitCode: 1, stderr: stderr));
+
+        Assert.Equal(BuildTestGateFailureKind.Lock, kind);
+    }
+
+    [Fact]
+    public void CompletedProcess_WithoutAnyInfraSignal_IsCode()
+    {
+        var kind = BuildTestGateRunner.ClassifyFailure(Evidence(exitCode: 1, stdout: "3 tests failed"));
+
+        Assert.Equal(BuildTestGateFailureKind.Code, kind);
+    }
+
+    [Fact]
+    public void UnfinishedProcess_WithLockString_StaysLock_Conservatively()
+    {
+        // No exit code means the process did not complete on its own - we cannot
+        // attribute the lock string to a reported test result, so stay conservative
+        // and treat it as (retryable) infrastructure.
+        var kind = BuildTestGateRunner.ClassifyFailure(
+            Evidence(exitCode: null, stderr: "the file is being used by another process"));
+
+        Assert.Equal(BuildTestGateFailureKind.Lock, kind);
+    }
+
+    [Fact]
+    public void TimedOutProcess_StaysTimeout_RegardlessOfOutput()
+    {
+        var kind = BuildTestGateRunner.ClassifyFailure(
+            Evidence(exitCode: null, timedOut: true, stdout: "being used by another process"));
+
+        Assert.Equal(BuildTestGateFailureKind.Timeout, kind);
+    }
+
+    [Fact]
+    public void KilledProcess_Exit137_StaysOutOfMemory()
+    {
+        var kind = BuildTestGateRunner.ClassifyFailure(Evidence(exitCode: 137));
+
+        Assert.Equal(BuildTestGateFailureKind.OutOfMemory, kind);
+    }
+
+    [Fact]
+    public void LaunchFailure_StaysProcessLaunch()
+    {
+        var kind = BuildTestGateRunner.ClassifyFailure(
+            Evidence(exitCode: null, launchError: "executable file not found"));
+
+        Assert.Equal(BuildTestGateFailureKind.ProcessLaunch, kind);
+    }
+}
+
+/// <summary>
+/// Deterministic coverage for the AGT-2182 fix: the machine-gate QUEUE wait is
+/// budgeted separately from the short infra-op SLA, so a card queued behind a
+/// legitimately running 15-25 min gate is not escalated as "Timeout persisted".
+/// Pure calls into <see cref="BuildTestGateRunner.ResolveQueueWaitTimeout"/> - no
+/// machine gate, no wall-clock race.
+/// </summary>
+public sealed class BuildTestGateQueueBudgetTests
+{
+    [Fact]
+    public void ExplicitConfiguredQueueWait_Wins()
+    {
+        var resolved = BuildTestGateRunner.ResolveQueueWaitTimeout(
+            TimeSpan.FromMinutes(45), TimeSpan.FromMinutes(20), TimeSpan.FromMinutes(2));
+
+        Assert.Equal(TimeSpan.FromMinutes(45), resolved);
+    }
+
+    [Fact]
+    public void UnsetQueueWait_DerivesRunPlusInfra()
+    {
+        // The production wiring: run timeout 20 min + infra 2 min = 22 min, which
+        // comfortably out-waits a real gate ahead - unlike the old 2 min infra SLA.
+        var resolved = BuildTestGateRunner.ResolveQueueWaitTimeout(
+            configured: null, TimeSpan.FromMinutes(20), TimeSpan.FromMinutes(2));
+
+        Assert.Equal(TimeSpan.FromMinutes(22), resolved);
+    }
+
+    [Fact]
+    public void DerivedQueueWait_FarExceedsInfraTimeout()
+    {
+        // The heart of the cascade fix: the queue budget must be MUCH larger than
+        // the infra SLA that used to (wrongly) bound it.
+        var infra = TimeSpan.FromSeconds(120);
+        var resolved = BuildTestGateRunner.ResolveQueueWaitTimeout(
+            configured: null, TimeSpan.FromSeconds(3600), infra);
+
+        Assert.True(resolved > infra);
+        Assert.Equal(TimeSpan.FromSeconds(3720), resolved);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void NonPositiveConfiguredQueueWait_FallsBackToDerived(int seconds)
+    {
+        var resolved = BuildTestGateRunner.ResolveQueueWaitTimeout(
+            TimeSpan.FromSeconds(seconds), TimeSpan.FromSeconds(300), TimeSpan.FromSeconds(120));
+
+        Assert.Equal(TimeSpan.FromSeconds(420), resolved);
+    }
+
+    [Fact]
+    public void AllNonPositive_FallsBackToTwoMinuteFloor()
+    {
+        var resolved = BuildTestGateRunner.ResolveQueueWaitTimeout(
+            configured: null, TimeSpan.Zero, TimeSpan.Zero);
+
+        Assert.Equal(TimeSpan.FromMinutes(2), resolved);
     }
 }
