@@ -17,7 +17,7 @@ type StoredTab = Record<string, unknown>;
 async function bootWithTabs(page: Page, tabs: StoredTab[], activeKey: string): Promise<void> {
   await page.setViewportSize({ width: 900, height: 700 });
   await page.addInitScript(() => {
-    const calls: Array<{ key?: string; options?: ScrollIntoViewOptions }> = [];
+    const calls: { key?: string; options?: ScrollIntoViewOptions }[] = [];
     Object.defineProperty(window, '__studioTabScrollCalls', { value: calls });
     const nativeScrollIntoView = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function (options?: boolean | ScrollIntoViewOptions): void {
@@ -71,7 +71,7 @@ async function expectInsideStrip(tab: Locator, strip: Locator): Promise<void> {
 async function expectSmoothNearestScroll(page: Page, key: string): Promise<void> {
   await expect.poll(() => page.evaluate(expectedKey => {
     const calls = (window as typeof window & {
-      __studioTabScrollCalls?: Array<{ key?: string; options?: ScrollIntoViewOptions }>;
+      __studioTabScrollCalls?: { key?: string; options?: ScrollIntoViewOptions }[];
     }).__studioTabScrollCalls ?? [];
     return calls.some(call => call.key === expectedKey
       && call.options?.behavior === 'smooth'
