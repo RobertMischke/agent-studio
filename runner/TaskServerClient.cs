@@ -21,6 +21,8 @@ public sealed class TaskServerClient : IDisposable
     private readonly HttpClient _http;
     private readonly string? _configuredClientId;
     private readonly RunnerOptions? _options;
+    // Per-run caches, evicted on completion/release so the long-lived daemon does
+    // not retain every claimed task's lease and full prompt body for its lifetime.
     private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _v1TaskBodies = new(StringComparer.OrdinalIgnoreCase);
     private bool _useV1;
@@ -319,13 +321,17 @@ public sealed class TaskServerClient : IDisposable
             return await PostJsonAsync<RunLeaseReleaseRequest, RunLeaseResponse>("/api/runner/lease/release", req, ct)
                    ?? new RunLeaseResponse("Invalid", false, null, "Empty release response.");
         if (!_v1Leases.TryGetValue(req.TaskKey, out var cached))
+        {
+            _v1TaskBodies.TryRemove(req.TaskKey, out _);
             return new RunLeaseResponse("Released", false, null, "Run already completed and closed by Task Server.");
+        }
         var authority = cached;
         var response = await PostJsonAsync<Contract.LeaseReleaseRequest, Contract.LeaseResponse>(
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/release",
             new Contract.LeaseReleaseRequest(req.RunnerId, RunnerInstanceId, req.LeaseId, req.FencingToken, "released"),
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
+        _v1TaskBodies.TryRemove(req.TaskKey, out _);
         return new RunLeaseResponse(response?.Status ?? "Released", false, authority.Lease, response?.Message);
     }
 
@@ -387,6 +393,7 @@ public sealed class TaskServerClient : IDisposable
             new Contract.CompleteRunRequest(req.RunnerId, RunnerInstanceId, req.LeaseId, req.FencingToken, req.Outcome, req.Reason),
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
+        _v1TaskBodies.TryRemove(req.TaskKey, out _);
         return new RemoteRunCompletionResponse(req.TaskKey, req.Outcome, "4-auto-review");
     }
 
@@ -416,6 +423,7 @@ public sealed class TaskServerClient : IDisposable
                     req.Summary),
                 ct);
             _v1Leases.TryRemove(jobId, out _);
+            _v1TaskBodies.TryRemove(jobId, out _);
             return new ExternalCompletionResponse(jobId, "4-auto-review", req.Source);
         }
         return await PostJsonAsync<ExternalCompletionRequest, ExternalCompletionResponse>(

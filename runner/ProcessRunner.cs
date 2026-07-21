@@ -15,6 +15,16 @@ public sealed record ProcessResult(int ExitCode, string StdOut, string StdErr)
 /// </summary>
 public static class ProcessRunner
 {
+    // A single agent run can stream unbounded output (full-file dumps, large
+    // diffs). The daemon lives for days across many such runs, so the retained
+    // copy must be capped: keep only the tail of each stream under a hard byte
+    // budget. The tail is all the caller needs - the terminal sentinel and the
+    // final summary an agent signs off with are emitted last, so a bounded tail
+    // keeps SentinelScanner's last-match-wins scan correct while a runaway run
+    // can no longer grow the runner's heap without bound.
+    private const int StdOutBudgetChars = 2 * 1024 * 1024; // ~2 MB tail
+    private const int StdErrBudgetChars = 256 * 1024;      // ~256 KB tail (diagnostics only)
+
     public static async Task<ProcessResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
@@ -41,19 +51,22 @@ public static class ProcessRunner
                 psi.Environment[key] = value;
 
         using var process = new Process { StartInfo = psi };
-        var outSb = new System.Text.StringBuilder();
-        var errSb = new System.Text.StringBuilder();
+        // Each stream's DataReceived events are serialised by the runtime and the
+        // two buffers are independent, so no locking is needed; WaitForExit() below
+        // drains both readers before the result is materialised.
+        var outBuf = new BoundedOutputBuffer(StdOutBudgetChars);
+        var errBuf = new BoundedOutputBuffer(StdErrBudgetChars);
 
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data is null) return;
-            outSb.AppendLine(e.Data);
+            outBuf.Append(e.Data);
             onStdOut?.Invoke(e.Data);
         };
         process.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null) return;
-            errSb.AppendLine(e.Data);
+            errBuf.Append(e.Data);
             onStdErr?.Invoke(e.Data);
         };
 
@@ -82,12 +95,54 @@ public static class ProcessRunner
         // WaitForExitAsync returns before the async readers have flushed the last
         // buffered lines; a bare WaitForExit() here drains them deterministically.
         process.WaitForExit();
-        return new ProcessResult(process.ExitCode, outSb.ToString(), errSb.ToString());
+        return new ProcessResult(process.ExitCode, outBuf.ToString(), errBuf.ToString());
     }
 
     private static void TryKill(Process process)
     {
         try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
         catch { /* best effort: the run is already being torn down */ }
+    }
+}
+
+/// <summary>
+/// Retains the tail of a child process stream under a hard character budget so a
+/// long-running or runaway agent cannot grow the runner's heap without bound.
+/// Oldest lines are evicted first; <see cref="ToString"/> prepends a one-line
+/// elision notice when anything was dropped. At least the most recent line is
+/// always kept, even if that single line exceeds the budget.
+/// </summary>
+internal sealed class BoundedOutputBuffer
+{
+    private readonly int _maxChars;
+    private readonly Queue<string> _lines = new();
+    private int _chars;
+    private long _dropped;
+
+    public BoundedOutputBuffer(int maxChars) => _maxChars = maxChars;
+
+    public long DroppedLines => _dropped;
+
+    public void Append(string line)
+    {
+        line ??= string.Empty;
+        _lines.Enqueue(line);
+        _chars += line.Length + 1; // account for the newline re-added on render
+        while (_chars > _maxChars && _lines.Count > 1)
+        {
+            var evicted = _lines.Dequeue();
+            _chars -= evicted.Length + 1;
+            _dropped++;
+        }
+    }
+
+    public override string ToString()
+    {
+        var sb = new System.Text.StringBuilder(_chars + 96);
+        if (_dropped > 0)
+            sb.Append("[runner] ").Append(_dropped)
+              .Append(" earlier output line(s) elided to bound runner memory\n");
+        foreach (var line in _lines) sb.Append(line).Append('\n');
+        return sb.ToString();
     }
 }
