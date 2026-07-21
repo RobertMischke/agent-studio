@@ -1,4 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
+import { routeSegmentOf, withRouteSegment } from '../../../services/url-hash.util';
 
 /**
  * Sections of the single, consolidated Workspace-settings view.
@@ -49,6 +50,12 @@ export type WorkspaceTokenUsagePage = 'workspace' | 'claude' | 'codex';
  * `#/workspace/screenshots`) are preserved; the retired `#/workspace/summary` /
  * `#/summary` aliases now resolve to the overview.
  *
+ * The deep link is the hash's ROUTE SEGMENT and coexists with key-value
+ * segments such as the board's `filters=...` (see url-hash.util.ts):
+ * reads match the route segment (never the whole hash), writes replace only
+ * the route segment, and closing removes only an own route. A hash like
+ * `#/workspace/settings&filters=...` therefore restores both surfaces.
+ *
  * Rendering lives in `WorkspaceOverlaysComponent`; the shell just mounts that
  * component once (modal in legacy layout, inline editor tab in the studio
  * shell).
@@ -96,7 +103,7 @@ export class WorkspaceOverlaysService {
     if (section === 'tokens') this.tokenUsagePage.set('workspace');
     this.settingsOpen.set(true);
     this.openedViaHash = false;
-    this.writeHash(this.hashForSection(section));
+    this.writeRoute(this.routeForSection(section));
   }
 
   /** Switch the active section, opening the view first if it is closed. */
@@ -107,12 +114,12 @@ export class WorkspaceOverlaysService {
     }
     if (this.section() === section) return;
     this.section.set(section);
-    this.writeHash(this.hashForSection(section));
+    this.writeRoute(this.routeForSection(section));
   }
 
   selectTokenUsagePage(page: WorkspaceTokenUsagePage): void {
     this.tokenUsagePage.set(page);
-    this.writeHash(page === 'workspace' ? '#/workspace/tokens' : `#/workspace/tokens/${page}`);
+    this.writeRoute(page === 'workspace' ? '/workspace/tokens' : `/workspace/tokens/${page}`);
   }
 
   close(): void {
@@ -163,19 +170,21 @@ export class WorkspaceOverlaysService {
 
   /**
    * Reconcile open state with the current URL hash. Call once on app boot and
-   * on every `hashchange` event. A recognised section hash opens (or switches)
-   * the view; dropping a hash that opened the view closes it.
+   * on every `hashchange` event. A recognised section route opens (or
+   * switches) the view; dropping a route that opened the view closes it.
+   * Matching happens on the hash's route segment, so key-value segments such
+   * as `filters=...` neither hide the deep link nor get disturbed by it.
    */
   syncFromHash(): void {
-    const hash = window.location.hash;
-    const section = this.sectionForHash(hash);
+    const route = routeSegmentOf(window.location.hash) ?? '';
+    const section = this.sectionForRoute(route);
     if (section) {
-      this.tokenUsagePage.set(this.tokenUsagePageForHash(hash));
+      this.tokenUsagePage.set(this.tokenUsagePageForRoute(route));
       if (this.section() !== section) this.section.set(section);
       if (!this.settingsOpen()) this.settingsOpen.set(true);
       this.openedViaHash = true;
-      if (hash === '#/workspace/settings/project-sources') {
-        this.writeHash('#/workspace/settings');
+      if (route === '/workspace/settings/project-sources') {
+        this.writeRoute('/workspace/settings');
       }
     } else if (this.settingsOpen() && this.openedViaHash) {
       this.settingsOpen.set(false);
@@ -183,86 +192,88 @@ export class WorkspaceOverlaysService {
     }
   }
 
-  private sectionForHash(hash: string): WorkspaceSettingsSection | null {
-    switch (hash) {
-      case '#/workspace/tokens': return 'tokens';
-      case '#/workspace/tokens/claude': return 'tokens';
-      case '#/workspace/tokens/codex': return 'tokens';
-      case '#/workspace/screenshots': return 'screenshots';
-      case '#/workspace/settings/caps':
-      case '#/workspace/caps': return 'caps';
-      case '#/workspace/settings/cli-sessions': return 'cli-sessions';
-      case '#/workspace/settings/cli-paths': return 'cli-paths';
-      case '#/workspace/settings/prompts':
-      case '#/workspace/prompts': return 'prompts';
-      case '#/workspace/settings/appearance': return 'appearance';
-      case '#/workspace/settings/updates': return 'updates';
-      case '#/workspace/settings/workspaces': return 'workspaces';
-      case '#/workspace/settings/task-server': return 'task-server';
-      case '#/workspace/settings/remote-hosts': return 'remote-hosts';
+  private sectionForRoute(route: string): WorkspaceSettingsSection | null {
+    switch (route) {
+      case '/workspace/tokens': return 'tokens';
+      case '/workspace/tokens/claude': return 'tokens';
+      case '/workspace/tokens/codex': return 'tokens';
+      case '/workspace/screenshots': return 'screenshots';
+      case '/workspace/settings/caps':
+      case '/workspace/caps': return 'caps';
+      case '/workspace/settings/cli-sessions': return 'cli-sessions';
+      case '/workspace/settings/cli-paths': return 'cli-paths';
+      case '/workspace/settings/prompts':
+      case '/workspace/prompts': return 'prompts';
+      case '/workspace/settings/appearance': return 'appearance';
+      case '/workspace/settings/updates': return 'updates';
+      case '/workspace/settings/workspaces': return 'workspaces';
+      case '/workspace/settings/task-server': return 'task-server';
+      case '/workspace/settings/remote-hosts': return 'remote-hosts';
       // Retired project-source catalogue: old bookmarks land safely on Overview.
-      case '#/workspace/settings/project-sources': return 'overview';
-      case '#/workspace/settings/orchestrator': return 'orchestrator';
-      case '#/workspace/settings/working-memory': return 'working-memory';
+      case '/workspace/settings/project-sources': return 'overview';
+      case '/workspace/settings/orchestrator': return 'orchestrator';
+      case '/workspace/settings/working-memory': return 'working-memory';
       // Retired 'summary' aliases resolve to the overview (migration: no crash).
-      case '#/workspace/summary':
-      case '#/summary':
-      case '#/workspace/settings': return 'overview';
+      case '/workspace/summary':
+      case '/summary':
+      case '/workspace/settings': return 'overview';
       default: return null;
     }
   }
 
-  private tokenUsagePageForHash(hash: string): WorkspaceTokenUsagePage {
-    if (hash === '#/workspace/tokens/claude') return 'claude';
-    if (hash === '#/workspace/tokens/codex') return 'codex';
+  private tokenUsagePageForRoute(route: string): WorkspaceTokenUsagePage {
+    if (route === '/workspace/tokens/claude') return 'claude';
+    if (route === '/workspace/tokens/codex') return 'codex';
     return 'workspace';
   }
 
-  private hashForSection(section: WorkspaceSettingsSection): string {
+  private routeForSection(section: WorkspaceSettingsSection): string {
     switch (section) {
-      case 'tokens': return '#/workspace/tokens';
-      case 'screenshots': return '#/workspace/screenshots';
-      case 'caps': return '#/workspace/settings/caps';
-      case 'cli-sessions': return '#/workspace/settings/cli-sessions';
-      case 'cli-paths': return '#/workspace/settings/cli-paths';
-      case 'prompts': return '#/workspace/settings/prompts';
-      case 'appearance': return '#/workspace/settings/appearance';
-      case 'updates': return '#/workspace/settings/updates';
-      case 'workspaces': return '#/workspace/settings/workspaces';
-      case 'task-server': return '#/workspace/settings/task-server';
-      case 'remote-hosts': return '#/workspace/settings/remote-hosts';
-      case 'orchestrator': return '#/workspace/settings/orchestrator';
-      case 'working-memory': return '#/workspace/settings/working-memory';
-      case 'overview': return '#/workspace/settings';
+      case 'tokens': return '/workspace/tokens';
+      case 'screenshots': return '/workspace/screenshots';
+      case 'caps': return '/workspace/settings/caps';
+      case 'cli-sessions': return '/workspace/settings/cli-sessions';
+      case 'cli-paths': return '/workspace/settings/cli-paths';
+      case 'prompts': return '/workspace/settings/prompts';
+      case 'appearance': return '/workspace/settings/appearance';
+      case 'updates': return '/workspace/settings/updates';
+      case 'workspaces': return '/workspace/settings/workspaces';
+      case 'task-server': return '/workspace/settings/task-server';
+      case 'remote-hosts': return '/workspace/settings/remote-hosts';
+      case 'orchestrator': return '/workspace/settings/orchestrator';
+      case 'working-memory': return '/workspace/settings/working-memory';
+      case 'overview': return '/workspace/settings';
     }
   }
 
-  private readonly ownHashes = new Set<string>([
-    '#/workspace/settings',
-    '#/workspace/settings/caps',
-    '#/workspace/settings/cli-sessions',
-    '#/workspace/settings/cli-paths',
-    '#/workspace/settings/prompts',
-    '#/workspace/settings/appearance',
-    '#/workspace/settings/updates',
-    '#/workspace/settings/workspaces',
-    '#/workspace/settings/task-server',
-    '#/workspace/settings/remote-hosts',
-    '#/workspace/settings/project-sources',
-    '#/workspace/settings/orchestrator',
-    '#/workspace/settings/working-memory',
-    '#/workspace/caps',
-    '#/workspace/prompts',
-    '#/workspace/tokens',
-    '#/workspace/tokens/claude',
-    '#/workspace/tokens/codex',
-    '#/workspace/screenshots',
-    // Retired aliases stay here so a stale summary hash still clears on close.
-    '#/workspace/summary',
-    '#/summary',
+  private readonly ownRoutes = new Set<string>([
+    '/workspace/settings',
+    '/workspace/settings/caps',
+    '/workspace/settings/cli-sessions',
+    '/workspace/settings/cli-paths',
+    '/workspace/settings/prompts',
+    '/workspace/settings/appearance',
+    '/workspace/settings/updates',
+    '/workspace/settings/workspaces',
+    '/workspace/settings/task-server',
+    '/workspace/settings/remote-hosts',
+    '/workspace/settings/project-sources',
+    '/workspace/settings/orchestrator',
+    '/workspace/settings/working-memory',
+    '/workspace/caps',
+    '/workspace/prompts',
+    '/workspace/tokens',
+    '/workspace/tokens/claude',
+    '/workspace/tokens/codex',
+    '/workspace/screenshots',
+    // Retired aliases stay here so a stale summary route still clears on close.
+    '/workspace/summary',
+    '/summary',
   ]);
 
-  private writeHash(target: string): void {
+  /** Swap the hash's route segment for `route`, keeping all other segments. */
+  private writeRoute(route: string): void {
+    const target = withRouteSegment(window.location.hash, route);
     if (window.location.hash !== target) {
       try {
         history.replaceState(null, '', window.location.pathname + window.location.search + target);
@@ -270,10 +281,13 @@ export class WorkspaceOverlaysService {
     }
   }
 
+  /** Remove an own route segment, keeping foreign segments (e.g. filters). */
   private clearOwnHash(): void {
-    if (this.ownHashes.has(window.location.hash)) {
+    const route = routeSegmentOf(window.location.hash);
+    if (route && this.ownRoutes.has(route)) {
+      const target = withRouteSegment(window.location.hash, null);
       try {
-        history.replaceState(null, '', window.location.pathname + window.location.search);
+        history.replaceState(null, '', window.location.pathname + window.location.search + target);
       } catch { /* ignore */ }
     }
   }

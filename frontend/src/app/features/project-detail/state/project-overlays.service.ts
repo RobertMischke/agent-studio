@@ -5,6 +5,7 @@ import {
   ProjectRailKey,
   toProjectSlug,
 } from '../components/project-shell/project-shell.config';
+import { routeSegmentOf, withRouteSegment } from '../../../services/url-hash.util';
 
 /**
  * Cycle 9g project-detail feature service: open/close state + URL-hash
@@ -38,11 +39,13 @@ export class ProjectOverlaysService {
     || this.projectShellName() !== null
     || this.analysisReportFocus() !== null);
 
-  private readonly shellHashPrefix = '#/projects/';
-  // Singular `#/project/` (no trailing `s`) so the feed anchor cannot be
-  // confused with the plural `#/projects/` project-shell prefix above.
-  private readonly feedHashPrefix = '#/project/';
-  private readonly feedHashSuffix = '/feed';
+  // Route segments per url-hash.util.ts: matched and written as the hash's
+  // single route segment so they coexist with `filters=...` etc.
+  private readonly shellRoutePrefix = '/projects/';
+  // Singular `/project/` (no trailing `s`) so the feed anchor cannot be
+  // confused with the plural `/projects/` project-shell prefix above.
+  private readonly feedRoutePrefix = '/project/';
+  private readonly feedRouteSuffix = '/feed';
   /**
    * True when the visible feed was reached via a deep-link hash, so a
    * back/forward navigation that drops the hash closes it. A feed opened
@@ -66,8 +69,9 @@ export class ProjectOverlaysService {
     this.openedFeedViaHash = false;
     const slug = toProjectSlug(name);
     if (!slug) return;
-    const target = `${this.feedHashPrefix}${slug}${this.feedHashSuffix}`;
-    if (window.location.hash !== target) {
+    const targetRoute = `${this.feedRoutePrefix}${slug}${this.feedRouteSuffix}`;
+    if (routeSegmentOf(window.location.hash) !== targetRoute) {
+      const target = withRouteSegment(window.location.hash, targetRoute);
       try {
         history.pushState(null, '', window.location.pathname + window.location.search + target);
       } catch { /* ignore */ }
@@ -77,9 +81,10 @@ export class ProjectOverlaysService {
   closeOrchFeed(): void {
     this.orchFeedProject.set(null);
     this.openedFeedViaHash = false;
-    if (this.isFeedHash(window.location.hash)) {
+    if (this.isFeedRoute(routeSegmentOf(window.location.hash))) {
+      const target = withRouteSegment(window.location.hash, null);
       try {
-        history.pushState(null, '', window.location.pathname + window.location.search);
+        history.pushState(null, '', window.location.pathname + window.location.search + target);
       } catch { /* ignore */ }
     }
   }
@@ -92,8 +97,8 @@ export class ProjectOverlaysService {
    * `/api/watch-paths` success, same as the project-shell sync).
    */
   syncFeedFromHash(watchPaths: readonly { name: string }[]): void {
-    const hash = window.location.hash;
-    if (!this.isFeedHash(hash)) {
+    const route = routeSegmentOf(window.location.hash);
+    if (route === null || !this.isFeedRoute(route)) {
       // Only a hash-opened feed closes when its hash is dropped; a
       // button-opened or shell-stacked feed survives unrelated churn.
       if (this.openedFeedViaHash && this.orchFeedProject() !== null) {
@@ -103,7 +108,7 @@ export class ProjectOverlaysService {
       return;
     }
     const slug = decodeURIComponent(
-      hash.slice(this.feedHashPrefix.length, hash.length - this.feedHashSuffix.length)
+      route.slice(this.feedRoutePrefix.length, route.length - this.feedRouteSuffix.length)
     ).toLowerCase();
     if (!slug) return;
     if (watchPaths.length === 0) return;
@@ -119,9 +124,10 @@ export class ProjectOverlaysService {
     this.openedFeedViaHash = true;
   }
 
-  private isFeedHash(hash: string): boolean {
-    return hash.startsWith(this.feedHashPrefix) && hash.endsWith(this.feedHashSuffix)
-      && hash.length > this.feedHashPrefix.length + this.feedHashSuffix.length;
+  private isFeedRoute(route: string | null): boolean {
+    return route !== null
+      && route.startsWith(this.feedRoutePrefix) && route.endsWith(this.feedRouteSuffix)
+      && route.length > this.feedRoutePrefix.length + this.feedRouteSuffix.length;
   }
 
   // ---------- project-shell (URL-deep-linked) ----------
@@ -130,9 +136,10 @@ export class ProjectOverlaysService {
                    watchPaths: readonly { name: string }[] = []): void {
     const slug = toProjectSlug(name);
     if (!slug) return;
-    const target = `${this.shellHashPrefix}${slug}`
+    const targetRoute = `${this.shellRoutePrefix}${slug}`
       + (rail !== DEFAULT_PROJECT_RAIL_KEY ? `/${rail}` : '');
-    if (window.location.hash !== target) {
+    if (routeSegmentOf(window.location.hash) !== targetRoute) {
+      const target = withRouteSegment(window.location.hash, targetRoute);
       try {
         history.pushState(null, '', window.location.pathname + window.location.search + target);
       } catch { /* ignore */ }
@@ -144,9 +151,10 @@ export class ProjectOverlaysService {
   closeProjectShell(): void {
     this.projectShellName.set(null);
     this.projectShellRail.set(DEFAULT_PROJECT_RAIL_KEY);
-    if (window.location.hash.startsWith(this.shellHashPrefix)) {
+    if (routeSegmentOf(window.location.hash)?.startsWith(this.shellRoutePrefix)) {
+      const target = withRouteSegment(window.location.hash, null);
       try {
-        history.pushState(null, '', window.location.pathname + window.location.search);
+        history.pushState(null, '', window.location.pathname + window.location.search + target);
       } catch { /* ignore */ }
     }
   }
@@ -156,9 +164,10 @@ export class ProjectOverlaysService {
     if (!name) return;
     this.projectShellRail.set(key);
     const slug = toProjectSlug(name);
-    const target = `${this.shellHashPrefix}${slug}`
+    const targetRoute = `${this.shellRoutePrefix}${slug}`
       + (key !== DEFAULT_PROJECT_RAIL_KEY ? `/${key}` : '');
-    if (window.location.hash !== target) {
+    if (routeSegmentOf(window.location.hash) !== targetRoute) {
+      const target = withRouteSegment(window.location.hash, targetRoute);
       try {
         history.replaceState(null, '', window.location.pathname + window.location.search + target);
       } catch { /* ignore */ }
@@ -174,23 +183,24 @@ export class ProjectOverlaysService {
     const rail = this.projectShellRail();
     // A rename only swaps the slug; the rail and any rail-owned deep-link query
     // (e.g. the Wiki's `?page=`/`?folder=`) are unaffected, so carry the current
-    // hash's query suffix over verbatim rather than dropping it from the URL.
-    const target = `${this.shellHashPrefix}${slug}`
+    // route's query suffix over verbatim rather than dropping it from the URL.
+    const targetRoute = `${this.shellRoutePrefix}${slug}`
       + (rail !== DEFAULT_PROJECT_RAIL_KEY ? `/${rail}` : '')
-      + this.currentShellHashQuery();
-    if (window.location.hash !== target) {
+      + this.currentShellRouteQuery();
+    if (routeSegmentOf(window.location.hash) !== targetRoute) {
+      const target = withRouteSegment(window.location.hash, targetRoute);
       try {
         history.replaceState(null, '', window.location.pathname + window.location.search + target);
       } catch { /* ignore */ }
     }
   }
 
-  /** The `?…` deep-link query on the current shell hash, or '' when none/off-route. */
-  private currentShellHashQuery(): string {
-    const hash = window.location.hash;
-    if (!hash.startsWith(this.shellHashPrefix)) return '';
-    const q = hash.indexOf('?');
-    return q >= 0 ? hash.slice(q) : '';
+  /** The `?…` deep-link query on the current shell route, or '' when none/off-route. */
+  private currentShellRouteQuery(): string {
+    const route = routeSegmentOf(window.location.hash);
+    if (route === null || !route.startsWith(this.shellRoutePrefix)) return '';
+    const q = route.indexOf('?');
+    return q >= 0 ? route.slice(q) : '';
   }
 
   /**
@@ -229,8 +239,8 @@ export class ProjectOverlaysService {
    * loaded yet we leave the signals alone — call again when they do.
    */
   syncShellFromHash(watchPaths: readonly { name: string }[]): void {
-    const hash = window.location.hash;
-    if (!hash.startsWith(this.shellHashPrefix)) {
+    const route = routeSegmentOf(window.location.hash);
+    if (route === null || !route.startsWith(this.shellRoutePrefix)) {
       if (this.projectShellName() !== null) {
         this.projectShellName.set(null);
         this.projectShellRail.set(DEFAULT_PROJECT_RAIL_KEY);
@@ -241,7 +251,7 @@ export class ProjectOverlaysService {
     // carries its open page/folder as `#/projects/<slug>/wiki?page=<relPath>`
     // (see wiki-deep-link.ts). Strip everything from the first `?` before the
     // slug/rail split so the rail still resolves to `wiki` (not a bogus key).
-    const rawTail = hash.slice(this.shellHashPrefix.length);
+    const rawTail = route.slice(this.shellRoutePrefix.length);
     const queryIndex = rawTail.indexOf('?');
     const tail = queryIndex >= 0 ? rawTail.slice(0, queryIndex) : rawTail;
     const [slugRaw, railRaw] = tail.split('/', 2);

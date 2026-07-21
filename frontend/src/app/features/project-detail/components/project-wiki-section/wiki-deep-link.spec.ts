@@ -51,6 +51,14 @@ describe('wiki-deep-link', () => {
     expect(parseWikiRouteHash('', slug)).toBeNull();
   });
 
+  it('recognises and parses the wiki rail inside a composite hash (coexisting filters=)', () => {
+    // The wiki route is the hash's route segment; a board filters= segment
+    // riding alongside must not hide it (url-hash.util.ts).
+    const hash = '#/projects/demo/wiki?page=concepts%2Foverview.md&filters=type%3Abug';
+    expect(isWikiRouteHash(hash, slug)).toBe(true);
+    expect(parseWikiRouteHash(hash, slug)).toEqual({ kind: 'page', relPath: 'concepts/overview.md' });
+  });
+
   it('builds an absolute shareable URL preserving origin, path, and search', () => {
     const url = buildWikiRouteUrl(
       { origin: 'https://studio.example', pathname: '/', search: '?flag=1' },

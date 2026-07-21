@@ -4,6 +4,7 @@ import { TaskService } from '../../../services/task.service';
 import { ClientService } from '../../../services/client.service';
 import { TagRegistryStore } from '../../../services/tag-registry.store';
 import { projectIdentity } from '../../../services/project-identity.util';
+import { kvValueOf, withKvSegment } from '../../../services/url-hash.util';
 
 /**
  * Cycle 9 board feature service: free-text search query, four faceted
@@ -427,9 +428,9 @@ export class BoardFiltersService {
 
   private readFilterHash(): void {
     const hash = window.location.hash || '';
-    const newM = hash.match(/[#&]filters=([^&]*)/);
-    if (newM) {
-      const decoded = decodeURIComponent(newM[1]);
+    const rawFilters = kvValueOf(hash, 'filters');
+    if (rawFilters != null) {
+      const decoded = decodeURIComponent(rawFilters);
       const parts = decoded.split(';').map(p => p.trim()).filter(Boolean);
       let owner: string | null = null;
       let dependsOn: string | null = null;
@@ -457,9 +458,9 @@ export class BoardFiltersService {
       this.activeTagFilter.set(tags);
       return;
     }
-    const legacyM = hash.match(/[#&]filter=([^&]*)/);
-    if (legacyM) {
-      const parts = decodeURIComponent(legacyM[1]).split(',').map(p => p.trim()).filter(Boolean);
+    const rawLegacy = kvValueOf(hash, 'filter');
+    if (rawLegacy != null) {
+      const parts = decodeURIComponent(rawLegacy).split(',').map(p => p.trim()).filter(Boolean);
       const types = new Set<string>();
       const tags = new Set<string>();
       for (const p of parts) {
@@ -486,15 +487,13 @@ export class BoardFiltersService {
     if (t) segments.push(`type:${t}`);
     const tags = [...this.activeTagFilter()];
     if (tags.length > 0) segments.push(`tags:${tags.join(',')}`);
-    const fragment = segments.length > 0 ? `filters=${encodeURIComponent(segments.join(';'))}` : '';
-    const existing = (window.location.hash || '').replace(/^#/, '');
-    const others = existing
-      .split('&')
-      .filter(s => s && !s.startsWith('filters=') && !s.startsWith('filter='));
-    const next = [fragment, ...others].filter(Boolean).join('&');
-    const target = next ? `#${next}` : '';
+    // Segment-aware upsert: the route segment of an open overlay (workspace
+    // settings, project shell, epics) and legacy segments survive; only the
+    // filters= segment is owned here. See url-hash.util.ts for the contract.
+    const value = segments.length > 0 ? encodeURIComponent(segments.join(';')) : null;
+    const target = withKvSegment(window.location.hash || '', 'filters', value, ['filter']);
     if (target !== window.location.hash) {
-      history.replaceState(null, '', target || window.location.pathname + window.location.search);
+      history.replaceState(null, '', window.location.pathname + window.location.search + target);
     }
     this.writeFiltersToQueryParams();
   }

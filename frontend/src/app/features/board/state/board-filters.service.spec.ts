@@ -218,3 +218,63 @@ describe('BoardFiltersService.filteredGroupedForProject (count-badge scope)', ()
     expect(svc.filteredGroupedForProject('Lotta Dashboard').backlog.length).toBe(2);
   });
 });
+
+/**
+ * URL-hash round-trip in the presence of a foreign ROUTE segment (an open
+ * overlay such as workspace settings). Regression for the hybrid-hash
+ * collision (operator report 2026-07-21): the filter writer must upsert only
+ * its own `filters=` segment and leave the route segment intact, and the
+ * reader must find `filters=` inside a composite hash. See url-hash.util.ts.
+ */
+describe('BoardFiltersService URL-hash coexistence with a route overlay', () => {
+  let svc: BoardFiltersService;
+
+  beforeEach(() => {
+    localStorage.clear();
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    });
+    svc = TestBed.inject(BoardFiltersService);
+  });
+
+  it('writing a filter preserves an open overlay route segment', () => {
+    history.replaceState(null, '', '/#/workspace/settings');
+
+    svc.selectProject('Agent Studio Marketing', false);
+
+    expect(window.location.hash).toBe(
+      '#/workspace/settings&filters=projects%3AAgent%20Studio%20Marketing',
+    );
+  });
+
+  it('clearing the last filter drops filters= but keeps the route (no empty segment)', () => {
+    history.replaceState(null, '', '/#/workspace/settings&filters=projects%3AAgent%20Studio%20Marketing');
+    svc.hydrateFromUrl();
+    expect([...svc.activeProjects()]).toEqual(['Agent Studio Marketing']);
+
+    svc.clearAllFilters();
+
+    expect(window.location.hash).toBe('#/workspace/settings');
+  });
+
+  it('hydrates the filter from a composite hash where the route comes first', () => {
+    history.replaceState(null, '', '/#/workspace/settings&filters=type%3Abug');
+
+    svc.hydrateFromUrl();
+
+    expect(svc.activeType()).toBe('bug');
+  });
+
+  it('hydrates the filter even when the route segment is written after filters=', () => {
+    history.replaceState(null, '', '/#filters=type%3Afeature&/workspace/settings');
+
+    svc.hydrateFromUrl();
+
+    expect(svc.activeType()).toBe('feature');
+  });
+});

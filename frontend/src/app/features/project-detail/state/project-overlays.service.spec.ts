@@ -115,4 +115,44 @@ describe('ProjectOverlaysService · orch-feed deep-link anchor', () => {
     expect(svc.projectShellName()).toBe('New Name');
     expect(window.location.hash).toBe('#/projects/new-name/wiki?page=concepts%2Foverview.md');
   });
+
+  /**
+   * Coexistence with the board's `filters=` segment (url-hash.util.ts). The
+   * shell / feed routes are the hash's route segment; a filters= segment
+   * riding alongside must neither hide the route on read nor be dropped on
+   * open/close.
+   */
+  describe('coexistence with a board filter segment', () => {
+    const FILTERS = 'filters=type%3Abug';
+
+    it('opening the feed keeps an existing filters segment', () => {
+      history.replaceState(null, '', `/#${FILTERS}`);
+      const svc = new ProjectOverlaysService();
+
+      svc.openOrchFeed('Runbook');
+
+      expect(window.location.hash).toBe(`#/project/runbook/feed&${FILTERS}`);
+    });
+
+    it('closing the feed removes only its route, keeping filters=', () => {
+      history.replaceState(null, '', `/#/project/runbook/feed&${FILTERS}`);
+      const svc = new ProjectOverlaysService();
+      svc.syncFeedFromHash(watchPaths);
+      expect(svc.orchFeedProject()).toBe('Runbook');
+
+      svc.closeOrchFeed();
+
+      expect(window.location.hash).toBe(`#${FILTERS}`);
+    });
+
+    it('resolves the project shell from a composite hash with a leading filters segment', () => {
+      history.replaceState(null, '', `/#${FILTERS}&/projects/runbook/wiki`);
+      const svc = new ProjectOverlaysService();
+
+      svc.syncShellFromHash(watchPaths);
+
+      expect(svc.projectShellName()).toBe('Runbook');
+      expect(svc.projectShellRail()).toBe('wiki');
+    });
+  });
 });

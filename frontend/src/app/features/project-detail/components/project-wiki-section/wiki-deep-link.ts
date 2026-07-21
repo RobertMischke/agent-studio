@@ -1,4 +1,5 @@
 import { toProjectSlug } from '../project-shell/project-shell.config';
+import { routeSegmentOf } from '../../../../services/url-hash.util';
 
 /**
  * Shareable-URL contract for the project wiki rail.
@@ -35,10 +36,15 @@ export function buildWikiRouteHash(slug: string, target: WikiDeepLinkTarget): st
   return base;
 }
 
-/** True when `hash` addresses this project's wiki rail (with or without a param). */
+/**
+ * True when `hash` addresses this project's wiki rail (with or without a
+ * param). Matches the hash's route segment (url-hash.util.ts), so coexisting
+ * segments such as `filters=...` do not hide the wiki route.
+ */
 export function isWikiRouteHash(hash: string, slug: string): boolean {
-  const base = wikiRouteHashBase(slug);
-  return hash === base || hash.startsWith(`${base}?`);
+  const route = routeSegmentOf(hash);
+  const base = wikiRouteHashBase(slug).slice(1);
+  return route === base || (route?.startsWith(`${base}?`) ?? false);
 }
 
 /**
@@ -50,9 +56,10 @@ export function isWikiRouteHash(hash: string, slug: string): boolean {
  */
 export function parseWikiRouteHash(hash: string, slug: string): WikiDeepLinkTarget | null {
   if (!isWikiRouteHash(hash, slug)) return null;
-  const qIndex = hash.indexOf('?');
+  const route = routeSegmentOf(hash) ?? '';
+  const qIndex = route.indexOf('?');
   if (qIndex < 0) return { kind: 'overview' };
-  const params = new URLSearchParams(hash.slice(qIndex + 1));
+  const params = new URLSearchParams(route.slice(qIndex + 1));
   const page = params.get('page');
   if (page && page.trim()) return { kind: 'page', relPath: page };
   const folder = params.get('folder');

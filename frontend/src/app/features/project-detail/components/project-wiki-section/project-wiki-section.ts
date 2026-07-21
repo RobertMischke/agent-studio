@@ -64,6 +64,7 @@ import {
 } from './wiki-deep-link';
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
 import { WikiClassMeta, classificationBadges, classificationMeta } from './wiki-classification';
+import { withRouteSegment } from '../../../../services/url-hash.util';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
@@ -1700,7 +1701,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     const slug = this.slug();
     if (!slug) return;
     if (!isWikiRouteHash(window.location.hash, slug)) return;
-    const nextHash = buildWikiRouteHash(slug, this.currentDeepLinkTarget());
+    // buildWikiRouteHash returns a `#/projects/<slug>/wiki?...` route; write it
+    // as the hash's route segment so coexisting segments (e.g. the board's
+    // `filters=...`) survive a page/folder navigation (url-hash.util.ts).
+    const nextRoute = buildWikiRouteHash(slug, this.currentDeepLinkTarget()).slice(1);
+    const nextHash = withRouteSegment(window.location.hash, nextRoute);
     if (window.location.hash === nextHash) return;
     const url = `${window.location.pathname}${window.location.search}${nextHash}`;
     try {
