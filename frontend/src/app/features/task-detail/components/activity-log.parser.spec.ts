@@ -166,6 +166,39 @@ describe('deriveLiveStatus', () => {
     expect(status.sinceMs).toBeGreaterThanOrEqual(7_000);
     expect(status.sinceMs).toBeLessThanOrEqual(8_000);
   });
+
+  it('does not treat the session-cut recovery marker as a recovering warning', () => {
+    const status = deriveLiveStatus([
+      line('* Read prompt.md', 'stdout', T),
+      line('  | prompt.md', 'stdout', T),
+      line('--- Session lost (no resumable session) - recovering from job folder ---', 'system', T),
+    ], true, NOW)!;
+    // The marker is skipped as noise; the last real action drives the status.
+    expect(status.kind).not.toBe('recovering');
+    expect(status.verb).toBe('Reading');
+    expect(status.detail).toBe('prompt.md');
+  });
+
+  it('heals to the new activity that follows a session-cut recovery marker', () => {
+    const later = '2026-04-26T12:00:03.000Z';
+    const now = Date.parse(later) + 2_000;
+    const status = deriveLiveStatus([
+      line('--- Session lost (session lost) - recovering from job folder ---', 'system', T),
+      line('* Search "needle"', 'stdout', later),
+    ], true, now)!;
+    expect(status.kind).toBe('tool');
+    expect(status.verb).toBe('Searching');
+  });
+
+  it('never shows recovering when the recovery marker is the last line (remote replay)', () => {
+    // A remote run whose only recent line is the recovery marker: folder/push
+    // replay is the normal path, so the live status must not read as a warning
+    // even when the embedded reason mentions an absent rollout.
+    const status = deriveLiveStatus([
+      line('--- Session lost (Codex rollout is absent) - recovering from job folder ---', 'system', T),
+    ], true, NOW)!;
+    expect(status.kind).not.toBe('recovering');
+  });
 });
 
 describe('formatLiveSince', () => {

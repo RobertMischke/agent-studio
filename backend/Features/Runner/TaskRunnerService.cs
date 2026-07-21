@@ -936,11 +936,71 @@ public class TaskRunnerService : BackgroundService
 
         if (job.State == AgentStudio.Shared.TaskStates.Progress)
         {
+            // Neither a live local process nor a fenced run lease currently owns
+            // this in-progress task. The usual cause is a task-server restart
+            // that dropped the in-memory run-lease record while the run itself
+            // kept going. Do NOT stick on a permanent "Recovering" badge: heal
+            // from the freshest signal available - the job folder's last-activity
+            // stamp, which every runner push / log write advances (see
+            // TaskScannerService.GetLastActivityTime). LastActivity is a local
+            // file-write stamp, so normalise it to UTC before comparing to now.
+            var lastActivityUtc = job.LastActivity == default
+                ? (DateTime?)null
+                : job.LastActivity.ToUniversalTime();
+            var freshest = Max(lastActivityUtc, clientLastSeenAt);
+            var recentActivity = freshest.HasValue
+                && now - freshest.Value <= TimeSpan.FromMinutes(3);
+            var remoteRouted = !string.IsNullOrWhiteSpace(configuredRunnerId)
+                && (localIdentity is null
+                    || !string.Equals(configuredRunnerId, localIdentity.RunnerId, StringComparison.OrdinalIgnoreCase));
+
+            if (remoteRouted)
+            {
+                // A remote run recovers by replaying the job folder / runner
+                // pushes - that is the normal path, never a fault. Present the
+                // configured remote runner as the owner (neutral), connected
+                // while activity is fresh and quietly reconnecting once it goes
+                // idle; never a "recovering / session-lost" warning.
+                return baseProjection with
+                {
+                    State = AgentStudio.Shared.TaskExecutionStates.RemoteRunning,
+                    ExecutionKind = "remote",
+                    RunnerId = configuredRunnerId,
+                    ClientId = configuredRunnerId,
+                    HostDisplayName = configuredRunnerId,
+                    LastActivityAt = freshest ?? baseProjection.LastActivityAt,
+                    ConnectionState = recentActivity ? "connected" : "reconnecting",
+                    LeaseState = "none",
+                    TrustReason = recentActivity
+                        ? "No run lease is held (e.g. after a task-server restart), but the configured remote runner is still replaying fresh activity from the job folder."
+                        : "No run lease is held; waiting for the configured remote runner to resume replaying the job folder.",
+                };
+            }
+
+            if (recentActivity)
+            {
+                // A local run whose process registration was lost but which is
+                // still producing fresh output. Treat it as running so the badge
+                // self-heals instead of accusing a live run of being orphaned.
+                return baseProjection with
+                {
+                    State = AgentStudio.Shared.TaskExecutionStates.LocalRunning,
+                    ExecutionKind = "local",
+                    RunnerId = localIdentity?.RunnerId,
+                    ClientId = localIdentity?.RunnerId,
+                    HostDisplayName = localIdentity?.RunnerName ?? localIdentity?.Hostname ?? "Local",
+                    LastActivityAt = freshest ?? baseProjection.LastActivityAt,
+                    ConnectionState = "connected",
+                    LeaseState = "none",
+                    TrustReason = "No run lease is held, but this in-progress task is still producing fresh activity.",
+                };
+            }
+
             return baseProjection with
             {
                 State = AgentStudio.Shared.TaskExecutionStates.Recovering,
                 ConnectionState = "recovering",
-                TrustReason = "The task is in progress, but no live process or fenced run lease currently owns it.",
+                TrustReason = "The task is in progress, but no live process or fenced run lease currently owns it and no fresh activity has arrived.",
             };
         }
 

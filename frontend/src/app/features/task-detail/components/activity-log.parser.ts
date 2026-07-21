@@ -319,9 +319,31 @@ function isWatchdogMetaLine(group: ActivityLogGroup): boolean {
   return /\[watchdog[^\]]*\]/i.test(first.text ?? '');
 }
 
+/**
+ * The backend appends a `--- Session lost (...) - recovering from job folder ---`
+ * marker to cli-output.log when a continue falls back to recovery (e.g. the
+ * resumable session was lost across a task-server restart - see
+ * `ProjectRunner.AppendSessionCutMarkerToCliLog`). It is a historical
+ * chain-break marker, not "current activity": the run heals as soon as the
+ * agent replays the job folder, and for remote runs that folder/push replay is
+ * the normal recovery path, not a fault. Treat it as live-status noise so it
+ * never surfaces as a sticky "recovering" warning - the marker itself stays in
+ * the log for the Trace / Conversation views (it is data), it just does not
+ * drive the live badge. Matched on text so it stays benign even when the
+ * embedded reason happens to contain "error"/"failed" (which would otherwise
+ * classify the line as an error group).
+ */
+function isSessionCutMarker(group: ActivityLogGroup): boolean {
+  if (group.lines.length === 0) return false;
+  const first = group.lines[0];
+  if (first.stream !== 'system') return false;
+  return /session lost\b.*recovering from job folder/i.test(first.text ?? '');
+}
+
 function isLiveStatusNoise(group: ActivityLogGroup): boolean {
   if (isTaskboardRuntimeMarker(group)) return true;
   if (isWatchdogMetaLine(group)) return true;
+  if (isSessionCutMarker(group)) return true;
   // A blank-only group has nothing to say about current activity.
   if (group.lines.every((l) => !l.text || l.text.trim() === '')) return true;
   return false;

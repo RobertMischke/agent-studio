@@ -133,17 +133,73 @@ public sealed class RunnerBadgeProjectionTests
         Assert.Equal("connected", renewed.ConnectionState);
     }
 
+    // Regression guard for the sticky-"Recovering"-badge bug: a Progress task
+    // that holds no lease and has no live local process, yet is still receiving
+    // fresh activity (the job folder's last-activity stamp is recent), is NOT
+    // orphaned - a runner is demonstrably still pushing. When the project routes
+    // to a remote runner, present that runner as the owner instead of a
+    // "recovering / session-lost" warning: folder/push replay is the normal
+    // remote recovery path (e.g. after a task-server restart dropped the
+    // in-memory lease), and it must self-heal as activity keeps arriving.
     [Fact]
-    public void ExecutionProjection_ProgressWithoutOwner_IsRecovering_AndReadyRemoteIsQueued()
+    public void ExecutionProjection_ProgressWithoutOwner_ButFreshRemoteActivity_HealsToRemoteRunning()
+    {
+        var result = TaskRunnerService.ProjectExecutionLocation(
+            ProgressTask() with { LastActivity = Now.AddSeconds(-5) }, null,
+            new TaskRunActivity { Kind = TaskRunActivityKinds.NoActiveRun },
+            new RunLeaseInspection("none", null), "agent-runner-01", LocalIdentity(), null, Now);
+
+        Assert.Equal(TaskExecutionStates.RemoteRunning, result.State);
+        Assert.NotEqual(TaskExecutionStates.Recovering, result.State);
+        Assert.Equal("remote", result.ExecutionKind);
+        Assert.Equal("connected", result.ConnectionState);
+        Assert.Equal("agent-runner-01", result.RunnerId);
+    }
+
+    // The same ownerless, remote-routed task once activity has gone stale is
+    // still presented as its remote runner (neutral, "reconnecting") - never a
+    // warning and never the sticky "Recovering" badge, because remote runs
+    // recover by replaying the job folder.
+    [Fact]
+    public void ExecutionProjection_ProgressWithoutOwner_StaleRemote_StaysRemoteNotRecovering()
+    {
+        var result = TaskRunnerService.ProjectExecutionLocation(
+            ProgressTask() with { LastActivity = Now.AddMinutes(-30) }, null,
+            new TaskRunActivity { Kind = TaskRunActivityKinds.NoActiveRun },
+            new RunLeaseInspection("none", null), "agent-runner-01", LocalIdentity(), null, Now);
+
+        Assert.Equal(TaskExecutionStates.RemoteRunning, result.State);
+        Assert.NotEqual(TaskExecutionStates.Recovering, result.State);
+        Assert.Equal("reconnecting", result.ConnectionState);
+    }
+
+    // A locally-routed Progress task with no lease, no live process, and no
+    // fresh activity is genuinely orphaned - the one case that still reads as
+    // Recovering. Fresh local output heals it back to local-running.
+    [Fact]
+    public void ExecutionProjection_ProgressLocalOrphan_IsRecovering_ButFreshOutputHeals()
     {
         var recovering = TaskRunnerService.ProjectExecutionLocation(
-            ProgressTask(), null, new TaskRunActivity { Kind = TaskRunActivityKinds.NoActiveRun },
-            new RunLeaseInspection("none", null), "agent-runner-01", LocalIdentity(), null, Now);
+            ProgressTask() with { LastActivity = Now.AddMinutes(-30) }, null,
+            new TaskRunActivity { Kind = TaskRunActivityKinds.NoActiveRun },
+            new RunLeaseInspection("none", null), configuredRunnerId: null, LocalIdentity(), null, Now);
+        var healed = TaskRunnerService.ProjectExecutionLocation(
+            ProgressTask() with { LastActivity = Now.AddSeconds(-5) }, null,
+            new TaskRunActivity { Kind = TaskRunActivityKinds.NoActiveRun },
+            new RunLeaseInspection("none", null), configuredRunnerId: null, LocalIdentity(), null, Now);
+
+        Assert.Equal(TaskExecutionStates.Recovering, recovering.State);
+        Assert.Equal(TaskExecutionStates.LocalRunning, healed.State);
+        Assert.Equal("connected", healed.ConnectionState);
+    }
+
+    [Fact]
+    public void ExecutionProjection_ReadyRemote_IsQueued()
+    {
         var queued = TaskRunnerService.ProjectExecutionLocation(
             ProgressTask() with { State = TaskStates.Ready }, null, null,
             new RunLeaseInspection("none", null), "agent-runner-01", LocalIdentity(), null, Now);
 
-        Assert.Equal(TaskExecutionStates.Recovering, recovering.State);
         Assert.Equal(TaskExecutionStates.QueuedRemote, queued.State);
     }
 
