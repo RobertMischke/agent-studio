@@ -70,6 +70,10 @@ public static class EvidenceGate
         "e2e", "playwright", "area-frontend",
     };
 
+    // Frontend source that renders user-visible surface: templates and styles.
+    // A change touching one of these can be proven with a screenshot.
+    private static readonly string[] UiTemplateOrStyleExtensions = [".html", ".scss", ".css"];
+
     public enum EvidenceGateAction
     {
         Pass,
@@ -90,11 +94,38 @@ public static class EvidenceGate
     }
 
     /// <summary>
-    /// True when the task must ship visual proof of its result: a
-    /// <see cref="TaskTypes.Bug"/>, a task tagged as frontend/UI work, or a task
-    /// whose title carries a strong UI signal word.
+    /// True when the task must ship visual proof of its result. BOTH conditions
+    /// must hold: the task reads as bug/UI work (<see cref="MatchesUiHeuristic"/>)
+    /// AND its attributed change-set provably touches the frontend UI surface
+    /// (<see cref="ChangeSetTouchesUi"/>).
+    ///
+    /// <para>
+    /// This closes the false-positive where a backend bug (AGT-2177) or a
+    /// planning/doc task (AGT-2195) was blocked as "UI/bug work" and asked for a
+    /// screenshot it could never produce. When <paramref name="changedFiles"/> is
+    /// <c>null</c> (unknown - the diff probe failed or the run was remote) the
+    /// gate falls back to the heuristic alone so it never silently drops
+    /// protection. A change-set that is known and carries no UI file suppresses
+    /// the visual demand; the tests-and-evidence aspect still governs the
+    /// test/log proof that a backend or doc task can actually supply.
+    /// </para>
     /// </summary>
     public static bool RequiresVisualEvidence(
+        string? taskType, IEnumerable<string>? tags, string? title,
+        IReadOnlyCollection<string>? changedFiles)
+    {
+        if (!MatchesUiHeuristic(taskType, tags, title)) return false;
+        if (changedFiles is not null && !ChangeSetTouchesUi(changedFiles)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// The bug/UI classifier: a <see cref="TaskTypes.Bug"/>, a task tagged as
+    /// frontend/UI work, or a task whose title carries a strong UI signal word.
+    /// Necessary but no longer sufficient for a visual-evidence demand - the
+    /// change-set must also touch UI (see <see cref="RequiresVisualEvidence"/>).
+    /// </summary>
+    public static bool MatchesUiHeuristic(
         string? taskType, IEnumerable<string>? tags, string? title)
     {
         if (TaskTypes.Normalize(taskType) == TaskTypes.Bug) return true;
@@ -109,6 +140,54 @@ public static class EvidenceGate
         }
 
         return !string.IsNullOrWhiteSpace(title) && UiSignalRegex.IsMatch(title);
+    }
+
+    /// <summary>
+    /// True when at least one attributed change touches the Angular app's
+    /// user-visible surface: a template (<c>.html</c>) or stylesheet
+    /// (<c>.scss</c>/<c>.css</c>) under <c>frontend/src/</c>, or a
+    /// component/directive/pipe TypeScript file (named <c>*.component.ts</c> or
+    /// living under a <c>components/</c> folder). Test specs, type declarations,
+    /// plain services/utilities/models, e2e specs, and everything outside
+    /// <c>frontend/src/</c> (backend, docs, config) are deliberately excluded:
+    /// they cannot be evidenced with a screenshot. Paths are git-relative and may
+    /// use either slash style.
+    /// </summary>
+    public static bool ChangeSetTouchesUi(IEnumerable<string>? changedFiles)
+    {
+        if (changedFiles is null) return false;
+        foreach (var file in changedFiles)
+        {
+            if (IsFrontendUiFile(file)) return true;
+        }
+        return false;
+    }
+
+    private static bool IsFrontendUiFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        var normalized = path.Replace('\\', '/').TrimStart('/');
+
+        if (!normalized.StartsWith("frontend/src/", StringComparison.OrdinalIgnoreCase))
+            return false;
+        // Specs and type declarations describe code, not rendered surface.
+        if (normalized.EndsWith(".spec.ts", StringComparison.OrdinalIgnoreCase)) return false;
+        if (normalized.EndsWith(".d.ts", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var ext = Path.GetExtension(normalized);
+        if (Array.Exists(UiTemplateOrStyleExtensions,
+                e => string.Equals(e, ext, StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        // Component/directive/pipe logic renders surface; a plain service,
+        // utility, or model TypeScript file does not.
+        if (string.Equals(ext, ".ts", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ext, ".tsx", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized.Contains(".component.", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains("/components/", StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
     }
 
     /// <summary>

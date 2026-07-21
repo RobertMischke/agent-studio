@@ -1768,8 +1768,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // "test" commit), demand verification instead of accepting with concerns:
         // reissue with a screenshot/e2e + green-build demand while the shared
         // reissue budget allows, otherwise escalate to 5e-escalated.
+        // Only demand a screenshot when the change-set proves the task actually
+        // touched the frontend UI surface: a backend bug or a planning/doc task
+        // cannot produce one, and the tests-and-evidence aspect governs its proof
+        // instead. A null change-set (unknown diff / remote run) falls back to
+        // the heuristic so protection is never silently dropped.
+        var evidenceGateChangedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
         var evidenceGate = EvidenceGate.Evaluate(
-            EvidenceGate.RequiresVisualEvidence(current.TaskType, current.Tags, current.Title),
+            EvidenceGate.RequiresVisualEvidence(current.TaskType, current.Tags, current.Title, evidenceGateChangedFiles),
             EvidenceGate.HasVisualEvidence(current.FolderPath),
             report,
             CountPriorReissues(workspace, entry.Name, current.Id),

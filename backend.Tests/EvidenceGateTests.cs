@@ -30,10 +30,10 @@ public class EvidenceGateTests : IDisposable
     [InlineData("feature", false)]
     [InlineData("chore", false)]
     [InlineData(null, false)]
-    public void RequiresVisualEvidence_BugTaskTypeAlwaysRequires(string? taskType, bool expected)
+    public void MatchesUiHeuristic_BugTaskTypeAlwaysMatches(string? taskType, bool expected)
     {
         Assert.Equal(expected,
-            EvidenceGate.RequiresVisualEvidence(taskType, tags: null, title: "Do the thing"));
+            EvidenceGate.MatchesUiHeuristic(taskType, tags: null, title: "Do the thing"));
     }
 
     [Theory]
@@ -42,19 +42,106 @@ public class EvidenceGateTests : IDisposable
     [InlineData("Add a Playwright e2e for the board", true)]
     [InlineData("Refactor the token aggregation service", false)]
     [InlineData("Cache the disk scan in the scanner", false)]
-    public void RequiresVisualEvidence_TitleSignalWords(string title, bool expected)
+    public void MatchesUiHeuristic_TitleSignalWords(string title, bool expected)
     {
         Assert.Equal(expected,
-            EvidenceGate.RequiresVisualEvidence(taskType: "chore", tags: null, title: title));
+            EvidenceGate.MatchesUiHeuristic(taskType: "chore", tags: null, title: title));
     }
 
     [Fact]
-    public void RequiresVisualEvidence_FrontendTagTriggers()
+    public void MatchesUiHeuristic_FrontendTagTriggers()
     {
-        Assert.True(EvidenceGate.RequiresVisualEvidence(
+        Assert.True(EvidenceGate.MatchesUiHeuristic(
             taskType: "chore", tags: new[] { "area-backend", "frontend" }, title: "Some work"));
-        Assert.False(EvidenceGate.RequiresVisualEvidence(
+        Assert.False(EvidenceGate.MatchesUiHeuristic(
             taskType: "chore", tags: new[] { "area-backend" }, title: "Some work"));
+    }
+
+    [Theory]
+    // Backend, docs, config, e2e specs, and non-component frontend TS carry no
+    // rendered surface: a screenshot is impossible, so they must not require one.
+    [InlineData("backend/Features/Runner/EvidenceGate.cs", false)]
+    [InlineData("docs/plans/AGT-2195-planning.md", false)]
+    [InlineData("frontend/src/app/services/task.service.ts", false)]
+    [InlineData("frontend/src/app/features/board/state/board-filters.service.ts", false)]
+    [InlineData("frontend/e2e/board.spec.ts", false)]
+    [InlineData("frontend/src/app/components/task-card/task-card.component.spec.ts", false)]
+    [InlineData("frontend/src/app/models/task.model.ts", false)]
+    // Templates, styles, and component/directive TypeScript are UI surface.
+    [InlineData("frontend/src/app/features/board/components/task-card/task-card.component.html", true)]
+    [InlineData("frontend/src/app/features/board/components/task-card/task-card.component.scss", true)]
+    [InlineData("frontend/src/app/features/board/components/task-card/task-card.component.ts", true)]
+    [InlineData("frontend/src/app/components/auth-gate/auth-gate.ts", true)]
+    [InlineData("frontend/src/styles.scss", true)]
+    // Windows-style separators and a leading slash must normalise the same way.
+    [InlineData("frontend\\src\\app\\components\\auth-gate\\auth-gate.html", true)]
+    public void ChangeSetTouchesUi_ClassifiesPath(string path, bool expected)
+    {
+        Assert.Equal(expected, EvidenceGate.ChangeSetTouchesUi(new[] { path }));
+    }
+
+    [Fact]
+    public void ChangeSetTouchesUi_NullOrEmpty_False()
+    {
+        Assert.False(EvidenceGate.ChangeSetTouchesUi(null));
+        Assert.False(EvidenceGate.ChangeSetTouchesUi(Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void RequiresVisualEvidence_BackendBugWithoutUiDiff_NotRequired()
+    {
+        // AGT-2177: a backend feature/bug whose change-set never touches the UI
+        // must not be blocked for a screenshot it cannot produce.
+        var changed = new[] { "backend/Features/Runner/RunnerEndpoints.cs", "backend/Program.cs" };
+
+        Assert.False(EvidenceGate.RequiresVisualEvidence(
+            taskType: "bug", tags: new[] { "area-backend" }, title: "Fix the runner lease API", changed));
+    }
+
+    [Fact]
+    public void RequiresVisualEvidence_PlanningDocDespiteUiWordInTitle_NotRequired()
+    {
+        // AGT-2195: a planning doc whose title carries a UI signal word ("layout")
+        // but whose change-set is docs-only must not demand a screenshot.
+        var changed = new[] { "docs/mockups/dashboard-layout.md" };
+
+        Assert.False(EvidenceGate.RequiresVisualEvidence(
+            taskType: "feature", tags: null, title: "Plan the new dashboard layout", changed));
+    }
+
+    [Fact]
+    public void RequiresVisualEvidence_RealUiBugWithUiDiff_StillRequired()
+    {
+        var changed = new[]
+        {
+            "backend/Features/Runner/EvidenceGate.cs",
+            "frontend/src/app/features/board/components/task-card/task-card.component.html",
+        };
+
+        Assert.True(EvidenceGate.RequiresVisualEvidence(
+            taskType: "bug", tags: null, title: "Card badge overlaps the title", changed));
+    }
+
+    [Fact]
+    public void RequiresVisualEvidence_UnknownChangeSet_FallsBackToHeuristic()
+    {
+        // A null change-set (diff probe failed / remote run) must not silently
+        // drop the gate: a bug still requires visual proof, a chore still does not.
+        Assert.True(EvidenceGate.RequiresVisualEvidence(
+            taskType: "bug", tags: null, title: "Something broke", changedFiles: null));
+        Assert.False(EvidenceGate.RequiresVisualEvidence(
+            taskType: "chore", tags: null, title: "Tidy the scanner", changedFiles: null));
+    }
+
+    [Fact]
+    public void RequiresVisualEvidence_NonUiTaskWithUiDiff_NotRequired()
+    {
+        // The heuristic gates first: a chore that happens to touch a template is
+        // not forced into a screenshot demand on the title/tag heuristic alone.
+        var changed = new[] { "frontend/src/app/app.html" };
+
+        Assert.False(EvidenceGate.RequiresVisualEvidence(
+            taskType: "chore", tags: null, title: "Bump the copyright year", changed));
     }
 
     [Fact]
