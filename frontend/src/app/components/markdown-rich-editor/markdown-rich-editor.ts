@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import type { Editor } from '@tiptap/core';
 import { htmlToMarkdown, markdownToHtml, MarkdownImageOptions } from 'coding-agent-chat/markdown';
 import { shouldEmitEditorSave } from './markdown-rich-editor.guard';
-import { CLIENT_ID } from '../../services/client-id.interceptor';
+import { sessionFetch } from '../../services/session-fetch';
 import { MediaLightboxService } from '../../services/media-lightbox.service';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -399,7 +399,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
         + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
       const form = new FormData();
       form.append('file', file, file.name || 'pasted-image.png');
-      const res = await fetch(url, { method: 'POST', body: form, headers: { 'X-Client-Id': CLIENT_ID } });
+      const res = await sessionFetch(url, { method: 'POST', body: form });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         this.uploadError.set(`Upload failed (${res.status}): ${body || res.statusText}`);

@@ -25,6 +25,7 @@ import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-v
 import { buildConversationTurns, parseActivityLog, sanitizeProjectionLines } from '../../activity-log.parser';
 import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
+import { sessionFetch } from '../../../../../services/session-fetch';
 import { ClaudeSessionPollService } from '../../../../polling/services/claude-session-poll.service';
 import { CliOutputPollService } from '../../../../polling/services/cli-output-poll.service';
 import { SessionEventsPollService } from '../../../../polling/services/session-events-poll.service';
@@ -1150,7 +1151,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     const form = new FormData();
     form.append('file', file, file.name || 'steer-screenshot.png');
     try {
-      await fetch(url, { method: 'POST', body: form });
+      await sessionFetch(url, { method: 'POST', body: form });
     } catch {
       /* upload failure is best-effort; the user retains the steer card
          so they can try again or send a follow-up message instead */

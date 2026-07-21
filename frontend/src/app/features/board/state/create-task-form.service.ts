@@ -6,7 +6,7 @@ import type { PendingAttachment } from '../components/create-task-dialog/create-
 import { TaskService } from '../../../services/task.service';
 import { CliCatalogStore } from '../../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
-import { CLIENT_ID } from '../../../services/client-id.interceptor';
+import { sessionFetch } from '../../../services/session-fetch';
 
 /**
  * Cycle 10a board-feature service: owns every field the create-job
@@ -319,13 +319,13 @@ export class CreateTaskFormService {
         // transient 400/404 "Job not found" before the cache observes the
         // mutation. Retry once with a short backoff so a brief cache miss
         // never surfaces as a user-visible upload failure.
-        let res = await fetch(url, { method: 'POST', body: form, headers: { 'X-Client-Id': CLIENT_ID } });
+        let res = await sessionFetch(url, { method: 'POST', body: form });
         if (!res.ok && (res.status === 400 || res.status === 404)) {
           await new Promise(r => setTimeout(r, 250));
           // FormData stream is consumed - rebuild it for the retry.
           const retry = new FormData();
           retry.append('file', att.file, att.file.name || `${att.alt}.png`);
-          res = await fetch(url, { method: 'POST', body: retry, headers: { 'X-Client-Id': CLIENT_ID } });
+          res = await sessionFetch(url, { method: 'POST', body: retry });
         }
         if (!res.ok) {
           this.errorDialog.show(new Error(`Upload failed (${res.status}) for ${att.file.name || att.alt}`), {
