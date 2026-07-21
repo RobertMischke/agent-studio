@@ -482,9 +482,16 @@
       der Daemon claimte sofort neu und startete echte Prozesse. Strukturell offen: Lease-Adoption muss
       Prozess-Existenz verifizieren statt dem DB-Zustand zu vertrauen (verwandt mit dem
       AGT-2182-Fencing-Scope); neue Deploy-Runbook-Regel: Daemon-Neustarts nur bei bestätigtem Leerlauf,
-      sonst Leases vorher explizit freigeben.</dd>
+      sonst Leases vorher explizit freigeben.
+      <b>Update 21.07. mittags:</b> Zweites Auftreten — Daemon crashte selbstständig um 10:16
+      (3,2-GB-Speicher-Peak, mutmaßlich OOM des neuen Binaries; systemd-Auto-Restart maskierte den Crash)
+      und adoptierte erneut 4 Leases ohne Prozesse (~2h Stillstand). Gegenmaßnahme jetzt automatisiert:
+      der Fleet-Pacer erkennt die Signatur selbst (alle 3-progress-Karten &gt;15 Min. inaktiv + null
+      Host-Worktree-Prozesse via <code>/proc</code>-Scan → Lease-Break auf 2-ready, Kappe 3/Karte). Neu
+      offen: Daemon-Speicherprofil untersuchen; Crash-Sichtbarkeit (systemd-Restart maskiert OOM).</dd>
     <dt>Status</dt><dd><span class="pill part">Einzelfall behoben</span>
-      <span class="pill open">strukturell offen</span> — keine Prozess-Verifikation bei Lease-Adoption.</dd>
+      <span class="pill open">strukturell offen</span> — Prozess-Verifikation bei Lease-Adoption jetzt
+      automatisiert (Fleet-Pacer); neu offen: Daemon-Speicherprofil, Crash-Sichtbarkeit.</dd>
     <dt>Referenzen</dt><dd>AGT-2182/2194/2198 · Bezug AGT-2177 (Deploy-Auslöser), AGT-2182-Fencing-Scope
       (Attempt-Fencing)</dd>
   </dl>
