@@ -95,7 +95,10 @@ state.
   `<TaskRepository>/.metadata/` and performs no
   checkout, build, test, provider CLI, vision, or semantic review work.
   `AgentSession` and process-holder identity remain continuity metadata only;
-  neither can mint or recover attempt write authority.
+  neither can mint or recover attempt write authority. Failed authority-store
+  persistence restores the last durable snapshot before the error escapes, so
+  the live process cannot retain a fence, epoch, or attempt that restart would
+  forget.
 - Canonical Remote ReviewAttempts are excluded from the legacy
   `ReviewDecisionOrchestrator` scan. They remain visibly in Auto Review until a
   fenced Remote Review Executor claims them. This is the fail-closed bootstrap

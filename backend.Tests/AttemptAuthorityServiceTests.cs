@@ -273,6 +273,61 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         Assert.Equal(2, calls);
     }
 
+    [Fact]
+    public void Review_writes_require_complete_fenced_idempotency_identity()
+    {
+        var service = NewService();
+        var (_, review) = CompletedRunWithReview(service, "sha-a");
+        var claimed = service.ClaimReview(
+            review.AttemptId, "reviewer", "review-host", 60, "review-claim").ReviewAttempt!;
+
+        var missingKey = service.SettleReview(new SettleReviewAttemptRequest(
+            new AttemptWriteReference(
+                claimed.AttemptId, claimed.LastFence, claimed.AuthorityEpoch, string.Empty),
+            "sha-a",
+            ReviewTerminalOutcome.Pass));
+        var missingFence = service.RenewReview(
+            new AttemptWriteReference(
+                claimed.AttemptId, 0, claimed.AuthorityEpoch, "review-renew"),
+            "reviewer",
+            60);
+
+        Assert.Equal(AttemptWriteStatus.Invalid, missingKey.Status);
+        Assert.Equal(AttemptWriteStatus.Invalid, missingFence.Status);
+        Assert.Equal(AttemptLifecycleState.Leased, service.GetReview(claimed.AttemptId)!.State);
+    }
+
+    [Fact]
+    public void Persistence_failure_rolls_memory_back_to_last_durable_fence_and_attempt()
+    {
+        var now = new DateTime(2026, 7, 21, 10, 0, 0, DateTimeKind.Utc);
+        var writer = new ControllableAtomicJsonFileWriter();
+        var service = NewService(() => now, writer);
+        var first = service.AcquireRun(
+            "AGT-1", "PROJ-1", null, "runner-a", "host-a", 30, "run-a").RunAttempt!;
+        now = now.AddSeconds(31);
+        writer.ShouldFail = (_, writeNumber) => writeNumber == 2;
+
+        Assert.Throws<IOException>(() => service.AcquireRun(
+            "AGT-1", "PROJ-1", first.AttemptId, "runner-b", "host-b", 30, "run-b"));
+
+        var afterFailure = service.GetTaskProjection("AGT-1");
+        Assert.Equal(first.AuthorityEpoch, afterFailure.AuthorityEpoch);
+        Assert.Equal(first.AttemptId, afterFailure.CurrentRunAttempt!.AttemptId);
+        Assert.Equal(AttemptLifecycleState.Leased, afterFailure.CurrentRunAttempt.State);
+
+        writer.ShouldFail = null;
+        var restarted = NewService(() => now);
+        var durable = restarted.GetTaskProjection("AGT-1");
+        Assert.Equal(afterFailure.AuthorityEpoch, durable.AuthorityEpoch);
+        Assert.Equal(afterFailure.CurrentRunAttempt.AttemptId, durable.CurrentRunAttempt!.AttemptId);
+        Assert.Equal(afterFailure.CurrentRunAttempt.LastFence, durable.CurrentRunAttempt.LastFence);
+
+        var takeover = service.AcquireRun(
+            "AGT-1", "PROJ-1", first.AttemptId, "runner-b", "host-b", 30, "run-b").RunAttempt!;
+        Assert.Equal(first.LastFence + 1, takeover.LastFence);
+    }
+
     private (RunAttemptDto Run, ReviewAttemptDto Review) CompletedRunWithReview(AttemptAuthorityService service, string sha)
     {
         var run = service.AcquireRun("AGT-1", "PROJ-1", null, "runner", "host", 60, "run-create").RunAttempt!;
@@ -282,14 +337,20 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
         return (service.GetRun(run.AttemptId)!, review);
     }
 
-    private AttemptAuthorityService NewService(Func<DateTime>? now = null)
+    private AttemptAuthorityService NewService(
+        Func<DateTime>? now = null,
+        IAtomicJsonFileWriter? writer = null)
     {
         Directory.CreateDirectory(_root);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["TaskRepository"] = _root,
         }).Build();
-        return new AttemptAuthorityService(config, NullLogger<AttemptAuthorityService>.Instance, now);
+        return new AttemptAuthorityService(
+            config,
+            NullLogger<AttemptAuthorityService>.Instance,
+            now,
+            writer);
     }
 
     public void Dispose()

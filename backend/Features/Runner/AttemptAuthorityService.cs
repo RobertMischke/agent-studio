@@ -65,8 +65,8 @@ public sealed class AttemptAuthorityService
         string? backendName = null,
         int processId = 0)
     {
-        if (Blank(taskKey) || Blank(repositoryId) || Blank(executorId) || Blank(idempotencyKey))
-            return InvalidRun("TaskKey, RepositoryId, ExecutorId, and IdempotencyKey are required.");
+        if (Blank(taskKey) || Blank(repositoryId) || Blank(executorId) || Blank(hostId) || Blank(idempotencyKey))
+            return InvalidRun("TaskKey, RepositoryId, ExecutorId, HostId, and IdempotencyKey are required.");
 
         lock (_gate)
         {
@@ -392,7 +392,11 @@ public sealed class AttemptAuthorityService
             }
 
             var now = _utcNow();
-            var evidence = (request.EvidenceDigestInputs ?? []).Select(Normalize).Where(x => x.Length > 0).Order().ToList();
+            var evidence = (request.EvidenceDigestInputs ?? [])
+                .Select(Normalize)
+                .Where(x => x.Length > 0)
+                .Order(StringComparer.Ordinal)
+                .ToList();
             var subjectId = SubjectId(request.RepositoryId, expectedSha, request.SourceRunAttemptId,
                 request.TaskRequirementsHash, request.ReviewPolicyHash, evidence);
             if (sourceReview is not null && !Same(sourceReview.Subject.SubjectId, subjectId))
@@ -471,8 +475,11 @@ public sealed class AttemptAuthorityService
 
     public AttemptWriteResult ClaimReview(string attemptId, string executorId, string hostId, int? requestedTtlSeconds, string idempotencyKey)
     {
-        if (Blank(attemptId) || Blank(executorId) || Blank(idempotencyKey))
-            return new AttemptWriteResult(AttemptWriteStatus.Invalid, Normalize(attemptId), "AttemptId, ExecutorId, and IdempotencyKey are required.");
+        if (Blank(attemptId) || Blank(executorId) || Blank(hostId) || Blank(idempotencyKey))
+            return new AttemptWriteResult(
+                AttemptWriteStatus.Invalid,
+                Normalize(attemptId),
+                "AttemptId, ExecutorId, HostId, and IdempotencyKey are required.");
 
         lock (_gate)
         {
@@ -695,6 +702,11 @@ public sealed class AttemptAuthorityService
 
     private AttemptWriteResult ValidateReviewWriteLocked(AttemptWriteReference write, string idempotencyScope)
     {
+        if (Blank(write.AttemptId) || write.Fence <= 0 || write.AuthorityEpoch <= 0 || Blank(write.IdempotencyKey))
+            return new AttemptWriteResult(
+                AttemptWriteStatus.Invalid,
+                Normalize(write.AttemptId),
+                "AttemptId, Fence, AuthorityEpoch, and IdempotencyKey are required.");
         var review = FindReview(write.AttemptId);
         if (review is null) return new AttemptWriteResult(AttemptWriteStatus.NotFound, write.AttemptId);
         if (review.IdempotencyKeys.Contains(DeliveryKey(idempotencyScope, write.IdempotencyKey)))
@@ -831,7 +843,20 @@ public sealed class AttemptAuthorityService
     private void PersistLocked()
     {
         if (_path is null) return;
-        _writer.Write(_path, JsonSerializer.Serialize(_state, JsonOptions));
+        try
+        {
+            _writer.Write(_path, JsonSerializer.Serialize(_state, JsonOptions));
+        }
+        catch
+        {
+            // No failed disk write may leave this process with authority that a
+            // restarted Task Server would not recognize. Restore the last
+            // durable snapshot before surfacing the persistence failure.
+            _state = Load();
+            NormalizeLoadedState();
+            if (_state.AuthorityEpoch <= 0) _state.AuthorityEpoch = 1;
+            throw;
+        }
     }
 
     private static string SubjectId(string repositoryId, string sha, string runId, string requirementsHash, string policyHash, IReadOnlyList<string> evidence)
