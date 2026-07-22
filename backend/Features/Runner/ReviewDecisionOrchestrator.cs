@@ -94,6 +94,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     public const int DefaultMaxParallelReviews = 4;
 
+    /// <summary>
+    /// Default per-hour budget for orchestrator LLM calls (decisions and DONE
+    /// aspect reviews share it). The budget is a runaway backstop, not a pacing
+    /// device: at ~5 calls per card, 30/h throttled healthy remote delivery
+    /// waves to ~6 cards/h and became the binding constraint of the
+    /// 4-auto-review drain. 120/h keeps the loop-protection while letting a
+    /// full wave pass. Override with <c>ReviewDecisionOrchestrator:CallsPerHour</c>.
+    /// </summary>
+    public const int DefaultCallsPerHour = 120;
+
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _stateMachine;
     private readonly ITaskAccess _taskAccess;
@@ -409,7 +419,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private async Task TickOnceCoreAsync(string workspace, CancellationToken ct)
     {
-        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
+        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", DefaultCallsPerHour);
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", CliTypes.Codex);
         var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
@@ -596,7 +606,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
         var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
-        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
+        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", DefaultCallsPerHour);
         var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
 
         var entry = _scanner.GetWatchPaths().FirstOrDefault(e =>
