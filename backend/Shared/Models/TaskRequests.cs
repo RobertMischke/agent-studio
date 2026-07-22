@@ -1,3 +1,5 @@
+using AgentStudio.Registry;
+
 namespace AgentStudio.Shared;
 
 /// <summary>
@@ -291,6 +293,15 @@ public record CreateTaskRequest
     /// silently; the registry is the source of truth for label and colour.
     /// </summary>
     public List<string>? Tags { get; init; }
+
+    /// <summary>
+    /// Affected surface/component supplied by task-creation clients. When
+    /// present the server resolves the destination from project ownership
+    /// metadata instead of assuming the navigation project owns the fix.
+    /// </summary>
+    public ComponentRoutingRequest? Routing { get; init; }
+    /// <summary>Optional caller-derived prefix. Must match the resolved destination.</summary>
+    public string? RequestedTaskPrefix { get; init; }
 }
 
 /// <summary>

@@ -499,7 +499,7 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapPost("/", (CreateTaskRequest req, HttpContext ctx, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects, AgentStudio.Registry.ComponentRoutingService routing) =>
         {
             if (string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest("Title is required");
@@ -522,8 +522,49 @@ public static class TaskCrudEndpoints
                 }
             }
 
+
+            AgentStudio.Registry.ComponentRoutingResolution? resolvedRouting = null;
+            if (req.Routing != null)
+            {
+                var routingRequest = req.Routing with
+                {
+                    NavigationProjectId = string.IsNullOrWhiteSpace(req.Routing.NavigationProjectId)
+                        ? req.Project
+                        : req.Routing.NavigationProjectId,
+                };
+                resolvedRouting = routing.Resolve(routingRequest);
+                if (resolvedRouting.RequiresQuestion || resolvedRouting.PrimaryProject == null)
+                {
+                    return Results.Conflict(new
+                    {
+                        error = "Task ownership must be resolved before creation.",
+                        routing = resolvedRouting,
+                    });
+                }
+                if (!string.IsNullOrWhiteSpace(req.RequestedTaskPrefix)
+                    && !string.Equals(req.RequestedTaskPrefix, resolvedRouting.AllowedTicketPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.BadRequest(new
+                    {
+                        error = $"Task prefix '{req.RequestedTaskPrefix}' is not valid for destination project {resolvedRouting.StorageProjectId}; expected '{resolvedRouting.AllowedTicketPrefix}'.",
+                        routing = resolvedRouting,
+                    });
+                }
+
+                var prompt = AppendDeliveryAcceptanceCriteria(req.PromptMarkdown, resolvedRouting);
+                req = req with
+                {
+                    Project = resolvedRouting.StorageProjectId,
+                    WatchPath = "",
+                    PromptMarkdown = prompt,
+                    RequestedTaskPrefix = resolvedRouting.AllowedTicketPrefix,
+                };
+            }
+
             var jobId = mutations.CreateJob(req);
-            return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
+            return jobId is null
+                ? Results.Conflict("Job already exists or invalid input")
+                : Results.Ok(new { id = jobId, routing = resolvedRouting });
         });
 
         group.MapPost("/reorder", (ReorderRequest req, HttpContext ctx, TaskStateMachine states,
@@ -567,6 +608,8 @@ public static class TaskCrudEndpoints
             // The target project is likewise addressable by a path-free handle;
             // resolve it so a caller can move a task with {"targetProject":"ASS"}.
             var targetWatchPath = ResolveWatchPath(projects, req.TargetProject, req.TargetWatchPath);
+            if (string.IsNullOrWhiteSpace(targetWatchPath))
+                return Results.BadRequest("A valid target project is required");
             var success = states.ChangeProject(jobId, targetWatchPath, watchPath);
             return success ? Results.Ok() : Results.BadRequest("Failed to change project");
         });
@@ -703,6 +746,25 @@ public static class TaskCrudEndpoints
             var index = TaskReferenceIndex.Build(scanner.ScanAllJobs());
             return Results.Ok(index.Dependents(info.Key, kind));
         });
+    }
+
+    internal static string? AppendDeliveryAcceptanceCriteria(
+        string? prompt,
+        AgentStudio.Registry.ComponentRoutingResolution route)
+    {
+        if (route.ConsumerProjects.Count == 0 && route.DeploymentSteps.Count == 0) return prompt;
+        var sb = new System.Text.StringBuilder(prompt?.TrimEnd() ?? "");
+        if (sb.Length > 0) sb.AppendLine().AppendLine();
+        sb.AppendLine("## Ownership and delivery acceptance criteria");
+        sb.AppendLine();
+        sb.AppendLine($"- Primary implementation: {route.PrimaryProject!.Id} ({route.PrimaryProject.ShortCode}), repository/package `{route.Repository ?? route.PackageOrModule ?? "unspecified"}`.");
+        if (route.ConsumerProjects.Count > 0)
+            sb.AppendLine($"- Integrate in consumer project(s): {string.Join(", ", route.ConsumerProjects.Select(p => $"{p.Id} ({p.ShortCode})"))}.");
+        foreach (var step in route.DeploymentSteps) sb.AppendLine($"- {step.Trim().TrimEnd('.')}.");
+        if (route.Environments.Count > 0)
+            sb.AppendLine($"- Verify integration in: {string.Join(", ", route.Environments)}.");
+        sb.AppendLine($"- Routing evidence: {string.Join("; ", route.Evidence)} (mapping {route.MappingId ?? "local"} v{route.MappingVersion?.ToString() ?? "1"}).");
+        return sb.ToString();
     }
 
     /// <summary>

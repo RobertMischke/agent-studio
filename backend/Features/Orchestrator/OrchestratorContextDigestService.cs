@@ -24,6 +24,7 @@ public sealed class OrchestratorContextDigestService
     private readonly TaskWatcherService _watcher;
     private readonly TimelineLog _timeline;
     private readonly IConfiguration _configuration;
+    private readonly AgentStudio.Registry.ProjectRegistry _projects;
     private readonly ILogger<OrchestratorContextDigestService> _logger;
 
     public OrchestratorContextDigestService(
@@ -34,6 +35,7 @@ public sealed class OrchestratorContextDigestService
         TaskWatcherService watcher,
         TimelineLog timeline,
         IConfiguration configuration,
+        AgentStudio.Registry.ProjectRegistry projects,
         ILogger<OrchestratorContextDigestService> logger)
     {
         _scanner = scanner;
@@ -43,6 +45,7 @@ public sealed class OrchestratorContextDigestService
         _watcher = watcher;
         _timeline = timeline;
         _configuration = configuration;
+        _projects = projects;
         _logger = logger;
     }
 
@@ -78,6 +81,7 @@ public sealed class OrchestratorContextDigestService
         var publish = ReadPublishTargets(projectNames);
         var watcher = ReadWatcherHealth();
         var decisions = ReadDecisions(projectNames);
+        var ownershipMappings = ReadOwnershipMappings(projectNames);
 
         var data = new OrchestratorContextDigestData(
             context,
@@ -89,7 +93,8 @@ public sealed class OrchestratorContextDigestService
             quota,
             publish,
             watcher,
-            decisions);
+            decisions,
+            ownershipMappings);
 
         var response = new OrchestratorContextDigestResponse(
             context.Value,
@@ -376,12 +381,41 @@ public sealed class OrchestratorContextDigestService
             .ToList();
     }
 
+    private List<DigestOwnershipMapping> ReadOwnershipMappings(IReadOnlyCollection<string> projectNames)
+    {
+        var projects = _projects.List();
+        var scopedIds = projects.Where(project => projectNames.Contains(project.DisplayName, StringComparer.OrdinalIgnoreCase))
+            .Select(project => project.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return projects.SelectMany(project => project.OwnershipMappings.Select(mapping => (project, mapping)))
+            .Where(row => scopedIds.Contains(row.project.Id)
+                || row.mapping.ConsumerProjectIds.Any(scopedIds.Contains))
+            .Select(row => new DigestOwnershipMapping(
+                row.mapping.Id,
+                row.mapping.Version,
+                row.mapping.Component,
+                row.mapping.PackageOrModule,
+                row.project.Id,
+                row.project.ShortCode,
+                row.mapping.ConsumerProjectIds,
+                row.mapping.ReleaseArtifact,
+                row.project.ShortCode,
+                row.mapping.Confidence))
+            .ToList();
+    }
+
     internal static string RenderDigest(OrchestratorContextDigestData data)
     {
         var sb = new StringBuilder(2_048);
         sb.AppendLine("=== APPLICATION READ DIGEST ===");
         sb.AppendLine($"context: {data.Context.Value}");
         sb.AppendLine($"capturedAtUtc: {Iso(data.CapturedAt)}");
+
+        sb.AppendLine("component ownership and delivery routes:");
+        if (data.OwnershipMappings == null || data.OwnershipMappings.Count == 0) sb.AppendLine("- no shared-component mapping in this scope; explicit project ownership applies unless the affected component is unresolved");
+        foreach (var route in data.OwnershipMappings ?? [])
+        {
+            sb.AppendLine($"- {route.Component}: owner={route.PrimaryProjectId}/{route.ProjectShortCode}; package={route.PackageOrModule ?? "(none)"}; consumers={string.Join(",", route.ConsumerProjectIds)}; artifact={route.ReleaseArtifact ?? "(none)"}; prefix={route.AllowedTicketPrefix}; confidence={route.Confidence:0.00}; mapping={route.MappingId}@v{route.Version}");
+        }
 
         sb.AppendLine("lanes:");
         if (data.Lanes.Count == 0)
@@ -573,7 +607,20 @@ internal sealed record OrchestratorContextDigestData(
     QuotaReport Quota,
     List<DigestPublishProject> Publish,
     TaskWatcherHealthSnapshot Watcher,
-    List<DigestDecision> Decisions);
+    List<DigestDecision> Decisions,
+    List<DigestOwnershipMapping>? OwnershipMappings = null);
+
+internal sealed record DigestOwnershipMapping(
+    string MappingId,
+    int Version,
+    string Component,
+    string? PackageOrModule,
+    string PrimaryProjectId,
+    string ProjectShortCode,
+    IReadOnlyList<string> ConsumerProjectIds,
+    string? ReleaseArtifact,
+    string AllowedTicketPrefix,
+    double Confidence);
 
 internal sealed record DigestProjectLanes(
     string Project,
