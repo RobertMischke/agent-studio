@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -45,12 +46,29 @@ public sealed class AutoReviewPostProcessingQueue : IAutoReviewPostProcessingQue
 /// </summary>
 public sealed class AutoReviewPostProcessingWorker : BackgroundService
 {
+    /// <summary>
+    /// Default cap on cards whose post-processing runs concurrently. Remote runners
+    /// deliver several completed cards in parallel; a serial drain let the
+    /// 4-auto-review lane back up. Override with <c>PostProcessing:MaxParallelism</c>
+    /// (read from appsettings like the gate timeouts). Per card the step order stays
+    /// sequential - only across cards is there parallelism.
+    /// </summary>
+    public const int DefaultMaxParallelism = 3;
+
     private readonly AutoReviewPostProcessingQueue _queue;
     private readonly ReviewDecisionOrchestrator _reviewDecisionOrchestrator;
     private readonly TaskScannerService _scanner;
     private readonly TaskMutationService _mutations;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AutoReviewPostProcessingWorker> _logger;
+
+    /// <summary>
+    /// Test seam: when set, one request is handed to this delegate instead of the
+    /// real <see cref="ProcessAsync"/>, so the bounded-parallel drain (max-N +
+    /// in-flight dedup + failure isolation) can be exercised deterministically
+    /// without a full orchestrator run. Null in production.
+    /// </summary>
+    internal Func<AutoReviewPostProcessingRequest, CancellationToken, Task>? ProcessOverride { get; set; }
 
     private static readonly JsonSerializerOptions LifecycleJsonOptions = new()
     {
@@ -77,20 +95,87 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Bounded parallelism across cards: several completed cards are
+        // post-processed at once (up to maxParallelism), while each card's own step
+        // sequence stays serial. An in-flight set keeps the same card from being
+        // processed twice concurrently, and each card's failure is isolated so it
+        // never tears down the pool. The workspace-wide backstop sweep remains the
+        // safety net for anything a slot missed.
+        var maxParallelism = Math.Max(1,
+            _configuration.GetValue("PostProcessing:MaxParallelism", DefaultMaxParallelism));
+        var slots = new SemaphoreSlim(maxParallelism, maxParallelism);
+        var inFlight = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+        var running = new ConcurrentDictionary<Task, byte>();
+
         try
         {
             await foreach (var request in _queue.Reader.ReadAllAsync(stoppingToken))
             {
-                await ProcessAsync(request, stoppingToken);
+                var key = CardKey(request);
+
+                // Same card already in flight: drop the duplicate enqueue. The durable
+                // 4-auto-review state plus the backstop sweep / startup recovery
+                // re-drive it if it still needs work, so nothing is lost and no card
+                // is post-processed twice at the same time.
+                if (!inFlight.TryAdd(key, 0))
+                {
+                    _logger.LogDebug(
+                        "auto-review-postprocessing-dedup project={Project} job={JobId} reason=already-in-flight",
+                        request.ProjectName, request.JobId);
+                    continue;
+                }
+
+                await slots.WaitAsync(stoppingToken);
+
+                var task = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RunOneAsync(request, stoppingToken);
+                    }
+                    catch (OperationCanceledException __ex) when (stoppingToken.IsCancellationRequested)
+                    {
+                        SilentCatch.Note(__ex, "AutoReviewPostProcessingWorker: card post-processing cancelled on graceful shutdown.");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Failure isolation: one card's fault must not abort the others.
+                        _logger.LogWarning(ex,
+                            "auto-review-postprocessing-worker-task-failed project={Project} job={JobId}",
+                            request.ProjectName, request.JobId);
+                    }
+                    finally
+                    {
+                        inFlight.TryRemove(key, out _);
+                        slots.Release();
+                    }
+                }, stoppingToken);
+
+                running[task] = 0;
+                _ = task.ContinueWith(
+                    t => running.TryRemove(t, out _),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
             }
+
+            await Task.WhenAll(running.Keys);
         }
         catch (OperationCanceledException __ex) when (stoppingToken.IsCancellationRequested)
         {
             SilentCatch.Note(__ex, "AutoReviewPostProcessingQueue: Graceful shutdown. The ReviewDecisionOrchestrator boot/backstop");
             // Graceful shutdown. The ReviewDecisionOrchestrator boot/backstop
             // sweep remains the recovery path for anything left in 4-auto-review.
+            try { await Task.WhenAll(running.Keys); }
+            catch (Exception __drainEx) { SilentCatch.Note(__drainEx, "AutoReviewPostProcessingWorker: draining in-flight card post-processings on shutdown."); }
         }
     }
+
+    private Task RunOneAsync(AutoReviewPostProcessingRequest request, CancellationToken ct)
+        => ProcessOverride != null ? ProcessOverride(request, ct) : ProcessAsync(request, ct);
+
+    private static string CardKey(AutoReviewPostProcessingRequest request)
+        => request.ProjectName + "" + request.JobId;
 
     /// <summary>
     /// Processes one queued review request. Exposed for deterministic tests;
@@ -123,7 +208,8 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
 
         try
         {
-            await _reviewDecisionOrchestrator.TickOnceAsync(workspace, ct);
+            await _reviewDecisionOrchestrator.ProcessCardAsync(
+                workspace, request.ProjectName, request.JobId, request.WatchPath, ct);
             sw.Stop();
             _logger.LogInformation(
                 "auto-review-postprocessing-finished project={Project} job={JobId} elapsedMs={ElapsedMs}",
