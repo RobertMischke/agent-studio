@@ -1,0 +1,341 @@
+namespace AgentStudio.TestRuns;
+
+using System.Collections.Concurrent;
+
+public sealed class TestRunService
+{
+    private readonly TestRunStore _store;
+    private readonly ProjectRegistry _projects;
+    private readonly TaskScannerService _scanner;
+    private readonly GitService _git;
+    private readonly ConcurrentDictionary<string, (string Signature, DateTime At, Dictionary<string, TaskTestRunEvidence> Value)> _evidenceCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public TestRunService(TestRunStore store, ProjectRegistry projects, TaskScannerService scanner, GitService git)
+    {
+        _store = store;
+        _projects = projects;
+        _scanner = scanner;
+        _git = git;
+    }
+
+    public ProjectRecord? ResolveProject(string handle) =>
+        _projects.FindByShortCode(handle) ?? _projects.FindByIdOrDisplayName(handle);
+
+    public IReadOnlyList<TestRunRecord>? List(string projectHandle)
+    {
+        var project = ResolveProject(projectHandle);
+        return project is null ? null : Ordered(_store.List(project.Id));
+    }
+
+    public TestRunRecord? Create(string projectHandle, CreateTestRunRequest request)
+    {
+        var project = ResolveProject(projectHandle);
+        if (project is null) return null;
+        ValidateCreate(request);
+        var now = DateTime.UtcNow;
+        var state = request.State.Trim().ToLowerInvariant();
+        var runs = _store.List(project.Id);
+        var run = new TestRunRecord
+        {
+            Id = $"TR-{now:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..25],
+            ProjectId = project.Id,
+            Trigger = request.Trigger.Trim(),
+            Commit = request.Commit.Trim(),
+            Branch = request.Branch.Trim(),
+            Scope = new TestRunScope
+            {
+                Level = request.Scope.Level.Trim(),
+                TestSet = request.Scope.TestSet.Trim(),
+            },
+            State = state,
+            Result = state == TestRunStates.Completed ? NormalizeResult(request.Result) : null,
+            DurationSeconds = state == TestRunStates.Planned ? null : request.DurationSeconds,
+            Host = Clean(request.Host),
+            PlannedOrder = request.PlannedOrder ?? (runs.Count == 0 ? 1 : runs.Max(item => item.PlannedOrder) + 1),
+            CreatedAt = now,
+            StartedAt = state is TestRunStates.Running or TestRunStates.Completed ? now : null,
+            CompletedAt = state == TestRunStates.Completed ? now : null,
+        };
+        return _store.Add(project.Id, run);
+    }
+
+    public TestRunRecord? Update(string projectHandle, string runId, UpdateTestRunRequest request)
+    {
+        var project = ResolveProject(projectHandle);
+        if (project is null) return null;
+        var state = request.State.Trim().ToLowerInvariant();
+        if (!TestRunStates.IsValid(state)) throw new TestRunValidationException("state must be planned, running, or completed.");
+        if (state == TestRunStates.Completed && !TestRunResults.IsTerminal(NormalizeResult(request.Result)))
+            throw new TestRunValidationException("A completed test run requires result passed, failed, or canceled.");
+        if (request.DurationSeconds is < 0) throw new TestRunValidationException("durationSeconds cannot be negative.");
+
+        return _store.Update(project.Id, runId, current =>
+        {
+            if (Rank(state) < Rank(current.State))
+                throw new TestRunValidationException($"Test run state cannot move backward from {current.State} to {state}.");
+            if (current.State == TestRunStates.Completed)
+            {
+                var changed = state != current.State
+                    || NormalizeResult(request.Result) != current.Result
+                    || (request.DurationSeconds is not null && request.DurationSeconds != current.DurationSeconds)
+                    || (Clean(request.Host) is { } host && host != current.Host);
+                if (changed) throw new TestRunValidationException("A completed test run is immutable.");
+                return current;
+            }
+            var now = DateTime.UtcNow;
+            return current with
+            {
+                State = state,
+                Result = state == TestRunStates.Completed ? NormalizeResult(request.Result) : null,
+                DurationSeconds = request.DurationSeconds ?? current.DurationSeconds,
+                Host = Clean(request.Host) ?? current.Host,
+                StartedAt = state is TestRunStates.Running or TestRunStates.Completed ? current.StartedAt ?? now : null,
+                CompletedAt = state == TestRunStates.Completed ? current.CompletedAt ?? now : null,
+            };
+        });
+    }
+
+    public ProjectTestRunsResponse? BuildProjectView(string projectHandle)
+    {
+        var project = ResolveProject(projectHandle);
+        if (project is null) return null;
+        var runs = Ordered(_store.List(project.Id));
+        var jobs = _scanner.ScanAllJobs()
+            .Where(job => SamePath(job.WatchPath, project.StorageLocation))
+            .ToList();
+        var evidence = BuildLookup(jobs);
+        var jobsByKey = jobs.ToDictionary(job => job.TaskKey, StringComparer.Ordinal);
+        var attachments = evidence
+            .Where(pair => pair.Value.RunId is not null)
+            .GroupBy(pair => pair.Value.RunId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<TestRunAttachedTask>)group.Select(pair =>
+                {
+                    var job = jobsByKey[pair.Key];
+                    return new TestRunAttachedTask(job.Key ?? job.Id, job.Title);
+                }).ToList(),
+                StringComparer.OrdinalIgnoreCase);
+        var repo = _git.ResolveRepoRootForProject(project.DisplayName);
+        return new ProjectTestRunsResponse
+        {
+            Project = project.DisplayName,
+            HeadCommit = string.IsNullOrWhiteSpace(repo) ? null : _git.GetBranchTip(repo, "HEAD"),
+            Runs = runs.Select(run => new ProjectTestRunItem
+            {
+                Run = run,
+                AttachedTasks = attachments.GetValueOrDefault(run.Id) ?? [],
+            }).ToList(),
+        };
+    }
+
+    public Dictionary<string, TaskTestRunEvidence> BuildLookup(IReadOnlyCollection<TaskInfo> jobs)
+    {
+        var result = new Dictionary<string, TaskTestRunEvidence>(StringComparer.Ordinal);
+        foreach (var projectJobs in jobs.GroupBy(job => job.WatchPath, StringComparer.OrdinalIgnoreCase))
+        {
+            var groupedJobs = projectJobs.ToList();
+            var project = _projects.FindByStorageLocation(projectJobs.Key);
+            var repo = _git.ResolveRepoRootForWatchPath(projectJobs.Key);
+            if (project is null || string.IsNullOrWhiteSpace(repo))
+            {
+                foreach (var job in groupedJobs) result[job.TaskKey] = None(job, "No test run assigned");
+                continue;
+            }
+            var runs = _store.List(project.Id);
+            var signature = Signature(groupedJobs, runs);
+            if (!_evidenceCache.TryGetValue(projectJobs.Key, out var cached)
+                || cached.Signature != signature
+                || DateTime.UtcNow - cached.At > TimeSpan.FromSeconds(5))
+            {
+                Dictionary<string, TaskTestRunEvidence> value;
+                if (runs.Count == 0)
+                {
+                    value = groupedJobs.ToDictionary(job => job.TaskKey, job => None(job, "No test run assigned"), StringComparer.Ordinal);
+                }
+                else
+                {
+                    var refs = runs.Select(run => run.Commit)
+                        .Concat(groupedJobs.Select(BoardMergeStatusService.AnchorFor).OfType<string>())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    var graph = _git.GetCommitParentGraph(repo, refs);
+                    var distances = refs.ToDictionary(reference => reference, reference => AncestorDistances(graph, reference), StringComparer.OrdinalIgnoreCase);
+                    value = groupedJobs.ToDictionary(job => job.TaskKey, job => Match(job, runs, distances), StringComparer.Ordinal);
+                }
+                cached = (signature, DateTime.UtcNow, value);
+                _evidenceCache[projectJobs.Key] = cached;
+            }
+            foreach (var pair in cached.Value) result[pair.Key] = pair.Value;
+        }
+        return result;
+    }
+
+    public DeploymentTestRunReference? LastGreenForDeployment(string projectHandle, string? headCommit)
+    {
+        var project = ResolveProject(projectHandle);
+        if (project is null) return null;
+        var run = _store.List(project.Id)
+            .Where(item => item.State == TestRunStates.Completed && item.Result == TestRunResults.Passed)
+            .OrderByDescending(item => item.CompletedAt ?? item.CreatedAt)
+            .FirstOrDefault();
+        if (run is null) return null;
+        var repo = _git.ResolveRepoRootForProject(project.DisplayName);
+        var refs = new[] { run.Commit, headCommit }.OfType<string>().ToArray();
+        var graph = string.IsNullOrWhiteSpace(repo) ? null : _git.GetCommitParentGraph(repo, refs);
+        var (distance, direction) = Distance(graph, run.Commit, headCommit);
+        return new DeploymentTestRunReference
+        {
+            Id = run.Id,
+            Commit = run.Commit,
+            Branch = run.Branch,
+            Scope = run.Scope,
+            CompletedAt = run.CompletedAt,
+            DistanceToHead = distance,
+            HeadDirection = direction,
+        };
+    }
+
+    private static TaskTestRunEvidence Match(
+        TaskInfo job,
+        IReadOnlyList<TestRunRecord> runs,
+        IReadOnlyDictionary<string, Dictionary<string, int>> distances)
+    {
+        var anchor = BoardMergeStatusService.AnchorFor(job);
+        if (string.IsNullOrWhiteSpace(anchor)) return None(job, "No test run assigned: card has no commit");
+
+        var candidates = new List<(TestRunRecord Run, string Quality, string Direction, int Distance, bool Contains)>();
+        foreach (var run in runs)
+        {
+            if (string.Equals(anchor, run.Commit, StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add((run, "perfect", "exact", 0, true));
+                continue;
+            }
+            if (distances.GetValueOrDefault(run.Commit)?.TryGetValue(anchor, out var afterDistance) == true)
+            {
+                candidates.Add((run, "contains-diff", "after", afterDistance, true));
+                continue;
+            }
+            if (distances.GetValueOrDefault(anchor)?.TryGetValue(run.Commit, out var beforeDistance) == true)
+                candidates.Add((run, "does-not-contain-diff", "before", beforeDistance, false));
+        }
+        var selected = candidates
+            .OrderBy(candidate => CandidateRank(candidate.Run, candidate.Quality))
+            .ThenBy(candidate => candidate.Distance)
+            .ThenByDescending(candidate => candidate.Run.CreatedAt)
+            .FirstOrDefault();
+        if (selected.Run is null) return None(job, "No matching test run");
+
+        var evidenceState = !selected.Contains
+            ? "not-proven"
+            : selected.Run.State is TestRunStates.Planned or TestRunStates.Running
+                ? "pending"
+                : selected.Run.Result == TestRunResults.Passed ? "proven" : "failed";
+        var waiting = IsSettledCard(job.State) && evidenceState == "pending";
+        var summary = selected.Quality switch
+        {
+            "perfect" => "Perfect match",
+            "contains-diff" => $"{selected.Distance} commit(s) after, diff included",
+            _ => $"{selected.Distance} commit(s) before, diff not included",
+        };
+        return new TaskTestRunEvidence
+        {
+            RunId = selected.Run.Id,
+            RunCommit = selected.Run.Commit,
+            RunState = selected.Run.State,
+            RunResult = selected.Run.Result,
+            MatchQuality = selected.Quality,
+            Direction = selected.Direction,
+            Distance = selected.Distance,
+            DiffContained = selected.Contains,
+            EvidenceState = evidenceState,
+            AwaitingEvidence = waiting,
+            Summary = waiting ? $"Evidence pending: {summary}" : summary,
+        };
+    }
+
+    private static TaskTestRunEvidence None(TaskInfo job, string summary) => new()
+    {
+        AwaitingEvidence = IsSettledCard(job.State),
+        Summary = IsSettledCard(job.State) ? "Evidence pending: " + summary : summary,
+    };
+
+    private static bool IsSettledCard(string state) => state is TaskStates.AutoReview or TaskStates.HumanReview
+        or TaskStates.Escalated or TaskStates.Completed or TaskStates.Archive;
+
+    private static (int? Distance, string Direction) Distance(
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? graph,
+        string from,
+        string? to)
+    {
+        if (graph is null || string.IsNullOrWhiteSpace(to)) return (null, "unknown");
+        if (string.Equals(from, to, StringComparison.OrdinalIgnoreCase)) return (0, "exact");
+        var fromHead = AncestorDistances(graph, to);
+        if (fromHead.TryGetValue(from, out var ahead)) return (ahead, "head-ahead");
+        var fromRun = AncestorDistances(graph, from);
+        if (fromRun.TryGetValue(to, out var behind)) return (behind, "head-behind");
+        return (null, "diverged");
+    }
+
+    private static Dictionary<string, int> AncestorDistances(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> graph,
+        string tip)
+    {
+        var distances = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [tip] = 0 };
+        var queue = new Queue<string>();
+        queue.Enqueue(tip);
+        while (queue.TryDequeue(out var current))
+        {
+            if (!graph.TryGetValue(current, out var parents)) continue;
+            foreach (var parent in parents)
+            {
+                var distance = distances[current] + 1;
+                if (distances.TryGetValue(parent, out var existing) && existing <= distance) continue;
+                distances[parent] = distance;
+                queue.Enqueue(parent);
+            }
+        }
+        return distances;
+    }
+
+    private static string Signature(IReadOnlyCollection<TaskInfo> jobs, IReadOnlyCollection<TestRunRecord> runs)
+        => string.Join('|', jobs.OrderBy(job => job.TaskKey).Select(job => $"{job.TaskKey}:{job.State}:{BoardMergeStatusService.AnchorFor(job)}"))
+           + "||" + string.Join('|', runs.OrderBy(run => run.Id).Select(run => $"{run.Id}:{run.Commit}:{run.State}:{run.Result}"));
+
+    private static IReadOnlyList<TestRunRecord> Ordered(IEnumerable<TestRunRecord> runs) => runs
+        .OrderBy(run => run.State == TestRunStates.Planned ? 0 : run.State == TestRunStates.Running ? 1 : 2)
+        .ThenBy(run => run.State == TestRunStates.Completed ? -(run.CompletedAt ?? run.CreatedAt).Ticks : run.PlannedOrder)
+        .ToList();
+
+    private static void ValidateCreate(CreateTestRunRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Commit)) throw new TestRunValidationException("commit is required.");
+        if (string.IsNullOrWhiteSpace(request.Branch)) throw new TestRunValidationException("branch is required.");
+        if (string.IsNullOrWhiteSpace(request.Trigger)) throw new TestRunValidationException("trigger is required.");
+        if (string.IsNullOrWhiteSpace(request.Scope.Level) || string.IsNullOrWhiteSpace(request.Scope.TestSet))
+            throw new TestRunValidationException("scope.level and scope.testSet are required.");
+        if (!TestRunStates.IsValid(request.State)) throw new TestRunValidationException("state must be planned, running, or completed.");
+        if (request.State == TestRunStates.Completed && !TestRunResults.IsTerminal(NormalizeResult(request.Result)))
+            throw new TestRunValidationException("A completed test run requires result passed, failed, or canceled.");
+        if (request.DurationSeconds is < 0) throw new TestRunValidationException("durationSeconds cannot be negative.");
+    }
+
+    private static int Rank(string state) => state switch { TestRunStates.Planned => 0, TestRunStates.Running => 1, _ => 2 };
+    private static int CandidateRank(TestRunRecord run, string quality)
+    {
+        if (quality == "does-not-contain-diff") return 8;
+        var exactOffset = quality == "perfect" ? 0 : 1;
+        if (run.State == TestRunStates.Completed && run.Result == TestRunResults.Passed) return exactOffset;
+        if (run.State == TestRunStates.Running) return 2 + exactOffset;
+        if (run.State == TestRunStates.Planned) return 4 + exactOffset;
+        return 6 + exactOffset;
+    }
+    private static string? NormalizeResult(string? value) => Clean(value)?.ToLowerInvariant();
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static bool SamePath(string left, string right) => string.Equals(
+        Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar),
+        Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+}

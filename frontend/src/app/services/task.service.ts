@@ -82,6 +82,7 @@ import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient } from './jobs-hub-client.service';
 import type {
   ProjectDeploymentSummary,
+  ProjectTestRunsResponse,
   CompiledDeploymentPrompt,
   ProjectThroughputSummary,
   ProjectVisualEvidenceItem,
@@ -2118,6 +2119,13 @@ export class TaskService {
   getProjectDeploymentSummary(projectName: string) {
     return this.http.get<ProjectDeploymentSummary>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/summary`,
+    );
+  }
+
+  /** Project-wide planned/running/completed test-run pipeline with derived card attachments. */
+  getProjectTestRuns(projectName: string) {
+    return this.http.get<ProjectTestRunsResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/test-runs`,
     );
   }
 

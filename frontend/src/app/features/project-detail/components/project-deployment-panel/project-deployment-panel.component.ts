@@ -31,6 +31,8 @@ export class ProjectDeploymentPanelComponent {
   readonly runError = signal<string | null>(null);
   readonly createdTask = signal<VisibleCliTaskCreated | null>(null);
   readonly visibleExecution = signal(true);
+  readonly revisionMode = signal<'tested' | 'head'>('head');
+  readonly headExceptionReason = signal('');
 
   constructor() {
     effect(() => this.load(this.projectName()));
@@ -59,7 +61,10 @@ export class ProjectDeploymentPanelComponent {
 
   canRun(target: ProjectDeploymentTarget): boolean {
     const values = this.parameterValues();
-    return this.visibleExecution() && !this.createdTask() && target.runnable && !!target.command && target.parameters.every(parameter =>
+    const revisionReady = this.revisionMode() === 'tested'
+      ? !!this.summary()?.defaultEvidenceRun
+      : this.headExceptionReason().trim().length > 0;
+    return revisionReady && this.visibleExecution() && !this.createdTask() && target.runnable && !!target.command && target.parameters.every(parameter =>
       !parameter.required || (this.isStableIdle(parameter.name)
         ? values[parameter.name] === true
         : parameter.type === 'boolean'
@@ -107,6 +112,12 @@ export class ProjectDeploymentPanelComponent {
     if (!target || !workspace || !this.canRun(target) || this.running()) return;
     const values = this.parameterValues();
     const command = target.command!.replace(/\{\{([A-Za-z][A-Za-z0-9_-]*)\}\}/g, (_, name: string) => shellValue(values[name]));
+    const evidence = this.summary()?.defaultEvidenceRun;
+    const tested = this.revisionMode() === 'tested' && evidence;
+    const deploymentCommit = tested ? evidence.commit : 'HEAD';
+    const evidencePrompt = tested
+      ? `Deploy exactly commit \`${evidence.commit}\`, justified by successful test run \`${evidence.id}\`. If the target command would deploy another revision, stop instead of falling forward to HEAD.`
+      : `This is an explicit HEAD deployment exception. Record the resolved HEAD and this justification before running: ${this.headExceptionReason().trim()}`;
     this.running.set(true);
     this.runError.set(null);
     this.cliTasks.start({
@@ -116,10 +127,19 @@ export class ProjectDeploymentPanelComponent {
       command,
       prompt: [
         `Run deployment target \`${target.id}\` using the exact command in the execution contract.`,
+        evidencePrompt,
         'Report preflight checks, each command outcome, the deployed revision, and the final health check in this task conversation.',
         'Do not request or copy secrets. Any secret reference must resolve on the execution host.',
       ].join('\n\n'),
-      context: { deploymentTarget: target.id, source: target.source, ...Object.fromEntries(Object.entries(values).map(([key, value]) => [key, String(value)])) },
+      context: {
+        deploymentTarget: target.id,
+        source: target.source,
+        deploymentCommit,
+        testRunId: tested ? evidence.id : 'HEAD_EXCEPTION',
+        distanceToHead: tested ? String(evidence.distanceToHead ?? 'unknown') : '0',
+        headExceptionReason: tested ? '' : this.headExceptionReason().trim(),
+        ...Object.fromEntries(Object.entries(values).map(([key, value]) => [key, String(value)])),
+      },
       cliType: 'codex',
     }, workspace.path).subscribe({
       next: task => this.createdTask.set(task),
@@ -141,6 +161,8 @@ export class ProjectDeploymentPanelComponent {
     this.tasks.getProjectDeploymentSummary(projectName).subscribe({
       next: summary => {
         this.summary.set(summary);
+        this.revisionMode.set(summary.defaultEvidenceRun ? 'tested' : 'head');
+        this.headExceptionReason.set('');
         const current = this.selectedTarget();
         const next = summary.targets.find(target => target.id === current?.id) ?? summary.targets[0] ?? null;
         if (next) this.chooseTarget(next);

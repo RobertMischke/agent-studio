@@ -33,6 +33,50 @@ export interface ProjectDeploymentSummary {
   pendingCount: number | null;
   pendingCommits: ProjectDeploymentCommit[];
   targets: ProjectDeploymentTarget[];
+  defaultEvidenceRun: DeploymentTestRunReference | null;
+}
+
+export interface TestRunScope {
+  level: string;
+  testSet: string;
+}
+
+export interface DeploymentTestRunReference {
+  id: string;
+  commit: string;
+  branch: string;
+  scope: TestRunScope;
+  completedAt: string | null;
+  distanceToHead: number | null;
+  headDirection: 'exact' | 'head-ahead' | 'head-behind' | 'diverged' | 'unknown';
+}
+
+export interface TestRunRecord {
+  id: string;
+  projectId: string;
+  trigger: string;
+  commit: string;
+  branch: string;
+  scope: TestRunScope;
+  state: 'planned' | 'running' | 'completed';
+  result: 'passed' | 'failed' | 'canceled' | null;
+  durationSeconds: number | null;
+  host: string | null;
+  plannedOrder: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface ProjectTestRunItem {
+  run: TestRunRecord;
+  attachedTasks: { taskKey: string; title: string }[];
+}
+
+export interface ProjectTestRunsResponse {
+  project: string;
+  headCommit: string | null;
+  runs: ProjectTestRunItem[];
 }
 
 export type ProjectDeploymentParameterType = 'string' | 'boolean' | 'branch' | 'enum' | 'secret-ref';

@@ -163,6 +163,9 @@ cannot erase an operator decision.
 - `backend/Services/Tasks/LaneMutexRegistry.cs`: per-project lane serialization.
 - `backend/Services/Tasks/CommitAttributionService.cs` and
   `CommitAttributionRunner.cs`: deterministic commit-to-task binding.
+- `backend/Features/TestRuns/TestRunService.cs`: project-wide test-run
+  lifecycle plus the read-time card evidence projection derived from the
+  latest task-owned commit and Git ancestry.
 - `backend/Services/Tasks/ReviewEvidenceLog.cs` and
   `ScreenshotIndexService.cs`: review evidence and visual proof.
 - `backend/Features/Registry/WorkspaceSettingsService.cs` and
@@ -207,6 +210,10 @@ cannot erase an operator decision.
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service
   layer and covered by architecture tests.
+- Test evidence is never persisted on a task. A successful run proves a card
+  only when its commit equals the card commit or contains that commit. Planned
+  and running matches are pending evidence; an older green run remains visible
+  as `diff not included` and never turns the card green.
 
 ## Execution location on task reads
 

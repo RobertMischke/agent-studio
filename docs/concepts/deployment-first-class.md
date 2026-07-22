@@ -298,6 +298,10 @@ bearing decision that makes deployment cheap to add:
   from a template or a prompt UI creates a CLI task through the existing task
   mutation boundary and then shows that task's live surface. The page is a
   launcher and a history view over deploy-tagged tasks.
+- **The deployed revision is justified by a test run.** The normal launcher
+  choice is the latest completed successful project test run. The visible task
+  records its run id, exact commit, and distance to Head. Selecting Head is a
+  reasoned exception and does not let an older green run bless newer commits.
 - **Secrets stay on the host.** A `secret-ref` parameter names a
   host-managed secret; the product injects nothing. GitHub authorization for the
   release template comes from the operator's `gh` session, exactly as
@@ -353,6 +357,9 @@ access, reduced motion (R5). The page never centers itself in a narrow column
   descriptors, never from opaque stored settings.
 - Every run executes as a visible CLI task; deployment owns no second execution
   engine, progress model, or scheduler.
+- Every normal deployment names the successful test run and exact commit that
+  justify it. A Head exception records its reason durably in the deployment
+  task.
 - The Deployment page and any prompt-compiled UI capture parameters and launch
   tasks; they never hold credentials, secrets, or direct execution authority. A
   PDU compiles to a bounded command template with typed slots, never a free-form

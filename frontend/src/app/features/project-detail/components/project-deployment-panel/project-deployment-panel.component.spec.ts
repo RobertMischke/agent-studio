@@ -19,6 +19,7 @@ describe('ProjectDeploymentPanelComponent', () => {
       .flush({
         project: 'Demo Project', available: true, reason: null,
         source: 'logs/stable-restarts.jsonl', pendingCount: 2,
+        defaultEvidenceRun: { id: 'TR-green', commit: 'bbbbbbbb', branch: 'develop', scope: { level: 'project', testSet: 'all' }, completedAt: '2026-07-11T08:00:00Z', distanceToHead: 2, headDirection: 'head-ahead' },
         pendingCommits: [{ sha: 'cccccccc', shortSha: 'cccccccc', subject: 'Pending', authorDateUtc: '2026-07-11T10:00:00Z' }],
         lastDeployment: { at: '2026-07-11T09:00:00Z', status: 'ok', headBefore: 'aaaaaaaa', headAfter: 'bbbbbbbb', durationSeconds: 42, jobsSinceLastRestart: 3, reviewCountAfter: 4, commits: [] },
         history: [
@@ -47,6 +48,8 @@ describe('ProjectDeploymentPanelComponent', () => {
     fixture.nativeElement.querySelector('[data-testid="project-deployment-run"]').click();
     const create = http.expectOne('/api/tasks');
     expect(create.request.body.promptMarkdown).toContain('deploymentTarget: deploy-stable');
+    expect(create.request.body.promptMarkdown).toContain('testRunId: TR-green');
+    expect(create.request.body.promptMarkdown).toContain('deploymentCommit: bbbbbbbb');
     create.flush({ id: 'AGT-3000' });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="project-deployment-created"]').textContent).toContain('AGT-3000');
@@ -68,6 +71,8 @@ describe('ProjectDeploymentPanelComponent', () => {
 
     fixture.componentInstance.chooseTarget(target);
 
+    expect(fixture.componentInstance.canRun(target)).toBe(false);
+    fixture.componentInstance.headExceptionReason.set('Emergency repair approved by operator');
     expect(fixture.componentInstance.canRun(target)).toBe(true);
   });
 
@@ -84,6 +89,7 @@ describe('ProjectDeploymentPanelComponent', () => {
     http.expectOne('/api/projects/Other/deployment/summary').flush({
       project: 'Other', available: false, reason: 'Latest deploy-stable revision range does not belong to this project repository.',
       source: 'logs/stable-restarts.jsonl', lastDeployment: null, history: [], pendingCount: null, pendingCommits: [], targets: [],
+      defaultEvidenceRun: null,
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="project-deployment-unavailable"]').textContent)

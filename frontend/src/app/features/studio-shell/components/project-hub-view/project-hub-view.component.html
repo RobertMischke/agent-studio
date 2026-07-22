@@ -83,6 +83,7 @@
   }
   @defer (when activeRail() === 'test-quality') {
     @if (activeRail() === 'test-quality') {
+      <app-project-test-runs-panel [projectName]="projectName()" />
       <app-regression-radar scope="project" [projectName]="projectName()" />
     }
   }

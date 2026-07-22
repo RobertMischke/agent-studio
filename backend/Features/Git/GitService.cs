@@ -4554,6 +4554,31 @@ public class GitService
     }
 
     /// <summary>
+    /// Commit parent graph reachable from all supplied refs in one git process.
+    /// Consumers can derive ancestry and edge distance for many ref pairs in
+    /// memory instead of spawning merge-base and rev-list once per card.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> GetCommitParentGraph(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs)
+    {
+        var graph = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return graph;
+        var refs = tipRefs.Where(IsLikelyBranchName).Distinct(StringComparer.Ordinal).ToArray();
+        if (refs.Length == 0) return graph;
+        var args = new List<string> { "rev-list", "--parents", "--ignore-missing" };
+        args.AddRange(refs);
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0) return graph;
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length > 0) graph[parts[0]] = parts.Skip(1).ToArray();
+        }
+        return graph;
+    }
+
+    /// <summary>
     /// AGT-2202 — the curated-merge map for an integration ref: task KEY -&gt; the
     /// SHA of the <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit that
     /// folded that task into develop. ONE bounded <c>git log --grep</c> spawn per
