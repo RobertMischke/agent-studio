@@ -48,7 +48,10 @@
       <div class="column__header">
         <span class="column__icon">{{ icon() }}</span>
         <h2 class="column__title">{{ title() }}</h2>
-        <span class="column__count">{{ headerCount() }}</span>
+        <span class="column__count" [attr.data-testid]="'lane-count-' + state()">
+          <span>{{ headerCount() }}</span>
+          @if (stalledCount() > 0) { <span class="column__stalled-count" data-testid="lane-stalled-count">· {{ stalledCount() }} stalled</span> }
+        </span>
         @if (sortIndicator(); as sort) {
           <span class="column__sort-indicator"
                 [attr.data-testid]="'lane-sort-indicator-' + state()"

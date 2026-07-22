@@ -374,6 +374,32 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__human-review-pill--attention');
   });
 
+  it('renders an amber Stalled signal for a failed In-Progress card with no active run', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '3-progress',
+      execution: null,
+      runActivity: { kind: 'failed-idle', attempt: 1, lastError: 'agent did not produce a reply' },
+    }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.stalledState()).toMatchObject({ reason: 'failed', label: 'Stalled' });
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('task-card--stalled')).toBe(true);
+    expect(host?.getAttribute('data-stalled')).toBe('failed');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-stalled"]')?.textContent).toContain('Stalled');
+  });
+
   it('stays quiet for an accepted human-review card', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],

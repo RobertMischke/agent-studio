@@ -1,6 +1,6 @@
 <div class="task-card"
      [class]="'task-card--' + job().state"
-     [class.task-card--running]="isRunning()"
+     [class.task-card--running]="isRunning()" [class.task-card--stalled]="stalledState()"
      [class.task-card--attention]="needsAttention()"
      [class.task-card--compact]="compact()"
      [class.task-card--epic-expanded]="isEpic() && epicExpanded()"
@@ -13,6 +13,7 @@
      data-testid="task-card"
      [attr.data-project]="job().projectName"
      [attr.data-running]="isRunning() ? 'true' : null"
+     [attr.data-stalled]="stalledState()?.reason ?? null"
      [attr.data-compact]="compact() ? 'true' : null"
      tabindex="0"
      (contextmenu)="openCardContextMenu($event)"
@@ -95,6 +96,10 @@
     }
   </h3>
   <div class="task-card__badges">
+    @if (stalledState(); as stalled) {
+      <span class="task-card__stalled-pill" data-testid="task-card-stalled" [attr.data-reason]="stalled.reason"
+            [cacTooltip]="stalled.tooltip" role="status"><span aria-hidden="true">⚠</span> {{ stalled.label }}</span>
+    }
     @if (modeBadge(); as mb) {
       <span class="task-card__mode-pill"
             [class]="'task-card__mode-pill--' + mb.mode"

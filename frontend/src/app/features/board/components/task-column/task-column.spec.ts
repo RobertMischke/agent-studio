@@ -89,6 +89,42 @@ describe('TaskColumnComponent (smoke)', () => {
     expect(cluster!.queue).toBeNull();
   });
 
+  it('shows the derived stalled subset in the In-Progress lane count', async () => {
+    const now = new Date('2026-05-27T15:00:00Z').getTime();
+    const fixture = await buildColumn({
+      mode: 'manual',
+      jobs: [
+        makeJob({
+          id: 'running', state: '3-progress',
+          execution: makeExec({ jobId: 'running' }),
+          runActivity: { kind: 'active', processId: 12345, attempt: 0 },
+        }),
+        makeJob({
+          id: 'fresh', state: '3-progress', execution: null,
+          enteredLaneAt: new Date(now - 60_000).toISOString(),
+          lastActivity: new Date(now - 60_000).toISOString(),
+          runActivity: { kind: 'no-active-run', attempt: 0 },
+        }),
+        makeJob({
+          id: 'failed', state: '3-progress', execution: null,
+          enteredLaneAt: new Date(now - 30_000).toISOString(),
+          runActivity: { kind: 'failed-idle', attempt: 1, lastError: 'router error' },
+        }),
+        makeJob({
+          id: 'idle', state: '3-progress', execution: null,
+          enteredLaneAt: new Date(now - 10 * 60_000).toISOString(),
+          lastActivity: new Date(now - 10 * 60_000).toISOString(),
+          runActivity: { kind: 'no-active-run', attempt: 0 },
+        }),
+      ],
+    });
+
+    expect(fixture.componentInstance.stalledCount()).toBe(2);
+    fixture.detectChanges();
+    const count = fixture.nativeElement.querySelector('[data-testid="lane-count-3-progress"]') as HTMLElement | null;
+    expect(count?.textContent?.replace(/\s+/g, ' ').trim()).toMatch(/^4\s*· 2 stalled$/);
+  });
+
   it('cluster: running + auto → RUNNING + AUTO chips both visible', async () => {
     const exec = makeExec({ jobId: 'task-7', startedAt: '2026-05-27T14:56:36Z' });
     const fixture = await buildColumn({

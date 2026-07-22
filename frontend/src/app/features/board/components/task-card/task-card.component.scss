@@ -140,7 +140,6 @@
         var(--shadow-running),
         0 14px 32px color-mix(in srgb, var(--studio-accent-3) 25%, transparent);
     }
-
     /* "Failed-Cards sehen aus wie Done" fix (Option C): an escalated /
        reissue card parked in 5-human-review shares the "Done & Decide"
        column with Completed and Archive cards and used to read as just
@@ -178,6 +177,7 @@
       min-height: 22px;
       margin-bottom: var(--studio-spacing-2);
     }
+
     .task-card__header-signals {
       display: inline-flex;
       align-items: center;
