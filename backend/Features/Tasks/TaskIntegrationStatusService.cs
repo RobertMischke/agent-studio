@@ -18,26 +18,42 @@ namespace AgentStudio.Tasks;
 /// defeats - it rewrites commits and lands them under a single
 /// <c>merge(&lt;KEY&gt;)</c> commit, so a task's own SHAs are frequently NOT
 /// ancestors of develop even though the work is in. Ground truth is only the
-/// develop git-log. This service reads three independent signals and collapses
-/// them into the four <see cref="IntegrationStatuses"/> states:
+/// develop git-log.
+/// </para>
+///
+/// <para>
+/// The verdict's <b>anchor is the attributed <c>commits[]</c> list</b> - exactly
+/// the commits the card's commit widget renders - so the badge and the widget can
+/// NEVER contradict each other (AGT-2171: the widget showed the attributed commits
+/// on develop while the badge, keying off the branch <em>tip</em> WIP snapshot,
+/// claimed "not integrated"). The signals are collapsed into the five
+/// <see cref="IntegrationStatuses"/> states:
 /// <list type="number">
 /// <item>a curated <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit
-///   in the develop log (authoritative for the curated integrator), or the
-///   recorded develop-merge fact;</item>
-/// <item>the task anchor commit is an ancestor of develop;</item>
-/// <item>the recorded task-branch tip is an ancestor of develop.</item>
+///   in the develop log, or the recorded develop-merge fact - either forces
+///   <c>integrated</c> (authoritative for the curated integrator);</item>
+/// <item>ALL attributed commits are ancestors of develop → <c>integrated</c> (even
+///   when the branch tip still carries further, un-integrated WIP commits the
+///   widget never showed - the detail then names how many);</item>
+/// <item>SOME attributed commits are ancestors → <c>partial</c>, with the missing
+///   short-SHAs in the detail;</item>
+/// <item>NONE are ancestors → <c>pending</c> (or <c>conflict-skipped</c> when a
+///   merge-into-develop conflict was recorded);</item>
+/// <item>no attributed commit at all → <c>no-branch</c>.</item>
 /// </list>
 /// </para>
 ///
 /// <para>
 /// Same design invariant as <see cref="BoardMergeStatusService"/>: <b>no per-card
-/// git spawn</b>. Per repository it computes ONE develop ancestor SHA set plus ONE
-/// bounded <c>git log --grep</c> curated-merge map, cached for a ref-fingerprinted
-/// TTL, and answers every card in that repo with in-memory lookups. The only
-/// per-card disk touch is a local <c>pipeline-execution.json</c> read, and only for
-/// the small not-integrated subset, to distinguish a conflict-skipped card from a
-/// plain pending one. Never throws: a git failure yields the conservative
-/// "pending / no-branch" reading.
+/// git spawn on the hot path</b>. Per repository it computes ONE develop ancestor
+/// SHA set plus ONE bounded <c>git log --grep</c> curated-merge map, cached for a
+/// ref-fingerprinted TTL, and answers every card in that repo with in-memory
+/// lookups. The only per-card touches are best-effort and confined to small
+/// subsets: a local <c>pipeline-execution.json</c> read for the not-integrated
+/// subset (conflict-skipped vs. plain pending), and one bounded
+/// <c>rev-list --count</c> for the rare fully-integrated-but-branch-tip-ahead
+/// subset (to name the WIP-commit count). Never throws: a git failure yields the
+/// conservative reading.
 /// </para>
 /// </summary>
 public sealed class TaskIntegrationStatusService
@@ -144,47 +160,85 @@ public sealed class TaskIntegrationStatusService
         {
             var reach = reaches[root];
             foreach (var job in repoJobs)
-                result[job.TaskKey] = ClassifyWithRepo(job, reach);
+                result[job.TaskKey] = ClassifyWithRepo(job, reach, root);
         }
 
         return result;
     }
 
     /// <summary>
-    /// The four-state verdict for one card given its repo's cached integration
-    /// facts. The three integrated signals are checked in authority order; a
-    /// non-integrated card is then split into conflict-skipped / pending /
-    /// no-branch.
+    /// The verdict for one card given its repo's cached integration facts. A
+    /// curated / recorded merge forces <c>integrated</c>; otherwise the verdict is
+    /// derived ENTIRELY from the develop-ancestry of the card's attributed
+    /// <c>commits[]</c> (the same list the commit widget shows): all landed →
+    /// integrated, some → partial, none → pending/conflict, and no attributed
+    /// commit at all → no-branch. The branch tip is deliberately NOT an anchor - it
+    /// is a WIP snapshot the widget never shows, whose use was the AGT-2171
+    /// badge/widget self-contradiction.
     /// </summary>
-    private TaskIntegrationStatus ClassifyWithRepo(TaskInfo job, RepoIntegration reach)
+    private TaskIntegrationStatus ClassifyWithRepo(TaskInfo job, RepoIntegration reach, string root)
     {
         var branchName = reach.IntegrationBranch;
 
-        // (1a) Curated integrator merge commit for this key on develop. This is
-        // the authoritative signal a rewritten/curated merge leaves behind.
+        // (a) Curated integrator merge commit for this key on develop. The
+        // authoritative signal a rewritten/curated merge leaves behind - it forces
+        // integrated even when the task's own SHAs are not ancestors.
         if (!string.IsNullOrWhiteSpace(job.Key)
             && reach.MergeShaByKey.TryGetValue(job.Key!, out var curatedSha))
         {
             return Integrated(Short(curatedSha), branchName, "curated-merge");
         }
 
-        // (1b) Recorded develop-merge fact (append-only, written by the merge
+        // (b) Recorded develop-merge fact (append-only, written by the merge
         // post-step). Zero-cost and authoritative once present.
         var recordedMerge = job.Provenance?.Merge?.MergeCommit;
         if (recordedMerge is { Length: > 0 })
             return Integrated(Short(recordedMerge), branchName, "recorded-merge");
 
-        // (2) The task anchor commit is an ancestor of develop.
-        var anchor = AnchorFor(job);
-        if (anchor != null && reach.DevelopAncestors.Contains(anchor))
-            return Integrated(Short(anchor), branchName, "anchor-ancestor");
+        // Anchor = the attributed commits[] list the card's commit widget renders.
+        // Badge and widget MUST speak from the same source.
+        var attributed = AttributedCommits(job);
+        if (attributed.Count == 0)
+            return ClassifyNotIntegrated(job, branchName, repoResolved: true);
 
-        // (3) The recorded task-branch tip is an ancestor of develop.
-        var branchTip = RecordedBranchTip(job);
-        if (branchTip != null && reach.DevelopAncestors.Contains(branchTip))
-            return Integrated(Short(branchTip), branchName, "branch-tip-ancestor");
+        var missing = new List<string>();
+        foreach (var sha in attributed)
+            if (!reach.DevelopAncestors.Contains(sha)) missing.Add(sha);
 
-        return ClassifyNotIntegrated(job, branchName, repoResolved: true);
+        // NONE of the attributed commits landed → conflict-skipped / pending
+        // (no-branch is impossible here: there IS attributed work).
+        if (missing.Count == attributed.Count)
+            return ClassifyNotIntegrated(job, branchName, repoResolved: true);
+
+        var newest = attributed[^1];
+
+        // ALL attributed commits landed → integrated, even if the branch tip still
+        // carries un-integrated WIP commits the widget never showed.
+        if (missing.Count == 0)
+        {
+            var branchTip = RecordedBranchTip(job);
+            if (branchTip != null && !reach.DevelopAncestors.Contains(branchTip))
+            {
+                var wip = CountUnintegratedTipCommits(root, reach, branchTip);
+                var detail = wip > 0
+                    ? $"attributed commits integrated; branch tip has {wip} unintegrated WIP commit{(wip == 1 ? "" : "s")}"
+                    : "attributed commits integrated; branch tip has unintegrated WIP commits";
+                return Integrated(Short(newest), branchName, detail);
+            }
+            return Integrated(Short(newest), branchName, "anchor-ancestor");
+        }
+
+        // SOME landed, some did not → partial, naming the missing short-SHAs so the
+        // tooltip says exactly which attributed commits are not in develop yet.
+        var integratedCount = attributed.Count - missing.Count;
+        var missingShort = string.Join(", ", missing.Select(Short));
+        return new TaskIntegrationStatus
+        {
+            Status = IntegrationStatuses.Partial,
+            IntegrationBranch = branchName,
+            Detail = $"{integratedCount}/{attributed.Count} attributed commits integrated; "
+                     + $"missing: {missingShort}",
+        };
     }
 
     /// <summary>
@@ -268,6 +322,50 @@ public sealed class TaskIntegrationStatusService
     {
         var last = job.Commits.Count > 0 ? job.Commits[^1].Sha : job.Commit?.Sha;
         return string.IsNullOrWhiteSpace(last) ? null : last;
+    }
+
+    /// <summary>
+    /// The attributed commit SHAs the card's commit widget renders (oldest →
+    /// newest), read entirely from the persisted board payload (no git spawn). This
+    /// is the single source both the badge and the widget speak from. Falls back to
+    /// the legacy single <see cref="TaskInfo.Commit"/> when the list is empty, and
+    /// drops blank SHAs. Empty when the card committed nothing.
+    /// </summary>
+    internal static IReadOnlyList<string> AttributedCommits(TaskInfo job)
+    {
+        var result = new List<string>(job.Commits.Count);
+        if (job.Commits.Count > 0)
+        {
+            foreach (var c in job.Commits)
+                if (!string.IsNullOrWhiteSpace(c.Sha)) result.Add(c.Sha);
+        }
+        else if (!string.IsNullOrWhiteSpace(job.Commit?.Sha))
+        {
+            result.Add(job.Commit!.Sha);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Best-effort count of the un-integrated WIP commits the recorded branch tip
+    /// carries beyond the integration branch (<c>&lt;branch&gt;..&lt;tip&gt;</c>,
+    /// no-merges), for the rare fully-integrated-but-tip-ahead subset only. Uses the
+    /// already-resolved repo root (no job re-discovery) and runs under the read-only
+    /// git concurrency limiter. Never throws; a git failure reads as 0 (the detail
+    /// then omits the number).
+    /// </summary>
+    private int CountUnintegratedTipCommits(string root, RepoIntegration reach, string branchTip)
+    {
+        try
+        {
+            return ReadOnlyGitConcurrencyLimiter.Run(
+                () => _git.GetCommitsInRangeAtRoot(root, reach.IntegrationBranch, branchTip).Count);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "TaskIntegrationStatusService: WIP-tip count is best-effort");
+            return 0;
+        }
     }
 
     /// <summary>

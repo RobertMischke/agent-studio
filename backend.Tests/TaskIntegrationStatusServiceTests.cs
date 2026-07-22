@@ -13,12 +13,16 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// AGT-2202: the honest, git-derived integration verdict for an accepted card must
 /// resolve the "Accept != Merge" blind spot from ground truth (the develop
-/// git-log), not the ephemeral anchor-ancestry signal. Every test drives real git
-/// against a throwaway repo so all four <see cref="IntegrationStatuses"/> classes
-/// are exercised end to end:
+/// git-log), not the ephemeral anchor-ancestry signal. The verdict's anchor is the
+/// attributed <c>commits[]</c> the card widget shows, so badge and widget can never
+/// contradict (AGT-2171). Every test drives real git against a throwaway repo so
+/// every <see cref="IntegrationStatuses"/> class is exercised end to end:
 ///   - integrated via a curated <c>merge(&lt;KEY&gt;)</c> log commit (the signal
 ///     anchor-ancestry cannot see because the curated integrator rewrites commits),
-///   - integrated via anchor / branch-tip ancestry (the plain --no-ff merge),
+///   - integrated via attributed-commit ancestry (the plain --no-ff merge),
+///   - integrated when all attributed commits are in develop even though the branch
+///     tip carries further un-integrated WIP commits (the AGT-2171 case),
+///   - partial (some attributed commits in develop, some not) with the missing SHAs,
 ///   - pending (accepted work still only on the task branch),
 ///   - conflict-skipped (a recorded merge-into-develop conflict),
 ///   - no-branch (nothing to integrate).
@@ -112,6 +116,80 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.Equal(IntegrationStatuses.Integrated, status.Status);
         Assert.Equal(anchor[..7], status.Sha);
         Assert.Equal("anchor-ancestor", status.Detail);
+    }
+
+    [Fact]
+    public void BuildLookup_AllAttributedCommitsInDevelop_ButBranchTipHasWip_IsIntegrated()
+    {
+        // AGT-2171: the attributed commits[] the card widget shows are ALL folded
+        // into develop, but the task branch tip carries further un-integrated WIP
+        // commits. Badge must agree with the widget: integrated, with the WIP count
+        // in the detail - NOT "not integrated".
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/wiptip");
+        File.WriteAllText(Path.Combine(repo, "attributed.txt"), "attributed work");
+        Commit(repo, "feat: attributed work");
+        var attributed = RunGit(repo, "rev-parse task/wiptip").Out.Trim();
+        // The attributed commit lands in develop via a plain merge.
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/wiptip");
+        // The branch then accrues two WIP commits that are NOT in develop.
+        RunGit(repo, "checkout -q task/wiptip");
+        File.WriteAllText(Path.Combine(repo, "wip1.txt"), "wip one");
+        Commit(repo, "wip: snapshot one");
+        File.WriteAllText(Path.Combine(repo, "wip2.txt"), "wip two");
+        Commit(repo, "wip: snapshot two");
+        var tip = RunGit(repo, "rev-parse task/wiptip").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("wiptip", "AGT-2171", project, repo, log, commits: new[] { Commit(attributed) },
+            prov: Prov(branch: "task/wiptip", tip: tip));
+
+        var status = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(attributed[..7], status.Sha);
+        Assert.Contains("unintegrated WIP", status.Detail);
+        Assert.Contains("2", status.Detail!);
+        // Ground-truth cross-check: the branch tip really is NOT an ancestor of develop.
+        var svcGit = new GitService(NullLogger<GitService>.Instance,
+            new TaskScannerService(EmptyConfig(), NullLogger<TaskScannerService>.Instance,
+                new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, EmptyConfig())), EmptyConfig());
+        Assert.False(svcGit.IsAncestor(repo, tip, "develop"));
+    }
+
+    [Fact]
+    public void BuildLookup_SomeAttributedCommitsInDevelop_IsPartialWithMissingShas()
+    {
+        // Mixed case: one attributed commit is folded into develop, another is not.
+        // The verdict is partial and the detail names the missing short-SHA.
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/partial");
+        File.WriteAllText(Path.Combine(repo, "landed.txt"), "landed work");
+        Commit(repo, "feat: landed work");
+        var landed = RunGit(repo, "rev-parse task/partial").Out.Trim();
+        // Land only the first commit into develop.
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/partial");
+        // A second attributed commit stays on the branch, never merged.
+        RunGit(repo, "checkout -q task/partial");
+        File.WriteAllText(Path.Combine(repo, "not-landed.txt"), "not landed");
+        Commit(repo, "feat: not landed work");
+        var notLanded = RunGit(repo, "rev-parse task/partial").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("partial", "AGT-3006", project, repo, log,
+            commits: new[] { Commit(landed), Commit(notLanded) },
+            prov: Prov(branch: "task/partial"));
+
+        var status = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Partial, status.Status);
+        Assert.Contains(notLanded[..7], status.Detail);
+        Assert.Contains("1/2", status.Detail!);
+        Assert.DoesNotContain(landed[..7], status.Detail!);
     }
 
     [Fact]
@@ -243,11 +321,14 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         return repo;
     }
 
-    private static TaskProvenance Prov(string branch, string? merge = null)
+    private static TaskProvenance Prov(string branch, string? merge = null, string? tip = null)
         => new()
         {
             Branch = branch,
             Merge = merge is null ? null : new TaskProvenanceMerge { MergeCommit = merge },
+            Transitions = tip is null
+                ? []
+                : [new TaskProvenanceTransition { Lane = TaskStates.Completed, BranchTip = tip }],
         };
 
     private static TaskCommitInfo Commit(string sha)

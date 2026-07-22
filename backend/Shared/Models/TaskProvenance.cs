@@ -277,8 +277,11 @@ public record TaskIntegrationStatus
 /// </summary>
 public static class IntegrationStatuses
 {
-    /// <summary>The task's work is provably in develop (curated merge, or anchor / branch tip is an ancestor).</summary>
+    /// <summary>Every attributed commit the card shows is provably in develop (curated merge, or all attributed commits are ancestors).</summary>
     public const string Integrated = "integrated";
+
+    /// <summary>Some — but not all — of the attributed commits the card shows are in develop; the rest have not landed yet.</summary>
+    public const string Partial = "partial";
 
     /// <summary>The task has integrable work that is not (yet) in develop.</summary>
     public const string Pending = "pending";
@@ -289,7 +292,7 @@ public static class IntegrationStatuses
     /// <summary>The card has no task branch and no attributed commit - nothing to integrate.</summary>
     public const string NoBranch = "no-branch";
 
-    public static readonly string[] All = [Integrated, Pending, ConflictSkipped, NoBranch];
+    public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch];
 
     /// <summary>
     /// Tag stamped on a card that was accepted (moved into 6-completed) while its
@@ -299,9 +302,10 @@ public static class IntegrationStatuses
     /// </summary>
     public const string PendingTag = "integration:pending";
 
-    /// <summary>True when the card carries integrable work that is not in develop (pending or conflict).</summary>
+    /// <summary>True when the card carries integrable work that is not (fully) in develop (partial, pending or conflict).</summary>
     public static bool IsNotIntegrated(string? status)
-        => string.Equals(status, Pending, StringComparison.Ordinal)
+        => string.Equals(status, Partial, StringComparison.Ordinal)
+           || string.Equals(status, Pending, StringComparison.Ordinal)
            || string.Equals(status, ConflictSkipped, StringComparison.Ordinal);
 
     public static string Normalize(string? value)
