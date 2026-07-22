@@ -1322,3 +1322,17 @@ durable authority store, local compatibility profile, Runner client, migration
 rehearsal, backup/restore, and independent-process topology proof ship in
 AGT-2192. Authenticated management recovery and the full cross-product golden
 path remain owned by the follow-up delivery tasks named in the canonical target.
+
+---
+
+## ADR-0064 - Component ownership routing is registry metadata and precedes task creation (2026-07-12)
+
+**Decision.** Navigation scope and implementation ownership are separate contracts. Before a routing-aware task is created, `ComponentRoutingService` resolves the observed surface and affected component against versioned mappings stored on `ProjectRecord`. A confident mapping selects the primary project, validates its short-code prefix, and adds consumer integration, package release, environment, and deployment acceptance criteria. Unknown, conflicting, low-confidence, or archived-owner results require a routing question. The initial registry mapping declares Coding Agent Chat as primary owner of Agent Studio chat rendering, footer, and message components, with Agent Studio as consumer and deployment host. Agent Studio backend/API remains AGT-owned.
+
+**Context.** The in-app orchestrator previously knew only where the operator was navigating. Shared components can be visible in one product while their implementation, release artifact, and deployment chain belong to another repository. Treating the active project as owner created AGT tickets for CAC work and omitted package publication and Agent Studio integration.
+
+**Non-goals.** Prompt prose is not an ownership registry. Filesystem paths and secrets do not enter model context. The resolver does not guess through a conflict. A project change does not preserve an invalid source prefix: it mints a destination key and migrates through hidden staging with rollback.
+
+**Implementation pointers.** Registry models and audit: [backend/Shared/Models/RegistryModels.cs](../../../../backend/Shared/Models/RegistryModels.cs) and [backend/Features/Registry/ProjectRegistry.cs](../../../../backend/Features/Registry/ProjectRegistry.cs). Resolver and compact prompt block: [backend/Features/Registry/ComponentRoutingService.cs](../../../../backend/Features/Registry/ComponentRoutingService.cs). Task guard and delivery criteria: [backend/Features/Tasks/TaskCrudEndpoints.cs](../../../../backend/Features/Tasks/TaskCrudEndpoints.cs). Atomic re-key migration: [backend/Features/Tasks/TaskStateMachine.cs](../../../../backend/Features/Tasks/TaskStateMachine.cs). Project Hub editor and routing preview: [frontend/src/app/features/project-detail/components/ownership-mapping-panel/ownership-mapping-panel.component.ts](../../../../frontend/src/app/features/project-detail/components/ownership-mapping-panel/ownership-mapping-panel.component.ts) and [frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.html](../../../../frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.html).
+
+**Status.** Accepted.
