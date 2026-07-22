@@ -103,7 +103,8 @@ public sealed record RunnerClaimRequest(
     string BackendName,
     int? RequestedTtlSeconds = null,
     HostTelemetrySample? Telemetry = null,
-    int AvailableSlots = 1);
+    int AvailableSlots = 1,
+    string? IdempotencyKey = null);
 
 /// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>
 public sealed record HostTelemetrySample(

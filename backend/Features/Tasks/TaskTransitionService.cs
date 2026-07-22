@@ -82,7 +82,9 @@ public sealed class TaskTransitionService
         string? watchPath,
         CancellationToken ct = default,
         int? targetIndex = null,
-        string? cause = null)
+        string? cause = null,
+        AttemptWriteReference? authorityWrite = null,
+        bool suppressProductExecution = false)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -102,6 +104,7 @@ public sealed class TaskTransitionService
         // affects the next move without a backend restart. TryAutoCommitAsync
         // still self-gates on a clean tree and scopes dirty paths to this task.
         var shouldAutoCommit =
+            !suppressProductExecution &&
             !isReadOnly &&
             info.State == TaskStates.Progress &&
             targetState == TaskStates.AutoReview &&
@@ -134,7 +137,7 @@ public sealed class TaskTransitionService
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
-        var outcome = _states.MoveJob(jobId, targetState, watchPath, cause);
+        var outcome = _states.MoveJob(jobId, targetState, watchPath, cause, authorityWrite);
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
             var moved = _scanner.FindJob(jobId, watchPath);
@@ -166,7 +169,8 @@ public sealed class TaskTransitionService
         // same result out, so re-running is a no-op.
         if (outcome.Status == MoveJobStatus.Success
             && info.State == TaskStates.Progress
-            && targetState == TaskStates.AutoReview)
+            && targetState == TaskStates.AutoReview
+            && !suppressProductExecution)
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
             if (attributed != null) EnterPostProcessingPhase(attributed);
@@ -210,7 +214,7 @@ public sealed class TaskTransitionService
             // fully guarded inside the service - it runs after the move has landed,
             // so it can never undo the transition. Re-find post-move so the record
             // is written to the folder's new location with fresh provenance.
-            if (_provenance != null)
+            if (_provenance != null && !suppressProductExecution)
             {
                 var anchored = _scanner.FindJob(jobId, watchPath);
                 if (anchored != null) _provenance.RecordTransition(anchored, targetState);

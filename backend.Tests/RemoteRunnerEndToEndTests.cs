@@ -305,9 +305,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         var taskJson = File.ReadAllText(Path.Combine(moved, "task.json"));
         Assert.DoesNotContain("externalCompletion", taskJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(LifecyclePhases.PostProcessingRunning, taskJson, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(moved, "lifecycle.json")));
         var timeline = File.ReadAllText(Path.Combine(moved, "logs", "timeline.jsonl"));
         Assert.Contains("agent_run_finished", timeline);
         Assert.Contains("idempotencyKey", timeline);
+        Assert.Contains($"\"runId\":\"{lease.Lease.AttemptId}\"", timeline, StringComparison.Ordinal);
+        Assert.Contains("\"idempotencyKey\":\"lane-completion:remote-done-completion\"", timeline, StringComparison.Ordinal);
         Assert.DoesNotContain("external_completion", timeline);
         Assert.Equal(1, timeline.Split("agent_run_finished", StringSplitOptions.None).Length - 1);
     }
@@ -435,7 +439,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var claim = await client.ClaimAsync(new RClaim(
             RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner", Telemetry: new RTelemetry(
                 DateTime.UtcNow, 54, 6.4, 6, 5, 34_000_000_000, 64_000_000_000,
-                0, 0, 6.2, 2.1, 12, 6)), CancellationToken.None);
+                0, 0, 6.2, 2.1, 12, 6),
+            IdempotencyKey: "daemon-claim-1"), CancellationToken.None);
 
         Assert.Equal(RClaimStatus.Claimed, claim.Status);
         Assert.False(string.IsNullOrWhiteSpace(claim.TaskKey));
@@ -447,6 +452,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("develop", claim.DefaultBranch);
         Assert.Equal("Prompt.", await client.ReadTaskFileAsync(claim.TaskKey!, "prompt.md", CancellationToken.None));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+        var laneTimeline = File.ReadAllText(Path.Combine(
+            _watchPath, TaskStates.Progress, TaskKey, "logs", "timeline.jsonl"));
+        Assert.Contains($"\"runId\":\"{claim.Lease.AttemptId}\"", laneTimeline, StringComparison.Ordinal);
+        Assert.Contains($"\"attemptId\":\"{claim.Lease.AttemptId}\"", laneTimeline, StringComparison.Ordinal);
+        Assert.Contains($"\"fence\":\"{claim.Lease.FencingToken}\"", laneTimeline, StringComparison.Ordinal);
+        Assert.Contains($"\"authorityEpoch\":\"{claim.Lease.AuthorityEpoch}\"", laneTimeline, StringComparison.Ordinal);
+        Assert.Contains("\"idempotencyKey\":\"lane-claim:daemon-claim-1\"", laneTimeline, StringComparison.Ordinal);
         var telemetry = await http.GetFromJsonAsync<HostTelemetryResponse>(
             $"/api/clients/{Uri.EscapeDataString(client.ClientId)}/telemetry?window=1h");
         Assert.NotNull(telemetry);

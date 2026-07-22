@@ -97,6 +97,11 @@ state.
   review settlements become superseded once another subject is current. It lives under
   `<TaskRepository>/.metadata/` and performs no
   checkout, build, test, provider CLI, vision, or semantic review work.
+  Remote claim and completion lane facts carry the same attempt, fence, epoch,
+  and idempotency tuple. Claim, standalone acquire, and completion are serialized
+  at the Task Server mutation boundary, and canonical Remote completion suppresses
+  the generic local auto-commit, commit-attribution, drift, provenance, and
+  post-processing queue path.
   `AgentSession` and process-holder identity remain continuity metadata only;
   neither can mint or recover attempt write authority. Failed authority-store
   persistence restores the last durable snapshot before the error escapes, so

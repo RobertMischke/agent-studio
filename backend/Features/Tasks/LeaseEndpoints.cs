@@ -28,23 +28,32 @@ public static class LeaseEndpoints
     {
         var group = app.MapGroup("/api/runner/lease");
 
-        group.MapPost("/acquire", (
+        group.MapPost("/acquire", async (
             RunLeaseAcquireRequest req,
             ITaskScanner scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             RunLeaseService leases,
-            RunnerIdentity identity) =>
+            RunnerIdentity identity,
+            CancellationToken ct) =>
         {
-            var task = FindTask(scanner, req.TaskKey);
-            if (task is null)
-                return Results.NotFound(new RunLeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
-            var project = projects.FindByStorageLocation(task.WatchPath)
-                          ?? projects.FindByIdOrDisplayName(task.ProjectName);
-            var canonical = StampIdentity(req, identity) with
+            await ClaimGate.WaitAsync(ct);
+            try
             {
-                RepositoryId = string.IsNullOrWhiteSpace(project?.Id) ? task.ProjectName : project.Id,
-            };
-            return Results.Ok(leases.TryAcquire(canonical));
+                var task = FindTask(scanner, req.TaskKey);
+                if (task is null)
+                    return Results.NotFound(new RunLeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
+                var project = projects.FindByStorageLocation(task.WatchPath)
+                              ?? projects.FindByIdOrDisplayName(task.ProjectName);
+                var canonical = StampIdentity(req, identity) with
+                {
+                    RepositoryId = string.IsNullOrWhiteSpace(project?.Id) ? task.ProjectName : project.Id,
+                };
+                return Results.Ok(leases.TryAcquire(canonical));
+            }
+            finally
+            {
+                ClaimGate.Release();
+            }
         });
 
         group.MapPost("/renew", (RunLeaseHeartbeatRequest req, RunLeaseService leases) =>
@@ -164,17 +173,25 @@ public static class LeaseEndpoints
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
+                var claimKey = string.IsNullOrWhiteSpace(req.IdempotencyKey)
+                    ? $"claim:{taskKey}:{req.RunnerId.Trim()}:{Guid.NewGuid():N}"
+                    : req.IdempotencyKey.Trim();
                 var acquire = leases.TryAcquire(new RunLeaseAcquireRequest(
                     taskKey, req.RunnerId.Trim(), req.RunnerName.Trim(), req.Hostname,
                     req.Pid, req.BackendName, req.RequestedTtlSeconds,
                     repository.ProjectId,
-                    IdempotencyKey: $"claim:{taskKey}:{req.RunnerId.Trim()}:{Guid.NewGuid():N}"));
+                    IdempotencyKey: claimKey));
                 if (!acquire.Granted || acquire.Lease is null)
                     return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome));
 
                 var move = await transitions.MoveAsync(
                     candidate.Id, TaskStates.Progress, candidate.WatchPath, ct,
-                    cause: $"remote-runner:{req.RunnerName.Trim()}");
+                    cause: $"remote-runner:{req.RunnerName.Trim()}",
+                    authorityWrite: new AttemptWriteReference(
+                        acquire.Lease.AttemptId!,
+                        acquire.Lease.FencingToken,
+                        acquire.Lease.AuthorityEpoch,
+                        $"lane-claim:{claimKey}"));
                 if (move.Status != MoveJobStatus.Success)
                 {
                     leases.Release(new RunLeaseReleaseRequest(
@@ -224,6 +241,9 @@ public static class LeaseEndpoints
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
+            await ClaimGate.WaitAsync(ct);
+            try
+            {
             var reportedOutcome = req.Outcome ?? string.Empty;
             var task = scanner.ScanAllJobs().FirstOrDefault(t =>
                 string.Equals(t.TaskKey, req.TaskKey, StringComparison.OrdinalIgnoreCase)
@@ -391,7 +411,13 @@ public static class LeaseEndpoints
             {
                 var move = await transitions.MoveAsync(
                     task.Id, targetState, task.WatchPath, ct,
-                    cause: $"remote-runner-completion:{source}");
+                    cause: $"remote-runner-completion:{source}",
+                    authorityWrite: new AttemptWriteReference(
+                        attemptId,
+                        req.FencingToken,
+                        epoch,
+                        $"lane-completion:{completionKey}"),
+                    suppressProductExecution: true);
                 if (move.Status != MoveJobStatus.Success)
                     return Results.Conflict(new RemoteRunCompletionResponse(
                         req.TaskKey, reportedOutcome, task.State, $"Lane move refused: {move.Status} {move.Message}",
@@ -408,6 +434,11 @@ public static class LeaseEndpoints
                 RunAttemptId: attemptId,
                 ReviewAttemptId: reviewAttempt?.AttemptId,
                 ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
+            }
+            finally
+            {
+                ClaimGate.Release();
+            }
         });
     }
 
