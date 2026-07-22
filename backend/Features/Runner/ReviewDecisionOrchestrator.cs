@@ -2904,6 +2904,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             AttemptChainId = subject.AttemptChainId,
             SubjectRef = subject.SubjectRef,
+            Project = entry.Name,
+            JobId = current.Id,
+            Lane = current.State,
+            TestExecution = settings?.TestExecution,
+            JobFolderPath = current.FolderPath,
             InfrastructureTimeout = TimeSpan.FromSeconds(Math.Max(1, infrastructureTimeoutSeconds)),
             QueueWaitTimeout = TimeSpan.FromSeconds(Math.Max(1, queueWaitTimeoutSeconds)),
             RemoteSshHost = ResolveRemoteGateSshHost(settings),
@@ -3092,6 +3097,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             {
                 WriteIndented = true,
             });
+            var selectionEvidence = JsonSerializer.Serialize(result.TestSelection, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            });
             var body = $"verdict={result.Verdict} exit={result.ExitCode?.ToString() ?? "n/a"} signal={result.TerminationSignal ?? "n/a"} durationMs={result.DurationMs}\n" +
                        $"gateId={result.GateId} failureKind={result.FailureKind} failureFingerprint={result.FailureFingerprint ?? "n/a"}\n" +
                        $"gateRunId={result.GateRunId ?? "n/a"} startedAtUtc={result.GateStartedAtUtc?.ToString("O") ?? "n/a"} completedAtUtc={result.GateCompletedAtUtc?.ToString("O") ?? "n/a"}\n" +
@@ -3101,11 +3110,24 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                        $"reason={result.Reason}\n" +
                        $"backend={result.RanBackendBuild} frontend={result.RanFrontendBuild}\n" +
                        $"changedFiles={(changedFiles == null ? "unknown" : string.Join(", ", changedFiles.Take(50)))}\n" +
+                       "--- test-selection.json ---\n" +
+                       selectionEvidence + "\n" +
                        "--- process-evidence.json ---\n" +
                        processEvidence + "\n" +
                        "--- last-300-lines ---\n" +
                        result.Output;
             File.WriteAllText(path, body);
+            if (result.Findings.Count > 0)
+            {
+                var findingPath = Path.Combine(dir, $"test-findings-{index}.json");
+                File.WriteAllText(findingPath, JsonSerializer.Serialize(new
+                {
+                    gateRunId = result.GateRunId,
+                    testLevel = result.TestSelection?.Level,
+                    blocking = false,
+                    findings = result.Findings,
+                }, new JsonSerializerOptions { WriteIndented = true }));
+            }
         }
         catch (Exception ex)
         {
