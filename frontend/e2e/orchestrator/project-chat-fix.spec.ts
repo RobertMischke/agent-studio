@@ -98,6 +98,11 @@ async function installChatMocks(page: Page, project: string, initial?: Partial<M
 }
 
 async function openSideSheetForProject(page: Page): Promise<string> {
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true }),
+  }));
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   // Let the watch-paths fetch settle so the project combobox has options.
@@ -336,15 +341,21 @@ test.describe('Project chat fix - silent drop, sluggishness, parallel use', () =
 
     await openSideSheetForProject(page);
 
-    // Attach an image via the hidden file input — no text typed.
-    // The attach button (chat-attach) is inside @if(allowAttachments()) which
-    // defaults to true so it is always rendered. setInputFiles bypasses the
-    // native file picker and works headlessly.
-    const fileInput = page.locator('input[type="file"][accept="image/*"]').first();
-    await fileInput.setInputFiles({
-      name: 'screenshot.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from('PNG_FAKE'),
+    // Paste an image with no text typed. The composer deliberately has no
+    // paperclip or hidden file input; clipboard images remain supported.
+    const input = page.getByTestId('chat-input');
+    await expect(page.getByTestId('chat-attach')).toHaveCount(0);
+    await expect(page.getByTestId('chat-composer').locator('input[type="file"]')).toHaveCount(0);
+    await input.evaluate((target) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([new TextEncoder().encode('PNG_FAKE')], 'screenshot.png', {
+        type: 'image/png',
+      }));
+      target.dispatchEvent(new ClipboardEvent('paste', {
+        clipboardData: transfer,
+        bubbles: true,
+        cancelable: true,
+      }));
     });
 
     // A draft preview row must appear — proves the attachment was staged.

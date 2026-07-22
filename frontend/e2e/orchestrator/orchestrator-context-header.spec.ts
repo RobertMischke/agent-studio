@@ -362,9 +362,9 @@ test.describe('Orchestrator context header · where am I', () => {
     await expect(page.getByTestId('chat-toolbar-search')).toBeFocused();
     await input.focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByTestId('chat-attach')).toBeFocused();
-    await page.keyboard.press('Tab');
     await expect(page.getByTestId('chat-send')).toBeFocused();
+    await expect(page.getByTestId('chat-attach')).toHaveCount(0);
+    await expect(sheet.getByTestId('chat-composer').locator('input[type="file"]')).toHaveCount(0);
 
     await sheet.screenshot({ path: resolve(RESULTS, 'orchestrator-board-context-light.png') });
     expect(unexpectedRequests).toEqual([]);

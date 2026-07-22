@@ -53,6 +53,11 @@ async function stubWorkspace(page: Page, sent: Record<string, unknown>[] = []) {
     });
     return route.fulfill({ status: 200, contentType: 'application/json', body });
   });
+  await page.route(/\/api\/auth\/status$/, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true }),
+  }));
   await page.route(/\/api\/cli\/codex\/models(?:\?.*)?$/, route => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ models: MODELS, source: 'live-codex-fixture' }),
@@ -151,11 +156,19 @@ test('full live GPT picker persists across Board and Task contexts', async ({ pa
 
   const input = page.getByTestId('chat-input');
   await input.fill('/bug preserved picker draft');
-  await page.getByTestId('chat-attach').click();
-  await page.locator('input[type="file"]').setInputFiles({
-    name: 'picker-proof.png', mimeType: 'image/png', buffer: Buffer.from(
+  await expect(page.getByTestId('chat-attach')).toHaveCount(0);
+  await expect(page.getByTestId('chat-composer').locator('input[type="file"]')).toHaveCount(0);
+  await input.evaluate((target) => {
+    const bytes = Uint8Array.from(atob(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-      'base64'),
+    ), char => char.charCodeAt(0));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], 'picker-proof.png', { type: 'image/png' }));
+    target.dispatchEvent(new ClipboardEvent('paste', {
+      clipboardData: transfer,
+      bubbles: true,
+      cancelable: true,
+    }));
   });
   await expect(page.getByTestId('chat-drafts')).toContainText('picker-proof');
 

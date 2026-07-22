@@ -25,14 +25,13 @@ import { test, expect, Page } from '@playwright/test';
  * The chat history GET, upload POST, and chat send POST are all stubbed
  * so the spec runs without a live orchestrator session and without
  * burning CLI quota. We do not mock the attachment GET — the inline
- * source is a `blob:` URL pulled straight from the local file the
- * operator picked, so the network never needs to be involved for the
- * bubble to render.
+ * source is a `blob:` URL pulled straight from the pasted clipboard file, so
+ * the network never needs to be involved for the bubble to render.
  */
 
 const SHOTS = 'screenshots/chat-attachment-inline-and-lightbox';
 
-// 1×1 PNG, sufficient for the visibility checks; the file picker accepts it
+// 1×1 PNG, sufficient for the visibility checks; the paste handler accepts it
 // because its MIME type starts with image/.
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==';
@@ -133,6 +132,11 @@ async function installChatMocks(page: Page, project: string): Promise<MockState>
 }
 
 async function openSideSheet(page: Page): Promise<string | null> {
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true }),
+  }));
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await page.waitForTimeout(800);
@@ -146,8 +150,28 @@ async function openSideSheet(page: Page): Promise<string | null> {
   return project || null;
 }
 
+async function pastePngOnComposer(page: Page, name: string, pngBase64: string): Promise<void> {
+  await page.getByTestId('chat-input').evaluate((target, payload) => {
+    const bin = atob(payload.pngBase64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], payload.name, { type: 'image/png' }));
+    target.dispatchEvent(new ClipboardEvent('paste', {
+      clipboardData: transfer,
+      bubbles: true,
+      cancelable: true,
+    }));
+  }, { name, pngBase64 });
+}
+
 test.describe('Project chat — inline attachment render + lightbox', () => {
-  test('image is visible in the bubble in the same frame as the text, lightbox opens on click', async ({ page }) => {
+  for (const theme of ['light', 'dark'] as const) test(
+    `pasted image is immediately visible, file picker stays absent, and lightbox works in ${theme} theme`,
+    async ({ page }) => {
+    await page.addInitScript(selectedTheme => {
+      localStorage.setItem('atp.studio.theme', selectedTheme);
+    }, theme);
     const project = await openSideSheet(page);
     if (!project) {
       test.skip(true, 'No watched projects — chat surface not mounted');
@@ -155,15 +179,11 @@ test.describe('Project chat — inline attachment render + lightbox', () => {
     }
     await installChatMocks(page, project);
 
-    // Stage the file via the hidden <input type="file"> the paperclip
-    // button triggers. setInputFiles fires the same change event so the
-    // addAttachment path is exercised end-to-end.
-    const fileInput = page.locator('input.chat__file-input').first();
-    await fileInput.setInputFiles({
-      name: 'screenshot.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(TINY_PNG_BASE64, 'base64'),
-    });
+    await expect(page.getByTestId('chat-attach')).toHaveCount(0);
+    await expect(page.getByTestId('chat-composer').locator('input[type="file"]')).toHaveCount(0);
+
+    // Stage the image through the retained clipboard path.
+    await pastePngOnComposer(page, 'screenshot.png', TINY_PNG_BASE64);
     await expect(page.getByTestId('chat-drafts')).toBeVisible({ timeout: 2_000 });
 
     const composer = page.getByTestId('chat-input');
@@ -199,7 +219,7 @@ test.describe('Project chat — inline attachment render + lightbox', () => {
     const sheetBox = await sheet.boundingBox();
     if (sheetBox) {
       await page.screenshot({
-        path: `${SHOTS}/01-bubble-with-image.png`,
+        path: `${SHOTS}/01-bubble-with-image-${theme}.png`,
         clip: {
           x: Math.max(0, sheetBox.x - 4),
           y: Math.max(0, sheetBox.y - 4),
@@ -214,7 +234,7 @@ test.describe('Project chat — inline attachment render + lightbox', () => {
     const lightbox = page.getByTestId('media-lightbox');
     await expect(lightbox).toBeVisible({ timeout: 1_000 });
     await expect(page.getByTestId('media-lightbox-image')).toBeVisible();
-    await page.screenshot({ path: `${SHOTS}/02-lightbox-open.png`, fullPage: false });
+    await page.screenshot({ path: `${SHOTS}/02-lightbox-open-${theme}.png`, fullPage: false });
 
     // Escape dismisses the lightbox.
     await page.keyboard.press('Escape');
