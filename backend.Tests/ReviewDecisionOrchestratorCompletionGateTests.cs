@@ -240,6 +240,51 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskDone_UnrelatedTestFailure_AdvancesAndPersistsSeparateFinding()
+    {
+        const string slug = "build-unrelated-red";
+        SeedReviewJobWithDone(slug,
+            status: "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n");
+        var result = new BuildTestGateResult(
+            BuildTestGateVerdict.Warn, 0, 25, "baseline red",
+            "work-package gate passed with 1 separate non-blocking finding; test-level=work-package; selected=2; full-suite=not-run; omitted=1",
+            true, false)
+        {
+            TestSelection = new TestSelectionAudit
+            {
+                Level = TestExecutionLevels.WorkPackage,
+                DiffInput = ["src/feature.cs"],
+                SelectedCommands = ["test-feature", "test-baseline"],
+                OmittedTestCommands = ["test-all"],
+            },
+            Findings = [new BuildTestGateFinding(
+                "out-of-work-package-test-failure",
+                TestExecutionLevels.Continuous,
+                "test-baseline",
+                "baseline failed outside the selected work package",
+                1,
+                "expected 1 but got 2")],
+        };
+        var aspect = new CountingAspect();
+        var orchestrator = BuildOrchestrator(
+            aspect.Cli, maxReissues: 3, new FakeBuildTestGateRunner(result));
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
+        Assert.True(Directory.Exists(folder), "an unrelated baseline failure must not block the card");
+        var findingPath = Path.Combine(folder, "post-steps", "test-findings-1.json");
+        Assert.True(File.Exists(findingPath));
+        var findingJson = File.ReadAllText(findingPath);
+        Assert.Contains("out-of-work-package-test-failure", findingJson);
+        Assert.Contains("\"blocking\": false", findingJson);
+        var gateLog = File.ReadAllText(Path.Combine(folder, "post-steps", "build-test-gate-1.log"));
+        Assert.Contains("\"Level\": \"work-package\"", gateLog);
+        Assert.Contains("\"src/feature.cs\"", gateLog);
+        Assert.True(aspect.Invocations > 0);
+    }
+
+    [Fact]
     public async Task TaskDone_BuildGateRequiresExactSubjectWithoutSharedCheckoutCommandFallback()
     {
         const string slug = "build-worktree-job";

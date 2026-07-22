@@ -327,7 +327,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     {
                         var advice = await _testSelectionAdvisor.AdviseAsync(
                             staged.Audit, request.TestExecution, workspace!,
-                            request.Project, request.JobId, ct).ConfigureAwait(false);
+                            request.Project, request.JobId, request.JobFolderPath, ct).ConfigureAwait(false);
                         if (advice is not null)
                         {
                             staged = TestSelectionPlanner.Plan(

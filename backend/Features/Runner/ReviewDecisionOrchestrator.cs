@@ -2894,7 +2894,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             $"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:QueueWaitTimeoutSeconds",
             timeoutSeconds + infrastructureTimeoutSeconds);
         var changedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
-        if (subject.IsRemote) changedFiles = null;
 
         var request = new BuildTestGateRequest(
             repoPath,

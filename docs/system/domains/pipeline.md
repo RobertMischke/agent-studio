@@ -82,6 +82,17 @@ pipeline view.
   next to the wiki-maintenance / wiki-learnings producers.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
+- `backend/Features/Pipeline/TestSelectionPlanner.cs`: staged test planning from
+  the lane policy, changed files, project/component ownership, explicit impact
+  rules, and Test Hub history. It produces the immutable selection audit used
+  by the gate log.
+- `backend/Features/Pipeline/LlmTestSelectionAdvisor.cs`: optional constrained
+  adviser. It can add only stable candidate ids from the deterministic safe
+  inventory and cannot emit an executable command.
+- `backend/Features/Pipeline/PreMainTestGate.cs`: fail-closed release boundary
+  that forces the full test level before any future `develop -> main`
+  promotion, irrespective of lane settings, diff input, history, or adviser
+  output.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
   condition evaluation.
 - `backend/Services/Pipeline/ProjectPipelineOrder.cs`: project-level step order
@@ -131,6 +142,27 @@ pipeline view.
   pipeline presentation.
 
 ## Invariants
+
+- Test execution has three stable levels: `continuous` runs the configured
+  fixed baseline, `work-package` adds tests selected from the current diff and
+  Test Hub history, and `full` runs every declared test command. Project
+  settings map task lanes to levels. Auto Review defaults to `work-package`
+  when no mapping exists; an unavailable diff falls back to `full`.
+- The build/test step reason always states the effective level, selected count,
+  whether the full suite ran, and how many full-suite commands were omitted.
+  Its `post-steps/build-test-gate-*.log` contains the exact diff input, history
+  rows, candidate inventory, chosen ids/commands, selector/model, and reasons.
+- A failing continuous-baseline command during a work-package run creates a
+  separate `post-steps/test-findings-*.json` record and a `warn` gate verdict.
+  It does not block the card. Selected work-package tests still block. No
+  failure is non-blocking at the pre-main full-suite boundary.
+- Model advice is additive and allowlisted. Deterministic diff/history choices
+  cannot be removed, unknown candidate ids are ignored, and raw model output is
+  never interpreted as a shell command.
+- Any operation that can advance `main` must call `PreMainTestGate` first and
+  proceed only on an `Ok` result with `FullSuiteRequired` and `FullSuiteRan` set.
+  The current product has no automated `develop -> main` write path; the
+  boundary exists for the release workflow that will introduce it.
 
 - `pre-model-qualification` runs before CORE and never performs quota fallback
   routing. It recommends from the live CLI catalogue without hardcoded model

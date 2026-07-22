@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace AgentStudio.Pipeline;
@@ -9,6 +10,7 @@ public sealed record TestHubHistoryEntry
 {
     public string TestId { get; init; } = "";
     public string Command { get; init; } = "";
+    public string WorkingSubdir { get; init; } = "";
     public IReadOnlyList<string> RelatedPaths { get; init; } = [];
     public DateTimeOffset? FailedAtUtc { get; init; }
     public string? Failure { get; init; }
@@ -91,23 +93,31 @@ public static class TestSelectionPlanner
 
         if (level == TestExecutionLevels.Full)
         {
-            var commands = nonTests.Concat(fullTests.Select(command => command with
+            var fullReason = fullSuiteRequired
+                ? "mandatory full suite before main"
+                : conservativeFullSuite
+                    ? "diff input is unavailable; conservative fallback runs the full suite"
+                    : "lane policy selected the full suite";
+            var fullBaseline = ContinuousCommands(policy, blocksWorkPackage: true);
+            var selected = fullBaseline.Concat(fullTests.Select(command => command with
             {
                 TestScope = TestExecutionLevels.Full,
                 BlocksWorkPackage = true,
-                SelectionReason = "mandatory full suite before main",
-            })).ToList();
+                SelectionReason = fullReason,
+            })).DistinctBy(command => CommandKey(command.Command, command.WorkingSubdir),
+                StringComparer.OrdinalIgnoreCase).ToList();
+            var commands = nonTests.Concat(selected).ToList();
             return new StagedVerifyPlan(commands, new TestSelectionAudit
             {
                 Level = level,
                 Lane = lane ?? "",
                 DiffInput = diff,
                 HistoryInput = history,
-                SelectedCommands = fullTests.Select(Describe).ToList(),
-                Reasons = [fullSuiteRequired
-                    ? "full suite is mandatory; diff and adviser cannot remove tests"
-                    : "diff input is unavailable; conservative fallback runs the full suite"],
-                Selector = fullSuiteRequired ? "mandatory-full-suite" : "conservative-full-suite",
+                SelectedCommands = selected.Select(Describe).ToList(),
+                Reasons = [fullReason],
+                Selector = fullSuiteRequired
+                    ? "mandatory-full-suite"
+                    : conservativeFullSuite ? "conservative-full-suite" : "lane-full-suite",
                 FullSuiteRequired = fullSuiteRequired,
                 FullSuiteRan = true,
             });
@@ -130,16 +140,11 @@ public static class TestSelectionPlanner
             reasons.Add("LLM adviser may add allowlisted candidates but cannot remove deterministic selections");
         }
 
-        var selectedCandidates = candidates.Where(candidate => selectedIds.Contains(candidate.Id)).ToList();
-        var continuous = (policy?.ContinuousCommands ?? [])
-            .Where(command => !string.IsNullOrWhiteSpace(command))
-            .Select(command => new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", command.Trim())
-            {
-                TestScope = TestExecutionLevels.Continuous,
-                BlocksWorkPackage = false,
-                SelectionReason = "configured fixed continuous baseline",
-            })
-            .ToList();
+        var selectedCandidates = level == TestExecutionLevels.Continuous
+            ? []
+            : candidates.Where(candidate => selectedIds.Contains(candidate.Id)).ToList();
+        var advisedIds = advice?.CandidateIds.ToHashSet(StringComparer.Ordinal) ?? [];
+        var continuous = ContinuousCommands(policy, blocksWorkPackage: false);
 
         var selectedTests = level == TestExecutionLevels.Continuous
             ? new List<VerifyCommand>()
@@ -147,7 +152,10 @@ public static class TestSelectionPlanner
             {
                 TestScope = TestExecutionLevels.WorkPackage,
                 BlocksWorkPackage = true,
-                SelectionReason = string.Join("; ", candidate.Reasons),
+                SelectionReason = string.Join("; ", candidate.Reasons.Concat(
+                    advisedIds.Contains(candidate.Id)
+                        ? [$"LLM adviser: {advice!.Reason}"]
+                        : [])),
             }).ToList();
         var commandsForRun = nonTests
             .Concat(continuous)
@@ -170,7 +178,7 @@ public static class TestSelectionPlanner
             SelectedCommands = continuous.Concat(selectedTests).Select(Describe).ToList(),
             OmittedTestCommands = fullTests
                 .Select(Describe)
-                .Except(selectedTests.Select(Describe), StringComparer.OrdinalIgnoreCase)
+                .Except(continuous.Concat(selectedTests).Select(Describe), StringComparer.OrdinalIgnoreCase)
                 .ToList(),
             Reasons = reasons,
             Selector = advice is null ? "deterministic" : "deterministic+llm",
@@ -190,20 +198,35 @@ public static class TestSelectionPlanner
     {
         var map = new Dictionary<string, CandidateBuilder>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var command in ImpactedNodeTests(verifyPlan, changedFiles))
-            Add(map, command, "diff touches this package/component");
+        // Build a safe inventory first. Deterministic matching and the optional
+        // adviser may select from this inventory, but neither may invent a shell
+        // command. Candidates without reasons remain unselected unless the LLM
+        // explicitly adds their stable id.
+        foreach (var command in verifyPlan.Commands.Where(command => command.Kind == VerifyCommandKind.Test))
+            Add(map, command);
 
-        foreach (var command in ImpactedDotNetTests(repositoryPath, changedFiles))
-            Add(map, command, "diff touches this test project or a referenced production project");
+        foreach (var command in verifyPlan.Commands.Where(command =>
+                     command.Kind == VerifyCommandKind.Test
+                     && command.Ecosystem == VerifyEcosystem.Node))
+        {
+            Add(map, command, string.IsNullOrEmpty(command.WorkingSubdir)
+                || PathMatches(changedFiles, command.WorkingSubdir)
+                    ? "diff touches this package/component"
+                    : null);
+        }
+
+        foreach (var candidate in DotNetTestInventory(repositoryPath, verifyPlan, changedFiles))
+            Add(map, candidate.Command, candidate.Impacted
+                ? "diff touches this test project or a referenced production project"
+                : null);
 
         foreach (var rule in policy?.ImpactRules ?? [])
         {
             var matched = rule.PathPrefixes.Any(prefix => PathMatches(changedFiles, prefix));
-            if (!matched) continue;
             foreach (var raw in rule.TestCommands.Where(value => !string.IsNullOrWhiteSpace(value)))
             {
                 Add(map, new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", raw.Trim()),
-                    rule.Reason ?? "configured impact rule matched the diff");
+                    matched ? rule.Reason ?? "configured impact rule matched the diff" : null);
             }
         }
 
@@ -212,7 +235,14 @@ public static class TestSelectionPlanner
         // execution surface.
         foreach (var entry in history.Where(entry => PathMatches(changedFiles, entry.RelatedPaths)))
         {
-            if (map.TryGetValue(CommandKey(entry.Command, ""), out var existing))
+            var key = CommandKey(entry.Command, entry.WorkingSubdir);
+            if (!map.TryGetValue(key, out var existing) && string.IsNullOrWhiteSpace(entry.WorkingSubdir))
+            {
+                existing = map.Values.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Command.Command.Trim(), entry.Command.Trim(),
+                        StringComparison.OrdinalIgnoreCase));
+            }
+            if (existing is not null)
                 existing.Reasons.Add($"Test Hub history: {entry.TestId} failed here before");
         }
 
@@ -224,17 +254,9 @@ public static class TestSelectionPlanner
             .ToList();
     }
 
-    private static IEnumerable<VerifyCommand> ImpactedNodeTests(
-        VerifyPlan plan,
-        IReadOnlyList<string> changedFiles)
-        => plan.Commands.Where(command =>
-            command.Kind == VerifyCommandKind.Test
-            && command.Ecosystem == VerifyEcosystem.Node
-            && (string.IsNullOrEmpty(command.WorkingSubdir)
-                || PathMatches(changedFiles, command.WorkingSubdir)));
-
-    private static IEnumerable<VerifyCommand> ImpactedDotNetTests(
+    private static IEnumerable<(VerifyCommand Command, bool Impacted)> DotNetTestInventory(
         string repositoryPath,
+        VerifyPlan verifyPlan,
         IReadOnlyList<string> changedFiles)
     {
         if (!Directory.Exists(repositoryPath)) yield break;
@@ -251,15 +273,29 @@ public static class TestSelectionPlanner
         foreach (var testProject in testProjects)
         {
             var references = ProjectReferences(testProject);
-            if (!touchedProjects.Contains(testProject)
-                && !references.Any(touchedProjects.Contains)) continue;
+            var impacted = touchedProjects.Contains(testProject)
+                || references.Any(touchedProjects.Contains);
             var relative = NormalizePath(Path.GetRelativePath(repositoryPath, testProject));
-            yield return new VerifyCommand(
+            yield return (new VerifyCommand(
                 VerifyEcosystem.DotNet,
                 VerifyCommandKind.Test,
                 "",
-                $"dotnet test \"{relative}\"");
+                $"dotnet test \"{relative}\"{DotNetFilterSuffix(verifyPlan)}"), impacted);
         }
+    }
+
+    private static string DotNetFilterSuffix(VerifyPlan verifyPlan)
+    {
+        foreach (var command in verifyPlan.Commands.Where(command => command.Kind == VerifyCommandKind.Test))
+        {
+            if (!command.Command.TrimStart().StartsWith("dotnet test", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var match = Regex.Match(command.Command,
+                "(?:^|\\s)(?:--filter|-f)\\s+(?:\\\"[^\\\"]*\\\"|'[^']*'|\\S+)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (match.Success) return " " + match.Value.Trim();
+        }
+        return string.Empty;
     }
 
     private static string? OwningProject(string root, string changedFile, IReadOnlyList<string> projects)
@@ -340,7 +376,20 @@ public static class TestSelectionPlanner
         return entries;
     }
 
-    private static void Add(Dictionary<string, CandidateBuilder> map, VerifyCommand command, string reason)
+    private static IReadOnlyList<VerifyCommand> ContinuousCommands(
+        TestExecutionPolicy? policy,
+        bool blocksWorkPackage)
+        => (policy?.ContinuousCommands ?? [])
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .Select(command => new VerifyCommand(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", command.Trim())
+            {
+                TestScope = TestExecutionLevels.Continuous,
+                BlocksWorkPackage = blocksWorkPackage,
+                SelectionReason = "configured fixed continuous baseline",
+            })
+            .ToList();
+
+    private static void Add(Dictionary<string, CandidateBuilder> map, VerifyCommand command, string? reason = null)
     {
         var key = CommandKey(command.Command, command.WorkingSubdir);
         if (!map.TryGetValue(key, out var candidate))
@@ -348,7 +397,7 @@ public static class TestSelectionPlanner
             candidate = new CandidateBuilder(command);
             map[key] = candidate;
         }
-        candidate.Reasons.Add(reason);
+        if (!string.IsNullOrWhiteSpace(reason)) candidate.Reasons.Add(reason);
     }
 
     private static bool PathMatches(IReadOnlyList<string> changedFiles, IEnumerable<string> prefixes)

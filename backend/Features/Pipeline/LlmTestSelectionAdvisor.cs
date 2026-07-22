@@ -10,6 +10,7 @@ public interface ITestSelectionAdvisor
         string repositoryPath,
         string? project,
         string? jobId,
+        string? jobFolderPath,
         CancellationToken ct);
 }
 
@@ -38,6 +39,7 @@ public sealed class LlmTestSelectionAdvisor : ITestSelectionAdvisor
         string repositoryPath,
         string? project,
         string? jobId,
+        string? jobFolderPath,
         CancellationToken ct)
     {
         if (policy?.LlmSelectionEnabled != true || input.Candidates.Count == 0) return null;
@@ -49,29 +51,44 @@ public sealed class LlmTestSelectionAdvisor : ITestSelectionAdvisor
         if (cli is null)
         {
             _logger.LogWarning("test selection adviser CLI {Cli} is unavailable; deterministic selection remains", resolved.Cli);
-            return null;
+            return new TestSelectionAdvice([], $"adviser CLI {resolved.Cli} is unavailable; deterministic selection remains", resolved.Model);
         }
 
         var prompt = BuildPrompt(input);
-        var result = await cli.RunAsync(new CliOneShotRequest(resolved.Cli, resolved.Model, prompt)
+        CliOneShotResult result;
+        try
         {
-            ThinkingLevel = resolved.ThinkingLevel,
-            WorkingDirectory = repositoryPath,
-            Timeout = TimeSpan.FromMinutes(2),
-            Source = AdHocUsageSources.ReviewDecision,
-            Project = project,
-            JobId = jobId,
-            RecordUsage = true,
-            StepId = PipelineCatalogue.BuildTestGateStepId,
-        }, ct).ConfigureAwait(false);
+            result = await cli.RunAsync(new CliOneShotRequest(resolved.Cli, resolved.Model, prompt)
+            {
+                ThinkingLevel = resolved.ThinkingLevel,
+                WorkingDirectory = repositoryPath,
+                Timeout = TimeSpan.FromMinutes(2),
+                Source = AdHocUsageSources.ReviewDecision,
+                Project = project,
+                JobId = jobId,
+                JobFolderPath = jobFolderPath,
+                RecordUsage = true,
+                StepId = PipelineCatalogue.BuildTestGateStepId,
+            }, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "test selection adviser threw; deterministic selection remains");
+            return new TestSelectionAdvice([], "adviser invocation failed; deterministic selection remains", resolved.Model);
+        }
         if (!result.Ok)
         {
             _logger.LogWarning("test selection adviser failed: {Error}", result.Error ?? result.Stderr);
-            return null;
+            return new TestSelectionAdvice([], "adviser returned an error; deterministic selection remains", resolved.Model);
         }
 
         var reply = string.IsNullOrWhiteSpace(result.ParsedText) ? result.Stdout : result.ParsedText;
-        return Parse(reply, resolved.Model);
+        return Parse(reply, resolved.Model)
+            ?? new TestSelectionAdvice([], "adviser reply was not valid selection JSON; deterministic selection remains", resolved.Model);
     }
 
     internal static string BuildPrompt(TestSelectionAudit input)
