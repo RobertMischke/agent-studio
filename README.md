@@ -13,10 +13,13 @@
 
 ![Task detail: pipeline steps, live agent activity, and run evidence](docs/media/task-detail.png)
 
-- **Stack:** .NET backend, Angular frontend.
-- **Runs:** Claude Code, Codex, GitHub Copilot, or Gemini CLIs as the coding engine.
-- **Remote-first:** a central Task Server holds task state; Agent Runners execute on any host, outbound-only.
-- **Every run leaves evidence:** structured events, artifacts, and diffs are captured per run and kept next to the code.
+## What it provides
+
+- Batch remote and local coding-agent work with task management in one place.
+- Reduces cognitive load: task state, progress and evidence are visible instead of remembered.
+- A management layer over autonomous agent runs — assign, gate, review, account.
+- Works with your existing CLI subscriptions, or bring your own API keys.
+- Runs fully local or distributed — your choice per project.
 
 ## Running locally
 
