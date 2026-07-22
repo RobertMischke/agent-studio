@@ -32,7 +32,8 @@ public static class LogIngestionEndpoints
             HttpContext context,
             ITaskScanner scanner,
             RunLeaseService leases,
-            AttemptAuthorityService authority) =>
+            AttemptAuthorityService authority,
+            AgentStudio.Docs.WikiAgentReadService wikiReads) =>
         {
             if (!RunnerLeaseAuthorization.IsCurrent(context, leases, req.TaskKey, req.RunnerId, req.LeaseId, req.FencingToken))
                 return Results.Conflict(new LogIngestResponse(req.TaskKey, 0, "The authenticated Runner does not hold the current fenced lease."));
@@ -82,6 +83,22 @@ public static class LogIngestionEndpoints
             catch (Exception ex)
             {
                 return Results.Problem(CredentialRedactor.Redact($"Failed to ingest logs for '{req.TaskKey}': {ex.Message}"));
+            }
+
+            // Remote runs do not flow through the in-process CliRouter. Attribute
+            // their tool-use lines only after the durable, fenced append succeeds.
+            try
+            {
+                wikiReads.ProcessOutput(req.TaskKey, req.Lines.Select(line => new AgentStudio.Cli.CliOutputLine
+                {
+                    Timestamp = line.Timestamp,
+                    Stream = line.Stream,
+                    Text = line.Text,
+                }));
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "WikiAgentReadService: remote log attribution failed.");
             }
 
             return Results.Ok(new LogIngestResponse(req.TaskKey, req.Lines.Count));

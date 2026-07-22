@@ -516,6 +516,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly openedClassification = computed<WikiClassMeta | null>(() =>
     classificationMeta(this.openedNode()?.classification));
 
+  /** Durable, observed tool-use reads from the open page's companion. */
+  readonly openedAgentReads = computed(() => this.openedNode()?.metadata?.agentReads ?? null);
+
   readonly registeredWorkbenchPaths = computed<ReadonlySet<string>>(() =>
     new Set((this.pulse()?.workbenches?.items ?? []).map(item => item.entryPath)));
 

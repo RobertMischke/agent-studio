@@ -1481,6 +1481,7 @@ public class ProjectDocsService
                 TryJsonObject(root, "drift", out var drift);
                 TryJsonObject(root, "duplicates", out var duplicates);
                 TryJsonObject(root, "grading", out var grading);
+                TryJsonObject(root, "agentReads", out var agentReads);
 
                 var sourceRel = NormalizeMetadataSourcePath(JsonString(source, "path") ?? JsonString(root, "sourcePath"));
                 if (sourceRel == null) continue;
@@ -1513,7 +1514,8 @@ public class ProjectDocsService
                     ClassificationStatus: JsonString(classification, "status"),
                     ClassificationSupersededBy: JsonString(classification, "supersededBy"),
                     ClassificationType: JsonString(classification, "type"),
-                    ClassificationAnalyzedAt: JsonString(classification, "analyzedAt"));
+                    ClassificationAnalyzedAt: JsonString(classification, "analyzedAt"),
+                    AgentReads: ParseAgentReads(agentReads));
                 index[sourceRel] = metadata;
             }
             catch (Exception __ex)
@@ -1711,6 +1713,48 @@ public class ProjectDocsService
             }
         }
         return BuildClassification(relPath, status, supersededBy, type, analyzedAt);
+    }
+
+    /// <summary>Agent-read projection for one folder-overview page row.</summary>
+    private static WikiAgentReads? ReadPageAgentReads(string pageFullPath)
+    {
+        var companion = pageFullPath + ".meta.json";
+        if (!File.Exists(companion)) return null;
+        try
+        {
+            GitProcessTelemetry.RecordFileRead();
+            using var doc = JsonDocument.Parse(File.ReadAllText(companion));
+            return TryJsonObject(doc.RootElement, "agentReads", out var reads)
+                ? ParseAgentReads(reads)
+                : null;
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "ProjectDocsService: unreadable companion during folder agent-read projection.");
+            return null;
+        }
+    }
+
+    private static WikiAgentReads? ParseAgentReads(JsonElement reads)
+    {
+        if (reads.ValueKind != JsonValueKind.Object) return null;
+        var total = JsonInt(reads, "total") ?? 0;
+        DateTime? lastReadAt = DateTime.TryParse(JsonString(reads, "lastReadAt"), out var last)
+            ? last.ToUniversalTime()
+            : null;
+        var recent = new List<WikiAgentReadRecent>();
+        if (reads.TryGetProperty("recent", out var array) && array.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in array.EnumerateArray().Take(WikiCompanionStore.MaxRecentAgentReads))
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                if (!DateTime.TryParse(JsonString(item, "at"), out var at)) continue;
+                var taskKey = JsonString(item, "taskKey");
+                if (string.IsNullOrWhiteSpace(taskKey)) continue;
+                recent.Add(new WikiAgentReadRecent(at.ToUniversalTime(), taskKey));
+            }
+        }
+        return new WikiAgentReads(Math.Max(0, total), lastReadAt, recent);
     }
 
     private static string? NormalizeMetadataSourcePath(string? sourcePath)
@@ -2429,7 +2473,8 @@ public class ProjectDocsService
                 Size: file.Length,
                 ChildCount: null,
                 Classification: ReadPageClassification(file.FullName, fileRel),
-                UpdatedAtSource: updated.Source));
+                UpdatedAtSource: updated.Source,
+                AgentReads: ReadPageAgentReads(file.FullName)));
         }
 
         // Same saved category and document drag-orders as the tree. Unlisted
@@ -3006,7 +3051,8 @@ public record WikiTreeMetadata(
     string? ClassificationStatus = null,
     string? ClassificationSupersededBy = null,
     string? ClassificationType = null,
-    string? ClassificationAnalyzedAt = null);
+    string? ClassificationAnalyzedAt = null,
+    WikiAgentReads? AgentReads = null);
 
 /// <summary>
 /// Curation classification of one wiki page, projected onto tree and folder
@@ -3297,7 +3343,8 @@ public record WikiFolderChild(
     WikiClassification? Classification = null,
     // "git" for the last commit's author date; "mtime" only when no commit
     // exists for the page (typically a new, untracked local file).
-    string? UpdatedAtSource = null);
+    string? UpdatedAtSource = null,
+    WikiAgentReads? AgentReads = null);
 
 // ---- Wiki home (curated landing sections) ----
 

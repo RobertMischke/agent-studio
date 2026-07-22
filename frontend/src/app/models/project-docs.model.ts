@@ -116,6 +116,19 @@ export interface WikiClassification {
   analyzedAt: string | null;
 }
 
+/** One retained agent tool-use read in the adjacent companion. */
+export interface WikiAgentReadRecent {
+  at: string;
+  taskKey: string;
+}
+
+/** Durable observed read count for one wiki page. Never a drift/gate signal. */
+export interface WikiAgentReads {
+  total: number;
+  lastReadAt: string | null;
+  recent: WikiAgentReadRecent[];
+}
+
 /** Compact per-document metadata shown in the tree (mirrors backend WikiTreeMetadata). */
 export interface WikiTreeMetadata {
   documentMode: string | null;
@@ -132,6 +145,7 @@ export interface WikiTreeMetadata {
   companionPath: string | null;
   sourceChangedSinceReview: boolean | null;
   findingsCount: number | null;
+  agentReads?: WikiAgentReads | null;
 }
 
 /**
@@ -431,6 +445,8 @@ export interface WikiFolderChild {
   childCount: number | null;
   /** Curated classification (pages only; null for folders and unclassified pages). */
   classification?: WikiClassification | null;
+  /** Observed agent reads (pages only). */
+  agentReads?: WikiAgentReads | null;
 }
 
 /** Overview of one wiki folder: its path, display name, and direct children. */

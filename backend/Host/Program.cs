@@ -627,6 +627,7 @@ builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingServi
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.
 builder.Services.AddSingleton<AgentStudio.Docs.WikiMaintenanceModelService>();
 builder.Services.AddSingleton<AgentStudio.Docs.WikiCompanionStore>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiAgentReadService>();
 builder.Services.AddSingleton<AgentStudio.Docs.IWikiPageGrader, AgentStudio.Docs.CliWikiPageGrader>();
 builder.Services.AddSingleton<AgentStudio.Docs.WikiGradingService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
@@ -798,6 +799,19 @@ catch (Exception ex)
     if (dedupCount > 0)
         app.Services.GetRequiredService<ILogger<Program>>()
             .LogWarning("Resolved duplicate task keys by re-keying {Count} task(s)", dedupCount);
+}
+
+// One-time initialization of durable per-page agent read counters from the
+// historical cli-output.log inventory. The marker makes subsequent boots a
+// cheap no-op; this runs before CLI reattachment and before the listener starts
+// so historical and new live observations cannot race each other.
+try
+{
+    app.Services.GetRequiredService<AgentStudio.Docs.WikiAgentReadService>().EnsureBackfilled();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("WikiAgentReadBackfill", ex);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any
@@ -1109,8 +1123,13 @@ watcher.OnJobChanged += path => runnerForTransitions.ReconcileRunnerForPath(path
 
 // Wire up CLI events → SignalR push (across all CLI backends via the router)
 var cliRouter = app.Services.GetRequiredService<CliRouter>();
+var wikiAgentReads = app.Services.GetRequiredService<AgentStudio.Docs.WikiAgentReadService>();
 cliRouter.OnOutput += (cliType, jobId, line) =>
-    TaskEventClients(jobId).SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
+{
+    try { wikiAgentReads.ProcessOutput(jobId, new[] { line }); }
+    catch (Exception ex) { SilentCatch.Note(ex, "WikiAgentReadService: live CLI output attribution failed."); }
+    _ = TaskEventClients(jobId).SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
+};
 cliRouter.OnStarted += (cliType, jobId, exec) =>
     TaskEventClients(jobId).SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
 cliRouter.OnFinished += (cliType, jobId, exec) =>

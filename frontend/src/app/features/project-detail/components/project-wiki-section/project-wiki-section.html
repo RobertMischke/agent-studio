@@ -639,6 +639,31 @@
                   }
               </app-wiki-meta-section>
 
+              @if (openedAgentReads(); as reads) {
+                <section class="pwiki__panel" data-testid="project-wiki-agent-reads-panel">
+                  <div class="pwiki__panel-head">
+                    <span>Agent reads</span>
+                    <span data-testid="project-wiki-agent-reads-total">{{ reads.total }}</span>
+                  </div>
+                  <dl class="pwiki__info-list">
+                    <div>
+                      <dt>Last read</dt>
+                      <dd data-testid="project-wiki-agent-reads-last">{{ reads.lastReadAt ? formatTimestamp(reads.lastReadAt) : 'Never' }}</dd>
+                    </div>
+                  </dl>
+                  @if (reads.recent.length > 0) {
+                    <ul class="pwiki__agent-reads" data-testid="project-wiki-agent-reads-recent">
+                      @for (read of reads.recent; track read.at + read.taskKey) {
+                        <li>
+                          <time [attr.datetime]="read.at">{{ formatTimestamp(read.at) }}</time>
+                          <code>{{ read.taskKey }}</code>
+                        </li>
+                      }
+                    </ul>
+                  }
+                </section>
+              }
+
               <app-wiki-meta-section class="pwiki__panel pwiki__panel--history"
                   data-testid="project-wiki-history-panel" sectionId="history" title="History"
                   toggleTestId="project-wiki-section-toggle-history"
