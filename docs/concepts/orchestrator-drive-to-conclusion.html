@@ -812,6 +812,24 @@
             plus simulated auto-review tests prove the escalated record carries that useful text instead of the placeholder.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-13</td>
+          <td><code>AGT-2178</code><br><span class="small">remote Epic planning stdin close during completion</span></td>
+          <td>
+            The remote Epic end-to-end gate captured a valid decomposition and <code>[[TASK_DONE]]</code>, but the
+            planning CLI closed stdin while the runner was still writing the rendered prompt. The resulting broken-pipe
+            exception replaced the captured terminal response with an unknown outcome and returned the Epic to Backlog.
+          </td>
+          <td>
+            <code>runner/ProcessRunner</code> treated a child closing its stdin pipe during exit as a process-spawn failure,
+            even when stdout already contained the authoritative terminal response and the child exit code was available.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> stdin pipe closure no longer discards captured stdout, stderr, or the child
+            exit code. The fenced completion path now parses the valid plan, creates its children, and reaches
+            <span class="lane">4-auto-review</span>; the regression also proves no coding or salvage branch is created.
+          </td>
+        </tr>
       </tbody>
     </table>
 
