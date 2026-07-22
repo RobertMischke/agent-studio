@@ -81,6 +81,47 @@ public class EpicDecompositionTests : IDisposable
     }
 
     [Fact]
+    public void Parse_ReadsGoalGraphAndVerificationPurpose()
+    {
+        var output = """
+            ```json
+            {
+              "subTasks": [
+                { "id": "ship", "title": "Ship", "prompt": "deliver", "purpose": "delivery", "dependsOn": [] },
+                { "id": "verify", "title": "Verify", "prompt": "inspect real evidence", "purpose": "verification", "dependsOn": ["ship"] }
+              ]
+            }
+            ```
+            [[TASK_DONE]]
+            """;
+
+        var result = EpicDecompositionParser.Parse(output);
+
+        Assert.Null(result.Error);
+        Assert.Equal("ship", result.SubTasks[0].PlanId);
+        Assert.Equal(GoalTaskPurposes.Verification, result.SubTasks[1].Purpose);
+        Assert.Equal(new[] { "ship" }, result.SubTasks[1].DependsOn);
+    }
+
+    [Fact]
+    public void Parse_RejectsCyclicGoalGraphBeforeCreatingCards()
+    {
+        var output = """
+            ```json
+            { "subTasks": [
+              { "id": "a", "title": "A", "dependsOn": ["b"] },
+              { "id": "b", "title": "B", "dependsOn": ["a"] }
+            ] }
+            ```
+            """;
+
+        var result = EpicDecompositionParser.Parse(output);
+
+        Assert.False(result.HasSubTasks);
+        Assert.Contains("cycle", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Parse_BareFencedArray_IsAccepted()
     {
         var output = """
@@ -330,6 +371,37 @@ public class EpicDecompositionTests : IDisposable
 
         Assert.Equal(2, created.Count);
         Assert.All(created, id => Assert.Equal("epic-e2e", scanner.FindJob(id, _watchPath)!.EpicId));
+    }
+
+    [Fact]
+    public void CreateSubTasks_GoalGraphPersistsDependenciesAndOrchestratorProvenance()
+    {
+        var (scanner, mutations) = Build();
+        var epic = CreateEpic("goal-epic");
+        var specs = new List<EpicSubTaskSpec>
+        {
+            new("Implement goal", "deliver", PlanId: "delivery", Purpose: GoalTaskPurposes.Delivery),
+            new("Verify goal", "inspect submitted revision and real evidence",
+                PlanId: "verify", DependsOn: new[] { "delivery" }, Purpose: GoalTaskPurposes.Verification),
+        };
+
+        var created = EpicSubTaskFactory.CreateSubTasks(
+            mutations,
+            epic,
+            specs,
+            TaskStates.Ready,
+            TaskCreationInitiators.Orchestrator,
+            "project:test-project");
+
+        Assert.Equal(2, created.Count);
+        var delivery = scanner.FindJob(created[0], _watchPath)!;
+        var verification = scanner.FindJob(created[1], _watchPath)!;
+        Assert.Equal(new[] { delivery.Key }, verification.References.DependsOn);
+        Assert.Equal(TaskCreationInitiators.Orchestrator, verification.CreationProvenance?.Initiator);
+        Assert.Equal(TaskCreationMethods.GoalDecomposition, verification.CreationProvenance?.Method);
+        Assert.Equal(epic.Id, verification.CreationProvenance?.GoalId);
+        Assert.Equal("project:test-project", verification.CreationProvenance?.ContextKey);
+        Assert.Equal(GoalTaskPurposes.Verification, verification.CreationProvenance?.Purpose);
     }
 
     // ---- harness -----------------------------------------------------------

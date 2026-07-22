@@ -110,6 +110,10 @@ public class OrchestratorPromptUserPreferencesTests : IDisposable
         Assert.Contains("POST /api/tasks", prompt);
         Assert.Contains("X-Client-Id", prompt);
         Assert.Contains("Do NOT tell them they have to do it manually in the UI", prompt);
+        Assert.Contains("watchful, goal-driven planning role", prompt);
+        Assert.Contains("kind: \"epic\"", prompt);
+        Assert.Contains("orchestrator provenance", prompt);
+        Assert.Contains("Never accept a completion claim", prompt);
     }
 
     [Fact]

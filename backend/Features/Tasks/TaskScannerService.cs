@@ -477,6 +477,7 @@ public class TaskScannerService : ITaskScanner
                 SteerPendingSince = ReadSteerPendingSince(jobDir, resolvedState),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
+                CreationProvenance = ReadCreationProvenance(raw),
                 References = ReadReferences(raw),
                 RelatedWikiPages = ReadRelatedWikiPages(raw, entry),
                 Provenance = ReadProvenance(raw),
@@ -486,6 +487,25 @@ public class TaskScannerService : ITaskScanner
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to parse task.json in {Dir}", jobDir);
+            return null;
+        }
+    }
+
+    private static TaskCreationProvenance? ReadCreationProvenance(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("creationProvenance", out var provenance)
+            || provenance.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<TaskCreationProvenance>(
+                provenance.GetRawText(), TaskJsonFile.ReadOpts);
+        }
+        catch (JsonException)
+        {
             return null;
         }
     }

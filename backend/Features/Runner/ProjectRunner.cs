@@ -5786,12 +5786,23 @@ public class ProjectRunner
             return;
         }
 
-        var created = EpicSubTaskFactory.CreateSubTasks(_mutations, epic, result.SubTasks, targetState);
+        var created = EpicSubTaskFactory.CreateSubTasks(
+            _mutations,
+            epic,
+            result.SubTasks,
+            targetState,
+            TaskCreationInitiators.Orchestrator,
+            $"project:{ProjectName}");
+        var verificationCount = result.SubTasks.Count(spec =>
+            string.Equals(
+                GoalTaskPurposes.Normalize(spec.Purpose),
+                GoalTaskPurposes.Verification,
+                StringComparison.Ordinal));
         _logger.LogInformation(
-            "[taskboard] epic {EpicId} decomposed into {Count} sub-task(s) -> {Lane}",
-            epic.Id, created.Count, targetState);
+            "[taskboard] epic {EpicId} decomposed into {Count} sub-task(s), including {VerificationCount} verification task(s) -> {Lane}",
+            epic.Id, created.Count, verificationCount, targetState);
         _chatLog.Append(epic, OrchestratorMessageKind.Decision,
-            $"[epic] Decomposition created {created.Count} sub-task(s) in {targetState}.");
+            $"[epic] Goal decomposition created {created.Count} sub-task(s) in {targetState}, including {verificationCount} planned verification task(s).");
         _timeline?.Append(
             epic.FolderPath,
             TimelineEventKinds.EpicDecomposed,
@@ -5801,6 +5812,7 @@ public class ProjectRunner
             details: new()
             {
                 ["created"] = created.Count.ToString(),
+                ["verificationTasks"] = verificationCount.ToString(),
                 ["targetState"] = targetState,
             });
     }

@@ -180,6 +180,22 @@ export interface PlanningSpawnSummary {
   contractSatisfied: boolean;
 }
 
+/**
+ * Server-authored origin for a card materialized by goal decomposition.
+ * Ordinary user-created and legacy cards omit it. `purpose` makes planned
+ * verification work distinguishable from delivery work without inferring from
+ * the title.
+ */
+export interface TaskCreationProvenance {
+  initiator: 'orchestrator' | 'operator';
+  method: 'goal-decomposition';
+  goalId: string;
+  goalKey?: string | null;
+  contextKey?: string | null;
+  purpose: 'delivery' | 'verification';
+  createdAt: string;
+}
+
 export interface TaskInfo {
   id: string;
   taskKey: string;
@@ -332,6 +348,8 @@ export interface TaskInfo {
    * that were soft-deleted from the registry) render as a faint ghost chip.
    */
   tags?: string[];
+  /** Traceable origin for orchestrator/operator goal-decomposition children. */
+  creationProvenance?: TaskCreationProvenance | null;
   /**
    * F34 cross-references to other tasks by F33 stable key. Always present
    * (backend surfaces an empty instance when absent on disk). Drives the

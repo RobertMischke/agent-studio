@@ -82,6 +82,10 @@ public static class EpicEndpoints
             if (req?.SubTasks is null || req.SubTasks.Count == 0)
                 return Results.BadRequest(new { error = "subTasks is required and must contain at least one entry" });
 
+            var validation = EpicGoalPlanValidator.Validate(req.SubTasks);
+            if (!validation.IsValid)
+                return Results.BadRequest(new { error = validation.Error });
+
             var created = EpicSubTaskFactory.CreateSubTasks(mutations, epic, req.SubTasks, TaskStates.Backlog);
             return Results.Ok(new { epicId = epic.Id, created });
         });

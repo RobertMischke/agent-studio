@@ -262,6 +262,14 @@ public record TaskInfo
     public List<string> Tags { get; init; } = [];
 
     /// <summary>
+    /// Server-authored origin of a task created by goal decomposition. This is
+    /// null for legacy and ordinary user-created cards. Consumers can use the
+    /// initiator, goal, and purpose to distinguish orchestrator-planned
+    /// delivery or verification work from manual queue entries.
+    /// </summary>
+    public TaskCreationProvenance? CreationProvenance { get; init; }
+
+    /// <summary>
     /// F34: structured cross-references to other tasks, keyed by F33 stable
     /// keys (<c>ATP-19</c>). Four relation kinds — dependsOn / relatedTo /
     /// blockedBy / supersedes (see <see cref="TaskReferences"/>). Stored as the
