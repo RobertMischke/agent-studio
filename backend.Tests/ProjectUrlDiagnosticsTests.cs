@@ -66,6 +66,9 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.Contains("[REDACTED]", result.Cwd);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess; Dispose loescht den Temp-Root,
+    // den der noch nicht beendete Prozess unter Last haelt (IOException "used by another process" im Gate belegt).
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAsync_FailedCommandIsCommandUnavailableWithBoundedEvidence()
     {
@@ -78,6 +81,9 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.True(result.StderrTail.Length <= ProjectUrlProcessService.OutputTailLimit);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess (exit-Command); Temp-Root-Cleanup
+    // rennt unter Last gegen den Prozess-Exit (IOException im Gate belegt).
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAsync_ProcessExitIsNotRunning()
     {
@@ -98,6 +104,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.ProcessCreated);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess und reserviert einen Port; timing-/lastabhaengig.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task TestAsync_LiveProcessWhosePortNeverOpensIsBoundedAndStopped()
     {
@@ -116,6 +124,9 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.PortReachable);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess, reserviert einen Port und misst per
+    // Wanduhr (Task.Delay 3.5s) - flakt unter Parallellast.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAsync_KeepsWaitingWhileConsoleStaysActivePastIdleWindow()
     {
@@ -146,6 +157,9 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         service.Stop(project.Id, candidate.Id);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess, reserviert einen Port und prueft ein
+    // Wanduhr-Zeitbudget (< 30s) - lastabhaengig.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAsync_SilentUnreachableProcessFailsAfterIdleWindow()
     {
@@ -201,6 +215,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.True(result.TimedOut);
     }
 
+    // MachineBound 22.07.: startet einen echten Kindprozess und reserviert einen Port; timing-/lastabhaengig.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task StartAsync_PublishesStartingWhileReadinessIsInFlight()
     {
@@ -224,6 +240,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.Equal(ProjectUrlDiagnosisClasses.Timeout, result.Classification);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_HttpErrorIsNotRunning()
     {
@@ -237,6 +255,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.ContentReady);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_ExplicitFramePolicyIsNotRenderable()
     {
@@ -256,6 +276,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.Contains("X-Frame-Options", result.FramePolicy);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_BlankHtmlIsNotRenderable()
     {
@@ -269,6 +291,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.IframeReady);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_RenderableHtmlRequiresTcpAndHttpEvidence()
     {
@@ -283,6 +307,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.True(result.ContentReady);
     }
 
+    // MachineBound 22.07.: bindet einen echten Loopback-TCP-Port und macht einen echten TCP-Connect.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_HttpTimeoutIsNotRunning()
     {
@@ -296,6 +322,8 @@ public sealed class ProjectUrlDiagnosticsTests : IDisposable
         Assert.False(result.ContentReady);
     }
 
+    // MachineBound 22.07.: reserviert einen Port und macht einen echten TCP-Connect gegen einen freien Port.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public async Task ProbeAsync_NoListenerIsNotStarted()
     {

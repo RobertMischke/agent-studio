@@ -590,16 +590,23 @@ public sealed class TaskServerStore
             await using var source = Open();
             await source.OpenAsync(ct);
             await ConfigureConnectionAsync(source, ct);
-            await using var destination = new SqliteConnection(new SqliteConnectionStringBuilder
+            // Write and verify the snapshot inside a nested scope so the destination
+            // connection is fully closed before the file is hashed or the .db is later
+            // moved/deleted. Pooling stays off so dispose actually releases the OS file
+            // handle instead of parking it in the pool ("used by another process").
+            await using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = path,
                 Mode = SqliteOpenMode.ReadWriteCreate,
-            }.ToString());
-            await destination.OpenAsync(ct);
-            source.BackupDatabase(destination);
-            var integrity = Convert.ToString(await ScalarAsync(destination, "PRAGMA integrity_check;", ct), CultureInfo.InvariantCulture);
-            if (!string.Equals(integrity, "ok", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Backup integrity check failed: {integrity}");
+                Pooling = false,
+            }.ToString()))
+            {
+                await destination.OpenAsync(ct);
+                source.BackupDatabase(destination);
+                var integrity = Convert.ToString(await ScalarAsync(destination, "PRAGMA integrity_check;", ct), CultureInfo.InvariantCulture);
+                if (!string.Equals(integrity, "ok", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Backup integrity check failed: {integrity}");
+            }
             var sha = await HashFileAsync(path, ct);
             var info = new FileInfo(path);
             await using var transaction = (SqliteTransaction)await source.BeginTransactionAsync(ct);
@@ -623,6 +630,9 @@ public sealed class TaskServerStore
         {
             DataSource = path,
             Mode = SqliteOpenMode.ReadOnly,
+            // Pooling off so the backup file handle is released on dispose and the
+            // .db can be moved/deleted afterwards.
+            Pooling = false,
         }.ToString()))
         {
             await verify.OpenAsync(ct);
