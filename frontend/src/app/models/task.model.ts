@@ -1119,6 +1119,8 @@ export interface RegistryProjectSummary {
   rootPath: string | null;
   /** Well-known repository URL (`urls[id=repo]`) projected for project basics editing. */
   repositoryUrl: string | null;
+  /** Optional read-only git ref supplying the complete project Wiki. */
+  wikiSourceBranch?: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
   archived: boolean;
