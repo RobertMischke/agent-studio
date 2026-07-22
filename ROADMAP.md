@@ -35,6 +35,41 @@ Hard rules:
 
 Phasing is detailed in the queued task `task-access-api-layer-extraction`: ADR + skeleton, in-memory store, mutations and subscribers, consumer migration, default-on with multi-instance preparation.
 
+### Host-Local Orchestration
+
+Remote execution becomes a two-level control system. Task Server keeps the
+global truth: cards, lanes, provenance, order across hosts, project eligibility,
+global gates, leases, and fences. Each remote host runs a Host Orchestrator in
+the Agent Runner service and owns the facts and decisions that only that host
+can make reliably: configured and effective capacity, local admission, accepted
+queue order, clone and worktree lifecycle, process containment, and
+post-processing for its own attempts.
+
+The boundary is the versioned `host-orchestrator/v1` exchange. Hosts report
+sequenced capacity, capabilities, queue, active attempts, post-processing, and
+faults. Task Server returns policy and ordered work permits. A permit occupies
+no slot until an eligible host admits and atomically accepts it. Host state in
+the central UI comes from the last accepted report sequence with explicit age,
+never from lane membership or mirrored booleans.
+
+Delivery is incremental and ordered:
+
+1. Move capacity truth into cyclic host reports while the legacy claim path
+   remains active.
+2. Make post-processing units claimable by the host that executed the attempt.
+3. Move local queue and admission to the host, with Task Server releasing
+   eligible work instead of assigning a guessed free slot.
+4. Remove inferred host flags after every central projection consumes reported
+   state.
+
+A Task Server restart restores lease and fence authority, reconciles the same
+host instance, and does not kill or duplicate admitted work. A missing host
+remains visible as `at host X since T` until fenced recovery has positive
+no-overlap evidence. No task or queue filesystem is shared. The canonical
+contract and migration gates live in
+[Distributed Agent Studio target architecture](docs/concepts/distributed-agent-studio-target-architecture.md#host-orchestration-exchange)
+and [ADR-0067](docs/system/architecture/decisions/adr-archive.md#adr-0067---orchestration-is-two-level-central-card-authority-and-host-local-operational-authority-2026-07-22).
+
 ### Assisted Coding Harness Around CLI Runs
 
 Provider pricing and usage boundaries can change quickly. The June 15, 2026 Claude Code Agent SDK credit change makes the product boundary more important, not less: agent-orchestrator should remain a CLI-conformant assisted-coding harness around task runs, while provider CLIs remain the execution engines.

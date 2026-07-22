@@ -1322,6 +1322,9 @@ durable authority store, local compatibility profile, Runner client, migration
 rehearsal, backup/restore, and independent-process topology proof ship in
 AGT-2192. Authenticated management recovery and the full cross-product golden
 path remain owned by the follow-up delivery tasks named in the canonical target.
+The statement that Task Server owns all orchestration and host admission is
+superseded by ADR-0067. Its durable card, lease, fence, and global-policy
+authority remains in force.
 
 ---
 
@@ -1437,3 +1440,100 @@ Restart, boundary, stage, env, version, and handshake tests:
 **Status.** Accepted. The API-only binary, durable run authority, restart
 reclaim, protocol handshake, version surface, env contract, and migration
 switch ship together.
+
+---
+
+## ADR-0067 - Orchestration is two-level: central card authority and host-local operational authority (2026-07-22)
+
+**Decision.** Task Server remains the only durable authority for cards, lanes,
+provenance, cross-host order, project-to-host policy, global gates, leases, and
+fences. Agent Runner becomes a Host Orchestrator for the machine on which it
+runs. It owns configured and effective capacity, local admission, the order of
+work it has atomically accepted, clone and worktree lifecycle, process
+containment, and post-processing for attempts executed on that host.
+
+Task Server publishes ordered work permits to eligible hosts instead of pushing
+an assignment into a centrally inferred free slot. A host evaluates its current
+capabilities and atomically accepts a permit before it queues or starts the
+work. Acceptance binds the card to the host and returns a persisted authority
+envelope containing the run, lease, fence, offline deadline, and immutable
+execution and post-processing plan. Host decisions affect card truth only after
+a fenced, idempotent report is accepted centrally.
+
+The host reports capacity, capabilities, accepted queue, active attempts,
+post-processing, and faults as sequenced facts through the separately negotiated
+`host-orchestrator/v1` contract. Task Server validates and projects those facts;
+it does not reconstruct them from lanes, lease age, checkout flags, or a shared
+filesystem. An incompatible host is rejected with HTTP 426 and
+`host-orchestrator-contract-unsupported` before permit acceptance.
+
+**Context.** The central backend currently combines global orchestration,
+scheduling, post-processing, and UI APIs. The remote daemon polls a centrally
+selected claim endpoint and starts processes. That design left idle Linux
+capacity unable to help a central post-processing backlog, hid host capacity in
+host configuration, showed no active work centrally while four host processes
+ran, and reduced clone, push, and worktree readiness to stale booleans. All four
+failures have the same cause: decisions requiring host facts were made away from
+the owner of those facts.
+
+ADR-0063 correctly separated Studio from durable Task Server authority but put
+all orchestration and admission centrally. This ADR supersedes that part of
+ADR-0063 without introducing another card store. Global truth stays centralized;
+host-local operational truth moves to the host that can observe and enforce it.
+
+**Restart and disappearance contract.** A Task Server restart does not revoke
+an admitted process. The server restores leases and fences before reopening
+admission, enters reconciliation, and resumes the same authority when the same
+host instance reports a matching run, lease, and fence. The host may continue
+only within the persisted offline deadline and must not accept new work while
+central authority is unavailable. If a host disappears, Task Server keeps the
+card visibly bound to that host with accepted time, last phase, report sequence,
+and report age. Reassignment requires expiry plus positive no-overlap or
+containment evidence. Lease expiry alone remains insufficient.
+
+**Migration.** The boundary ships in four independently useful, reversible
+slices:
+
+1. Add contract negotiation and cyclic host capacity reports while legacy claim
+   selection remains active.
+2. Expose fenced post-processing units and let the host that executed the
+   attempt claim and report them.
+3. Publish eligible work permits and move queue plus admission to compatible
+   hosts. Switch project policy from legacy claim to permit acceptance only
+   after compatibility is observed.
+4. Replace every inferred central host flag with the sequenced report projection
+   and explicit staleness.
+
+Each slice is additive before it becomes authoritative. Rollback returns only
+the current slice to the previous read or pickup path; it never rewrites leases,
+fences, card history, or host evidence.
+
+**Non-goals.** The Host Orchestrator is not a second Task Server, mutable board,
+global scheduler, release authority, or UI backend. It cannot mint leases,
+extend its offline deadline, bypass main/release gates, accept work without
+central policy, or continue indefinitely after Task Server disappears. No task,
+queue, clone, or worktree filesystem is shared between central and host
+services.
+
+**Reasoning style.** Put a decision beside the freshest fact it requires while
+keeping authority beside the state that must be globally serialized. Capacity,
+push readiness, checkout containment, process liveness, and toolchain presence
+are host facts, so the host decides and reports them. Lanes, provenance,
+cross-host order, eligibility policy, release gates, leases, and fences must be
+globally serialized, so Task Server remains authoritative for them. Preserve
+that split with explicit versions, monotonic reports, atomic permit acceptance,
+and fenced idempotent results instead of mirrored flags or shared files.
+
+**Implementation pointers.** Canonical boundary and full exchange fields:
+[distributed-agent-studio-target-architecture.md](../../../concepts/distributed-agent-studio-target-architecture.md#host-orchestration-exchange).
+Current shared protocol and compatibility seam:
+[`contracts/TaskServer.Contracts/`](../../../../contracts/TaskServer.Contracts/).
+Current remote daemon and local slot owner: [`runner/`](../../../../runner/).
+Current central claim and host-flag compatibility path:
+[`backend/Features/Tasks/LeaseEndpoints.cs`](../../../../backend/Features/Tasks/LeaseEndpoints.cs)
+and [`backend/Features/Clients/ClientIdentityStore.cs`](../../../../backend/Features/Clients/ClientIdentityStore.cs).
+Separated durable lease/fence authority: [`task-server/`](../../../../task-server/).
+
+**Status.** Accepted as the target boundary in AGT-2229. The four migration
+slices remain delivery work and must preserve the legacy path until their own
+compatibility and rollback gates pass.
