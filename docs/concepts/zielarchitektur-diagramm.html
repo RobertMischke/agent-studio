@@ -155,34 +155,20 @@ figcaption b { color: var(--ink-1); }
 
 /* Wire-Layer: SVG zeichnet NUR die Verbindungen, Boxen sind HTML */
 .arch { position: relative; width: 100%; }
-.arch-stage { position: relative; width: 100%; min-width: 640px; aspect-ratio: 360 / 300; }
+.arch-stage { position: relative; width: 100%; min-width: 640px; aspect-ratio: 360 / 340; }
 .wires { position: absolute; inset: 0; width: 100%; height: 100%; }
 .wires .rails, .wires .rails use { fill: none; stroke: var(--line); stroke-width: 1.6; opacity: .9; }
 .wires .flow  { fill: none; stroke-width: 2.4; stroke-linecap: round;
-                stroke-dasharray: 7 12; animation: dash 1.5s linear infinite; }
+                /* beruhigt: ~2.5x langsamer als die ursprüngliche 1.4–1.7s-Bandbreite */
+                stroke-dasharray: 7 12; animation: dash 3.6s linear infinite; }
 .wires .flow.up   { stroke: var(--blue); }
 .wires .flow.down { stroke: var(--teal); }
 @keyframes dash { to { stroke-dashoffset: -38; } }
 @media (prefers-reduced-motion: reduce) { .wires .flow { animation: none; } }
 
-/* Chip = kleine Einheiten-Box (Client/Runner) */
-.chip {
-  position: absolute; transform: translate(-50%, 0);
-  display: inline-flex; align-items: center; gap: 8px;
-  background: var(--bg-elv); color: var(--ink-1);
-  border: 1px solid var(--border); border-radius: 9px;
-  padding: 8px 13px; font-size: 13px; font-weight: 600;
-  box-shadow: var(--chip-shadow); white-space: nowrap;
-}
-.chip .ic { width: 9px; height: 9px; border-radius: 3px; flex: none; }
-.chip.client { border-color: var(--blue-bd); }
-.chip.client .ic { background: var(--blue); }
-.chip.exec   { border-color: var(--teal-bd); }
-.chip.exec .ic { background: var(--teal); }
-
 /* Host-Box = zentrale Autorität (Task Server) */
 .host {
-  position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%);
+  position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
   width: min(48%, 300px); text-align: center;
   background: var(--blue-soft); border: 1px solid var(--blue-bd);
   border-radius: 14px; padding: 16px 20px; box-shadow: 0 0 34px var(--blue-glow);
@@ -190,6 +176,20 @@ figcaption b { color: var(--ink-1); }
 .host .lbl { display: block; font: 700 12.5px/1 var(--font-mono); letter-spacing: .16em;
              text-transform: uppercase; color: var(--blue-ink); margin-bottom: 8px; }
 .host .sub { display: block; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+/* Studio-Host-Karte (oben, gleiche Präsenz wie die Runner-Hosts unten) */
+.shost {
+  position: absolute; top: 0; left: 50%; transform: translate(-50%, 0);
+  width: min(60%, 360px);
+  background: var(--bg-elv); border: 1px solid var(--blue-bd);
+  border-radius: 12px; padding: 13px 16px; box-shadow: var(--chip-shadow);
+}
+.shost .rt { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+.shost .rt .ic { width: 9px; height: 9px; border-radius: 3px; background: var(--blue); flex: none; }
+.shost .rs { font: 500 11.5px/1.5 var(--font-mono); color: var(--ink-3); letter-spacing: .02em; }
+.shost .pools { display: flex; gap: 6px; margin-top: 9px; }
+.pool.studio { border-color: var(--blue-bd); background: var(--blue-soft); }
+.pool.studio .pn { color: var(--blue-ink); }
 
 /* Runner-Host-Karte (unten, größer, mit Pool-Struktur) */
 .rhost {
@@ -224,6 +224,13 @@ figcaption b { color: var(--ink-1); }
 }
 .edge.b { color: var(--blue-ink); border-color: var(--blue-bd); }
 .edge.t { color: var(--teal-ink); border-color: var(--teal-bd); }
+
+/* Anmerkung: Runner-Verbindungen sind strikt ausgehend, keine offenen Ports */
+.ports-note {
+  margin-top: 4px; text-align: center;
+  font: 600 11px/1.5 var(--font-mono); letter-spacing: .04em; color: var(--ink-3);
+}
+.ports-note b { color: var(--teal-ink); }
 
 /* --- Zwei-Pool-Panel + Autonomie-Callout --- */
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 22px 0; }
@@ -312,37 +319,51 @@ footer.src code { font-size: 11.5px; }
 <!-- ============================================================ -->
 <p class="sec-no"><span class="n">§1</span> · Haupt-Architektur</p>
 <h2>Die drei Einheiten und ihre Kanäle</h2>
-<p class="dim">Studio spricht den Task Server über eine einzige HTTPS-Origin an. Jeder Runner-Host
-initiiert die Verbindung selbst — <b>pull, nur ausgehend</b>, keine offenen Inbound-Ports. Quelltext
-nimmt einen dritten, orthogonalen Weg: ausschließlich über <code>git origin</code>, nie über die Task-API.</p>
+<p class="dim">Studio spricht den Task Server über eine einzige HTTPS-Origin an — gleichwertige Gegenstelle,
+nicht Anhängsel. Jeder Runner-Host hält dazu <b>zwei getrennte, ausgehende</b> Verbindungen: er
+<b>pullt Tasks</b> (Claim/Lease) und <b>pusht Ergebnisse</b> (Results/Artifacts) zurück — nie umgekehrt.
+Quelltext nimmt einen dritten, orthogonalen Weg: ausschließlich über <code>git origin</code>, nie über
+die Task-API.</p>
 
 <figure>
 <div class="canvas">
   <div class="arch">
     <div class="arch-stage">
-      <svg class="wires" viewBox="0 0 360 300" preserveAspectRatio="none" aria-hidden="true">
+      <svg class="wires" viewBox="0 0 360 340" preserveAspectRatio="none" aria-hidden="true">
         <defs>
-          <!-- Studio <-> Task Server (vertikal, doppelt) -->
-          <path id="wS1" d="M168,54 C168,92 174,92 174,120"/>
-          <path id="wS2" d="M192,54 C192,92 186,92 186,120"/>
-          <!-- Task Server -> Runner-Host A / B -->
-          <path id="wA" d="M158,182 C120,224 96,214 84,250"/>
-          <path id="wB" d="M202,182 C240,224 264,214 276,250"/>
+          <!-- Studio <-> Task Server (vertikal, doppelt, gegenläufig) -->
+          <path id="wS1" d="M166,55 C166,90 172,90 172,121"/>
+          <path id="wS2" d="M188,121 C188,90 194,90 194,55"/>
+          <!-- Runner A: zwei getrennte, parallele Linien (kreuzen sich nicht) -->
+          <path id="wA-claim"   d="M145,167 C118,195 93,225 63,270"/>
+          <path id="wA-results" d="M87,270 C117,225 142,195 165,167"/>
+          <!-- Runner B: zwei getrennte Linien (Spiegel von A) -->
+          <path id="wB-claim"   d="M215,167 C242,195 267,225 297,270"/>
+          <path id="wB-results" d="M273,270 C243,225 218,195 195,167"/>
         </defs>
         <!-- statische Rails -->
         <g class="rails">
-          <use href="#wS1"/><use href="#wS2"/><use href="#wA"/><use href="#wB"/>
+          <use href="#wS1"/><use href="#wS2"/>
+          <use href="#wA-claim"/><use href="#wA-results"/>
+          <use href="#wB-claim"/><use href="#wB-results"/>
         </g>
-        <!-- fließende Signal-Dashes -->
-        <use class="flow up"   href="#wS1" style="animation-duration:1.5s"/>
-        <use class="flow up"   href="#wS2" style="animation-duration:1.7s"/>
-        <use class="flow down" href="#wA"  style="animation-duration:1.6s"/>
-        <use class="flow down" href="#wB"  style="animation-duration:1.4s"/>
+        <!-- fließende Signal-Dashes: Richtung folgt der Zeichenrichtung des Pfads (Start → Ende) -->
+        <use class="flow up"   href="#wS1"       style="animation-duration:3.7s"/>
+        <use class="flow up"   href="#wS2"       style="animation-duration:4.1s"/>
+        <use class="flow down" href="#wA-claim"   style="animation-duration:3.6s"/>
+        <use class="flow down" href="#wA-results" style="animation-duration:4.3s"/>
+        <use class="flow down" href="#wB-claim"   style="animation-duration:3.9s"/>
+        <use class="flow down" href="#wB-results" style="animation-duration:4.5s"/>
       </svg>
 
-      <!-- Client: Studio UI -->
-      <div class="chip client" style="left:50%; top:0;">
-        <span class="ic"></span> Studio UI · Board · Wiki · Reviews · Orchestrator-Sicht
+      <!-- Client: Studio (UI) — eigene, gleichwertige Karte -->
+      <div class="shost">
+        <div class="rt"><span class="ic"></span> Studio (UI)</div>
+        <div class="rs">Board · Wiki · Reviews · Orchestrator-Sicht</div>
+        <div class="pools">
+          <div class="pool studio"><span class="pn">Einziger Kanal</span><span class="pd">spricht nur mit dem Task Server</span></div>
+          <div class="pool studio"><span class="pn">Ersetzbar</span><span class="pd">Schließen stoppt keine Arbeit</span></div>
+        </div>
       </div>
 
       <!-- Zentrum: Task Server -->
@@ -371,11 +392,16 @@ nimmt einen dritten, orthogonalen Weg: ausschließlich über <code>git origin</c
       </div>
 
       <!-- Kanal-Etiketten -->
-      <div class="edge b" style="left:50%; top:29%;">HTTPS · eine Origin<br>Config ↓ · Events ↑</div>
-      <div class="edge t" style="left:26%; top:74%;">pull · outbound-only<br>claim · lease · logs</div>
-      <div class="edge t" style="left:74%; top:74%;">pull · outbound-only<br>artifacts · completion</div>
+      <div class="edge b" style="left:50%; top:26%;">HTTPS · eine Origin<br>Config ↓ · Events ↑</div>
+      <div class="edge t" style="left:11%; top:55%;">CLAIM · LEASE<br>Tasks pullen</div>
+      <div class="edge t" style="left:32%; top:55%;">RESULTS · ARTIFACTS<br>zurück an den Server</div>
+      <div class="edge t" style="left:89%; top:55%;">CLAIM · LEASE<br>Tasks pullen</div>
+      <div class="edge t" style="left:68%; top:55%;">RESULTS · ARTIFACTS<br>zurück an den Server</div>
     </div>
   </div>
+
+  <p class="ports-note">Runner: <b>nur ausgehende Verbindungen</b> — keine offenen Inbound-Ports.
+  Beide Kanäle werden vom Runner selbst initiiert.</p>
 
   <!-- git origin: dritter, orthogonaler Kanal -->
   <div class="origin">
@@ -386,10 +412,14 @@ nimmt einen dritten, orthogonalen Weg: ausschließlich über <code>git origin</c
 </div>
 </figure>
 <figcaption><b>Abb. 1 — Zielarchitektur.</b> <b style="color:var(--blue-ink)">Blau</b> = Autoritätsebene
-(Studio ↔ Task Server, HTTPS über eine Origin, bidirektionaler API-Vertrag).
-<b style="color:var(--teal-ink)">Teal</b> = Ausführungsebene (Runner → Task Server, strikt pull und
-ausgehend). Der Task Server ist die einzige Wahrheits- und Konfigurationsinstanz; Studio ist ersetzbar
-(schließen darf Arbeit nicht stoppen). Code läuft orthogonal zu beiden API-Kanälen über <code>git origin</code>.</figcaption>
+(Studio ↔ Task Server, HTTPS über eine Origin, bidirektionaler API-Vertrag — Studio spricht
+ausschließlich mit dem Task Server, sonst mit niemandem).
+<b style="color:var(--teal-ink)">Teal</b> = Ausführungsebene, je Runner-Host als <b>zwei getrennte
+Leitungen</b>: <code>CLAIM · LEASE</code> pullt Arbeit (Dash-Fluss zeigt zum Runner — Antwort auf die
+Anfrage), <code>RESULTS · ARTIFACTS</code> pusht Ergebnisse zurück (Dash-Fluss zeigt zum Server). Beide
+Leitungen gehen vom Runner aus; er hält keinen offenen Port. Der Task Server ist die einzige
+Wahrheits- und Konfigurationsinstanz; Studio ist ersetzbar (schließen darf Arbeit nicht stoppen).
+Code läuft orthogonal zu beiden API-Kanälen über <code>git origin</code>.</figcaption>
 
 <!-- ============================================================ -->
 <p class="sec-no"><span class="n">§2</span> · Admission</p>
