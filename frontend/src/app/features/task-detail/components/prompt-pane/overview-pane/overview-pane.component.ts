@@ -42,6 +42,7 @@ import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-ru
 import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
 import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
 import { PostStepControlsComponent } from '../post-step-controls/post-step-controls.component';
+import { OverviewFailureComponent } from '../overview-failure/overview-failure.component';
 import { lifecyclePhaseLabel } from './lifecycle-phase.util';
 import {
   isSteeringKind,
@@ -479,7 +480,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, OverviewFailureComponent, StudioIconComponent, CostBreakdownTriggerDirective, ExecutionLocationBadgeComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -792,12 +793,6 @@ export class OverviewPaneComponent {
   readonly owner = computed(() => {
     const ownerId = this.job().ownerClientId;
     return this.clients.resolve(ownerId);
-  });
-
-  readonly failureInfo = computed<string | null>(() => {
-    const issue = this.job().outcomeIssue;
-    if (issue) return `${issue.label}: ${issue.summary}`;
-    return null;
   });
 
   readonly lastRunRecord = computed<RunRecord | null>(() => {

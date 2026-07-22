@@ -167,6 +167,26 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     }
 
     [Fact]
+    public void WatchdogTimeout_PreservesCompleteTechnicalDetailsBeyondCompactSummary()
+    {
+        var diagnostic =
+            "[orchestrator] [watchdog-timeout] \"A deliberately long task title that keeps the diagnostic line over the compact summary limit\" (codex): " +
+            "auto-cancelled after 601s of silence. The run will finalize as failed. " +
+            "[phase=TurnCompleted silence=601s allowed=600s lastActivity=2026-07-22T09:10:00.000Z " +
+            "session=019c123456789abcdef0123456789abcdef runner=agent-runner-with-a-long-diagnostic-name]";
+        SeedJob("watchdog-details", TaskStates.HumanReview,
+            $"[09:20:01.000] {diagnostic}{Environment.NewLine}");
+
+        var issue = Outcome("watchdog-details");
+
+        Assert.NotNull(issue);
+        Assert.Equal("watchdog-timeout", issue!.Kind);
+        Assert.Equal(diagnostic, issue.TechnicalDetails);
+        Assert.EndsWith("...", issue.Summary);
+        Assert.DoesNotContain("runner=agent-runner-with-a-long-diagnostic-name", issue.Summary);
+    }
+
+    [Fact]
     public void EmptyFastExitMarker_SurfacesHighSeverityOutcome()
     {
         SeedJob("empty-fast-exit", TaskStates.HumanReview,

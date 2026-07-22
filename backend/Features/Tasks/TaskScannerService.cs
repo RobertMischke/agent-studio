@@ -1145,16 +1145,20 @@ public class TaskScannerService : ITaskScanner
     }
 
     private static TaskOutcomeIssue BuildOutcomeIssue(string kind, string label, string severity, string rawLine, DateTime lastSeenAt)
-        => new()
+    {
+        var technicalDetails = NormalizeOutcomeLine(rawLine);
+        return new()
         {
             Kind = kind,
             Label = label,
             Severity = severity,
-            Summary = SummarizeOutcomeLine(rawLine),
+            Summary = SummarizeOutcomeLine(technicalDetails),
+            TechnicalDetails = technicalDetails,
             LastSeenAt = lastSeenAt
         };
+    }
 
-    private static string SummarizeOutcomeLine(string line)
+    private static string NormalizeOutcomeLine(string line)
     {
         var trimmed = line.Trim();
         var end = trimmed.IndexOf(']');
@@ -1162,6 +1166,12 @@ public class TaskScannerService : ITaskScanner
         {
             trimmed = trimmed[(end + 1)..].Trim();
         }
+        return trimmed;
+    }
+
+    private static string SummarizeOutcomeLine(string normalizedLine)
+    {
+        var trimmed = normalizedLine.Trim();
         if (trimmed.Length <= 260) return trimmed;
         return trimmed[..257].TrimEnd() + "...";
     }

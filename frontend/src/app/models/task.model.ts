@@ -503,7 +503,10 @@ export interface TaskOutcomeIssue {
     | string;
   label: string;
   severity: 'Info' | 'Warn' | 'High' | string;
+  /** Bounded compatibility text for compact consumers. */
   summary: string;
+  /** Complete normalized source line, rendered only inside technical details. */
+  technicalDetails?: string | null;
   lastSeenAt: string | null;
 }
 

@@ -480,7 +480,10 @@ public record TaskOutcomeIssue
     public string Kind { get; init; } = "";
     public string Label { get; init; } = "";
     public string Severity { get; init; } = "Info";
+    /// <summary>Bounded compatibility summary for compact legacy consumers.</summary>
     public string Summary { get; init; } = "";
+    /// <summary>Complete normalized source line for an explicit technical-details surface.</summary>
+    public string TechnicalDetails { get; init; } = "";
     public DateTime? LastSeenAt { get; init; }
 }
 
