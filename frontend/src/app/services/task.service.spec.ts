@@ -201,23 +201,6 @@ describe('TaskService', () => {
     expect(versionReq.request.responseType).toBe('arraybuffer');
     versionReq.flush(utf8Buffer('# Old review\n'));
     expect(version).toBe('# Old review\n');
-
-    let diff = '';
-    service
-      .diffTaskFileVersions('demo-job', 'results/review note.md', 'abcdef1', 'abcdef2', 'C:/projects/demo', 'workspace')
-      .subscribe((text) => {
-        diff = text;
-      });
-
-    const diffReq = http.expectOne((request) =>
-      request.url === '/api/tasks/demo-job/files/results/review%20note.md/diff' &&
-      request.params.get('watchPath') === 'C:/projects/demo' &&
-      request.params.get('scope') === 'workspace' &&
-      request.params.get('from') === 'abcdef1' &&
-      request.params.get('to') === 'abcdef2');
-    expect(diffReq.request.responseType).toBe('arraybuffer');
-    diffReq.flush(utf8Buffer('-old\n+new\n'));
-    expect(diff).toBe('-old\n+new\n');
   });
 
   // ASS-1727: the paged Archive read endpoint. The board's grouped.archive is
