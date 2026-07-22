@@ -230,14 +230,20 @@ figcaption b { color: var(--ink-1); }
 .pool .pn { display: block; font: 700 9.5px/1.2 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--teal-ink); }
 .pool .pd { display: block; font-size: 10.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.3; }
 
-/* git-origin-Medium (dritter, orthogonaler Kanal) */
-.origin {
-  margin-top: 18px; border: 1.5px dashed var(--border); border-radius: 12px;
-  background: var(--bg-soft); padding: 13px 18px; text-align: center;
+/* git-origin-Medium: angedockte Storage-Kachel AM Orchestrator-Server (nicht freischwebend) */
+.origin-dock {
+  position: absolute; left: 88%; top: 42%; transform: translate(-50%, -50%);
+  width: min(30%, 172px); text-align: left; z-index: 2;
+  background: var(--bg-soft); border: 1.5px dashed var(--border);
+  border-radius: 10px; padding: 11px 14px;
 }
-.origin b { font: 700 13px/1 var(--font-mono); letter-spacing: .04em; }
-.origin b .g { color: var(--coral); }
-.origin span { display: block; font-size: 12px; color: var(--ink-2); margin-top: 5px; }
+.origin-dock::before {
+  content: ""; position: absolute; top: 50%; right: 100%; width: 48px; height: 0;
+  border-top: 1.5px dashed var(--border); transform: translateY(-50%);
+}
+.origin-dock b { display: block; font: 700 12.5px/1 var(--font-mono); letter-spacing: .04em; margin-bottom: 5px; }
+.origin-dock b .g { color: var(--coral); }
+.origin-dock span { display: block; font-size: 10.5px; line-height: 1.42; color: var(--ink-2); }
 
 /* Kanal-Etiketten am Rand des Stages */
 .edge {
@@ -430,18 +436,19 @@ die Task-API.</p>
       <div class="edge t" style="left:32%; top:55%;">RESULTS · ARTIFACTS<br>zurück an den Server</div>
       <div class="edge t" style="left:72%; top:64%;">CLAIM · LEASE<br>Tasks pullen</div>
       <div class="edge t" style="left:68%; top:55%;">RESULTS · ARTIFACTS<br>zurück an den Server</div>
+
+      <!-- git origin: an den Orchestrator-Server angedockte Storage-Kachel (Teil seiner Verantwortung, keine dritte Autorität) -->
+      <div class="origin-dock">
+        <b>git <span class="g">origin</span></b>
+        <span>Artefakt-Medium des Servers — trägt Code, nie Task-Wahrheit. Runner pushen
+        <code>runner/&lt;id&gt;/&lt;key&gt;</code>, Studio liest Diff/PR. Kein geteiltes
+        Dateisystem, nur der Remote.</span>
+      </div>
     </div>
   </div>
 
   <p class="ports-note">Runner: <b>nur ausgehende Verbindungen</b> — keine offenen Inbound-Ports.
   Beide Kanäle werden vom Runner selbst initiiert.</p>
-
-  <!-- git origin: dritter, orthogonaler Kanal -->
-  <div class="origin">
-    <b>git <span class="g">origin</span></b>
-    <span>Austauschmedium der Artefakte — trägt Code, nie Task-Wahrheit. Studio liest Diff/PR,
-    Runner pusht <code>runner/&lt;id&gt;/&lt;key&gt;</code>. Kein geteiltes Dateisystem, nur der Remote.</span>
-  </div>
 </div>
 </figure>
 <figcaption><b>Abb. 1 — Zielarchitektur.</b> <b style="color:var(--blue-ink)">Blau</b> = Autoritätsebene
@@ -455,8 +462,11 @@ Namensvorschlag <b>Orchestrator-Server</b> geführt) ist die einzige Wahrheits- 
 Konfigurationsinstanz; Studio ist ersetzbar (schließen darf Arbeit nicht stoppen) und
 <b>multiuser</b> — es kann N gleichzeitige Studio-Instanzen geben, dargestellt als gestapelte
 Karte. Die Mono-Chips in den Kopfzeilen zeigen je Einheit, wo sie üblicherweise läuft
-(<code>LOCAL</code>/<code>CLOUD</code> Betrieb, <code>WEB</code> Zugriffsweg). Code läuft
-orthogonal zu beiden API-Kanälen über <code>git origin</code>.</figcaption>
+(<code>LOCAL</code>/<code>CLOUD</code> Betrieb, <code>WEB</code> Zugriffsweg). <code>git origin</code>
+ist als angedockte Storage-Kachel direkt am Orchestrator-Server gezeichnet, nicht als
+freischwebendes drittes Band: der Server verwaltet auch das Artefakt-Medium, es bleibt aber ein
+eigener, orthogonaler Kanal — Code läuft nie über die Task-API, sondern wird von den Runnern
+per <code>git push</code> dorthin geliefert.</figcaption>
 
 <!-- ============================================================ -->
 <p class="sec-no"><span class="n">§2</span> · Admission</p>
@@ -526,7 +536,7 @@ Vorlage. Jede Zeile ist eine gerichtete Nachricht; die Farbe zeigt die Richtung
       <div class="seq-step"><div class="seq-msg to-c"><span class="arw">←</span> fenced lease + immutabler Run-Plan</div></div>
       <div class="seq-note">Run · im Lease-Fenster ~10 min autonom</div>
       <div class="seq-step"><div class="seq-msg to-s">heartbeat · cliOutput-Events (gepuffert) <span class="arw">→</span></div></div>
-      <div class="seq-note plain">git: push <code>runner/&lt;id&gt;/&lt;key&gt;</code> → origin (separater Kanal)</div>
+      <div class="seq-note plain">git: push <code>runner/&lt;id&gt;/&lt;key&gt;</code> → origin (am Server angedockt, separater Kanal)</div>
       <div class="seq-note">Deliver</div>
       <div class="seq-step"><div class="seq-msg to-s">upload results/ evidence + fenced completion <span class="arw">→</span></div></div>
       <div class="seq-note">Reconcile · zentral auf API-Lane</div>
