@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Schichten & Infrastruktur: drei Layer, drei Säulen",
+  "source": {
+    "path": "docs/concepts/layer-infrastruktur-diagramm.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "86bb57ad13da037d92370216e3e2ca33d2de56aa9fe851ab9c23ae1fbc6ea3bb",
+      "sizeBytes": 22775,
+      "lineCount": 470,
+      "capturedAt": "2026-07-22T00:00:00.000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "current",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-22"
+  },
+  "relatedTasks": []
+}
