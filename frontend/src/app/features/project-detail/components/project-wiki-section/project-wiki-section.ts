@@ -70,6 +70,7 @@ import { withRouteSegment } from '../../../../services/url-hash.util';
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
 const WIKI_STATE_STORAGE_PREFIX = 'atp.projectWiki.v1.';
+const WIKI_META_PANEL_STORAGE_KEY = 'atp.wikiMetaPanel.v1';
 const WIKI_NAV_MIN_WIDTH = 216;
 const WIKI_NAV_MAX_WIDTH = 420;
 const WIKI_NAV_DEFAULT_WIDTH = 286;
@@ -81,19 +82,11 @@ type WikiViewerTab = 'doc' | 'report' | 'source' | 'edit';
 type WikiResizablePanel = 'nav' | 'context';
 interface WikiPersistedState {
   navCollapsed?: boolean;
-  contextCollapsed?: boolean;
   openedRel?: string | null;
   viewerTab?: WikiViewerTab;
   navWidth?: number;
   contextWidth?: number;
   expandedIds?: string[];
-  /**
-   * Per-page collapse memory for the right meta rail, keyed by the page's
-   * relPath. A page absent from the map falls back to `contextCollapsed`
-   * (the landing / default state), so an operator who folds the meta of one
-   * page does not silently fold it for every other page.
-   */
-  metaCollapsedByPage?: Record<string, boolean>;
 }
 
 interface WikiResizeState {
@@ -192,13 +185,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly expanded = signal<ReadonlySet<string>>(new Set());
   readonly focusedRowId = signal<string | null>(null);
   readonly navCollapsed = signal(false);
-  // `contextCollapsed` is the *effective* meta-rail state for whatever is on
-  // screen right now (the open page, or the landing view). Its per-page memory
-  // lives in `metaCollapsedByPage`; `defaultMetaCollapsed` is the fallback for a
-  // page with no stored preference and for the landing view.
+  // One global preference covers the landing and every document. Page
+  // navigation must never alter it.
   readonly contextCollapsed = signal(false);
-  private readonly metaCollapsedByPage = signal<Record<string, boolean>>({});
-  private readonly defaultMetaCollapsed = signal(false);
   readonly navWidth = signal(WIKI_NAV_DEFAULT_WIDTH);
   readonly contextWidth = signal(WIKI_CONTEXT_DEFAULT_WIDTH);
   readonly navWidthStyle = computed(() => `${this.navWidth()}px`);
@@ -825,7 +814,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.expandAncestors(rel);
     this.focusedRowId.set(rel);
     this.openedRel.set(rel);
-    this.contextCollapsed.set(this.metaCollapsedFor(rel));
     this.openedType.set(type);
     this.viewerTab.set(tab);
     this.openedContent.set('');
@@ -867,7 +855,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   closeFile(): void {
     this.openedRel.set(null);
-    this.contextCollapsed.set(this.defaultMetaCollapsed());
     this.openedContent.set('');
     this.reportContent.set('');
     this.reportAnchor.set(null);
@@ -988,27 +975,9 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     this.setContextCollapsed(!this.contextCollapsed());
   }
 
-  /**
-   * Records the meta-rail collapse state. When a page is open the choice is
-   * remembered against that page's relPath; on the landing view it becomes the
-   * default for pages without their own stored preference.
-   */
   private setContextCollapsed(collapsed: boolean): void {
     this.contextCollapsed.set(collapsed);
-    const rel = this.openedRel();
-    if (rel) {
-      this.metaCollapsedByPage.update(map => ({ ...map, [rel]: collapsed }));
-    } else {
-      this.defaultMetaCollapsed.set(collapsed);
-    }
-    this.persistState();
-  }
-
-  /** Effective collapse state for a page: its stored choice, else the default. */
-  private metaCollapsedFor(rel: string | null): boolean {
-    if (!rel) return this.defaultMetaCollapsed();
-    const map = this.metaCollapsedByPage();
-    return rel in map ? map[rel] === true : this.defaultMetaCollapsed();
+    this.writeMetaPanelState(collapsed);
   }
 
   startPanelResize(event: PointerEvent, panel: WikiResizablePanel): void {
@@ -1313,7 +1282,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
       case 'history':
         if (t.relPath) {
           // Viewing history implies wanting the meta rail visible: open the
-          // page, then force the rail expanded and remember that for the page.
+          // page, then force the globally remembered rail state to expanded.
           this.openFile(t.relPath, t.type);
           this.setContextCollapsed(false);
         }
@@ -1575,16 +1544,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private restorePersistedState(projectName: string): void {
     const state = this.readPersistedState(projectName);
     this.navCollapsed.set(state?.navCollapsed === true);
-    // Compute the default from the parsed state (a plain local), never by
-    // reading a signal: restorePersistedState runs inside the constructor
-    // effect, so a signal read here would make the effect re-fire (and refetch)
-    // every time the meta rail is toggled on the landing view.
-    const defaultCollapsed = state?.contextCollapsed === true;
-    this.defaultMetaCollapsed.set(defaultCollapsed);
-    this.metaCollapsedByPage.set(state?.metaCollapsedByPage ?? {});
-    // Effective state starts at the landing default; restorePendingOpen ->
-    // openFile applies the per-page override once a page is reopened.
-    this.contextCollapsed.set(defaultCollapsed);
+    this.contextCollapsed.set(this.readMetaPanelState());
     this.navWidth.set(this.clampNavWidth(state?.navWidth ?? WIKI_NAV_DEFAULT_WIDTH));
     this.contextWidth.set(this.clampContextWidth(state?.contextWidth ?? WIKI_CONTEXT_DEFAULT_WIDTH));
     this.expanded.set(new Set(state?.expandedIds ?? []));
@@ -1774,13 +1734,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     if (!projectName) return;
     const state: WikiPersistedState = {
       navCollapsed: this.navCollapsed(),
-      contextCollapsed: this.defaultMetaCollapsed(),
       openedRel: this.openedRel(),
       viewerTab: this.viewerTab(),
       navWidth: this.navWidth(),
       contextWidth: this.contextWidth(),
       expandedIds: [...this.expanded()],
-      metaCollapsedByPage: this.metaCollapsedByPage(),
     };
     this.writePersistedState(projectName, state);
   }
@@ -1792,13 +1750,11 @@ export class ProjectWikiSectionComponent implements OnDestroy {
       const parsed = JSON.parse(raw) as Partial<WikiPersistedState>;
       return {
         navCollapsed: parsed.navCollapsed === true,
-        contextCollapsed: parsed.contextCollapsed === true,
         openedRel: typeof parsed.openedRel === 'string' && parsed.openedRel.trim() ? parsed.openedRel : null,
         viewerTab: this.safeViewerTab(parsed.viewerTab),
         navWidth: this.readStoredWidth(parsed.navWidth, WIKI_NAV_MIN_WIDTH, WIKI_NAV_MAX_WIDTH),
         contextWidth: this.readStoredWidth(parsed.contextWidth, WIKI_CONTEXT_MIN_WIDTH, WIKI_CONTEXT_MAX_WIDTH),
         expandedIds: this.readStoredExpandedIds(parsed.expandedIds),
-        metaCollapsedByPage: this.readStoredMetaCollapsed(parsed.metaCollapsedByPage),
       };
     } catch {
       return null;
@@ -1815,6 +1771,25 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   private storageKey(projectName: string): string {
     return `${WIKI_STATE_STORAGE_PREFIX}${encodeURIComponent(projectName)}`;
+  }
+
+  private readMetaPanelState(): boolean {
+    try {
+      return globalThis.localStorage?.getItem(WIKI_META_PANEL_STORAGE_KEY) === 'collapsed';
+    } catch {
+      return false;
+    }
+  }
+
+  private writeMetaPanelState(collapsed: boolean): void {
+    try {
+      globalThis.localStorage?.setItem(
+        WIKI_META_PANEL_STORAGE_KEY,
+        collapsed ? 'collapsed' : 'expanded',
+      );
+    } catch {
+      /* persistence is a convenience; the panel remains interactive without storage */
+    }
   }
 
   private safeViewerTab(value: unknown): WikiViewerTab {
@@ -1868,15 +1843,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private readStoredExpandedIds(value: unknown): string[] | undefined {
     if (!Array.isArray(value)) return undefined;
     return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-  }
-
-  private readStoredMetaCollapsed(value: unknown): Record<string, boolean> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-    const out: Record<string, boolean> = {};
-    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      if (key.trim().length > 0 && typeof val === 'boolean') out[key] = val;
-    }
-    return out;
   }
 
   private resolveDriftProjectContext(after: () => void): void {

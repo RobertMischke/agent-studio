@@ -278,7 +278,9 @@ function wikiStorageKey(projectName = 'Demo'): string {
 
 function clearWikiStorage(): void {
   for (const key of Object.keys(localStorage)) {
-    if (key.startsWith('atp.projectWiki.v1.') || key.startsWith('atp.projectWikiStars.v1.')) {
+    if (key.startsWith('atp.projectWiki.v1.')
+      || key.startsWith('atp.projectWikiStars.v1.')
+      || key === 'atp.wikiMetaPanel.v1') {
       localStorage.removeItem(key);
     }
   }
@@ -741,9 +743,9 @@ describe('ProjectWikiSectionComponent', () => {
   });
 
   it('restores collapsed panels, selected document, and active tab from localStorage', async () => {
+    localStorage.setItem('atp.wikiMetaPanel.v1', 'collapsed');
     localStorage.setItem(wikiStorageKey(), JSON.stringify({
       navCollapsed: true,
-      contextCollapsed: true,
       openedRel: 'concepts/overview.md',
       viewerTab: 'source',
       navWidth: 340,
@@ -798,7 +800,7 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
-  it('remembers the meta-rail collapse state per page', async () => {
+  it('keeps the meta-rail state unchanged while navigating between pages', async () => {
     const { fixture, http } = await setup();
     expandConcepts(fixture);
     const cmp = fixture.componentInstance;
@@ -820,29 +822,62 @@ describe('ProjectWikiSectionComponent', () => {
     cmp.toggleContext();
     expect(cmp.contextCollapsed()).toBe(true);
 
-    // A different page keeps its own state (default: expanded).
+    // A different page inherits the current collapsed state.
     el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-README.md"]')!.click();
     fixture.detectChanges();
     http.expectOne('/api/projects/Demo/wiki/files/README.md')
       .flush({ relPath: 'README.md', content: '# Readme\n' });
     openReadmeHistory();
     fixture.detectChanges();
+    expect(cmp.contextCollapsed()).toBe(true);
+
+    // Expand the panel on README, then navigate back.
+    cmp.toggleContext();
     expect(cmp.contextCollapsed()).toBe(false);
 
-    // Reopening overview.md restores its remembered collapsed state.
+    // Page navigation does not restore overview.md's former collapsed state.
     el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
     fixture.detectChanges();
     http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
       .flush({ relPath: 'concepts/overview.md', content: '# Overview\n' });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
     fixture.detectChanges();
-    expect(cmp.contextCollapsed()).toBe(true);
+    expect(cmp.contextCollapsed()).toBe(false);
 
-    // The per-page choice is persisted for a later session.
-    const stored = JSON.parse(localStorage.getItem(wikiStorageKey()) ?? '{}');
-    expect(stored.metaCollapsedByPage?.['concepts/overview.md']).toBe(true);
-    // README was only viewed, never toggled, so it keeps the default (no entry).
-    expect(stored.metaCollapsedByPage?.['README.md']).toBeUndefined();
+    expect(localStorage.getItem('atp.wikiMetaPanel.v1')).toBe('expanded');
+    http.verify();
+  });
+
+  it('defaults the meta rail to expanded when no preference is stored', async () => {
+    const { fixture, http } = await setup();
+
+    expect(localStorage.getItem('atp.wikiMetaPanel.v1')).toBeNull();
+    expect(fixture.componentInstance.contextCollapsed()).toBe(false);
+    expect(el(fixture).querySelector('[data-testid="project-wiki-meta-toggle"]')?.getAttribute('aria-expanded'))
+      .toBe('true');
+    http.verify();
+  });
+
+  it('round-trips the meta-rail preference through localStorage', async () => {
+    const { fixture, http } = await setup();
+    fixture.componentInstance.toggleContext();
+    expect(localStorage.getItem('atp.wikiMetaPanel.v1')).toBe('collapsed');
+    fixture.destroy();
+
+    const reloaded = TestBed.createComponent(ProjectWikiSectionComponent);
+    reloaded.componentRef.setInput('projectName', 'Demo');
+    reloaded.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
+    flushWikiPulse(http);
+    flushGradingContext(http);
+    reloaded.detectChanges();
+    flushStyleGuidesIfRendered(http);
+    flushWikiHomeIfRendered(http);
+    reloaded.detectChanges();
+
+    expect(reloaded.componentInstance.contextCollapsed()).toBe(true);
+    expect(el(reloaded).querySelector('[data-testid="project-wiki-meta-toggle"]')?.getAttribute('aria-expanded'))
+      .toBe('false');
     http.verify();
   });
 
