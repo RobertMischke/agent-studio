@@ -290,6 +290,8 @@ public sealed class ProjectChatMigrationTests : IDisposable
         catch { /* best-effort */ }
     }
 
+    // MachineBound 22.07.: 5s-Laufzeitbudget - unter Gate-Parallellast 17s+ (Nacht-Kaskade 21./22.07.), solo gruen
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void Migration_IsIdempotent_AndProducesPerMonthFiles()
     {
