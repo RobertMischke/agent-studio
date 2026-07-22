@@ -220,3 +220,96 @@ public record TaskCommitMembership
     public bool AlsoOnIntegration { get; init; }
     public bool AlsoOnRelease { get; init; }
 }
+
+/// <summary>
+/// AGT-2202 — the honest, git-derived integration verdict for an <b>accepted</b>
+/// card (5-human-review / 6-completed / 7-archive): is this task's work actually
+/// folded into the integration branch (develop)?
+///
+/// <para>
+/// Motivated by the 20.07. accept-run finding "Accept != Merge": 29 cards were
+/// accepted while their code still sat un-merged on <c>task/</c> branches, because
+/// the async curated auto-integrator merges out-of-band (a
+/// <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit on develop) and
+/// the ephemeral <see cref="TaskMergeSignal"/> anchor-ancestry reading cannot see a
+/// curated (rewritten) merge. Ground truth is only the develop git-log. This field
+/// resolves the truth from three independent git signals and collapses it into one
+/// of four discrete states, so the board can show a single, unambiguous "integrated
+/// / not integrated / conflict / no branch" verdict on every accepted card and the
+/// accept flow can flag an accept-without-merge the moment it happens.
+/// </para>
+///
+/// <para>
+/// Computed batched + cached per repository by
+/// <c>TaskIntegrationStatusService</c> (O(repos) git spawns, never per card) and
+/// folded onto the board payload; never persisted to <c>task.json</c>. Null on
+/// cards that are not in an accepted lane.
+/// </para>
+/// </summary>
+public record TaskIntegrationStatus
+{
+    /// <summary>One of <see cref="IntegrationStatuses"/>.</summary>
+    public string Status { get; init; } = IntegrationStatuses.NoBranch;
+
+    /// <summary>
+    /// Short SHA that proves the integration when <see cref="Status"/> is
+    /// <see cref="IntegrationStatuses.Integrated"/> - the curated
+    /// <c>merge(&lt;KEY&gt;)</c> commit when present, else the contained task
+    /// anchor / branch tip. Null for every non-integrated status.
+    /// </summary>
+    public string? Sha { get; init; }
+
+    /// <summary>Integration branch the verdict was computed against (usually "develop").</summary>
+    public string IntegrationBranch { get; init; } = "develop";
+
+    /// <summary>
+    /// Which of the three integration signals proved the verdict, or the reason a
+    /// non-integrated card is pending / conflicted / branch-less. Free-form, for
+    /// tooltip + audit only; never drives logic.
+    /// </summary>
+    public string? Detail { get; init; }
+}
+
+/// <summary>
+/// String constants for <see cref="TaskIntegrationStatus.Status"/>. Kept as
+/// constants (not an enum) so the JSON wire format is the literal string, matching
+/// <see cref="LandedStates"/> / <see cref="TaskTypes"/>.
+/// </summary>
+public static class IntegrationStatuses
+{
+    /// <summary>The task's work is provably in develop (curated merge, or anchor / branch tip is an ancestor).</summary>
+    public const string Integrated = "integrated";
+
+    /// <summary>The task has integrable work that is not (yet) in develop.</summary>
+    public const string Pending = "pending";
+
+    /// <summary>The deferred merge-into-develop step recorded a conflict / error; the work was NOT merged.</summary>
+    public const string ConflictSkipped = "conflict-skipped";
+
+    /// <summary>The card has no task branch and no attributed commit - nothing to integrate.</summary>
+    public const string NoBranch = "no-branch";
+
+    public static readonly string[] All = [Integrated, Pending, ConflictSkipped, NoBranch];
+
+    /// <summary>
+    /// Tag stamped on a card that was accepted (moved into 6-completed) while its
+    /// work was not yet in develop (AGT-2202). Durable audit marker: the
+    /// completed-lane audit lists it and clears it once the card becomes
+    /// integrated. Not a hard block.
+    /// </summary>
+    public const string PendingTag = "integration:pending";
+
+    /// <summary>True when the card carries integrable work that is not in develop (pending or conflict).</summary>
+    public static bool IsNotIntegrated(string? status)
+        => string.Equals(status, Pending, StringComparison.Ordinal)
+           || string.Equals(status, ConflictSkipped, StringComparison.Ordinal);
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return NoBranch;
+        var v = value.Trim();
+        foreach (var s in All)
+            if (string.Equals(s, v, StringComparison.OrdinalIgnoreCase)) return s;
+        return NoBranch;
+    }
+}

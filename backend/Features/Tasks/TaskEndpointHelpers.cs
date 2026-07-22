@@ -275,6 +275,21 @@ internal static class TaskEndpointHelpers
                 : job);
 
     /// <summary>
+    /// AGT-2202 — folds the batched per-task integration verdict onto each accepted
+    /// card. The lookup is built ONCE per request by
+    /// <see cref="TaskIntegrationStatusService"/> (O(repos) git spawns, never per
+    /// card), so this stays an O(1) dictionary hit per job. Jobs without a verdict
+    /// (not in an accepted lane) pass through untouched.
+    /// </summary>
+    internal static IEnumerable<TaskInfo> WithIntegrationStatus(
+        this IEnumerable<TaskInfo> jobs,
+        IReadOnlyDictionary<string, TaskIntegrationStatus> integrationByJobKey)
+        => jobs.Select(job =>
+            integrationByJobKey.TryGetValue(job.TaskKey, out var status)
+                ? job with { Integration = status }
+                : job);
+
+    /// <summary>
     /// PUB-1 — folds the batched per-task publish signal onto each accepted card.
     /// The lookup is built ONCE per request by <see cref="TaskPublishableService"/>
     /// (O(projects), never per card), so this stays an O(1) dictionary hit per job.

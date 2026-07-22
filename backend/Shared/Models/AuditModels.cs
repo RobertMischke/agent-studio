@@ -87,3 +87,34 @@ public record CompletedLaneAuditReport
     public DateTime GeneratedAt { get; init; }
     public string Markdown { get; init; } = "";
 }
+
+/// <summary>
+/// AGT-2202 — the completed-lane "accepted but not integrated" listing: accepted
+/// cards (6-completed / 7-archive) whose work is still not in the integration
+/// branch. Built by re-deriving the live git integration verdict for every card
+/// tagged <c>integration:pending</c>, dropping the tag from any that have since
+/// become integrated (self-healing), and returning the ones that are still
+/// pending / conflicted.
+/// </summary>
+public record IntegrationPendingListing
+{
+    public string ProjectId { get; init; } = "";
+    public string ProjectName { get; init; } = "";
+    public DateTime GeneratedAt { get; init; }
+    /// <summary>Cards still not integrated, newest-accepted first.</summary>
+    public List<IntegrationPendingItem> Items { get; init; } = [];
+    /// <summary>How many stale <c>integration:pending</c> tags were cleared this pass (now integrated).</summary>
+    public int Cleared { get; init; }
+}
+
+public record IntegrationPendingItem
+{
+    public string JobId { get; init; } = "";
+    public string? Key { get; init; }
+    public string Title { get; init; } = "";
+    public string State { get; init; } = "";
+    /// <summary>One of <see cref="IntegrationStatuses"/> (pending / conflict-skipped).</summary>
+    public string IntegrationStatus { get; init; } = "";
+    public string IntegrationBranch { get; init; } = "";
+    public string? Detail { get; init; }
+}

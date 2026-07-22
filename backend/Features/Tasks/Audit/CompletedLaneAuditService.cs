@@ -45,6 +45,7 @@ public sealed class CompletedLaneAuditService
     private readonly AuditRunStore _runStore;
     private readonly ProjectRegistry _projects;
     private readonly ILogger<CompletedLaneAuditService> _logger;
+    private readonly TaskIntegrationStatusService? _integrationStatus;
 
     public CompletedLaneAuditService(
         TaskScannerService scanner,
@@ -54,7 +55,8 @@ public sealed class CompletedLaneAuditService
         AcceptanceEvidenceDetector detector,
         AuditRunStore runStore,
         ProjectRegistry projects,
-        ILogger<CompletedLaneAuditService> logger)
+        ILogger<CompletedLaneAuditService> logger,
+        TaskIntegrationStatusService? integrationStatus = null)
     {
         _scanner = scanner;
         _states = states;
@@ -64,6 +66,76 @@ public sealed class CompletedLaneAuditService
         _runStore = runStore;
         _projects = projects;
         _logger = logger;
+        _integrationStatus = integrationStatus;
+    }
+
+    /// <summary>
+    /// AGT-2202 — lists the accepted cards (6-completed / 7-archive) whose work is
+    /// still not in the integration branch. Re-derives the live git integration
+    /// verdict for every card carrying the <c>integration:pending</c> tag, clears
+    /// the tag from any that have since become integrated (the marker self-heals),
+    /// and returns the ones still pending / conflicted. Project scope accepts the
+    /// PROJ-NNN id, the display name, or a watch path; a null/blank project scans
+    /// the whole workspace. Read-only apart from clearing resolved tags.
+    /// </summary>
+    public IntegrationPendingListing ListIntegrationPending(string? projectIdOrName)
+    {
+        var project = string.IsNullOrWhiteSpace(projectIdOrName)
+            ? null
+            : _projects.FindByIdOrDisplayName(projectIdOrName) ?? _projects.FindByStorageLocation(projectIdOrName);
+        var watchPath = project?.StorageLocation
+            ?? (string.IsNullOrWhiteSpace(projectIdOrName)
+                ? null
+                : _scanner.GetWatchPaths()
+                    .FirstOrDefault(w => string.Equals(w.Name, projectIdOrName, StringComparison.OrdinalIgnoreCase)
+                                         || string.Equals(w.Path, projectIdOrName, StringComparison.OrdinalIgnoreCase))?.Path);
+
+        var candidates = _scanner.ScanAllJobsWithArchive()
+            .Where(j => j.State == TaskStates.Completed || j.State == TaskStates.Archive)
+            .Where(j => watchPath == null || string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
+            .Where(j => (j.Tags ?? []).Any(t => string.Equals(t, IntegrationStatuses.PendingTag, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var statusByKey = _integrationStatus?.BuildLookup(candidates)
+            ?? new Dictionary<string, TaskIntegrationStatus>(StringComparer.Ordinal);
+
+        var items = new List<IntegrationPendingItem>();
+        var cleared = 0;
+        foreach (var job in candidates.OrderByDescending(j => j.EnteredLaneAt))
+        {
+            statusByKey.TryGetValue(job.TaskKey, out var status);
+            var verdict = status?.Status ?? IntegrationStatuses.Pending;
+
+            if (!IntegrationStatuses.IsNotIntegrated(verdict))
+            {
+                // Now integrated (or nothing to integrate): drop the stale tag.
+                var tags = (job.Tags ?? []).Where(t =>
+                    !string.Equals(t, IntegrationStatuses.PendingTag, StringComparison.OrdinalIgnoreCase)).ToList();
+                _mutations.SetJobTags(job.Id, tags, job.WatchPath);
+                cleared++;
+                continue;
+            }
+
+            items.Add(new IntegrationPendingItem
+            {
+                JobId = job.Id,
+                Key = job.Key,
+                Title = job.Title,
+                State = job.State,
+                IntegrationStatus = verdict,
+                IntegrationBranch = status?.IntegrationBranch ?? "develop",
+                Detail = status?.Detail,
+            });
+        }
+
+        return new IntegrationPendingListing
+        {
+            ProjectId = project?.Id ?? projectIdOrName ?? "",
+            ProjectName = project?.DisplayName ?? projectIdOrName ?? "(all projects)",
+            GeneratedAt = DateTime.UtcNow,
+            Items = items,
+            Cleared = cleared,
+        };
     }
 
     public ReEvaluateOutcome ReEvaluate(string jobId, string? watchPath, string actorEmail)
