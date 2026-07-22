@@ -50,4 +50,61 @@ public sealed class RemoteCompletionProtocolTests
 
         Assert.Equal(RunOutcomeKind.Done, SentinelScanner.Scan(output).Kind);
     }
+
+    [Fact]
+    public void Agt2208_sentinel_literal_in_streamed_diff_does_not_create_a_verdict()
+    {
+        const string output = """
+            {"type":"thread.started","thread_id":"019c"}
+            {"type":"item.completed","item":{"type":"command_execution","command":"git diff","aggregated_output":"+ const fixture = \"[[TASK_BLOCKED:missing API key]]\";\n","exit_code":0}}
+            {"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":20}}
+            """;
+
+        var outcome = SentinelScanner.Scan(output);
+
+        Assert.Equal(RunOutcomeKind.Unknown, outcome.Kind);
+        Assert.Null(outcome.Reason);
+    }
+
+    [Fact]
+    public void Sentinel_literal_in_code_block_without_terminal_signoff_does_not_create_a_verdict()
+    {
+        const string output = """
+            {"type":"item.completed","item":{"type":"agent_message","text":"Added this regression fixture:\n```text\n[[TASK_BLOCKED:missing API key]]\n```\nThe test now covers the stream parser."}}
+            {"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":20}}
+            """;
+
+        var outcome = SentinelScanner.Scan(output);
+
+        Assert.Equal(RunOutcomeKind.Unknown, outcome.Kind);
+    }
+
+    [Fact]
+    public void Sentinel_at_end_of_final_agent_message_remains_authoritative()
+    {
+        const string output = """
+            {"type":"item.completed","item":{"type":"agent_message","text":"Implemented and verified the scanner regression.\n[[TASK_DONE]]"}}
+            {"type":"item.completed","item":{"type":"command_execution","command":"git diff","aggregated_output":"+ const fixture = \"[[TASK_BLOCKED:missing API key]]\";\n","exit_code":0}}
+            {"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":20}}
+            """;
+
+        var outcome = SentinelScanner.Scan(output);
+
+        Assert.Equal(RunOutcomeKind.Done, outcome.Kind);
+        Assert.Null(outcome.Reason);
+    }
+
+    [Fact]
+    public void Claude_completion_result_is_scanned_instead_of_tool_result_frames()
+    {
+        const string output = """
+            {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"fixture.txt"}}]}}
+            {"type":"user","message":{"content":[{"type":"tool_result","content":"[[TASK_BLOCKED:missing API key]]"}]}}
+            {"type":"result","subtype":"success","is_error":false,"result":"Implemented and verified the fix.\n[[TASK_DONE]]"}
+            """;
+
+        var outcome = SentinelScanner.Scan(output);
+
+        Assert.Equal(RunOutcomeKind.Done, outcome.Kind);
+    }
 }

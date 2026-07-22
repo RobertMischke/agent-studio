@@ -209,7 +209,9 @@ state.
   coding pipeline. An interrupted assigned card whose lease is free is requeued
   to Ready inside the next atomic claim before a higher fence is issued.
 
-- Sentinel matches are authoritative. When adding a sentinel, update
+- A terminal sentinel in the final agent reply is authoritative. Sentinel-shaped
+  text in streamed tool output, diffs, file content, or stderr is not a verdict.
+  When adding a sentinel, update
   [docs/system/contracts/agent-task.md](../contracts/agent-task.md) and
   `AgentOutcomeAnalyzer.SentinelRegex`.
 - The agent classifies its run. The rule engine decides reissue, stop,

@@ -20,7 +20,7 @@ public static class ProcessRunner
     // copy must be capped: keep only the tail of each stream under a hard byte
     // budget. The tail is all the caller needs - the terminal sentinel and the
     // final summary an agent signs off with are emitted last, so a bounded tail
-    // keeps SentinelScanner's last-match-wins scan correct while a runaway run
+    // keeps SentinelScanner's final-agent-reply scan available while a runaway run
     // can no longer grow the runner's heap without bound.
     private const int StdOutBudgetChars = 2 * 1024 * 1024; // ~2 MB tail
     private const int StdErrBudgetChars = 256 * 1024;      // ~256 KB tail (diagnostics only)
