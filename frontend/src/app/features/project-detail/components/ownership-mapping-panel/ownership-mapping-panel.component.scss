@@ -1,0 +1,36 @@
+.ownership {
+  display: grid;
+  gap: var(--studio-spacing-5);
+  padding: var(--studio-spacing-6);
+  color: var(--studio-fg);
+}
+
+.ownership h2,
+.ownership p { margin: 0; }
+.ownership header { display: flex; align-items: start; justify-content: space-between; gap: var(--studio-spacing-4); }
+.ownership__eyebrow { color: var(--studio-fg-muted); font-size: 12px; text-transform: uppercase; }
+.ownership__message,
+.ownership__empty,
+.ownership__card {
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--studio-border);
+  border-radius: 10px;
+  background: var(--studio-bg-elevated);
+}
+.ownership__card { display: grid; gap: var(--studio-spacing-4); }
+.ownership__card-head { display: flex; justify-content: space-between; gap: var(--studio-spacing-4); }
+.ownership__card-head div { display: grid; gap: var(--studio-spacing-1); }
+.ownership__card-head span { color: var(--studio-fg-muted); font-size: 12px; }
+.ownership__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--studio-spacing-3); }
+.ownership__grid label { display: grid; gap: var(--studio-spacing-1); color: var(--studio-fg-muted); font-size: 12px; }
+.ownership input,
+.ownership textarea {
+  padding: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg);
+  font: inherit;
+}
+.ownership textarea { resize: vertical; }
+.ownership button { justify-self: end; min-height: 34px; padding-inline: var(--studio-spacing-4); }

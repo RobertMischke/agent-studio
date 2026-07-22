@@ -3,7 +3,7 @@ import { ModalStackService } from '../../../../services/modal-stack.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
-import type { CliType, TagRegistryEntry, TaskKind, TaskMode, WatchPathEntry } from '../../../../models/task.model';
+import type { CliType, ComponentRoutingResolution, TagRegistryEntry, TaskKind, TaskMode, WatchPathEntry } from '../../../../models/task.model';
 import { TaskState } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { TaskService } from '../../../../services/task.service';
@@ -12,19 +12,18 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { CreateEpicPickerComponent } from '../create-epic-picker/create-epic-picker.component';
 import { CreateModePickerComponent } from '../create-mode-picker/create-mode-picker.component';
+import { RoutingPreviewComponent } from '../routing-preview/routing-preview.component';
 export interface PendingAttachment {
   id: string;
   file: File;
   alt: string;
   previewUrl: string;
 }
-
 export interface LaneOption {
   state: string;
   label: string;
   icon: string;
 }
-
 /**
  * Lanes a user is allowed to land a freshly created task in. Everything
  * past Ready (3-progress and later) is orchestrator-owned and not a valid
@@ -39,9 +38,8 @@ export const CREATE_LANE_OPTIONS: readonly LaneOption[] = [
 const PENDING_PREFIX = 'pending-attachment-';
 
 /**
- * "Create task" dialog. The parent owns all draft signals and the
- * model catalog; this component renders the form, captures pasted/
- * dropped images as `PendingAttachment`s (the actual upload happens
+ * "Create task" dialog. The parent owns draft state; this component
+ * renders the form and captures pasted/dropped images (upload happens
  * after the job folder is created), and emits intent (cancel /
  * submit / cliType change). Two-way bindings via `model()` keep
  * title / watchPath / model / prompt / attachments / target lane /
@@ -58,7 +56,7 @@ const PENDING_PREFIX = 'pending-attachment-';
   selector: 'app-create-job-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent, CreateEpicPickerComponent, CreateModePickerComponent],
+  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent, CreateEpicPickerComponent, CreateModePickerComponent, RoutingPreviewComponent],
   templateUrl: './create-task-dialog.component.html',
   styleUrl: './create-task-dialog.component.scss'
 })
@@ -66,6 +64,7 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   readonly watchPaths = input<WatchPathEntry[]>([]);
   readonly availableModels = input<CliModelInfo[]>([]);
   readonly cliTypeDraft = input.required<CliType>();
+  readonly routing = input<ComponentRoutingResolution | null>(null); readonly routingPending = input(false);
 
   readonly newTitle = model<string>('');
   readonly newWatchPath = model<string>('');

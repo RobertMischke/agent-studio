@@ -1,0 +1,43 @@
+<section class="ownership" data-testid="ownership-mapping-panel">
+  <header>
+    <div>
+      <p class="ownership__eyebrow">Project metadata</p>
+      <h2>Component ownership and delivery</h2>
+      <p>Define where shared components are implemented, released, integrated, and deployed. Navigation context stays separate.</p>
+    </div>
+    <button type="button" data-testid="add-ownership-mapping" (click)="addMapping()">Add mapping</button>
+  </header>
+
+  @if (message()) { <p class="ownership__message" aria-live="polite">{{ message() }}</p> }
+  @if (mappings().length === 0) {
+    <div class="ownership__empty">No component ownership mappings are stored on this project.</div>
+  }
+  @for (mapping of mappings(); track mapping.id) {
+    <article class="ownership__card" [attr.data-testid]="'ownership-mapping-' + mapping.id">
+      <div class="ownership__card-head">
+        <div><strong>{{ mapping.id }}</strong><span>Version {{ mapping.version }} · {{ mapping.updatedBy }}</span></div>
+        <label>Confidence <input type="number" min="0" max="1" step="0.05" [(ngModel)]="mapping.confidence" /></label>
+      </div>
+      <div class="ownership__grid">
+        <label>Component<input [(ngModel)]="mapping.component" /></label>
+        <label>Package or module<input [(ngModel)]="mapping.packageOrModule" /></label>
+        <label>Repository identifier<input [(ngModel)]="mapping.repository" /></label>
+        <label>Release artifact<input [(ngModel)]="mapping.releaseArtifact" /></label>
+        <label>Versioning mechanism<input [(ngModel)]="mapping.versioningMechanism" /></label>
+        <label>Allowed prefix<input [ngModel]="mapping.allowedTicketPrefix" disabled /></label>
+      </div>
+      <div class="ownership__grid ownership__grid--lists">
+        <label>Observed surfaces<textarea rows="4" [ngModel]="list(mapping, 'observedSurfaces')" (ngModelChange)="updateList(mapping, 'observedSurfaces', $event)"></textarea></label>
+        <label>Consumer project IDs<textarea rows="4" [ngModel]="list(mapping, 'consumerProjectIds')" (ngModelChange)="updateList(mapping, 'consumerProjectIds', $event)"></textarea></label>
+        <label>Integration hosts<textarea rows="4" [ngModel]="list(mapping, 'integrationHosts')" (ngModelChange)="updateList(mapping, 'integrationHosts', $event)"></textarea></label>
+        <label>Deployment steps<textarea rows="4" [ngModel]="list(mapping, 'deploymentSteps')" (ngModelChange)="updateList(mapping, 'deploymentSteps', $event)"></textarea></label>
+        <label>Environments<textarea rows="4" [ngModel]="list(mapping, 'environments')" (ngModelChange)="updateList(mapping, 'environments', $event)"></textarea></label>
+        <label>Evidence<textarea rows="4" [ngModel]="list(mapping, 'evidence')" (ngModelChange)="updateList(mapping, 'evidence', $event)"></textarea></label>
+        <label>Unresolved alternatives<textarea rows="4" [ngModel]="list(mapping, 'unresolvedAlternatives')" (ngModelChange)="updateList(mapping, 'unresolvedAlternatives', $event)"></textarea></label>
+      </div>
+      <button type="button" data-testid="save-ownership-mapping" [disabled]="savingId() === mapping.id" (click)="save(mapping)">
+        {{ savingId() === mapping.id ? 'Saving…' : 'Save mapping' }}
+      </button>
+    </article>
+  }
+</section>
