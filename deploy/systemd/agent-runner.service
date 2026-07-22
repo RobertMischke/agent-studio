@@ -2,6 +2,8 @@
 Description=Agent Studio remote runner daemon
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -16,7 +18,10 @@ ExecStart=/opt/agent-runner/agent-runner --poll
 Restart=always
 RestartSec=10s
 TimeoutStopSec=90s
-KillSignal=SIGINT
+KillSignal=SIGTERM
+# Stop only the daemon main PID. Detached job workers stay alive and are
+# positively verified + reattached by the replacement daemon.
+KillMode=process
 SyslogIdentifier=agent-runner
 StandardOutput=journal
 StandardError=journal

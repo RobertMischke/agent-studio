@@ -87,14 +87,14 @@ public sealed class LogShipper
     }
 
     /// <summary>Drain the buffer and post it. Safe to call repeatedly; a no-op when empty.</summary>
-    public async Task FlushAsync(CancellationToken ct)
+    public async Task<bool> FlushAsync(CancellationToken ct)
     {
         if (_outbox is not null)
         {
             await _outbox.ReplayAsync(
                 (item, token) => _client.SendOutboxItemAsync(_outbox.Authority, item, token),
                 ct);
-            return;
+            return true;
         }
         var batch = new List<CliOutputLine>();
         while (batch.Count < MaxBatchLines && _pending.TryDequeue(out var line))
@@ -102,7 +102,7 @@ public sealed class LogShipper
             Interlocked.Decrement(ref _pendingCount);
             batch.Add(line);
         }
-        if (batch.Count == 0) return;
+        if (batch.Count == 0) return true;
 
         try
         {
@@ -125,6 +125,7 @@ public sealed class LogShipper
                 _diag($"log buffer capped: dropped {dropped - reported} backlogged line(s) to bound memory");
                 Volatile.Write(ref _reportedDropped, dropped);
             }
+            return true;
         }
         catch (Exception ex)
         {
@@ -138,6 +139,7 @@ public sealed class LogShipper
             }
             TrimToCap();
             _diag($"log ingest failed, will retry: {ex.Message}");
+            return false;
         }
     }
 

@@ -188,6 +188,15 @@ state.
   card runs. A project without a remote assignment executes chat locally. Each
   response projects the actual local or remote hostname, repository path,
   branch, and HEAD; a reassignment invalidates a cached host context.
+- A planned remote-daemon restart is an execution handoff, not an attempt
+  boundary. The daemon persists lease, fence, Task Server run/instance,
+  worktree, detached-worker PID/start time, and file-log progress below
+  `RUNNER_STATE_DIR`. SIGTERM stops claims and exits without cancelling those
+  workers. The replacement renews authority only after PID-generation and
+  Linux `/proc/<pid>/cwd` match the persisted worktree, then follows JSONL
+  output and completes the same attempt. Missing or mismatched processes are
+  actively released and returned to Ready; DB lease presence alone is never
+  process-liveness evidence. systemd must use `KillMode=process`.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
   occupies a normal host slot and holds the same fenced lease, heartbeat,

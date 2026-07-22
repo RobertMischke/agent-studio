@@ -60,6 +60,9 @@ public sealed class RunnerOptions
     /// </summary>
     public IReadOnlyList<string> ReviewCredentialEnvironment { get; init; } = [];
 
+    /// <summary>Durable daemon slot records and detached-worker logs.</summary>
+    public string StateDir { get; init; } = Path.Combine(Path.GetTempPath(), "agent-runner-state");
+
     /// <summary>Branch to check out for the run. When empty, the runner stays on <see cref="BaseBranch"/>.</summary>
     public string? Branch { get; init; }
 
@@ -171,8 +174,10 @@ public sealed class RunnerOptions
                 Path.Combine(Path.GetTempPath(), "agent-review-work")),
             ReviewCredentialEnvironment = Val(
                     "review-credential-env",
-                    "RUNNER_REVIEW_CREDENTIAL_ENV")
+                "RUNNER_REVIEW_CREDENTIAL_ENV")
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            StateDir = Val("state-dir", "RUNNER_STATE_DIR",
+                Path.Combine(Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")), ".runner-state")),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),

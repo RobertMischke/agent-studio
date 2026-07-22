@@ -697,6 +697,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             Hostname = "hetzner-test",
             BackendName = "remote-runner",
             WorkDir = runnerWork,
+            StateDir = Path.Combine(runnerWork, ".runner-state"),
             BaseBranch = "main",
             CliBin = cli,
             CliArgs = "",

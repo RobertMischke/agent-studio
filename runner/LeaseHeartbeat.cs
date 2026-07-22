@@ -38,7 +38,6 @@ public sealed class LeaseHeartbeat
         {
             while (!stopRun.IsCancellationRequested && !shutdown.IsCancellationRequested)
             {
-                await Task.Delay(interval, stopRun.Token);
                 RunLeaseResponse resp;
                 try
                 {
@@ -53,6 +52,7 @@ public sealed class LeaseHeartbeat
                     // A transient network error is not proof of a takeover; log and
                     // let the next tick retry while the TTL still has headroom.
                     _log($"heartbeat error (will retry): {ex.Message}");
+                    await Task.Delay(interval, stopRun.Token);
                     continue;
                 }
 
@@ -63,6 +63,7 @@ public sealed class LeaseHeartbeat
                     stopRun.Cancel();
                     return;
                 }
+                await Task.Delay(interval, stopRun.Token);
             }
         }
         catch (OperationCanceledException) { /* run finished or shutting down */ }

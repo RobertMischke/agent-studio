@@ -10,11 +10,10 @@ namespace AgentRunner;
 /// <para>
 /// The daemon is long-lived and the Task Server is reached over a link that is
 /// expected to blip (the backend restarts on deploy; a reverse tunnel drops). A
-/// blip must never terminate the daemon: exiting would let systemd kill the whole
-/// service cgroup - every in-flight slot with it - and strand each run's lease
-/// until its TTL, which surfaces as leases held by no process. So transient
-/// connectivity faults are absorbed here (retry with backoff) instead of bubbling
-/// up to the process's fatal exit-4 handler.
+/// blip must never churn the daemon: detached workers can survive a planned
+/// handoff, but repeated main-process exits would interrupt heartbeats and delay
+/// output delivery. Transient connectivity faults are therefore absorbed here
+/// (retry with backoff) instead of bubbling up to the fatal exit-4 handler.
 /// </para>
 /// </summary>
 public sealed class RemoteRunnerDaemon
@@ -87,6 +86,34 @@ public sealed class RemoteRunnerDaemon
         var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
         await handoffRecovery.RecoverAllAsync(shutdown);
 
+        var state = new RunnerStateStore(_options.StateDir);
+        var active = new List<Task<int>>();
+        foreach (var slot in state.LoadAll())
+        {
+            _client.RestoreRunAuthority(slot.TaskKey, slot.RunId, slot.LeaseInstanceId, slot.Lease);
+            var taskRunner = new RemoteTaskRunner(_options, _client, _log, state);
+            var completed = DurableAgentProcess.HasCompleted(slot);
+            var live = DurableAgentProcess.VerifyLive(slot, out var verification);
+            if (completed || live)
+            {
+                _log($"persisted attempt accepted task={slot.TaskKey} attempt={slot.AttemptId} " +
+                     $"pid={slot.ProcessId} verification={(completed ? "durable result ready" : verification)}");
+                active.Add(taskRunner.ReattachAsync(slot, CancellationToken.None));
+            }
+            else
+            {
+                if (!await taskRunner.ReleaseDeadAsync(slot, verification))
+                    throw new InvalidOperationException(
+                        $"Dead attempt '{slot.AttemptId}' for task '{slot.TaskKey}' could not be released. " +
+                        "Startup is fail-closed and retained the durable state for the next bounded systemd retry.");
+            }
+        }
+        if (active.Count > 0)
+            _log($"recovered {active.Count} persisted slot(s); no replacement claim will use those slots");
+
+        // Recover heartbeats before the potentially slow Git capability probe.
+        // Push readiness gates new coding claims, not ownership of work that is
+        // already executing under a valid fenced attempt.
         var gitCapability = await GitPushProbe.RunAsync(_options, _log, shutdown);
         await WithServerRetryAsync<object?>(
             "git-capability report",
@@ -98,10 +125,10 @@ public sealed class RemoteRunnerDaemon
             },
             shutdown);
         _log($"runner-git-capability status={(gitCapability.CanPush ? "ready" : "read-only")} detail={gitCapability.Detail}");
-        if (!gitCapability.CanPush)
-            throw new InvalidOperationException("Git push capability is read-only; refusing to claim work until the host credential is repaired.");
+        var admissionEnabled = gitCapability.CanPush;
+        if (!admissionEnabled)
+            _log("Git push capability is read-only; existing recovered work will continue but new claims are disabled.");
 
-        var active = new List<Task<int>>();
         var telemetry = new HostTelemetrySampler();
         HostTelemetrySample? TakeTelemetry()
         {
@@ -128,6 +155,17 @@ public sealed class RemoteRunnerDaemon
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
                 var claimedAny = false;
+                if (!admissionEnabled)
+                {
+                    var sample = TakeTelemetry();
+                    if (sample is not null)
+                        _ = await _client.ClaimAsync(new RunnerClaimRequest(
+                            _options.RunnerId, _options.RunnerName, _options.Hostname,
+                            Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
+                            sample, AvailableSlots: 0), shutdown);
+                    await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
+                    continue;
+                }
                 if (active.Count >= _options.HostMaxParallelism)
                 {
                     var sample = TakeTelemetry();
@@ -171,15 +209,17 @@ public sealed class RemoteRunnerDaemon
 
                     claimedAny = true;
                     _log($"claimed {claim.ProjectName}/{claim.TaskKey} using project cache {claim.ProjectId ?? "legacy fallback"} into slot {active.Count + 1}/{_options.HostMaxParallelism}");
-                    var taskRunner = new RemoteTaskRunner(_options, _client, _log);
+                    var taskRunner = new RemoteTaskRunner(_options, _client, _log, state);
                     active.Add(taskRunner.RunClaimedAsync(
                         claim.TaskKey,
                         claim.Lease,
-                        shutdown,
+                        CancellationToken.None,
                         claim.ProjectId,
                         claim.RepositoryUrl,
                         claim.DefaultBranch,
-                        claim.TaskKind));
+                        claim.TaskKind,
+                        claim.RunId,
+                        claim.LeaseInstanceId));
                 }
 
                 if (!claimedAny)
@@ -188,8 +228,8 @@ public sealed class RemoteRunnerDaemon
             }
             catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
             {
-                // Clean shutdown: fall through so the loop condition ends it and
-                // the drain below awaits the in-flight slots.
+                // Clean shutdown: the loop ends and leaves in-flight detached
+                // workers for the replacement daemon.
             }
             catch (Exception ex) when (IsTransientServerFault(ex))
             {
@@ -205,11 +245,11 @@ public sealed class RemoteRunnerDaemon
             }
         }
 
-        if (active.Count > 0)
-        {
-            try { await Task.WhenAll(active); }
-            catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
-        }
+        // Planned restart is a handoff, not job cancellation. Slot state was
+        // atomically flushed at claim/process/output boundaries and detached
+        // workers are intentionally left alive for the replacement daemon.
+        state.Flush();
+        _log($"daemon drain complete; leaving {active.Count} detached job(s) for startup reattach");
     }
 
     private static async Task DelayThroughShutdown(TimeSpan delay, CancellationToken shutdown)

@@ -937,6 +937,26 @@
             acknowledged salvage can authorize a fresh attempt.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-22</td>
+          <td><code>AGT-2232</code><br><span class="small">planned remote-daemon restart killed jobs and adopted zombie leases<br>(observed on <code>AGT-2182/2194/2198</code>)</span></td>
+          <td>
+            Three restart incidents killed newly claimed remote jobs while the replacement daemon kept renewing their
+            leases without a corresponding host process. All slots appeared healthy but made no progress, including one
+            eight-hour stall. Deploys consequently required an idle host.
+          </td>
+          <td>
+            systemd used <code>KillMode=control-group</code>, the daemon owned CLI output through anonymous pipes, and slot
+            identity lived only in memory. Startup trusted lease presence without verifying PID generation or process cwd.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> job execution now runs behind a detached, file-logging worker. Lease, fence,
+            Task Server run/instance, PID/start time, worktree, and log sequence are atomically persisted. SIGTERM stops
+            claims and leaves workers alive; startup reattaches only after PID + worktree proof, while dead attempts are
+            released to Ready. The unit uses <code>KillMode=process</code> and bounded start limits. The recovered job reaches
+            its ordinary completion terminal; a dead job reaches the explicit release/requeue terminal instead of zombie Progress.
+          </td>
+        </tr>
       </tbody>
     </table>
 

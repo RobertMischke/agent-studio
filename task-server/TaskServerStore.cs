@@ -486,7 +486,10 @@ public sealed partial class TaskServerStore
             await ExecuteAsync(connection, """
                 UPDATE leases SET status = 'released' WHERE run_id = $run;
                 UPDATE runs SET status = $outcome, finished_at = $now WHERE id = $run;
-                """, ct, transaction, ("$run", runId), ("$outcome", request.Outcome), ("$now", Iso(UtcNow)));
+                UPDATE tasks SET state = '2-ready', version = version + 1, updated_at = $now
+                 WHERE id = $task AND state = '3-progress';
+                """, ct, transaction, ("$run", runId), ("$outcome", request.Outcome),
+                ("$now", Iso(UtcNow)), ("$task", lease.TaskId));
             released = lease with { Status = "released" };
             await AuditAsync(connection, transaction, actorId, "lease.released", "run", runId,
                 JsonSerializer.Serialize(new { request.Fence, request.Outcome }), ct);

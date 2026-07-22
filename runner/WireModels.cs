@@ -137,7 +137,9 @@ public sealed record RunnerClaimResponse(
     string? ProjectId = null,
     string? RepositoryUrl = null,
     string? DefaultBranch = null,
-    string? TaskKind = null);
+    string? TaskKind = null,
+    string? RunId = null,
+    string? LeaseInstanceId = null);
 
 public static class RemoteChatWorkKinds
 {

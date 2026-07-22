@@ -1,8 +1,12 @@
 using AgentRunner;
+using System.Runtime.InteropServices;
 
 // Standalone remote runner. With a task key it performs the RM-5 one-shot run;
 // without one (or with --poll) it continuously fills bounded host slots. See
 // docs/operations/setup/linux-runner-host.md.
+
+if (args is ["--detached-worker", var detachedSpec])
+    return await DurableAgentProcess.RunWorkerAsync(detachedSpec);
 
 var (options, taskKey, once, help) = RunnerOptions.Parse(args);
 
@@ -19,10 +23,22 @@ Log($"agent-runner starting: server={options.ServerUrl} role={options.Role} mode
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
-    e.Cancel = true; // let the finally-blocks release the lease cleanly
-    Log("shutdown requested (Ctrl+C); finishing teardown...");
+    e.Cancel = true;
+    Log(daemonMode
+        ? "shutdown requested (Ctrl+C); draining daemon without stopping detached jobs..."
+        : "shutdown requested (Ctrl+C); cancelling one-shot run...");
     shutdown.Cancel();
 };
+using var sigterm = !OperatingSystem.IsWindows()
+    ? PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+    {
+        context.Cancel = true;
+        Log(daemonMode
+            ? "planned shutdown requested (SIGTERM); stopping claims and flushing durable slot state..."
+            : "shutdown requested (SIGTERM); cancelling one-shot run...");
+        shutdown.Cancel();
+    })
+    : null;
 
 using var client = new TaskServerClient(options);
 
@@ -114,6 +130,7 @@ static void PrintUsage()
           --base-branch <name>    Fallback branch             (RUNNER_BASE_BRANCH)
           --workdir <path>        Checkout + results dir      (RUNNER_WORKDIR)
           --review-workdir <path> Disposable review root      (RUNNER_REVIEW_WORKDIR)
+          --state-dir <path>      Durable slot/process state  (RUNNER_STATE_DIR)
           --cli <bin>             Agent CLI binary            (RUNNER_CLI_BIN)
           --cli-args "<args>"     Headless CLI args           (RUNNER_CLI_ARGS)
           --auth-token-file <p>   Protected credential file  (RUNNER_AUTH_TOKEN_FILE)

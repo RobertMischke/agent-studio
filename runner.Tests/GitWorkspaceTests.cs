@@ -332,6 +332,7 @@ public sealed class GitWorkspaceTests : IDisposable
             BackendName = "test",
             GitRemote = _origin,
             WorkDir = _workDir,
+            StateDir = Path.Combine(_workDir, ".runner-state"),
             BaseBranch = "main",
             CliBin = "test",
             CliArgs = "",

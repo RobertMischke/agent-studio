@@ -12,6 +12,32 @@ namespace TaskServer.Tests;
 public sealed class TaskServerStoreTests
 {
     [Fact]
+    public async Task Releasing_a_dead_runner_attempt_returns_its_progress_task_to_ready()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+
+        await store.ReleaseLeaseAsync(
+            claim.Run!.RunId,
+            new LeaseReleaseRequest(
+                "runner-a", "instance-a", claim.Lease!.LeaseId, claim.Lease.Fence,
+                "runner-process-missing"),
+            "runner-a",
+            default);
+
+        var released = await store.GetTaskAsync(project.ProjectId, task.TaskId, default);
+        Assert.Equal("2-ready", released!.State);
+        var replacement = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+        Assert.Equal("claimed", replacement.Status);
+        Assert.Equal(task.TaskId, replacement.Task!.TaskId);
+        Assert.True(replacement.Lease!.Fence > claim.Lease.Fence);
+    }
+
+    [Fact]
     public async Task Schema_migration_is_recorded_and_a_newer_store_fails_closed()
     {
         using var temp = new TempDirectory();
