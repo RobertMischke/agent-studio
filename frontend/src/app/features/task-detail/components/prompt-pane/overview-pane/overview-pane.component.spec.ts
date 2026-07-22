@@ -14,6 +14,7 @@ import type { AgentWorkSummary } from '../../../../session-events';
 import type { PipelineCostSummary, PipelineStepCost, TaskPipelineResponse } from '../../../../task-pipeline';
 import type { RunRecord, RunTimeline } from '../../../../run-timeline';
 import type { TaskTimelineEvent } from '../../../../task-timeline';
+import { PIPELINE_DENSITY_STORAGE_KEY } from './pipeline-panel-density.util';
 
 /** A pipeline catalogue + execution with a single core Agent-execution row. */
 function agentPipeline(coreModel: string | null = 'claude-opus-4-8'): TaskPipelineResponse {
@@ -134,10 +135,85 @@ async function build(job: TaskInfo, agentWork: AgentWorkSummary | null = null) {
 }
 
 afterEach(() => {
+  localStorage.removeItem(PIPELINE_DENSITY_STORAGE_KEY);
   TestBed.resetTestingModule();
 });
 
 describe('OverviewPaneComponent (smoke)', () => {
+  it('pipeline density defaults compact, toggles, and persists for the next instance', async () => {
+    localStorage.removeItem(PIPELINE_DENSITY_STORAGE_KEY);
+    const compact = await build(baseJob());
+    expect(compact.componentInstance.pipelineDensity()).toBe('compact');
+    compact.componentInstance.togglePipelineDensity();
+    expect(compact.componentInstance.pipelineDensity()).toBe('comfortable');
+    expect(localStorage.getItem(PIPELINE_DENSITY_STORAGE_KEY)).toBe('comfortable');
+
+    const restored = await build(baseJob());
+    expect(restored.componentInstance.pipelineDensity()).toBe('comfortable');
+  });
+
+  it('pipeline metrics omit empty columns and render only recorded measures', async () => {
+    const fixture = await build(baseJob());
+    const pending = agentPipeline();
+    pending.execution = null;
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pending);
+    fixture.componentInstance.expandAllPipelineGroups();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.pipelineMetrics().any).toBe(false);
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-header"]')).toBeNull();
+
+    pending.execution = {
+      pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+      startedAt: new Date().toISOString(), completedAt: null,
+      steps: [{ stepId: 'core-agent-run', kind: 'core', status: 'passed', durationMs: 800,
+        inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 }],
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set({ ...pending });
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(fixture.componentInstance.pipelineMetrics()).toEqual({
+      time: false, duration: true, tokens: false, cost: false, any: true,
+    });
+    expect(host.querySelector('.ov-pl-header__duration')).not.toBeNull();
+    expect(host.querySelector('.ov-pl-header__time')).toBeNull();
+    expect(host.querySelector('[data-testid="overview-pipeline-step-tokens"]')).toBeNull();
+    expect(host.querySelector('[data-testid="overview-pipeline-step-cost"]')).toBeNull();
+  });
+
+  it('compact groups lift uniform model and activation metadata; comfortable rows expose it', async () => {
+    const fixture = await build(baseJob({ state: TaskState.AutoReview }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: { id: 'standard', displayName: 'Standard', version: 1, pre: [], core: [], post: [], allSteps: [
+        { id: 'aspect-a', displayName: 'Aspect A', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+        { id: 'aspect-b', displayName: 'Aspect B', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+      ] },
+      execution: { pipelineId: 'standard', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), steps: [
+          { stepId: 'aspect-a', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+          { stepId: 'aspect-b', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+        ] },
+      cost: emptyCost(),
+      config: {
+        'aspect-a': { enabled: true, activation: { state: 'active', source: 'global', reason: 'Global default' } },
+        'aspect-b': { enabled: true, activation: { state: 'active', source: 'global', reason: 'Global default' } },
+      },
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.componentInstance.expandAllPipelineGroups();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-group-model"]').length).toBe(1);
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-group-activation"]').length).toBe(1);
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-step-model"]').length).toBe(0);
+    expect(host.querySelectorAll('[data-testid="overview-post-step-source"]').length).toBe(0);
+
+    fixture.componentInstance.togglePipelineDensity();
+    fixture.detectChanges();
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-group-model"]').length).toBe(0);
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-step-model"]').length).toBe(2);
+    expect(host.querySelectorAll('[data-testid="overview-post-step-source"]').length).toBe(2);
+  });
+
   it('compiles + instantiates without throwing', async () => {
     const fixture = await build(baseJob());
     expect(fixture.componentInstance).toBeTruthy();

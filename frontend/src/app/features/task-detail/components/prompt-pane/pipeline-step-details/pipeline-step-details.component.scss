@@ -73,3 +73,8 @@
     transition-duration: 0s;
   }
 }
+
+:host-context(.ov-pipeline[data-density='compact']) .step-details__trigger {
+  width: 18px;
+  height: 18px;
+}

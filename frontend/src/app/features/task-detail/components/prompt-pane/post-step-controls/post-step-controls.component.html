@@ -1,5 +1,7 @@
 @let state = activationView();
 <span class="post-step-controls" data-testid="overview-post-step-actions">
+  @if (showSource()) {
+  @if (state) {
   <button type="button"
           class="post-step-controls__source"
           data-testid="overview-post-step-source"
@@ -12,6 +14,8 @@
     <span aria-hidden="true">·</span>
     <span>{{ state.source }}</span>
   </button>
+  }
+  }
 
   @if (supported()) {
     <button type="button"

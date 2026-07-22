@@ -32,6 +32,7 @@ export class PostStepControlsComponent {
   readonly watchPath = input<string | undefined>();
   readonly projectName = input.required<string>();
   readonly activation = input<PostStepActivation | null>(null);
+  readonly showSource = input(true);
   readonly attempts = input<readonly OnDemandPostStepAttempt[]>([]);
 
   private readonly jobs = inject(TaskService);
@@ -42,11 +43,7 @@ export class PostStepControlsComponent {
   readonly busy = signal(false);
   readonly historyOpen = signal(false);
   readonly supported = computed(() => SUPPORTED_STEP_IDS.has(this.stepId()));
-  readonly activationView = computed(() => this.activation() ?? {
-    state: 'unknown' as const,
-    source: 'unknown' as const,
-    reason: 'Activation metadata is unavailable from the backend.',
-  });
+  readonly activationView = computed(() => this.activation());
   readonly stepAttempts = computed(() => this.attempts()
     .filter(attempt => attempt.stepId === this.stepId())
     .sort((left, right) => right.attempt - left.attempt));
