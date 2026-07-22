@@ -249,15 +249,20 @@
 .sheet__conversation {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  // Orchestrator rows have intentionally mixed heights (short turns,
+  // multi-line Markdown, badges and status rows). Keep this host as the one
+  // real scroll container so appending a turn never swaps measured rows for
+  // a fixed-height virtual spacer and then asks sticky-to-bottom to correct
+  // the resulting height error.
+  overflow-y: auto;
+  overflow-anchor: none;
   display: flex;
   flex-direction: column;
 }
 
 .sheet__conversation cac-conversation-view {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
-  height: 100%;
 }
 
 .sheet__no-project {

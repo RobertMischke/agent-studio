@@ -121,6 +121,15 @@ moving between the board and a task in the same project swaps the visible
 transcript even though the project is unchanged. When no context key is
 derivable it falls back to the per-project route, keeping the board identical.
 
+The side sheet owns one non-windowed vertical scroll container for its live
+transcript. Orchestrator rows mix short turns, multi-line Markdown, badges, and
+status rows, so replacing off-screen rows with one fixed-height estimate makes
+the scroll height oscillate whenever a turn is appended. Stable event ids keep
+existing DOM rows mounted, while the shared conversation stick-to-bottom
+directive follows the host scroll container only when the operator is already
+at the latest turn. Long, searchable history remains the responsibility of the
+separate virtualised project-chat history surface.
+
 ## Application Read Context (ORCH-1)
 
 Both chat dispatch paths use one deterministic context builder:

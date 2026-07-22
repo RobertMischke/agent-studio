@@ -214,7 +214,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `no-redundant-scrollbars.spec.ts` | F60 - no redundant scrollbars in super-column layout |
 | `optimistic-reorder-evidence.spec.ts` | @evidence capture optimistic reorder before/after screenshots |
 | `post-processing-lane-identity.spec.ts` | Post Processing lane identity |
-| `remote-running-card.spec.ts` | Remote-running card visibility, steer wait, and timeout recovery |
+| `remote-running-card.spec.ts` | Remote lease drives the board running state |
 | `signalr-jobs-hub.spec.ts` | SignalR jobs hub - push delivery |
 | `stalled-progress-card.spec.ts` | stalled Progress cards and lane subset are visible at a glance |
 | `task-filter-removed.spec.ts` | Task filter axis removed from filter list |
@@ -234,7 +234,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `activity-log-markdown.spec.ts` | Activity log - Conversation markdown rendering |
 | `activity-log-tool-chips.spec.ts` | Activity log - tool chips |
 | `activity-log-visibility.spec.ts` | Activity log - visibility @billable |
-| `activity-plan-toggle.spec.ts` | Activity tab Plan / CLI toggle |
+| `activity-plan-toggle.spec.ts` | Activity tab compact view switcher |
 | `activity-tab-no-gap.spec.ts` | Activity tab - no gap between log and compose |
 | `chat-attachment-inline-and-lightbox.spec.ts` | Project chat - inline attachment render + lightbox |
 | `chat-continue.spec.ts` | Activity tab - interactive chat continuation |
@@ -256,7 +256,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `task-detail-simple-chat.spec.ts` | Task detail Activity chat is message-only |
 | `token-bubble.spec.ts` | Token bubble on job cards |
 
-### `cli/` - 16 specs
+### `cli/` - 18 specs
 
 | Spec | Summary |
 |------|---------|
@@ -271,6 +271,8 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `cli-config-copilot-only.spec.ts` | CLI configuration card |
 | `cli-icons-screenshots.spec.ts` | CLI icons - screenshots @screenshots |
 | `cli-icons.spec.ts` | CLI icons - distinct glyph per CLI |
+| `cli-management-restructure.spec.ts` | CLI Management restructure (AGT-2101) |
+| `cli-sessions-tool.spec.ts` | CLI-session tool - real data |
 | `cli-skills-pickup.spec.ts` | CLI skills - pickup @billable |
 | `cli-usage-project-clickthrough.spec.ts` | clicking a project usage row opens that project Settings rail |
 | `cli-usage.spec.ts` | CLI usage hub (status-bar → settings home) |
@@ -346,29 +348,26 @@ Do **not** select by CSS class names; they belong to styling and change often.
 |------|---------|
 | `menu-no-icons.spec.ts` | Menu surfaces are text-only |
 
-### `mockups/` - 9 specs
+### `mockups/` - 4 specs
 
 | Spec | Summary |
 |------|---------|
-| `chat-window-next-gen-mockup.spec.ts` | @mockup chat-window-next-gen |
 | `experimentier-workbench-mockup.spec.ts` | @mockup experimentier-workbench |
-| `meta-cycle-mockup-screenshot.spec.ts` | meta-cycle mockup screenshots - overview, last cycle, configuration, banner states |
-| `orchestrator-prep-mockup-screenshot.spec.ts` | orchestrator-prep mockup: low-autonomy and fully-auto board states |
 | `plan-strip-mockup.spec.ts` | @mockup plan-strip (real component) |
 | `project-overview-dashboard-mockup.spec.ts` | Project Overview interactive mockup |
 | `result-view-mockup.spec.ts` | @mockup result-view (real component) |
-| `task-progress-tracking-mockup.spec.ts` | task-progress-tracking mockup |
-| `vscode-layout-mockup.spec.ts` | @mockup vscode-layout |
 
-### `orchestrator/` - 14 specs
+### `orchestrator/` - 16 specs
 
 | Spec | Summary |
 |------|---------|
 | `f14-context-chip-and-caching.spec.ts` | F14: context badge, menu and send caching |
 | `orchestrator-chat-content-visible.spec.ts` | orchestrator chat - content stays visible after load |
+| `orchestrator-chat-scroll-stability.spec.ts` | mixed-height streamed rows stay mounted without scrollbar correction |
 | `orchestrator-config-panel.spec.ts` | Orchestrator logic config (consolidated Settings, Admin/System entry) |
 | `orchestrator-context-header.spec.ts` | Orchestrator context header · where am I |
 | `orchestrator-feed-overlay.spec.ts` | global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes |
+| `orchestrator-model-picker.spec.ts` | full live GPT picker persists across Board and Task contexts |
 | `orchestrator-project-chat.spec.ts` | orchestrator project chat |
 | `orchestrator-review-subsection.spec.ts` | (no description) |
 | `orchestrator-side-sheet-pin.spec.ts` | Orchestrator side sheet · navigation context + pin |
@@ -379,15 +378,16 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-chat-context-awareness.spec.ts` | Project chat context awareness |
 | `project-chat-fix.spec.ts` | Project chat fix - silent drop, sluggishness, parallel use |
 
-### `perf/` - 3 specs
+### `perf/` - 4 specs
 
 | Spec | Summary |
 |------|---------|
+| `perceived-performance-feedback.spec.ts` | delayed board skeleton follows the 200 ms rule in ${theme} theme |
 | `perf-baseline.spec.ts` | Frontend perf baseline |
 | `perf-frontend.spec.ts` | Frontend perceived latency |
 | `perf-stress.spec.ts` | Frontend stress: render perf at scale |
 
-### `project/` - 39 specs
+### `project/` - 42 specs
 
 | Spec | Summary |
 |------|---------|
@@ -396,6 +396,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `nav-level-and-prompt-overrides.spec.ts` | prompt overrides are explicit and filterable in both themes |
 | `nav-rebuild-t5a.spec.ts` | project rail: Pipeline / Workflow / Prompts shells in Config |
 | `nav-rebuild-t5b.spec.ts` | Project Settings no longer hosts the relocated sections |
+| `ownership-routing.spec.ts` | Project Hub ownership routing |
 | `pipeline-cost-timeline.spec.ts` | token usage: pipeline cost-by-step-kind section renders legend + stacked trend |
 | `pipeline-drift-steps.spec.ts` | pipeline: drift dimensions appear as opt-in post-steps that default OFF |
 | `pipeline-page-evidence-real.spec.ts` | pipeline page (real): reworked panel renders against the live backend |
@@ -408,6 +409,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-drift-architecture-marble.spec.ts` | no architecture model: empty state with explanatory copy |
 | `project-drift-overview.spec.ts` | empty state: section visible with action buttons; no scored block |
 | `project-execution-assignment.spec.ts` | assigns a remote host and completes the guided readiness probe |
+| `project-graph.spec.ts` | renders the manifest graph and complete list in dark and light themes |
 | `project-hub-nav-ia.spec.ts` | default rail shows four collapsible segments with Agent Docs + Prompts in Context |
 | `project-identity.spec.ts` | Project identity & running prominence |
 | `project-observability-panel.spec.ts` | rail entry opens the observability panel and shows empty state when no bus traffic |
@@ -423,13 +425,20 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-token-usage-panel.spec.ts` | empty state - no orchestrator entries renders explicit empty copy |
 | `project-url-preview-in-place.spec.ts` | keeps start, settings, live output, and stop in the embed in both themes |
 | `project-uxui-panel.spec.ts` | empty state - no design folder, all action buttons render |
-| `project-wiki-interactive-html.spec.ts` | AGT-2083 exploration runs scripts while parent access stays blocked |
+| `project-wiki-interactive-html.spec.ts` | repository HTML exploration runs scripts while parent access stays blocked |
 | `project-wiki-section.spec.ts` | Project detail - Knowledge section |
 | `proposals-hub.spec.ts` | Project Hub proposals render in both themes |
 | `wiki-pulse.spec.ts` | Wiki Pulse landing view (PULSE-2) |
+| `workbench-readonly.spec.ts` | Workbench Explorer, isolated viewer, and Pulse thinking inbox use real repository artifacts in both themes |
 | `workflow-lanes-t6a.spec.ts` | Workflow rail renders lane list, transitions, and stage 2/3 placeholders |
 | `workspace-create-and-delete.spec.ts` | create dialog rejects empty + duplicate names client-side |
 | `workspace-token-timeline.spec.ts` | Workspace token timeline |
+
+### `security/` - 1 spec
+
+| Spec | Summary |
+|------|---------|
+| `networked-login.spec.ts` | networked Studio gates the workspace behind same-origin login |
 
 ### `settings/` - 6 specs
 
@@ -442,7 +451,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `workspace-settings-panel-screenshots.spec.ts` | captures light-theme screenshot of Settings Workspaces section |
 | `workspace-settings-panel.spec.ts` | Settings - Workspaces section (F47) |
 
-### `studio-shell/` - 13 specs
+### `studio-shell/` - 14 specs
 
 | Spec | Summary |
 |------|---------|
@@ -458,7 +467,8 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `reload-restores-current-view.spec.ts` | studio-shell · reload restores the current view (F5 bug) |
 | `tab-hover-status-card-screenshots.spec.ts` | Open-Tabs hover - evidence screenshots |
 | `tab-hover-status-card.spec.ts` | Open-Tabs hover → TaskStatusCard popover |
-| `tab-label-tooltip-alignment.spec.ts` | restored task tab hides its watch path and centres its key |
+| `tab-label-tooltip-alignment.spec.ts` | restored task tab hides its watch path and uses the canonical tooltip in both themes |
+| `url-preview-failure-recovery.spec.ts` | offline 4184 is actionable, responsive, and links to quick setup |
 
 ### `system/` - 23 specs
 
@@ -608,7 +618,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `explorer-micro-dashboard.spec.ts` | numbers default, dots toggle, cap, order, a11y, and both themes |
 | `explorer-tree-nesting.spec.ts` | AGT-2057: Explorer tree destination nesting |
 | `project-board-lane-counters.spec.ts` | Explorer Project Board row shows subtle live lane counters |
-| `project-onboarding-basics.spec.ts` | project onboarding, store separation, validation, and editable Project Basics |
+| `project-onboarding-basics.spec.ts` | project onboarding and editable project basics |
 | `workspace-rename.spec.ts` | F46: workspace-header inline rename |
 | `workspace-tree.spec.ts` | F46: Explorer two-level workspace -> project tree |
 
