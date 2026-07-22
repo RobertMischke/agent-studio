@@ -343,9 +343,16 @@ public class TaskRunnerPromptTests
             RuntimePromptService.RunnerResumeRestart,
             RuntimePromptService.RunnerRecoveryContinuation,
             RuntimePromptService.RunnerReissueChange,
+            RuntimePromptService.EpicDecomposition,
             "global-orchestrator-boot.md",
+            "orchestrator-conflict-resolution.md",
+            "orchestrator-decision-oneshot.md",
+            "orchestrator-decision-resume.md",
+            "orchestrator-no-completion-signal.md",
             "orchestrator-project-boot.md",
-            "orchestrator-reissue-followup.md"
+            "orchestrator-reissue-followup.md",
+            "orchestrator-review-decision-fallback.md",
+            "orchestrator-review-decision.md"
         })
         {
             var rendered = prompts.Render(template, new Dictionary<string, string?>
@@ -362,7 +369,25 @@ public class TaskRunnerPromptTests
                 ["attachments_list"] = "(none)",
                 ["mode_framing"] = "",
                 ["project_name"] = "project",
-                ["decision"] = "continue"
+                ["decision"] = "continue",
+                ["task_title"] = "task title",
+                ["task_id"] = "AGT-1",
+                ["task_description"] = "task body",
+                ["attachments_block"] = "",
+                ["last_agent_text"] = "question",
+                ["project"] = "project",
+                ["job_id"] = "AGT-1",
+                ["job_title"] = "task title",
+                ["needs_input_reason"] = "question",
+                ["task_body"] = "task body",
+                ["recent_log"] = "log",
+                ["roadmap_excerpt"] = "roadmap",
+                ["adr_titles"] = "ADR",
+                ["previous_decisions"] = "none",
+                ["task_branch"] = "task/agt-1",
+                ["integration_branch"] = "main",
+                ["worktree"] = "worktree",
+                ["conflicted_files"] = "file.cs"
             });
 
             Assert.Contains("docs/start/contribution-and-style-guide.html", rendered);

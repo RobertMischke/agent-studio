@@ -11,28 +11,25 @@ badge, pool, and sequence row), and (d) instructions an agent can follow.
 the Agent Studio target architecture in this exact self-contained,
 theme-aware style.
 
-**Important usage note.** This style is also the foundation for diagrams and
-sections on the **Agent Studio website** (`agent-studio-marketing`). The tokens
-and snippets are deliberately framework-free. They do not require VitePress
-and can be copied directly into the marketing site, preserving the same
-palette, wire diagrams, and brand language across the Wiki and public site.
+**Usage.** The **Agent Studio website** (`agent-studio-marketing`) also uses
+this style for diagrams and sections. The tokens and snippets do not require
+VitePress or another framework. They can be used in the Wiki and public site.
 
 ---
 
 ## (a) Principles
 
-1. **Calm through grid and whitespace.** Use few elements, generous spacing,
-   and a clear vertical rhythm. Keep the diagram centered, balanced, and open.
-2. **Flat boxes without decoration.** Use 1&nbsp;px borders, a subtle radius
-   (8-14&nbsp;px), and a very soft shadow. Do not use gradients, 3D effects, or
-   heavy borders.
+1. **Grid and whitespace.** Use few elements, defined spacing, and a consistent
+   vertical rhythm. Center the diagram and align elements to a grid.
+2. **Flat boxes.** Use 1&nbsp;px borders, an 8-14&nbsp;px radius, and the shadow
+   token from section (b). Do not use gradients, 3D effects, or thick borders.
 3. **Muted surfaces and exactly two accents.** Neutral gray tones carry the
    surface. **Blue means authority or control plane** and **teal means execution
    plane**. Use coral as a third signal color only for numbers and labels. No
    other colors should carry meaning.
-4. **Connections are thin Bezier curves, not box arrows.** A fine gray rail is
-   static. Colored dashed flows move over it with subtle animation. Indicate
-   direction through color and an optional arrow, not heavy arrowheads.
+4. **Connections are thin Bezier curves.** A gray rail is static. Colored
+   dashed flows move over it. Indicate direction through color and an optional
+   arrow. Do not use thick arrowheads.
 5. **Technique: HTML boxes plus a thin SVG wire layer.** SVG draws only the
    connections (`preserveAspectRatio="none"`, paths in `<defs>`, reused with
    `<use>`). All boxes and labels are normal, absolutely positioned HTML above
@@ -43,9 +40,9 @@ palette, wire diagrams, and brand language across the Wiki and public site.
 7. **Number badges instead of chapter overhead.** Give sections a compact
    coral monospace label such as `§1 · MAIN ARCHITECTURE`. Give pills a thin
    accent outline and a dot or icon.
-8. **Theme awareness by default.** Every value must exist for light and dark
-   themes. Dark mode is its own deep, quiet palette, not an inversion. Accents
-   are slightly brighter and the host box gets a soft glow.
+8. **Light and dark themes.** Define every value for both themes. Use the dark
+   theme values in section (b) instead of color inversion. The dark theme uses
+   brighter accent values and the host box uses the defined glow token.
 
 ---
 
@@ -141,7 +138,7 @@ dash `7 12`, and animation duration `1.4-1.7s`.
 
 ### 3 · Connection or wire (SVG layer above HTML boxes)
 
-This is the core of the style. Place the SVG absolutely over a relative stage.
+Place the SVG absolutely over a relative stage.
 Position boxes above it with percentage `left` plus `top` or `bottom`. Define
 paths once in `<defs>`, then reuse them as both static rails and animated flows.
 
@@ -261,16 +258,15 @@ outward, and blue comes back. Do not use heavy arrows.
 > 5. **Support themes:** include the light and dark tokens. Add a small toggle
 >    that stamps `data-theme` on `:root` and overrides the system preference in
 >    both directions. Check both themes.
-> 6. **Keep it responsive and calm:** put the diagram in an `overflow-x:auto`
+> 6. **Support responsive layouts:** put the diagram in an `overflow-x:auto`
 >    wrapper with a `min-width`. The body must never scroll horizontally. Use
->    generous whitespace, few elements, and no decorative clutter.
+>    the defined spacing and include only elements required by the diagram.
 > 7. **Verify it:** render light and dark modes with Playwright and inspect the
 >    screenshots. Confirm that rails are not black-filled, dashes are not
 >    distorted, and nothing overflows.
 >
-> **Definition of done:** the result looks consistent beside
-> `docs/concepts/zielarchitektur-diagramm.html`, opens without network access,
-> and renders correctly in light and dark themes.
+> **Definition of done:** the result uses the specified tokens and components,
+> opens without network access, and renders correctly in light and dark themes.
 
 ---
 

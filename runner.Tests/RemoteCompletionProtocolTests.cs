@@ -14,6 +14,7 @@ public sealed class RemoteCompletionProtocolTests
         Assert.Contains("docs/system/domains/model-routing-policy.md", prompt);
         Assert.Contains("authoritative source", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("correctness-risk floors", prompt);
+        Assert.Contains("docs/start/contribution-and-style-guide.html", prompt);
         Assert.Contains("MUST end with exactly one", prompt);
         Assert.Contains("[[TASK_DONE]]", prompt);
         Assert.Contains("[[TASK_BLOCKED:missing-dependency-xyz]]", prompt);

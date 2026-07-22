@@ -4,9 +4,10 @@ namespace AgentRunner;
 /// Builds the prompt handed to a standalone remote-runner CLI.
 /// <para>
 /// The task server deliberately exposes the operator-authored <c>prompt.md</c>
-/// verbatim. The local in-process runner adds standing model-routing guidance
-/// and its completion protocol while it renders <c>runner-fresh-start.md</c>,
-/// so the standalone runner must add the same instructions at its own execution
+/// verbatim. The local in-process runner adds standing model-routing and
+/// contribution guidance plus its completion protocol while it renders
+/// <c>runner-fresh-start.md</c>, so the standalone runner must add the same
+/// instructions at its own execution
 /// boundary. Keeping them here makes one-shot and daemon-claimed runs use
 /// exactly the same prompt.
 /// </para>
@@ -17,6 +18,10 @@ public static class RemoteRunPrompt
         "Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever " +
         "you select, recommend, override, or explain a model and thinking level. Never let quota or " +
         "cost cross its correctness-risk floors.";
+
+    public const string ContributionGuideInstruction =
+        "Consult `docs/start/contribution-and-style-guide.html` and treat it as the authoritative " +
+        "source for contribution and style conventions.";
 
     public const string CompletionProtocol =
         "Orchestrator note: your reply MUST end with exactly one of " +
@@ -31,6 +36,8 @@ public static class RemoteRunPrompt
         ArgumentNullException.ThrowIfNull(taskPrompt);
         return taskPrompt.TrimEnd() + Environment.NewLine + Environment.NewLine
             + "---" + Environment.NewLine + Environment.NewLine
+            + ModelRoutingPolicyInstruction + Environment.NewLine + Environment.NewLine
+            + ContributionGuideInstruction + Environment.NewLine + Environment.NewLine
             + ModelRoutingPolicyInstruction + Environment.NewLine + Environment.NewLine
             + CompletionProtocol + Environment.NewLine;
     }
