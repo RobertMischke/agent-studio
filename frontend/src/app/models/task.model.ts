@@ -36,7 +36,7 @@ export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState)
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let TaskInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { TaskCommitInfo, TaskProvenanceRecord, TaskMergeSignal } from '../features/git';
+import type { TaskCommitInfo, TaskProvenanceRecord, TaskMergeSignal, TaskIntegrationStatus } from '../features/git';
 import type { TaskTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -365,6 +365,17 @@ export interface TaskInfo {
    * on cards with no committed/merged anchor yet.
    */
   mergeSignal?: TaskMergeSignal | null;
+
+  /**
+   * AGT-2202: honest, git-derived integration verdict for accepted cards
+   * (5-human-review / 6-completed / 7-archive): is the work actually in develop?
+   * Mirrors backend `TaskInfo.Integration`; one of integrated / pending /
+   * conflict-skipped / no-branch. Resolves the "Accept != Merge" blind spot -
+   * unlike `mergeSignal` it also reads the curated `merge(<KEY>)` develop-log
+   * commit, so it survives commit rewriting by the async curated integrator. Null
+   * on cards not in an accepted lane.
+   */
+  integration?: TaskIntegrationStatus | null;
 
   /**
    * PUB-1: read-time "publishable to" signal for accepted (6-completed) cards -

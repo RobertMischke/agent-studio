@@ -33,7 +33,12 @@ public record ProjectUrlStartRule
     public int? Port { get; init; }
     /// <summary>Optional HTTP readiness target; defaults to the URL itself.</summary>
     public string? HealthUrl { get; init; }
-    /// <summary>Maximum bounded startup validation time. Defaults to 20 seconds.</summary>
+    /// <summary>
+    /// Console-silence window for startup validation. Startup is abandoned only
+    /// after this many seconds pass with no new process output <em>and</em> the
+    /// URL is still unreachable; while the command keeps producing output the
+    /// wait continues (bounded by a hard 5-minute cap). Defaults to 20 seconds.
+    /// </summary>
     public int ReadinessTimeoutSeconds { get; init; } = 20;
     /// <summary>Where the rule came from: <c>manual</c> | <c>package-json</c> | <c>readme</c>.</summary>
     public string Source { get; init; } = "manual";

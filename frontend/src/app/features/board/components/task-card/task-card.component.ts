@@ -53,6 +53,7 @@ import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
 import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
+import { IntegrationStatusBadgeComponent } from '../../../../components/integration-status-badge/integration-status-badge.component';
 import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -71,7 +72,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ThinkingLevelIndicatorComponent, ExecutionLocationBadgeComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ThinkingLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -309,6 +310,15 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    * a glance. Null on pre-work cards with no anchor. See {@link buildMergeSignal}.
    */
   readonly mergeSignal = computed(() => buildMergeSignal(this.job()));
+
+  /**
+   * AGT-2202 — the honest integration verdict badge for accepted cards
+   * (5-human-review / 6-completed / 7-archive): "merged @sha" / "NICHT
+   * integriert" / "Konflikt" / "kein Branch". The backend only computes it for
+   * accepted lanes, so presence is the whole gate. Makes accept-without-merge
+   * impossible to miss.
+   */
+  readonly integrationStatus = computed(() => this.job().integration ?? null);
 
   /**
    * Host-level "this card needs a human" flag. Drives the red uniform ring +

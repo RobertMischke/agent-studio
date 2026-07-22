@@ -8,7 +8,7 @@ export interface ProjectUrlDiagnosisPresentation {
 
 const PRESENTATION: Record<ProjectUrlDiagnosisClass, ProjectUrlDiagnosisPresentation> = {
   'not-started': { status: 'Offline', title: 'The preview service is not running', primaryAction: 'start' },
-  starting: { status: 'Starting', title: 'Waiting for the preview to become ready', primaryAction: 'retry' },
+  starting: { status: 'Starting', title: 'The process is working — waiting for the URL…', primaryAction: 'retry' },
   'command-unavailable': { status: 'Start failed', title: 'The start command is unavailable', primaryAction: 'settings' },
   'invalid-cwd': { status: 'Setup issue', title: 'The working directory is invalid', primaryAction: 'settings' },
   'process-exited': { status: 'Start failed', title: 'The service exited during startup', primaryAction: 'retry' },

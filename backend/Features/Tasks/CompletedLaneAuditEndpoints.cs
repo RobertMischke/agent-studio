@@ -51,5 +51,13 @@ public static class CompletedLaneAuditEndpoints
             var status = store.Get(runId);
             return status == null ? Results.NotFound() : Results.Ok(status);
         });
+
+        // AGT-2202: accepted-but-not-integrated listing. Re-derives the live git
+        // integration verdict for every completed/archived card tagged
+        // integration:pending, self-heals resolved ones, and returns the ones
+        // whose work is still not in develop.
+        app.MapGet("/api/projects/{projectId}/completed-lane/integration-pending",
+            (string projectId, CompletedLaneAuditService audit) =>
+                Results.Ok(audit.ListIntegrationPending(projectId)));
     }
 }

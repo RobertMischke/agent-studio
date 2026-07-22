@@ -69,6 +69,8 @@ public sealed class ProjectUrlProcessService : IDisposable
 {
     private const int MaxOutputLines = 1000;
     internal const int OutputTailLimit = 8_192;
+    /// <summary>Absolute upper bound on startup validation, regardless of ongoing output.</summary>
+    internal const int HardStartupCapSeconds = 300;
     private static readonly Regex SecretRegex = new(
         @"(?im)(?<userinfo>https?://)[^/\s:@]+(?::[^/\s@]*)?@|(?<bearer>bearer\s+)[a-z0-9._~+/=-]+|(?<key>(?:api[_-]?key|token|password|secret|authorization)\s*[:=]\s*)(?<value>(?:bearer\s+)?[^\s\r\n]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -276,17 +278,24 @@ public sealed class ProjectUrlProcessService : IDisposable
         Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
         {
             Classification = ProjectUrlDiagnosisClasses.Starting,
-            Summary = "The start command is running. Waiting for HTTP readiness.",
-            RecommendedAction = "Wait for the readiness check to finish.",
+            Summary = "The process is working — waiting for the URL to become reachable.",
+            RecommendedAction = "Wait while the command keeps producing output.",
             ProcessCreated = true,
         });
 
-        var timeout = TimeSpan.FromSeconds(Math.Clamp(rule.ReadinessTimeoutSeconds <= 0 ? 20 : rule.ReadinessTimeoutSeconds, 2, 120));
-        var deadline = DateTime.UtcNow + timeout;
+        // The command may spend minutes installing dependencies and building
+        // before it ever binds a port (e.g. `npm install && ng serve`). Rather
+        // than failing on a fixed wall-clock deadline, keep waiting as long as
+        // the process is still emitting console output; only silence counts
+        // against the readiness window. A hard cap bounds the wait regardless.
+        var idleWindow = TimeSpan.FromSeconds(Math.Clamp(rule.ReadinessTimeoutSeconds <= 0 ? 20 : rule.ReadinessTimeoutSeconds, 2, 120));
+        var hardCap = TimeSpan.FromSeconds(HardStartupCapSeconds);
+        var startedAt = DateTime.UtcNow;
         var everPortReachable = false;
+        var hardCapReached = false;
         try
         {
-            while (DateTime.UtcNow < deadline)
+            while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var current = Get(project.Id, url.Id);
@@ -321,6 +330,18 @@ public sealed class ProjectUrlProcessService : IDisposable
                         or ProjectUrlDiagnosisClasses.ContentNotRenderable)
                         return Save(project.Id, url.Id, ready);
                 }
+
+                var now = DateTime.UtcNow;
+                if (now - startedAt >= hardCap)
+                {
+                    hardCapReached = true;
+                    break;
+                }
+                // Fail only on sustained silence: the URL is still unreachable
+                // and the process has produced no output for the idle window.
+                if (now - LastOutputAt(project.Id, url.Id) >= idleWindow)
+                    break;
+
                 await Task.Delay(250, cancellationToken);
             }
         }
@@ -337,17 +358,39 @@ public sealed class ProjectUrlProcessService : IDisposable
             });
         }
 
+        var idleSeconds = (int)Math.Round(Math.Max(0, (DateTime.UtcNow - LastOutputAt(project.Id, url.Id)).TotalSeconds));
         var (finalStdout, finalStderr) = OutputTails(project.Id, url.Id);
-        return Save(project.Id, url.Id, Base(rule, url.Url, cwd) with
+        return Save(project.Id, url.Id, StartupFailure(
+            rule, url.Url, cwd, hardCapReached, everPortReachable, idleSeconds,
+            Redact(finalStdout), Redact(finalStderr)));
+    }
+
+    /// <summary>
+    /// Build the terminal diagnostic when startup validation gives up: either
+    /// the hard <see cref="HardStartupCapSeconds"/> cap was reached, or the
+    /// process fell silent for the idle window while the URL stayed unreachable.
+    /// </summary>
+    internal static ProjectUrlDiagnostic StartupFailure(
+        ProjectUrlStartRule? rule, string url, string? cwd,
+        bool hardCapReached, bool everPortReachable, int idleSeconds,
+        string stdoutTail, string stderrTail)
+    {
+        var minutes = HardStartupCapSeconds / 60;
+        var summary = hardCapReached
+            ? (everPortReachable
+                ? $"The port opened, but the preview did not become ready within the {minutes}-minute startup limit."
+                : $"The URL did not become reachable within the {minutes}-minute startup limit.")
+            : (everPortReachable
+                ? $"The port opened, but HTTP content did not become ready and the process produced no console output for {idleSeconds}s."
+                : $"The URL is not reachable and the process produced no console output for {idleSeconds}s.");
+        return Base(rule, url, cwd) with
         {
             Classification = everPortReachable ? ProjectUrlDiagnosisClasses.Timeout : ProjectUrlDiagnosisClasses.PortNeverOpened,
-            Summary = everPortReachable
-                ? "The port opened, but HTTP content did not become ready before the timeout."
-                : "The process stayed alive, but the configured port never opened.",
+            Summary = summary,
             RecommendedAction = "Verify the port, URL, and readiness target in Settings, then Retry.",
             ProcessCreated = true, TimedOut = true, PortReachable = everPortReachable,
-            StdoutTail = Redact(finalStdout), StderrTail = Redact(finalStderr),
-        });
+            StdoutTail = stdoutTail, StderrTail = stderrTail,
+        };
     }
 
     /// <summary>
@@ -523,6 +566,12 @@ public sealed class ProjectUrlProcessService : IDisposable
             ? (session.StdoutTail.Value, session.StderrTail.Value)
             : ("", "");
 
+    /// <summary>UTC timestamp of the most recent process console output for the URL.</summary>
+    private DateTime LastOutputAt(string projectId, string urlId)
+        => _sessions.TryGetValue(Key(projectId, urlId), out var session)
+            ? session.LastOutputUtc
+            : DateTime.UtcNow;
+
     internal static ProcessStartInfo BuildStartInfo(string command, string cwd)
     {
         var psi = new ProcessStartInfo
@@ -627,6 +676,8 @@ public sealed class ProjectUrlProcessService : IDisposable
     private void AppendOutput(Session session, string? line, bool isError)
     {
         if (line == null) return;
+        // Real process output resets the console-silence window (StartAsync).
+        session.LastOutputUtc = DateTime.UtcNow;
         lock (session.Gate) AppendOutputLocked(session, line);
         if (isError)
         {
@@ -713,7 +764,15 @@ public sealed class ProjectUrlProcessService : IDisposable
         string cwd,
         Process process)
     {
+        private long _lastOutputTicks = DateTime.UtcNow.Ticks;
+
         public object Gate { get; } = new();
+        /// <summary>UTC time of the last process console output; lock-free for the readiness poll.</summary>
+        public DateTime LastOutputUtc
+        {
+            get => new(Interlocked.Read(ref _lastOutputTicks), DateTimeKind.Utc);
+            set => Interlocked.Exchange(ref _lastOutputTicks, value.Ticks);
+        }
         public string ProjectId { get; } = projectId;
         public string UrlId { get; } = urlId;
         public string Command { get; } = command;

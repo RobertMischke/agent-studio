@@ -289,6 +289,9 @@ builder.Services.AddSingleton<IAutoReviewPostProcessingQueue>(sp =>
     sp.GetRequiredService<AutoReviewPostProcessingQueue>());
 builder.Services.AddSingleton<TaskProvenanceService>();
 builder.Services.AddSingleton<BoardMergeStatusService>();
+// AGT-2202: honest git-derived integration verdict for accepted cards (is the
+// work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
+builder.Services.AddSingleton<TaskIntegrationStatusService>();
 // PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
 // chips). PublishTargetService derives + caches per project; TaskPublishableService
 // folds the per-task chip signal onto accepted cards (O(projects), no per-card git).

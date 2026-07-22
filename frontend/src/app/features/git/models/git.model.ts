@@ -339,3 +339,32 @@ export interface TaskMergeSignal {
   /** Short SHA of the anchor that reached main; null when not in main. */
   releaseSha: string | null;
 }
+
+/** One of the discrete integration verdicts (AGT-2202; `partial` added AGT-2171 fix). */
+export type IntegrationStatusValue =
+  | 'integrated'
+  | 'partial'
+  | 'pending'
+  | 'conflict-skipped'
+  | 'no-branch';
+
+/**
+ * AGT-2202 — the honest, git-derived integration verdict for an accepted card
+ * (5-human-review / 6-completed / 7-archive): is this task's work actually folded
+ * into the integration branch (develop)? Mirrors backend `TaskIntegrationStatus`
+ * and ships via `TaskInfo.integration`. Unlike {@link TaskMergeSignal} (which
+ * reads anchor ancestry only) this also honours the curated `merge(<KEY>)` /
+ * `merge-recut(<KEY>)` develop-log commit the async curated integrator leaves
+ * behind, so it survives commit rewriting. Computed batched + cached per repo on
+ * the backend. Null on cards not in an accepted lane.
+ */
+export interface TaskIntegrationStatus {
+  /** integrated | pending | conflict-skipped | no-branch. */
+  status: IntegrationStatusValue;
+  /** Short SHA proving integration (curated merge commit or contained anchor); null unless integrated. */
+  sha: string | null;
+  /** Integration branch the verdict was computed against (usually "develop"). */
+  integrationBranch: string;
+  /** Which signal proved the verdict / why it is not integrated. Tooltip + audit only. */
+  detail: string | null;
+}
