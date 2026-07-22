@@ -119,7 +119,21 @@ public sealed record RunnerClaimResponse(
     string? Message = null,
     string? ProjectId = null,
     string? RepositoryUrl = null,
-    string? DefaultBranch = null);
+    string? DefaultBranch = null,
+    string? TaskKind = null);
+
+public sealed record RemoteEpicPlanningPromptRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string WorkingDirectory);
+
+public sealed record RemoteEpicPlanningPromptResponse(
+    string Prompt,
+    string? CliType,
+    string? Model,
+    string? ThinkingLevel);
 
 /// <summary>Runner -> Server: fenced normal completion after the remote CLI exits.</summary>
 public sealed record RemoteRunCompletionRequest(
@@ -143,7 +157,10 @@ public sealed record RemoteRunCompletionRequest(
     string? SalvageRecoveryBranchUrl = null,
     string? SalvageAuthoritativeBaseBranch = null,
     string? SalvageAuthoritativeBaseSha = null,
-    string? Repository = null);
+    string? Repository = null,
+    // AGT-2178: additive Epic-planning fields; salvage fields above stay intact.
+    IReadOnlyList<string>? OutputLines = null,
+    bool SourceMutated = false);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

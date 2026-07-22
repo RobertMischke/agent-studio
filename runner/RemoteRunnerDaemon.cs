@@ -154,7 +154,8 @@ public sealed class RemoteRunnerDaemon
                         shutdown,
                         claim.ProjectId,
                         claim.RepositoryUrl,
-                        claim.DefaultBranch));
+                    claim.DefaultBranch,
+                    claim.TaskKind));
                 }
 
                 if (!claimedAny)

@@ -68,7 +68,8 @@ public sealed class RemoteTaskRunner
         CancellationToken shutdown,
         string? projectId = null,
         string? repositoryUrl = null,
-        string? defaultBranch = null)
+        string? defaultBranch = null,
+        string? taskKind = null)
     {
         _log($"running claimed task '{taskKey}' with lease {lease.LeaseId}, fencing token {lease.FencingToken}");
 
@@ -82,11 +83,16 @@ public sealed class RemoteTaskRunner
         var outcome = new RunOutcome(RunOutcomeKind.Unknown, "Runner ended before a terminal outcome was recorded.");
         var workspace = new GitWorkspace(
             _options, taskKey, _log, projectId, repositoryUrl, defaultBranch);
+        var epicPlanning = string.Equals(taskKind, "epic", StringComparison.OrdinalIgnoreCase);
+        IReadOnlyList<string> outputLines = [];
+        var sourceMutated = false;
         var handedBack = false;
         var teardownAttempted = false;
         try
         {
-            outcome = await ExecuteAsync(taskKey, workspace, shipper, stopRun, shutdown);
+            var execution = await ExecuteAsync(taskKey, lease, workspace, shipper, stopRun, shutdown, epicPlanning);
+            outcome = execution.Outcome;
+            outputLines = execution.OutputLines;
             await shipper.FlushAsync(shutdown);
             await UploadResultsAsync(taskKey, lease, shutdown);
 
@@ -97,8 +103,21 @@ public sealed class RemoteTaskRunner
             }
 
             teardownAttempted = true;
-            var teardown = await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
-            await CompleteAsync(taskKey, lease, outcome, teardown, workspace.RepositoryUrl, shutdown);
+            WorktreeTeardownResult teardown;
+            if (epicPlanning)
+            {
+                // Epic planning is source-read-only: verify no mutation and
+                // discard the detached checkout without salvage or a coding
+                // branch. The mutation verdict rides the additive completion
+                // fields; develop's salvage protocol stays untouched.
+                sourceMutated = await workspace.TeardownReadOnlyAsync(CancellationToken.None);
+                teardown = WorktreeTeardownResult.NoWork;
+            }
+            else
+            {
+                teardown = await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
+            }
+            await CompleteAsync(taskKey, lease, outcome, teardown, workspace.RepositoryUrl, outputLines, sourceMutated, shutdown);
             handedBack = true;
             _log($"task '{taskKey}' handed back to the local board: {outcome.Kind}");
             return outcome.Kind is RunOutcomeKind.Done or RunOutcomeKind.NoOp ? 0 : 1;
@@ -122,10 +141,14 @@ public sealed class RemoteTaskRunner
                 try
                 {
                     teardownAttempted = true;
-                    var teardown = await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
+                    var teardown = epicPlanning
+                        ? WorktreeTeardownResult.NoWork
+                        : await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
+                    if (epicPlanning)
+                        sourceMutated = await workspace.TeardownReadOnlyAsync(CancellationToken.None);
                     if (!handedBack && !heartbeat.LeaseLost)
                     {
-                        await CompleteAsync(taskKey, lease, outcome, teardown, workspace.RepositoryUrl, CancellationToken.None);
+                        await CompleteAsync(taskKey, lease, outcome, teardown, workspace.RepositoryUrl, outputLines, sourceMutated, CancellationToken.None);
                         handedBack = true;
                     }
                 }
@@ -152,10 +175,13 @@ public sealed class RemoteTaskRunner
         }
     }
 
-    private async Task<RunOutcome> ExecuteAsync(
-        string taskKey, GitWorkspace workspace, LogShipper shipper, CancellationTokenSource stopRun, CancellationToken shutdown)
+    private async Task<RemoteExecutionResult> ExecuteAsync(
+        string taskKey, RunLeaseInfoDto lease, GitWorkspace workspace, LogShipper shipper,
+        CancellationTokenSource stopRun, CancellationToken shutdown, bool epicPlanning)
     {
-        var branch = await workspace.PrepareAsync(shutdown);
+        var branch = epicPlanning
+            ? await workspace.PrepareReadOnlyAsync(shutdown)
+            : await workspace.PrepareAsync(shutdown);
         shipper.Add("system", $"[runner] working tree ready on branch '{branch}'");
         if (workspace.PickupReconciliation is { } recovery)
         {
@@ -169,10 +195,22 @@ public sealed class RemoteTaskRunner
                 $"authoritativeBaseSha={recovery.AuthoritativeBaseSha}");
         }
 
+        string prompt;
+        if (epicPlanning)
+        {
+            var planning = await _client.GetEpicPlanningPromptAsync(new RemoteEpicPlanningPromptRequest(
+                taskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId, workspace.RepoPath), shutdown)
+                ?? throw new InvalidOperationException("Server returned no Epic planning prompt.");
+            prompt = planning.Prompt;
+            shipper.Add("system", $"[runner] server-rendered Epic decomposition prompt; cli={planning.CliType ?? "default"} model={planning.Model ?? "default"} thinking={planning.ThinkingLevel ?? "default"}");
+        }
+        else
+        {
         var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
                          ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
-        var prompt = RemoteRunPrompt.Build(taskPrompt);
+            prompt = RemoteRunPrompt.Build(taskPrompt);
         shipper.Add("system", "[runner] remote-completion-protocol appended to task prompt");
+        }
 
         var resultsDir = ResultsDir(taskKey);
         if (Directory.Exists(resultsDir)) Directory.Delete(resultsDir, recursive: true);
@@ -196,12 +234,15 @@ public sealed class RemoteTaskRunner
         catch (OperationCanceledException) when (runTimeout.IsCancellationRequested)
         {
             shipper.Add("system", $"[runner] run exceeded {_options.RunTimeoutSeconds}s timeout");
-            return new RunOutcome(RunOutcomeKind.Blocked, $"Runner timeout after {_options.RunTimeoutSeconds}s");
+            return new RemoteExecutionResult(
+                new RunOutcome(RunOutcomeKind.Blocked, $"Runner timeout after {_options.RunTimeoutSeconds}s"), []);
         }
 
         var outcome = SentinelScanner.Scan(result.StdOut);
         shipper.Add("system", $"[runner] CLI exited {result.ExitCode}; outcome {outcome.Kind}");
-        return outcome;
+        return new RemoteExecutionResult(
+            outcome,
+            result.StdOut.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
     }
 
     private async Task<List<string>> UploadResultsAsync(string taskKey, RunLeaseInfoDto lease, CancellationToken ct)
@@ -232,6 +273,8 @@ public sealed class RemoteTaskRunner
         RunOutcome outcome,
         WorktreeTeardownResult teardown,
         string? repository,
+        IReadOnlyList<string> outputLines,
+        bool sourceMutated,
         CancellationToken ct)
     {
         var resp = await _client.CompleteRunAsync(new RemoteRunCompletionRequest(
@@ -249,7 +292,9 @@ public sealed class RemoteTaskRunner
             SalvageRecoveryCommitSha: teardown.Reconciliation?.RecoveryCommitSha,
             SalvageRecoveryBranchUrl: null,
             SalvageAuthoritativeBaseBranch: teardown.Reconciliation?.AuthoritativeBaseBranch,
-            SalvageAuthoritativeBaseSha: teardown.Reconciliation?.AuthoritativeBaseSha), ct);
+            SalvageAuthoritativeBaseSha: teardown.Reconciliation?.AuthoritativeBaseSha,
+            OutputLines: outputLines,
+            SourceMutated: sourceMutated), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 
@@ -306,3 +351,5 @@ public sealed class RemoteTaskRunner
         catch { /* background loops already logged their own failures */ }
     }
 }
+
+internal sealed record RemoteExecutionResult(RunOutcome Outcome, IReadOnlyList<string> OutputLines);

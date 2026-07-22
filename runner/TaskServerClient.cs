@@ -397,6 +397,11 @@ public sealed class TaskServerClient : IDisposable
         return new RemoteRunCompletionResponse(req.TaskKey, req.Outcome, "4-auto-review");
     }
 
+    public async Task<RemoteEpicPlanningPromptResponse?> GetEpicPlanningPromptAsync(
+        RemoteEpicPlanningPromptRequest req, CancellationToken ct)
+        => await PostJsonAsync<RemoteEpicPlanningPromptRequest, RemoteEpicPlanningPromptResponse>(
+            "/api/runner/epic-planning-prompt", req, ct);
+
     public async Task<ExternalCompletionResponse?> CompleteAsync(string jobId, ExternalCompletionRequest req, CancellationToken ct)
     {
         if (_useV1)
