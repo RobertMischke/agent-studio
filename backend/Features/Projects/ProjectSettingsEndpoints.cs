@@ -469,6 +469,20 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(settings.Get(projectName));
         });
 
+        app.MapPut("/api/projects/{projectName}/wiki-source-branch", (string projectName, SetWikiSourceBranchRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var branch = req.Branch?.Trim();
+            if (!string.IsNullOrEmpty(branch)
+                && (branch.Contains("..", StringComparison.Ordinal) || branch.Any(char.IsWhiteSpace)))
+                return Results.BadRequest(new { error = "Wiki source branch is not a valid git ref." });
+
+            settings.SetWikiSourceBranch(projectName, branch);
+            return Results.Ok(settings.Get(projectName));
+        });
+
         // ADR-0052: how a finished task branch folds back into the integration
         // branch (direct-merge default, or pull-request).
         app.MapPut("/api/projects/{projectName}/integration-strategy", (string projectName, SetIntegrationStrategyRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>

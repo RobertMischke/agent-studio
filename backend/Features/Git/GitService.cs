@@ -125,6 +125,7 @@ public record GitRecentFileEdit(
 /// commit's <c>Co-authored-by</c> trailer, or null for a hand-authored commit).
 /// </summary>
 public record WikiDocGitInfo(List<GitCommitInfo> Commits, string? Model);
+public record GitTreeEntry(string RepoRelPath, long Size);
 
 /// <summary>
 /// Per-commit enrichment for the deterministic commit-attribution step: the
@@ -426,6 +427,73 @@ public class GitService
         var sha = ReadHeadShaAt(root);
         _headShaCache[root] = (DateTime.UtcNow, sha);
         return sha;
+    }
+
+    /// <summary>Resolves a symbolic wiki source ref to one immutable commit, briefly cached for request bursts.</summary>
+    public string? GetRevisionShaCached(string root, string revision)
+    {
+        if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(revision) || !IsLikelyShaOrRef(revision)) return null;
+        var key = root + "\u001f" + revision;
+        if (_headShaCache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.At < HeadShaTtl)
+            return cached.Sha;
+        var repo = ResolveGitToplevel(root) ?? root;
+        var (output, _, code) = RunGitArgs(repo, "rev-parse", "--verify", revision + "^{commit}");
+        var sha = code == 0 ? output.Trim() : null;
+        if (string.IsNullOrWhiteSpace(sha)) sha = null;
+        _headShaCache[key] = (DateTime.UtcNow, sha);
+        return sha;
+    }
+
+    public T MemoizeByRevision<T>(string logicalKey, string revisionSha, Func<T> compute) where T : class
+    {
+        lock (_headKeyedLock)
+        {
+            if (_headKeyedCache.TryGetValue(logicalKey, out var e) && e.Head == revisionSha && e.Value is T hit)
+            {
+                _headKeyedOrder.Remove(e.Node);
+                _headKeyedOrder.AddLast(e.Node);
+                return hit;
+            }
+        }
+        var value = compute();
+        lock (_headKeyedLock)
+        {
+            if (_headKeyedCache.TryGetValue(logicalKey, out var existing))
+            {
+                _headKeyedOrder.Remove(existing.Node);
+                _headKeyedCache.Remove(logicalKey);
+            }
+            var node = _headKeyedOrder.AddLast(logicalKey);
+            _headKeyedCache[logicalKey] = (node, revisionSha, value);
+            while (_headKeyedCache.Count > HeadKeyedCacheLimit && _headKeyedOrder.First is { } first)
+            {
+                _headKeyedOrder.RemoveFirst();
+                _headKeyedCache.Remove(first.Value);
+            }
+        }
+        return value;
+    }
+
+    /// <summary>Lists a committed subtree without touching the index or working tree.</summary>
+    public List<GitTreeEntry> GetTreeAtCommitCached(string repoRoot, string sha, string repoRelDir)
+    {
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        var key = string.Join('\u001f', "tree-at", root, sha, repoRelDir);
+        return MemoizeByRevision(key, sha, () =>
+        {
+            var (output, _, code) = RunGitArgs(root, "ls-tree", "-r", "-l", sha, "--", repoRelDir.Replace('\\', '/'));
+            if (code != 0) return [];
+            var entries = new List<GitTreeEntry>();
+            foreach (var line in output.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var tab = line.IndexOf('\t');
+                if (tab < 0) continue;
+                var header = line[..tab].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (header.Length < 4 || !long.TryParse(header[3], out var size)) continue;
+                entries.Add(new GitTreeEntry(line[(tab + 1)..], size));
+            }
+            return entries;
+        });
     }
 
     /// <summary>
@@ -3440,7 +3508,7 @@ public class GitService
     /// lineage intact. Returns an empty list when the repo or path can't be
     /// resolved, mirroring the other read-only git lookups on this service.
     /// </summary>
-    public List<GitCommitInfo> GetFileHistory(string repoRoot, string repoRelPath, int limit = 50)
+    public List<GitCommitInfo> GetFileHistory(string repoRoot, string repoRelPath, int limit = 50, string? revision = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(repoRelPath)) return [];
         var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
@@ -3451,9 +3519,11 @@ public class GitService
         // any printable char round-trips. --follow needs exactly one pathspec
         // after `--`; args are passed verbatim so a path with spaces survives.
         const string fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
-        var (output, _, code) = RunGitArgs(root,
-            "log", "--no-merges", $"--max-count={limit}", "--follow",
-            "--shortstat", $"--pretty=format:{fmt}", "--", repoRelPath.Replace('\\', '/'));
+        var args = new List<string> { "log", "--no-merges", $"--max-count={limit}" };
+        if (!string.IsNullOrWhiteSpace(revision)) args.Add(revision);
+        args.AddRange(["--follow",
+            "--shortstat", $"--pretty=format:{fmt}", "--", repoRelPath.Replace('\\', '/')]);
+        var (output, _, code) = RunGitArgs(root, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
         return ParseLogBlocks(output);
     }
@@ -3470,7 +3540,7 @@ public class GitService
     /// resolved, mirroring the other read-only git lookups on this service.
     /// </summary>
     public List<GitRecentFileEdit> GetRecentEditsUnderPath(
-        string repoRoot, string repoRelDir, int limit = 20, int commitScan = 200)
+        string repoRoot, string repoRelDir, int limit = 20, int commitScan = 200, string? revision = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot)) return [];
         var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
@@ -3484,9 +3554,10 @@ public class GitService
         // first, the first time we see a path is its most-recent commit.
         const string fmt = "%x1e%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
         var pathspec = string.IsNullOrWhiteSpace(repoRelDir) ? "." : repoRelDir.Replace('\\', '/');
-        var (output, _, code) = RunGitArgs(root,
-            "log", "--no-merges", $"--max-count={commitScan}",
-            "--name-only", $"--pretty=format:{fmt}", "--", pathspec);
+        var args = new List<string> { "log", "--no-merges", $"--max-count={commitScan}" };
+        if (!string.IsNullOrWhiteSpace(revision)) args.Add(revision);
+        args.AddRange(["--name-only", $"--pretty=format:{fmt}", "--", pathspec]);
+        var (output, _, code) = RunGitArgs(root, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
         return ParseRecentEdits(output, limit);
     }
@@ -3621,16 +3692,16 @@ public class GitService
     /// address is stripped so the wiki provenance line shows just the model
     /// name. Returns null for a hand-authored commit with no such trailer.
     /// </summary>
-    public string? GetLatestModelForPath(string repoRoot, string repoRelPath)
+    public string? GetLatestModelForPath(string repoRoot, string repoRelPath, string? revision = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(repoRelPath)) return null;
         var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
         if (!Directory.Exists(root)) return null;
 
-        var (output, _, code) = RunGitArgs(root,
-            "log", "--no-merges", "--max-count=1",
-            "--pretty=format:%(trailers:key=Co-authored-by,valueonly,separator=%x1f)",
-            "--", repoRelPath.Replace('\\', '/'));
+        var args = new List<string> { "log", "--no-merges", "--max-count=1" };
+        if (!string.IsNullOrWhiteSpace(revision)) args.Add(revision);
+        args.AddRange(["--pretty=format:%(trailers:key=Co-authored-by,valueonly,separator=%x1f)", "--", repoRelPath.Replace('\\', '/')]);
+        var (output, _, code) = RunGitArgs(root, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
         return ParseModelTrailer(output);
     }
@@ -3698,6 +3769,15 @@ public class GitService
         return MemoizeByHead(root, key, () => new WikiDocGitInfo(
             GetFileHistory(root, repoRelPath, limit),
             GetLatestModelForPath(root, repoRelPath)));
+    }
+
+    public WikiDocGitInfo GetWikiDocGitInfoAtCommitCached(string repoRoot, string repoRelPath, string sha, int limit = 50)
+    {
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        var key = string.Join(CacheKeySep, "wiki-hist-at", root, sha, repoRelPath, limit);
+        return MemoizeByRevision(key, sha, () => new WikiDocGitInfo(
+            GetFileHistory(root, repoRelPath, limit, sha),
+            GetLatestModelForPath(root, repoRelPath, sha)));
     }
 
     /// <summary>

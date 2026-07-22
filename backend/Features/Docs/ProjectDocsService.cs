@@ -19,6 +19,8 @@ public class ProjectDocsService
     private readonly TaskScannerService _scanner;
     private readonly ProjectRegistry _registry;
     private readonly ILogger<ProjectDocsService> _logger;
+    private readonly ProjectSettingsService _settings;
+    private readonly GitService _git;
 
     private const string SecurityRel = "docs/operations/security";
     private const string SecurityStateFile = "state.json";
@@ -77,12 +79,39 @@ public class ProjectDocsService
     private readonly ConcurrentDictionary<string, (string Signature, WikiTree Tree, string ETag)> _treeCache =
         new(StringComparer.Ordinal);
 
-    public ProjectDocsService(TaskScannerService scanner, ProjectRegistry registry, ILogger<ProjectDocsService> logger)
+    public ProjectDocsService(TaskScannerService scanner, ProjectRegistry registry, ILogger<ProjectDocsService> logger,
+        ProjectSettingsService settings, GitService git)
     {
         _scanner = scanner;
         _registry = registry;
         _logger = logger;
+        _settings = settings;
+        _git = git;
     }
+
+    public WikiSourceInfo? GetWikiSource(string projectName)
+    {
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return null;
+        var repoRoot = _git.ResolveRepoRootForProject(projectName);
+        var configured = _settings.Get(projectName).WikiSourceBranch;
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            var status = string.IsNullOrWhiteSpace(repoRoot) ? null : _git.GetStatusForRepoRoot(repoRoot);
+            var sha = string.IsNullOrWhiteSpace(repoRoot) ? null : _git.GetHeadShaCached(repoRoot);
+            return new WikiSourceInfo("checkout", status?.Branch ?? "Checkout", sha, sha?[..Math.Min(8, sha.Length)], false, null);
+        }
+        if (string.IsNullOrWhiteSpace(repoRoot))
+            return new WikiSourceInfo("branch", configured, null, null, true, "Repository not found.");
+        var commit = _git.GetRevisionShaCached(repoRoot, configured);
+        return new WikiSourceInfo("branch", configured, commit, commit?[..Math.Min(8, commit.Length)], true,
+            commit == null ? $"Git ref '{configured}' was not found. Fetch it before selecting it as the Wiki source." : null);
+    }
+
+    public string? WikiMutationBlockReason(string projectName)
+        => GetWikiSource(projectName) is { ReadOnly: true } source
+            ? $"Wiki is read-only because its source is '{source.Branch}'. Switch Wiki source to Checkout in Project Settings to edit or upload files."
+            : null;
 
     /// <summary>
     /// Drops the in-memory wiki title + tree caches. Tests that mutate a fixture

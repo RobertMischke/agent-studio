@@ -473,6 +473,12 @@ public record SetIntegrationBranchRequest
     public string? Branch { get; init; }
 }
 
+/// <summary>Blank selects the project checkout; otherwise the whole Wiki reads from this git ref.</summary>
+public record SetWikiSourceBranchRequest
+{
+    public string? Branch { get; init; }
+}
+
 /// <summary>
 /// Body for <c>PUT /api/projects/{name}/integration-strategy</c> (ADR-0052).
 /// Unknown values normalize to <see cref="IntegrationStrategies.DirectMerge"/>.

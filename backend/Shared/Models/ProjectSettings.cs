@@ -3,6 +3,13 @@ namespace AgentStudio.Shared;
 public record ProjectSettings
 {
     /// <summary>
+    /// Optional git ref used as the read source for the entire project Wiki.
+    /// Null or blank keeps the legacy checkout-backed behavior. A configured
+    /// ref is read directly from git objects and never changes the checkout.
+    /// </summary>
+    public string? WikiSourceBranch { get; init; }
+
+    /// <summary>
     /// Per publish-target automation ladder. Keys are derived target ids
     /// (<c>package:npm</c>, <c>package:nuget</c>, <c>website</c>); values are
     /// <c>manual</c>, <c>suggest</c>, or <c>auto</c>. Missing entries resolve to

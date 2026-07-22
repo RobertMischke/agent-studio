@@ -93,6 +93,20 @@ public class ProjectSettingsService
         _logger.LogInformation("Max parallelism set to {Max} for project {Project}", clamped, projectName);
     }
 
+    public void SetWikiSourceBranch(string projectName, string? branch)
+    {
+        EnsureLoaded();
+        var normalized = string.IsNullOrWhiteSpace(branch) ? null : branch.Trim();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { WikiSourceBranch = normalized };
+            Persist();
+        }
+        _logger.LogInformation("wiki-source-branch-updated project={Project} branch={Branch}",
+            projectName, normalized ?? "checkout");
+    }
+
     public void SetPublishAutomation(string projectName, string targetId, string mode)
     {
         EnsureLoaded();
