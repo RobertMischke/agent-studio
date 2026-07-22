@@ -64,6 +64,7 @@ import type { TaskTimelineEvent } from '../features/task-timeline';
 import type {
   TaskPipelineResponse,
   PipelineCatalogue,
+  PipelineStepProbeResult,
   PipelineStepSetting,
   PipelineStepCondition,
   StepPromptsResponse,
@@ -2020,6 +2021,13 @@ export class TaskService {
   getProjectPipelineHealth(projectName: string) {
     return this.http.get<PipelineHealthSnapshot>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-health`,
+    );
+  }
+
+  probePipelineStep(projectName: string, stepId: string) {
+    return this.http.post<PipelineStepProbeResult>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-steps/${encodeURIComponent(stepId)}/probe`,
+      {},
     );
   }
 

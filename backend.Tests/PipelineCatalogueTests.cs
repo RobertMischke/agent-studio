@@ -525,6 +525,15 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
+    public void FrontendStylelint_IsMarkedAngularSpecific()
+    {
+        var step = PipelineCatalogue.Standard.Post.Single(candidate =>
+            candidate.Id == PipelineCatalogue.LintScssStepId);
+
+        Assert.Equal(PipelineStepStacks.Angular, step.AppliesTo);
+    }
+
+    [Fact]
     public void StandardPipeline_ModelQualification_IsVisibleDefaultOnPreStepBeforeExecution()
     {
         var p = PipelineCatalogue.Standard;

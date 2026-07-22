@@ -40,6 +40,11 @@ public sealed record PipelineStep
     public StepKind Kind { get; init; } = StepKind.Module;
     public StepRunMode RunMode { get; init; } = StepRunMode.Sequential;
     /// <summary>
+    /// Repository stack required by this step. The project value is derived
+    /// from repository markers, never copied from project settings.
+    /// </summary>
+    public string AppliesTo { get; init; } = PipelineStepStacks.Any;
+    /// <summary>
     /// Step ids that must complete before this step starts. Empty means
     /// "no intra-section dependency"; siblings with <see cref="RunMode"/>
     /// = <see cref="StepRunMode.Parallel"/> and no edges run together.
@@ -93,6 +98,15 @@ public sealed record PipelineStep
     /// resolves the project override against this default.
     /// </summary>
     public bool DefaultEnabled { get; init; } = true;
+}
+
+/// <summary>Stable stack ids used by pipeline catalogue applicability metadata.</summary>
+public static class PipelineStepStacks
+{
+    public const string Any = "any";
+    public const string Angular = "angular";
+    public const string DotNet = "dotnet";
+    public const string Node = "node";
 }
 
 public enum StepKind

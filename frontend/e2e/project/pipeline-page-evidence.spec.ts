@@ -40,6 +40,8 @@ const CATALOGUE = {
     { id: 'aspect-security', displayName: 'Aspect: Security', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-security', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'decision-gate', displayName: 'Decision: Lint gate', kind: 'tool', usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'orchestrator', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
+    { id: 'post-lint-scss', displayName: 'Frontend stylelint', kind: 'tool', appliesTo: 'angular', applicable: true, effectiveExecution: { executionKind: 'shell', source: 'catalogue', commands: [{ workingSubdir: 'frontend', command: 'npx stylelint "src/**/*.scss"' }] }, usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: true },
+    { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'orchestrator', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
   ],
 };
 
@@ -185,6 +187,10 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
     ],
     alerts: [],
   })));
+  await page.route('**/api/projects/*/pipeline-steps/post-lint-scss/probe', r => r.fulfill(json({
+    stepId: 'post-lint-scss', status: 'passed', applicable: true, exitCode: 0,
+    durationMs: 81, output: 'stylelint passed', queueWaitMs: 4,
+  })));
 
   // Tall viewport so the shell's inner scroll area shows the whole panel
   // (every phase group, each with its per-step token chips) in one shot.
@@ -222,6 +228,14 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   await expect(page.getByTestId('pipeline-cost')).toHaveCount(0);
   await expect(page.getByTestId('pipeline-cost-total')).toHaveCount(0);
 
+  const stylelint = page.getByTestId('pipeline-step-row-post-lint-scss');
+  await stylelint.evaluate(el => { (el as HTMLDetailsElement).open = true; });
+  await expect(page.getByTestId('pipeline-step-stack-post-lint-scss')).toHaveText('angular');
+  await expect(page.getByTestId('pipeline-step-commands-post-lint-scss'))
+    .toContainText('cd frontend && npx stylelint "src/**/*.scss"');
+  await page.getByTestId('pipeline-step-probe-post-lint-scss').click();
+  await expect(page.getByTestId('pipeline-step-probe-output-post-lint-scss')).toContainText('stylelint passed');
+
   await setTheme(page, 'light');
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-full--mocked.png'), fullPage: true });
   await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-section--mocked.png') });
@@ -229,4 +243,79 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
 
   await setTheme(page, 'dark');
   await health.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-health-night-alarms--dark--mocked.png') });
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-full-dark--mocked.png'), fullPage: true });
+  await setTheme(page, 'light');
+  await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-section-light--mocked.png') });
+});
+
+test('pipeline page: pure dotnet project keeps Angular stylelint visible but inapplicable', async ({ page, devBackend }) => {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
+  const paths = await pathsResponse.json() as WatchPath[];
+  const preferred = paths.find(p => /playwright|worktree/i.test(p.name)) ?? paths[0];
+  expect(preferred, 'needs at least one watched project').toBeTruthy();
+  projectName = preferred.name;
+  projectSlug = slugFor(projectName);
+  const dotnetCatalogue = {
+    ...CATALOGUE,
+    detectedStacks: ['dotnet'],
+    steps: CATALOGUE.steps.map(step => step.id === 'post-lint-scss'
+      ? { ...step, applicable: false, effectiveExecution: { executionKind: 'shell', source: 'catalogue', commands: [] } }
+      : step),
+  };
+  await page.route('**/api/**', r => r.fulfill(json({})));
+  await page.route('**/api/auth/status', r => r.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  })));
+  await page.route('**/api/clients/', r => r.fulfill(json([])));
+  await page.route('**/api/tags', r => r.fulfill(json([])));
+  await page.route('**/api/orchestrator/sessions', r => r.fulfill(json({ sessions: [] })));
+  await page.route('**/api/crash-recovery/pending', r => r.fulfill(json({ pending: [] })));
+  await page.route('**/api/cli/*/models*', r => r.fulfill(json({ models: [], source: 'stubbed' })));
+  await page.route('**/api/watch-paths', r => r.fulfill(json([preferred])));
+  await page.route('**/api/workspaces', r => r.fulfill(json([{
+    id: 'WS-1', displayName: 'Workspace', sortOrder: 0, isDefault: true, color: null,
+    createdAt: '2026-07-22T00:00:00Z',
+    projects: [{
+      id: 'PROJ-1', displayName: projectName, shortCode: 'PLH', workspaceId: 'WS-1',
+      color: null, cliDefault: null, modelDefault: null, sortOrder: 0,
+      storageLocation: preferred.path, archived: false, createdAt: '2026-07-22T00:00:00Z',
+    }],
+  }])));
+  await page.route('**/api/environment', r => r.fulfill(json({
+    isDev: false, devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false },
+  })));
+  await page.route('**/api/cli/quota', r => r.fulfill(json({
+    at: '2026-07-23T01:00:00Z', ttlSeconds: 600, snapshots: [],
+  })));
+  await page.route('**/api/cli/usage**', r => r.fulfill(json({
+    at: '2026-07-23T01:00:00Z', sessions: [],
+  })));
+  await page.route('**/api/tasks/grouped', r => r.fulfill(json({
+    archive: [], autoReview: [], backlog: [], codeNotComplete: [], completed: [],
+    failedPickup: [], humanReview: [], orchestratorPrep: [], preparation: [],
+    progress: [], ready: [], review: [],
+  })));
+  await page.route('**/api/tasks/archive**', r => r.fulfill(json({ items: [], total: 0 })));
+  await page.route('**/api/runner/status', r => r.fulfill(json({ projects: {} })));
+  await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(dotnetCatalogue)));
+  await page.route('**/api/projects/settings', r => r.fulfill(json({ [projectName]: SETTINGS_PROJECTION })));
+  await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));
+  await page.route('**/api/projects/*/pipeline-health', r => r.fulfill(json({
+    project: projectName,
+    capturedAtUtc: '2026-07-23T01:00:00Z',
+    status: 'healthy',
+    activeGate: null,
+    fingerprint: null,
+    lanes: [],
+    alerts: [],
+  })));
+
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
+  const row = page.getByTestId('pipeline-step-row-post-lint-scss');
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute('data-applicable', 'false');
+  await row.evaluate(el => { (el as HTMLDetailsElement).open = true; });
+  await expect(page.getByTestId('pipeline-step-not-applicable-post-lint-scss'))
+    .toContainText('Requires angular');
 });

@@ -42,6 +42,9 @@ export interface PipelineAdminRow {
   id: string;
   displayName: string;
   kind: string;
+  appliesTo: 'angular' | 'dotnet' | 'node' | 'any';
+  applicable: boolean;
+  effectiveExecution: NonNullable<PipelineCatalogueStep['effectiveExecution']>;
   runMode: string;
   dependsOn: string[];
   idempotent: boolean;

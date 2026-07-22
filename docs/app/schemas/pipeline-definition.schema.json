@@ -92,6 +92,12 @@
           "type": "boolean",
           "description": "When false the step is shown greyed in the timeline and skipped at runtime."
         },
+        "appliesTo": {
+          "type": "string",
+          "enum": ["any", "angular", "dotnet", "node"],
+          "default": "any",
+          "description": "Repository stack required by the step. Applicability is derived from repository markers, never configured per project."
+        },
         "model": {
           "type": ["string", "null"],
           "description": "Llm steps only. Per-step model override via the shared selector (ASS-544/562). Null defers to job/project/client default."

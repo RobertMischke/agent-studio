@@ -148,6 +148,13 @@ pipeline view.
   condition evaluation.
 - `backend/Services/Pipeline/ProjectPipelineOrder.cs`: project-level step order
   handling.
+- `backend/Features/Pipeline/ProjectStackDetector.cs`: bounded convention-based
+  Angular, .NET, and Node detection from repository markers. Pipeline catalogue
+  applicability never reads the configured build-profile stack label.
+- `backend/Features/Pipeline/PipelineStepExecutionResolver.cs` and
+  `PipelineStepProbeService.cs`: effective shell-command projection and isolated
+  per-step probes. Probes do not create or move tasks and execute through the
+  build/test gate runner so they share its machine lock.
 - `backend/Services/Pipeline/ProjectPipelineCostService.cs` and
   `PipelineCostCalculator.cs`: cost summary projection.
 - `backend/Services/Runner/PostAbortReviewStepService.cs` and
@@ -252,6 +259,13 @@ pipeline view.
   suite, and only then fast-forwards `main`. A red or incomplete result leaves
   `main` unchanged. The future manifest-based release workflow must use the
   same boundary.
+- Framework-specific catalogue steps declare `appliesTo`; `any` remains the
+  default. The project catalogue response includes derived `detectedStacks`, an
+  `applicable` flag, and the effective resolved command list for every step.
+  Inapplicable steps remain visible in Project Hub -> Pipeline.
+- A project-level step probe is diagnostic only. It may run the step's resolved
+  shell command against the repository, but it never creates a task or changes a
+  lane. Every shell probe is serialized by the build/test machine lock.
 
 - `pre-model-qualification` runs before CORE and never performs quota fallback
   routing. It recommends from the live CLI catalogue without hardcoded model

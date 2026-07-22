@@ -142,12 +142,16 @@ public static class ProjectSettingsEndpoints
         app.MapGet("/api/projects/pipeline-catalogue", (string? projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             ProjectSettings? projectSettings = null;
+            WatchPathEntry? project = null;
+            var repositoryPath = "";
             if (!string.IsNullOrWhiteSpace(projectName))
             {
-                var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
-                if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+                project = scanner.GetWatchPaths().FirstOrDefault(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+                if (project is null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
                 projectSettings = settings.Get(projectName.Trim());
+                repositoryPath = string.IsNullOrWhiteSpace(project.RepositoryPath) ? project.RootPath : project.RepositoryPath;
             }
+            var detectedStacks = ProjectStackDetector.Detect(repositoryPath);
 
             var pipeline = PipelineCatalogue.Standard;
             var catalogueSteps = PipelineCatalogue.All
@@ -184,12 +188,16 @@ public static class ProjectSettingsEndpoints
                         cliType,
                         resolved.Model,
                         PipelineStepModelDefaults.RuntimeDefaultThinkingLevelFor(s));
+                var execution = PipelineStepExecutionResolver.Resolve(s, repositoryPath, projectSettings);
                 return new
                 {
                     id = s.Id,
                     pipelineId,
                     displayName = s.DisplayName,
                     kind = s.Kind.ToString(),
+                    appliesTo = s.AppliesTo,
+                    applicable = ProjectStackDetector.Applies(s.AppliesTo, detectedStacks),
+                    effectiveExecution = execution,
                     phase,
                     runMode = s.RunMode.ToString(),
                     dependsOn = s.DependsOn,
@@ -236,7 +244,31 @@ public static class ProjectSettingsEndpoints
             var abort = PipelineCatalogue.AbortReviewStep;
             steps.Add(ProjectPipelineStepDto(abort, "abort"));
 
-            return Results.Ok(new { pipelineId = pipeline.Id, steps });
+            return Results.Ok(new { pipelineId = pipeline.Id, detectedStacks, steps });
+        });
+
+        app.MapPost("/api/projects/{projectName}/pipeline-steps/{stepId}/probe", async (
+            string projectName,
+            string stepId,
+            TaskScannerService scanner,
+            PipelineStepProbeService probes,
+            HttpContext context) =>
+        {
+            var project = scanner.GetWatchPaths().FirstOrDefault(e =>
+                string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (project is null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            var step = PipelineCatalogue.Standard.AllSteps
+                .Append(PipelineCatalogue.AbortReviewStep)
+                .FirstOrDefault(candidate => string.Equals(candidate.Id, stepId, StringComparison.OrdinalIgnoreCase));
+            if (step is null) return Results.NotFound(new { error = $"Unknown pipeline step '{stepId}'" });
+            var repositoryPath = string.IsNullOrWhiteSpace(project.RepositoryPath)
+                ? project.RootPath
+                : project.RepositoryPath;
+            if (string.IsNullOrWhiteSpace(repositoryPath) || !Directory.Exists(repositoryPath))
+                return Results.BadRequest(new { error = "Project repository path is unavailable." });
+
+            var result = await probes.RunAsync(projectName, repositoryPath, step, context.RequestAborted);
+            return Results.Ok(result);
         });
 
         // Per-project pipeline-step override. Sets enabled / mode / model for

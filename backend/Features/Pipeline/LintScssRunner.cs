@@ -96,14 +96,14 @@ public sealed class LintScssRunner : ILintScssRunner
             return new LintScssResult(LintScssVerdict.Skipped, null, 0, "", "mode=off");
         }
 
-        var frontend = Path.Combine(repositoryPath, "frontend");
-        if (!Directory.Exists(frontend))
+        var frontend = FrontendStylelintCommand.ResolveWorkspace(repositoryPath);
+        if (frontend is null)
         {
             // Watched projects without a frontend tree (e.g. pure-CLI
             // tooling repos) skip silently; the post-step is a no-op for
             // them rather than a permanent failure.
             return new LintScssResult(LintScssVerdict.Skipped, null, 0, "",
-                $"no frontend/ at {repositoryPath}");
+                $"no Angular workspace at {repositoryPath}");
         }
 
         var sw = Stopwatch.StartNew();

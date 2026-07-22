@@ -211,6 +211,7 @@
         "src/app/features/project-detail/components/pipeline-health-block/pipeline-health-block.scss",
         "src/app/features/project-detail/components/page-action-bar/page-action-bar.scss",
         "src/app/features/project-detail/components/project-style-guides-panel/project-style-guides-panel.scss",
+        "src/app/features/project-detail/components/project-pipeline-panel/pipeline-step-execution/pipeline-step-execution.component.scss",
         "src/app/features/project-detail/components/project-graph/project-graph.component.scss",
         "src/app/features/project-detail/components/project-test-runs-panel/project-test-runs-panel.scss",
         "src/app/features/orchestrator/components/prompt-admin-landing/prompt-admin-landing.component.scss",
