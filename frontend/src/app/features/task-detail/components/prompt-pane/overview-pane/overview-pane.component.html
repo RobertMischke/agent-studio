@@ -126,12 +126,7 @@
     <app-references-section [info]="job()" (changed)="referencesChanged.emit()" />
   </div>
 
-  <!-- Pipeline block: ordered steps with status, usage, and cost. Configuration of
-       which steps run and on which model lives in project Settings; this
-       block is the read-only "what ran, on which model, what did it cost"
-       view the feature spec asks for. The completion loop (verdict / attempt
-       / re-open counters) is consolidated into this section's header as a
-       strip rather than a separate block — it is the pipeline's outcome. -->
+  <!-- Read-only execution evidence; project Settings owns configuration. -->
   @if (hasPipelineSection()) {
     <section class="ov-section studio-measure studio-measure--tabular-compact" data-testid="overview-pipeline">
       <div class="ov-section__heading-row">
@@ -168,12 +163,8 @@
         }
       </div>
 
-      <!-- Completion-loop attempt-cycle strip (ADR-0049 / ASS-566): latest
-           verdict + Attempt N/M + re-open counter + gap, consolidated under
-           the Pipeline title. Self-renders (and hides) off the shared
-           task-timeline poll. The full reopen->retry->verdict story lives
-           in the Timeline tab. -->
-      <app-completion-loop-indicator />
+      <!-- Latest completion-loop verdict; the full history lives in Timeline. -->
+      <app-completion-loop-indicator [taskState]="job().state" />
 
       @if (pipelineRunOptions().length > 1) {
         <!-- Runs chip strip (ASS-1735): one line regardless of run count. The
@@ -255,11 +246,21 @@
           }
         </div>
       }
-
-      @if (hasPipeline()) {
       @if (!selectedPipelineIsCurrent()) {
         <app-pipeline-history-notice [attempt]="selectedPipelineAttemptNumber()" [currentAttempt]="pipelineAttempt()" />
       }
+      @if (showPipelineNoExecution()) {
+        <div class="ov-pl-empty" data-testid="overview-pipeline-no-execution">
+          <span class="ov-pl-empty__glyph" aria-hidden="true">○</span>
+          <span class="ov-pl-empty__copy">
+            <strong>No step execution recorded</strong>
+            <span>No step execution was recorded for this run. Step statuses and cost are unavailable.</span>
+            @if (pipelineOutcomeLabel(); as outcome) {
+              <span class="ov-pl-empty__outcome">Task outcome: <strong>{{ outcome }}</strong></span>
+            }
+          </span>
+        </div>
+      } @else if (hasPipeline()) {
       <div class="ov-pipeline"
            [class.ov-pipeline--historical]="!selectedPipelineIsCurrent()"
            data-testid="overview-pipeline-steps">
@@ -513,7 +514,6 @@
           </button>
         </div>
       }
-
       }
     </section>
   }

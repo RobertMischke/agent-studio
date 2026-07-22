@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { TaskState } from '../../../../models/task.model';
 import { AspectFindingsListComponent } from '../../../../components/aspect-findings';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import {
@@ -33,10 +34,36 @@ import {
 export class CompletionLoopIndicatorComponent {
   private readonly poll = inject(TaskTimelinePollService);
 
+  readonly taskState = input<string | null>(null);
+
   readonly completionLoop = this.poll.completionLoop;
 
   /** Only render once the loop has produced at least one verdict. */
   readonly hasCompletionLoop = computed(() => this.completionLoop().hasActivity);
+
+  /** A later terminal lane move turns a contradictory verdict into history. */
+  readonly isHistoricalOutcome = computed<boolean>(() => {
+    const verdict = this.completionLoop().latestVerdict;
+    switch (this.taskState()) {
+      case TaskState.Completed: return verdict !== 'accepted';
+      case TaskState.Escalated: return verdict !== 'escalated';
+      case TaskState.Archive: return true;
+      default: return false;
+    }
+  });
+
+  readonly currentOutcomeLabel = computed<string | null>(() => {
+    switch (this.taskState()) {
+      case TaskState.Completed: return 'Delivered';
+      case TaskState.Escalated: return 'Escalated';
+      case TaskState.Archive: return 'Archived';
+      default: return null;
+    }
+  });
+
+  readonly displayedVerdictTone = computed(() =>
+    this.isHistoricalOutcome() ? 'neutral' : this.verdictTone(this.completionLoop().latestVerdict),
+  );
 
   /** "N / M" attempt counter, or just "N" when the budget is unknown. */
   readonly attemptLabel = computed<string | null>(() => {

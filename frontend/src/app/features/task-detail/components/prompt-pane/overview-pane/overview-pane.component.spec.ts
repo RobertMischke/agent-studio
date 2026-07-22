@@ -38,6 +38,22 @@ function agentPipeline(coreModel: string | null = 'claude-opus-4-8'): TaskPipeli
   };
 }
 
+function unrecordedPipeline(): TaskPipelineResponse {
+  return {
+    pipeline: {
+      id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+      pre: [], core: [], post: [],
+      allSteps: [
+        { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+        { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+      ],
+    },
+    execution: null,
+    cost: emptyCost(),
+    config: {},
+  };
+}
+
 function emptyCost(overrides: Partial<PipelineCostSummary> = {}): PipelineCostSummary {
   return {
     steps: [],
@@ -255,6 +271,34 @@ describe('OverviewPaneComponent (smoke)', () => {
     review.detectChanges();
     expect(review.nativeElement.querySelector('[data-testid="pipeline-step-toggle-pre-model-qualification"]'))
       .toBeNull();
+  });
+
+  it.each([
+    [TaskState.Escalated, 'Escalated'],
+    [TaskState.Completed, 'Delivered'],
+    [TaskState.Archive, 'Archive'],
+  ])('pipeline block: terminal %s task without execution data shows an honest empty state', async (state, outcome) => {
+    const fixture = await build(baseJob({ state }));
+    TestBed.inject(TaskPipelinePollService).pipeline.set(unrecordedPipeline());
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const empty = host.querySelector('[data-testid="overview-pipeline-no-execution"]');
+    expect(empty).not.toBeNull();
+    expect(empty?.textContent).toContain('No step execution was recorded for this run');
+    expect(empty?.textContent).toContain(`Task outcome: ${outcome}`);
+    expect(host.querySelector('[data-testid="overview-pipeline-steps"]')).toBeNull();
+    expect(host.querySelector('[data-testid="overview-pipeline-total"]')).toBeNull();
+  });
+
+  it('pipeline block: a not-yet-run Ready task still shows its configured future steps', async () => {
+    const fixture = await build(baseJob({ state: TaskState.Ready }));
+    TestBed.inject(TaskPipelinePollService).pipeline.set(unrecordedPipeline());
+    fixture.componentInstance.expandAllPipelineGroups();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-no-execution"]')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step"]').length).toBe(2);
   });
 
   it('pipeline block: exposes the recorded reason behind an escalated open-items check', async () => {

@@ -569,6 +569,12 @@ export class OverviewPaneComponent {
     TaskState.AutoReview,
   ]);
 
+  private static readonly PIPELINE_TERMINAL_STATES = new Set<string>([
+    TaskState.Escalated,
+    TaskState.Completed,
+    TaskState.Archive,
+  ]);
+
   readonly canConfigurePendingPipelineSteps = computed(() =>
     OverviewPaneComponent.PIPELINE_CONFIGURABLE_STATES.has(this.job().state),
   );
@@ -830,14 +836,7 @@ export class OverviewPaneComponent {
   /** Recorded run count, from the run-timeline. 0 before the first run. */
   readonly runCount = computed<number>(() => this.timeline()?.runCount ?? 0);
 
-  /**
-   * Per-step pipeline rows for the Overview pipeline block. Joins the
-   * static catalogue (ordered pre+core+post, gives label/kind) with the
-   * recorded execution (status/model/verdict/tokens), the derived cost,
-   * and the per-project config (enabled flag + model override). Steps the
-   * project disabled still render — as a struck-through "disabled" row —
-   * so the operator can see what was switched off, not just what ran.
-   */
+  /** Join catalogue, execution, cost, and project config into visible step rows. */
   readonly pipelineRows = computed<PipelineRowVm[]>(() => {
     const res = this.pipelinePoll.pipeline();
     if (res == null) return [];
@@ -975,26 +974,12 @@ export class OverviewPaneComponent {
     this.pipelinePoll.refresh();
   }
 
-  /**
-   * The complete configured pipeline folded into collapsible sections — one per
-   * contiguous run of the same phase (PRE STEPS, CORE AGENT WORK, ASPECT, TOOL,
-   * DECISION, DRIFT, and the repeated TOOL/DECISION runs in the post-bracket).
-   * Each carries the aggregate tone + honest counters ({@link PipelineGroupVm})
-   * the header shows whether expanded or collapsed. Derivation lives in the
-   * dependency-free `pipeline-groups.util` so the grouping/tone/collapse rules
-   * are unit-tested in isolation from this 1800-line host.
-   */
+  /** Fold the configured rows into phase groups with aggregate tone and counters. */
   readonly pipelineGroups = computed<PipelineGroupVm<PipelineRowVm>[]>(() =>
     buildPipelineGroups(this.visiblePipelineRows()),
   );
 
-  /**
-   * Explicit per-section collapse choices, keyed by group key
-   * (`${phaseKey}#${occurrence}`). Absent -> the section follows its derived
-   * {@link PipelineGroupVm.defaultCollapsed} (attention sections open, quiet
-   * finished / not-yet-reached sections collapse), so the strip reacts to the
-   * run as it progresses until the operator overrides a section by hand.
-   */
+  /** Explicit collapse choices override each group's derived default. */
   private readonly groupCollapseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
 
   /** Effective collapse state: an explicit operator choice wins over the default. */
@@ -1031,12 +1016,7 @@ export class OverviewPaneComponent {
   readonly groupToneLabel = groupToneLabel;
   readonly groupAriaLabel = groupAriaLabel;
 
-  /**
-   * Latest raw step-call prompt per pipeline step, keyed by lowercased step id.
-   * Fed from `GET /step-prompts` (the `.metadata/prompts.jsonl` read-model) so
-   * the Overview "Prompt" affordance on a step can show the exact prompt that
-   * step dispatched to the CLI. Empty until the first fetch resolves.
-   */
+  /** Latest raw prompt per lowercased pipeline step id. */
   private readonly stepPrompts = signal<ReadonlyMap<string, string>>(new Map());
 
   /**
@@ -1049,12 +1029,7 @@ export class OverviewPaneComponent {
     return this.stepPrompts().get(stepId.toLowerCase()) ?? '';
   }
 
-  /**
-   * Pull the raw step prompts for this task. Re-runs when the task changes or
-   * a new run completes ({@link runCount}) so freshly dispatched step prompts
-   * surface without a manual refresh. Best-effort: an error leaves the prior
-   * map in place and the triggers simply stay hidden.
-   */
+  /** Refresh step prompts when the task or run count changes. */
   private readonly loadStepPromptsEffect = effect(() => {
     const job = this.job();
     this.runCount();
@@ -1079,22 +1054,12 @@ export class OverviewPaneComponent {
     return this.pipelineRows().find(r => r.id === id && r.totalTokens > 0) ?? null;
   });
 
-  /**
-   * The single core "Agent execution" row, used to surface the run count and
-   * its details popover. The catalogue carries exactly one `core` step
-   * (`core-agent-run`); null before the pipeline catalogue loads.
-   */
+  /** The single CORE execution row used by run and duration summaries. */
   private readonly agentExecutionRow = computed<PipelineRowVm | null>(
     () => this.pipelineRows().find(r => r.kind === 'core') ?? null,
   );
 
-  /**
-   * Execution count for the core Agent-execution row. Read from the same
-   * `RunTimeline.runCount` that drives the Overview "Runs" value, with the
-   * Agent Work call count as a fallback, so the row can never drift from the
-   * numbers shown elsewhere on the tab. 0 when no run has happened yet, which
-   * keeps the row in its existing dash state.
-   */
+  /** CORE run count, preferring the run timeline over Agent Work. */
   readonly agentRunCount = computed<number>(() => {
     const tl = this.timeline();
     if (tl && tl.runCount > 0) return tl.runCount;
@@ -1107,11 +1072,7 @@ export class OverviewPaneComponent {
     return n === 1 ? '1 run' : `${n} runs`;
   });
 
-  /**
-   * Runs that had to reconstruct context after a failed session resume —
-   * counted from the run-timeline intents, falling back to the Agent Work
-   * `recovered` flag when the timeline is unavailable.
-   */
+  /** Count recovered runs, with Agent Work as the legacy fallback. */
   private readonly recoveredRunCount = computed<number>(() => {
     const recovery = this.runs().filter(r => r.intent === 'recovery').length;
     if (recovery > 0) return recovery;
@@ -1139,13 +1100,7 @@ export class OverviewPaneComponent {
     return this.agentWork()?.lastTouchAt ?? null;
   });
 
-  /**
-   * Structured popover for the Agent-execution run-count badge: run count,
-   * recovered count, CLI / model / session summary, first-run and
-   * last-activity stamps, plus a pointer to the Timeline tab for the full
-   * story. Null when no run has happened so the badge — which is only
-   * rendered for count > 0 — never carries an empty tooltip.
-   */
+  /** Run-count tooltip with recovery, agent, session, and time context. */
   readonly agentRunTooltip = computed<StructuredTooltip | null>(() => {
     const count = this.agentRunCount();
     if (count <= 0) return null;
@@ -1169,25 +1124,13 @@ export class OverviewPaneComponent {
     };
   });
 
-  /**
-   * True once the completion loop has produced at least one verdict. Read
-   * from the shared timeline poll (same instance the consolidated
-   * completion-loop strip binds to) so the Pipeline section can render even
-   * when only loop activity — and no pipeline execution — exists yet.
-   */
+  /** True once the shared timeline has any completion-loop verdict. */
   readonly hasCompletionLoop = computed(() => this.timelinePoll.completionLoop().hasActivity);
 
   /** Render the Pipeline section when there are steps or completion-loop activity. */
   readonly hasPipelineSection = computed(() => this.hasPipeline() || this.hasCompletionLoop());
 
-  /**
-   * The latest orchestrator steering step, projected from the shared
-   * task-timeline ledger (Epic ASS-776). The orchestrator review / decision
-   * steps render this as a collapsible structured block (verdict + reason +
-   * steer prompt + context) so the Steps surface shows the same steering
-   * trace as the Timeline, not just the bare verdict token. Null until the
-   * completion loop has emitted at least one steering event.
-   */
+  /** Latest steering event projected from the shared task timeline. */
   private readonly latestSteeringInfo = computed<SteeringInfo | null>(() => {
     const events = this.timelinePoll.events();
     for (let i = events.length - 1; i >= 0; i--) {
@@ -1200,6 +1143,7 @@ export class OverviewPaneComponent {
 
   private readonly authoritativeDecisionBadge = computed(() => outcomeDecisionBadge(this.runOutcome()));
 
+  /** Prefer the authoritative terminal outcome, then fall back to steering history. */
   decisionBadgeForRow(row: PipelineRowVm): DecisionBadgeVm | null {
     if (!row.isFinalVerdict) return null;
     const authoritative = this.authoritativeDecisionBadge();
@@ -1445,6 +1389,20 @@ export class OverviewPaneComponent {
 
   readonly selectedPipelineAttemptNumber = computed<number>(
     () => this.selectedPipelineExecution()?.attempt ?? this.pipelineAttempt(),
+  );
+
+  /** A settled run without step telemetry must not look like future work. */
+  readonly showPipelineNoExecution = computed<boolean>(() => {
+    const selected = this.selectedPipelineExecution();
+    if ((selected?.steps?.length ?? 0) > 0) return false;
+    if (selected != null && !this.selectedPipelineIsCurrent()) return selected.completedAt != null;
+    return OverviewPaneComponent.PIPELINE_TERMINAL_STATES.has(this.job().state);
+  });
+
+  readonly pipelineOutcomeLabel = computed<string | null>(() =>
+    OverviewPaneComponent.PIPELINE_TERMINAL_STATES.has(this.job().state)
+      ? this.laneLabel(this.job().state)
+      : null,
   );
 
   selectPipelineRun(attempt: number): void {

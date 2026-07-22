@@ -7,12 +7,17 @@
   <div class="loop-strip" data-testid="overview-completion-loop">
     <div class="loop__head">
       <span class="loop__verdict"
-            [class]="'loop__verdict--' + verdictTone(loop.latestVerdict)"
+            [class]="'loop__verdict--' + displayedVerdictTone()"
             data-testid="overview-loop-verdict"
-            [attr.data-verdict]="loop.latestVerdict">
+            [attr.data-verdict]="loop.latestVerdict"
+            [attr.data-historical]="isHistoricalOutcome() ? 'true' : null">
         <span class="loop__glyph" aria-hidden="true">{{ verdictGlyph(loop.latestVerdict) }}</span>
+        @if (isHistoricalOutcome()) { <span>Earlier:</span> }
         {{ verdictLabel(loop.latestVerdict) }}
       </span>
+      @if (isHistoricalOutcome() && currentOutcomeLabel(); as outcome) {
+        <span class="loop__current" data-testid="overview-loop-current-outcome">Current: {{ outcome }}</span>
+      }
       @if (attemptLabel(); as al) {
         <span class="loop__attempt" data-testid="overview-loop-attempt"
               [cacTooltip]="'Attempt ' + al + ' of the orchestrator completion loop. Each re-open feeds the specific gap into the next run.'">
@@ -36,7 +41,12 @@
          ACCEPTED verdict it would only restate the per-step "Auto-review
          accepted … Moved to 5-human-review" copy, so it is suppressed here to
          avoid a redundant top-NOTE banner duplicating the final review step. -->
-    @if (loop.latestVerdict !== 'accepted') {
+    @if (isHistoricalOutcome() && currentOutcomeLabel(); as outcome) {
+      <div class="loop__reason loop__reason--history" data-testid="overview-loop-history">
+        <span class="loop__reason-label">History</span>
+        <span class="loop__reason-text">This earlier pipeline verdict was superseded when the task moved to {{ outcome }}.</span>
+      </div>
+    } @else if (loop.latestVerdict !== 'accepted') {
       @if (loop.findings.length > 0) {
         <app-aspect-findings-list class="loop__findings"
                                   [findings]="loop.findings"

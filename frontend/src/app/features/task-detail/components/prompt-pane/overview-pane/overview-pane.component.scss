@@ -579,6 +579,35 @@
   }
 }
 
+.ov-pl-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+
+  &__glyph {
+    color: var(--studio-fg-muted);
+    line-height: 1.4;
+  }
+
+  &__copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  &__outcome {
+    color: var(--studio-fg-dim);
+  }
+}
+
 // One collapsible pipeline section: the phase-header button plus its (optionally
 // hidden) step rows. Owns the inter-section rhythm so the header button can stay
 // a flush first child.

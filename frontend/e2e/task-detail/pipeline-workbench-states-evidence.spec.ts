@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Pipeline workbench state evidence (ASS-1914).
@@ -213,13 +214,19 @@ function pipelineDone() {
   };
 }
 
-async function installRoutes(page: Page, state: string, pipelineBody: () => unknown) {
+async function installRoutes(page: Page, state: string, pipelineBody: () => unknown, timelineEvents: unknown[] = []) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }),
+  );
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
@@ -252,6 +259,9 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
   await page.route(new RegExp(`/api/tasks/${idEsc}/session-events(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) }),
   );
+  await page.route(new RegExp(`/api/tasks/${idEsc}/timeline(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(timelineEvents) }),
+  );
   await page.route(new RegExp(`/api/tasks/${idEsc}/pipeline(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pipelineBody()) }),
   );
@@ -264,7 +274,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   const overlay = page.getByTestId('error-dialog-overlay');
   if (await overlay.isVisible().catch(() => false)) {
     await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]')?.click());
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
   }
 }
 
@@ -284,8 +294,8 @@ async function collapseAllPipelineSections(page: Page): Promise<void> {
   }
 }
 
-async function load(page: Page, state: string, body: () => unknown) {
-  await installRoutes(page, state, body);
+async function load(page: Page, state: string, body: () => unknown, timelineEvents: unknown[] = []) {
+  await installRoutes(page, state, body, timelineEvents);
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
   await dismissErrorDialog(page);
   const pipeline = page.getByTestId('overview-pipeline');
@@ -317,6 +327,36 @@ test.describe('Pipeline workbench state evidence', () => {
     await expandAllPipelineSections(page);
     await expect(page.getByTestId('pipeline-step-toggle-pre-model-qualification')).toBeVisible();
     await shot(page, pipeline, 'pipeline-state-empty--mocked.png');
+  });
+
+  test('AGT-2098 regression: Escalated task without execution shows no pending ladder in light theme', async ({ page }) => {
+    const pipeline = await load(page, '5e-escalated', pipelineEmpty);
+    await setTheme(page, 'light');
+
+    const empty = page.getByTestId('overview-pipeline-no-execution');
+    await expect(empty).toContainText('No step execution was recorded for this run');
+    await expect(empty).toContainText('Task outcome: Escalated');
+    await expect(page.getByTestId('overview-pipeline-steps')).toHaveCount(0);
+    await expect(page.getByTestId('overview-pipeline-total')).toHaveCount(0);
+    await shot(page, pipeline, 'pipeline-no-execution-escalated--mocked.png');
+  });
+
+  test('QS-23 regression: Delivered task treats an older escalate verdict as history in dark theme', async ({ page }) => {
+    const pipeline = await load(page, '6-completed', pipelineEmpty, [{
+      ts: '2026-07-22T10:05:00Z', kind: 'orchestrator_escalated', actor: 'orchestrator',
+      summary: 'Recorded escalate verdict never completed its lane move',
+      details: { reason: 'Recorded escalate verdict never completed its lane move' },
+    }]);
+    await setTheme(page, 'dark');
+
+    await expect(page.getByTestId('overview-pipeline-no-execution')).toContainText('Task outcome: Delivered');
+    await expect(page.getByTestId('overview-pipeline-steps')).toHaveCount(0);
+    await expect(page.getByTestId('overview-loop-verdict')).toHaveAttribute('data-historical', 'true');
+    await expect(page.getByTestId('overview-loop-verdict')).toContainText('Earlier:');
+    await expect(page.getByTestId('overview-loop-current-outcome')).toContainText('Delivered');
+    await expect(page.getByTestId('overview-loop-history')).toContainText('superseded');
+    await expect(page.getByTestId('overview-loop-reason')).toHaveCount(0);
+    await shot(page, pipeline, 'pipeline-no-execution-delivered-history--mocked.png');
   });
 
   test('running: core in flight, live section open, quiet finished section collapsed', async ({ page }) => {

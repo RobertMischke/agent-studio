@@ -6,8 +6,9 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { CompletionLoopIndicatorComponent } from './completion-loop-indicator.component';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import { TIMELINE_KIND, type TaskTimelineEvent } from '../../models/task-timeline.model';
+import { TaskState } from '../../../../models/task.model';
 
-async function build(events: TaskTimelineEvent[] = []) {
+async function build(events: TaskTimelineEvent[] = [], taskState: string | null = null) {
   await TestBed.configureTestingModule({
     imports: [CompletionLoopIndicatorComponent],
     providers: [
@@ -19,6 +20,7 @@ async function build(events: TaskTimelineEvent[] = []) {
   }).compileComponents();
   TestBed.inject(TaskTimelinePollService).events.set(events);
   const fixture = TestBed.createComponent(CompletionLoopIndicatorComponent);
+  fixture.componentRef.setInput('taskState', taskState);
   try { fixture.detectChanges(); } catch (e) {
     console.warn('[smoke] CompletionLoopIndicatorComponent render skipped:', (e as Error).message);
   }
@@ -73,6 +75,22 @@ describe('CompletionLoopIndicatorComponent', () => {
     expect(c.attemptLabel()).toBe('2');
     const html = fixture.nativeElement as HTMLElement;
     expect(html.querySelector('[data-testid="overview-loop-verdict"]')?.getAttribute('data-verdict')).toBe('accepted');
+  });
+
+  it('marks an escalated verdict as history after the task later reaches Delivered', async () => {
+    const fixture = await build([{
+      ts: '2026-07-22T10:05:00Z', kind: TIMELINE_KIND.orchestratorEscalated, actor: 'orchestrator',
+      summary: 'Recorded escalate verdict never completed its lane move',
+      details: { reason: 'Recorded escalate verdict never completed its lane move' },
+    }], TaskState.Completed);
+    const html = fixture.nativeElement as HTMLElement;
+    const verdict = html.querySelector('[data-testid="overview-loop-verdict"]');
+
+    expect(verdict?.getAttribute('data-historical')).toBe('true');
+    expect(verdict?.textContent).toContain('Earlier:');
+    expect(html.querySelector('[data-testid="overview-loop-current-outcome"]')?.textContent).toContain('Delivered');
+    expect(html.querySelector('[data-testid="overview-loop-history"]')?.textContent).toContain('superseded');
+    expect(html.querySelector('[data-testid="overview-loop-reason"]')).toBeNull();
   });
 
   it('verdict helpers map to stable labels / glyphs / tones', async () => {
