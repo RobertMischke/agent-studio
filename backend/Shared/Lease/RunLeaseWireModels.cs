@@ -110,7 +110,27 @@ public sealed record RunnerClaimResponse(
     string? Message = null,
     string? ProjectId = null,
     string? RepositoryUrl = null,
-    string? DefaultBranch = null);
+    string? DefaultBranch = null,
+    string? TaskKind = null);
+
+/// <summary>Fenced request for the server-rendered Epic decomposition prompt.</summary>
+public sealed record RemoteEpicPlanningPromptRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string WorkingDirectory);
+
+/// <summary>
+/// The local and remote runners consume the same runtime prompt template and
+/// project planning-model selection. The remote host receives only the fully
+/// rendered prompt, never a second copy of the decomposition contract.
+/// </summary>
+public sealed record RemoteEpicPlanningPromptResponse(
+    string Prompt,
+    string? CliType,
+    string? Model,
+    string? ThinkingLevel);
 
 /// <summary>
 /// Fenced handoff from a standalone runner after its CLI exits. This is a
@@ -138,7 +158,12 @@ public sealed record RemoteRunCompletionRequest(
     string? SalvageRecoveryBranchUrl = null,
     string? SalvageAuthoritativeBaseBranch = null,
     string? SalvageAuthoritativeBaseSha = null,
-    string? Repository = null);
+    string? Repository = null,
+    // AGT-2178: Epic planning carries its decomposition output and read-only
+    // mutation verdict additively; coding-task salvage fields above are
+    // untouched (develop's 2177/2193 completion protocol remains the truth).
+    IReadOnlyList<string>? OutputLines = null,
+    bool SourceMutated = false);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

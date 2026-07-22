@@ -5747,62 +5747,9 @@ public class ProjectRunner
     /// </summary>
     private void DecomposeEpicAndCreateSubTasks(TaskInfo epic, IReadOnlyList<string> outputLines, string? runId)
     {
-        var result = EpicDecompositionParser.Parse(outputLines);
-        var toReady = _projectSettings.Get(ProjectName).EpicSubTasksToReady == true;
-        var targetState = toReady ? TaskStates.Ready : TaskStates.Backlog;
-
-        if (!result.HasSubTasks)
-        {
-            _logger.LogWarning(
-                "[taskboard] epic {EpicId} decomposition produced no sub-tasks: {Reason}",
-                epic.Id, result.Error ?? "unknown");
-            _chatLog.Append(epic, OrchestratorMessageKind.Decision,
-                $"[epic] Decomposition produced no sub-tasks ({result.Error ?? "no plan found"}). The epic returns to Backlog so it cannot become a ghost completion. Clarify its goal before retrying.");
-            _timeline?.Append(
-                epic.FolderPath,
-                TimelineEventKinds.EpicDecomposed,
-                TimelineActors.Orchestrator,
-                summary: "Epic decomposition produced no sub-tasks",
-                runId: runId,
-                details: new()
-                {
-                    ["created"] = "0",
-                    ["reason"] = result.Error ?? "no plan found",
-                    ["recoveryState"] = TaskStates.Backlog,
-                });
-
-            // The normal success path has already moved the run to review by
-            // the time its plan is parsed. Undo that transition when the plan
-            // is empty: an epic with no concrete children is not completed
-            // work and must remain visible/actionable in Backlog.
-            var recovery = _states.MoveJob(epic.Id, TaskStates.Backlog, epic.WatchPath,
-                cause: "epic_decomposition_empty");
-            if (recovery.Status != MoveJobStatus.Success)
-            {
-                _logger.LogError(
-                    "[taskboard] epic {EpicId} empty-decomposition recovery to {State} failed: {Status} {Error}",
-                    epic.Id, TaskStates.Backlog, recovery.Status, recovery.Message);
-            }
-            return;
-        }
-
-        var created = EpicSubTaskFactory.CreateSubTasks(_mutations, epic, result.SubTasks, targetState);
-        _logger.LogInformation(
-            "[taskboard] epic {EpicId} decomposed into {Count} sub-task(s) -> {Lane}",
-            epic.Id, created.Count, targetState);
-        _chatLog.Append(epic, OrchestratorMessageKind.Decision,
-            $"[epic] Decomposition created {created.Count} sub-task(s) in {targetState}.");
-        _timeline?.Append(
-            epic.FolderPath,
-            TimelineEventKinds.EpicDecomposed,
-            TimelineActors.Orchestrator,
-            summary: $"Epic decomposition created {created.Count} sub-task(s)",
-            runId: runId,
-            details: new()
-            {
-                ["created"] = created.Count.ToString(),
-                ["targetState"] = targetState,
-            });
+        EpicDecompositionLifecycle.Finalize(
+            epic, outputLines, runId, _projectSettings, _mutations, _scanner,
+            _states, _timeline, _chatLog, _logger);
     }
 
     private static bool ShouldRouteIssueToHumanReview(RunIssueKind issueKind)
