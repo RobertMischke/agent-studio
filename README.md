@@ -13,8 +13,6 @@
 
 ![Task detail: pipeline steps, live agent activity, and run evidence](docs/media/task-detail.png)
 
-## At a glance
-
 - **Stack:** .NET backend, Angular frontend.
 - **Runs:** Claude Code, Codex, GitHub Copilot, or Gemini CLIs as the coding engine.
 - **Remote-first:** a central Task Server holds task state; Agent Runners execute on any host, outbound-only.
