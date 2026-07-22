@@ -23,6 +23,8 @@ public sealed class TaskTransitionService
     private readonly IAutoReviewPostProcessingQueue? _autoReviewQueue;
     private readonly TaskProvenanceService? _provenance;
     private readonly AgentStudio.Bus.AgentMessageBusBridge? _bus;
+    private readonly TaskIntegrationStatusService? _integrationStatus;
+    private readonly TimelineLog? _timeline;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -50,7 +52,9 @@ public sealed class TaskTransitionService
         IAutoReviewPostProcessingQueue? autoReviewQueue = null,
         AgentStudio.Pipeline.MergeIntoDevelopRunner? mergeRunner = null,
         TaskProvenanceService? provenance = null,
-        AgentStudio.Bus.AgentMessageBusBridge? bus = null)
+        AgentStudio.Bus.AgentMessageBusBridge? bus = null,
+        TaskIntegrationStatusService? integrationStatus = null,
+        TimelineLog? timeline = null)
     {
         _scanner = scanner;
         _states = states;
@@ -66,6 +70,8 @@ public sealed class TaskTransitionService
         _mergeRunner = mergeRunner;
         _provenance = provenance;
         _bus = bus;
+        _integrationStatus = integrationStatus;
+        _timeline = timeline;
     }
 
     /// <summary>
@@ -246,6 +252,19 @@ public sealed class TaskTransitionService
             {
                 var mergeJob = _scanner.FindJob(jobId, watchPath);
                 if (mergeJob != null) TriggerMergeIntoDevelop(mergeJob, settings);
+            }
+
+            // AGT-2202: accept-without-merge visibility. After the deferred merge
+            // step has had its chance, re-derive the honest git integration verdict
+            // for the just-accepted card. If its work is NOT in develop (pending /
+            // conflict), make it loud - a Warn timeline event + an
+            // integration:pending tag the completed-lane audit can list - WITHOUT
+            // blocking the acceptance that already landed (Robert wants visibility,
+            // not a new brake). Fully guarded and read-only.
+            if (targetState == TaskStates.Completed && !isReadOnly)
+            {
+                var acceptedJob = _scanner.FindJob(jobId, watchPath);
+                if (acceptedJob != null) FlagIntegrationOnAccept(acceptedJob);
             }
 
             try
@@ -519,6 +538,69 @@ public sealed class TaskTransitionService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "merge-into-develop trigger failed for {JobId}", moved.Id);
+        }
+    }
+
+    /// <summary>
+    /// AGT-2202 accept-without-merge guard. Derives the honest git integration
+    /// verdict for a freshly accepted card and, when its work is not in develop,
+    /// records a Warn timeline event and stamps the <c>integration:pending</c> tag
+    /// so the state is visible on the board and listable by the completed-lane
+    /// audit. Deliberately NOT a hard block: the acceptance already landed, this
+    /// only makes "Accept != Merge" loud. When the card IS integrated, any stale
+    /// <c>integration:pending</c> tag from an earlier accept is cleared so the
+    /// marker self-heals. Best-effort and fully guarded.
+    /// </summary>
+    private void FlagIntegrationOnAccept(TaskInfo accepted)
+    {
+        if (_integrationStatus == null) return;
+        try
+        {
+            var lookup = _integrationStatus.BuildLookup(new[] { accepted });
+            if (!lookup.TryGetValue(accepted.TaskKey, out var status)) return;
+
+            var tags = (accepted.Tags ?? []).ToList();
+            var hasTag = tags.Any(t => string.Equals(t, IntegrationStatuses.PendingTag, StringComparison.OrdinalIgnoreCase));
+
+            if (IntegrationStatuses.IsNotIntegrated(status.Status))
+            {
+                if (!hasTag)
+                {
+                    tags.Add(IntegrationStatuses.PendingTag);
+                    _mutations.SetJobTags(accepted.Id, tags, accepted.WatchPath);
+                }
+
+                _timeline?.Append(accepted.FolderPath, new TimelineEvent
+                {
+                    Ts = DateTime.UtcNow,
+                    Kind = TimelineEventKinds.IntegrationPendingWarning,
+                    Actor = TimelineActors.System,
+                    Summary = status.Status == IntegrationStatuses.ConflictSkipped
+                        ? $"Accepted, but NOT integrated into {status.IntegrationBranch}: merge conflict/skip - the code is not in {status.IntegrationBranch}."
+                        : $"Accepted, but NOT integrated into {status.IntegrationBranch}: the accepted work is not yet merged.",
+                    Details = new Dictionary<string, string>
+                    {
+                        ["integrationStatus"] = status.Status,
+                        ["integrationBranch"] = status.IntegrationBranch,
+                        ["detail"] = status.Detail ?? "",
+                    },
+                });
+
+                _logger.LogWarning(
+                    "accept-without-merge project={Project} job={JobId} status={Status} branch={Branch}",
+                    accepted.ProjectName, accepted.Id, status.Status, status.IntegrationBranch);
+            }
+            else if (hasTag)
+            {
+                // Self-heal: the card is now integrated (or has no branch to
+                // integrate); drop the stale pending marker.
+                tags.RemoveAll(t => string.Equals(t, IntegrationStatuses.PendingTag, StringComparison.OrdinalIgnoreCase));
+                _mutations.SetJobTags(accepted.Id, tags, accepted.WatchPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "accept-without-merge flagging failed for {JobId}", accepted.Id);
         }
     }
 

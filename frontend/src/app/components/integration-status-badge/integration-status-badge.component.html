@@ -1,0 +1,13 @@
+@if (visible() && integration(); as value) {
+  <span class="integration-badge"
+        [class.integration-badge--acute]="acute()"
+        [attr.data-integration-status]="value.status"
+        [attr.data-kind]="kind()"
+        data-testid="integration-status-badge"
+        role="img"
+        [attr.aria-label]="ariaLabel()"
+        [cacTooltip]="tooltip()">
+    <span class="integration-badge__glyph" aria-hidden="true">{{ glyph() }}</span>
+    <span class="integration-badge__label">{{ label() }}</span>
+  </span>
+}

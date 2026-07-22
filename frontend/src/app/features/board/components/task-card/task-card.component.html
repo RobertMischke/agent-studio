@@ -233,6 +233,9 @@
         }
       </span>
       <app-execution-location-badge [execution]="job().executionLocation" />
+      @if (integrationStatus(); as integ) {
+        <app-integration-status-badge [integration]="integ" />
+      }
       @if (externalDoneBadge(); as edb) {
         <span class="task-card__external-pill"
               [cacTooltip]="edb.tooltip"

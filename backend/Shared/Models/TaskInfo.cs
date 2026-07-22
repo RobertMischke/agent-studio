@@ -314,6 +314,19 @@ public record TaskInfo
     public TaskMergeSignal? MergeSignal { get; init; }
 
     /// <summary>
+    /// AGT-2202 — honest, git-derived integration verdict for accepted cards
+    /// (5-human-review / 6-completed / 7-archive): is this task's work actually in
+    /// develop? Resolves the "Accept != Merge" blind spot by reading three
+    /// independent git signals (curated <c>merge(&lt;KEY&gt;)</c> log commit, anchor
+    /// ancestry, task-branch-tip ancestry) into one of four discrete states
+    /// (<see cref="IntegrationStatuses"/>). Computed batched + cached per repository
+    /// by <c>TaskIntegrationStatusService</c> (O(repos) git spawns, never per card)
+    /// and folded onto the board payload. Never persisted to <c>task.json</c>; null
+    /// on cards that are not in an accepted lane.
+    /// </summary>
+    public TaskIntegrationStatus? Integration { get; init; }
+
+    /// <summary>
     /// PUB-1 — read-time "publishable to" projection for accepted (6-completed)
     /// tasks: which publish targets (npm / NuGet / website) this task's merged work
     /// touches, so the card / task-detail renders a "publishable: npm, website"
