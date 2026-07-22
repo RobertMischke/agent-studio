@@ -340,8 +340,13 @@ export interface TaskMergeSignal {
   releaseSha: string | null;
 }
 
-/** One of the four discrete integration verdicts (AGT-2202). */
-export type IntegrationStatusValue = 'integrated' | 'pending' | 'conflict-skipped' | 'no-branch';
+/** One of the discrete integration verdicts (AGT-2202; `partial` added AGT-2171 fix). */
+export type IntegrationStatusValue =
+  | 'integrated'
+  | 'partial'
+  | 'pending'
+  | 'conflict-skipped'
+  | 'no-branch';
 
 /**
  * AGT-2202 — the honest, git-derived integration verdict for an accepted card

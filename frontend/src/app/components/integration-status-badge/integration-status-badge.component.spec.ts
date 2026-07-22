@@ -47,6 +47,18 @@ describe('IntegrationStatusBadgeComponent', () => {
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
   });
 
+  it('renders partial as an orange "teilweise integriert" badge with missing SHAs in the tooltip', () => {
+    const fixture = render(
+      integration('partial', { detail: '1/2 attributed commits integrated; missing: beef123' }),
+    );
+    const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
+    expect(badge.textContent).toContain('teilweise integriert');
+    expect(badge.dataset['kind']).toBe('partial');
+    expect(badge.classList.contains('integration-badge--acute')).toBe(true);
+    expect(fixture.componentInstance.tooltip()).toContain('Partially integrated');
+    expect(fixture.componentInstance.tooltip()).toContain('beef123');
+  });
+
   it('renders conflict-skipped as a red conflict badge', () => {
     const fixture = render(integration('conflict-skipped', { detail: 'Conflicted: a.txt' }));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;

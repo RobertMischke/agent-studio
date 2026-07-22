@@ -6,10 +6,14 @@ import type { TaskIntegrationStatus } from '../../features/git';
  * AGT-2202 — the accept-safety badge. Renders the honest, git-derived
  * {@link TaskIntegrationStatus} on an accepted card (5-human-review / 6-completed
  * / 7-archive) so "Accept != Merge" is impossible to miss:
- *   - green  "merged @sha"       — the work is provably in develop,
- *   - amber  "NICHT integriert"  — accepted work is still not in develop,
- *   - red    "Konflikt"          — the merge-into-develop step hit a conflict/skip,
- *   - grey   "kein Branch"       — nothing to integrate (read-only / no code).
+ *   - green  "merged @sha"          — every attributed commit is provably in develop,
+ *   - orange "teilweise integriert" — some attributed commits are in develop, some are not,
+ *   - amber  "NICHT integriert"     — accepted work is still not in develop,
+ *   - red    "Konflikt"             — the merge-into-develop step hit a conflict/skip,
+ *   - grey   "kein Branch"          — nothing to integrate (read-only / no code).
+ *
+ * The verdict is derived from the SAME attributed `commits[]` list the card's
+ * commit widget renders, so badge and widget can never contradict (AGT-2171).
  *
  * Follows the {@link ExecutionLocationBadgeComponent} pill pattern. Purely
  * presentational; hidden when the card carries no integration verdict.
@@ -29,19 +33,20 @@ export class IntegrationStatusBadgeComponent {
   readonly visible = computed(() => !!this.integration());
 
   /** Coarse visual kind for colour theming. */
-  readonly kind = computed<'integrated' | 'pending' | 'conflict' | 'no-branch'>(() => {
+  readonly kind = computed<'integrated' | 'partial' | 'pending' | 'conflict' | 'no-branch'>(() => {
     switch (this.integration()?.status) {
       case 'integrated': return 'integrated';
+      case 'partial': return 'partial';
       case 'pending': return 'pending';
       case 'conflict-skipped': return 'conflict';
       default: return 'no-branch';
     }
   });
 
-  /** True for the states that mean "accepted, but the code is NOT in develop". */
+  /** True for the states that mean "accepted, but the code is NOT (fully) in develop". */
   readonly acute = computed(() => {
     const s = this.integration()?.status;
-    return s === 'pending' || s === 'conflict-skipped';
+    return s === 'partial' || s === 'pending' || s === 'conflict-skipped';
   });
 
   readonly label = computed(() => {
@@ -49,6 +54,7 @@ export class IntegrationStatusBadgeComponent {
     if (!value) return '';
     switch (value.status) {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
+      case 'partial': return 'teilweise integriert';
       case 'pending': return 'NICHT integriert';
       case 'conflict-skipped': return 'Konflikt';
       default: return 'kein Branch';
@@ -58,6 +64,7 @@ export class IntegrationStatusBadgeComponent {
   readonly glyph = computed(() => {
     switch (this.kind()) {
       case 'integrated': return '✓'; // check
+      case 'partial': return '◐';    // half-filled circle
       case 'conflict': return '⚠';   // warning
       case 'pending': return '○';    // hollow circle
       default: return '–';           // en dash
@@ -74,6 +81,8 @@ export class IntegrationStatusBadgeComponent {
           return value.sha
             ? `Integrated into ${branch} (${value.sha})`
             : `Integrated into ${branch}`;
+        case 'partial':
+          return `Partially integrated into ${branch} — some attributed commits are NOT in ${branch}`;
         case 'pending':
           return `Accepted, but NOT integrated into ${branch}`;
         case 'conflict-skipped':
@@ -91,6 +100,7 @@ export class IntegrationStatusBadgeComponent {
     const branch = value.integrationBranch || 'develop';
     switch (value.status) {
       case 'integrated': return `Integrated into ${branch}`;
+      case 'partial': return `Partially integrated into ${branch}`;
       case 'pending': return `Not integrated into ${branch}`;
       case 'conflict-skipped': return `Merge conflict; not integrated into ${branch}`;
       default: return 'No branch to integrate';

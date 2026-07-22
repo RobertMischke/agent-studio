@@ -575,9 +575,15 @@ public sealed class TaskTransitionService
                     Ts = DateTime.UtcNow,
                     Kind = TimelineEventKinds.IntegrationPendingWarning,
                     Actor = TimelineActors.System,
-                    Summary = status.Status == IntegrationStatuses.ConflictSkipped
-                        ? $"Accepted, but NOT integrated into {status.IntegrationBranch}: merge conflict/skip - the code is not in {status.IntegrationBranch}."
-                        : $"Accepted, but NOT integrated into {status.IntegrationBranch}: the accepted work is not yet merged.",
+                    Summary = status.Status switch
+                    {
+                        IntegrationStatuses.ConflictSkipped =>
+                            $"Accepted, but NOT integrated into {status.IntegrationBranch}: merge conflict/skip - the code is not in {status.IntegrationBranch}.",
+                        IntegrationStatuses.Partial =>
+                            $"Accepted, but only PARTIALLY integrated into {status.IntegrationBranch}: some attributed commits are not yet merged.",
+                        _ =>
+                            $"Accepted, but NOT integrated into {status.IntegrationBranch}: the accepted work is not yet merged.",
+                    },
                     Details = new Dictionary<string, string>
                     {
                         ["integrationStatus"] = status.Status,
