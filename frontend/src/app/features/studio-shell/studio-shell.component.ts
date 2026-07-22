@@ -156,11 +156,11 @@ export class StudioShellComponent {
       ?.nativeElement;
     if (!activeElement || typeof activeElement.scrollIntoView !== 'function') return;
 
-    const reduceMotion = typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const listRect = activeElement.parentElement?.getBoundingClientRect();
+    const activeRect = activeElement.getBoundingClientRect();
+    if (!listRect || (activeRect.left >= listRect.left && activeRect.right <= listRect.right)) return;
     activeElement.scrollIntoView({
-      behavior: reduceMotion ? 'auto' : 'smooth',
+      behavior: 'smooth',
       block: 'nearest',
       inline: 'nearest',
     });

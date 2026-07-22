@@ -80,6 +80,21 @@ async function expectSmoothNearestScroll(page: Page, key: string): Promise<void>
   }, key)).toBe(true);
 }
 
+async function resetScrollCalls(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const calls = (window as typeof window & {
+      __studioTabScrollCalls?: { key?: string; options?: ScrollIntoViewOptions }[];
+    }).__studioTabScrollCalls;
+    calls?.splice(0);
+  });
+}
+
+async function scrollCallCount(page: Page): Promise<number> {
+  return page.evaluate(() => (window as typeof window & {
+    __studioTabScrollCalls?: { key?: string; options?: ScrollIntoViewOptions }[];
+  }).__studioTabScrollCalls?.length ?? 0);
+}
+
 async function captureStrip(page: Page, testInfo: TestInfo, name: string): Promise<void> {
   const fileName = `${name}--mocked.png`;
   const path = process.env.JOB_RESULTS_DIR
@@ -90,44 +105,39 @@ async function captureStrip(page: Page, testInfo: TestInfo, name: string): Promi
 }
 
 test.describe('studio-shell · active tab remains visible in the scrolling strip', () => {
-  test('new tab appended at the end scrolls into view', async ({ page }, testInfo) => {
-    await bootWithTabs(page, HUB_TABS, 'hub:Long project 1');
-
-    await page.getByTestId('studio-ab-settings').click();
-
-    const active = page.getByTestId('studio-tab-workspace-settings');
-    await expect(active).toHaveAttribute('aria-selected', 'true');
-    await expectSmoothNearestScroll(page, 'workspace-settings');
-    await expectInsideStrip(active, page.getByTestId('studio-tab-list'));
-    await captureStrip(page, testInfo, 'active-tab-new-at-end-visible');
-  });
-
-  test('navigation to an existing off-screen tab scrolls it into view', async ({ page }, testInfo) => {
+  test('activation of an off-screen tab scrolls it into view', async ({ page }, testInfo) => {
     const settings = { kind: 'workspace-settings' };
     const tabs = [settings, ...HUB_TABS];
     await bootWithTabs(page, tabs, 'hub:Long project 9');
 
+    await expectInsideStrip(
+      page.getByTestId('studio-tab-hub:Long project 9'),
+      page.getByTestId('studio-tab-list'),
+    );
+    await resetScrollCalls(page);
+
     await page.getByTestId('studio-ab-settings').click();
 
     const active = page.getByTestId('studio-tab-workspace-settings');
     await expect(active).toHaveAttribute('aria-selected', 'true');
     await expectSmoothNearestScroll(page, 'workspace-settings');
     await expectInsideStrip(active, page.getByTestId('studio-tab-list'));
-    await captureStrip(page, testInfo, 'active-tab-existing-visible');
+    await captureStrip(page, testInfo, 'active-tab-off-screen-visible');
   });
 
-  test('closing the active tab keeps its selected neighbour visible', async ({ page }, testInfo) => {
-    const tabs = [...HUB_TABS, { kind: 'workspace-settings' }];
-    await bootWithTabs(page, tabs, 'workspace-settings');
-    const closing = page.getByTestId('studio-tab-workspace-settings');
-    await expectInsideStrip(closing, page.getByTestId('studio-tab-list'));
+  test('activation of a visible tab does not scroll', async ({ page }, testInfo) => {
+    const settings = { kind: 'workspace-settings' };
+    await bootWithTabs(page, [settings, ...HUB_TABS], 'hub:Long project 1');
+    await resetScrollCalls(page);
 
-    await closing.getByRole('button', { name: 'Close tab' }).click();
+    const active = page.getByTestId('studio-tab-workspace-settings');
+    await active.click();
+    await expect(active).toHaveAttribute('aria-selected', 'true');
+    await page.evaluate(() => new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
 
-    const neighbour = page.getByTestId('studio-tab-hub:Long project 9');
-    await expect(neighbour).toHaveAttribute('aria-selected', 'true');
-    await expectSmoothNearestScroll(page, 'hub:Long project 9');
-    await expectInsideStrip(neighbour, page.getByTestId('studio-tab-list'));
-    await captureStrip(page, testInfo, 'active-tab-close-neighbour-visible');
+    expect(await scrollCallCount(page)).toBe(0);
+    await captureStrip(page, testInfo, 'active-tab-already-visible');
   });
 });
