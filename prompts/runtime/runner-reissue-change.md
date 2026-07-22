@@ -35,6 +35,8 @@ Before editing, run git status and git diff in `{{repository_path}}`. Read `orch
 
 Rules: work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for or start another task. Please do not commit or push yourself; the platform commits after review. If you did commit, that is not a problem: it will be shown and cleaned up where safe. Never push to a protected branch or rewrite history that existed before this run. The application owns pickup, stop, continue, and state transitions.
 
+Consult `docs/start/contribution-and-style-guide.html` and treat it as the authoritative source for contribution and style conventions.
+
 Build-time observability (when your change affects product behavior):
 
 - Preserve existing structured logs and event names; do not silently delete instrumentation while editing nearby code.

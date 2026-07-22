@@ -333,6 +333,44 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void RunnerAndOrchestratorTemplates_PointToCanonicalContributionGuide()
+    {
+        var prompts = Prompts();
+        foreach (var template in new[]
+        {
+            RuntimePromptService.RunnerFreshStart,
+            RuntimePromptService.RunnerResumeInterrupted,
+            RuntimePromptService.RunnerResumeRestart,
+            RuntimePromptService.RunnerRecoveryContinuation,
+            RuntimePromptService.RunnerReissueChange,
+            "global-orchestrator-boot.md",
+            "orchestrator-project-boot.md",
+            "orchestrator-reissue-followup.md"
+        })
+        {
+            var rendered = prompts.Render(template, new Dictionary<string, string?>
+            {
+                ["prompt_path"] = "prompt.md",
+                ["job_folder"] = "job",
+                ["working_directory"] = "work",
+                ["repository_path"] = "repo",
+                ["user_followup"] = "follow up",
+                ["title"] = "title",
+                ["prompt_text"] = "body",
+                ["reissue_findings"] = "- [ ] finding",
+                ["reissue_followup"] = "follow up",
+                ["attachments_list"] = "(none)",
+                ["mode_framing"] = "",
+                ["project_name"] = "project",
+                ["decision"] = "continue"
+            });
+
+            Assert.Contains("docs/start/contribution-and-style-guide.html", rendered);
+            Assert.Contains("authoritative source", rendered, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void AllRunnerTemplates_UseCalmPlatformCommitOwnership()
     {
         var prompts = Prompts();
