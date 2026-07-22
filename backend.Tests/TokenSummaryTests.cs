@@ -146,7 +146,7 @@ public class TokenSummaryTests
     [Fact]
     public void SummarizePerJob_PrefersAgentModelAndUsesRegistryLabels()
     {
-        var t = new DateTime(2026, 6, 9, 8, 0, 0, DateTimeKind.Utc);
+        var t = new DateTime(2026, 7, 23, 8, 0, 0, DateTimeKind.Utc);
         var entries = new[]
         {
             JobEntry("gpt-5-codex", 1_000, 100, t, participantId: "agent:codex"),
@@ -160,6 +160,10 @@ public class TokenSummaryTests
         Assert.Equal("GPT-5 Codex", summary.Entries[0].Model);
         Assert.Equal("Claude Haiku 4.5", summary.Entries[1].Model);
         Assert.Equal(t.AddMinutes(5), summary.LastUpdate);
+        Assert.False(summary.AllModelsPriced);
+        Assert.True(summary.EstimatedApiCostUsd > 0m);
+        Assert.False(summary.Entries[0].ModelPriced);
+        Assert.True(summary.Entries[1].ModelPriced);
     }
 
     [Fact]

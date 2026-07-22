@@ -17,6 +17,8 @@ export interface ProjectTokenChipInfo {
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+  allModelsPriced: boolean;
   jobsWithTokens: number;
   /** De-duplicated list of models seen across this project's jobs, most-recent first when available. */
   models: string[];

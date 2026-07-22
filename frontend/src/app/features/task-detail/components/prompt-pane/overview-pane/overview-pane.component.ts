@@ -51,7 +51,7 @@ import {
 import { cliTypeLabel } from '../../../../../services/format.util';
 import { projectIdentity } from '../../../../../services/project-identity.util';
 import { TaskService } from '../../../../../services/task.service';
-import { CostBreakdownTriggerDirective } from '../../../../tokens';
+import { CostBreakdownTriggerDirective, TOKEN_COST_ESTIMATE_NOTICE } from '../../../../tokens';
 import { NotificationService } from '../../../../../services/notification.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
@@ -406,8 +406,7 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
   drift:        'An opt-in drift-analysis pass that runs after auto-review.',
 };
 
-const API_PRICE_DISCLAIMER =
-  'API price estimate only. Actual CLI billing uses the subscription or plan, not these API rates.';
+const API_PRICE_DISCLAIMER = TOKEN_COST_ESTIMATE_NOTICE;
 
 /**
  * Catalogue id of the single FINAL orchestrator ruling. Only this row earns

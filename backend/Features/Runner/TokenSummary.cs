@@ -127,6 +127,11 @@ public class TokenSummaryService
             bucket.Output += u.OutputTokens;
             bucket.CacheRead += u.CacheReadTokens;
             bucket.CacheCreate += u.CacheCreationTokens;
+            var cost = TokenPricing.Estimate(
+                u.Model, u.InputTokens, u.OutputTokens, u.CacheReadTokens,
+                u.CacheCreationTokens, entry.Ts);
+            bucket.Cost += cost.Total;
+            if (!cost.ModelKnown) bucket.AnyUnpriced = true;
             var displayModel = TokenModelDisplay.Label(u.Model);
             if (entry.Ts > (bucket.LastUpdate ?? DateTime.MinValue))
             {
@@ -154,7 +159,9 @@ public class TokenSummaryService
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,
                 CacheReadTokens = u.CacheReadTokens,
-                CacheCreationTokens = u.CacheCreationTokens
+                CacheCreationTokens = u.CacheCreationTokens,
+                EstimatedApiCostUsd = cost.Total,
+                ModelPriced = cost.ModelKnown,
             });
         }
 
@@ -170,6 +177,8 @@ public class TokenSummaryService
                 CacheReadTokens = b.CacheRead,
                 CacheCreationTokens = b.CacheCreate,
                 TotalTokens = total,
+                EstimatedApiCostUsd = b.Cost,
+                AllModelsPriced = !b.AnyUnpriced,
                 LastModel = b.LastAgentModel ?? b.LastAnyModel,
                 LastUpdate = b.LastUpdate,
                 Entries = b.Entries.OrderBy(e => e.Ts).ToList()
@@ -185,7 +194,7 @@ public class TokenSummaryService
 
         var entries = summary.Entries
             .Select(e => ShouldApplyRunModelFallback(e)
-                ? e with { Model = fallback }
+                ? Reprice(e with { Model = fallback }, modelId)
                 : e)
             .ToList();
         var hasAgentFallbackRow = entries.Any(e =>
@@ -196,6 +205,19 @@ public class TokenSummaryService
         {
             LastModel = string.IsNullOrWhiteSpace(summary.LastModel) && hasAgentFallbackRow ? fallback : summary.LastModel,
             Entries = entries,
+            EstimatedApiCostUsd = entries.Sum(e => e.EstimatedApiCostUsd),
+            AllModelsPriced = entries.Count > 0 && entries.All(e => e.ModelPriced),
+        };
+    }
+
+    private static TaskTokenCall Reprice(TaskTokenCall entry, string? modelId)
+    {
+        var cost = TokenPricing.Estimate(modelId, entry.InputTokens, entry.OutputTokens,
+            entry.CacheReadTokens, entry.CacheCreationTokens, entry.Ts);
+        return entry with
+        {
+            EstimatedApiCostUsd = cost.Total,
+            ModelPriced = cost.ModelKnown,
         };
     }
 
@@ -210,6 +232,8 @@ public class TokenSummaryService
         public long Output;
         public long CacheRead;
         public long CacheCreate;
+        public decimal Cost;
+        public bool AnyUnpriced;
         public string? LastAnyModel;
         public string? LastAgentModel;
         public DateTime? LastUpdate;

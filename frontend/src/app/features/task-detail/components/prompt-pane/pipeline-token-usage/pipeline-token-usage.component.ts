@@ -6,6 +6,7 @@ import type {
   PipelineModelUsageSummary,
   PipelineRunTokenUsage,
 } from '../../../../task-pipeline';
+import { buildTokenCostTooltip } from '../../../../tokens';
 
 /** The task-wide total (every model summed over every run). */
 interface TaskTotal {
@@ -108,6 +109,14 @@ export class PipelineTokenUsageComponent {
     return `$${usd.toFixed(2)}`;
   }
 
+  totalTooltip(totalTokens: number, costUsd: number, anyModelUnknown: boolean, scope: string): string {
+    return buildTokenCostTooltip({
+      costUsd,
+      priceKnown: !anyModelUnknown,
+      context: `${scope}: ${totalTokens.toLocaleString()} total tokens.`,
+    });
+  }
+
   relativeTime(iso: string | null | undefined): string {
     if (!iso) return '';
     const d = new Date(iso);
@@ -127,12 +136,12 @@ export class PipelineTokenUsageComponent {
 
   /** Per-model row tooltip: full model id + step count + token split. */
   modelTooltip(m: PipelineModelTokenUsage): string {
-    const cost = m.modelKnown ? this.formatCost(m.costUsd) : 'no price on file';
-    return [
+    const context = [
       `${m.model} - ${m.steps} step(s)`,
       `Input ${this.tokens(m.inputTokens)} / Output ${this.tokens(m.outputTokens)}`,
       `Cache read ${this.tokens(m.cacheReadTokens)} / Cache write ${this.tokens(m.cacheCreationTokens)}`,
-      `Total ${this.tokens(m.totalTokens)} - ${cost}`,
+      `Total ${this.tokens(m.totalTokens)}`,
     ].join('\n');
+    return buildTokenCostTooltip({ costUsd: m.costUsd, priceKnown: m.modelKnown, context });
   }
 }

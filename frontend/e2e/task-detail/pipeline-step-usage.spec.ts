@@ -214,6 +214,9 @@ async function installFixtureRoutes(page: Page) {
   await page.route('**/api/clients', route => route.fulfill(json([])));
   await page.route('**/api/cli/usage**', route => route.fulfill(json({ items: [] })));
   await page.route('**/api/cli/quota**', route => route.fulfill(json({ snapshots: [], ttlSeconds: 600 })));
+  await page.route('**/api/auth/status', route => route.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: false, user: null,
+  })));
 
   const id = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(pipeline())));
@@ -269,12 +272,15 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
 
   const coreRow = page.locator('[data-step-id="core-agent-run"]');
   const aspectRow = page.locator('[data-step-id="aspect-code-quality"]');
-  await expect(coreRow.getByTestId('overview-pipeline-step-tokens')).toContainText('110k');
+  await expect(coreRow.getByTestId('overview-pipeline-step-tokens')).toHaveText(/110(?:\.0)?k/i);
   await expect(coreRow.getByTestId('overview-pipeline-step-cost')).toContainText('$0.75');
   await expect(aspectRow.getByTestId('overview-pipeline-step-tokens')).toContainText('1.2m');
   await expect(aspectRow.getByTestId('overview-pipeline-step-cost')).toContainText('$2.00');
   await expect(page.getByTestId('overview-pipeline-total-tokens')).toContainText('1.3m');
   await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('$2.75');
+
+  await coreRow.getByTestId('overview-pipeline-step-tokens').hover();
+  await expect(page.getByTestId('cac-tooltip')).toContainText('Estimated - historical list prices');
 
   await pipeline.screenshot({
     path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-step-usage--mocked.png') : 'test-results/pipeline-step-usage--mocked.png',
@@ -389,12 +395,21 @@ test('retro grading stays available on an existing card and is captured in both 
     fileName: 'code-review-grade-2026-07-11T22-15-00Z.md', verdict: 'pass', grade: 'B',
     summary: 'Solid result with one small evidence gap.', model: 'claude-opus-4-8', cliType: 'claude',
     commit: 'base..task/pipeline-step-usage-fixture', runAt: '2026-07-11T22:15:00Z',
+    inputTokens: 125000, outputTokens: 18000, cacheReadTokens: 42000, cacheCreationTokens: 6000,
+    totalTokens: 191000, estimatedApiCostUsd: 1.42, priceKnown: true,
   }] })));
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
   await page.getByTestId('prompt-tab-code-review').click();
 
   await expect(page.getByTestId('code-review-grade-run')).toBeVisible();
   await expect(page.getByTestId('code-review-list')).toContainText('Grade B');
+  const usage = page.getByTestId('code-review-token-usage');
+  await expect(usage).toContainText('125k in / 18k out (191k) tokens');
+  await usage.hover();
+  const tooltip = page.getByTestId('cac-tooltip');
+  await expect(tooltip).toContainText('Estimated cost: $1.42');
+  await expect(tooltip).toContainText('Estimated - historical list prices');
+  await saveShot(page, 'review-token-cost-tooltip--mocked.png');
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
     const path = RESULTS_DIR

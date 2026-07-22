@@ -93,6 +93,8 @@ public static class TaskCodeReviewEndpoints
                             var content = File.ReadAllText(path);
                             var fm = AgentStudio.Cli.FrontmatterParser.Parse(content);
                             var fields = fm.Ok ? fm.Fields : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                            var generation = generated.GetValueOrDefault(fileName);
+                            var usage = ResolveReviewUsage(generation, fields);
                             entries.Add(new CodeReviewListEntry
                             {
                                 FileName = fileName,
@@ -104,7 +106,14 @@ public static class TaskCodeReviewEndpoints
                                 ThinkingLevel = fields.GetValueOrDefault("thinkingLevel"),
                                 Commit = fields.GetValueOrDefault("commit"),
                                 RunAt = fields.GetValueOrDefault("runAt") ?? string.Empty,
-                                Generation = generated.GetValueOrDefault(fileName),
+                                InputTokens = usage.InputTokens,
+                                OutputTokens = usage.OutputTokens,
+                                CacheReadTokens = usage.CacheReadTokens,
+                                CacheCreationTokens = usage.CacheCreationTokens,
+                                TotalTokens = usage.TotalTokens,
+                                EstimatedApiCostUsd = usage.Cost.Total,
+                                PriceKnown = usage.PriceKnown,
+                                Generation = generation,
                             });
                         }
                         catch (Exception __ex)
@@ -284,6 +293,55 @@ public static class TaskCodeReviewEndpoints
         });
     }
 
+    internal static ReviewUsage ResolveReviewUsage(
+        FileGenerationMeta? generation,
+        IReadOnlyDictionary<string, string> fields)
+    {
+        if (generation == null)
+            return ReviewUsage.Empty;
+
+        var input = generation.TokensIn;
+        var output = generation.TokensOut;
+        var cacheRead = generation.CacheReadTokens;
+        var cacheCreation = generation.CacheCreationTokens;
+        var reportedTotal = generation.TokensTotal;
+
+        // Legacy provenance stored cache tokens only inside TokensTotal. Keep
+        // those tokens visible, but mark the estimate partial instead of
+        // guessing whether the remainder was cache read or cache creation.
+        // New records carry both cache fields explicitly.
+        var knownTotal = input + output + cacheRead + cacheCreation;
+        var hasLegacyCacheRemainder = reportedTotal > knownTotal
+            && cacheRead == 0 && cacheCreation == 0;
+
+        var total = Math.Max(reportedTotal, input + output + cacheRead + cacheCreation);
+        var model = generation.Model ?? fields.GetValueOrDefault("model");
+        var recordedAt = generation.StartedAt;
+        if (recordedAt == null
+            && DateTime.TryParse(fields.GetValueOrDefault("runAt"), out var parsedRunAt))
+        {
+            recordedAt = parsedRunAt;
+        }
+        var cost = TokenPricing.Estimate(model, input, output, cacheRead, cacheCreation, recordedAt);
+        return new ReviewUsage(input, output, cacheRead, cacheCreation, total, cost,
+            PriceKnown: cost.ModelKnown && !hasLegacyCacheRemainder);
+    }
+
+    internal sealed record ReviewUsage(
+        long InputTokens,
+        long OutputTokens,
+        long CacheReadTokens,
+        long CacheCreationTokens,
+        long TotalTokens,
+        TokenCostEstimate Cost,
+        bool PriceKnown)
+    {
+        public static ReviewUsage Empty { get; } = new(
+            0, 0, 0, 0, 0,
+            TokenPricing.Estimate(null, 0, 0, 0, 0),
+            PriceKnown: false);
+    }
+
     /// <summary>
     /// Every commit SHA the task owns, newest-first, deduped. Built from the
     /// same run-range + persisted-chain aggregation the protocol-pane change
@@ -341,6 +399,13 @@ public sealed record CodeReviewListEntry
     public string? ThinkingLevel { get; init; }
     public string? Commit { get; init; }
     public required string RunAt { get; init; }
+    public long InputTokens { get; init; }
+    public long OutputTokens { get; init; }
+    public long CacheReadTokens { get; init; }
+    public long CacheCreationTokens { get; init; }
+    public long TotalTokens { get; init; }
+    public decimal EstimatedApiCostUsd { get; init; }
+    public bool PriceKnown { get; init; }
     public FileGenerationMeta? Generation { get; init; }
 }
 

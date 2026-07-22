@@ -21,6 +21,12 @@
   color: var(--studio-fg-dim);
 }
 
+.cr-token-usage {
+  color: var(--studio-fg-muted);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
 .cr-actions {
   display: flex;
   align-items: center;

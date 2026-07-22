@@ -786,6 +786,8 @@ export interface FileGenerationMeta {
   cli?: string | null;
   tokensIn: number;
   tokensOut: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   tokensTotal: number;
   startedAt?: string | null;
   endedAt?: string | null;

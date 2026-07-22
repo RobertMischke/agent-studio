@@ -1055,6 +1055,8 @@ describe('TaskCardComponent (smoke)', () => {
         cacheReadTokens: 250_000,
         cacheCreationTokens: 12_000,
         totalTokens: 400_000,
+        estimatedApiCostUsd: 1.25,
+        allModelsPriced: true,
         lastModel: 'claude-opus-4-7',
         lastUpdate: '2026-06-09T08:30:00Z',
         entries: [],
@@ -1073,6 +1075,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
 
     fixture.destroy();
   });
@@ -1363,6 +1367,8 @@ describe('buildTokenBubble', () => {
       cacheReadTokens: 1000,
       cacheCreationTokens: 0,
       totalTokens: 4300,
+      estimatedApiCostUsd: 0.09,
+      allModelsPriced: true,
       lastModel: 'GPT-5 Codex',
       lastUpdate: '2026-06-09T08:05:00Z',
       entries: [
@@ -1388,6 +1394,7 @@ describe('buildTokenBubble', () => {
     });
 
     expect(bubble?.model).toBe('GPT-5 Codex');
+    expect(bubble?.costTooltip).toContain('Estimated cost: $0.09');
     expect(bubble?.entries.map((entry) => entry.model)).toEqual([
       'GPT-5 Codex',
       'Claude Haiku 4.5',

@@ -22,6 +22,7 @@ import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { codeReviewVerdictTone, type CodeReviewVerdictTone } from '../../code-review-verdict.util';
 import { describeDiffSize, isLargeDiff } from '../../../../../utils/large-diff-gate';
 import { formatDateTimeUtc } from '../../../../../services/format.util';
+import { buildTokenCostTooltip } from '../../../../tokens';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -293,6 +294,31 @@ export class CodeReviewPanelComponent implements OnInit {
 
   formatTimestamp(iso: string): string {
     return formatDateTimeUtc(iso);
+  }
+
+  tokenLabel(entry: CodeReviewListEntry): string | null {
+    const input = entry.inputTokens ?? entry.generation?.tokensIn ?? 0;
+    const output = entry.outputTokens ?? entry.generation?.tokensOut ?? 0;
+    const total = entry.totalTokens ?? entry.generation?.tokensTotal ?? (input + output);
+    if (total <= 0) return null;
+    return `${this.compactTokens(input)} in / ${this.compactTokens(output)} out (${this.compactTokens(total)})`;
+  }
+
+  tokenTooltip(entry: CodeReviewListEntry): string {
+    const input = entry.inputTokens ?? entry.generation?.tokensIn ?? 0;
+    const output = entry.outputTokens ?? entry.generation?.tokensOut ?? 0;
+    const total = entry.totalTokens ?? entry.generation?.tokensTotal ?? (input + output);
+    return buildTokenCostTooltip({
+      costUsd: entry.estimatedApiCostUsd,
+      priceKnown: entry.priceKnown === true,
+      context: `${input.toLocaleString()} input + ${output.toLocaleString()} output = ${total.toLocaleString()} total tokens. Pricing date: ${entry.runAt || 'recorded execution time'}.`,
+    });
+  }
+
+  private compactTokens(value: number): string {
+    if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}m`;
+    if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}k`;
+    return `${value}`;
   }
 
   provenanceFor(entry: CodeReviewListEntry) {
