@@ -13,7 +13,7 @@
 
 ![Task detail: pipeline steps, live agent activity, and run evidence](docs/media/task-detail.png)
 
-## Facts
+## At a glance
 
 - **Stack:** .NET backend, Angular frontend.
 - **Runs:** Claude Code, Codex, GitHub Copilot, or Gemini CLIs as the coding engine.
@@ -29,7 +29,7 @@ npm install
 npm start
 ```
 
-Follow [AGENTS.md](AGENTS.md) and the [setup guide](./docs/operations/setup/getting-started.md) for the supported lifecycle.
+Or ask your coding-agent CLI to do it. For anything beyond the default setup, see the [setup guide](./docs/operations/setup/getting-started.md) and [AGENTS.md](AGENTS.md).
 
 ## More
 
