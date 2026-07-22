@@ -1,0 +1,52 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Agent-Studio-Zielarchitektur: drei Einheiten, zwei Pools, ein Origin",
+  "source": {
+    "path": "docs/concepts/zielarchitektur-diagramm.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "eb452d5f24a54cd217e60da4a0eb659193e519047f84437b1b7d36970c512c36",
+      "sizeBytes": 24694,
+      "lineCount": 500,
+      "capturedAt": "2026-07-22T00:00:00.000Z"
+    }
+  },
+  "classification": {
+    "owner": "concepts",
+    "documentMode": "documentation",
+    "temporalState": "future",
+    "implementationState": "planned",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-22"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2222",
+      "title": "Post-Processing parallel, remote-fähig, zeitnah",
+      "linkedAt": "2026-07-22T00:00:00.0000000Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2228",
+      "title": "Slots on the fly: Runner gleicht Kapazität zyklisch ab",
+      "linkedAt": "2026-07-22T00:00:00.0000000Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2229",
+      "title": "Eigene Orchestrator-Instanz auf dem Remote-Host",
+      "linkedAt": "2026-07-22T00:00:00.0000000Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2230",
+      "title": "Task-Server als zentrale Konfigurationsinstanz",
+      "linkedAt": "2026-07-22T00:00:00.0000000Z",
+      "source": "auto"
+    }
+  ]
+}
