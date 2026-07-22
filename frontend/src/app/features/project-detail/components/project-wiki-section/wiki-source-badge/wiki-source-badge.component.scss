@@ -17,6 +17,11 @@
 }
 
 .source--readonly {
-  background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-bg-sidebar));
-  color: var(--studio-accent-strong);
+  border-color: var(--studio-wiki-source-readonly-border);
+  background: var(--studio-wiki-source-readonly-bg);
+  color: var(--studio-wiki-source-readonly-fg);
+}
+
+.source:hover {
+  border-color: var(--studio-wiki-source-hover-border);
 }

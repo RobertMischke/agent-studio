@@ -172,8 +172,9 @@
           this instance's working tree.
         </p>
         <label class="ps-settings__field">
-          <span class="ps-settings__field-label">Source branch</span>
-          <select class="ps-settings__select"
+          <span class="ps-settings__field-label"
+                data-testid="project-settings-wiki-source-label">Source branch</span>
+          <select class="ps-settings__select ps-settings__select--wiki-source"
                   data-testid="project-settings-wiki-source-select"
                   [disabled]="wikiSourceSaving() || !projectId()"
                   (change)="setWikiSourceBranch($any($event.target).value)">

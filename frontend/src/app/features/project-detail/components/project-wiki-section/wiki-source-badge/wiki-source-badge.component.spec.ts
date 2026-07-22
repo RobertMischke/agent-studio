@@ -16,5 +16,7 @@ describe('WikiSourceBadgeComponent', () => {
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('origin/develop @ abcdef12');
+    expect(fixture.nativeElement.querySelector('[data-testid="project-wiki-source"]')?.classList)
+      .toContain('source--readonly');
   });
 });
