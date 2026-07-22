@@ -292,16 +292,3 @@
   user-select: none;
   white-space: nowrap;
 }
-.detail__model-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--studio-spacing-1);
-  min-height: var(--studio-card-pill-height);
-  padding: 0 var(--studio-card-pill-padding-x);
-  border: 1px solid var(--studio-border);
-  border-radius: 999px;
-  color: var(--studio-fg-dim);
-  background: var(--studio-bg-elevated);
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-}

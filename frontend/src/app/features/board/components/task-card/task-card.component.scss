@@ -1178,57 +1178,6 @@
       background: rgba(148, 163, 184, 0.08);
       border-color: rgba(148, 163, 184, 0.20);
     }
-    .task-card__effective-model {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      flex: 1 1 80px;
-      font-size: var(--studio-card-meta-size);
-      color: var(--studio-fg-dim);
-      min-width: 0;
-      max-width: 100%;
-      line-height: 1.2;
-    }
-    .task-card__effective-model-icon {
-      font-size: 11px;
-      line-height: 1;
-      flex: 0 0 auto;
-    }
-    .task-card__effective-model-cli {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-weight: 600;
-      color: var(--studio-fg-dim);
-      white-space: nowrap;
-    }
-    .task-card__effective-model-cli::after {
-      content: "";
-      width: 2px;
-      height: 2px;
-      border-radius: 999px;
-      background: currentColor;
-      opacity: 0.42;
-    }
-    .task-card__effective-model-name {
-      font-family: var(--font-mono, monospace);
-      color: var(--studio-fg);
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .task-card__effective-model--default .task-card__effective-model-name {
-      font-style: italic;
-      color: var(--studio-fg-dim);
-    }
-    .task-card__effective-model--default .task-card__effective-model-cli {
-      font-style: italic;
-    }
-    .task-card__effective-model[data-model-source="fallback"] {
-      border-color: var(--studio-accent-warn-strong);
-      background: color-mix(in srgb, var(--studio-accent-warn-strong) 12%, transparent);
-    }
     /* AGT-2003 runner badge next to the CLI badge. Remote = accent chip with an
        arrow + runner name so a card running on another host is recognizable at a
        glance (the operator's lokal-vs-remote "Abgleich"); local = a quiet muted

@@ -218,20 +218,17 @@
           <app-studio-icon [name]="taskTypeIconName(tt.kind)" [size]="11" [strokeWidth]="2"></app-studio-icon>
         </span>
       }
-      <span class="task-card__effective-model"
-            [class.task-card__effective-model--default]="effectiveModelChip().isDefault"
-            [cacTooltip]="effectiveModelChip().tooltip"
-            data-testid="task-card-effective-model"
-            [attr.data-model-source]="effectiveModelChip().source">
-        <span class="task-card__effective-model-icon" aria-hidden="true">{{ effectiveModelChip().icon }}</span>
-        @if (effectiveModelChip().cliLabel && effectiveModelChip().fullModel) {
-          <span class="task-card__effective-model-cli">{{ effectiveModelChip().cliLabel }}</span>
-        }
-        <span class="task-card__effective-model-name">{{ effectiveModelChip().label }}</span>
-        @if (effectiveModelChip().thinkingLevel; as level) {
-          <app-thinking-level-indicator [indicator]="level" testId="task-card-thinking-level" />
-        }
-      </span>
+      <app-model-level-indicator
+        [model]="effectiveModelChip().fullModel"
+        [cliType]="effectiveModelChip().cliType"
+        [thinkingLevel]="effectiveModelChip().thinkingLevel?.effective ?? null"
+        [thinkingLevelOverride]="(effectiveModelChip().thinkingLevel?.differsFromDefault || effectiveModelChip().thinkingLevel?.differsFromConfigured) ?? false"
+        [fallbackLabel]="effectiveModelChip().label"
+        [tooltip]="effectiveModelChip().tooltip"
+        [source]="effectiveModelChip().source"
+        [isDefault]="effectiveModelChip().isDefault"
+        testId="task-card-effective-model"
+        levelTestId="task-card-thinking-level" />
       <app-execution-location-badge [execution]="job().executionLocation" />
       @if (integrationStatus(); as integ) {
         <app-integration-status-badge [integration]="integ" />

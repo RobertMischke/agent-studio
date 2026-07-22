@@ -14,6 +14,7 @@ short visual baseline that the Angular guide incorporates.
 | [app-survey-2026-07-11.html](app-survey-2026-07-11.html) | Self-contained, screenshot-by-screenshot visual findings for the 2026-07-11 Stable application sweep. |
 | [angular-performance-report-2026-07.html](angular-performance-report-2026-07.html) | Measured Angular 21 performance and best-practice review, focused on the 123-card Human Review lane observed on Stable. |
 | [tree-indicator-exploration-2026-07.html](tree-indicator-exploration-2026-07.html) | Interactive light/dark Explorer mockup comparing eight project-level state indicators. |
+| [model-level-indicator.md](model-level-indicator.md) | Shared model-family colours, abbreviations, thinking-level codes, and tooltip contract for taskboard and coding-agent-chat indicators. |
 
 The concrete component vocabulary (tokens, primitives, canonical components) and
 the "why" behind the shell look live under

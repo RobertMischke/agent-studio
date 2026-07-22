@@ -290,6 +290,7 @@ export interface EffectiveModelChip {
   icon: string;
   label: string;
   fullModel: string | null;
+  cliType: CliType | null;
   cliLabel: string | null;
   source: EffectiveModelSource;
   isDefault: boolean;
@@ -312,6 +313,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
   let icon: string;
   let label: string;
   let fullModel: string | null;
+  let effectiveCliType: CliType | null;
   let cliLbl: string | null;
   let source: EffectiveModelSource;
   let isDefault: boolean;
@@ -321,6 +323,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     icon = cli ? cliTypeIcon(cli) : '\u{26A0}';
     label = `fallback: ${shortModelName(job.quotaFallback.model)}`;
     fullModel = job.quotaFallback.model;
+    effectiveCliType = cli;
     cliLbl = cli ? cliTypeLabel(cli) : null;
     source = 'fallback';
     isDefault = false;
@@ -329,6 +332,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
     label = shortModelName(execution.model);
     fullModel = execution.model;
+    effectiveCliType = cli;
     cliLbl = cli ? cliTypeLabel(cli) : null;
     source = 'run';
     isDefault = false;
@@ -337,6 +341,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
     label = shortModelName(job.model ?? ownerModel);
     fullModel = job.model ?? ownerModel;
+    effectiveCliType = cli;
     cliLbl = cli ? cliTypeLabel(cli) : null;
     source = 'explicit';
     isDefault = false;
@@ -344,6 +349,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     icon = ownerCli ? cliTypeIcon(ownerCli) : '\u{1F916}';
     label = shortModelName(ownerModel);
     fullModel = ownerModel;
+    effectiveCliType = ownerCli;
     cliLbl = ownerCli ? cliTypeLabel(ownerCli) : null;
     source = 'default';
     isDefault = true;
@@ -351,6 +357,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     icon = '\u{1F464}';
     label = 'human';
     fullModel = null;
+    effectiveCliType = null;
     cliLbl = null;
     source = 'human';
     isDefault = false;
@@ -358,6 +365,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     icon = '\u{1F916}';
     label = 'unknown';
     fullModel = null;
+    effectiveCliType = null;
     cliLbl = null;
     source = 'unknown';
     isDefault = false;
@@ -371,7 +379,7 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
   );
   const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel, thinkingLevel);
 
-  return { icon, label, fullModel, cliLabel: cliLbl, source, isDefault, tooltip, thinkingLevel };
+  return { icon, label, fullModel, cliType: effectiveCliType, cliLabel: cliLbl, source, isDefault, tooltip, thinkingLevel };
 }
 
 function buildModelTooltip(

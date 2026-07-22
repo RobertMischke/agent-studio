@@ -1,29 +1,38 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
 import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 
 const PROJECT = 'Thinking level indicator';
 const WATCH_PATH = 'C:/fixtures/thinking-level-indicator';
 
-function task(id: string, title: string, configured: string, effective?: string) {
+function task(id: string, title: string, model: string, cliType: 'claude' | 'codex' | 'gemini', configured: string, effective?: string) {
   return {
-    id, taskKey: `${WATCH_PATH}::${id}`, title, state: '2-ready', order: id === 'default-level' ? 1 : 2,
-    agent: 'codex', cliType: 'codex', createdAt: '2026-07-11T00:00:00Z', watchPath: WATCH_PATH,
+    id, key: id, displayKey: id, taskKey: `${WATCH_PATH}::${id}`, title, state: '2-ready', order: Number(id.split('-').at(-1)) || 1,
+    agent: cliType, cliType, createdAt: '2026-07-11T00:00:00Z', watchPath: WATCH_PATH,
     projectName: PROJECT, folderPath: `${WATCH_PATH}/${id}`, lastActivity: '2026-07-11T00:01:00Z',
-    sessionName: null, model: 'gpt-5.6-sol', thinkingLevel: configured, useOwnSession: null,
+    sessionName: null, model, thinkingLevel: configured, useOwnSession: null,
     lastUsage: null, commit: null, ownerClientId: 'local-default', tags: [],
     execution: {
       jobId: id, taskKey: `${WATCH_PATH}::${id}`, processId: 7, startedAt: '2026-07-11T00:00:30Z',
-      status: 'completed', exitCode: 0, durationSeconds: 30, model: 'gpt-5.6-sol',
+      status: 'completed', exitCode: 0, durationSeconds: 30, model,
       thinkingLevel: effective ?? configured, runOutcome: 'success',
     },
   };
 }
 
-const tasks = [
-  task('default-level', 'Default stays quiet', 'high', 'high'),
-  task('configured-override', 'Configured override stands out', 'ultra'),
-  task('effective-level', 'Effective run metadata wins', 'ultra', 'medium'),
-];
+const modelFixtures = [
+  ['gpt-5.6-sol', 'codex', 'Sol family'],
+  ['gpt-5.6-ter', 'codex', 'Ter family'],
+  ['claude-opus-4-8', 'claude', 'Opus family'],
+  ['claude-sonnet-5', 'claude', 'Sonnet family'],
+  ['claude-haiku-4-5', 'claude', 'Haiku family'],
+  ['gemini-2.5-pro', 'gemini', 'Gemini family'],
+] as const;
+const levels = ['low', 'medium', 'high', 'xhigh'] as const;
+const tasks = levels.flatMap((level, levelIndex) => modelFixtures.map(([model, cli, label], modelIndex) =>
+  task(`AGT-${9001 + levelIndex * modelFixtures.length + modelIndex}`, `${label} at ${level}`, model, cli, level, levelIndex === 3 ? 'medium' : level),
+));
 const grouped = {
   backlog: [], preparation: [], orchestratorPrep: [], ready: tasks, progress: [], failedPickup: [],
   codeNotComplete: [], review: [], autoReview: [], humanReview: [], escalated: [], completed: [], archive: [],
@@ -36,9 +45,23 @@ function json(route: Route, body: unknown) {
 async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', route => {
     const url = route.request().url();
+    if (url.includes('/api/auth/status')) return json(route, { profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
+    if (url.includes('/api/tasks/archive')) return json(route, { items: [], total: 0, offset: 0, limit: 50 });
     if (url.includes('/api/tasks/grouped')) return json(route, grouped);
     if (/\/api\/(?:tasks|jobs)(\?|$)/.test(url)) return json(route, tasks);
+    const detailMatch = /\/api\/(?:tasks|jobs)\/([^/?]+)(?:\?|$)/.exec(url);
+    if (detailMatch) {
+      const key = decodeURIComponent(detailMatch[1]);
+      const info = tasks.find(item => item.id === key || item.taskKey === key);
+      return json(route, info ? {
+        info, promptMarkdown: '# Model-level indicator fixture', promptHistory: [], titleHistory: [],
+        statusMarkdown: null, contextUsage: null, log: [], summaryState: null, reviewEvidence: [],
+      } : null);
+    }
     if (url.includes('/api/watch-paths')) return json(route, [{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
+    if (url.includes('/api/clients/local-default/defaults')) return json(route, {
+      cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'high',
+    });
     if (url.includes('/api/clients')) return json(route, [{ id: 'local-default', displayName: 'Local', kind: 'agent-instance', defaultCliType: 'codex', defaultModel: 'gpt-5.6-sol', defaultThinkingLevel: 'high' }]);
     if (url.includes('/api/runner/status')) return json(route, { projects: {} });
     if (url.includes('/api/environment')) return json(route, { isDev: false, devTools: {} });
@@ -48,35 +71,56 @@ async function installRoutes(page: Page): Promise<void> {
   });
 }
 
-test('shows the effective level and highlights deviations from the client default in both themes', async ({ page }) => {
+test('keeps 24 mixed-model cards scanable and exposes full execution context', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1200 });
   await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
     v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
   })));
   await installRoutes(page);
   await page.goto('/?includeFixtures=true');
 
-  const levels = page.getByTestId('task-card-thinking-level');
-  await expect(levels).toHaveCount(3);
-  await expect(levels.nth(0)).toHaveText('h');
-  await expect(levels.nth(0)).toHaveAttribute('data-thinking-level-override', 'false');
-  await expect(levels.nth(1)).toHaveText('u');
-  await expect(levels.nth(1)).toHaveAttribute('data-thinking-level-override', 'true');
-  await expect(levels.nth(2)).toHaveText('m');
-  await expect(levels.nth(2)).toHaveAttribute('data-thinking-level', 'medium');
-  await expect(levels.nth(2)).toHaveAttribute('data-thinking-level-override', 'true');
+  const indicators = page.getByTestId('task-card-effective-model');
+  const thinkingLevels = page.getByTestId('task-card-thinking-level');
+  await expect(indicators).toHaveCount(24);
+  await expect(thinkingLevels).toHaveCount(24);
+  expect(new Set(await indicators.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-model-family')))))
+    .toEqual(new Set(['sol', 'ter', 'opus', 'sonnet', 'haiku', 'gemini']));
+  await expect(indicators.nth(0)).toHaveAttribute('data-model-code', 'SOL');
+  await expect(indicators.nth(1)).toHaveAttribute('data-model-code', 'TER');
+  await expect(indicators.nth(2)).toHaveAttribute('data-model-code', 'OP4.8');
+  await expect(thinkingLevels.nth(6)).toHaveText('m');
+  await expect(thinkingLevels.nth(12)).toHaveText('h');
+  await expect(thinkingLevels.nth(18)).toHaveAttribute('data-thinking-level-override', 'true');
+
+  const heights = await indicators.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+  expect(Math.max(...heights)).toBeLessThanOrEqual(22);
+
+  await dismissDevErrorDialog(page);
+  // The ng-serve-only NG0919 dialog can be re-raised by mocked polling after
+  // Escape closes it. Suppress only that dev artifact so the real pointer
+  // interaction and tooltip path remain under test.
+  await page.addStyleTag({ content: 'app-error-dialog { display: none !important; }' });
+  await indicators.nth(0).hover();
+  const tooltip = page.getByTestId('cac-tooltip');
+  await expect(tooltip).toContainText('Model: gpt-5.6-sol');
+  await expect(tooltip).toContainText('Thinking level: low');
+  await expect(tooltip).toContainText('CLI: Codex');
+  const resultsDir = path.resolve(__dirname, '../../../results');
+  fs.mkdirSync(resultsDir, { recursive: true });
 
   for (const theme of ['dark', 'light'] as const) {
     await setTheme(page, theme);
-    const backgrounds = await levels.evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
-    expect(backgrounds[0]).toBe('rgba(0, 0, 0, 0)');
-    expect(backgrounds[1]).not.toBe('rgba(0, 0, 0, 0)');
-    expect(backgrounds[2]).not.toBe('rgba(0, 0, 0, 0)');
+    const familyColors = await indicators.evaluateAll(nodes => nodes.slice(0, 6).map(node => getComputedStyle(node).color));
+    expect(new Set(familyColors).size).toBe(6);
 
     await dismissDevErrorDialog(page);
     await expect(page.getByTestId('lane-2-ready')).toBeVisible();
+    await page.mouse.move(1200, 80);
+    await expect(tooltip).toBeHidden();
     await page.screenshot({
-      path: `C:/Projects/agent-taskboard-workspace/projects/agent-taskboard/tasks/002/AGT-2075/results/thinking-level-card--${theme}.png`,
+      path: path.join(resultsDir, `model-level-board-mixed--${theme}.png`),
       fullPage: true,
     });
   }
+
 });

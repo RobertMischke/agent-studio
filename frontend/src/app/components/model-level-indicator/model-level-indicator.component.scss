@@ -1,0 +1,70 @@
+:host {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.model-level {
+  --model-level-color: var(--studio-model-unknown);
+
+  display: inline-flex;
+  align-items: stretch;
+  height: var(--studio-card-pill-height);
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--model-level-color) 55%, var(--studio-border));
+  border-radius: 6px;
+  color: var(--model-level-color);
+  background: color-mix(in srgb, var(--model-level-color) 13%, var(--studio-bg-elevated));
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.035em;
+  box-sizing: border-box;
+  cursor: help;
+}
+
+.model-level--sol { --model-level-color: var(--studio-model-sol); }
+.model-level--ter { --model-level-color: var(--studio-model-ter); }
+.model-level--opus { --model-level-color: var(--studio-model-opus); }
+.model-level--sonnet { --model-level-color: var(--studio-model-sonnet); }
+.model-level--haiku { --model-level-color: var(--studio-model-haiku); }
+.model-level--gemini { --model-level-color: var(--studio-model-gemini); }
+.model-level--openai { --model-level-color: var(--studio-model-openai); }
+.model-level--human { --model-level-color: var(--studio-model-human); }
+
+.model-level__model,
+.model-level__thinking {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.model-level__model {
+  padding: 0 var(--studio-spacing-2);
+}
+
+.model-level__thinking {
+  min-width: 19px;
+  padding: 0 var(--studio-spacing-1);
+  border-inline-start: 1px solid color-mix(in srgb, var(--model-level-color) 38%, transparent);
+  background: color-mix(in srgb, var(--model-level-color) 10%, transparent);
+  font-size: 9px;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.model-level__thinking--override {
+  background: color-mix(in srgb, var(--model-level-color) 30%, var(--studio-bg-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--model-level-color) 48%, transparent);
+}
+
+.model-level--default {
+  border-style: dashed;
+}
+
+.model-level--fallback {
+  box-shadow: 0 0 0 1px var(--studio-accent-warn-strong);
+}
