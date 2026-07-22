@@ -169,27 +169,50 @@ figcaption b { color: var(--ink-1); }
 /* Host-Box = zentrale Autorität (Task Server) */
 .host {
   position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
-  width: min(48%, 300px); text-align: center;
+  width: min(52%, 340px); text-align: center;
   background: var(--blue-soft); border: 1px solid var(--blue-bd);
   border-radius: 14px; padding: 16px 20px; box-shadow: 0 0 34px var(--blue-glow);
 }
-.host .lbl { display: block; font: 700 12.5px/1 var(--font-mono); letter-spacing: .16em;
-             text-transform: uppercase; color: var(--blue-ink); margin-bottom: 8px; }
+.host .hrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.host .lbl { font: 700 12.5px/1 var(--font-mono); letter-spacing: .16em;
+             text-transform: uppercase; color: var(--blue-ink); text-align: left; }
+.host .alt { display: block; font-size: 11px; color: var(--ink-3); margin-bottom: 8px; letter-spacing: .01em; }
 .host .sub { display: block; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
 
 /* Studio-Host-Karte (oben, gleiche Präsenz wie die Runner-Hosts unten) */
+/* Multiuser: es kann N Studios geben — Hauptkarte + zwei dezente Schatten-Karten dahinter */
+.shost-stack { position: absolute; top: 0; left: 50%; transform: translate(-50%, 0); width: min(60%, 360px); }
+.shost-ghost {
+  position: absolute; inset: 0; border-radius: 12px;
+  background: var(--bg-soft); border: 1px solid var(--border); box-shadow: var(--chip-shadow);
+}
+.shost-ghost.g2 { transform: translate(13px, 12px); opacity: .4; }
+.shost-ghost.g1 { transform: translate(7px, 6px); opacity: .65; }
+.stack-badge {
+  position: absolute; top: -9px; right: -6px; z-index: 3;
+  font: 700 9px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--blue-ink); background: var(--bg-elv); border: 1px solid var(--blue-bd);
+  border-radius: 99px; padding: 4px 8px; box-shadow: var(--chip-shadow); white-space: nowrap;
+}
 .shost {
-  position: absolute; top: 0; left: 50%; transform: translate(-50%, 0);
-  width: min(60%, 360px);
+  position: relative; z-index: 2; width: 100%;
   background: var(--bg-elv); border: 1px solid var(--blue-bd);
   border-radius: 12px; padding: 13px 16px; box-shadow: var(--chip-shadow);
 }
-.shost .rt { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+.shost .rt { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+.shost .rt .grp { display: inline-flex; align-items: center; gap: 8px; }
 .shost .rt .ic { width: 9px; height: 9px; border-radius: 3px; background: var(--blue); flex: none; }
 .shost .rs { font: 500 11.5px/1.5 var(--font-mono); color: var(--ink-3); letter-spacing: .02em; }
 .shost .pools { display: flex; gap: 6px; margin-top: 9px; }
 .pool.studio { border-color: var(--blue-bd); background: var(--blue-soft); }
 .pool.studio .pn { color: var(--blue-ink); }
+
+/* Deployment-Chip: dezenter Mono-Hinweis "wo läuft das" in der Kopfzeile jeder Einheit */
+.loc-chip {
+  font: 600 9px/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); border: 1px solid var(--border); border-radius: 5px;
+  padding: 3px 6px; background: var(--bg-soft); white-space: nowrap; flex: none;
+}
 
 /* Runner-Host-Karte (unten, größer, mit Pool-Struktur) */
 .rhost {
@@ -198,7 +221,8 @@ figcaption b { color: var(--ink-1); }
   background: var(--bg-elv); border: 1px solid var(--teal-bd);
   border-radius: 12px; padding: 12px 14px; box-shadow: var(--chip-shadow);
 }
-.rhost .rt { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13.5px; margin-bottom: 3px; }
+.rhost .rt { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 13.5px; margin-bottom: 3px; }
+.rhost .rt .grp { display: inline-flex; align-items: center; gap: 8px; }
 .rhost .rt .ic { width: 9px; height: 9px; border-radius: 3px; background: var(--teal); flex: none; }
 .rhost .rs { font: 500 11px/1.5 var(--font-mono); color: var(--ink-3); letter-spacing: .02em; }
 .rhost .pools { display: flex; gap: 6px; margin-top: 9px; }
@@ -356,26 +380,35 @@ die Task-API.</p>
         <use class="flow down" href="#wB-results" style="animation-duration:4.5s"/>
       </svg>
 
-      <!-- Client: Studio (UI) — eigene, gleichwertige Karte -->
-      <div class="shost">
-        <div class="rt"><span class="ic"></span> Studio (UI)</div>
-        <div class="rs">Board · Wiki · Reviews · Orchestrator-Sicht</div>
-        <div class="pools">
-          <div class="pool studio"><span class="pn">Einziger Kanal</span><span class="pd">spricht nur mit dem Task Server</span></div>
-          <div class="pool studio"><span class="pn">Ersetzbar</span><span class="pd">Schließen stoppt keine Arbeit</span></div>
+      <!-- Client: Studio (UI) — es kann N Studios geben; gestapelte Karten stehen dafür -->
+      <div class="shost-stack">
+        <div class="shost-ghost g2"></div>
+        <div class="shost-ghost g1"></div>
+        <span class="stack-badge">× N · MULTIUSER</span>
+        <div class="shost">
+          <div class="rt"><span class="grp"><span class="ic"></span> Studio (UI)</span><span class="loc-chip">LOCAL · WEB</span></div>
+          <div class="rs">Board · Wiki · Reviews · Orchestrator-Sicht</div>
+          <div class="pools">
+            <div class="pool studio"><span class="pn">Einziger Kanal</span><span class="pd">spricht nur mit dem Task Server</span></div>
+            <div class="pool studio"><span class="pn">Ersetzbar</span><span class="pd">Schließen stoppt keine Arbeit</span></div>
+          </div>
         </div>
       </div>
 
-      <!-- Zentrum: Task Server -->
+      <!-- Zentrum: Orchestrator-Server (Vorschlag; etablierter Name "Task Server" bleibt als Alt-Name sichtbar) -->
       <div class="host">
-        <span class="lbl">Task Server</span>
+        <div class="hrow">
+          <span class="lbl">Orchestrator-Server</span>
+          <span class="loc-chip">CLOUD · LOCAL</span>
+        </div>
+        <span class="alt">(Task Server)</span>
         <span class="sub">zentrale Konfig &amp; Wahrheit · Tasks, Leases, Fences,
         Events · Identitäten/Auth · Scheduling &amp; Admission · Management-API</span>
       </div>
 
       <!-- Ausführung: zwei Runner-Hosts, jeder mit eigener Orchestrator-Instanz -->
       <div class="rhost" style="left:22%;">
-        <div class="rt"><span class="ic"></span> Runner-Host A</div>
+        <div class="rt"><span class="grp"><span class="ic"></span> Runner-Host A</span><span class="loc-chip">CLOUD · LOCAL</span></div>
         <div class="rs">eigene Orchestrator-Instanz</div>
         <div class="pools">
           <div class="pool"><span class="pn">Build-Slots</span><span class="pd">dynamisch, on the fly</span></div>
@@ -383,7 +416,7 @@ die Task-API.</p>
         </div>
       </div>
       <div class="rhost" style="left:78%;">
-        <div class="rt"><span class="ic"></span> Runner-Host B</div>
+        <div class="rt"><span class="grp"><span class="ic"></span> Runner-Host B</span><span class="loc-chip">CLOUD · LOCAL</span></div>
         <div class="rs">git + Agent-CLIs · keine offenen Ports</div>
         <div class="pools">
           <div class="pool"><span class="pn">Build-Slots</span><span class="pd">dynamisch, on the fly</span></div>
@@ -391,11 +424,11 @@ die Task-API.</p>
         </div>
       </div>
 
-      <!-- Kanal-Etiketten -->
+      <!-- Kanal-Etiketten: exakt auf ihrer Linie verankert (Bezier bei t≈0.55 bzw. RESULTS unverändert) -->
       <div class="edge b" style="left:50%; top:26%;">HTTPS · eine Origin<br>Config ↓ · Events ↑</div>
-      <div class="edge t" style="left:11%; top:55%;">CLAIM · LEASE<br>Tasks pullen</div>
+      <div class="edge t" style="left:28%; top:64%;">CLAIM · LEASE<br>Tasks pullen</div>
       <div class="edge t" style="left:32%; top:55%;">RESULTS · ARTIFACTS<br>zurück an den Server</div>
-      <div class="edge t" style="left:89%; top:55%;">CLAIM · LEASE<br>Tasks pullen</div>
+      <div class="edge t" style="left:72%; top:64%;">CLAIM · LEASE<br>Tasks pullen</div>
       <div class="edge t" style="left:68%; top:55%;">RESULTS · ARTIFACTS<br>zurück an den Server</div>
     </div>
   </div>
@@ -417,9 +450,13 @@ ausschließlich mit dem Task Server, sonst mit niemandem).
 <b style="color:var(--teal-ink)">Teal</b> = Ausführungsebene, je Runner-Host als <b>zwei getrennte
 Leitungen</b>: <code>CLAIM · LEASE</code> pullt Arbeit (Dash-Fluss zeigt zum Runner — Antwort auf die
 Anfrage), <code>RESULTS · ARTIFACTS</code> pusht Ergebnisse zurück (Dash-Fluss zeigt zum Server). Beide
-Leitungen gehen vom Runner aus; er hält keinen offenen Port. Der Task Server ist die einzige
-Wahrheits- und Konfigurationsinstanz; Studio ist ersetzbar (schließen darf Arbeit nicht stoppen).
-Code läuft orthogonal zu beiden API-Kanälen über <code>git origin</code>.</figcaption>
+Leitungen gehen vom Runner aus; er hält keinen offenen Port. Der Task Server (in der Box als
+Namensvorschlag <b>Orchestrator-Server</b> geführt) ist die einzige Wahrheits- und
+Konfigurationsinstanz; Studio ist ersetzbar (schließen darf Arbeit nicht stoppen) und
+<b>multiuser</b> — es kann N gleichzeitige Studio-Instanzen geben, dargestellt als gestapelte
+Karte. Die Mono-Chips in den Kopfzeilen zeigen je Einheit, wo sie üblicherweise läuft
+(<code>LOCAL</code>/<code>CLOUD</code> Betrieb, <code>WEB</code> Zugriffsweg). Code läuft
+orthogonal zu beiden API-Kanälen über <code>git origin</code>.</figcaption>
 
 <!-- ============================================================ -->
 <p class="sec-no"><span class="n">§2</span> · Admission</p>
