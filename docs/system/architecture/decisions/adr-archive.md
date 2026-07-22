@@ -1322,3 +1322,66 @@ durable authority store, local compatibility profile, Runner client, migration
 rehearsal, backup/restore, and independent-process topology proof ship in
 AGT-2192. Authenticated management recovery and the full cross-product golden
 path remain owned by the follow-up delivery tasks named in the canonical target.
+
+---
+
+## ADR-0064 - The global orchestrator owns goal decomposition and may schedule independent verification (2026-07-22)
+
+**Decision.** The global orchestrator is a watchful, goal-driven planning role,
+not only a manager of existing cards. It reuses matching work first and may
+optionally create a goal Epic when an explicit outcome requires missing work.
+The Epic planning contract emits a validated dependency DAG of delivery and
+verification tasks. Generated tasks persist server-authored creation provenance,
+and verification nodes wait on the delivery revisions they inspect.
+
+**Context.** The operational role had narrowed over time to queue summaries,
+lane movement, and reactions to cards already on the board. That made the board
+look like the boundary of responsibility even when the user supplied a wider
+goal. At the same time, completion and Evidence Gate incidents showed that a
+text scanner can accept claims or reject good work when it reads truncated or
+stale prose instead of the submitted revision and actual artifacts. The role
+therefore needs both an optional way to create missing work and an explicit way
+to schedule independent, evidence-based verification.
+
+**Non-goals.**
+
+- No ticket-creation quota and no wrapper Epic when one existing card covers
+  the goal cleanly.
+- No unbounded workflow engine. The plan is a finite DAG backed by existing
+  Epic membership and `references.dependsOn` pickup gating.
+- No hidden task truth in the Runner. Durable task, dependency, and provenance
+  state belongs to the control plane described by ADR-0063; the current Studio
+  compatibility backend owns the write until Task Server cutover.
+- No verification by success wording, terminal sentinel, keyword scan, or a
+  truncated CLI log alone. A verification task inspects the submitted revision
+  and actual command, test, screenshot, or result evidence and discloses gaps.
+- No bypass of deterministic completion gates or human review. Planned
+  verification adds evidence; it does not become authority by itself.
+
+**Reasoning style.** Start from the desired outcome, compare it with current
+work and evidence, and create only the missing nodes. Validate the whole local
+graph before any side effect, materialize it topologically, translate local ids
+to stable task keys, and preserve who created each node and why. Separate
+delivery from independent verification when risk or proof warrants it, then let
+the normal admission, evidence, and review contracts judge the result.
+
+**Implementation pointers.** Role prompts:
+[`prompts/runtime/global-orchestrator-boot.md`](../../../../prompts/runtime/global-orchestrator-boot.md)
+and [`prompts/runtime/epic-decomposition.md`](../../../../prompts/runtime/epic-decomposition.md).
+Graph and provenance contracts:
+[`backend/Shared/Models/EpicModels.cs`](../../../../backend/Shared/Models/EpicModels.cs),
+[`backend/Shared/Models/TaskCreationProvenance.cs`](../../../../backend/Shared/Models/TaskCreationProvenance.cs),
+[`backend/Features/Tasks/EpicSubTaskFactory.cs`](../../../../backend/Features/Tasks/EpicSubTaskFactory.cs),
+and [`backend/Features/Tasks/TaskMutationService.cs`](../../../../backend/Features/Tasks/TaskMutationService.cs).
+Planning execution:
+[`backend/Features/Runner/EpicDecompositionParser.cs`](../../../../backend/Features/Runner/EpicDecompositionParser.cs)
+and [`backend/Features/Runner/ProjectRunner.cs`](../../../../backend/Features/Runner/ProjectRunner.cs).
+Role and evidence rationale:
+[`docs/concepts/orchestrator-supervision-loop.html`](../../../concepts/orchestrator-supervision-loop.html#goal-horizon),
+[`docs/concepts/drei-einheiten-architektur.html`](../../../concepts/drei-einheiten-architektur.html),
+and [`docs/concepts/auto-review-evidence-gate-analysis.html`](../../../concepts/auto-review-evidence-gate-analysis.html#plan).
+
+**Status.** Accepted. Goal decomposition, dependency validation, creation
+provenance, and explicit verification-task scheduling are implemented in the
+current Studio compatibility path. The separated Task Server must carry the
+same durable fields and invariants at cutover.

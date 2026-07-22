@@ -110,6 +110,23 @@ cannot erase an operator decision.
 ## Epic lifecycle
 
 - Epics are `kind=epic` task records; membership is the child's `epicId`.
+- Epic planning is the goal-decomposition boundary. Plan nodes may carry a
+  local `id`, `dependsOn`, and `purpose=delivery|verification`. The pure
+  validator rejects unknown ids, self-dependencies, duplicates, and cycles
+  before any child is created. The factory materializes valid nodes in
+  topological order and translates local dependencies into stable task keys in
+  `references.dependsOn`.
+- Children created by a planning run persist server-authored
+  `creationProvenance`: `initiator=orchestrator`,
+  `method=goal-decomposition`, the owning goal id/key, orchestrator context,
+  task purpose, and UTC creation time. Deterministic API-created children use
+  `initiator=operator`. Legacy and ordinary direct-created cards omit this
+  field.
+- Verification is first-class scheduled work, not a title convention. A
+  `purpose=verification` card waits on every delivery node it checks and its
+  prompt must inspect the submitted revision and actual evidence. See
+  [Orchestrator Supervision Loop](../../concepts/orchestrator-supervision-loop.html#goal-horizon)
+  and the [Evidence Gate analysis](../../concepts/auto-review-evidence-gate-analysis.html#plan).
 - `GET /api/epics` is archive-inclusive. A finished epic remains queryable when
   all of its children are in `6-completed` or `7-archive`.
 - The Epic overview separates active and completed rollups, shows `x / y done`,

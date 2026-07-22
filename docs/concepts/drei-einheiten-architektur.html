@@ -225,6 +225,17 @@
 </table>
 </div>
 
+<div class="box accent">
+  <h4>Role boundary: goal-driven orchestration</h4>
+  <p>The orchestrator is not limited to administering cards that already exist. Given an explicit goal, the global role
+  may reuse existing work or optionally create a goal Epic whose planning run produces traceable delivery and
+  verification tasks. Dependencies and orchestrator creation provenance belong to durable task truth; the Runner only
+  executes admitted nodes and does not own the plan. Verification is ordered work that inspects the submitted revision
+  and real evidence, following the lessons in the
+  <a href="auto-review-evidence-gate-analysis.html">Evidence Gate analysis</a>. The full role contract lives in
+  <a href="orchestrator-supervision-loop.html#goal-horizon">Orchestrator Supervision Loop</a>.</p>
+</div>
+
 <p class="dim">Wichtig für das Bild als „drei Einheiten“: heute sind Board und Wiki nicht nur Studios
 Oberfläche über fremde Daten — <code>backend/OrchestratorApi.csproj</code> <i>ist</i> zugleich der
 Prozess, der Task-Zustand hält, den lokalen Runner einbettet (<code>ProjectRunner</code>) und die Wiki-Dateien

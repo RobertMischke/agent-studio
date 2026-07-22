@@ -89,6 +89,16 @@
     <li><strong>Traceable reasons.</strong> Every reissue / accept-with-concerns must carry a clearly derivable reason and the evidence it was based on, surfaced on the card and in the task detail, so the operator can follow the chain.</li>
     <li><strong>Completion gate reads the final status</strong>, not a stale in-run snapshot.</li>
   </ol>
+  <h3>Planned verification complements the gate</h3>
+  <p>A goal-driven orchestrator may schedule a separate verification task after the delivery tasks it checks. That task
+  must inspect the submitted revision and the real artifact manifest, run the ordered checks in its prompt, and disclose
+  missing, stale, or contradictory evidence. Its conclusion is additional review evidence, not permission to accept a
+  delivery merely because the verification agent used success language.</p>
+  <p>The task graph makes this ordering explicit through <code>dependsOn</code>; goal-decomposition provenance identifies
+  who created the check and which goal it serves. This turns verification into traceable work while preserving the rule
+  above: deterministic gates and human review judge facts, not text-scanner matches. See
+  <a href="orchestrator-supervision-loop.html#goal-horizon">Goal horizon, not board administration</a> and the
+  <a href="drei-einheiten-architektur.html#studio">three-unit ownership boundary</a>.</p>
   <p class="sub">Related: this is the review-side counterpart of the
   <a href="orchestrator-drive-to-conclusion.html">drive-to-conclusion concept</a> (over-eager reissue vs. carrying a task home). Never bulk re-pickup the human-review lane; that re-runs from scratch and wipes the committed work.</p>
 

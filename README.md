@@ -13,7 +13,7 @@ editing loop.
 
 ![The board: every watched project and every task state in one place](./docs/assets/images/board-overview.png)
 
-*One board across every watched project. Tasks flow `ready → in progress → review`; the runner picks them up automatically, so your role shrinks to the part that needs you — review.*
+*One board across every watched project. Tasks flow `ready → in progress → review`; the runner picks them up automatically, so your role shrinks to the part that needs you - review.*
 
 > .NET 10 backend + Angular 21 PWA. Newly onboarded task state lives in the central `TaskRepository`, separate from product repositories; legacy in-repository stores remain compatibility-only until migrated. The Task Access API fronts the filesystem so the runner, supervisor, frontend, remote clients, and scripts read and mutate through one boundary. Runs tasks through Claude Code, Codex, GitHub Copilot, or Gemini. Coding work is sequential by default and can opt into bounded, orchestrator-gated parallelism via `maxParallelism`.
 
@@ -23,29 +23,31 @@ editing loop.
 
 ![The pipeline catalogue: pre-steps, the core agent run, post-steps and tool steps, each with its own model, prompt, gate and token spend](./docs/assets/images/pipeline-page.png)
 
-Every run is a configurable **pre / core / post** pipeline, not a single shot. Pre-steps prepare the work (loop check, orchestrator prep, reissue-open-items check); the **core** step is the provider CLI doing the actual coding; post-steps close it out (orchestrator review, conflict resolution, a code-review quality grade, build/test gate, worktree containment, merge to develop). Each step is independently toggled and bound to its own model, prompt, and gate, and shows its token spend over the last 90 days — so the managed work *around* the agent is explicit and tunable per project, not hidden in code.
+Every run is a configurable **pre / core / post** pipeline, not a single shot. Pre-steps prepare the work (loop check, orchestrator prep, reissue-open-items check); the **core** step is the provider CLI doing the actual coding; post-steps close it out (orchestrator review, conflict resolution, a code-review quality grade, build/test gate, worktree containment, merge to develop). Each step is independently toggled and bound to its own model, prompt, and gate, and shows its token spend over the last 90 days - so the managed work *around* the agent is explicit and tunable per project, not hidden in code.
 
 ### Agent orchestration
 
 ![The per-project orchestrator: a live session that watches every project, summarises the queue, and is addressable from the CLI](./docs/assets/images/orchestrator-rail.png)
 
-A per-project **orchestrator** owns queue movement — and it is a participant you can talk to, not a hidden daemon. It carries a long-lived session with inspectable memory (what it was booted with, which tasks and decisions it has seen), summarises the queue ("25 tasks: 6 in backlog, 1 in progress, 16 in human review, 2 escalated"), and is **deterministic, not prompt-trust**: when an agent's report contradicts the structural evidence — no edits, near-zero duration, a post-recovery no-op — the orchestrator re-issues the work itself instead of accepting the inconsistency. A supervisor layer above it watches health and budget every tick.
+The **global orchestrator** owns the goal horizon, while per-project orchestrators keep active work moving. The global role compares an explicit outcome goal with the board and its evidence instead of treating the existing cards as the full problem. It reuses matching work first, but may optionally create a goal Epic when a real gap needs decomposition. The Epic planning run materializes traceable delivery and verification cards, validates their dependency graph, and records orchestrator creation provenance. Verification work waits for the delivery revisions it checks and judges real diffs, commands, test reports, screenshots, and result artifacts, not success wording alone.
+
+Every orchestrator remains a participant you can talk to, not a hidden daemon. Sessions carry inspectable memory, summarize current state, and explain decisions. Run outcomes stay **deterministic, not prompt-trust**: when an agent's report contradicts structural evidence such as no edits, near-zero duration, or a post-recovery no-op, the orchestrator reissues the work instead of accepting the inconsistency. A supervisor layer above it watches health and budget every tick. The role and decomposition contract are documented in [Orchestrator Supervision Loop](./docs/concepts/orchestrator-supervision-loop.html#goal-horizon).
 
 Every canonical chat turn is grounded in a compact application digest rather than a raw data dump. It covers the board pulse, active run phases, cached CLI quota, publish-target status, backend and watcher health, and recent decision-journal entries. The `global`, `project:<id>`, and `task:<projectId>/<taskKey>` context keys control what the digest may see, while an explicit refresh rebuilds it and re-probes quota.
 
-### Context management — the project Wiki
+### Context management - the project Wiki
 
 ![The project Wiki: a 338-page knowledge base built from the repository's docs tree, with categories, rendered Markdown and git history](./docs/assets/images/wiki-context.png)
 
-An agent is only as good as the context it starts from. Each project's `docs/` tree becomes a browsable **knowledge base** — here, 338 pages grouped by category (architecture, contracts, domains, ADRs, skills, research), rendered from the real folder structure with page history and drift signals. The same steering documents the agents rely on (README, AGENTS, task contracts, skills lookup) are inspectable surfaces, so what the agents are told stays visible and reviewable rather than buried.
+An agent is only as good as the context it starts from. Each project's `docs/` tree becomes a browsable **knowledge base** - here, 338 pages grouped by category (architecture, contracts, domains, ADRs, skills, research), rendered from the real folder structure with page history and drift signals. The same steering documents the agents rely on (README, AGENTS, task contracts, skills lookup) are inspectable surfaces, so what the agents are told stays visible and reviewable rather than buried.
 
 ### Token economy & pricing
 
 ![The token-usage panel: total / job / supporting / orchestrator spend, pipeline cost by step in dollars, a per-task heatmap and the most expensive tasks](./docs/assets/images/token-economy.png)
 
-Inference spend is a first-class signal on every surface that touches a model. Per-job, per-step, per-model token aggregates are tracked and **priced**: a pipeline cost-by-step-kind breakdown in dollars (core run vs. aspects vs. tools), a recent-activity timeline, a top-tasks-by-day heatmap, and a most-expensive-tasks list with per-run drill-down. Cost is theoretical against a per-model price table — your CLI subscriptions make the real bill flat — but it shows exactly where the budget goes.
+Inference spend is a first-class signal on every surface that touches a model. Per-job, per-step, per-model token aggregates are tracked and **priced**: a pipeline cost-by-step-kind breakdown in dollars (core run vs. aspects vs. tools), a recent-activity timeline, a top-tasks-by-day heatmap, and a most-expensive-tasks list with per-run drill-down. Cost is theoretical against a per-model price table - your CLI subscriptions make the real bill flat - but it shows exactly where the budget goes.
 
-> **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` — developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-taskboard" as a follow-up cleanup; see [docs/system/architecture/decisions/adr-archive.md](./docs/system/architecture/decisions/adr-archive.md) for the load-bearing rename note.
+> **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` - developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-taskboard" as a follow-up cleanup; see [docs/system/architecture/decisions/adr-archive.md](./docs/system/architecture/decisions/adr-archive.md) for the load-bearing rename note.
 
 ---
 
@@ -90,9 +92,9 @@ worktrees. Parallelism across projects is supported.
 
 **A layer on top of agents and software.** The product surfaces what the agents did and what changed in your software in one place. The top level is condensed (run summaries, commit counts, status badges); drill-down is always one click away (full activity log, diffs, tool calls). The full UX contract is in [docs/quality/design-principles.md](./docs/quality/design-principles.md) and is the bar every protocol-layer change has to clear.
 
-**Make the patterns visible — and explain the why next to the lever.** A major part of this product is *exposing* the patterns and best practices the platform has accumulated, instead of hiding them in code or a wiki nobody opens. Every controllable behavior — agent permissions, sandbox modes, auto-commit/push, review thresholds, drift rules, skill catalog — should show up in Project Settings and the agent configuration surfaces *with* an inline explanation: what it does, why we picked this default, what the risk is, what the alternative would cost. The user should never have to leave the screen to understand a setting. Standalone docs in `docs/` remain the source of truth; the UI embeds the relevant section in-line at the spot the decision is made. See [docs/quality/design-principles.md §Inline meta](./docs/quality/design-principles.md#inline-meta-explain-decisions-next-to-the-lever).
+**Make the patterns visible - and explain the why next to the lever.** A major part of this product is *exposing* the patterns and best practices the platform has accumulated, instead of hiding them in code or a wiki nobody opens. Every controllable behavior - agent permissions, sandbox modes, auto-commit/push, review thresholds, drift rules, skill catalog - should show up in Project Settings and the agent configuration surfaces *with* an inline explanation: what it does, why we picked this default, what the risk is, what the alternative would cost. The user should never have to leave the screen to understand a setting. Standalone docs in `docs/` remain the source of truth; the UI embeds the relevant section in-line at the spot the decision is made. See [docs/quality/design-principles.md §Inline meta](./docs/quality/design-principles.md#inline-meta-explain-decisions-next-to-the-lever).
 
-**A living orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. Each project has a canonical orchestrator session with inspectable memory: what it was booted with, which tasks and decisions it has seen, what the project does, what the roadmap says, and what should happen next. The long-term concept is documented in [docs/concepts/orchestrator-chat.md](./docs/concepts/orchestrator-chat.md).
+**A living, goal-driven orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. The global role watches the gap between a stated goal and verified reality and may create a traceable Epic plan when existing cards do not cover that gap. Per-project sessions keep their narrower decision scope. Their inspectable memory shows what they were booted with, which tasks and decisions they have seen, what the project does, what the roadmap says, and what should happen next. The long-term conversation concept is documented in [docs/concepts/orchestrator-chat.md](./docs/concepts/orchestrator-chat.md).
 
 **Sequential by default, bounded parallelism when opted in.** A project starts with one coding task at a time (`maxParallelism = 1`). When a project deliberately opts in, the orchestrator may admit several safe tasks at once, each isolated in its own git worktree on a short-lived `task/<id>` branch. Parallelism is capped, explained, and rejected for exclusive or cross-cutting work. Worktree isolation is not only a parallelism mechanism: every coding run, including a single-slot resume or reissue, always executes in its task worktree, never in the shared main checkout, backed by a fail-closed guard (ADR-0052 / ADR-0057).
 
@@ -122,9 +124,9 @@ Building a custom coding agent is not a forbidden idea. Many projects do it. It 
 | Small, typed components beat a workflow engine | Shared contracts and deterministic policy libraries support three runtime products without unbounded fan-out. |
 
 The fuller UX contract lives in
-[design principles](./docs/product/design-principles.md). Load-bearing
+[design principles](./docs/quality/design-principles.md). Load-bearing
 architecture decisions are preserved in the
-[ADR archive](./docs/architecture/decisions/adr-archive.md).
+[ADR archive](./docs/system/architecture/decisions/adr-archive.md).
 
 ## What you see
 
@@ -190,7 +192,7 @@ The task Activity tab and the project orchestrator side sheet both render chat t
 
 ### Foundation
 
-.NET 10 backend (port 5030) + Angular 21 PWA (port 4010). Twenty-eight JSON schemas under [`docs/system/schemas/`](docs/system/schemas/) cover Agent Message Bus events, supervisor advisories + interventions, drift reports, analysis reports, architecture model, product runtime events, token aggregates, task find / mutate, orchestrator decisions, and update-run snapshots. Twenty-five frontend feature folders under [`frontend/src/app/features/`](frontend/src/app/features/) carry the per-feature components / state / models with public APIs exported via barrel files (ADR-0034). Append-only Agent Message Bus persists every cross-cutting structured signal as JSONL.
+.NET 10 backend (port 5030) + Angular 21 PWA (port 4010). Twenty-eight JSON schemas under [`docs/app/schemas/`](docs/app/schemas/) cover Agent Message Bus events, supervisor advisories + interventions, drift reports, analysis reports, architecture model, product runtime events, token aggregates, task find / mutate, orchestrator decisions, and update-run snapshots. Twenty-five frontend feature folders under [`frontend/src/app/features/`](frontend/src/app/features/) carry the per-feature components / state / models with public APIs exported via barrel files (ADR-0034). Append-only Agent Message Bus persists every cross-cutting structured signal as JSONL.
 
 Out of scope on purpose: API-key billing, mandatory sandboxes, general workflow engines, custom coding-agent runtimes, or unbounded fan-out. Worktrees and short-lived task branches are in scope as the isolation mechanism for every coding run, opted-in parallel coding included (ADR-0052 / ADR-0057). The product is small by design; every capability above answers a question the existing CLI agents do not, while leaving them to do the actual coding.
 
@@ -198,7 +200,7 @@ Out of scope on purpose: API-key billing, mandatory sandboxes, general workflow 
 
 ![A review-ready task: the work merged task branch → develop → main, with the per-file diff and evidence](./docs/assets/images/detail-git-focus.png)
 
-*A review-ready task. The git pane shows the work merged `task/… → develop → main` with the full per-file diff (added/modified, line counts) — the concrete change a reviewer signs off on, next to the run protocol and evidence.*
+*A review-ready task. The git pane shows the work merged `task/… → develop → main` with the full per-file diff (added/modified, line counts) - the concrete change a reviewer signs off on, next to the run protocol and evidence.*
 
 When a CLI run completes successfully, the application captures the run log, moves the task to `4-review`, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the task's `results/` folder.
 
@@ -227,7 +229,7 @@ containment proof. Lease expiry alone never proves that a process stopped.
 
 Prompt wording remains the easiest way to steer behavior, but it is not the load-bearing layer anymore. The product treats orchestrator-to-CLI communication as a core capability.
 
-The next layer of this thinking is *supervision*: a meta-loop that watches the orchestrator's own job-pickup loop in real time, asks "is the agent on track, is anything stuck, should we intervene?", and writes its own continuous protocol. Implementation lives under [backend/Features/Supervisor/](backend/Features/Supervisor/) with a dedicated UI panel on each project page; auto-intervention stays opt-in. The full conceptual analysis (loop-to-loop control, communication contract, traceability) is in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md); the load-bearing decision is recorded as [ADR-0017](./docs/system/architecture/decisions/adr-archive.md). A lower-frequency meta-cycle above the runner can pause at batch boundaries, inspect the system, write a structured report, then resume or queue follow-up work. Its current spec is [docs/mockups/orchestrator-meta-cycle/](docs/mockups/orchestrator-meta-cycle/) and the decision is [ADR-0022](./docs/system/architecture/decisions/adr-archive.md). A stand-alone external review monitor (Layer 3) for stable lives at [scripts/supervisor/](scripts/supervisor/).
+The next layer of this thinking is *supervision*: a meta-loop that watches the orchestrator's own job-pickup loop in real time, asks "is the agent on track, is anything stuck, should we intervene?", and writes its own continuous protocol. Implementation lives under [backend/Features/Supervisor/](backend/Features/Supervisor/) with a dedicated UI panel on each project page; auto-intervention stays opt-in. The maintained [Orchestrator Supervision Loop](docs/concepts/orchestrator-supervision-loop.html) describes the loop-to-loop control, goal horizon, communication contract, and traceability; the load-bearing decision is recorded as [ADR-0017](./docs/system/architecture/decisions/adr-archive.md). A lower-frequency meta-cycle above the runner can pause at batch boundaries, inspect the system, write a structured report, then resume or queue follow-up work. Its durable report contract is [`meta-cycle-report.schema.json`](docs/app/schemas/meta-cycle-report.schema.json), and the decision is [ADR-0022](./docs/system/architecture/decisions/adr-archive.md). A stand-alone external review monitor (Layer 3) for stable lives at [scripts/supervisor/](scripts/supervisor/).
 
 ---
 
@@ -368,13 +370,13 @@ verified quiet boundary through the repository's update process.
 - `GET /api/supervisor/{project}/meta-cycle` - meta-cycle status and recent reports.
 - `GET /api/supervisor/{project}/observation`, `GET /api/supervisor/{project}/recent-events` - advisories, interventions, and recent activity for the project.
 
-The wire shape for find / mutate is fixed in [`docs/system/schemas/task-find-result.schema.json`](docs/system/schemas/task-find-result.schema.json) and [`docs/system/schemas/task-mutation-request.schema.json`](docs/system/schemas/task-mutation-request.schema.json). The architectural decision is recorded in [ADR-0024](./docs/system/architecture/decisions/adr-archive.md); the migration of the remaining direct-filesystem call sites is tracked under the queued task `task-access-api-layer-extraction`. Mutations are mirrored onto the [agent message bus](./docs/system/architecture/bus/agent-message-bus.md) as events.
+The wire shape for find / mutate is fixed in [`docs/app/schemas/task-find-result.schema.json`](docs/app/schemas/task-find-result.schema.json) and [`docs/app/schemas/task-mutation-request.schema.json`](docs/app/schemas/task-mutation-request.schema.json). The architectural decision is recorded in [ADR-0024](./docs/system/architecture/decisions/adr-archive.md); the migration of the remaining direct-filesystem call sites is tracked under the queued task `task-access-api-layer-extraction`. Mutations are mirrored onto the [agent message bus](./docs/system/architecture/bus/agent-message-bus.md) as events.
 
 ---
 
 ## Outlook: remote execution (in progress, not yet shipped)
 
-Everything above runs on one Windows machine today: backend(s), frontend(s), every CLI agent process, and every Playwright run share the operator's box. [ADR-0059](./docs/system/architecture/decisions/adr-archive.md) promotes moving that execution load off the operator's machine to a **major goal**: coding-agent CLIs and Playwright running on one or more remote Linux runner hosts (SSH-provisioned), with tasks living behind a task server reachable under one central URL, while the operator machine keeps only the browser seat and the Windows-native dev seat. This is a phased plan, not a shipped capability: the current single-machine setup keeps working at every phase. The plan of record, with its ground-truth coupling survey and phase breakdown, is [docs/research/remote-ready-kickoff-2026-07.md](./docs/research/remote-ready-kickoff-2026-07.md).
+Everything above runs on one Windows machine today: backend(s), frontend(s), every CLI agent process, and every Playwright run share the operator's box. [ADR-0059](./docs/system/architecture/decisions/adr-archive.md) promotes moving that execution load off the operator's machine to a **major goal**: coding-agent CLIs and Playwright running on one or more remote Linux runner hosts (SSH-provisioned), with tasks living behind a task server reachable under one central URL, while the operator machine keeps only the browser seat and the Windows-native dev seat. This is a phased plan, not a shipped capability: the current single-machine setup keeps working at every phase. The current plan of record is [Distributed Agent Studio target architecture](./docs/concepts/distributed-agent-studio-target-architecture.md).
 
 ---
 
@@ -388,17 +390,17 @@ If you want to install and configure manually, the technical walkthrough lives i
 
 ## Docs
 
-- [docs/start/README.md](docs/start/README.md) — **hierarchical lookup index** of every load-bearing document with a one-line description per file. Start here when you don't already know which doc to read.
-- [AGENTS.md](AGENTS.md) — canonical agent instructions
-- [ROADMAP.md](ROADMAP.md) — product direction, roadmap themes, and decision principles
-- [PATHS.md](PATHS.md) — path conventions
-- [prompts/runtime/](prompts/runtime/) — editable backend runtime prompt templates
+- [docs/start/README.md](docs/start/README.md) - **hierarchical lookup index** of every load-bearing document with a one-line description per file. Start here when you don't already know which doc to read.
+- [AGENTS.md](AGENTS.md) - canonical agent instructions
+- [ROADMAP.md](ROADMAP.md) - product direction, roadmap themes, and decision principles
+- [PATHS.md](PATHS.md) - path conventions
+- [prompts/runtime/](prompts/runtime/) - editable backend runtime prompt templates
 
 The four most-asked-for individual documents (the index covers the full set):
 
-- [docs/system/cli/supported-clis.md](./docs/system/cli/supported-clis.md) — CLI integration contract
-- [docs/system/contracts/filesystem.md](./docs/system/contracts/filesystem.md) — task folder contract
-- [docs/system/contracts/agent-task.md](./docs/system/contracts/agent-task.md) — application and agent ownership boundary
-- [docs/system/architecture/decisions/adr-archive.md](./docs/system/architecture/decisions/adr-archive.md) — ADR archive with the load-bearing decisions
-- [docs/concepts/orchestrator-chat.md](./docs/concepts/orchestrator-chat.md) — persistent orchestrator chat, memory, scope, and control surface
-- [docs/concepts/orchestrator-chat-redesign-handoff.md](./docs/concepts/orchestrator-chat-redesign-handoff.md) — conversation-first chat redesign handoff
+- [docs/system/cli/supported-clis.md](./docs/system/cli/supported-clis.md) - CLI integration contract
+- [docs/system/contracts/filesystem.md](./docs/system/contracts/filesystem.md) - task folder contract
+- [docs/system/contracts/agent-task.md](./docs/system/contracts/agent-task.md) - application and agent ownership boundary
+- [docs/system/architecture/decisions/adr-archive.md](./docs/system/architecture/decisions/adr-archive.md) - ADR archive with the load-bearing decisions
+- [docs/concepts/orchestrator-chat.md](./docs/concepts/orchestrator-chat.md) - persistent orchestrator chat, memory, scope, and control surface
+- [docs/concepts/orchestrator-chat-redesign-handoff.md](./docs/concepts/orchestrator-chat-redesign-handoff.md) - conversation-first chat redesign handoff
