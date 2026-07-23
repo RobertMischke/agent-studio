@@ -654,7 +654,7 @@ key-alias decision. Do not duplicate or renumber these tasks in the meantime.
 | Workspace/component project model | AGT-2195 | Solution workspace, component boards, initiatives, and repository bindings. |
 | Client-off topology acceptance harness | AGT-2196 | Release-blocking proof of independent lifecycles. |
 | Host-local orchestration authority split | AGT-2229 | Replaces central host inference and slot assignment with the two-level authority and contract defined here. |
-| Host-owned capacity reports | AGT-2230 | First independently shippable migration slice; moves capacity truth to the host without changing task pickup yet. |
+| Host-owned capacity reports | AGT-2228 | First independently shippable migration slice; moves capacity truth to the host without changing task pickup yet. |
 
 ## 13. Delivery sequence
 
