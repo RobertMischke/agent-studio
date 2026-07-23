@@ -1,0 +1,22 @@
+<div class="war__head">
+  <span>Agent reads</span>
+  <span data-testid="project-wiki-agent-reads-total">{{ reads().total }}</span>
+</div>
+<dl class="war__info">
+  <div>
+    <dt>Last read</dt>
+    <dd data-testid="project-wiki-agent-reads-last">
+      {{ reads().lastReadAt ? formatTimestamp(reads().lastReadAt!) : 'Never' }}
+    </dd>
+  </div>
+</dl>
+@if (reads().recent.length > 0) {
+  <ul class="war__recent" data-testid="project-wiki-agent-reads-recent">
+    @for (read of reads().recent; track $index) {
+      <li>
+        <time [attr.datetime]="read.at">{{ formatTimestamp(read.at) }}</time>
+        <code>{{ read.taskKey }}</code>
+      </li>
+    }
+  </ul>
+}

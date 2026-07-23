@@ -31,23 +31,27 @@ public static partial class WikiAgentReadLogParser
         if (value.Length == 0) return [];
 
         var candidates = new List<string>();
-        if (value[0] == '{') ExtractJsonCandidates(value, candidates);
-
-        var marker = ReadMarkerRegex().Match(value);
-        if (marker.Success)
+        if (value[0] == '{')
         {
-            candidates.Add(marker.Groups["argument"].Value);
+            ExtractJsonCandidates(value, candidates);
         }
         else
         {
-            var run = RunMarkerRegex().Match(value);
-            if (run.Success) candidates.AddRange(ExtractPathTokens(run.Groups["command"].Value));
+            var marker = ReadMarkerRegex().Match(value);
+            if (marker.Success)
+            {
+                candidates.Add(marker.Groups["argument"].Value);
+            }
+            else
+            {
+                var run = RunMarkerRegex().Match(value);
+                if (run.Success) ExtractShellReadCandidates(run.Groups["command"].Value, candidates);
+            }
         }
 
-        // Old logs and shell commands can contain several docs paths in one
-        // tool event. Scan the complete line as a fallback, then distinct the
-        // normalized page paths so one tool-use counts a page at most once.
-        candidates.AddRange(ExtractPathTokens(value));
+        // One read command can name several pages. Distinct within that tool
+        // event, but never across lines: two reads emitted at the same timestamp
+        // are still two observed reads.
         return candidates
             .Select(NormalizeDocsRelativePath)
             .Where(path => path != null)
@@ -70,6 +74,9 @@ public static partial class WikiAgentReadLogParser
         else
             return null;
 
+        if (rel.Contains(".meta.json", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains(".report.html", StringComparison.OrdinalIgnoreCase)
+            || rel.Contains(".report.htm", StringComparison.OrdinalIgnoreCase)) return null;
         var extension = PageExtensionRegex().Match(rel);
         if (!extension.Success) return null;
         rel = rel[..extension.Index] + extension.Value;
@@ -97,9 +104,9 @@ public static partial class WikiAgentReadLogParser
             using var doc = JsonDocument.Parse(json);
             Visit(doc.RootElement, candidates);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            // A torn/raw line contributes through the textual path scan only.
+            SilentCatch.Note(ex, "WikiAgentReadLogParser: malformed JSON tool-use line ignored.");
         }
     }
 
@@ -123,7 +130,9 @@ public static partial class WikiAgentReadLogParser
         }
         else if (tool is not null && IsShellTool(tool))
         {
-            AddJsonString(argumentObject, candidates, "command", "cmd");
+            foreach (var name in new[] { "command", "cmd" })
+                if (JsonString(argumentObject, name) is { Length: > 0 } command)
+                    ExtractShellReadCandidates(command, candidates);
         }
 
         foreach (var property in element.EnumerateObject())
@@ -140,8 +149,23 @@ public static partial class WikiAgentReadLogParser
         || tool.Equals("command_call", StringComparison.OrdinalIgnoreCase)
         || tool.Equals("command_execution", StringComparison.OrdinalIgnoreCase)
         || tool.Equals("local_shell_call", StringComparison.OrdinalIgnoreCase)
+        || tool.Equals("local_shell", StringComparison.OrdinalIgnoreCase)
         || tool.Equals("run_shell_command", StringComparison.OrdinalIgnoreCase)
+        || tool.Equals("exec_command", StringComparison.OrdinalIgnoreCase)
         || tool.Equals("shell", StringComparison.OrdinalIgnoreCase);
+
+    private static void ExtractShellReadCandidates(string command, List<string> candidates)
+    {
+        // Reuse the established Agent Docs classifier so Wiki reads and
+        // instruction-file analytics agree on what constitutes a read-only
+        // shell access. The complete command scan is safe only after that
+        // classification and preserves multi-file commands such as
+        // `cat docs/a.md docs/b.md`.
+        var classified = AgentDocReadClassifier.Classify("shell", command);
+        if (classified == null) return;
+        candidates.AddRange(classified.Paths);
+        candidates.AddRange(ExtractPathTokens(command));
+    }
 
     private static JsonElement? JsonObject(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object ? value : null;
@@ -186,7 +210,7 @@ public sealed class WikiAgentReadService
     private readonly IConfiguration _configuration;
     private readonly ILogger<WikiAgentReadService> _logger;
     private readonly object _backfillGate = new();
-    private readonly ConcurrentDictionary<string, TaskTarget?> _targetCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, TaskTarget> _targetCache = new(StringComparer.OrdinalIgnoreCase);
 
     public WikiAgentReadService(
         TaskScannerService scanner,
@@ -213,14 +237,17 @@ public sealed class WikiAgentReadService
             .ToList();
         if (observations.Count == 0) return 0;
 
-        var target = _targetCache.GetOrAdd(taskKey, ResolveTaskTarget);
-        if (target == null) return 0;
+        if (!_targetCache.TryGetValue(taskKey, out var target))
+        {
+            target = ResolveTaskTarget(taskKey);
+            if (target == null) return 0;
+            _targetCache.TryAdd(taskKey, target);
+        }
 
         var applied = 0;
-        foreach (var group in observations.GroupBy(o => $"{o.RelPath}|{o.At:O}", StringComparer.OrdinalIgnoreCase))
+        foreach (var observation in observations)
         {
-            var observation = group.First();
-            if (!TryReadPage(target.WikiDir, observation.RelPath, out var fullPath, out var title, out var content)) continue;
+            if (!TryReadPage(target.WikiDir, observation.RelPath, out _, out var title, out var content)) continue;
             try
             {
                 _companions.IncrementAgentRead(
@@ -261,29 +288,35 @@ public sealed class WikiAgentReadService
                 var target = ResolveTaskTarget(task);
                 if (target == null) continue;
 
-                List<CliOutputLine> lines;
-                try { lines = CliOutputLogParser.ParseFile(logPath); }
+                try
+                {
+                    // Backfill is a one-time inventory fold, not a UI hot path.
+                    // Stream every persisted line so reads near the beginning
+                    // of logs larger than CliOutputLogParser.MaxLinesCap are
+                    // not silently omitted.
+                    var fallbackDate = File.GetLastWriteTimeUtc(logPath).Date;
+                    foreach (var raw in File.ReadLines(logPath))
+                    {
+                        var line = CliOutputLogParser.ParseLine(raw, fallbackDate);
+                        var at = NormalizeAt(line.Timestamp);
+                        foreach (var rel in WikiAgentReadLogParser.ExtractDocsRelativePaths(line.Text))
+                        {
+                            var key = target.WikiDir + "|" + rel;
+                            if (!byPage.TryGetValue(key, out var page))
+                            {
+                                if (!TryReadPage(target.WikiDir, rel, out _, out var title, out var content)) continue;
+                                page = new BackfillPage(target.WikiDir, rel, title, content);
+                                byPage[key] = page;
+                            }
+                            page.Total++;
+                            page.Recent.Add(new WikiAgentReadRecent(at, target.TaskKey));
+                        }
+                    }
+                }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "wiki-agent-read-backfill-log-failed task={TaskKey} log={Log}", target.TaskKey, logPath);
                     continue;
-                }
-
-                foreach (var line in lines)
-                {
-                    var at = NormalizeAt(line.Timestamp);
-                    foreach (var rel in WikiAgentReadLogParser.ExtractDocsRelativePaths(line.Text))
-                    {
-                        if (!TryReadPage(target.WikiDir, rel, out _, out var title, out var content)) continue;
-                        var key = target.ProjectName + "|" + rel;
-                        if (!byPage.TryGetValue(key, out var page))
-                        {
-                            page = new BackfillPage(target.WikiDir, rel, title, content);
-                            byPage[key] = page;
-                        }
-                        page.Total++;
-                        page.Recent.Add(new WikiAgentReadRecent(at, target.TaskKey));
-                    }
                 }
             }
 
@@ -316,9 +349,13 @@ public sealed class WikiAgentReadService
         if (string.IsNullOrWhiteSpace(repo)) return null;
         var wikiDir = Path.Combine(repo, ProjectDocsService.WikiRel);
         if (!Directory.Exists(wikiDir)) return null;
-        var key = !string.IsNullOrWhiteSpace(task.TaskKey) ? task.TaskKey
-            : !string.IsNullOrWhiteSpace(task.Key) ? task.Key! : task.Id;
-        return new TaskTarget(task.ProjectName, wikiDir, key);
+        // Recent history is operator-facing. Prefer the stable display key
+        // (AGT-123) over TaskInfo.TaskKey, whose value is the internal
+        // watchPath::slug lookup identity.
+        var key = !string.IsNullOrWhiteSpace(task.Key) ? task.Key!
+            : !string.IsNullOrWhiteSpace(task.Id) ? task.Id
+            : task.TaskKey;
+        return new TaskTarget(wikiDir, key);
     }
 
     private static bool TryReadPage(
@@ -376,14 +413,15 @@ public sealed class WikiAgentReadService
         }
         finally
         {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { /* best effort */ }
+            try { if (File.Exists(temp)) File.Delete(temp); }
+            catch (Exception ex) { SilentCatch.Note(ex, "WikiAgentReadService: backfill marker temp cleanup failed."); }
         }
     }
 
     private static DateTime NormalizeAt(DateTime at) =>
         at == default ? DateTime.UtcNow : at.ToUniversalTime();
 
-    private sealed record TaskTarget(string ProjectName, string WikiDir, string TaskKey);
+    private sealed record TaskTarget(string WikiDir, string TaskKey);
     private sealed record ReadObservation(string RelPath, DateTime At);
     private sealed class BackfillPage(string wikiDir, string relPath, string title, string content)
     {

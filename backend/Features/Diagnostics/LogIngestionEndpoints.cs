@@ -89,7 +89,7 @@ public static class LogIngestionEndpoints
             // their tool-use lines only after the durable, fenced append succeeds.
             try
             {
-                wikiReads.ProcessOutput(req.TaskKey, req.Lines.Select(line => new AgentStudio.Cli.CliOutputLine
+                wikiReads.ProcessOutput(req.TaskKey, req.Lines.Select(line => new CliOutputLine
                 {
                     Timestamp = line.Timestamp,
                     Stream = line.Stream,

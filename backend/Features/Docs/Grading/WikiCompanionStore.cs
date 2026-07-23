@@ -256,12 +256,17 @@ public sealed class WikiCompanionStore
                 ?? BuildCreationCompanion(docsRelPath, title, content, capturedAt.ToUniversalTime().ToString("o"));
             var reads = root["agentReads"] as JsonObject ?? new JsonObject();
             var storedTotal = JsonInt(reads["total"]);
-            var combinedRecent = ReadRecentAgentReads(reads)
-                .Concat(recent)
-                .GroupBy(r => $"{r.At.ToUniversalTime():O}|{NormalizeTaskKey(r.TaskKey)}", StringComparer.Ordinal)
-                .Select(group => group.First())
-                .ToList();
-            SetAgentReads(reads, Math.Max(storedTotal, Math.Max(0, total)), combinedRecent);
+            var reconstructedTotal = Math.Max(0, total);
+            // When the reconstructed inventory is at least as complete as the
+            // stored baseline, replace history from that source. This keeps
+            // two genuine reads by the same task in the same millisecond while
+            // making a crash-resumed backfill idempotent. A larger stored total
+            // means live evidence already extends beyond this baseline, so its
+            // newer retained history wins.
+            var history = reconstructedTotal >= storedTotal
+                ? recent
+                : ReadRecentAgentReads(reads);
+            SetAgentReads(reads, Math.Max(storedTotal, reconstructedTotal), history);
             root["agentReads"] = reads;
             return WriteRootAtomically(companionAbs, root);
         }

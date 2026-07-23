@@ -97,6 +97,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     {
         SeedTask(TaskStates.Progress, TaskKey, "Remote runner smoke",
             "Do the remote thing and stop.");
+        Directory.CreateDirectory(Path.Combine(_watchPath, "docs", "concepts"));
+        File.WriteAllText(
+            Path.Combine(_watchPath, "docs", "concepts", "remote-runner.md"),
+            "# Remote runner\n");
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
@@ -134,6 +138,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var logResp = await client.IngestLogsAsync(new RLogIngest(TaskKey,
         [
             new RCliLine(DateTime.UtcNow, "stdout", "remote runner: starting task"),
+            new RCliLine(DateTime.UtcNow, "stdout", "● Read docs/concepts/remote-runner.md"),
             new RCliLine(DateTime.UtcNow, "stdout", "remote runner: [[TASK_DONE]]"),
         ],
             RunnerId: lease.Lease.RunnerId,
@@ -144,7 +149,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
             IdempotencyKey: "e2e-logs-1"), ct);
         Assert.NotNull(logResp);
-        Assert.Equal(2, logResp!.Appended);
+        Assert.Equal(3, logResp!.Appended);
 
         // 4. Upload evidence — decoded under the task's results/ folder.
         var content = Convert.ToBase64String(Encoding.UTF8.GetBytes("evidence bytes"));
@@ -186,6 +191,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var cliLog = File.ReadAllText(Path.Combine(moved, "logs", "cli-output.log"));
         Assert.Contains("remote runner: starting task", cliLog);
         Assert.Contains("[[TASK_DONE]]", cliLog);
+
+        using var companion = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(_watchPath, "docs", "concepts", "remote-runner.md.meta.json")));
+        var agentReads = companion.RootElement.GetProperty("agentReads");
+        using var movedTask = JsonDocument.Parse(File.ReadAllText(Path.Combine(moved, "task.json")));
+        var displayTaskKey = movedTask.RootElement.GetProperty("key").GetString();
+        Assert.Equal(1, agentReads.GetProperty("total").GetInt32());
+        Assert.Equal(displayTaskKey, agentReads.GetProperty("recent")[0].GetProperty("taskKey").GetString());
 
         var evidence = File.ReadAllText(Path.Combine(moved, "results", "runner-evidence--real.txt"));
         Assert.Equal("evidence bytes", evidence);
