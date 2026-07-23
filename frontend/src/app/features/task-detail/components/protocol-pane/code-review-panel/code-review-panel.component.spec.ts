@@ -163,6 +163,7 @@ describe('CodeReviewPanelComponent', () => {
     const entry = fixture.componentInstance.entries()[0];
     expect(fixture.componentInstance.tokenTooltip(entry)).toContain('Estimated cost: $0.0042');
     expect(fixture.componentInstance.tokenTooltip(entry)).toContain('historical list prices');
+    expect(fixture.componentInstance.tokenTooltip(entry)).toContain('0 cache read + 0 cache write');
     httpCtrl.verify();
   });
 

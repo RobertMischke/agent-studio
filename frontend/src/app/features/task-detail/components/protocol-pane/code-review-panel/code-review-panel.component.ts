@@ -299,7 +299,9 @@ export class CodeReviewPanelComponent implements OnInit {
   tokenLabel(entry: CodeReviewListEntry): string | null {
     const input = entry.inputTokens ?? entry.generation?.tokensIn ?? 0;
     const output = entry.outputTokens ?? entry.generation?.tokensOut ?? 0;
-    const total = entry.totalTokens ?? entry.generation?.tokensTotal ?? (input + output);
+    const cacheRead = entry.cacheReadTokens ?? entry.generation?.cacheReadTokens ?? 0;
+    const cacheWrite = entry.cacheCreationTokens ?? entry.generation?.cacheCreationTokens ?? 0;
+    const total = entry.totalTokens ?? entry.generation?.tokensTotal ?? (input + output + cacheRead + cacheWrite);
     if (total <= 0) return null;
     return `${this.compactTokens(input)} in / ${this.compactTokens(output)} out (${this.compactTokens(total)})`;
   }
@@ -307,11 +309,18 @@ export class CodeReviewPanelComponent implements OnInit {
   tokenTooltip(entry: CodeReviewListEntry): string {
     const input = entry.inputTokens ?? entry.generation?.tokensIn ?? 0;
     const output = entry.outputTokens ?? entry.generation?.tokensOut ?? 0;
-    const total = entry.totalTokens ?? entry.generation?.tokensTotal ?? (input + output);
+    const cacheRead = entry.cacheReadTokens ?? entry.generation?.cacheReadTokens ?? 0;
+    const cacheWrite = entry.cacheCreationTokens ?? entry.generation?.cacheCreationTokens ?? 0;
+    const total = entry.totalTokens ?? entry.generation?.tokensTotal ?? (input + output + cacheRead + cacheWrite);
     return buildTokenCostTooltip({
       costUsd: entry.estimatedApiCostUsd,
       priceKnown: entry.priceKnown === true,
-      context: `${input.toLocaleString()} input + ${output.toLocaleString()} output = ${total.toLocaleString()} total tokens. Pricing date: ${entry.runAt || 'recorded execution time'}.`,
+      context: [
+        `${input.toLocaleString()} input + ${output.toLocaleString()} output`,
+        `${cacheRead.toLocaleString()} cache read + ${cacheWrite.toLocaleString()} cache write`,
+        `${total.toLocaleString()} total tokens`,
+        `Pricing date: ${entry.runAt || 'recorded execution time'}.`,
+      ].join('\n'),
     });
   }
 
