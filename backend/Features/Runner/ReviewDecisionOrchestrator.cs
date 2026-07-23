@@ -5377,6 +5377,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     break;
                 case ReviewDecisionKind.Escalate:
                 case ReviewDecisionKind.AcceptAsDone:
+                case ReviewDecisionKind.OperatorRequeue:
                     // Chain boundary: the previous attempt chain is closed. Reset
                     // so a reopened card gets a fresh reissue budget (AGT-1935).
                     count = 0;
@@ -6032,6 +6033,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? beforeMoveFolderPath,
         string? afterMoveFolderPath)
     {
+        var epochFolder = !string.IsNullOrWhiteSpace(afterMoveFolderPath)
+            ? afterMoveFolderPath
+            : beforeMoveFolderPath;
+        record = record with
+        {
+            AttemptEpoch = record.AttemptEpoch
+                ?? OperatorReviewRequeueService.ReadEpoch(epochFolder),
+        };
         ReviewDecisionLog.Append(workspace, record);
         var result = _workspaceArtifactCommits?.TryCommitRunBoundary(
             workspace,

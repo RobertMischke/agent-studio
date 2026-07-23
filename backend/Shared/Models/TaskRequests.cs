@@ -104,6 +104,12 @@ public record ExternalCompletionResponse
 public record MoveJobRequest
 {
     public string TargetState { get; init; } = "";
+    /// <summary>
+    /// Optional operator rationale for the lane move. It is persisted on the
+    /// timeline and, for a requeue out of a decision lane, on the fresh
+    /// review-attempt epoch boundary.
+    /// </summary>
+    public string? Reason { get; init; }
 
     /// <summary>
     /// Optional 0-based insertion slot in the target lane. When supplied,
@@ -191,6 +197,7 @@ public record BatchMoveItem
     public string? WatchPath { get; init; }
     public string TargetState { get; init; } = "";
     public int? TargetIndex { get; init; }
+    public string? Reason { get; init; }
 }
 
 public record BatchMoveRequest

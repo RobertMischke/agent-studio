@@ -371,7 +371,9 @@ public static class TaskCrudEndpoints
             // detail-view lane button), so the lane-change ledger trigger is the
             // human. Auto paths (runner pickup, orchestrator, sweeps) reach
             // MoveJob without a cause and are recorded as system.
-            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex, cause: TimelineActors.Human("")));
+            return MoveResult(await transitions.MoveAsync(
+                jobId, req.TargetState, watchPath, ct, req.TargetIndex,
+                cause: TimelineActors.Human(""), reason: req.Reason));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
@@ -383,7 +385,9 @@ public static class TaskCrudEndpoints
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
 
-            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex, cause: TimelineActors.Human("")));
+            return MoveResult(await transitions.MoveAsync(
+                jobId, req.TargetState, watchPath, ct, req.TargetIndex,
+                cause: TimelineActors.Human(""), reason: req.Reason));
         });
 
         // Batch move / restore. Per-item atomic: a failure on item N must
