@@ -341,10 +341,11 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                             with { TestSelection = staged.Audit }
                         : await RunCommandsAsync(workspace!, commands, plan.Source, mode, timeout, ct)
                             .ConfigureAwait(false);
+                    var completedAudit = CompleteAudit(staged.Audit, commands, completed.Processes);
                     completed = completed with
                     {
-                        TestSelection = staged.Audit,
-                        Reason = CoverageReason(completed.Reason, staged.Audit),
+                        TestSelection = completedAudit,
+                        Reason = CoverageReason(completed.Reason, completedAudit),
                     };
                 }
             }
@@ -694,6 +695,39 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                (audit.FullSuiteRan
                    ? audit.FullSuiteRequired ? "full-suite=required-and-run" : "full-suite=run-conservatively"
                    : $"full-suite=not-run; omitted={omitted}");
+    }
+
+    private static TestSelectionAudit CompleteAudit(
+        TestSelectionAudit audit,
+        IReadOnlyList<VerifyCommand> commands,
+        IReadOnlyList<BuildTestGateProcessEvidence> processes)
+    {
+        if (audit.Level != TestExecutionLevels.Full) return audit;
+
+        // Evidence is appended once per attempted command and commands execute
+        // sequentially. A failure can stop the loop, so only the matching prefix
+        // is known to have run. An empty declared test inventory is complete
+        // after the remaining verify commands finish successfully; the verdict
+        // still guards that case at the pre-main boundary.
+        var attemptedCount = Math.Min(commands.Count, processes.Count);
+        var allTestsAttempted = commands
+            .Select((command, index) => (command, index))
+            .Where(item => item.command.Kind == VerifyCommandKind.Test)
+            .All(item => item.index < attemptedCount
+                && processes[item.index].LaunchError is null);
+        var notRun = commands
+            .Select((command, index) => (command, index))
+            .Where(item => item.command.Kind == VerifyCommandKind.Test
+                && (item.index >= attemptedCount || processes[item.index].LaunchError is not null))
+            .Select(item => TestSelectionPlanner.Describe(item.command));
+        return audit with
+        {
+            FullSuiteRan = allTestsAttempted,
+            OmittedTestCommands = audit.OmittedTestCommands
+                .Concat(notRun)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+        };
     }
 
     private static string LastEvidence(BuildTestGateProcessEvidence process)
@@ -1318,9 +1352,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         };
     }
 
-    private static bool ShouldRunForChange(VerifyCommand command, IReadOnlyList<string>? changedFiles)
+    internal static bool ShouldRunForChange(VerifyCommand command, IReadOnlyList<string>? changedFiles)
     {
         if (changedFiles is null) return true;
+        // Staged test selection has already applied diff, ownership, Test Hub,
+        // and optional model evidence. Re-applying the legacy package-prefix
+        // filter here would silently discard cross-package tests selected from
+        // history or by the adviser. It would also make an explicit full run
+        // smaller than the declared suite.
+        if (command.Kind == VerifyCommandKind.Test) return true;
         if (command.Ecosystem != VerifyEcosystem.Node || string.IsNullOrEmpty(command.WorkingSubdir))
             return true;
         var prefix = command.WorkingSubdir.Replace('\\', '/').TrimEnd('/') + "/";

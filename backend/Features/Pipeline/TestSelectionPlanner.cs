@@ -99,13 +99,12 @@ public static class TestSelectionPlanner
                     ? "diff input is unavailable; conservative fallback runs the full suite"
                     : "lane policy selected the full suite";
             var fullBaseline = ContinuousCommands(policy, blocksWorkPackage: true);
-            var selected = fullBaseline.Concat(fullTests.Select(command => command with
+            var selected = MergeTestCommands(fullBaseline.Concat(fullTests.Select(command => command with
             {
                 TestScope = TestExecutionLevels.Full,
                 BlocksWorkPackage = true,
                 SelectionReason = fullReason,
-            })).DistinctBy(command => CommandKey(command.Command, command.WorkingSubdir),
-                StringComparer.OrdinalIgnoreCase).ToList();
+            })));
             var commands = nonTests.Concat(selected).ToList();
             return new StagedVerifyPlan(commands, new TestSelectionAudit
             {
@@ -119,7 +118,10 @@ public static class TestSelectionPlanner
                     ? "mandatory-full-suite"
                     : conservativeFullSuite ? "conservative-full-suite" : "lane-full-suite",
                 FullSuiteRequired = fullSuiteRequired,
-                FullSuiteRan = true,
+                // Planning selects the full inventory. The runner flips this
+                // only after execution evidence shows that every selected test
+                // command was actually attempted.
+                FullSuiteRan = false,
             });
         }
 
@@ -157,11 +159,8 @@ public static class TestSelectionPlanner
                         ? [$"LLM adviser: {advice!.Reason}"]
                         : [])),
             }).ToList();
-        var commandsForRun = nonTests
-            .Concat(continuous)
-            .Concat(selectedTests)
-            .DistinctBy(command => $"{command.WorkingSubdir}\n{command.Command}", StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var mergedTests = MergeTestCommands(continuous.Concat(selectedTests));
+        var commandsForRun = nonTests.Concat(mergedTests).ToList();
 
         if (continuous.Count == 0) reasons.Add("continuous baseline not configured");
         if (level == TestExecutionLevels.WorkPackage && selectedTests.Count == 0)
@@ -175,10 +174,10 @@ public static class TestSelectionPlanner
             HistoryInput = history,
             Candidates = candidates,
             SelectedCandidateIds = selectedCandidates.Select(candidate => candidate.Id).ToList(),
-            SelectedCommands = continuous.Concat(selectedTests).Select(Describe).ToList(),
+            SelectedCommands = mergedTests.Select(Describe).ToList(),
             OmittedTestCommands = fullTests
                 .Select(Describe)
-                .Except(continuous.Concat(selectedTests).Select(Describe), StringComparer.OrdinalIgnoreCase)
+                .Except(mergedTests.Select(Describe), StringComparer.OrdinalIgnoreCase)
                 .ToList(),
             Reasons = reasons,
             Selector = advice is null ? "deterministic" : "deterministic+llm",
@@ -389,6 +388,43 @@ public static class TestSelectionPlanner
             })
             .ToList();
 
+    private static IReadOnlyList<VerifyCommand> MergeTestCommands(IEnumerable<VerifyCommand> commands)
+    {
+        var merged = new List<VerifyCommand>();
+        var indexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var command in commands)
+        {
+            var key = CommandKey(command.Command, command.WorkingSubdir);
+            if (!indexes.TryGetValue(key, out var index))
+            {
+                indexes[key] = merged.Count;
+                merged.Add(command);
+                continue;
+            }
+
+            var existing = merged[index];
+            // One physical command can be both part of the fixed baseline and
+            // selected for this diff. In that case the stricter classification
+            // must win, otherwise an impacted regression would be mislabeled as
+            // unrelated debt and would not block the card.
+            if ((!existing.BlocksWorkPackage && command.BlocksWorkPackage)
+                || TestScopeRank(command.TestScope) > TestScopeRank(existing.TestScope))
+            {
+                merged[index] = command;
+            }
+        }
+        return merged;
+    }
+
+    private static int TestScopeRank(string scope)
+        => scope switch
+        {
+            TestExecutionLevels.Full => 3,
+            TestExecutionLevels.WorkPackage => 2,
+            TestExecutionLevels.Continuous => 1,
+            _ => 0,
+        };
+
     private static void Add(Dictionary<string, CandidateBuilder> map, VerifyCommand command, string? reason = null)
     {
         var key = CommandKey(command.Command, command.WorkingSubdir);
@@ -427,7 +463,7 @@ public static class TestSelectionPlanner
         => $"{NormalizePath(subdir).TrimEnd('/')}\n{command.Trim()}";
 
     private static string NormalizePath(string value) => value.Replace('\\', '/').TrimStart('.', '/');
-    private static string Describe(VerifyCommand command)
+    internal static string Describe(VerifyCommand command)
         => string.IsNullOrWhiteSpace(command.WorkingSubdir)
             ? command.Command
             : $"({NormalizePath(command.WorkingSubdir)}) {command.Command}";

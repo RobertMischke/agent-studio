@@ -152,15 +152,23 @@ pipeline view.
   whether the full suite ran, and how many full-suite commands were omitted.
   Its `post-steps/build-test-gate-*.log` contains the exact diff input, history
   rows, candidate inventory, chosen ids/commands, selector/model, and reasons.
+  `FullSuiteRan` is execution evidence, not a planning claim: it becomes true
+  only after every selected full-suite test command was attempted.
 - A failing continuous-baseline command during a work-package run creates a
   separate `post-steps/test-findings-*.json` record and a `warn` gate verdict.
   It does not block the card. Selected work-package tests still block. No
-  failure is non-blocking at the pre-main full-suite boundary.
+  failure is non-blocking at the pre-main full-suite boundary. If one physical
+  command belongs to both the baseline and the diff-selected set, the stricter
+  work-package classification wins.
 - Model advice is additive and allowlisted. Deterministic diff/history choices
   cannot be removed, unknown candidate ids are ignored, and raw model output is
   never interpreted as a shell command.
 - Any operation that can advance `main` must call `PreMainTestGate` first and
   proceed only on an `Ok` result with `FullSuiteRequired` and `FullSuiteRan` set.
+  `PreMainTestGate` converts a nominally green runner result without that
+  evidence into a failure, so callers cannot accidentally accept an incomplete
+  release check. It also forces exact-subject execution even if the caller
+  supplied a weaker request.
   The current product has no automated `develop -> main` write path; the
   boundary exists for the release workflow that will introduce it.
 

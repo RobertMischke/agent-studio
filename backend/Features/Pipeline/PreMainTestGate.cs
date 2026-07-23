@@ -13,16 +13,44 @@ public sealed class PreMainTestGate
 
     public PreMainTestGate(IBuildTestGateRunner runner) => _runner = runner;
 
-    public Task<BuildTestGateResult> RunAsync(
+    public async Task<BuildTestGateResult> RunAsync(
         BuildTestGateRequest request,
         BuildProfile? profile,
         TimeSpan timeout,
         CancellationToken ct)
-        => _runner.RunAsync(
-            request with { RequiredTestLevel = TestExecutionLevels.Full },
+    {
+        var result = await _runner.RunAsync(
+            request with
+            {
+                RequireExactSubject = true,
+                RequiredTestLevel = TestExecutionLevels.Full,
+            },
             changedFiles: null,
             profile,
             PostStepMode.Fail,
             timeout,
-            ct);
+            ct).ConfigureAwait(false);
+
+        if (result.Verdict != BuildTestGateVerdict.Ok) return result;
+        if (result.TestSelection is
+            {
+                Level: TestExecutionLevels.Full,
+                FullSuiteRequired: true,
+                FullSuiteRan: true,
+            })
+        {
+            return result;
+        }
+
+        const string reason =
+            "pre-main gate rejected an incomplete result: mandatory full-suite evidence is missing";
+        return result with
+        {
+            Verdict = BuildTestGateVerdict.Fail,
+            Reason = reason,
+            FailureKind = BuildTestGateFailureKind.Code,
+            FailureFingerprint = BuildTestGateRunner.Fingerprint(
+                BuildTestGateFailureKind.Code, reason),
+        };
+    }
 }

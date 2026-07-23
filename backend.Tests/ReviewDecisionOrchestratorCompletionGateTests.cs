@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
+using System.Text.Json;
 
 using Xunit;
 
@@ -254,8 +255,12 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
             {
                 Level = TestExecutionLevels.WorkPackage,
                 DiffInput = ["src/feature.cs"],
+                SelectedCandidateIds = ["test-feature"],
                 SelectedCommands = ["test-feature", "test-baseline"],
                 OmittedTestCommands = ["test-all"],
+                Selector = "deterministic+llm",
+                SelectorModel = "model-x",
+                AdvisorReason = "shared namespace risk",
             },
             Findings = [new BuildTestGateFinding(
                 "out-of-work-package-test-failure",
@@ -281,6 +286,17 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         var gateLog = File.ReadAllText(Path.Combine(folder, "post-steps", "build-test-gate-1.log"));
         Assert.Contains("\"Level\": \"work-package\"", gateLog);
         Assert.Contains("\"src/feature.cs\"", gateLog);
+        var selectionStart = gateLog.IndexOf("--- test-selection.json ---\n", StringComparison.Ordinal)
+            + "--- test-selection.json ---\n".Length;
+        var selectionEnd = gateLog.IndexOf(
+            "\n--- process-evidence.json ---", selectionStart, StringComparison.Ordinal);
+        var loggedSelection = JsonSerializer.Deserialize<TestSelectionAudit>(
+            gateLog[selectionStart..selectionEnd]);
+        Assert.NotNull(loggedSelection);
+        Assert.Equal(["test-feature"], loggedSelection!.SelectedCandidateIds);
+        Assert.Equal("deterministic+llm", loggedSelection.Selector);
+        Assert.Equal("model-x", loggedSelection.SelectorModel);
+        Assert.Equal("shared namespace risk", loggedSelection.AdvisorReason);
         Assert.True(aspect.Invocations > 0);
     }
 

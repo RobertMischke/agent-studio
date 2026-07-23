@@ -136,10 +136,57 @@ public sealed class TestSelectionPlannerTests : IDisposable
 
         Assert.Equal(TestExecutionLevels.Full, result.Audit.Level);
         Assert.True(result.Audit.FullSuiteRequired);
-        Assert.True(result.Audit.FullSuiteRan);
+        Assert.False(result.Audit.FullSuiteRan);
         Assert.Equal(["test-smoke", "test-a", "test-b"],
             result.Commands.Select(command => command.Command));
         Assert.All(result.Commands, command => Assert.True(command.BlocksWorkPackage));
+    }
+
+    [Fact]
+    public void SelectedNodeTest_IsNotRemovedByLegacyPackageDiffFilter()
+    {
+        var selectedFromHistoryOrLlm = new VerifyCommand(
+            VerifyEcosystem.Node,
+            VerifyCommandKind.Test,
+            "frontend",
+            "npm test")
+        {
+            TestScope = TestExecutionLevels.WorkPackage,
+            SelectionReason = "Test Hub history selected a cross-package regression",
+        };
+
+        Assert.True(BuildTestGateRunner.ShouldRunForChange(
+            selectedFromHistoryOrLlm,
+            ["backend/Shared/Contract.cs"]));
+    }
+
+    [Fact]
+    public void BaselineCommand_SelectedForDiff_IsBlockingAndRunsOnlyOnce()
+    {
+        var verify = new VerifyPlan([
+            new(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", "test-fast"),
+            new(VerifyEcosystem.Custom, VerifyCommandKind.Test, "", "test-other"),
+        ], VerifyPlan.SourceBuildProfile);
+        var policy = new TestExecutionPolicy
+        {
+            ContinuousCommands = ["test-fast"],
+            ImpactRules = [new TestImpactRule
+            {
+                PathPrefixes = ["src/feature"],
+                TestCommands = ["test-fast"],
+                Reason = "feature regression set",
+            }],
+        };
+
+        var result = TestSelectionPlanner.Plan(
+            _root, verify, ["src/feature/component.cs"], policy,
+            TaskStates.AutoReview, requiredLevel: null);
+
+        var selected = Assert.Single(result.Commands);
+        Assert.Equal("test-fast", selected.Command);
+        Assert.True(selected.BlocksWorkPackage);
+        Assert.Equal(TestExecutionLevels.WorkPackage, selected.TestScope);
+        Assert.Contains("feature regression set", selected.SelectionReason);
     }
 
     private void Write(string relativePath, string contents)
@@ -157,22 +204,57 @@ public sealed class PreMainTestGateTests
     {
         var runner = new CapturingGateRunner();
         var gate = new PreMainTestGate(runner);
-        var request = new BuildTestGateRequest("/repo", "abc", "release")
+        var request = new BuildTestGateRequest(
+            "/repo", "abc", "release", RequireExactSubject: false)
         {
             Lane = TaskStates.Ready,
             RequiredTestLevel = TestExecutionLevels.Continuous,
         };
 
-        await gate.RunAsync(request, new BuildProfile(), TimeSpan.FromMinutes(1), CancellationToken.None);
+        var result = await gate.RunAsync(
+            request, new BuildProfile(), TimeSpan.FromMinutes(1), CancellationToken.None);
 
         Assert.NotNull(runner.Request);
         Assert.Equal(TestExecutionLevels.Full, runner.Request!.RequiredTestLevel);
+        Assert.True(runner.Request.RequireExactSubject);
         Assert.Null(runner.ChangedFiles);
         Assert.Equal(PostStepMode.Fail, runner.Mode);
+        Assert.Equal(BuildTestGateVerdict.Ok, result.Verdict);
+    }
+
+    [Fact]
+    public async Task RunAsync_RejectsGreenRunnerResultWithoutFullSuiteEvidence()
+    {
+        var runner = new CapturingGateRunner
+        {
+            Result = new BuildTestGateResult(
+                BuildTestGateVerdict.Ok, 0, 1, "", "claimed green", false, false),
+        };
+        var gate = new PreMainTestGate(runner);
+
+        var result = await gate.RunAsync(
+            new BuildTestGateRequest("/repo", "abc", "release"),
+            new BuildProfile(),
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None);
+
+        Assert.Equal(BuildTestGateVerdict.Fail, result.Verdict);
+        Assert.Equal(BuildTestGateFailureKind.Code, result.FailureKind);
+        Assert.Contains("mandatory full-suite evidence is missing", result.Reason);
     }
 
     private sealed class CapturingGateRunner : IBuildTestGateRunner
     {
+        public BuildTestGateResult Result { get; init; } = new(
+            BuildTestGateVerdict.Ok, 0, 1, "", "ok", false, false)
+        {
+            TestSelection = new TestSelectionAudit
+            {
+                Level = TestExecutionLevels.Full,
+                FullSuiteRequired = true,
+                FullSuiteRan = true,
+            },
+        };
         public BuildTestGateRequest? Request { get; private set; }
         public IReadOnlyList<string>? ChangedFiles { get; private set; }
         public PostStepMode Mode { get; private set; }
@@ -188,8 +270,7 @@ public sealed class PreMainTestGateTests
             Request = request;
             ChangedFiles = changedFiles;
             Mode = mode;
-            return Task.FromResult(new BuildTestGateResult(
-                BuildTestGateVerdict.Ok, 0, 1, "", "ok", false, false));
+            return Task.FromResult(Result);
         }
     }
 }
@@ -277,6 +358,38 @@ public sealed class StagedBuildTestGateBehaviorTests : IDisposable
             $"expected isolated subset to save at least 350 ms, work={workPackage.DurationMs} full={full.DurationMs}");
         Assert.False(workPackage.TestSelection!.FullSuiteRan);
         Assert.True(full.TestSelection!.FullSuiteRan);
+    }
+
+    [Fact]
+    public async Task FullSuiteEvidence_RemainsFalseWhenBuildStopsBeforeTests()
+    {
+        var testMarker = Path.Combine(_root, "full-test-ran.txt");
+        var writeMarker = OperatingSystem.IsWindows()
+            ? $"type nul > \"{testMarker}\""
+            : $"touch \"{testMarker}\"";
+        var request = new BuildTestGateRequest(_root, null, "release", RequireExactSubject: false)
+        {
+            RequiredTestLevel = TestExecutionLevels.Full,
+        };
+
+        var result = await _runner.RunAsync(
+            request,
+            changedFiles: null,
+            new BuildProfile
+            {
+                BuildCmds = ["exit 7"],
+                TestCmds = [writeMarker],
+            },
+            PostStepMode.Fail,
+            TimeSpan.FromSeconds(10),
+            CancellationToken.None);
+
+        Assert.Equal(BuildTestGateVerdict.Fail, result.Verdict);
+        Assert.True(result.TestSelection!.FullSuiteRequired);
+        Assert.False(result.TestSelection.FullSuiteRan);
+        Assert.Contains(writeMarker, result.TestSelection.OmittedTestCommands);
+        Assert.False(File.Exists(testMarker));
+        Assert.Contains("full-suite=not-run", result.Reason);
     }
 
     private static string WaitCommand(int milliseconds)
