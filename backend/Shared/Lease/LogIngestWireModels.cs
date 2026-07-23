@@ -14,7 +14,11 @@ public sealed record LogIngestRequest(
     List<CliOutputLine> Lines,
     string? RunnerId = null,
     string? LeaseId = null,
-    long FencingToken = 0);
+    long FencingToken = 0,
+    string? AttemptId = null,
+    long? Fence = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record LogIngestResponse(string TaskKey, int Appended, string? Message = null);
 
@@ -28,7 +32,11 @@ public sealed record ArtifactIngestRequest(
     List<RunnerArtifactUpload> Artifacts,
     string? RunnerId = null,
     string? LeaseId = null,
-    long FencingToken = 0);
+    long FencingToken = 0,
+    string? AttemptId = null,
+    long? Fence = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record RunnerArtifactUpload(string Path, string ContentBase64);
 

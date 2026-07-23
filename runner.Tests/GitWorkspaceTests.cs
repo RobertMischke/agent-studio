@@ -64,6 +64,8 @@ public sealed class GitWorkspaceTests : IDisposable
         var result = await workspace.TeardownAsync("Done", CancellationToken.None);
 
         Assert.False(result.SecuredWork);
+        Assert.False(string.IsNullOrWhiteSpace(result.ResultSha));
+        Assert.Equal((await GitAsync(_origin, "rev-parse", "refs/heads/main")).StdOut, result.ResultSha);
         Assert.False(Directory.Exists(workspace.RepoPath));
         var branch = await RunGitAsync(_origin, "show-ref", "--verify", "--quiet",
             "refs/heads/runner/runner-test/AGT-2147");

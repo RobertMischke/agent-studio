@@ -115,6 +115,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly ILogger<ReviewDecisionOrchestrator> _logger;
     private readonly TaskSessionLog? _sessions;
     private readonly GitService? _git;
+    private readonly AttemptAuthorityService? _attemptAuthority;
 
     /// <summary>
     /// Default aspect runner ids when <c>ReviewDecisionOrchestrator:AspectRunners</c>
@@ -253,7 +254,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         TaskSpawnerPostStepRunner? taskSpawner = null,
         WikiTaskCrossReferenceService? wikiTaskCrossReferences = null,
         AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
-        PipelineStepEconomyAdvisor? pipelineStepEconomy = null)
+        PipelineStepEconomyAdvisor? pipelineStepEconomy = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -283,6 +285,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _taskSpawner = taskSpawner;
         _wikiTaskCrossReferences = wikiTaskCrossReferences;
         _agentsWikiSync = agentsWikiSync;
+        _attemptAuthority = attemptAuthority;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -5756,6 +5759,25 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // faster than the original folder-walk + ScanAllJobs FirstOrDefault.
         foreach (var info in _taskAccess.ListByLaneInWorkspace(entry.Path, TaskStates.AutoReview))
         {
+            // Canonical ReviewAttempts belong to the remote review data plane.
+            // Until that executor claims the attempt, leaving the card in Auto
+            // Review is the fail-closed state. The legacy Task Server review
+            // loop must not infer a subject from session-events or inspect its
+            // own project checkout for a Remote result.
+            var authorityKey = _attemptAuthority is null
+                ? null
+                : new[] { info.Key, info.TaskKey, info.Id }
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(value => !_attemptAuthority.GetTaskProjection(value!).LegacyTask);
+            if (authorityKey is not null)
+            {
+                _logger.LogDebug(
+                    "ReviewDecisionOrchestrator skipped canonical remote review {TaskKey}; awaiting fenced ReviewAttempt executor.",
+                    authorityKey);
+                continue;
+            }
+
             var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath))
             {

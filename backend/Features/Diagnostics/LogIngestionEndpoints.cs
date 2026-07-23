@@ -21,7 +21,12 @@ public static class LogIngestionEndpoints
 {
     public static void MapLogIngestionEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/runner/logs", (LogIngestRequest req, HttpContext context, ITaskScanner scanner, RunLeaseService leases) =>
+        app.MapPost("/api/runner/logs", (
+            LogIngestRequest req,
+            HttpContext context,
+            ITaskScanner scanner,
+            RunLeaseService leases,
+            AttemptAuthorityService authority) =>
         {
             if (!RunnerLeaseAuthorization.IsCurrent(context, leases, req.TaskKey, req.RunnerId, req.LeaseId, req.FencingToken))
                 return Results.Conflict(new LogIngestResponse(req.TaskKey, 0, "The authenticated Runner does not hold the current fenced lease."));
@@ -33,7 +38,6 @@ public static class LogIngestionEndpoints
                 return Results.NotFound(new LogIngestResponse(req.TaskKey, 0, $"No task '{req.TaskKey}'."));
 
             var logsDir = Path.Combine(folder, "logs");
-            Directory.CreateDirectory(logsDir);
             var logPath = Path.Combine(logsDir, "cli-output.log");
 
             var rendered = string.Join(Environment.NewLine,
@@ -41,15 +45,32 @@ public static class LogIngestionEndpoints
 
             try
             {
-                var hasContent = File.Exists(logPath) && new FileInfo(logPath).Length > 0;
-                var payload = (hasContent ? Environment.NewLine : string.Empty) + rendered;
-                // FileShare.ReadWrite: the durable log is read concurrently by the
-                // projection + activity-log endpoint; an exclusive open would 500 them.
-                using var fs = new FileStream(
-                    logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-                var bytes = Encoding.UTF8.GetBytes(payload);
-                fs.Write(bytes, 0, bytes.Length);
-                fs.Flush(flushToDisk: true);
+                void Append()
+                {
+                    Directory.CreateDirectory(logsDir);
+                    var hasContent = File.Exists(logPath) && new FileInfo(logPath).Length > 0;
+                    var payload = (hasContent ? Environment.NewLine : string.Empty) + rendered;
+                    // FileShare.ReadWrite: the durable log is read concurrently by the
+                    // projection + activity-log endpoint; an exclusive open would 500 them.
+                    using var fs = new FileStream(
+                        logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                    var bytes = Encoding.UTF8.GetBytes(payload);
+                    fs.Write(bytes, 0, bytes.Length);
+                    fs.Flush(flushToDisk: true);
+                }
+
+                var authorityResult = Authorize(req, authority, Append);
+                if (authorityResult is not null)
+                {
+                    if (authorityResult.Status == AttemptWriteStatus.Duplicate)
+                        return Results.Ok(new LogIngestResponse(req.TaskKey, 0, "duplicate delivery"));
+                    if (authorityResult.Status != AttemptWriteStatus.Accepted)
+                        return Results.Conflict(authorityResult);
+                }
+                else
+                {
+                    Append();
+                }
             }
             catch (Exception ex)
             {
@@ -58,6 +79,28 @@ public static class LogIngestionEndpoints
 
             return Results.Ok(new LogIngestResponse(req.TaskKey, req.Lines.Count));
         });
+    }
+
+    private static AttemptWriteResult? Authorize(
+        LogIngestRequest req,
+        AttemptAuthorityService authority,
+        Action append)
+    {
+        var projection = authority.GetTaskProjection(req.TaskKey);
+        if (string.IsNullOrWhiteSpace(req.AttemptId) || !req.Fence.HasValue
+            || !req.AuthorityEpoch.HasValue || string.IsNullOrWhiteSpace(req.IdempotencyKey))
+        {
+            return projection.LegacyTask
+                ? null
+                : new AttemptWriteResult(AttemptWriteStatus.Invalid, req.AttemptId ?? string.Empty,
+                    "Canonical runner writes require AttemptId, Fence, AuthorityEpoch, and IdempotencyKey.");
+        }
+        return authority.ExecuteRunWrite(
+            new AttemptWriteReference(
+                req.AttemptId, req.Fence.Value, req.AuthorityEpoch.Value, req.IdempotencyKey),
+            "log",
+            req.TaskKey,
+            append);
     }
 
     private static string? ResolveFolder(ITaskScanner scanner, string taskKey)

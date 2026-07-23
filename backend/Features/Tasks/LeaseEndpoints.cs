@@ -1,4 +1,5 @@
 using AgentStudio.Pipeline;
+using System.Text;
 
 namespace AgentStudio.Tasks;
 
@@ -28,31 +29,68 @@ public static class LeaseEndpoints
     {
         var group = app.MapGroup("/api/runner/lease");
 
-        group.MapPost("/acquire", (RunLeaseAcquireRequest req, HttpContext context, ITaskScanner scanner, ProjectSettingsService settings, RunLeaseService leases, RunnerIdentity identity) =>
+        group.MapPost("/acquire", async (
+            RunLeaseAcquireRequest req,
+            HttpContext context,
+            ITaskScanner scanner,
+            ProjectSettingsService settings,
+            AgentStudio.Registry.ProjectRegistry projects,
+            RunLeaseService leases,
+            RunnerIdentity identity,
+            CancellationToken ct) =>
         {
             if (!RunnerMatches(context, req.RunnerId, req.RunnerName)) return Results.Unauthorized();
-            var task = FindTask(scanner, req.TaskKey);
-            if (task is null)
-                return Results.NotFound(new RunLeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
-            if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal principal)
+            await ClaimGate.WaitAsync(ct);
+            try
             {
-                var project = settings.Get(task.ProjectName);
-                var assigned = project.ExecutionRunner;
-                if (!project.RemoteExecutionEnabled || string.IsNullOrWhiteSpace(assigned)
-                    || !(string.Equals(assigned, principal.RunnerId, StringComparison.OrdinalIgnoreCase)
-                         || string.Equals(assigned, principal.RunnerName, StringComparison.OrdinalIgnoreCase)))
-                    return Results.Json(new RunLeaseResponse(
-                        "ProjectDenied", false, null,
-                        "The Runner is not assigned to this remote-enabled project."), statusCode: StatusCodes.Status403Forbidden);
+                var task = FindTask(scanner, req.TaskKey);
+                if (task is null)
+                    return Results.NotFound(new RunLeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
+                if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal principal)
+                {
+                    var settingsProject = settings.Get(task.ProjectName);
+                    var assigned = settingsProject.ExecutionRunner;
+                    if (!settingsProject.RemoteExecutionEnabled || string.IsNullOrWhiteSpace(assigned)
+                        || !(string.Equals(assigned, principal.RunnerId, StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(assigned, principal.RunnerName, StringComparison.OrdinalIgnoreCase)))
+                        return Results.Json(new RunLeaseResponse(
+                            "ProjectDenied", false, null,
+                            "The Runner is not assigned to this remote-enabled project."), statusCode: StatusCodes.Status403Forbidden);
+                }
+                var project = projects.FindByStorageLocation(task.WatchPath)
+                              ?? projects.FindByIdOrDisplayName(task.ProjectName);
+                var clientId = context.Items["ClientId"] as string
+                               ?? context.Request.Headers["X-Client-Id"].ToString();
+                var canonical = StampIdentity(req, identity) with
+                {
+                    RepositoryId = string.IsNullOrWhiteSpace(project?.Id) ? task.ProjectName : project.Id,
+                    ClientId = string.IsNullOrWhiteSpace(clientId) ? null : clientId,
+                };
+                return Results.Ok(leases.TryAcquire(canonical));
             }
-            return Results.Ok(leases.TryAcquire(StampIdentity(req, identity)));
+            finally
+            {
+                ClaimGate.Release();
+            }
         });
 
         group.MapPost("/renew", (RunLeaseHeartbeatRequest req, HttpContext context, RunLeaseService leases) =>
-            RunnerMatches(context, req.RunnerId) ? Results.Ok(leases.Renew(req)) : Results.Unauthorized());
+            !RunnerMatches(context, req.RunnerId)
+                ? Results.Unauthorized()
+                : CanonicalLeaseWritePresent(req.AttemptId, req.AuthorityEpoch, req.IdempotencyKey)
+                    ? Results.Ok(leases.Renew(req))
+                    : Results.Conflict(new RunLeaseResponse(
+                        "Invalid", false, null,
+                        "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease renewal.")));
 
         group.MapPost("/release", (RunLeaseReleaseRequest req, HttpContext context, RunLeaseService leases) =>
-            RunnerMatches(context, req.RunnerId) ? Results.Ok(leases.Release(req)) : Results.Unauthorized());
+            !RunnerMatches(context, req.RunnerId)
+                ? Results.Unauthorized()
+                : CanonicalLeaseWritePresent(req.AttemptId, req.AuthorityEpoch, req.IdempotencyKey)
+                    ? Results.Ok(leases.Release(req))
+                    : Results.Conflict(new RunLeaseResponse(
+                        "Invalid", false, null,
+                        "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease release.")));
 
         group.MapGet("/{taskKey}", (string taskKey, RunLeaseService leases) =>
             Results.Ok(leases.Peek(taskKey)));
@@ -105,6 +143,7 @@ public static class LeaseEndpoints
             {
                 var allWithArchive = scanner.ScanAllJobsWithArchive();
                 var waitsOn = TaskReferenceIndex.Build(allWithArchive);
+                var recoveredSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 // A daemon restart releases its lease but may leave the card in
                 // Progress. Requeue only server-assigned remote work whose lease
@@ -122,9 +161,16 @@ public static class LeaseEndpoints
                         continue;
                     var interruptedKey = interrupted.Key ?? interrupted.TaskKey ?? interrupted.Id;
                     if (leases.Peek(interruptedKey).Outcome != "Free") continue;
+                    var recoveryWrite = leases.CurrentWriteReference(
+                        interruptedKey,
+                        $"lane-recovery:{interruptedKey}:{req.RunnerId.Trim()}");
                     await transitions.MoveAsync(
                         interrupted.Id, TaskStates.Ready, interrupted.WatchPath, ct,
-                        cause: $"remote-runner-lease-recovery:{req.RunnerName.Trim()}");
+                        cause: $"remote-runner-lease-recovery:{req.RunnerName.Trim()}",
+                        authorityWrite: recoveryWrite,
+                        suppressProductExecution: true);
+                    if (recoveryWrite is not null)
+                        recoveredSources[interruptedKey] = recoveryWrite.AttemptId;
                 }
 
                 var eligible = scanner.ScanAllJobs()
@@ -188,19 +234,35 @@ public static class LeaseEndpoints
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
+                var claimKey = string.IsNullOrWhiteSpace(req.IdempotencyKey)
+                    ? $"claim:{taskKey}:{req.RunnerId.Trim()}:{Guid.NewGuid():N}"
+                    : req.IdempotencyKey.Trim();
                 var acquire = leases.TryAcquire(new RunLeaseAcquireRequest(
                     taskKey, req.RunnerId.Trim(), req.RunnerName.Trim(), req.Hostname,
-                    req.Pid, req.BackendName, req.RequestedTtlSeconds) { ClientId = clientId });
+                    req.Pid, req.BackendName, req.RequestedTtlSeconds,
+                    repository.ProjectId,
+                    SourceRunAttemptId: recoveredSources.GetValueOrDefault(taskKey),
+                    IdempotencyKey: claimKey)
+                {
+                    ClientId = string.IsNullOrWhiteSpace(clientId) ? null : clientId,
+                });
                 if (!acquire.Granted || acquire.Lease is null)
                     return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome));
 
                 var move = await transitions.MoveAsync(
                     candidate.Id, TaskStates.Progress, candidate.WatchPath, ct,
-                    cause: $"remote-runner:{req.RunnerName.Trim()}");
+                    cause: $"remote-runner:{req.RunnerName.Trim()}",
+                    authorityWrite: new AttemptWriteReference(
+                        acquire.Lease.AttemptId!,
+                        acquire.Lease.FencingToken,
+                        acquire.Lease.AuthorityEpoch,
+                        $"lane-claim:{claimKey}"));
                 if (move.Status != MoveJobStatus.Success)
                 {
                     leases.Release(new RunLeaseReleaseRequest(
-                        taskKey, acquire.Lease.LeaseId, acquire.Lease.FencingToken, req.RunnerId.Trim()));
+                        taskKey, acquire.Lease.LeaseId, acquire.Lease.FencingToken, req.RunnerId.Trim(),
+                        acquire.Lease.AttemptId, acquire.Lease.AuthorityEpoch,
+                        $"claim-rollback:{taskKey}:{acquire.Lease.LeaseId}"));
                     logger.LogWarning(
                         "remote-runner-claim-move-failed project={Project} task={TaskKey} runner={Runner} status={Status} message={Message}",
                         candidate.ProjectName, taskKey, req.RunnerName, move.Status, move.Message);
@@ -311,6 +373,7 @@ public static class LeaseEndpoints
             TaskScannerService scanner,
             TaskTransitionService transitions,
             RunLeaseService leases,
+            AttemptAuthorityService authority,
             TimelineLog timeline,
             AccessSecurityStore accessSecurity,
             WorkspaceArtifactCommitService artifactCommits,
@@ -322,12 +385,10 @@ public static class LeaseEndpoints
             CancellationToken ct) =>
         {
             if (!RunnerMatches(context, req.RunnerId)) return Results.Unauthorized();
+            await ClaimGate.WaitAsync(ct);
+            try
+            {
             var reportedOutcome = req.Outcome ?? string.Empty;
-            if (!leases.IsCurrent(req.TaskKey, req.LeaseId, req.FencingToken, req.RunnerId))
-                return Results.Conflict(new RemoteRunCompletionResponse(
-                    req.TaskKey, reportedOutcome, TaskStates.Progress,
-                    "Lease id, fencing token, or runner id does not match the current holder."));
-
             var task = scanner.ScanAllJobs().FirstOrDefault(t =>
                 string.Equals(t.TaskKey, req.TaskKey, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(t.Id, req.TaskKey, StringComparison.OrdinalIgnoreCase)
@@ -361,10 +422,86 @@ public static class LeaseEndpoints
             {
                 return Results.BadRequest(new RemoteRunCompletionResponse(
                     req.TaskKey, reportedOutcome, TaskStates.Progress,
-                    "Done/NoOp completion requires a full fenced ResultSha and AttemptChainId equal to the current lease id."));
+                    "Done/NoOp completion requires a full fenced ResultSha and AttemptChainId equal to the current lease id.",
+                    RunAttemptId: req.AttemptId,
+                    FailureClassification: AttemptWriteStatus.Invalid.ToString()));
             }
 
-            var source = CredentialRedactor.Redact(string.IsNullOrWhiteSpace(req.Source) ? req.RunnerId : req.Source.Trim());
+            if (string.IsNullOrWhiteSpace(req.AttemptId)
+                || !req.AuthorityEpoch.HasValue
+                || string.IsNullOrWhiteSpace(req.IdempotencyKey))
+            {
+                return Results.Conflict(new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, TaskStates.Progress,
+                    "Attempt ID, fence, authority epoch, and idempotency key are required for Remote completion.",
+                    RunAttemptId: req.AttemptId,
+                    FailureClassification: AttemptWriteStatus.Invalid.ToString()));
+            }
+
+            var attemptId = req.AttemptId.Trim();
+            var epoch = req.AuthorityEpoch.Value;
+            // Result-SHA is independent authority. A salvage commit is useful
+            // evidence, but it must never be promoted into the review subject.
+            var resultSha = req.ResultSha;
+            var completionKey = req.IdempotencyKey.Trim();
+            var settled = authority.SettleRun(
+                new AttemptWriteReference(attemptId, req.FencingToken, epoch, completionKey),
+                outcome,
+                resultSha,
+                req.Reason,
+                req.RunnerId,
+                req.LeaseId,
+                req.TaskKey,
+                requireResultSha: !isEpicPlanning);
+            if (!settled.Accepted)
+            {
+                var response = new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, task.State, settled.Message,
+                    RunAttemptId: attemptId,
+                    FailureClassification: settled.Status.ToString());
+                return settled.Status == AttemptWriteStatus.Invalid
+                    ? Results.BadRequest(response)
+                    : Results.Conflict(response);
+            }
+
+            ReviewAttemptDto? reviewAttempt = null;
+            if (!isEpicPlanning && outcome is ("done" or "noop"))
+            {
+                var requirementsPath = Path.Combine(task.FolderPath, "prompt.md");
+                var requirements = File.Exists(requirementsPath) ? File.ReadAllText(requirementsPath) : task.Id;
+                var run = settled.RunAttempt!;
+                var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+                    req.TaskKey,
+                    run.RepositoryId,
+                    run.ResultSha!,
+                    run.AttemptId,
+                    AttemptAuthorityService.Hash(requirements),
+                    AttemptAuthorityService.Hash("remote-review-policy:v1"),
+                    run.EvidenceDigests,
+                    $"review-subject:{run.AttemptId}:{run.ResultSha}"));
+                if (!review.Accepted)
+                {
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey, reportedOutcome, task.State, review.Message,
+                        RunAttemptId: run.AttemptId,
+                        FailureClassification: review.Status.ToString()));
+                }
+                reviewAttempt = review.ReviewAttempt;
+            }
+
+            if (!isEpicPlanning
+                && settled.Status == AttemptWriteStatus.Duplicate
+                && string.Equals(task.State, targetState, StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Ok(new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, targetState, "duplicate delivery",
+                    RunAttemptId: attemptId,
+                    ReviewAttemptId: reviewAttempt?.AttemptId,
+                    ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
+            }
+
+            var source = CredentialRedactor.Redact(
+                string.IsNullOrWhiteSpace(req.Source) ? req.RunnerId : req.Source.Trim());
             var salvageBranch = CredentialRedactor.Redact(req.SalvageBranch);
             var salvageCommitSha = CredentialRedactor.Redact(req.SalvageCommitSha);
             var salvageBranchUrl = CredentialRedactor.Redact(req.SalvageBranchUrl);
@@ -374,6 +511,10 @@ public static class LeaseEndpoints
                 ["cli"] = "remote-runner",
                 ["status"] = outcome,
                 ["runner"] = source,
+                ["runAttemptId"] = attemptId,
+                ["fence"] = req.FencingToken.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["authorityEpoch"] = epoch.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["idempotencyKey"] = completionKey,
                 ["sentinel"] = outcome switch
                 {
                     "needsinput" => "TASK_NEEDS_INPUT",
@@ -405,6 +546,18 @@ public static class LeaseEndpoints
                 details["salvageAuthoritativeBaseBranch"] = req.SalvageAuthoritativeBaseBranch;
             if (!string.IsNullOrWhiteSpace(req.SalvageAuthoritativeBaseSha))
                 details["salvageAuthoritativeBaseSha"] = req.SalvageAuthoritativeBaseSha;
+            if (reviewAttempt is not null)
+            {
+                details["reviewAttemptId"] = reviewAttempt.AttemptId;
+                details["reviewSubjectId"] = reviewAttempt.Subject.SubjectId;
+                details["expectedResultSha"] = reviewAttempt.Subject.ExpectedResultSha;
+            }
+            var gateFile = WriteGateItems(task.FolderPath, req.GateItems);
+            if (gateFile is not null)
+            {
+                details["gateItems"] = string.Join(" | ", req.GateItems!);
+                artifactCommits.TryCommitArtifactUpload(null, task.Id, task.FolderPath, [gateFile]);
+            }
             if (!string.IsNullOrWhiteSpace(salvageBranch)
                 && !string.IsNullOrWhiteSpace(salvageCommitSha))
             {
@@ -433,54 +586,49 @@ public static class LeaseEndpoints
                 artifactCommits.TryCommitArtifactUpload(
                     null, task.Id, task.FolderPath, ["results/deliverables.md"]);
             }
-            if (targetState == TaskStates.AutoReview && !isEpicPlanning)
+            var timelineAlreadyRecorded = timeline.ReadAll(task.FolderPath).Any(evt =>
+                evt.Details is not null
+                && evt.Details.TryGetValue("idempotencyKey", out var recordedKey)
+                && string.Equals(recordedKey, completionKey, StringComparison.Ordinal));
+            if (!timelineAlreadyRecorded && !timeline.Append(
+                    task.FolderPath,
+                    TimelineEventKinds.AgentRunFinished,
+                    TimelineActors.Agent,
+                    summary: $"remote run {outcome} on {source}",
+                    runId: attemptId,
+                    details: details))
             {
-                try
-                {
-                    ReviewSubjectStore.Write(task.FolderPath, new ReviewSubjectRecord
-                    {
-                        TaskKey = req.TaskKey,
-                        Project = task.ProjectName,
-                        Repository = req.Repository?.Trim() ?? string.Empty,
-                        ResultSha = req.ResultSha!,
-                        AttemptChainId = req.AttemptChainId!,
-                        Executor = source,
-                        LeaseId = req.LeaseId,
-                        FencingToken = req.FencingToken,
-                        ResultRef = req.SalvageBranch,
-                        CompletedAtUtc = DateTimeOffset.UtcNow,
-                    });
-                }
-                catch (Exception ex)
-                {
-                    loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogError(
-                        ex, "remote-runner-completion could not persist review subject for {TaskKey}", req.TaskKey);
-                    return Results.Conflict(new RemoteRunCompletionResponse(
-                        req.TaskKey, reportedOutcome, TaskStates.Progress,
-                        "Canonical review subject could not be persisted; completion failed closed."));
-                }
+                return Results.Problem(
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Remote completion timeline persistence failed",
+                    detail: $"RunAttempt '{attemptId}' is settled, but its idempotent timeline fact was not persisted. Retry the same completion delivery.");
             }
-            timeline.Append(
-                task.FolderPath,
-                TimelineEventKinds.AgentRunFinished,
-                TimelineActors.Agent,
-                summary: $"remote run {outcome} on {source}",
-                details: details);
+
+            var laneWrite = new AttemptWriteReference(
+                attemptId,
+                req.FencingToken,
+                epoch,
+                $"lane-completion:{completionKey}");
 
             if (isEpicPlanning)
             {
-                // Epic planning has no coding transition side effects. Move the
-                // container first through the lane authority, then finalize the
-                // plan against its rebound folder. Invalid output immediately
-                // recovers that same Epic from AutoReview to Backlog inside the
-                // shared lifecycle.
-                var planningMove = states.MoveJob(
-                    task.Id, TaskStates.AutoReview, task.WatchPath,
-                    cause: $"remote-epic-planning-completion:{source}");
-                if (planningMove.Status != MoveJobStatus.Success)
-                    return Results.Conflict(new RemoteRunCompletionResponse(
-                        req.TaskKey, reportedOutcome, task.State,
-                        $"Epic planning lane move refused: {planningMove.Status} {planningMove.Message}"));
+                // Epic planning is source-read-only and owns no ReviewSubject.
+                // It still uses the canonical RunAttempt for its lane write and
+                // completion evidence, then delegates child creation to the
+                // shared idempotent decomposition lifecycle.
+                if (!string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
+                {
+                    var planningMove = states.MoveJob(
+                        task.Id, TaskStates.AutoReview, task.WatchPath,
+                        cause: $"remote-epic-planning-completion:{source}",
+                        authorityWrite: laneWrite);
+                    if (planningMove.Status != MoveJobStatus.Success)
+                        return Results.Conflict(new RemoteRunCompletionResponse(
+                            req.TaskKey, reportedOutcome, task.State,
+                            $"Epic planning lane move refused: {planningMove.Status} {planningMove.Message}",
+                            RunAttemptId: attemptId));
+                }
+
                 task = scanner.FindJob(task.Id, task.WatchPath) ?? task;
                 var invalidationReason = req.SourceMutated
                     ? "Epic planning mutated the read-only product checkout"
@@ -501,21 +649,38 @@ public static class LeaseEndpoints
                         req.TaskKey, reportedOutcome, TaskStates.Backlog,
                         req.SourceMutated
                             ? "Epic planning attempted to mutate the read-only checkout; no children were created."
-                            : finalized.Error));
+                            : finalized.Error,
+                        RunAttemptId: attemptId));
                 }
                 loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogInformation(
                     "remote-epic-planning-completion project={Project} task={TaskKey} runner={Runner} children={Children} token={FencingToken}",
                     task.ProjectName, req.TaskKey, source, finalized.CreatedTaskIds.Count, req.FencingToken);
+                if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal epicPrincipal)
+                {
+                    accessSecurity.AppendRunAudit(new RunSecurityAuditEvent(
+                        DateTime.UtcNow, "completion", req.TaskKey, task.ProjectName,
+                        InitiatingPrincipal(task.OwnerClientId), epicPrincipal.RunnerId, epicPrincipal.CredentialId,
+                        req.FencingToken, outcome));
+                }
                 return Results.Ok(new RemoteRunCompletionResponse(
-                    req.TaskKey, reportedOutcome, TaskStates.AutoReview));
+                    req.TaskKey, reportedOutcome, TaskStates.AutoReview,
+                    RunAttemptId: attemptId));
             }
 
-            var move = await transitions.MoveAsync(
-                task.Id, targetState, task.WatchPath, ct,
-                cause: $"remote-runner-completion:{source}");
-            if (move.Status != MoveJobStatus.Success)
-                return Results.Conflict(new RemoteRunCompletionResponse(
-                    req.TaskKey, reportedOutcome, task.State, $"Lane move refused: {move.Status} {move.Message}"));
+            if (!string.Equals(task.State, targetState, StringComparison.OrdinalIgnoreCase))
+            {
+                var move = await transitions.MoveAsync(
+                    task.Id, targetState, task.WatchPath, ct,
+                    cause: $"remote-runner-completion:{source}",
+                    authorityWrite: laneWrite,
+                    suppressProductExecution: true);
+                if (move.Status != MoveJobStatus.Success)
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey, reportedOutcome, task.State, $"Lane move refused: {move.Status} {move.Message}",
+                        RunAttemptId: attemptId,
+                        ReviewAttemptId: reviewAttempt?.AttemptId,
+                        ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
+            }
 
             loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogInformation(
                 "remote-runner-completion project={Project} task={TaskKey} runner={Runner} outcome={Outcome} targetState={TargetState} token={FencingToken}",
@@ -527,9 +692,53 @@ public static class LeaseEndpoints
                     InitiatingPrincipal(task.OwnerClientId), runnerPrincipal.RunnerId, runnerPrincipal.CredentialId,
                     req.FencingToken, outcome));
             }
-            return Results.Ok(new RemoteRunCompletionResponse(req.TaskKey, reportedOutcome, targetState));
+            return Results.Ok(new RemoteRunCompletionResponse(
+                req.TaskKey, reportedOutcome, targetState,
+                RunAttemptId: attemptId,
+                ReviewAttemptId: reviewAttempt?.AttemptId,
+                ReviewSubjectId: reviewAttempt?.Subject.SubjectId));
+            }
+            finally
+            {
+                ClaimGate.Release();
+            }
         });
     }
+
+    private static string? WriteGateItems(string folderPath, IReadOnlyList<string>? gateItems)
+    {
+        var items = (gateItems ?? [])
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Replace('\r', ' ').Replace('\n', ' ').Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (items.Count == 0) return null;
+
+        const string relativePath = "orchestrator-follow-up.md";
+        var path = Path.Combine(folderPath, relativePath);
+        var existing = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+        var sb = new StringBuilder(existing);
+        if (sb.Length == 0)
+            sb.Append("# Orchestrator follow-up\n\n");
+        else if (!existing.EndsWith("\n\n", StringComparison.Ordinal))
+            sb.Append(existing.EndsWith('\n') ? "\n" : "\n\n");
+        foreach (var item in items)
+        {
+            var row = $"- [ ] {item}";
+            if (!existing.Contains(row, StringComparison.Ordinal))
+                sb.Append(row).Append('\n');
+        }
+        File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+        return relativePath;
+    }
+
+    private static bool CanonicalLeaseWritePresent(
+        string? attemptId,
+        long? authorityEpoch,
+        string? idempotencyKey) =>
+        !string.IsNullOrWhiteSpace(attemptId)
+        && authorityEpoch is > 0
+        && !string.IsNullOrWhiteSpace(idempotencyKey);
 
     /// <summary>
     /// Fill a partial acquire request with this backend's runner identity so a

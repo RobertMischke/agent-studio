@@ -82,8 +82,17 @@ public sealed class LogShipper
 
         try
         {
+            var delivery = string.Join("\n", batch.Select(x => $"{x.Timestamp:o}|{x.Stream}|{x.Text}"));
             await _client.IngestLogsAsync(new LogIngestRequest(
-                _taskKey, batch, _lease.RunnerId, _lease.LeaseId, _lease.FencingToken), ct);
+                _taskKey,
+                batch,
+                RunnerId: _lease.RunnerId,
+                LeaseId: _lease.LeaseId,
+                FencingToken: _lease.FencingToken,
+                AttemptId: _lease.AttemptId,
+                Fence: _lease.FencingToken,
+                AuthorityEpoch: _lease.AuthorityEpoch,
+                IdempotencyKey: $"logs:{_lease.AttemptId}:{WireDigest.Hash(delivery)}"), ct);
 
             var dropped = Volatile.Read(ref _dropped);
             var reported = Volatile.Read(ref _reportedDropped);

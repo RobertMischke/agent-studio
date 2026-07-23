@@ -132,14 +132,17 @@ public sealed class RemoteRunnerDaemon
                         _ = await _client.ClaimAsync(new RunnerClaimRequest(
                             _options.RunnerId, _options.RunnerName, _options.Hostname,
                             Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                            sample, AvailableSlots: 0), shutdown);
+                            sample, AvailableSlots: 0,
+                            IdempotencyKey: $"telemetry:{_options.RunnerId}:{Guid.NewGuid():N}"), shutdown);
                 }
                 while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
                 {
                     var claim = await _client.ClaimAsync(new RunnerClaimRequest(
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                        TakeTelemetry()), shutdown);
+                        TakeTelemetry(),
+                        AvailableSlots: _options.HostMaxParallelism - active.Count,
+                        IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}"), shutdown);
                     if (claim.Status != RunnerClaimStatus.Claimed
                         || string.IsNullOrWhiteSpace(claim.TaskKey)
                         || claim.Lease is null)
@@ -154,8 +157,8 @@ public sealed class RemoteRunnerDaemon
                         shutdown,
                         claim.ProjectId,
                         claim.RepositoryUrl,
-                    claim.DefaultBranch,
-                    claim.TaskKind));
+                        claim.DefaultBranch,
+                        claim.TaskKind));
                 }
 
                 if (!claimedAny)

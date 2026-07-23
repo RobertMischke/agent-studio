@@ -213,7 +213,7 @@ public sealed class GitWorkspace
         if (!Directory.Exists(RepoPath))
         {
             await TryGit(["worktree", "prune"], SharedRepoPath, ct);
-            return WorktreeTeardownResult.NoWork;
+            return WorktreeTeardownResult.NoResult;
         }
 
         var status = (await Git(["status", "--porcelain=v1", "--untracked-files=all"], RepoPath, ct)).StdOut;
@@ -469,6 +469,8 @@ public sealed record WorktreeTeardownResult(
     SalvageReconciliationResult? Reconciliation = null)
 {
     public static WorktreeTeardownResult NoWork { get; } = new(false, null, null, null, null);
+    public static WorktreeTeardownResult NoResult { get; } = new(false, null, null, null, null);
+    public static WorktreeTeardownResult Clean(string resultSha) => new(false, null, null, null, resultSha);
 }
 
 public sealed record SalvageReconciliationResult(
