@@ -9,6 +9,7 @@ import { shouldShowFailureToast } from '../../../task-detail/services/run-outcom
 import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
 import { buildTokenCostTooltip } from '../../../tokens';
+
 export interface TaskTypeChip {
   kind: string;
   label: string;
@@ -22,7 +23,8 @@ export interface TaskTokenBubble {
   input: number;
   output: number;
   cacheRead: number;
-  cacheWrite: number; costTooltip: string;
+  cacheWrite: number;
+  costTooltip: string;
   model: string | null;
   lastUpdate: string | null;
   tier: 'neutral' | 'blue' | 'mauve' | 'peach';
