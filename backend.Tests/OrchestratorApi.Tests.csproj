@@ -24,6 +24,7 @@
     <None Include="Fixtures\cli\claude\outcome-classifier\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures\cli\codex\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures\quota\claude\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\pipeline-health\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

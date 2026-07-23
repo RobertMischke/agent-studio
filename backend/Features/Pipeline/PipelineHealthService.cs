@@ -111,16 +111,15 @@ public sealed class PipelineHealthDetector
                 _consecutiveFailures.Clear();
             }
 
-            if (_consecutiveFailures.Count > 0
-                && string.Equals(
-                    _consecutiveFailures[^1].JobId,
-                    completion.JobId,
-                    StringComparison.OrdinalIgnoreCase))
+            var repeatedCardIndex = _consecutiveFailures.FindIndex(item =>
+                string.Equals(item.JobId, completion.JobId, StringComparison.OrdinalIgnoreCase));
+            if (repeatedCardIndex >= 0)
             {
                 // Environmental retry attempts for one card are still one card
                 // failure. Do not let a single noisy task manufacture the
-                // cross-card systemic signal by consuming its retry budget.
-                _consecutiveFailures[^1] = completion;
+                // cross-card systemic signal by consuming its retry budget,
+                // even when another card's gate ran between those attempts.
+                _consecutiveFailures[repeatedCardIndex] = completion;
                 return null;
             }
 

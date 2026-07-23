@@ -1,0 +1,7 @@
+{"timestamp":"2026-07-23T04:20:00Z","event":"lane_inventory","lane":"4-auto-review","queueCount":65,"oldestQueuedAtUtc":"2026-07-22T21:05:00Z","completedInPriorHour":0}
+{"timestamp":"2026-07-23T04:21:12Z","event":"build_test_gate_completed","gateRunId":"night-failure-1","project":"Agent Taskboard","watchPath":"/fixture/agent-taskboard","jobId":"night-card-1","failureFingerprint":"lock:9c2f19e4a88c73ab"}
+{"timestamp":"2026-07-23T04:25:48Z","event":"build_test_gate_completed","gateRunId":"night-failure-2","project":"Website","watchPath":"/fixture/website","jobId":"night-card-2","failureFingerprint":"lock:9c2f19e4a88c73ab"}
+{"timestamp":"2026-07-23T04:29:31Z","event":"build_test_gate_completed","gateRunId":"night-failure-3","project":"Agent Taskboard","watchPath":"/fixture/agent-taskboard","jobId":"night-card-3","failureFingerprint":"lock:9c2f19e4a88c73ab"}
+{"timestamp":"2026-07-23T04:37:37Z","event":"build_test_gate_acquired","gateRunId":"7bbed536","project":"Agent Taskboard","watchPath":"/fixture/agent-taskboard","jobId":"night-wedged-gate"}
+{"timestamp":"2026-07-23T04:37:43Z","event":"build_test_gate_workspace_ready","gateRunId":"7bbed536"}
+{"timestamp":"2026-07-23T07:15:00Z","event":"replay_end","reason":"backend_restart"}

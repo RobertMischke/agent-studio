@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures/dev-backend';
 import * as fs from 'fs';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * T4a evidence — the reworked project-level Pipeline page.
@@ -183,7 +184,11 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   await expect(page.getByTestId('pipeline-cost')).toHaveCount(0);
   await expect(page.getByTestId('pipeline-cost-total')).toHaveCount(0);
 
+  await setTheme(page, 'light');
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-full--mocked.png'), fullPage: true });
   await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-section--mocked.png') });
-  await health.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-health-night-alarms--mocked.png') });
+  await health.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-health-night-alarms--light--mocked.png') });
+
+  await setTheme(page, 'dark');
+  await health.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-health-night-alarms--dark--mocked.png') });
 });
