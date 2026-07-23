@@ -5031,12 +5031,43 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         try
         {
-            return !ReviewDecisionLog.ReadAll(workspace, project).Any(r => r.JobId == info.Id);
+            // Operator authority (AGT-2260): verdicts recorded BEFORE the card's
+            // current review-cycle epoch belong to a closed cycle (the operator
+            // requeued the card afterwards). They do not count as "this cycle
+            // has a verdict" - otherwise a requeued card would sit inert forever:
+            // its old sentinel is resolved, its old verdict is ignored by the
+            // stale-with-verdict guard, and nothing would ever drive it again.
+            var epoch = CurrentReviewCycleEpoch(info);
+            return !ReviewDecisionLog.ReadAll(workspace, project).Any(r =>
+                r.JobId == info.Id
+                && (epoch is null || r.CreatedAt >= epoch));
         }
         catch
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Operator authority (AGT-2260): the current review-cycle epoch is the
+    /// card's most recent recorded transition INTO <c>4-auto-review</c> (written
+    /// by the single recording hook in <c>TaskTransitionService.MoveAsync</c>).
+    /// Verdicts older than it belong to a closed cycle - typically one the
+    /// operator ended by requeueing the escalated card - and must neither be
+    /// backfilled as "due moves" nor count as this cycle's verdict. Cards
+    /// without recorded transitions (legacy folders, unit-test fixtures) keep
+    /// the pre-epoch behavior.
+    /// </summary>
+    private static DateTime? CurrentReviewCycleEpoch(TaskInfo info)
+    {
+        var transitions = info.Provenance?.Transitions;
+        if (transitions is not { Count: > 0 }) return null;
+        for (var i = transitions.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(transitions[i].Lane, TaskStates.AutoReview, StringComparison.Ordinal))
+                return transitions[i].AtUtc;
+        }
+        return null;
     }
 
     /// <summary>
@@ -5085,6 +5116,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             if (records[i].JobId == info.Id) { latest = records[i]; break; }
         }
         if (latest == null) return null;
+
+        // Operator authority (AGT-2260): a verdict recorded BEFORE the card's
+        // current review-cycle epoch has already had its move - and someone
+        // (typically the operator, requeueing an escalated card) deliberately
+        // moved the card back afterwards. Backfilling that old move would
+        // override the operator and re-escalate from stale artifacts without
+        // any new evidence (the requeue ping-pong of 23.07.). Only a verdict
+        // YOUNGER than the current lane entry is a genuinely un-executed move.
+        if (CurrentReviewCycleEpoch(info) is { } epoch && latest.CreatedAt < epoch)
+            return null;
 
         return latest.Kind switch
         {
