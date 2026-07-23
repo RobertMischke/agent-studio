@@ -141,7 +141,7 @@ test('project-wide branch source is visible and read-only in both themes', async
     return route.fulfill({ json: {} });
   });
 
-  await page.goto('/#/projects/demo/wiki');
+  await page.goto('/#/projects/demo/wiki', { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('project-wiki-section')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('project-wiki-source')).toContainText('origin/develop @ abcdef12');
   await expect(page.getByTestId('project-wiki-source')).toHaveClass(/source--readonly/);
@@ -174,7 +174,7 @@ test('project-wide branch source is visible and read-only in both themes', async
       .not.toBe(borderBeforeHover);
   }
 
-  await page.goto('/#/projects/demo/settings');
+  await page.goto('/#/projects/demo/settings', { waitUntil: 'domcontentloaded' });
   const select = page.getByTestId('project-settings-wiki-source-select');
   await expect(select).toBeVisible({ timeout: 10_000 });
   await expect(select).toHaveValue('origin/develop');
