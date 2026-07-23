@@ -950,7 +950,7 @@ export class StudioShellComponent {
     this.pickProject(ev.id === '__all__' ? null : ev.id);
   }
 
-  togglePanel(panel: StudioActivityPanelKey | 'settings' | 'admin'): void {
+  togglePanel(panel: StudioActivityPanelKey | 'settings'): void {
     // The gear ('settings') no longer toggles a sidebar panel — it opens the
     // one consolidated Settings view as an editor tab (AGT-2035).
     if (panel === 'settings') {
