@@ -98,11 +98,7 @@ function escapeHtml(value: string): string {
 function formatClock(iso: string): string | null {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return null;
-  return new Date(ms).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  });
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 /**

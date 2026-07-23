@@ -143,7 +143,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `create-job-with-screenshot.spec.ts` | Add Task dialog - drop + paste screenshot uploads |
 | `promote-planning-to-coding.spec.ts` | Promote planning result -> coding task |
 
-### `board/` - 73 specs
+### `board/` - 75 specs
 
 | Spec | Summary |
 |------|---------|
@@ -182,6 +182,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `epic-overview-history.spec.ts` | Epic overview history |
 | `epic-overview-screen.spec.ts` | Epic overview screen |
 | `epic-rollup-tight-viewport.spec.ts` | Epic rollup: tight viewport / resize keeps lanes enclosed and reachable |
+| `execution-location-badge.spec.ts` | shows each concurrent task owner and limits warnings to the stale remote run |
 | `explorer-collapse-screenshots.spec.ts` | F27 visual evidence |
 | `explorer-collapse.spec.ts` | F27: Explorer-tree folder headers are all collapsible |
 | `f39-running-card-themes.spec.ts` | F39 - running task-card across themes |
@@ -215,6 +216,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `post-processing-lane-identity.spec.ts` | Post Processing lane identity |
 | `remote-running-card.spec.ts` | Remote-running card visibility, steer wait, and timeout recovery |
 | `signalr-jobs-hub.spec.ts` | SignalR jobs hub - push delivery |
+| `stalled-progress-card.spec.ts` | stalled Progress cards and lane subset are visible at a glance |
 | `task-filter-removed.spec.ts` | Task filter axis removed from filter list |
 | `thinking-level-indicator.spec.ts` | shows the effective level and highlights deviations from the client default in both themes |
 | `token-popover-contrast.spec.ts` | Token popover WCAG-AA contrast |
