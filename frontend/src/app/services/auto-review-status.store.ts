@@ -25,6 +25,14 @@ export interface AutoReviewStatusView {
   escalationRateAlert?: boolean;
   currentJob: string | null;
   currentProject: string | null;
+  activeJobs?: AutoReviewActivityView[];
+}
+
+export interface AutoReviewActivityView {
+  project: string;
+  jobId: string;
+  step: 'processing' | 'gate' | 'gate-queued' | 'aspects' | 'grade' | 'decision' | string;
+  startedAt: string;
 }
 
 @Injectable({ providedIn: 'root' })

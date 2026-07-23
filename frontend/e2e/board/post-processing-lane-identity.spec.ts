@@ -20,6 +20,7 @@ interface JobInfoStub {
   projectName: string;
   folderPath: string;
   lastActivity: string;
+  enteredLaneAt?: string | null;
   sessionName: null;
   model: string | null;
   cliType: string | null;
@@ -38,7 +39,7 @@ interface JobInfoStub {
     totalTokens: number;
     lastModel: string | null;
     lastUpdate: string | null;
-    entries: Array<{
+    entries: {
       ts: string;
       model: string | null;
       participantId?: string | null;
@@ -46,10 +47,11 @@ interface JobInfoStub {
       outputTokens: number;
       cacheReadTokens: number;
       cacheCreationTokens: number;
-    }>;
+    }[];
   } | null;
   phase: string | null;
   phaseEnteredAt?: string | null;
+  postProcessingChecks?: { name: string; status: string; startedAt?: string | null }[];
   steerPendingSince?: string | null;
   tags: string[];
   taskType: string;
@@ -70,6 +72,7 @@ function jobInfo(over: Partial<JobInfoStub> = {}): JobInfoStub {
     projectName: PROJECT,
     folderPath: `${WATCH_PATH}/tasks/000/${id}`,
     lastActivity: '2026-06-09T08:12:00Z',
+    enteredLaneAt: over.enteredLaneAt ?? '2026-06-09T08:12:00Z',
     sessionName: null,
     model: over.model ?? 'GPT-5 Codex',
     cliType: over.cliType ?? 'codex',
@@ -137,11 +140,39 @@ function grouped(jobs: JobInfoStub[]) {
   };
 }
 
-async function installRoutes(page: Page, jobs: JobInfoStub[]): Promise<void> {
+interface AutoReviewStatusStub {
+  lastTickAt: string;
+  accept: number;
+  reissue: number;
+  escalate: number;
+  aspectsRun: number;
+  pending: number;
+  currentJob: string | null;
+  currentProject: string | null;
+  activeJobs?: {
+    project: string;
+    jobId: string;
+    step: string;
+    startedAt: string;
+  }[];
+}
+
+async function installRoutes(
+  page: Page,
+  jobs: JobInfoStub[],
+  autoReviewStatus?: AutoReviewStatusStub,
+): Promise<void> {
   const groupedBody = grouped(jobs);
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
+    if (p === '/api/auth/status') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+      });
+    }
     if (p === '/api/tasks/grouped' || p === '/api/tasks/grouped') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(groupedBody) });
     }
@@ -162,7 +193,7 @@ async function installRoutes(page: Page, jobs: JobInfoStub[]): Promise<void> {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
+        body: JSON.stringify(autoReviewStatus ?? {
           lastTickAt: '2026-06-09T08:12:00Z',
           accept: 0,
           reissue: 0,
@@ -171,6 +202,12 @@ async function installRoutes(page: Page, jobs: JobInfoStub[]): Promise<void> {
           pending: 1,
           currentJob: 'post-processing-codex-main',
           currentProject: PROJECT,
+          activeJobs: [{
+            project: PROJECT,
+            jobId: 'post-processing-codex-main',
+            step: 'aspects',
+            startedAt: '2026-06-09T08:12:00Z',
+          }],
         }),
       });
     }
@@ -311,8 +348,10 @@ test.describe('Post Processing lane identity', () => {
     const card = page.locator('[data-testid="task-card"]', { hasText: job.title });
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card.getByTestId('task-card-state')).toHaveCount(0);
-    await expect(card.getByTestId('task-card-phase')).toContainText('Post processing');
+    await expect(card.getByTestId('task-card-phase')).toHaveCount(0);
+    await expect(card.getByTestId('task-card-post-processing-activity')).toContainText('Aspects');
     await expect(card.getByTestId('task-card-effective-model')).toHaveAttribute('data-cli', 'codex');
+    await expect(card.getByTestId('task-card-effective-model')).toContainText('Codex');
 
     const bubble = card.getByTestId('task-card-token-bubble');
     await expect(bubble).toBeVisible();
@@ -326,6 +365,83 @@ test.describe('Post Processing lane identity', () => {
     await dismissRuntimeErrorOverlay(page);
     mkdirSync(SHOTS, { recursive: true });
     await page.screenshot({ path: `${SHOTS}/post-processing-codex-claude--mocked.png`, fullPage: false });
+  });
+
+  test('shows mixed activity and switches card state on the next status snapshot', async ({ page }) => {
+    const now = new Date('2026-07-23T12:00:00Z');
+    await page.clock.install({ time: now });
+    const active = jobInfo({
+      id: 'active-aspects',
+      title: 'Active aspect review',
+      order: 1,
+      enteredLaneAt: '2026-07-23T11:45:00Z',
+    });
+    const waiting = jobInfo({
+      id: 'waiting-review',
+      title: 'Waiting review',
+      order: 2,
+      enteredLaneAt: '2026-07-23T09:50:00Z',
+      phase: 'awaiting-review',
+    });
+    const gateQueued = jobInfo({
+      id: 'gate-queued',
+      title: 'Waiting for machine gate',
+      order: 3,
+      enteredLaneAt: '2026-07-23T11:30:00Z',
+    });
+    const status: AutoReviewStatusStub = {
+      lastTickAt: now.toISOString(),
+      accept: 0,
+      reissue: 0,
+      escalate: 0,
+      aspectsRun: 0,
+      pending: 3,
+      currentJob: active.id,
+      currentProject: PROJECT,
+      activeJobs: [
+        { project: PROJECT, jobId: active.id, step: 'aspects', startedAt: '2026-07-23T11:58:00Z' },
+        { project: PROJECT, jobId: gateQueued.id, step: 'gate-queued', startedAt: '2026-07-23T11:52:00Z' },
+      ],
+    };
+    await seedBoardTab(page);
+    await installRoutes(page, [active, waiting, gateQueued], status);
+    await page.goto('/');
+
+    const lane = page.getByTestId('lane-4-auto-review');
+    const activeCard = page.locator('[data-testid="task-card"]', { hasText: active.title });
+    const waitingCard = page.locator('[data-testid="task-card"]', { hasText: waiting.title });
+    const gateCard = page.locator('[data-testid="task-card"]', { hasText: gateQueued.title });
+
+    await expect(activeCard.getByTestId('task-card-post-processing-activity')).toContainText('Aspects');
+    await expect(waitingCard.getByTestId('task-card-post-processing-activity')).toContainText('waiting 2h 10m');
+    await expect(gateCard.getByTestId('task-card-post-processing-activity')).toContainText('Gate queued 8m');
+    const summary = lane.getByTestId('lane-post-processing-summary');
+    await expect(summary).toContainText('1 active / 2 waiting');
+    await expect(summary).toHaveAttribute('data-active-count', '1');
+    await expect(summary).toHaveAttribute('data-waiting-count', '2');
+
+    mkdirSync(SHOTS, { recursive: true });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: `${SHOTS}/mixed-activity-${theme}--mocked.png`,
+        fullPage: false,
+      });
+    }
+
+    status.currentJob = waiting.id;
+    status.activeJobs = [
+      { project: PROJECT, jobId: waiting.id, step: 'grade', startedAt: now.toISOString() },
+      { project: PROJECT, jobId: gateQueued.id, step: 'gate-queued', startedAt: '2026-07-23T11:52:00Z' },
+    ];
+    await page.clock.fastForward(30_000);
+
+    await expect(waitingCard.getByTestId('task-card-post-processing-activity')).toContainText('Grade');
+    await expect(waitingCard.getByTestId('task-card-post-processing-activity'))
+      .toHaveAttribute('data-activity-state', 'active');
+    await expect(activeCard.getByTestId('task-card-post-processing-activity')).toContainText('waiting 15m');
+    await expect(activeCard.getByTestId('task-card-post-processing-activity'))
+      .toHaveAttribute('data-activity-state', 'waiting');
   });
 
   test('shows a timed loop-waiting phase without claiming a runner slot', async ({ page }) => {

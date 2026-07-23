@@ -552,6 +552,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             "ReviewDecisionOrchestrator failed to process {Project}/{JobId}",
                             entry.Name, pending.Job.Id);
                     }
+                    finally
+                    {
+                        _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
+                    }
                 }
             }
 
@@ -658,6 +662,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             finally
             {
                 _cardsInFlight.TryRemove(inflightKey, out _);
+                _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
             }
             return; // handled the target card
         }
@@ -803,6 +808,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                         _logger.LogWarning(ex,
                             "ReviewDecisionOrchestrator failed to process {Project}/{JobId}",
                             entry.Name, pending.Job.Id);
+                    }
+                    finally
+                    {
+                        _statusSnapshot.ClearCurrent(entry.Name, pending.Job.Id);
                     }
                 }, ct);
                 running.Add((task, slot));
@@ -1741,6 +1750,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         TimeSpan perAspectTimeout,
         CancellationToken ct)
     {
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, pending.Job.Id, AutoReviewActivitySteps.Gate);
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var (taskBody, recentLog) = LoadTaskContext(pending);
         var statusSummary = LoadStatusSummary(current.FolderPath);
@@ -1818,6 +1829,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         RecordOrchestratorReviewStep(current.FolderPath, PipelineStepStatus.Passed,
             ReviewVerdictComplete, gate.Reason);
 
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, current.Id, AutoReviewActivitySteps.Gate);
         var buildGateResult = await RunBuildTestGatePostStepAsync(workspace, entry, current, ct);
         if (buildGateResult?.Verdict == BuildTestGateVerdict.Fail)
         {
@@ -1831,6 +1844,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // red deterministic build must stay loud and still receive that
             // evidence before the task is reissued / escalated. The aspect pool
             // is intentionally bypassed on this terminal branch.
+            _statusSnapshot.SetCurrentStep(
+                entry.Name, current.Id, AutoReviewActivitySteps.Grade);
             var failedBuildGrade = await RunCodeReviewGradePostStepAsync(
                 entry, current, taskBody, buildGateResult, ct);
             await HandleBuildTestGateFailureAsync(
@@ -1891,6 +1906,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ? null
             : aspectId => PipelineStepConfigResolver.ResolvePrompt(settings, $"aspect-{aspectId}");
 
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, current.Id, AutoReviewActivitySteps.Aspects);
         var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct,
             modelForAspect, thinkingLevelForAspect, promptForAspect, cliForAspect);
 
@@ -1899,8 +1916,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reviewer must not silently erase that review artifact or its explicit
         // reaction. Keeping the call here also preserves the normal ordering
         // (after aspects) without running twice.
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, current.Id, AutoReviewActivitySteps.Grade);
         var gradeReport = await RunCodeReviewGradePostStepAsync(
             entry, current, taskBody, buildGateResult, ct);
+        _statusSnapshot.SetCurrentStep(
+            entry.Name, current.Id, AutoReviewActivitySteps.Decision);
 
         // Aspect-verdict infra crash (AGT-2021): one or more aspects produced no
         // verdict because the reviewing CLI died - even after the aspect runner's
@@ -3117,6 +3138,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             InfrastructureTimeout = TimeSpan.FromSeconds(Math.Max(1, infrastructureTimeoutSeconds)),
             QueueWaitTimeout = TimeSpan.FromSeconds(Math.Max(1, queueWaitTimeoutSeconds)),
             RemoteSshHost = ResolveRemoteGateSshHost(settings),
+            OnMachineGateWaiting = () => _statusSnapshot.SetCurrentStep(
+                entry.Name, current.Id, AutoReviewActivitySteps.GateQueued),
+            OnMachineGateAcquired = () => _statusSnapshot.SetCurrentStep(
+                entry.Name, current.Id, AutoReviewActivitySteps.Gate),
         };
 
         BuildTestGateResult? result = null;

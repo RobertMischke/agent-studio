@@ -474,6 +474,7 @@ public class TaskScannerService : ITaskScanner
                     && phaseEntered.TryGetDateTime(out var phaseEnteredAt)
                         ? phaseEnteredAt.ToUniversalTime()
                         : null,
+                PostProcessingChecks = ReadPostProcessingChecks(jobDir, resolvedState),
                 SteerPendingSince = ReadSteerPendingSince(jobDir, resolvedState),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
@@ -771,6 +772,26 @@ public class TaskScannerService : ITaskScanner
             return null;
         }
         return value;
+    }
+
+    private List<LifecycleCheck> ReadPostProcessingChecks(string jobDir, string state)
+    {
+        if (!string.Equals(state, TaskStates.AutoReview, StringComparison.Ordinal)) return [];
+        var path = Path.Combine(jobDir, "lifecycle.json");
+        if (!File.Exists(path)) return [];
+        try
+        {
+            var snapshot = JsonSerializer.Deserialize<LifecycleSnapshot>(
+                File.ReadAllText(path), TaskJsonFile.ReadOpts);
+            return snapshot?.PostProcessingChecks ?? [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to read post-processing lifecycle checks from {Path}; returning an empty projection",
+                path);
+            return [];
+        }
     }
 
     /// <summary>

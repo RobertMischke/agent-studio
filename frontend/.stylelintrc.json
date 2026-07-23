@@ -191,6 +191,8 @@
         "src/app/components/project-basics-form/project-basics-form.component.scss",
         "src/app/components/tooltip/tooltip.scss",
         "src/app/features/board/components/create-task-dialog/create-task-dialog.component.scss",
+        "src/app/features/board/components/post-processing-activity/post-processing-activity.component.scss",
+        "src/app/features/board/components/post-processing-summary/post-processing-summary.component.scss",
         "src/app/features/board/components/task-column/task-column.scss",
         "src/app/features/orchestrator/components/prompt-catalogue-nav/prompt-catalogue-nav.component.scss",
         "src/app/features/project-detail/components/execution-assignment-card/execution-assignment-card.scss",

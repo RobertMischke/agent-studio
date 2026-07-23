@@ -46,7 +46,10 @@ groups, and a failed domain reports an error without hiding successful domains.
 ## Key Code
 
 - `frontend/src/app/features/board/`: kanban lanes, task cards, project tabs,
-  filters, and task creation.
+  filters, and task creation. Post Processing cards project the live
+  auto-review status snapshot into a compact current-step or elapsed-wait
+  indicator; the lane header reconciles those visible cards as active versus
+  waiting, with machine-lock gate queueing remaining a distinct waiting state.
 - `frontend/src/app/features/board/components/epic-overview-screen/`: the
   read-only Epics overview (`#/epics`, studio tab `epics:<project|__all__>`).
   It fetches `GET /api/epics` (archive-inclusive) and splits rollups into

@@ -1207,9 +1207,7 @@ export function buildCooldownRetryBanner(job: TaskInfo, nowMs: number): Cooldown
 export interface ReviewBadge { label: string; tone: 'generating' | 'ready' | 'failed'; tooltip: string; }
 
 /**
- * Review-pill descriptor: shows the auto-review (Haiku summarizer) status on a
- * card that landed in 4-auto-review. Returns null when there is nothing to show
- * (no run, or the user already moved on).
+ * Post-run summary descriptor. The card stays quiet after the summary settles.
  */
 export function buildReviewBadge(summaryState: TaskInfo['summaryState']): ReviewBadge | null {
   if (!summaryState) return null;
@@ -1227,45 +1225,77 @@ export function buildReviewBadge(summaryState: TaskInfo['summaryState']): Review
   }
 }
 
-export interface AutoReviewProcessBadge { label: string; tone: 'active' | 'queued' | 'stale' | 'done'; tooltip: string; }
+export interface AutoReviewProcessBadge {
+  label: string;
+  tone: 'active' | 'waiting' | 'gate-queued';
+  tooltip: string;
+}
 
+/** Compact live-step or elapsed-wait descriptor for a Post Processing card. */
 export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewStatusView | null, nowMs: number): AutoReviewProcessBadge | null {
   if (job.state !== TaskState.AutoReview) return null;
 
-  const matchesCurrent = !!status?.currentJob
+  const activity = status?.activeJobs?.find(item =>
+    item.jobId === job.id && item.project === job.projectName);
+  const matchesLegacyCurrent = !activity
+    && !!status?.currentJob
     && status.currentJob === job.id
     && (!status.currentProject || status.currentProject === job.projectName);
-
-  if (matchesCurrent) {
+  if (activity || matchesLegacyCurrent) {
+    const step = activity?.step ?? runningLifecycleStep(job) ?? 'aspects';
+    const stepLabel = autoReviewStepLabel(step);
+    if (step === 'gate-queued') {
+      const queueStartedAt = Date.parse(activity?.startedAt ?? job.enteredLaneAt ?? job.lastActivity);
+      return {
+        label: `Gate queued ${formatAutoReviewWait(Number.isFinite(queueStartedAt) ? nowMs - queueStartedAt : 0)}`,
+        tone: 'gate-queued',
+        tooltip: 'This task has been admitted to post-processing and is waiting for the shared build/test machine lock.',
+      };
+    }
     return {
-      label: 'reviewing now',
+      label: stepLabel,
       tone: 'active',
-      tooltip: 'Auto-review is currently running its multi-aspect pass for this task.'
+      tooltip: `Post-processing is active for this task. Current step: ${stepLabel}.`,
     };
   }
 
-  if (job.orchestratorVerdict) {
-    return {
-      label: `review ${job.orchestratorVerdict}`,
-      tone: 'done',
-      tooltip: `Auto-review has already recorded an orchestrator verdict: ${job.orchestratorVerdict}.`
-    };
-  }
+  const enteredAt = Date.parse(job.enteredLaneAt ?? job.lastActivity);
+  const wait = formatAutoReviewWait(Number.isFinite(enteredAt) ? nowMs - enteredAt : 0);
+  return {
+    label: `waiting ${wait}`,
+    tone: 'waiting',
+    tooltip: `Waiting for a post-processing slot since ${new Date(
+      Number.isFinite(enteredAt) ? enteredAt : nowMs).toLocaleString()}.`,
+  };
+}
 
-  if (!status?.lastTickAt) {
-    return null;
-  }
+function runningLifecycleStep(job: TaskInfo): string | null {
+  const running = job.postProcessingChecks?.find(check => check.status === 'running');
+  if (!running) return job.phase === 'post-processing-running' ? 'processing' : null;
+  const name = running.name.toLowerCase();
+  if (name.includes('build') || name.includes('gate')) return 'gate';
+  if (name.includes('aspect')) return 'aspects';
+  if (name.includes('grade') || name.includes('code-review')) return 'grade';
+  if (name.includes('decision')) return 'decision';
+  return 'processing';
+}
 
-  const ageMs = nowMs - Date.parse(status.lastTickAt);
-  if (ageMs > 90_000) {
-    return {
-      label: 'review stale',
-      tone: 'stale',
-      tooltip: `Auto-review has not completed a tick since ${new Date(status.lastTickAt).toLocaleString()}.`
-    };
+function autoReviewStepLabel(step: string): string {
+  switch (step) {
+    case 'gate': return 'Gate running';
+    case 'aspects': return 'Aspects';
+    case 'grade': return 'Grade';
+    case 'decision': return 'Decision';
+    default: return 'Processing';
   }
+}
 
-  return null;
+export function formatAutoReviewWait(elapsedMs: number): string {
+  const totalMinutes = Math.max(0, Math.floor(elapsedMs / 60_000));
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
 // Lanes that sit in the "Done & Decide" super-column and carry an orchestrator

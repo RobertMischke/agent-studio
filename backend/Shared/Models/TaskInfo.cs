@@ -232,6 +232,13 @@ public record TaskInfo
     public DateTime? PhaseEnteredAt { get; init; }
 
     /// <summary>
+    /// Checks from the optional lifecycle sidecar while a task is in post
+    /// processing. This read-only projection lets compact board activity labels
+    /// name the running step without making the browser read workspace files.
+    /// </summary>
+    public List<LifecycleCheck> PostProcessingChecks { get; init; } = [];
+
+    /// <summary>
     /// Run-Liveness Slice B (concept Rule 2): when this <c>3-progress</c> card is
     /// waiting on an unanswered steer / NeedsInput question, the UTC time the wait
     /// started - read from the durable <c>steer-pending.json</c> marker. Null when

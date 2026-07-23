@@ -4,13 +4,11 @@ import { TaskState } from '../../../../models/task.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { TaskService } from '../../../../services/task.service';
 import { ClientService } from '../../../../services/client.service';
-import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 import { CodeReviewActivityStore } from '../../../../services/code-review-activity.store';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import {
-  buildAutoReviewProcessBadge,
   buildCardCtxMenuItems,
   buildCodeReviewGradeBadge,
   buildDependencyChip,
@@ -63,6 +61,7 @@ import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
 import { TaskSelectionService } from '../../../task-detail';
 import type { DependencyChip } from './task-card-view-model';
+import { PostProcessingActivityComponent } from '../post-processing-activity/post-processing-activity.component';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -73,7 +72,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, PostProcessingActivityComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -123,7 +122,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   private readonly gitSummary = inject(GitSummaryService);
   private readonly clients = inject(ClientService);
   private readonly tagRegistry = inject(TagRegistryStore);
-  private readonly autoReviewStatus = inject(AutoReviewStatusStore);
   private readonly codeReviewActivity = inject(CodeReviewActivityStore);
   private stopPolling: (() => void) | null = null;
 
@@ -228,15 +226,14 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
   ngOnDestroy(): void { this.stopPolling?.(); }
 
-  phaseBadge() { return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, nowTick()); }
+  phaseBadge() {
+    if (this.job().state === TaskState.AutoReview) return null;
+    return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, nowTick());
+  }
 
   executionBadge() { return buildExecutionBadge(this.job()); }
 
   readonly reviewBadge = computed(() => buildReviewBadge(this.job().summaryState));
-
-  readonly autoReviewProcessBadge = computed(() =>
-    buildAutoReviewProcessBadge(this.job(), this.autoReviewStatus.status(), Date.now()),
-  );
 
   readonly humanReviewBadge = computed(() => buildHumanReviewBadge(this.job()));
 

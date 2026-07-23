@@ -366,7 +366,7 @@ describe('TaskColumnComponent (smoke)', () => {
     expect(fixture.componentInstance.statusCluster()).toBeNull();
   });
 
-  it('does not render a separate auto-review tick line in the lane header', async () => {
+  it('renders the compact active/waiting summary without a tick-history line', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskColumnComponent],
       providers: [
@@ -386,6 +386,8 @@ describe('TaskColumnComponent (smoke)', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="auto-review-status"]')).toBeNull();
     expect(host.textContent ?? '').not.toContain('Last tick:');
+    expect(host.querySelector('[data-testid="lane-post-processing-summary"]')?.textContent)
+      .toContain('0 active / 0 waiting');
   });
 
   // AGT-2020: Delete moved off the hover trash button into the card context

@@ -171,14 +171,8 @@
         {{ rb.label }}
       </span>
     }
-    @if (autoReviewProcessBadge(); as arb) {
-      <span class="task-card__auto-review-pill"
-            [class]="'task-card__auto-review-pill--' + arb.tone"
-            [cacTooltip]="arb.tooltip"
-            data-testid="task-card-auto-review-status">
-        <span class="task-card__auto-review-dot"></span>
-        {{ arb.label }}
-      </span>
+    @if (job().state === '4-auto-review') {
+      <app-post-processing-activity [job]="job()" />
     }
     @if (outcomeIssueBadge(); as oib) {
       <span class="task-card__issue-pill"
