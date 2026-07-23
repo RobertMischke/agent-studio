@@ -145,4 +145,48 @@ public sealed class CouncilReviewPolicyTests
         Assert.Contains("Dark theme is wrong; provide both-theme screenshots.", parsed);
         Assert.Contains("Upload rejection needs a focused test.", parsed);
     }
+
+    [Fact]
+    public void ReactionSidecar_RoundTripsPerFindingAssessmentsAndTargetRoundLink()
+    {
+        var folder = Path.Combine(
+            Path.GetTempPath(),
+            "council-reaction-sidecar-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var reaction = CouncilReviewPolicy.Derive(
+                "code-review-grade-2026-07-23.md",
+                CodeReviewGrade.B,
+                new[]
+                {
+                    "Dark-theme colors are incorrect; provide both-theme screenshots.",
+                    "Upload rejection lacks focused test evidence; add the missing regression test.",
+                },
+                priorReissues: 0,
+                maxReissues: 2,
+                jobId: "AGT-2108",
+                targetRunAttempt: 4,
+                now: new DateTime(2026, 7, 23, 20, 0, 0, DateTimeKind.Utc));
+
+            CouncilReviewReactionStore.Write(folder, reaction);
+            var persisted = CouncilReviewReactionStore.Read(folder, reaction.ReviewFileName);
+
+            Assert.NotNull(persisted);
+            Assert.Equal(CouncilReactionDisposition.Reissue, persisted!.Disposition);
+            Assert.True(persisted.StartsNewRound);
+            Assert.Equal("AGT-2108", persisted.TargetJobId);
+            Assert.Equal(4, persisted.TargetRunAttempt);
+            Assert.Equal(2, persisted.Assessments.Count);
+            Assert.All(
+                persisted.Assessments,
+                assessment => Assert.Equal(CouncilFindingAction.FixNextRound, assessment.Action));
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
 }

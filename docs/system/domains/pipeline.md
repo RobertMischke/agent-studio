@@ -289,6 +289,22 @@ operator changes cause the step to fail before its writer runs.
   legacy or manually triggered review without a sidecar shows an explicit
   `No orchestrator reaction recorded` audit state instead of silently omitting
   the reaction.
+
+  This is a load-bearing review-orchestration contract, not optional reporting.
+  The terminal routing is fixed:
+
+  | Review outcome | Orchestrator reaction | Lane effect | Required durable evidence |
+  |---|---|---|---|
+  | Grade A, no findings | `Accept, nothing open.` | Continue through the remaining gates | Reaction sidecar on the grade artifact |
+  | Named findings, loop budget available | One `FixNextRound` assessment per finding | Reissue the same task to `2-ready` | Sidecar, decision-journal record, targeted `orchestrator-follow-up.md`, and target task/run |
+  | Named findings, loop budget exhausted | One `Escalate` assessment per finding | Move to `5e-escalated` | Sidecar and decision-journal record |
+  | Grade B/C/D without concrete finding sentences | Escalate the missing handoff | Move to `5e-escalated` | Sidecar explaining why no safe targeted round can start |
+
+  A task is not accepted merely because the letter grade is passing. Named
+  findings take precedence over the grade letter. Completion, build/test,
+  evidence, solution-quality, and council decisions share the same bounded
+  reissue budget; the council reaction runs before generic evidence routing so
+  its concrete finding sentences remain the next-round assignment.
 - `post-code-review-grade` is the automatic quality-grade step (ASS-1657). It is
   `DefaultEnabled`, runs after the four aspect reviews and before
   `post-orchestrator-decision`, and assigns every pipelined task an A/B/C/D grade
