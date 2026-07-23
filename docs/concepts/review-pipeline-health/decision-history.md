@@ -52,3 +52,10 @@ Tests that fail under machine load but pass at idle get
 `[Trait("Category","MachineBound")]` and are excluded from gate runs
 (`Category!=MachineBound`). Reference commits: `227b7041`, night-flake tail
 additions of 22./23.07.
+
+## 2026-07-23 — Everything moves to the remote host; tunnels are interim only
+Operator direction: the target picture is the full system (task server, studio,
+runners) living on the remote host — the Remote-Ready line. The ssh reverse
+tunnel that unblocked UI-evidence cards (AGT-2240/2254) is explicitly an
+interim: any bridging solution must be removable without residue once the
+system itself runs remotely. → ui-evidence card + AGT-2229 line.
