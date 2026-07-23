@@ -200,6 +200,21 @@ public static class CompletionGate
         @"(?ix)\b(?:no|without)\s+(?:remaining\s+)?(?:unfinished|incomplete|pending)\s+(?:work|items?|evidence)\b",
         RegexOptions.Compiled);
 
+    private static readonly Regex PipelineStatusBeforePendingRegex = new(
+        @"(?ix)(?:
+            \b(?:all|fully|entirely|only)\s*[- ]\s* |
+            \b(?:pipeline\s+)?(?:status|state|label|value)\s*[:=]?\s*
+        )$",
+        RegexOptions.Compiled);
+
+    private static readonly Regex PipelineStatusAfterPendingRegex = new(
+        @"(?ix)^\s*(?:
+            /\s*planned\b |
+            [- ](?:status|state|label|value|ladder|telemetry|records?|rows?)\b |
+            [- ]plan\s+rows?\b
+        )",
+        RegexOptions.Compiled);
+
     public enum CompletionGateAction
     {
         Pass,
@@ -509,8 +524,56 @@ public static class CompletionGate
             // "No unfinished evidence" is evidence of completion, not an
             // unfinished-work finding.
             if (NegatedIncompleteEvidenceRegex.IsMatch(line)) continue;
+            // A task can legitimately discuss the Pipeline status value
+            // `Pending` while proving that the stale representation was
+            // removed. Only suppress lines whose incomplete-work matches are
+            // all quoted or clearly contextualised Pipeline status tokens.
+            // Lower-case prose such as "verification is still pending" remains
+            // actionable completion evidence (AGT-2209).
+            if (HasOnlyPipelineStatusPendingEvidence(line)) continue;
             yield return line;
         }
+    }
+
+    private static bool HasOnlyPipelineStatusPendingEvidence(string line)
+    {
+        var matches = IncompleteEvidenceRegex.Matches(line);
+        if (matches.Count == 0) return false;
+
+        foreach (Match match in matches)
+        {
+            if (!match.Value.Equals("pending", StringComparison.OrdinalIgnoreCase) ||
+                !IsPipelineStatusPendingToken(line, match))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsPipelineStatusPendingToken(string line, Match match)
+    {
+        var before = line[..match.Index];
+        var after = line[(match.Index + match.Length)..];
+        var previous = before.Length > 0 ? before[^1] : '\0';
+        var next = after.Length > 0 ? after[0] : '\0';
+
+        if ((previous is '`' or '\'' or '"') && next == previous)
+            return true;
+
+        if (PipelineStatusBeforePendingRegex.IsMatch(before) ||
+            PipelineStatusAfterPendingRegex.IsMatch(after))
+        {
+            return true;
+        }
+
+        // Uppercase enum labels are commonly compounded in reports, for
+        // example "PENDING-ladder". Do not generalise this to an uppercase
+        // token on its own, which can still be genuine unfinished-work prose.
+        return match.Value.Equals("PENDING", StringComparison.Ordinal) &&
+               after.Length > 0 &&
+               after[0] == '-';
     }
 
     private static bool IsNoneLine(string line)

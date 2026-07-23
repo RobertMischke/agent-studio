@@ -1169,6 +1169,23 @@
             repair itself, records the reason in <code>timeline.jsonl</code>.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2209</code><br><span class="small">Pipeline Pending-label completion-gate loop</span></td>
+          <td>
+            A completed Overview fix repeatedly reissued and ultimately escalated after its tests and visual evidence passed.
+            The reported findings quoted only the stale <code>PENDING</code> Pipeline label that the change removed.
+          </td>
+          <td>
+            The completion gate treated every occurrence of the word <code>pending</code> as unfinished work, including quoted
+            status constants, Pipeline-state compounds, source echoes, and the successful close-out description.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> quoted and clearly contextualised Pipeline status tokens are ignored only when
+            they are the line's complete set of unfinished-work matches. Genuine prose such as "verification is still pending"
+            remains blocking. The reproduced exhausted-budget close-out now passes the gate and continues to auto-review.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -464,6 +464,42 @@ public class CompletionGateTests
     }
 
     [Fact]
+    public void Evaluate_PipelinePendingVocabularyFromSuccessfulFix_Passes()
+    {
+        // AGT-2209 operator-sweep regression: the completed UI fix necessarily
+        // names the stale Pipeline status in source echoes and close-out prose.
+        // Those tokens describe the removed defect, not work left to perform.
+        var log = string.Join('\n',
+            "[14:07:05.101] [stderr] +/** Project a terminal CORE verdict over a legacy Pending plan row. */",
+            "[14:07:05.102] [stderr] + if (status !== 'pending' && status !== 'planned') return status;",
+            "[14:07:09.489] [stdout] Terminal tasks now render without an all-PENDING ladder.",
+            "[14:07:09.490] [stdout] [[TASK_DONE]]");
+
+        var findings = CompletionGate.ExtractFindings(statusMarkdown: null, log);
+        var decision = CompletionGate.Evaluate(
+            statusMarkdown: null,
+            log,
+            priorReissues: MaxReissues,
+            maxReissues: MaxReissues);
+
+        Assert.Empty(findings);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
+    }
+
+    [Theory]
+    [InlineData("Pipeline verification is still pending.")]
+    [InlineData("VERIFICATION PENDING")]
+    [InlineData("Migration steps pending.")]
+    public void ExtractFindings_GenuinePendingWorkNearPipelineVocabulary_StillReported(string line)
+    {
+        var findings = CompletionGate.ExtractFindings(
+            statusMarkdown: $"## Notes\n{line}",
+            recentLog: null);
+
+        Assert.NotEmpty(findings);
+    }
+
+    [Fact]
     public void ExtractFindings_GreppedBuildErrorString_InLogTail_IsNotReported()
     {
         // A grepped source line that merely contains the literal "build failed"
