@@ -1,4 +1,8 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -90,6 +94,63 @@ public sealed class TestRunServiceTests : IDisposable
         {
             State = "running",
         }));
+    }
+
+    [Fact]
+    public async Task Api_CreatesReadsAndCompletesDurableRun()
+    {
+        var stack = BuildStack();
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Test");
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["TaskRepository"] = stack.Configuration["TaskRepository"],
+                    ["WatchPaths:0:Name"] = "Demo",
+                    ["WatchPaths:0:Path"] = stack.Storage,
+                    ["WatchPaths:0:RootPath"] = stack.Repo,
+                    ["WatchPaths:0:RepositoryPath"] = stack.Repo,
+                }));
+        });
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+        var commit = RevParse(stack.Repo, "HEAD");
+
+        var create = await client.PostAsJsonAsync("/api/projects/Demo/test-runs", Request(commit, "planned", null));
+
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var planned = await create.Content.ReadFromJsonAsync<TestRunRecord>();
+        Assert.NotNull(planned);
+        var complete = await client.PutAsJsonAsync($"/api/projects/Demo/test-runs/{planned!.Id}", new UpdateTestRunRequest
+        {
+            State = "completed",
+            Result = "passed",
+            Host = "runner-api",
+        });
+        complete.EnsureSuccessStatusCode();
+        var completed = await complete.Content.ReadFromJsonAsync<TestRunRecord>();
+        Assert.Equal("passed", completed!.Result);
+        Assert.NotNull(completed.DurationSeconds);
+
+        var view = await client.GetFromJsonAsync<ProjectTestRunsResponse>("/api/projects/Demo/test-runs");
+        Assert.Equal(planned.Id, Assert.Single(view!.Runs).Run.Id);
+        Assert.Equal("runner-api", view.Runs[0].Run.Host);
+    }
+
+    [Fact]
+    public void Lifecycle_NormalizesEnumsAndRejectsInvalidQueueOrder()
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+
+        var completed = stack.Service.Create("Demo", Request(commit, "COMPLETED", "PASSED"));
+
+        Assert.Equal(TestRunStates.Completed, completed!.State);
+        Assert.Equal(TestRunResults.Passed, completed.Result);
+        Assert.Equal(4, completed.DurationSeconds);
+        var invalid = Request(commit, "planned", null) with { PlannedOrder = 0 };
+        Assert.Throws<TestRunValidationException>(() => stack.Service.Create("Demo", invalid));
     }
 
     [Fact]
@@ -189,7 +250,7 @@ public sealed class TestRunServiceTests : IDisposable
         Scope = new TestRunScope { Level = "project", TestSet = "all" },
         State = state,
         Result = result,
-        DurationSeconds = state == "completed" ? 4 : null,
+        DurationSeconds = string.Equals(state, "completed", StringComparison.OrdinalIgnoreCase) ? 4 : null,
         Host = state == "planned" ? null : "runner-01",
     };
 

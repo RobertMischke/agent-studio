@@ -458,7 +458,7 @@
       }
     </div>
   }
-  @if (!isEpic() && job().testEvidence; as evidence) {
+  @if (job().testEvidence; as evidence) {
     <app-task-test-evidence [evidence]="evidence" />
   }
   <div class="task-card__activity">

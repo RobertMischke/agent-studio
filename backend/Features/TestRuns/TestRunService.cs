@@ -34,7 +34,7 @@ public sealed class TestRunService
         if (project is null) return null;
         ValidateCreate(request);
         var now = DateTime.UtcNow;
-        var state = request.State.Trim().ToLowerInvariant();
+        var state = NormalizeState(request.State);
         var runs = _store.List(project.Id);
         var run = new TestRunRecord
         {
@@ -45,12 +45,14 @@ public sealed class TestRunService
             Branch = request.Branch.Trim(),
             Scope = new TestRunScope
             {
-                Level = request.Scope.Level.Trim(),
+                Level = request.Scope!.Level.Trim(),
                 TestSet = request.Scope.TestSet.Trim(),
             },
             State = state,
             Result = state == TestRunStates.Completed ? NormalizeResult(request.Result) : null,
-            DurationSeconds = state == TestRunStates.Planned ? null : request.DurationSeconds,
+            DurationSeconds = state == TestRunStates.Planned
+                ? null
+                : request.DurationSeconds ?? (state == TestRunStates.Completed ? 0 : null),
             Host = Clean(request.Host),
             PlannedOrder = request.PlannedOrder ?? (runs.Count == 0 ? 1 : runs.Max(item => item.PlannedOrder) + 1),
             CreatedAt = now,
@@ -64,7 +66,7 @@ public sealed class TestRunService
     {
         var project = ResolveProject(projectHandle);
         if (project is null) return null;
-        var state = request.State.Trim().ToLowerInvariant();
+        var state = NormalizeState(request.State);
         if (!TestRunStates.IsValid(state)) throw new TestRunValidationException("state must be planned, running, or completed.");
         if (state == TestRunStates.Completed && !TestRunResults.IsTerminal(NormalizeResult(request.Result)))
             throw new TestRunValidationException("A completed test run requires result passed, failed, or canceled.");
@@ -84,13 +86,19 @@ public sealed class TestRunService
                 return current;
             }
             var now = DateTime.UtcNow;
+            DateTime? startedAt = state is TestRunStates.Running or TestRunStates.Completed
+                ? current.StartedAt ?? now
+                : null;
+            var duration = request.DurationSeconds ?? current.DurationSeconds;
+            if (state == TestRunStates.Completed && duration is null)
+                duration = Math.Max(0, (now - startedAt!.Value).TotalSeconds);
             return current with
             {
                 State = state,
                 Result = state == TestRunStates.Completed ? NormalizeResult(request.Result) : null,
-                DurationSeconds = request.DurationSeconds ?? current.DurationSeconds,
+                DurationSeconds = duration,
                 Host = Clean(request.Host) ?? current.Host,
-                StartedAt = state is TestRunStates.Running or TestRunStates.Completed ? current.StartedAt ?? now : null,
+                StartedAt = startedAt,
                 CompletedAt = state == TestRunStates.Completed ? current.CompletedAt ?? now : null,
             };
         });
@@ -337,12 +345,16 @@ public sealed class TestRunService
         if (string.IsNullOrWhiteSpace(request.Commit)) throw new TestRunValidationException("commit is required.");
         if (string.IsNullOrWhiteSpace(request.Branch)) throw new TestRunValidationException("branch is required.");
         if (string.IsNullOrWhiteSpace(request.Trigger)) throw new TestRunValidationException("trigger is required.");
-        if (string.IsNullOrWhiteSpace(request.Scope.Level) || string.IsNullOrWhiteSpace(request.Scope.TestSet))
+        if (request.Scope is null
+            || string.IsNullOrWhiteSpace(request.Scope.Level)
+            || string.IsNullOrWhiteSpace(request.Scope.TestSet))
             throw new TestRunValidationException("scope.level and scope.testSet are required.");
-        if (!TestRunStates.IsValid(request.State)) throw new TestRunValidationException("state must be planned, running, or completed.");
-        if (request.State == TestRunStates.Completed && !TestRunResults.IsTerminal(NormalizeResult(request.Result)))
+        var state = NormalizeState(request.State);
+        if (!TestRunStates.IsValid(state)) throw new TestRunValidationException("state must be planned, running, or completed.");
+        if (state == TestRunStates.Completed && !TestRunResults.IsTerminal(NormalizeResult(request.Result)))
             throw new TestRunValidationException("A completed test run requires result passed, failed, or canceled.");
         if (request.DurationSeconds is < 0) throw new TestRunValidationException("durationSeconds cannot be negative.");
+        if (request.PlannedOrder is <= 0) throw new TestRunValidationException("plannedOrder must be positive.");
     }
 
     private static int Rank(string state) => state switch { TestRunStates.Planned => 0, TestRunStates.Running => 1, _ => 2 };
@@ -355,6 +367,7 @@ public sealed class TestRunService
         if (run.State == TestRunStates.Planned) return 4 + exactOffset;
         return 6 + exactOffset;
     }
+    private static string NormalizeState(string? value) => Clean(value)?.ToLowerInvariant() ?? "";
     private static string? NormalizeResult(string? value) => Clean(value)?.ToLowerInvariant();
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static bool SamePath(string left, string right) => string.Equals(
