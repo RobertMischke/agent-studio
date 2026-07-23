@@ -71,6 +71,7 @@ import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 import { taskNavigationHref, taskUrl } from '../../../state/task-url';
+import { LayoutPanesService } from '../../../services/layout-panes.service';
 export type InspectorTab = 'protocol' | 'activity';
 
 /**
@@ -165,6 +166,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly jobs = inject(TaskService);
   private readonly overlayPortal = inject(OverlayPortalService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly layout = inject(LayoutPanesService);
 
   @ViewChild('outcomeIssuePortalRoot')
   private outcomeIssuePortalRoot?: ElementRef<HTMLDivElement>;
@@ -421,6 +423,10 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (link.target === 'status') {
       this.openSource({ path: 'status.md', line: null });
     }
+  }
+
+  onResultMetricNavigate(metricId: string): void {
+    if (metricId === 'grade') this.layout.openPromptTab('description', 'codeReview');
   }
 
   /**

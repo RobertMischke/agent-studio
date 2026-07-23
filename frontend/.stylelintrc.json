@@ -209,6 +209,7 @@
         "src/app/features/remote-hosts/components/runner-setup-dialog/runner-setup-dialog.scss",
         "src/app/features/shell/components/onboard-project-dialog/onboard-project-dialog.component.scss",
         "src/app/features/studio-shell/components/explorer-workbench-list/explorer-workbench-list.component.scss",
+        "src/app/features/task-detail/components/prompt-pane/files-pane/document-details-menu/document-details-menu.component.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-run-history/pipeline-run-history.component.scss",
         "src/app/features/task-detail/components/prompt-pane/post-step-controls/post-step-controls.component.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-step-details/pipeline-step-details.component.scss",

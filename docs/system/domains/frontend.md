@@ -70,7 +70,9 @@ groups, and a failed domain reports an error without hiding successful domains.
   timestamps and triggers from the timeline, and shows open gate evidence.
   Timeline and steering text is ANSI-sanitised before rendering. Code Review
   keeps the last available grade visible with its date when it belongs to an
-  older delivery.
+  older delivery. The task-detail Docs tab presents rendered result documents
+  before prompt and raw artifacts, with per-document anchors and technical file
+  metadata disclosed from the document details menu.
 - `frontend/src/app/features/project-detail/`: project shell and project-level
   quality, settings, architecture, runtime, drift, and supervisor panels. The
   left rail (`project-shell`) is a collapsible-segment tree

@@ -91,19 +91,19 @@
     },
     {
       "id": "task-detail-files",
-      "feature": "Task files",
-      "title": "Task detail files tab",
-      "purpose": "Shows that task prompts, notes, and generated Markdown artifacts stay attached to the task.",
+      "feature": "Task docs",
+      "title": "Task detail Docs tab",
+      "purpose": "Shows rendered task outcomes before prompts and raw artifacts while keeping file details inspectable.",
       "featureDoc": "features/task-detail-files.md",
       "image": {
         "path": "../images/detail-files.png",
-        "alt": "Task detail Files tab with prompt and task Markdown artifacts.",
-        "caption": "Files tab from an existing Agent Software Studio task."
+        "alt": "Task detail Docs tab with rendered outcomes and task artifacts.",
+        "caption": "Outcome-first Docs tab from an existing Agent Software Studio task."
       },
       "state": {
         "route": "/tasks/<existing-agent-studio-task>",
         "viewport": "1440x900",
-        "relevantState": "The task detail is open and the Files tab is selected.",
+        "relevantState": "The task detail is open and the Docs tab is selected.",
         "dataSource": "Existing Agent Software Studio task selected by the Playwright spec."
       },
       "capture": {
@@ -123,8 +123,8 @@
           "publicPath": "/product-screenshots/task-detail-files.png",
           "component": "productVisualGallery",
           "pages": ["/product", "/patterns"],
-          "role": "Task artifacts proof image",
-          "copyIntent": "Show that task documents and agent artifacts remain inspectable with the task."
+          "role": "Task outcome documents proof image",
+          "copyIntent": "Show that task outcomes are readable first while source artifacts remain inspectable."
         }
       ]
     },
