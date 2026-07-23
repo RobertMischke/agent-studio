@@ -107,6 +107,26 @@ describe('OrchestratorFeedComponent · decision override buttons', () => {
     expect(fixture.componentInstance.visibleEntries().map(entry => entry.kind)).toEqual(['decision']);
   });
 
+  it('renders pipeline health alarms and exposes the dedicated alert filter', async () => {
+    const { fixture } = await setup();
+    fixture.componentInstance.entries.set([{
+      ...decisionEntry,
+      kind: 'alert',
+      topic: 'pipeline-health',
+      summary: 'Systemic gate problem detected',
+      project: 'demo-project',
+    }]);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const alert = root.querySelector<HTMLElement>('.orch-feed__entry--alert');
+    const filter = root.querySelector<HTMLElement>('[data-testid="feed-kind-alert"]');
+    expect(alert?.textContent).toContain('Systemic gate problem detected');
+    expect(alert?.textContent).toContain('Alert');
+    expect(filter?.textContent).toContain('Alerts');
+    expect(filter?.textContent).toContain('1');
+  });
+
   it('renders Cancel and Send override as type="button" while the override form is open', async () => {
     const { fixture } = await setup();
 
