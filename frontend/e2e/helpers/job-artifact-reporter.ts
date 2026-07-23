@@ -3,7 +3,8 @@ import path from 'path';
 import { Reporter, TestCase, TestResult } from '@playwright/test';
 
 /**
- * Custom Playwright reporter that harvests test artifacts (screenshots, videos, traces)
+ * Custom Playwright reporter that harvests test artifacts (screenshots, videos,
+ * traces, and structured JSON probes)
  * into a job folder's results directory when JOB_RESULTS_DIR env var is set.
  *
  * This reporter activates only when JOB_RESULTS_DIR is defined and copies artifacts
@@ -58,7 +59,7 @@ export class JobArtifactReporter implements Reporter {
       const files = fs.readdirSync(testResultsSpecDir);
       for (const file of files) {
         const srcPath = path.join(testResultsSpecDir, file);
-        if (fs.statSync(srcPath).isFile() && /\.(png|webm|zip)$/.test(file)) {
+        if (fs.statSync(srcPath).isFile() && /\.(json|png|webm|zip)$/.test(file)) {
           const destPath = path.join(destDir, file);
           fs.copyFileSync(srcPath, destPath);
           specArtifacts.files.push(file);
@@ -69,7 +70,7 @@ export class JobArtifactReporter implements Reporter {
     // Also copy from result.attachments if available
     if (result.attachments) {
       for (const attachment of result.attachments) {
-        if (attachment.path && fs.existsSync(attachment.path) && /\.(png|webm|zip)$/.test(attachment.path)) {
+        if (attachment.path && fs.existsSync(attachment.path) && /\.(json|png|webm|zip)$/.test(attachment.path)) {
           const destDir = path.join(this.jobResultsDir, 'playwright', specName);
           fs.mkdirSync(destDir, { recursive: true });
 

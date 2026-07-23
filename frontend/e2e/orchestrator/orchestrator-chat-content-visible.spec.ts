@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { installFrontendOverride } from '../helpers/frontend-override';
 
 /**
  * End-to-end acceptance: orchestrator-chat content is visible immediately
@@ -28,7 +29,6 @@ import { expect, test, type Page } from '@playwright/test';
  * regression and reliable as an acceptance check on the fixed build.
  */
 
-const SHOTS = 'screenshots/orchestrator-chat-content-visible';
 // Alpha-only: orchestrator turns render through markdown, and underscores
 // would be eaten as emphasis (NEWEST_X_Y -> italic, underscores stripped).
 const NEWEST_MARKER = 'ZZZNEWESTTURNVISIBLEZZZ';
@@ -61,6 +61,40 @@ function buildTurns(n: number): StubTurn[] {
 const TURNS = buildTurns(200);
 
 async function stubOrchestratorChat(page: Page): Promise<void> {
+  await installFrontendOverride(page);
+
+  await page.route('**/api/watch-paths', route => route.fulfill({
+    json: [{ name: 'chat-visible', path: '/tmp/chat-visible', rootPath: '/tmp/chat-visible' }],
+  }));
+  await page.route('**/api/workspaces', route => route.fulfill({
+    json: [{
+      id: 'workspace-chat-visible',
+      displayName: 'Chat fixture',
+      sortOrder: 0,
+      isDefault: true,
+      projects: [{
+        id: 'chat-visible',
+        displayName: 'chat-visible',
+        shortCode: 'CV',
+        workspaceId: 'workspace-chat-visible',
+        storageLocation: '/tmp/chat-visible',
+        archived: false,
+        urls: [],
+      }],
+    }],
+  }));
+
+  // Keep the assertion isolated from unrelated recovery state on a live
+  // operator backend. Mutating that recovery state just to reach the chat
+  // would be destructive, so make this read empty in the browser fixture.
+  await page.route('**/api/crash-recovery/pending', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { pending: [] } });
+  });
+
   // Exact-path match for the chat GET; the `/attachments/...` sub-route
   // lives deeper so this glob never swallows it.
   await page.route('**/api/runner/*/orchestrator-chat', async (route) => {
@@ -162,6 +196,11 @@ test.describe('orchestrator chat — content stays visible after load', () => {
     // And there must be no phantom bottom spacer hiding the tail.
     expect(snapshot.bottomSpacerHeight).toBe(0);
 
-    await page.screenshot({ path: `${SHOTS}/01-newest-turn-visible-after-load.png` });
+    const screenshotPath = test.info().outputPath('newest-turn-visible-after-load.png');
+    await page.screenshot({ path: screenshotPath });
+    await test.info().attach('newest-turn-visible-after-load.png', {
+      path: screenshotPath,
+      contentType: 'image/png',
+    });
   });
 });

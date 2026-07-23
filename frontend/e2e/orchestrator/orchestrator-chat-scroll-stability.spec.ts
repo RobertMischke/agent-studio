@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import { installFrontendOverride } from '../helpers/frontend-override';
 import { setTheme } from '../helpers/theme';
 
 /**
@@ -50,6 +51,8 @@ function buildTurns(): StubTurn[] {
 async function stubGrowingTranscript(page: Page): Promise<() => number> {
   const turns = buildTurns();
   let reads = 0;
+
+  await installFrontendOverride(page);
 
   // Keep the rendering regression independent of the operator's auth profile
   // and current board. More specific route handlers registered below win over
@@ -197,8 +200,13 @@ test('mixed-height streamed rows stay mounted without scrollbar correction', asy
   expect(snapshot.maxBackwardScroll).toBeLessThanOrEqual(1);
   expect(snapshot.distanceFromBottom).toBeLessThanOrEqual(24);
 
-  await setTheme(page, 'light');
-  await page.screenshot({ path: testInfo.outputPath('orchestrator-stream-stable-light.png') });
-  await setTheme(page, 'dark');
-  await page.screenshot({ path: testInfo.outputPath('orchestrator-stream-stable-dark.png') });
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    const screenshotPath = testInfo.outputPath(`orchestrator-stream-stable-${theme}.png`);
+    await page.screenshot({ path: screenshotPath });
+    await testInfo.attach(`orchestrator-stream-stable-${theme}.png`, {
+      path: screenshotPath,
+      contentType: 'image/png',
+    });
+  }
 });
