@@ -186,6 +186,25 @@ public class TaskScannerOutcomeIssueTests : IDisposable
         Assert.DoesNotContain("runner=agent-runner-with-a-long-diagnostic-name", issue.Summary);
     }
 
+    [Theory]
+    [InlineData("tool-router-error", "Tool router error")]
+    [InlineData("no-reply", "No reply")]
+    public void TypedAgentFailureMarker_SurfacesWithCompleteTechnicalDetails(string kind, string expectedLabel)
+    {
+        var diagnostic =
+            $"[orchestrator] [{kind}] Agent execution failed. " +
+            "[phase=TurnCompleted silence=42s allowed=600s complete-tail]";
+        SeedJob(kind, TaskStates.HumanReview,
+            $"[09:20:01.000] {diagnostic}{Environment.NewLine}");
+
+        var issue = Outcome(kind);
+
+        Assert.NotNull(issue);
+        Assert.Equal(kind, issue!.Kind);
+        Assert.Equal(expectedLabel, issue.Label);
+        Assert.Equal(diagnostic, issue.TechnicalDetails);
+    }
+
     [Fact]
     public void EmptyFastExitMarker_SurfacesHighSeverityOutcome()
     {

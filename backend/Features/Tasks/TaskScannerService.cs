@@ -1074,6 +1074,16 @@ public class TaskScannerService : ITaskScanner
             issue = BuildOutcomeIssue("watchdog-timeout", "Watchdog timeout", "High", line, lastSeenAt);
             return true;
         }
+        if (lower.Contains("[tool-router-error]"))
+        {
+            issue = BuildOutcomeIssue("tool-router-error", "Tool router error", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("[no-reply]"))
+        {
+            issue = BuildOutcomeIssue("no-reply", "No reply", "High", line, lastSeenAt);
+            return true;
+        }
         if (lower.Contains("empty-fast-exit"))
         {
             issue = BuildOutcomeIssue("empty-fast-exit", "Empty fast exit", "High", line, lastSeenAt);

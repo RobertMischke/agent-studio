@@ -496,6 +496,8 @@ export interface TaskOutcomeIssue {
   kind:
     | 'permission-blocked'
     | 'watchdog-timeout'
+    | 'tool-router-error'
+    | 'no-reply'
     | 'missing-terminal-sentinel'
     | 'classifier-unknown'
     | 'heuristic-done'
