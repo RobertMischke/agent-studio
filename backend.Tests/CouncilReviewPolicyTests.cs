@@ -34,6 +34,16 @@ public sealed class CouncilReviewPolicyTests
     }
 
     [Fact]
+    public void ReissueTargetsTheActualNextPipelineAttempt_NotTheChainReissueCount()
+    {
+        var reaction = CouncilReviewPolicy.Derive(
+            "code-review-grade.md", CodeReviewGrade.B, new[] { "Dark theme is wrong." },
+            priorReissues: 0, maxReissues: 2, jobId: "AGT-2108", targetRunAttempt: 7);
+
+        Assert.Equal(7, reaction.TargetRunAttempt);
+    }
+
+    [Fact]
     public void GradeAWithoutFindings_AcceptsNothingOpenWithoutStartingRound()
     {
         var reaction = CouncilReviewPolicy.Derive(
@@ -44,6 +54,24 @@ public sealed class CouncilReviewPolicyTests
         Assert.Equal("Accept, nothing open.", reaction.Summary);
         Assert.False(reaction.StartsNewRound);
         Assert.Empty(reaction.Assessments);
+    }
+
+    [Theory]
+    [InlineData(CodeReviewGrade.B)]
+    [InlineData(CodeReviewGrade.C)]
+    [InlineData(CodeReviewGrade.D)]
+    public void NonCleanGradeWithoutConcreteFindings_EscalatesInsteadOfOptimisticallyAccepting(
+        CodeReviewGrade grade)
+    {
+        var reaction = CouncilReviewPolicy.Derive(
+            "code-review-grade.md", grade, Array.Empty<string>(),
+            priorReissues: 0, maxReissues: 2, jobId: "AGT-2108");
+
+        Assert.Equal(CouncilReactionDisposition.Escalate, reaction.Disposition);
+        Assert.False(reaction.StartsNewRound);
+        var assessment = Assert.Single(reaction.Assessments);
+        Assert.Equal(CouncilFindingAction.Escalate, assessment.Action);
+        Assert.Contains("no concrete finding sentence", assessment.Finding, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

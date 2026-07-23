@@ -279,17 +279,24 @@ operator changes cause the step to fail before its writer runs.
   per finding. `FixNextRound` reissues the same card within the shared loop
   budget and writes only the selected finding sentences to
   `orchestrator-follow-up.md`; exhausted budget escalates every remaining
-  finding. The sibling `*.council-reaction.json` and decision journal entry are
-  the read-side chain for review -> reaction -> target task/run.
+  finding. A B/C/D response without the required concrete finding sentences is
+  never treated as clean: it escalates the missing handoff because no safe,
+  targeted round can be formed. When a deterministic build/test failure already
+  reopens the same attempt, that follow-up includes both the build output and
+  the selected council findings. The sibling `*.council-reaction.json` and the
+  action decision journal entry are the read-side chain for review -> reaction
+  -> target task/run.
 - `post-code-review-grade` is the automatic quality-grade step (ASS-1657). It is
   `DefaultEnabled`, runs after the four aspect reviews and before
   `post-orchestrator-decision`, and assigns every pipelined task an A/B/C/D grade
   with the rubric: A solves the goal completely with tests/evidence, B is solid
   with small gaps, C has concerns (half-done/unclear), D misses the goal or
-  redundantly redoes existing code. It is reporting-only and never gates the lane:
-  the grade surfaces as a `code-review:grade-{a..d}` card tag plus a rendered
-  detail file, a D records a `Failed` step row so it stands out in the Overview,
-  and A-C record `Passed`. The grade model is quality-first: it defaults to the
+  redundantly redoes existing code. The grade token is reporting-only: it
+  surfaces as a `code-review:grade-{a..d}` card tag plus a rendered detail file.
+  A D records a `Failed` step row so it stands out in the Overview, and A-C
+  record `Passed`. Named findings from that review are inputs to the separate
+  council decision above and can therefore start a bounded round. The grade
+  model is quality-first: it defaults to the
   live-discovered Codex flagship with the top supported reasoning level
   (`CodeReviewStep:DefaultModel`, CLI `CodeReviewStep:DefaultCli`), while the four
   bounded aspect reviews use Codex `gpt-5.4-mini` at `high`. Opt out per deployment

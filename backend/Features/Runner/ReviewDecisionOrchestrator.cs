@@ -1832,13 +1832,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // evidence before the task is reissued / escalated. The aspect pool
             // is intentionally bypassed on this terminal branch.
             var failedBuildGrade = await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
-            if (failedBuildGrade is not null)
-            {
-                AgentStudio.Review.CouncilReviewReactionStore.Write(
-                    current.FolderPath,
-                    DeriveCouncilReviewReaction(workspace, entry, current, failedBuildGrade));
-            }
-            await HandleBuildTestGateFailureAsync(workspace, entry, pending, current, buildGateResult, ct);
+            await HandleBuildTestGateFailureAsync(
+                workspace, entry, pending, current, buildGateResult, failedBuildGrade, ct);
             return;
         }
 
@@ -1916,18 +1911,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reissue budget (an Escalate decision, which resets the attempt chain).
         if (report.HasInfraFailure)
         {
+            AgentStudio.Review.CouncilReviewReaction? infraReaction = null;
             if (gradeReport is not null)
             {
-                var reaction = DeriveCouncilReviewReaction(workspace, entry, current, gradeReport);
-                reaction = AgentStudio.Review.CouncilReviewPolicy.EscalateBecause(
-                    reaction,
+                infraReaction = DeriveCouncilReviewReaction(workspace, entry, current, gradeReport);
+                infraReaction = AgentStudio.Review.CouncilReviewPolicy.EscalateBecause(
+                    infraReaction,
                     "aspect review infrastructure failed, so no safe automatic follow-up round can be started");
-                AgentStudio.Review.CouncilReviewReactionStore.Write(current.FolderPath, reaction);
+                AgentStudio.Review.CouncilReviewReactionStore.Write(current.FolderPath, infraReaction);
             }
             _pipelineLog?.Complete(
                 current.FolderPath,
                 pendingStepReason: "Not run because aspect review infrastructure failed after its retry budget was exhausted.");
-            await HandleAspectInfraCrashAsync(workspace, entry, pending, current, report, ct);
+            await HandleAspectInfraCrashAsync(workspace, entry, pending, current, report, infraReaction, ct);
             return;
         }
 
@@ -2298,7 +2294,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             CountPriorReissues(workspace, entry.Name, current.Id),
             ConfiguredMaxReissues(),
             current.Id,
-            gradeReport.ExecutionError);
+            targetRunAttempt: (_pipelineLog?.Read(current.FolderPath)?.Attempt
+                ?? CountPriorReissues(workspace, entry.Name, current.Id) + 1) + 1,
+            executionError: gradeReport.ExecutionError);
 
     private async Task ReissueOnBlockAsync(
         string workspace,
@@ -2392,6 +2390,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PendingDecision pending,
         TaskInfo current,
         AspectRunReport report,
+        AgentStudio.Review.CouncilReviewReaction? councilReaction,
         CancellationToken ct)
     {
         var crashedAspects = report.InfraFailures.Select(v => v.Aspect).ToList();
@@ -2419,6 +2418,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
         var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.Escalated };
+        if (councilReaction is not null)
+        {
+            AgentStudio.Review.CouncilReviewReactionStore.Write(escalatedFolder, councilReaction);
+        }
 
         RecordOrchestratorDecisionStep(escalatedFolder, PipelineStepStatus.Failed,
             "environmental", reason);
@@ -2443,7 +2446,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: reason,
             Prompt: "(multi-aspect run; reviewing CLI produced no verdict after environmental retry)",
             Response: AspectSummaryLine(report),
-            FollowUp: string.Empty),
+            FollowUp: string.Empty)
+        {
+            CouncilReaction = councilReaction,
+        },
             current.FolderPath,
             escalatedFolder);
 
@@ -4654,8 +4660,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PendingDecision pending,
         TaskInfo current,
         BuildTestGateResult result,
+        AgentStudio.Review.CodeReviewStepReport? gradeReport,
         CancellationToken ct)
     {
+        var councilReaction = gradeReport is null
+            ? null
+            : DeriveCouncilReviewReaction(workspace, entry, current, gradeReport);
+        if (councilReaction is not null)
+        {
+            AgentStudio.Review.CouncilReviewReactionStore.Write(current.FolderPath, councilReaction);
+        }
+
         _pipelineLog?.Complete(
             current.FolderPath,
             pendingStepReason: "Not run because the build/test gate stopped this pipeline attempt: " + result.Reason);
@@ -4677,11 +4692,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var reason = priorBuildGateReissues >= 1
                 ? $"build-test gate failed twice for the same product retry identity ({failureIdentity}; {result.Reason}); escalating per post-step loop guard."
                 : $"build-test gate failed and the task-level anti-churn ceiling was reached ({failureIdentity}; {result.Reason}).";
+            if (councilReaction?.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue)
+            {
+                councilReaction = AgentStudio.Review.CouncilReviewPolicy.EscalateBecause(
+                    councilReaction,
+                    "the build/test gate ended this attempt at its loop guard, so no further automatic round can start");
+            }
             var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status == MoveJobStatus.Success)
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
                 var escalated = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
+                if (councilReaction is not null)
+                {
+                    AgentStudio.Review.CouncilReviewReactionStore.Write(movedFolderPath, councilReaction);
+                }
                 RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Failed,
                     DecisionVerdictEscalate, reason);
                 WritePostProcessingOutcome(escalated, PostProcessingOutcomes.FailedPostProcessing,
@@ -4718,6 +4743,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 SubjectSha = result.ExpectedSha,
                 FailureFingerprint = result.FailureFingerprint,
                 FailureKind = result.FailureKind.ToString(),
+                CouncilReaction = councilReaction,
             },
                 current.FolderPath,
                 move.NewFolderPath);
@@ -4727,6 +4753,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var moved = MoveReissueToReadyTop(current, entry, "build-test gate fail");
         if (moved == null) return;
 
+        if (councilReaction is not null)
+        {
+            AgentStudio.Review.CouncilReviewReactionStore.Write(moved.FolderPath, councilReaction);
+        }
         RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
             DecisionVerdictReissue, BuildTestGateReissueReasonPrefix + failureIdentity + "; " + result.Reason);
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.FailedPostProcessing,
@@ -4735,19 +4765,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             stepId: PipelineCatalogue.BuildTestGateStepId,
             evidenceRef: "post-steps/build-test-gate.log");
 
-        var followUp = BuildBuildTestGateFollowUp(result);
+        var followUp = BuildBuildTestGateFollowUp(result, councilReaction);
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        var councilSuffix = councilReaction?.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue
+            ? $" The same round also carries {councilReaction.Assessments.Count} named council finding(s)."
+            : string.Empty;
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
-            $"Auto-review sent \"{title}\" back to 2-ready: build/test gate failed ({result.Reason}).");
+            $"Auto-review sent \"{title}\" back to 2-ready: build/test gate failed ({result.Reason}).{councilSuffix}");
 
         EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
             TimelineActors.QualityLoop,
             $"Reopened: build/test gate failed ({result.Reason}).",
             BuildReopenDetails("build-test-gate-fail",
                 CountPriorReissues(workspace, entry.Name, current.Id),
-                result.Output));
+                followUp));
 
         _statusSnapshot.RecordReissue();
         AppendReviewDecision(workspace, new ReviewDecisionRecord(
@@ -4765,6 +4798,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             SubjectSha = result.ExpectedSha,
             FailureFingerprint = result.FailureFingerprint,
             FailureKind = result.FailureKind.ToString(),
+            CouncilReaction = councilReaction,
         },
             current.FolderPath,
             moved.FolderPath);
@@ -4773,18 +4807,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal static string BuildTestGateFailureIdentity(BuildTestGateResult result)
         => $"attempt={result.AttemptChainId ?? "missing"};subject={result.ExpectedSha ?? "missing"};gate={result.GateId};fingerprint={result.FailureFingerprint ?? "missing"}";
 
-    private static string BuildBuildTestGateFollowUp(BuildTestGateResult result)
+    private static string BuildBuildTestGateFollowUp(
+        BuildTestGateResult result,
+        AgentStudio.Review.CouncilReviewReaction? councilReaction = null)
     {
         var commands = result.RanFrontendBuild
             ? "`dotnet build backend/OrchestratorApi.csproj` and `npm run build` from `frontend/`"
             : "`dotnet build backend/OrchestratorApi.csproj`";
-        return "Auto-review re-opened this task because the deterministic build/test gate failed. " +
+        var buildFollowUp = "Auto-review re-opened this task because the deterministic build/test gate failed. " +
             "Do not rely on the previous self-reported Success. Fix only the current task diff, " +
             $"run {commands}, and end with [[TASK_DONE]] once the gate is green.\n\n" +
             "Truncated build/test output:\n" +
             "```\n" +
             result.Output + "\n" +
             "```";
+        if (councilReaction?.Disposition != AgentStudio.Review.CouncilReactionDisposition.Reissue)
+        {
+            return buildFollowUp;
+        }
+
+        return buildFollowUp + "\n\n" +
+            AgentStudio.Review.CouncilReviewPolicy.BuildTargetedFollowUp(councilReaction);
     }
 
     /// <summary>

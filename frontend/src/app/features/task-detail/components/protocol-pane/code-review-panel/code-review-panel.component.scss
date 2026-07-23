@@ -125,7 +125,6 @@
   color: var(--studio-fg);
   font: inherit;
 }
-
 .cr-reaction {
   display: flex;
   flex-direction: column;
@@ -137,24 +136,20 @@
   background: var(--studio-surface-muted);
   color: var(--studio-fg);
 }
-
 .cr-reaction[data-disposition='reissue'] {
   background: color-mix(in srgb, var(--severity-warn) 9%, var(--studio-bg-elevated));
   border-color: color-mix(in srgb, var(--severity-warn) 38%, var(--studio-border));
 }
-
 .cr-reaction[data-disposition='escalate'] {
   background: color-mix(in srgb, var(--severity-high) 9%, var(--studio-bg-elevated));
   border-color: color-mix(in srgb, var(--severity-high) 38%, var(--studio-border));
 }
-
 .cr-reaction__header {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: var(--studio-spacing-2);
 }
-
 .cr-reaction__eyebrow {
   color: var(--studio-fg-dim);
   font-size: 0.68rem;
@@ -162,13 +157,11 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-
 .cr-reaction__decision {
   color: var(--studio-fg-strong);
   font-size: 0.8rem;
   font-weight: 600;
 }
-
 .cr-reaction__findings {
   display: flex;
   flex-direction: column;
@@ -177,7 +170,6 @@
   padding: 0;
   list-style: none;
 }
-
 .cr-reaction__findings li {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -185,35 +177,20 @@
   align-items: baseline;
   font-size: 0.78rem;
 }
-
 .cr-reaction__findings small {
   grid-column: 2;
   color: var(--studio-fg-dim);
   font-size: 0.72rem;
 }
-
 .cr-reaction__action {
-  padding: 1px var(--studio-spacing-2);
-  border-radius: 999px;
-  background: var(--studio-bg-elevated);
-  color: var(--studio-fg-strong);
-  font-size: 0.68rem;
-  font-weight: 700;
-  white-space: nowrap;
+  padding: 1px var(--studio-spacing-2); border-radius: 999px; background: var(--studio-bg-elevated);
+  color: var(--studio-fg-strong); font-size: 0.68rem; font-weight: 700; white-space: nowrap;
 }
-
 .cr-reaction__round {
-  align-self: flex-start;
-  color: var(--studio-accent-3);
-  font-size: 0.76rem;
-  font-weight: 600;
-  text-decoration: none;
+  align-self: flex-start; color: var(--studio-accent-3); font-size: 0.76rem;
+  font-weight: 600; text-decoration: none;
 }
-
-.cr-reaction__round:hover {
-  text-decoration: underline;
-}
-
+.cr-reaction__round:hover { text-decoration: underline; }
 .cr-verdict {
   text-transform: uppercase;
   font-size: 0.7rem;

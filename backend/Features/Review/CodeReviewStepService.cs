@@ -331,7 +331,7 @@ public sealed class CodeReviewStepService
                 "- **A** — solves the goal clearly, complete, with tests / evidence.\n" +
                 "- **B** — solid, small gaps.\n" +
                 "- **C** — concerns: half-done or unclear.\n" +
-                "- **D** — misses the goal, or redundantly redoes already-present code.\n\n" +
+                "- **D**: misses the goal, or redundantly redoes already-present code.\n\n" +
                 "For every concrete deficiency named in the paragraph, emit one self-contained actionable finding on its own line:\n" +
                 "[[CODE_REVIEW_FINDING: text=<one concrete deficiency and its required outcome>]]\n" +
                 "Emit no finding when nothing is open. Then emit exactly one grade sentinel on its own line:\n\n" +

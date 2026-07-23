@@ -58,6 +58,7 @@ public static class CouncilReviewPolicy
         int priorReissues,
         int maxReissues,
         string jobId,
+        int? targetRunAttempt = null,
         string? executionError = null,
         DateTime? now = null)
     {
@@ -72,14 +73,28 @@ public static class CouncilReviewPolicy
                 Array.Empty<CouncilFindingAssessment>(), false, null, null);
         }
 
-        if (findings.Count == 0)
+        if (findings.Count == 0 && grade == CodeReviewGrade.A)
         {
             return new CouncilReviewReaction(createdAt, reviewFileName, gradeToken,
                 CouncilReactionDisposition.Accept,
-                grade == CodeReviewGrade.A
-                    ? "Accept, nothing open."
-                    : "Accept: the review names no actionable deficiency.",
+                "Accept, nothing open.",
                 Array.Empty<CouncilFindingAssessment>(), false, null, null);
+        }
+
+        if (findings.Count == 0)
+        {
+            var finding = $"Quality grade {gradeToken} indicates an open gap, but the reviewer emitted no concrete finding sentence.";
+            return new CouncilReviewReaction(createdAt, reviewFileName, gradeToken,
+                CouncilReactionDisposition.Escalate,
+                $"Escalate: grade {gradeToken} is not clean, but its required finding handoff is missing.",
+                new[]
+                {
+                    new CouncilFindingAssessment(
+                        finding,
+                        CouncilFindingAction.Escalate,
+                        "A targeted automatic round cannot start without the concrete deficiency and required outcome.")
+                },
+                false, null, null);
         }
 
         if (priorReissues >= maxReissues)
@@ -101,7 +116,7 @@ public static class CouncilReviewPolicy
         return new CouncilReviewReaction(createdAt, reviewFileName, gradeToken,
             CouncilReactionDisposition.Reissue,
             $"Fix {fixes.Count} review finding(s) in the next round.",
-            fixes, true, jobId, priorReissues + 2);
+            fixes, true, jobId, targetRunAttempt ?? priorReissues + 2);
     }
 
     public static string BuildTargetedFollowUp(CouncilReviewReaction reaction)

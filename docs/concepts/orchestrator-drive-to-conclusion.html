@@ -867,8 +867,10 @@
             <span class="pill ok">fixed</span> each automatic grade now receives a structured council reaction. Named findings
             reissue the card to <span class="lane">2-ready</span> with only those findings as the next-round prompt while budget
             remains; exhausted budget reaches <span class="lane">5e-escalated</span>. Grade A without findings records
-            <em>Accept, nothing open.</em> The review sidecar, decision journal, timeline, and task-detail review row expose the
-            complete review &rarr; reaction &rarr; round chain.
+            <em>Accept, nothing open.</em> A non-clean grade that omits the required concrete finding handoff escalates instead
+            of being optimistically accepted. If the build/test gate also fails, its reissue prompt carries both the build
+            evidence and the named review findings. The review sidecar, decision journal, timeline, and task-detail review row
+            expose the complete review &rarr; reaction &rarr; round chain.
           </td>
         </tr>
       </tbody>

@@ -64,7 +64,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
             gradeCli: (model) =>
             {
                 gradeModel = model;
-                return "Solid, one small gap.\n[[CODE_REVIEW_GRADE: grade=B; summary=Solid with a minor gap.]]\n[[TASK_DONE]]";
+                return "Complete and evidenced.\n[[CODE_REVIEW_GRADE: grade=A; summary=Complete and evidenced.]]\n[[TASK_DONE]]";
             },
             maxReissues: 3);
 
@@ -84,13 +84,13 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         // 2. The pipeline records a post-code-review-grade row with the parsed grade.
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.CodeReviewGradeStepId + "\"", pipelineJson);
-        Assert.Contains("\"verdict\": \"B\"", pipelineJson);
+        Assert.Contains("\"verdict\": \"A\"", pipelineJson);
         var gradeStep = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
         Assert.Equal(PipelineStepModelDefaults.QualityThinkingLevel, gradeStep.ThinkingLevel);
 
         // 3. Exactly one code-review:grade-* tag is stamped on the real task.json.
         var tags = ReadTags(folder);
-        Assert.Contains("code-review:grade-b", tags);
+        Assert.Contains("code-review:grade-a", tags);
         Assert.Single(tags, t => t.StartsWith("code-review:grade-"));
 
         // The rendered grade markdown is left behind for the detail pane.
@@ -98,7 +98,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         Assert.Single(gradeMd);
         var md = File.ReadAllText(gradeMd[0]);
         Assert.Contains("type: code-review-grade", md);
-        Assert.Contains("Quality Grade: B", md);
+        Assert.Contains("Quality Grade: A", md);
     }
 
     [Fact]
@@ -128,27 +128,68 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
     }
 
     [Fact]
-    public async Task GradeStep_DGrade_RecordsFailedRow_AndStampsGradeDTag()
+    public async Task GradeStep_NonCleanGradeWithoutRequiredFindingHandoff_Escalates()
+    {
+        SeedReviewJobWithDone(
+            "grade-missing-findings",
+            CleanStatus,
+            taskType: TaskTypes.Chore,
+            withScreenshot: true);
+
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) => PassVerdict,
+            gradeCli: (_) => """
+                Small gaps remain, but the response omitted the required finding sentinel.
+                [[CODE_REVIEW_GRADE: grade=B; summary=Small gaps remain.]]
+                [[TASK_DONE]]
+                """,
+            maxReissues: 3);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.Escalated, "grade-missing-findings");
+        Assert.True(Directory.Exists(folder));
+        var reviewFile = Assert.Single(Directory.GetFiles(folder, "code-review-grade-*.md"));
+        var reaction = AgentStudio.Review.CouncilReviewReactionStore.Read(
+            folder, Path.GetFileName(reviewFile));
+        Assert.NotNull(reaction);
+        Assert.Equal(AgentStudio.Review.CouncilReactionDisposition.Escalate, reaction!.Disposition);
+        Assert.Contains(
+            "no concrete finding sentence",
+            Assert.Single(reaction.Assessments).Finding,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GradeStep_DGradeWithNamedDeficiency_RecordsFailedRow_AndStartsTargetedRound()
     {
         SeedReviewJobWithDone("grade-d", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
 
         var orchestrator = BuildOrchestrator(
             aspectStub: (_, _) => PassVerdict,
-            gradeCli: (_) => "Redundant, not wired.\n[[CODE_REVIEW_GRADE: grade=D; summary=Reimplements existing code.]]\n[[TASK_DONE]]",
+            gradeCli: (_) => """
+                Redundant, not wired.
+                [[CODE_REVIEW_FINDING: text=The implementation duplicates existing behavior; remove the duplicate path and wire the canonical service.]]
+                [[CODE_REVIEW_GRADE: grade=D; summary=Reimplements existing code.]]
+                [[TASK_DONE]]
+                """,
             maxReissues: 3);
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "grade-d");
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "grade-d");
         Assert.True(Directory.Exists(folder));
 
-        // A D grade is reporting evidence, never a lane gate: it records a Failed
-        // row so it stands out in the Overview, but the accept still proceeds.
+        // The grade row remains reporting evidence. Its concrete named finding
+        // is what drives the bounded council reissue.
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.CodeReviewGradeStepId + "\"", pipelineJson);
         Assert.Contains("\"verdict\": \"D\"", pipelineJson);
 
         Assert.Contains("code-review:grade-d", ReadTags(folder));
+        Assert.Contains(
+            "remove the duplicate path and wire the canonical service",
+            File.ReadAllText(Path.Combine(folder, "orchestrator-follow-up.md")));
     }
 
     [Fact]
@@ -167,7 +208,11 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
             gradeCli: _ =>
             {
                 Interlocked.Increment(ref gradeCalls);
-                return "[[CODE_REVIEW_GRADE: grade=B; summary=Useful despite the red build gate.]]\n[[TASK_DONE]]";
+                return """
+                    [[CODE_REVIEW_FINDING: text=Upload rejection lacks focused test evidence; add the missing regression test.]]
+                    [[CODE_REVIEW_GRADE: grade=B; summary=Useful despite the red build gate.]]
+                    [[TASK_DONE]]
+                    """;
             },
             maxReissues: 3,
             buildTestGate: new FakeBuildTestGateRunner(new BuildTestGateResult(
@@ -190,6 +235,16 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         Assert.Equal(PipelineStepStatus.Passed, grade.Status);
         Assert.Equal("B", grade.Verdict);
         Assert.Contains("code-review:grade-b", ReadTags(folder));
+
+        var followUp = File.ReadAllText(Path.Combine(folder, "orchestrator-follow-up.md"));
+        Assert.Contains("error CS1001: build failed", followUp);
+        Assert.Contains("Upload rejection lacks focused test evidence", followUp);
+
+        var decision = Assert.Single(ReviewDecisionLog.ReadAll(_workspace, Project));
+        Assert.NotNull(decision.CouncilReaction);
+        Assert.Equal(
+            AgentStudio.Review.CouncilReactionDisposition.Reissue,
+            decision.CouncilReaction!.Disposition);
     }
 
     [Fact]
@@ -216,6 +271,13 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         var grade = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
         Assert.Equal(PipelineStepStatus.Passed, grade.Status);
         Assert.Equal("C", grade.Verdict);
+
+        var reviewFile = Assert.Single(Directory.GetFiles(folder, "code-review-grade-*.md"));
+        var reaction = AgentStudio.Review.CouncilReviewReactionStore.Read(
+            folder, Path.GetFileName(reviewFile));
+        Assert.NotNull(reaction);
+        Assert.Equal(AgentStudio.Review.CouncilReactionDisposition.Escalate, reaction!.Disposition);
+        Assert.NotNull(Assert.Single(ReviewDecisionLog.ReadAll(_workspace, Project)).CouncilReaction);
     }
 
     [Fact]
