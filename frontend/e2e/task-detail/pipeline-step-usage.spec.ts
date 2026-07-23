@@ -282,6 +282,7 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
 
   await coreRow.getByTestId('overview-pipeline-step-tokens').hover();
   await expect(page.getByTestId('cac-tooltip')).toContainText('Estimated - historical list prices');
+  await saveShot(page, 'pipeline-token-cost-tooltip--mocked.png');
 
   await pipeline.screenshot({
     path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-step-usage--mocked.png') : 'test-results/pipeline-step-usage--mocked.png',
