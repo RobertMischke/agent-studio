@@ -597,6 +597,30 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Equal("Alpha Title", recent.Edits[1].Title);
     }
 
+    [Fact]
+    public void WriteWikiFile_ConfiguredBranchSource_IsRejectedWithoutTouchingCheckout()
+    {
+        var repoRoot = Path.Combine(_tempDir, "readonly-branch");
+        var docsDir = Path.Combine(repoRoot, "docs");
+        Directory.CreateDirectory(docsDir);
+        var file = Path.Combine(docsDir, "page.md");
+        File.WriteAllText(file, "# Checkout\n");
+        var entries = new[] { (Name: "Readonly", RootPath: repoRoot) };
+        var config = BuildConfig(entries);
+        var scanner = BuildScanner(entries);
+        var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var project = registry.EnsureProjectForStorage(
+            Path.Combine(repoRoot, ".orchestrator", "jobs"), "Readonly", DefaultWorkspace.Id);
+        registry.SetWikiSourceBranch(project.Id, "origin/develop");
+        var docs = new ProjectDocsService(scanner, registry, NullLogger<ProjectDocsService>.Instance);
+
+        var result = docs.WriteWikiFile("Readonly", "page.md", "# Diverged\n");
+
+        Assert.False(result.Success);
+        Assert.Contains("disabled to prevent silent divergence", result.Error);
+        Assert.Equal("# Checkout\n", File.ReadAllText(file));
+    }
+
     // ---- helpers ----
 
     private ProjectDocsService BuildDocsService(params (string Name, string RootPath)[] entries)

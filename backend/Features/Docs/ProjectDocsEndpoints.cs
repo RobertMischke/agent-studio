@@ -272,6 +272,8 @@ public static class ProjectDocsEndpoints
         // Move/rename a wiki node (file or folder) via git mv + commit.
         app.MapPost("/api/projects/{projectName}/wiki/move", (string projectName, WikiMoveRequest body, ProjectDocsService docs, GitService git) =>
         {
+            if (docs.WikiWriteBlockReason(projectName) is { } blocked)
+                return Results.Conflict(new { error = blocked });
             var from = Normalize(body.FromRelPath);
             var to = Normalize(body.ToRelPath);
             if (from == null || to == null) return Results.BadRequest(new { error = "fromRelPath and toRelPath are required" });
@@ -308,6 +310,8 @@ public static class ProjectDocsEndpoints
         // Delete a wiki node (file or folder) via git rm + commit.
         app.MapDelete("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
         {
+            if (docs.WikiWriteBlockReason(projectName) is { } blocked)
+                return Results.Conflict(new { error = blocked });
             var rel = Normalize(relPath);
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
             var full = docs.ResolveWikiNodeFullPath(projectName, rel);

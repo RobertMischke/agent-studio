@@ -46,6 +46,7 @@ import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.com
 import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.component';
 import { WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiSearchResultsComponent } from './wiki-search-results/wiki-search-results.component';
+import { WikiSourceBadgeComponent } from './wiki-source-badge/wiki-source-badge.component';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -144,6 +145,7 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
     WikiSearchResultsComponent,
+    WikiSourceBadgeComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
@@ -354,6 +356,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly menuItems = computed<MenuItem[]>(() => {
     const t = this.menuTarget();
     if (!t) return [];
+    if (!this.wikiWritable())
+      return t.type === 'folder' ? [] : [{ kind: 'row', id: 'history', label: 'View history' }];
     if (t.type === 'folder') {
       return [
         { kind: 'row', id: 'new-page', label: 'New page' },
@@ -429,10 +433,14 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   });
 
   readonly canEditDoc = computed(() =>
-    this.openedType() === 'md' && !this.revisionSha());
+    this.openedType() === 'md' && !this.revisionSha() && this.wikiWritable());
+
+  readonly wikiWritable = computed(() => this.tree()?.source?.writable !== false);
 
   readonly editDisabledReason = computed(() => {
     if (this.revisionSha()) return 'Old revisions are read-only.';
+    if (!this.wikiWritable())
+      return `This Wiki is read-only because its source is ${this.tree()?.source?.branch ?? 'a git branch'}, not the checkout.`;
     if (this.openedType() !== 'md') return 'Rich editing is currently available for Markdown pages.';
     return null;
   });
@@ -1329,11 +1337,13 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   // ---- create page / folder ----
 
   promptNewPage(folderRel: string): void {
+    if (!this.wikiWritable()) return;
     const name = this.prompt('New page name (e.g. guide.md):', '');
     if (name) this.createPage(folderRel, name);
   }
 
   promptNewFolder(folderRel: string): void {
+    if (!this.wikiWritable()) return;
     const name = this.prompt('New category name:', '');
     if (name) this.createFolder(folderRel, name);
   }
@@ -1452,6 +1462,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   // persisted through the docs/app/config/wiki-order.json channel.
 
   onNodeDragStart(ev: DragEvent, node: WikiTreeNode): void {
+    if (!this.wikiWritable()) return;
     if (!node.relPath || !ev.dataTransfer) return;
     if (node.type === 'folder') {
       ev.dataTransfer.setData(FOLDER_DRAG_TYPE, node.relPath);

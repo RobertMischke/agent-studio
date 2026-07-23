@@ -1,0 +1,22 @@
+:host { display: contents; }
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  max-width: 18rem;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 999px;
+  background: var(--studio-bg-sidebar);
+  color: var(--studio-fg-muted);
+  font-family: var(--studio-font-mono, monospace);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source--readonly {
+  background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-bg-sidebar));
+  color: var(--studio-accent-strong);
+}

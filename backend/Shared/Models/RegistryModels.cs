@@ -118,6 +118,12 @@ public record ProjectRecord
     /// </summary>
     public string? RepositoryPath { get; init; }
     /// <summary>
+    /// Optional git ref used as the read-only source for the complete project
+    /// wiki. Null keeps the legacy checkout-backed behaviour. A configured ref
+    /// is read through git without switching the working tree.
+    /// </summary>
+    public string? WikiSourceBranch { get; init; }
+    /// <summary>
     /// Absolute path the runner uses as the CLI's working directory, when it
     /// differs from - or simply needs to exist independently of -
     /// <see cref="RepositoryPath"/> (e.g. a monorepo subfolder). Durable
