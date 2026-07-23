@@ -88,8 +88,9 @@ public sealed class RemoteRunnerDaemon
 
         var state = new RunnerStateStore(_options.StateDir);
         var active = new List<Task<int>>();
-        foreach (var slot in state.LoadAll())
+        foreach (var persisted in state.LoadAll())
         {
+            var slot = await RecoverLaunchingIdentityAsync(persisted, state);
             _client.RestoreRunAuthority(slot.TaskKey, slot.RunId, slot.LeaseInstanceId, slot.Lease);
             var taskRunner = new RemoteTaskRunner(_options, _client, _log, state);
             var completed = DurableAgentProcess.HasCompleted(slot);
@@ -274,6 +275,34 @@ public sealed class RemoteRunnerDaemon
         // workers are intentionally left alive for the replacement daemon.
         state.Flush();
         _log($"daemon drain complete; leaving {active.Count} detached job(s) for startup reattach");
+    }
+
+    private async Task<PersistedRunnerSlot> RecoverLaunchingIdentityAsync(
+        PersistedRunnerSlot slot,
+        RunnerStateStore state)
+    {
+        if (slot.ProcessId is not null || DurableAgentProcess.HasCompleted(slot))
+            return slot;
+
+        // "launching" is persisted before Process.Start. The worker writes its
+        // own atomic identity before it starts the CLI, so a replacement waits
+        // briefly for that proof instead of releasing a child which was merely
+        // between Process.Start and the daemon's PID slot write.
+        var attempts = string.Equals(slot.Phase, "launching", StringComparison.Ordinal)
+            ? 20
+            : 1;
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            if (DurableAgentProcess.TryRecoverIdentity(slot, out var recovered, out var reason))
+            {
+                _log($"recovered worker identity task={slot.TaskKey} pid={recovered.ProcessId}: {reason}");
+                return state.Save(recovered with { Phase = "running" });
+            }
+
+            if (attempt + 1 < attempts)
+                await Task.Delay(TimeSpan.FromMilliseconds(250));
+        }
+        return slot;
     }
 
     private static async Task DelayThroughShutdown(TimeSpan delay, CancellationToken shutdown)

@@ -20,6 +20,11 @@ internal sealed record DetachedJobResult(
     bool TimedOut,
     DateTime CompletedAtUtc);
 
+internal sealed record DetachedWorkerIdentity(
+    int ProcessId,
+    DateTime ProcessStartedAtUtc,
+    string WorktreePath);
+
 internal sealed class DetachedWorkerLostException(string message) : Exception(message);
 
 /// <summary>
@@ -44,6 +49,7 @@ internal sealed class DurableAgentProcess
     public DateTime ProcessStartedAtUtc { get; }
     public string LogPath => Path.Combine(_directory, "output.jsonl");
     public string ResultPath => Path.Combine(_directory, "result.json");
+    public string IdentityPath => Path.Combine(_directory, "worker.json");
 
     public static DurableAgentProcess Start(
         RunnerOptions options,
@@ -91,6 +97,61 @@ internal sealed class DurableAgentProcess
             slot.WorkerDirectory,
             slot.ProcessId ?? -1,
             slot.ProcessStartedAtUtc ?? DateTime.MinValue);
+
+    /// <summary>
+    /// Recover the worker identity written by the worker itself. This closes the
+    /// Process.Start-to-slot-save handoff window: if the daemon exits after the
+    /// child exists but before its own slot write, the replacement can still
+    /// prove and persist the exact PID generation before renewing the lease.
+    /// </summary>
+    public static bool TryRecoverIdentity(
+        PersistedRunnerSlot slot,
+        out PersistedRunnerSlot recovered,
+        out string reason)
+    {
+        recovered = slot;
+        if (slot.ProcessId is not null && slot.ProcessStartedAtUtc is not null)
+        {
+            reason = "process identity already persisted";
+            return true;
+        }
+
+        var path = Path.Combine(slot.WorkerDirectory, "worker.json");
+        if (!File.Exists(path))
+        {
+            reason = "worker identity has not been recorded";
+            return false;
+        }
+
+        DetachedWorkerIdentity? identity;
+        try
+        {
+            identity = JsonSerializer.Deserialize<DetachedWorkerIdentity>(File.ReadAllText(path), Json);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException)
+        {
+            reason = $"worker identity is unreadable: {ex.Message}";
+            return false;
+        }
+
+        if (identity is null)
+        {
+            reason = "worker identity is empty";
+            return false;
+        }
+        if (!PathsEqual(identity.WorktreePath, slot.WorktreePath))
+        {
+            reason = $"worker identity worktree '{identity.WorktreePath}' does not match slot worktree '{slot.WorktreePath}'";
+            return false;
+        }
+
+        recovered = slot with
+        {
+            ProcessId = identity.ProcessId,
+            ProcessStartedAtUtc = identity.ProcessStartedAtUtc,
+        };
+        return VerifyLive(recovered, out reason);
+    }
 
     public static bool HasCompleted(PersistedRunnerSlot slot)
         => File.Exists(Path.Combine(slot.WorkerDirectory, "result.json"));
@@ -182,6 +243,16 @@ internal sealed class DurableAgentProcess
         var spec = JsonSerializer.Deserialize<DetachedJobSpec>(await File.ReadAllTextAsync(specPath), Json)
             ?? throw new InvalidDataException($"Detached job spec is empty: {specPath}");
         var directory = Path.GetDirectoryName(specPath)!;
+        using (var current = Process.GetCurrentProcess())
+        {
+            var identity = new DetachedWorkerIdentity(
+                current.Id,
+                current.StartTime.ToUniversalTime(),
+                Path.GetFullPath(spec.WorkingDirectory));
+            await WriteAtomicAsync(
+                Path.Combine(directory, "worker.json"),
+                JsonSerializer.Serialize(identity, Json));
+        }
         var logPath = Path.Combine(directory, "output.jsonl");
         var resultPath = Path.Combine(directory, "result.json");
         Directory.CreateDirectory(spec.ResultsDirectory);
@@ -232,10 +303,23 @@ internal sealed class DurableAgentProcess
             processResult.StdErr,
             timedOut,
             DateTime.UtcNow);
-        var temp = resultPath + $".{Environment.ProcessId}.tmp";
-        await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(result, Json));
-        File.Move(temp, resultPath, overwrite: true);
+        await WriteAtomicAsync(resultPath, JsonSerializer.Serialize(result, Json));
         return processResult.ExitCode;
+    }
+
+    private static async Task WriteAtomicAsync(string path, string content)
+    {
+        var temp = path + $".{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
+        await using (var stream = new FileStream(
+                         temp, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                         4096, FileOptions.WriteThrough | FileOptions.Asynchronous))
+        await using (var writer = new StreamWriter(stream))
+        {
+            await writer.WriteAsync(content);
+            await writer.FlushAsync();
+            stream.Flush(flushToDisk: true);
+        }
+        File.Move(temp, path, overwrite: true);
     }
 
     private static bool PathsEqual(string left, string right)

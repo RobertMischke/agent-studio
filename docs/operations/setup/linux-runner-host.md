@@ -366,11 +366,15 @@ start time and `/proc/<pid>/cwd` resolves to the recorded worktree. The daemon
 then restores the same lease, fence, Task Server run id, and attempt instance,
 and follows the worker's JSONL output file from the persisted sequence. A
 worker that finished during the short restart window is finalized from its
-atomically written result file. A missing process, reused PID, or worktree
-mismatch is never heartbeated: the lease is actively released and the Task
-Server returns the Progress card to Ready with the next claim using a higher
-fence. This recovery preserves the bounded attempt/autonomy contract; it does
-not create a second attempt or an autonomous task store on the Runner.
+atomically written result file. The slot enters `launching` before
+`Process.Start`, and the worker writes its own atomic `worker.json` identity
+before starting the CLI. Startup briefly waits for that identity, closing the
+child-start-to-slot-save handoff window without trusting an unverified PID. A
+missing process, reused PID, or worktree mismatch is never heartbeated: the
+lease is actively released and the Task Server returns the Progress card to
+Ready with the next claim using a higher fence. This recovery preserves the
+bounded attempt/autonomy contract; it does not create a second attempt or an
+autonomous task store on the Runner.
 
 ### systemd deployment
 

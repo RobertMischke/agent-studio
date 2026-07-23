@@ -192,11 +192,13 @@ state.
   boundary. The daemon persists lease, fence, Task Server run/instance,
   worktree, detached-worker PID/start time, and file-log progress below
   `RUNNER_STATE_DIR`. SIGTERM stops claims and exits without cancelling those
-  workers. The replacement renews authority only after PID-generation and
-  Linux `/proc/<pid>/cwd` match the persisted worktree, then follows JSONL
-  output and completes the same attempt. Missing or mismatched processes are
-  actively released and returned to Ready; DB lease presence alone is never
-  process-liveness evidence. systemd must use `KillMode=process`.
+  workers. A pre-launch slot marker plus worker-written atomic identity closes
+  the `Process.Start`-to-slot-save handoff window. The replacement renews
+  authority only after PID-generation and Linux `/proc/<pid>/cwd` match the
+  persisted worktree, then follows JSONL output and completes the same attempt.
+  Missing or mismatched processes are actively released and returned to Ready;
+  DB lease presence alone is never process-liveness evidence. systemd must use
+  `KillMode=process`.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
   occupies a normal host slot and holds the same fenced lease, heartbeat,

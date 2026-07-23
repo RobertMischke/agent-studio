@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AgentRunner;
 using Xunit;
 
@@ -76,6 +77,44 @@ public sealed class DurableAgentProcessTests : IDisposable
         Assert.Contains("does not match worktree", reason);
         process.Kill();
         await Task.Delay(50);
+    }
+
+    [Fact]
+    public async Task Worker_identity_closes_the_process_start_to_slot_save_restart_window()
+    {
+        var worktree = Path.Combine(_root, "launch-window");
+        var results = Path.Combine(_root, "results");
+        var stateRoot = Path.Combine(_root, "state");
+        Directory.CreateDirectory(worktree);
+        Directory.CreateDirectory(results);
+        var options = Options(stateRoot, worktree, "-c \"sleep 1; printf 'done\\n'\"");
+        var lease = Lease("AGT-LAUNCH-WINDOW");
+        var firstStore = new RunnerStateStore(stateRoot);
+        var slot = firstStore.Create(lease.TaskKey, lease, worktree);
+        slot = firstStore.Save(slot with { Phase = "launching" });
+
+        var worker = DurableAgentProcess.Start(
+            options, slot.WorkerDirectory, worktree, "", results);
+        var replacementSlot = Assert.Single(new RunnerStateStore(stateRoot).LoadAll());
+
+        PersistedRunnerSlot recovered = replacementSlot;
+        var reason = string.Empty;
+        for (var i = 0; i < 40; i++)
+        {
+            if (DurableAgentProcess.TryRecoverIdentity(replacementSlot, out recovered, out reason))
+                break;
+            await Task.Delay(50);
+        }
+
+        Assert.Equal(worker.ProcessId, recovered.ProcessId);
+        Assert.InRange(
+            Math.Abs((worker.ProcessStartedAtUtc - recovered.ProcessStartedAtUtc!.Value).TotalSeconds),
+            0,
+            2);
+        Assert.True(DurableAgentProcess.VerifyLive(recovered, out var proof), proof);
+        using var workerProcess = Process.GetProcessById(worker.ProcessId);
+        worker.Kill();
+        await workerProcess.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
     }
 
     private static RunnerOptions Options(string stateRoot, string worktree, string cliArgs) => new()
