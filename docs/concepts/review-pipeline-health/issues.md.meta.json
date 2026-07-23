@@ -17,6 +17,12 @@
       "title": "Operator-Requeue hat Autoritaet: Attempt-Epoche statt Wieder-Eskalation aus Altlasten",
       "linkedAt": "2026-07-23T12:06:50.4990917Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2256",
+      "title": "Build-profile validation launches bash on Windows and always fails",
+      "linkedAt": "2026-07-23T12:29:47.1572491Z",
+      "source": "auto"
     }
   ]
 }
