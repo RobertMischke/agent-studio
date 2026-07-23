@@ -105,7 +105,9 @@ test('keeps 24 mixed-model cards scanable and exposes full execution context', a
   await expect(tooltip).toContainText('Model: gpt-5.6-sol');
   await expect(tooltip).toContainText('Thinking level: low');
   await expect(tooltip).toContainText('CLI: Codex');
-  const resultsDir = path.resolve(__dirname, '../../../results');
+  const resultsDir = process.env.JOB_RESULTS_DIR?.trim()
+    ? path.resolve(process.env.JOB_RESULTS_DIR)
+    : path.resolve(__dirname, '../../../results');
   fs.mkdirSync(resultsDir, { recursive: true });
 
   for (const theme of ['dark', 'light'] as const) {
@@ -123,4 +125,11 @@ test('keeps 24 mixed-model cards scanable and exposes full execution context', a
     });
   }
 
+  await page.getByTestId('task-card').first().click();
+  await expect(page.getByTestId('detail-model-chip')).toHaveAttribute('data-model-family', 'sol');
+  await expect(page.getByTestId('detail-thinking-level')).toHaveText('l');
+  await page.screenshot({
+    path: path.join(resultsDir, 'model-level-task-detail--light.png'),
+    fullPage: true,
+  });
 });
