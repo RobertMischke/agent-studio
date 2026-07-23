@@ -3,7 +3,7 @@
 // levels are fixed px (root 8px, child 44px in tree-row), so the topic text
 // aligns with the child row's LABEL column (44px indent + glyph column).
 .studio-workbench-topics { padding-left: 60px; padding-right: var(--studio-rail-trailing-gutter, var(--studio-spacing-3)); }
-.studio-workbench-topics__state { display: block; padding: var(--studio-spacing-1) 0; color: var(--studio-fg-muted); font-size: 11px; }
+.studio-workbench-topics__state { display: block; padding: 3px var(--studio-spacing-2); color: var(--studio-fg-muted); font-size: 11px; }
 .studio-workbench-topic { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 3px var(--studio-spacing-2); border: 0; border-radius: 4px; background: transparent; color: var(--studio-fg); text-align: left; cursor: pointer; }
 .studio-workbench-topic:hover { background: var(--studio-bg-hover); }
 .studio-workbench-topic:focus-visible { outline: 2px solid var(--studio-accent-4-strong); outline-offset: -2px; }
