@@ -197,7 +197,9 @@
 
   <header class="page">
     <h1>Orchestrator Supervision Loop</h1>
-    <div class="sub">A maintained concept page: the always-on watch loop whose one job is to keep the pipeline running, decide cleverly, act through the existing primitives, and show every decision live on the bus.</div>
+    <div class="sub">A maintained concept page for the goal-driven orchestrator role: move explicit goals toward
+      verified outcomes, keep their delivery pipeline running, act through the existing primitives, and show every
+      decision live on the bus.</div>
     <div class="meta">
       <span><strong>Audience:</strong> operator, engineers, future agents</span>
       <span><strong>Status:</strong> concept (proposed)</span>
@@ -209,6 +211,7 @@
     <h2>Contents</h2>
     <ol>
       <li><a href="#mission">Mission and vision</a></li>
+      <li><a href="#goal-horizon">Goal horizon and validation contract</a></li>
       <li><a href="#today">How it works today, and the gap</a></li>
       <li><a href="#loop">The supervision loop</a></li>
       <li><a href="#suspicion">Suspicion model</a></li>
@@ -224,8 +227,9 @@
     <h2>1. Mission and vision</h2>
 
     <div class="callout zielbild">
-      <strong>Mission, one sentence: keep the pipeline RUNNING.</strong> The watch loop is a single named, always-on
-      control loop that reads every signal, makes a clever decision through a dedicated supervision prompt, ACTS through
+      <strong>Mission, one sentence: move explicit goals to verified outcomes and keep their pipeline RUNNING.</strong>
+      The orchestrator owns the goal horizon, including optional decomposition and planned validation when gaps remain.
+      Its always-on watch loop reads every signal, makes a decision through a dedicated supervision prompt, ACTS through
       the existing emergency primitives and state machine, and publishes both the tick and the decision on the bus so the
       operator can watch it think.
     </div>
