@@ -167,6 +167,42 @@ describe('CodeReviewPanelComponent', () => {
     httpCtrl.verify();
   });
 
+  it('renders the council reaction, per-finding rulings, and linked next round on the review row', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(CodeReviewPanelComponent);
+    fixture.componentRef.setInput('job', { ...seedJob(), key: 'AGT-2108' });
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    httpCtrl.expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
+      .flush({ cliType: 'codex', model: 'gpt-5.5' });
+    httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({ entries: [{
+      fileName: 'code-review-grade-2026-07-23.md', verdict: 'pass', grade: 'B',
+      summary: 'Concrete gaps remain.', model: 'gpt-5.5', cliType: 'codex',
+      runAt: '2026-07-23T10:00:00Z',
+      councilReaction: {
+        createdAt: '2026-07-23T10:00:01Z', reviewFileName: 'code-review-grade-2026-07-23.md',
+        grade: 'B', disposition: 'Reissue', summary: 'Fix 2 review finding(s) in the next round.',
+        startsNewRound: true, targetJobId: 'demo-job', targetRunAttempt: 2,
+        assessments: [
+          { finding: 'Dark-theme colors are incorrect; provide both-theme screenshots.', action: 'FixNextRound', reason: 'Concrete review deficiency.' },
+          { finding: 'Upload rejection lacks focused test evidence.', action: 'FixNextRound', reason: 'Concrete review deficiency.' },
+        ],
+      },
+    }] });
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const reaction = root.querySelector('[data-testid="code-review-council-reaction"]');
+    expect(reaction?.textContent).toContain('Orchestrator reaction');
+    expect(reaction?.textContent).toContain('Dark-theme colors are incorrect');
+    expect(reaction?.querySelectorAll('.cr-reaction__findings li')).toHaveLength(2);
+    const round = reaction?.querySelector('[data-testid="code-review-council-round-link"]') as HTMLAnchorElement;
+    expect(round.textContent).toContain('Open round 2');
+    expect(round.getAttribute('href')).toContain('task=AGT-2108');
+    httpCtrl.verify();
+  });
+
   it('shows the last grade with date when the newest delivery has no fresh grade', async () => {
     await setup();
     const fixture = TestBed.createComponent(CodeReviewPanelComponent);

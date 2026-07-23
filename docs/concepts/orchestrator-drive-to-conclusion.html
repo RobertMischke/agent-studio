@@ -850,6 +850,27 @@
             explained <span class="lane">5e-escalated</span> terminal.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2253</code><br><span class="small">council reaction after quality grade<br>(evidence: <code>AGT-2108</code>)</span></td>
+          <td>
+            A Grade B review named incorrect dark-theme colours, missing focused upload-rejection tests, and ambiguous
+            Playwright evidence, but the quality-grade step was reporting-only. The task could still reach
+            <span class="lane">5-human-review</span> as accepted, leaving no explicit ruling on any named deficiency.
+          </td>
+          <td>
+            <code>RunCodeReviewGradePostStepAsync</code> persisted a grade and badge but returned no evidence to the final
+            decision path. The orchestrator therefore had no per-finding policy, targeted handoff, or durable link from the
+            review artifact to a new round.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> each automatic grade now receives a structured council reaction. Named findings
+            reissue the card to <span class="lane">2-ready</span> with only those findings as the next-round prompt while budget
+            remains; exhausted budget reaches <span class="lane">5e-escalated</span>. Grade A without findings records
+            <em>Accept, nothing open.</em> The review sidecar, decision journal, timeline, and task-detail review row expose the
+            complete review &rarr; reaction &rarr; round chain.
+          </td>
+        </tr>
       </tbody>
     </table>
 

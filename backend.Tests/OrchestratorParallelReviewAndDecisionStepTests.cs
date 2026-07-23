@@ -81,6 +81,45 @@ public class OrchestratorParallelReviewAndDecisionStepTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskDone_GradeBNamesDeficiencies_CouncilReissuesWithTargetedHandoff()
+    {
+        SeedReviewJobWithDone("council-job");
+        var gradeReply = """
+            The implementation is close, but concrete gaps remain.
+            [[CODE_REVIEW_FINDING: text=Dark-theme colors are incorrect; fix them and provide both-theme screenshots.]]
+            [[CODE_REVIEW_FINDING: text=Upload rejection lacks focused test evidence; add the missing regression test.]]
+            [[CODE_REVIEW_GRADE: grade=B; summary=Two concrete gaps remain.]]
+            [[TASK_DONE]]
+            """;
+        var orchestrator = BuildOrchestrator(PassStub, gradeReply: gradeReply);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "council-job");
+        Assert.True(Directory.Exists(folder), "named grade findings should start a new round in 2-ready");
+
+        var followUp = File.ReadAllText(Path.Combine(folder, "orchestrator-follow-up.md"));
+        Assert.Contains("Dark-theme colors are incorrect", followUp);
+        Assert.Contains("Upload rejection lacks focused test evidence", followUp);
+        Assert.DoesNotContain("The implementation is close", followUp);
+
+        var reviewFile = Assert.Single(Directory.EnumerateFiles(folder, "code-review-grade-*.md"));
+        var reaction = AgentStudio.Review.CouncilReviewReactionStore.Read(folder, Path.GetFileName(reviewFile));
+        Assert.NotNull(reaction);
+        Assert.Equal(AgentStudio.Review.CouncilReactionDisposition.Reissue, reaction!.Disposition);
+        Assert.Equal(2, reaction.Assessments.Count);
+        Assert.True(reaction.StartsNewRound);
+        var reactionJson = File.ReadAllText(
+            AgentStudio.Review.CouncilReviewReactionStore.PathFor(folder, Path.GetFileName(reviewFile)));
+        Assert.Contains("\"disposition\": \"Reissue\"", reactionJson);
+        Assert.Contains("\"action\": \"FixNextRound\"", reactionJson);
+
+        var decision = Assert.Single(ReviewDecisionLog.ReadAll(_workspace, Project));
+        Assert.Equal(ReviewDecisionKind.Reissue, decision.Kind);
+        Assert.NotNull(decision.CouncilReaction);
+    }
+
+    [Fact]
     public async Task TwoDoneJobs_AreReviewedConcurrentlyInReadOnlyPool()
     {
         // Req 1: two DONE tasks must be in auto-review at the same time. The
@@ -144,7 +183,8 @@ public class OrchestratorParallelReviewAndDecisionStepTests : IDisposable
 
     private ReviewDecisionOrchestrator BuildOrchestrator(
         AspectCli aspectCli,
-        int maxParallelReviews = 4)
+        int maxParallelReviews = 4,
+        string? gradeReply = null)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -183,6 +223,13 @@ public class OrchestratorParallelReviewAndDecisionStepTests : IDisposable
             NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
         var pipelineLog = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
+        AgentStudio.Review.CodeReviewStepService? codeReviewStep = null;
+        if (gradeReply is not null)
+        {
+            codeReviewStep = new AgentStudio.Review.CodeReviewStepService(
+                prompts, NullLogger<AgentStudio.Review.CodeReviewStepService>.Instance);
+            codeReviewStep.CliRunner = (_, _, _, _, _) => Task.FromResult(gradeReply);
+        }
 
         return new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner,
@@ -193,7 +240,8 @@ public class OrchestratorParallelReviewAndDecisionStepTests : IDisposable
             sessions: null,
             git: null,
             pipelineLog: pipelineLog,
-            lintScssRunner: null);
+            lintScssRunner: null,
+            codeReviewStep: codeReviewStep);
     }
 
     /// <summary>

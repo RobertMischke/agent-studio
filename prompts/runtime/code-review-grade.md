@@ -70,8 +70,17 @@ it **D** for an empty diff when its deliverable is the results/ artefact or a
 ## What you must emit
 
 A short paragraph (under 200 words) justifying the grade — name the
-concrete evidence in the diff that moved it up or down — then exactly one
-grade sentinel on its own line:
+concrete evidence in the diff that moved it up or down. For every concrete
+deficiency, gap, bug, or missing piece of evidence named in that paragraph,
+emit one finding sentinel on its own line. The text must be a self-contained,
+actionable handoff rather than a label:
+
+```
+[[CODE_REVIEW_FINDING: text=<one concrete deficiency and its required outcome>]]
+```
+
+Emit no finding sentinel when nothing is open. Then emit exactly one grade
+sentinel on its own line:
 
 ```
 [[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<one short sentence>]]

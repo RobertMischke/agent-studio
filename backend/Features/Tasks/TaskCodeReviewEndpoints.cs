@@ -114,6 +114,7 @@ public static class TaskCodeReviewEndpoints
                                 EstimatedApiCostUsd = usage.Cost.Total,
                                 PriceKnown = usage.PriceKnown,
                                 Generation = generation,
+                                CouncilReaction = AgentStudio.Review.CouncilReviewReactionStore.Read(info.FolderPath, fileName),
                             });
                         }
                         catch (Exception __ex)
@@ -407,6 +408,8 @@ public sealed record CodeReviewListEntry
     public decimal EstimatedApiCostUsd { get; init; }
     public bool PriceKnown { get; init; }
     public FileGenerationMeta? Generation { get; init; }
+    /// <summary>Explicit orchestrator ruling attached to this review, if the pipeline has processed it.</summary>
+    public AgentStudio.Review.CouncilReviewReaction? CouncilReaction { get; init; }
 }
 
 /// <summary>Response for <c>GET /api/tasks/{jobId}/code-review/list</c>.</summary>

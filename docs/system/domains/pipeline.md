@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -116,6 +116,9 @@ pipeline view.
   `[[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<short>]]` sentinel parser, the
   `code-review:grade-{a..d}` tag mapping, and the grade->pass/concerns/block
   severity mapping.
+- `backend/Features/Review/CouncilReviewReaction.cs`: structured review-finding
+  parsing, the bounded per-finding council policy, targeted follow-up rendering,
+  and the reaction sidecar stored beside each automatic grade artifact.
 - `backend/Features/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
   model/CLI from `CodeReviewStep:DefaultModel` / `CodeReviewStep:DefaultCli`,
   defaulting to Codex's live-discovered flagship (gpt-5.5 fallback) at its top
@@ -269,6 +272,15 @@ operator changes cause the step to fail before its writer runs.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.
+- Automatic quality-grade reviews follow the council contract. Every grade
+  artifact receives an explicit orchestrator reaction. Grade A with no named
+  deficiencies records `Accept, nothing open.` A review that names concrete
+  deficiencies records one `FixNextRound`, `Accept`, or `Escalate` assessment
+  per finding. `FixNextRound` reissues the same card within the shared loop
+  budget and writes only the selected finding sentences to
+  `orchestrator-follow-up.md`; exhausted budget escalates every remaining
+  finding. The sibling `*.council-reaction.json` and decision journal entry are
+  the read-side chain for review -> reaction -> target task/run.
 - `post-code-review-grade` is the automatic quality-grade step (ASS-1657). It is
   `DefaultEnabled`, runs after the four aspect reviews and before
   `post-orchestrator-decision`, and assigns every pipelined task an A/B/C/D grade

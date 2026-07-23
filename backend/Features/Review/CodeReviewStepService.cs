@@ -134,6 +134,7 @@ public sealed class CodeReviewStepService
             sw.ElapsedMilliseconds, ok, project: request.Project, jobId: request.JobId);
 
         CodeReviewGrade? grade = null;
+        IReadOnlyList<string> findings = Array.Empty<string>();
         if (request.Mode == CodeReviewMode.Grade)
         {
             // Quality-grade pass: parse the A/B/C/D sentinel. An unparseable
@@ -155,6 +156,7 @@ public sealed class CodeReviewStepService
             // Map onto the existing pass/concerns/block status so the report
             // and pipeline rendering reuse one severity concept.
             status = CodeReviewGradeParsing.ToAspectStatus(grade.Value);
+            findings = CodeReviewFindingParsing.Parse(rawResponse);
         }
         else
         {
@@ -260,7 +262,8 @@ public sealed class CodeReviewStepService
             DurationMs: sw.ElapsedMilliseconds,
             StartedAt: startedAt,
             Grade: grade,
-            ExecutionError: executionError);
+            ExecutionError: executionError,
+            Findings: findings);
     }
 
     /// <summary>Tag id for the given verdict, or null when no tag should be hung.</summary>
@@ -329,7 +332,9 @@ public sealed class CodeReviewStepService
                 "- **B** — solid, small gaps.\n" +
                 "- **C** — concerns: half-done or unclear.\n" +
                 "- **D** — misses the goal, or redundantly redoes already-present code.\n\n" +
-                "Reply with a short paragraph plus exactly one sentinel on its own line:\n\n" +
+                "For every concrete deficiency named in the paragraph, emit one self-contained actionable finding on its own line:\n" +
+                "[[CODE_REVIEW_FINDING: text=<one concrete deficiency and its required outcome>]]\n" +
+                "Emit no finding when nothing is open. Then emit exactly one grade sentinel on its own line:\n\n" +
                 "[[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<one short sentence>]]\n";
         }
 
@@ -538,4 +543,5 @@ public sealed record CodeReviewStepReport(
     long DurationMs,
     DateTime StartedAt,
     CodeReviewGrade? Grade = null,
-    string? ExecutionError = null);
+    string? ExecutionError = null,
+    IReadOnlyList<string>? Findings = null);

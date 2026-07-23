@@ -1831,7 +1831,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // red deterministic build must stay loud and still receive that
             // evidence before the task is reissued / escalated. The aspect pool
             // is intentionally bypassed on this terminal branch.
-            await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+            var failedBuildGrade = await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+            if (failedBuildGrade is not null)
+            {
+                AgentStudio.Review.CouncilReviewReactionStore.Write(
+                    current.FolderPath,
+                    DeriveCouncilReviewReaction(workspace, entry, current, failedBuildGrade));
+            }
             await HandleBuildTestGateFailureAsync(workspace, entry, pending, current, buildGateResult, ct);
             return;
         }
@@ -1893,10 +1899,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             modelForAspect, thinkingLevelForAspect, promptForAspect, cliForAspect);
 
         // Grade the settled change set before any aspect-infrastructure
-        // short-circuit. The grade is independent reporting evidence; a dead
-        // aspect reviewer must not silently erase it. Keeping the call here also
-        // preserves the normal ordering (after aspects) without running twice.
-        await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+        // short-circuit. The grade supplies council findings; a dead aspect
+        // reviewer must not silently erase that review artifact or its explicit
+        // reaction. Keeping the call here also preserves the normal ordering
+        // (after aspects) without running twice.
+        var gradeReport = await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
 
         // Aspect-verdict infra crash (AGT-2021): one or more aspects produced no
         // verdict because the reviewing CLI died - even after the aspect runner's
@@ -1909,6 +1916,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reissue budget (an Escalate decision, which resets the attempt chain).
         if (report.HasInfraFailure)
         {
+            if (gradeReport is not null)
+            {
+                var reaction = DeriveCouncilReviewReaction(workspace, entry, current, gradeReport);
+                reaction = AgentStudio.Review.CouncilReviewPolicy.EscalateBecause(
+                    reaction,
+                    "aspect review infrastructure failed, so no safe automatic follow-up round can be started");
+                AgentStudio.Review.CouncilReviewReactionStore.Write(current.FolderPath, reaction);
+            }
             _pipelineLog?.Complete(
                 current.FolderPath,
                 pendingStepReason: "Not run because aspect review infrastructure failed after its retry budget was exhausted.");
@@ -1962,6 +1977,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Runs after the aspects settle and before the Complete mark so its step
         // record lands in the in-flight pipeline-execution.json.
         await RunTaskSpawnerPostStepAsync(entry, current, report, taskBody, statusSummary, diffSummary, resultsInventory, ct);
+
+        // Council pattern: the quality-grade reviewer is advisory, while this
+        // orchestrator owns the explicit per-finding ruling. A named deficiency
+        // cannot disappear behind a passing grade or an unrelated aspect pass.
+        // Reissue carries only the concrete finding sentences into the next run.
+        if (gradeReport is not null
+            && await HandleCouncilReviewReactionAsync(workspace, entry, current, gradeReport, ct))
+        {
+            return;
+        }
 
         _pipelineLog?.Complete(
             current.FolderPath,
@@ -2156,6 +2181,124 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             current.FolderPath,
             movedFolderPath);
     }
+
+    /// <summary>
+    /// Persist and apply the council reaction for one quality-grade artifact.
+    /// Returns true when the reaction is terminal for this post-processing pass
+    /// (reissue or escalation); accept reactions stay attached to the review and
+    /// allow the remaining deterministic/aspect gates to rule on their evidence.
+    /// </summary>
+    private async Task<bool> HandleCouncilReviewReactionAsync(
+        string workspace,
+        WatchPathEntry entry,
+        TaskInfo current,
+        AgentStudio.Review.CodeReviewStepReport gradeReport,
+        CancellationToken ct)
+    {
+        var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+        var reaction = DeriveCouncilReviewReaction(workspace, entry, current, gradeReport);
+        AgentStudio.Review.CouncilReviewReactionStore.Write(current.FolderPath, reaction);
+
+        if (reaction.Disposition == AgentStudio.Review.CouncilReactionDisposition.Accept)
+        {
+            return false;
+        }
+
+        _pipelineLog?.Complete(
+            current.FolderPath,
+            pendingStepReason: "Not run because the council reaction concluded this review pass.");
+
+        if (reaction.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue)
+        {
+            var followUp = AgentStudio.Review.CouncilReviewPolicy.BuildTargetedFollowUp(reaction);
+            var moved = MoveReissueToReadyTop(current, entry, "code-review council findings");
+            if (moved is null) return true;
+
+            AgentStudio.Review.CouncilReviewReactionStore.Write(moved.FolderPath, reaction);
+            RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
+                DecisionVerdictReissue, reaction.Summary);
+            WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
+                summary: reaction.Summary,
+                stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+                evidenceRef: gradeReport.FileName,
+                findingRefs: new[] { gradeReport.FileName },
+                performer: PostProcessingPerformers.Orchestrator);
+            await WriteFollowUpFileAsync(moved, followUp, ct);
+
+            _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+                $"Council reaction reopened \"{(moved.Title ?? moved.Id)}\" for {reaction.Assessments.Count} named review finding(s). Next round: {moved.Id} attempt {reaction.TargetRunAttempt}.");
+            EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+                TimelineActors.QualityLoop, reaction.Summary,
+                BuildReopenDetails("code-review-council", priorReissues, followUp));
+            _statusSnapshot.RecordReissue();
+
+            AppendReviewDecision(workspace, new ReviewDecisionRecord(
+                CreatedAt: reaction.CreatedAt,
+                JobId: current.Id,
+                Project: entry.Name,
+                Kind: ReviewDecisionKind.Reissue,
+                Reason: reaction.Summary,
+                Prompt: $"(council reaction to {gradeReport.FileName})",
+                Response: string.Join("\n", reaction.Assessments.Select(a => $"{a.Action}: {a.Finding}")),
+                FollowUp: followUp)
+            {
+                CouncilReaction = reaction,
+            }, current.FolderPath, moved.FolderPath);
+            return true;
+        }
+
+        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to escalate {JobId} after council reaction: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+            return true;
+        }
+
+        var escalatedPath = move.NewFolderPath ?? current.FolderPath;
+        var escalated = current with { FolderPath = escalatedPath, State = TaskStates.Escalated };
+        AgentStudio.Review.CouncilReviewReactionStore.Write(escalatedPath, reaction);
+        RecordOrchestratorDecisionStep(escalatedPath, PipelineStepStatus.Failed,
+            DecisionVerdictEscalate, reaction.Summary);
+        WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
+            summary: reaction.Summary,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: gradeReport.FileName,
+            findingRefs: new[] { gradeReport.FileName },
+            performer: PostProcessingPerformers.Orchestrator);
+        _chatLog.Append(escalated, OrchestratorMessageKind.Decision,
+            $"Council reaction escalated \"{(escalated.Title ?? escalated.Id)}\": {reaction.Summary}");
+        _statusSnapshot.RecordEscalate();
+
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
+            CreatedAt: reaction.CreatedAt,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: reaction.Summary,
+            Prompt: $"(council reaction to {gradeReport.FileName})",
+            Response: string.Join("\n", reaction.Assessments.Select(a => $"{a.Action}: {a.Finding}")),
+            FollowUp: string.Empty)
+        {
+            CouncilReaction = reaction,
+        }, current.FolderPath, escalatedPath);
+        return true;
+    }
+
+    private AgentStudio.Review.CouncilReviewReaction DeriveCouncilReviewReaction(
+        string workspace,
+        WatchPathEntry entry,
+        TaskInfo current,
+        AgentStudio.Review.CodeReviewStepReport gradeReport)
+        => AgentStudio.Review.CouncilReviewPolicy.Derive(
+            gradeReport.FileName,
+            gradeReport.Grade,
+            gradeReport.Findings ?? Array.Empty<string>(),
+            CountPriorReissues(workspace, entry.Name, current.Id),
+            ConfiguredMaxReissues(),
+            current.Id,
+            gradeReport.ExecutionError);
 
     private async Task ReissueOnBlockAsync(
         string workspace,
@@ -3365,17 +3508,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     /// <summary>
     /// Run the automatic post-CORE quality-grade code-review step (ASS-1657)
-    /// and record it on the pipeline. Reporting only: it assigns an A/B/C/D
-    /// grade to the task's full change set with a quality-first model
+    /// and record it on the pipeline. It assigns an A/B/C/D grade and structured
+    /// findings to the task's full change set with a quality-first model
     /// (<c>CodeReviewStep:DefaultModel</c>, the live Codex flagship by default)
     /// and hangs a
     /// <c>code-review:grade-*</c> tag on the card so the grade shows in the
-    /// Overview and as a card badge. Best-effort: any runtime failure is logged,
-    /// recorded as a failed row, and swallowed so a grade hiccup never blocks
-    /// the lane decision. An unavailable service, explicit disable, or condition
+    /// Overview and as a card badge. The caller applies the council policy to
+    /// every returned report. Best-effort: any runtime failure is logged and
+    /// returned as unavailable evidence, so it never invents a work deficiency.
+    /// An unavailable service, explicit disable, or condition
     /// mismatch records an honest skipped row rather than remaining Pending.
     /// </summary>
-    private async Task RunCodeReviewGradePostStepAsync(
+    private async Task<AgentStudio.Review.CodeReviewStepReport?> RunCodeReviewGradePostStepAsync(
         WatchPathEntry entry,
         TaskInfo job,
         string taskBody,
@@ -3388,7 +3532,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 job.FolderPath,
                 PipelineStepStatus.Skipped,
                 "Quality-grade service is unavailable in this runtime.");
-            return;
+            return null;
         }
 
         // Opt-out switch; default on so every pipelined task carries a grade.
@@ -3398,7 +3542,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 job.FolderPath,
                 PipelineStepStatus.Skipped,
                 "Quality grade disabled by CodeReviewStep:AutoGrade=false.");
-            return;
+            return null;
         }
 
         var projectSettings = _projectSettings?.Get(entry.Name);
@@ -3418,7 +3562,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 job.FolderPath,
                 PipelineStepStatus.Skipped,
                 "Quality-grade pipeline condition did not match this task.");
-            return;
+            return null;
         }
 
         var startedAt = DateTime.UtcNow;
@@ -3487,7 +3631,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     startedAt,
                     report.Model,
                     report.ThinkingLevel);
-                return;
+                return report;
             }
 
             var gradeToken = report.Grade is null
@@ -3522,6 +3666,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _logger.LogInformation(
                 "code-review-grade: project={Project} job={JobId} grade={Grade} model={Model} file={File}",
                 entry.Name, job.Id, gradeToken, report.Model, report.FileName);
+            return report;
         }
         catch (OperationCanceledException)
         {
@@ -3546,6 +3691,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 startedAt,
                 selectedModel,
                 selectedThinkingLevel);
+            return null;
         }
     }
 

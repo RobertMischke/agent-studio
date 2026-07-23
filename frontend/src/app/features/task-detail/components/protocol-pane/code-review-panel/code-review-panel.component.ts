@@ -23,6 +23,7 @@ import { codeReviewVerdictTone, type CodeReviewVerdictTone } from '../../code-re
 import { describeDiffSize, isLargeDiff } from '../../../../../utils/large-diff-gate';
 import { formatDateTimeUtc } from '../../../../../services/format.util';
 import { buildTokenCostTooltip } from '../../../../tokens';
+import { taskNavigationHref } from '../../../state/task-url';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -332,5 +333,15 @@ export class CodeReviewPanelComponent implements OnInit {
 
   provenanceFor(entry: CodeReviewListEntry) {
     return generatedFileProvenance(entry.generation);
+  }
+
+  reactionActionLabel(action: string): string {
+    if (action === 'FixNextRound') return 'Fix next round';
+    if (action === 'Escalate') return 'Escalate';
+    return 'Accept';
+  }
+
+  reactionHref(entry: CodeReviewListEntry): string | null {
+    return entry.councilReaction?.targetJobId ? taskNavigationHref(this.job()) : null;
   }
 }
