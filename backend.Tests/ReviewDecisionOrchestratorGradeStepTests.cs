@@ -193,6 +193,53 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
     }
 
     [Fact]
+    public async Task GradeStep_NamedFinding_ReissuesWithCouncilHandoffBeforeGenericEvidenceGate()
+    {
+        SeedReviewJobWithDone(
+            "grade-b-no-evidence",
+            CleanStatus,
+            taskType: TaskTypes.Bug);
+        const string finding =
+            "Upload rejection lacks focused test evidence; add the missing regression test.";
+
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) => PassVerdict,
+            gradeCli: (_) => $"""
+                [[CODE_REVIEW_FINDING: text={finding}]]
+                [[CODE_REVIEW_GRADE: grade=B; summary=One focused evidence gap remains.]]
+                [[TASK_DONE]]
+                """,
+            maxReissues: 3);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "grade-b-no-evidence");
+        Assert.True(Directory.Exists(folder));
+
+        var reviewFile = Assert.Single(Directory.GetFiles(folder, "code-review-grade-*.md"));
+        var reaction = AgentStudio.Review.CouncilReviewReactionStore.Read(
+            folder, Path.GetFileName(reviewFile));
+        Assert.NotNull(reaction);
+        Assert.Equal(AgentStudio.Review.CouncilReactionDisposition.Reissue, reaction!.Disposition);
+        Assert.True(reaction.StartsNewRound);
+        Assert.Equal("grade-b-no-evidence", reaction.TargetJobId);
+        Assert.Equal(finding, Assert.Single(reaction.Assessments).Finding);
+
+        var followUp = File.ReadAllText(Path.Combine(folder, "orchestrator-follow-up.md"));
+        Assert.Contains(finding, followUp);
+        Assert.DoesNotContain(
+            "Prove the fix with visual evidence",
+            followUp,
+            StringComparison.OrdinalIgnoreCase);
+
+        var decision = Assert.Single(
+            ReviewDecisionLog.ReadAll(_workspace, Project),
+            item => item.JobId == "grade-b-no-evidence");
+        Assert.NotNull(decision.CouncilReaction);
+        Assert.Contains("council reaction", decision.Prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task GradeStep_BuildGateFails_StillRunsBeforeReissue()
     {
         SeedReviewJobWithDone("grade-build-red", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
