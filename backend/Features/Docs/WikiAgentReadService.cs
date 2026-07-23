@@ -277,7 +277,11 @@ public sealed class WikiAgentReadService
 
             var logsScanned = 0;
             var byPage = new Dictionary<string, BackfillPage>(StringComparer.OrdinalIgnoreCase);
-            foreach (var task in _scanner.ScanAllJobs()
+            // The normal board snapshot deliberately omits 7-archive when the
+            // production index cache is active. Historical initialization must
+            // include that partition because archived logs are still durable
+            // evidence and often make up most of the available inventory.
+            foreach (var task in _scanner.ScanAllJobsWithArchive()
                          .Where(task => !string.IsNullOrWhiteSpace(task.FolderPath))
                          .GroupBy(task => Path.GetFullPath(task.FolderPath), StringComparer.OrdinalIgnoreCase)
                          .Select(group => group.First()))

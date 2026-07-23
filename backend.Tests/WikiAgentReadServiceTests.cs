@@ -120,14 +120,18 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
     [Fact]
     public void EnsureBackfilled_FoldsCompleteExistingLogAndMarkerMakesRepeatANoOp()
     {
-        var taskDir = Path.Combine(_tasks, TaskStates.Progress, "wiki-reader");
+        // Production's TaskIndexCache keeps archive outside ScanAllJobs().
+        // Put the only historical log there so the backfill is forced to use
+        // the archive-inclusive inventory rather than passing only in uncached
+        // test mode.
+        var taskDir = Path.Combine(_tasks, TaskStates.Archive, "wiki-reader");
         Directory.CreateDirectory(Path.Combine(taskDir, "logs"));
         File.WriteAllText(Path.Combine(taskDir, "task.json"), JsonSerializer.Serialize(new
         {
             id = "wiki-reader",
             key = "AGT-2242",
             title = "Wiki reader",
-            state = TaskStates.Progress,
+            state = TaskStates.Archive,
             order = 1,
             agent = "codex",
         }));
@@ -140,7 +144,12 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
                 writer.WriteLine($"[10:00:01.000] [stdout] noise {i}");
         }
 
-        var service = BuildService();
+        var service = BuildService(out var scanner);
+        var archived = Assert.Single(scanner.ScanAllJobsWithArchive());
+        Assert.Equal(taskDir, archived.FolderPath);
+        Assert.True(File.Exists(TaskPaths.CliOutputLog(archived.FolderPath)));
+        Assert.Empty(scanner.ScanAllJobs());
+        Assert.Single(scanner.ScanAllJobsWithArchive());
         var first = service.EnsureBackfilled();
         var second = service.EnsureBackfilled();
 
@@ -161,7 +170,7 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
     public void ProcessOutput_AppliesEachLiveReadEvenWhenTimestampsMatch()
     {
         WriteTask("live-reader", "AGT-2243");
-        var service = BuildService();
+        var service = BuildService(out _);
         var at = new DateTime(2026, 7, 22, 12, 0, 0, DateTimeKind.Utc);
 
         var applied = service.ProcessOutput("AGT-2243", new[]
@@ -191,7 +200,7 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
         }));
     }
 
-    private WikiAgentReadService BuildService()
+    private WikiAgentReadService BuildService(out TaskScannerService scanner)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -203,7 +212,9 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
         var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
         var docs = new ProjectDocsService(scanner, registry, NullLogger<ProjectDocsService>.Instance);
         return new WikiAgentReadService(
