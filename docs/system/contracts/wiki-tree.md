@@ -86,6 +86,22 @@ retains at most 20 reads. The one-time startup backfill is guarded by
 `<TaskRepository>/.metadata/wiki-agent-reads-backfill-v1.json`; companion
 updates use atomic replace writes.
 
+The persistence and initialization contract is:
+
+- startup scans the complete current and archived task inventory before CLI
+  reattachment, including every `logs/cli-output.log` line rather than the
+  bounded UI log window,
+- the marker has schema `wiki-agent-read-backfill/v1` and records completion
+  time, logs scanned, and reads applied; its presence makes later startups a
+  no-op,
+- a restart after companion writes but before marker creation is safe because
+  backfill merges a monotonic reconstructed baseline instead of adding the
+  baseline again,
+- local CLI output and fenced remote-runner log ingestion both feed the same
+  live attribution method after the log line is durable,
+- each companion update preserves unrelated metadata blocks and is published
+  with an atomic temporary-file replacement.
+
 Only actual read tool uses and recognized read-only shell commands count.
 Agent prose that merely mentions a `docs/**` path, writes, edits, `docs/app/**`
 contracts, companion files, and generated reports do not count. This evidence
