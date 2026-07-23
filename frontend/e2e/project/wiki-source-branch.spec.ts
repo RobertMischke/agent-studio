@@ -38,31 +38,108 @@ test('project-wide branch source is visible and read-only in both themes', async
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
   let settingsUpdate: Record<string, unknown> | null = null;
   let releaseSettingsUpdate: (() => void) | undefined;
-  await page.route('**/api/auth/status', route => route.fulfill({ json: {
-    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  await page.route('**/hubs/jobs/negotiate**', route => route.fulfill({ json: {
+    connectionId: 'wiki-source-branch-e2e',
+    connectionToken: 'wiki-source-branch-e2e',
+    negotiateVersion: 1,
+    availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
   } }));
-  await page.route('**/api/watch-paths', route => route.fulfill({ json: [{ name: 'Demo', path: '/tmp/demo/jobs', rootPath: '/tmp/demo' }] }));
-  await page.route('**/api/workspaces**', route => route.fulfill({ json: [{
-    id: 'ws-default', displayName: 'Workspace', sortOrder: 0, isDefault: true,
-    color: null, createdAt: '2026-07-12T00:00:00Z', projects: [{
-      sourceType: 'local-folder', id: 'PROJ-001', displayName: 'Demo', shortCode: 'DEM',
-      workspaceId: 'ws-default', color: null, cliDefault: null, modelDefault: null,
-      sortOrder: 0, storageLocation: '/tmp/demo/jobs', urls: [], archived: false,
-      createdAt: '2026-07-12T00:00:00Z', wikiSourceBranch: 'origin/develop',
-    }],
-  }] }));
-  await page.route('**/api/git/inventory**', route => route.fulfill({ json: {
-    isRepo: true, currentBranch: 'main', branches: [{ name: 'develop', upstream: 'origin/develop' }],
-  } }));
-  await page.route('**/api/projects/PROJ-001', async route => {
-    settingsUpdate = route.request().postDataJSON();
-    await new Promise<void>(resolve => { releaseSettingsUpdate = resolve; });
-    await route.fulfill({ json: { wikiSourceBranch: null } });
+  await page.routeWebSocket('**/hubs/jobs**', socket => {
+    socket.onMessage(message => {
+      if (message.toString().includes('"protocol":"json"')) socket.send('{}\u001e');
+    });
   });
-  await page.route('**/api/projects/Demo/wiki/tree', route => route.fulfill({ json: tree }));
-  await page.route('**/api/projects/Demo/wiki/pulse**', route => route.fulfill({ json: pulse }));
-  await page.route('**/api/cli/maintenance-model', route => route.fulfill({ json: { cliType: 'claude', model: null, thinkingLevel: null } }));
-  await page.route('**/wiki/grading/status**', route => route.fulfill({ json: { status: null } }));
+  await page.route('**/api/**', async route => {
+    const endpoint = new URL(route.request().url()).pathname;
+    if (endpoint === '/api/auth/status') {
+      return route.fulfill({ json: {
+        profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+      } });
+    }
+    if (endpoint === '/api/environment') {
+      return route.fulfill({ json: {
+        isDev: false,
+        devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false },
+      } });
+    }
+    if (endpoint === '/api/crash-recovery/pending') {
+      return route.fulfill({ json: { pending: [] } });
+    }
+    if (endpoint === '/api/watch-paths') {
+      return route.fulfill({ json: [{ name: 'Demo', path: '/tmp/demo/jobs', rootPath: '/tmp/demo' }] });
+    }
+    if (endpoint === '/api/tasks/grouped') {
+      return route.fulfill({ json: {
+        backlog: [], preparation: [], orchestratorPrep: [], ready: [], progress: [],
+        failedPickup: [], codeNotComplete: [], autoReview: [], humanReview: [],
+        escalated: [], review: [], completed: [], archive: [],
+      } });
+    }
+    if (endpoint === '/api/tasks/archive') {
+      return route.fulfill({ json: { items: [], total: 0, offset: 0, limit: 50 } });
+    }
+    if (endpoint === '/api/runner/status') return route.fulfill({ json: { projects: {} } });
+    if (endpoint === '/api/cli/quota') {
+      return route.fulfill({ json: {
+        at: '2026-07-12T03:00:00Z', ttlSeconds: 600, snapshots: [],
+      } });
+    }
+    if (endpoint === '/api/tags' || endpoint === '/api/clients' || endpoint === '/api/clients/') {
+      return route.fulfill({ json: [] });
+    }
+    if (endpoint === '/api/workspaces') {
+      return route.fulfill({ json: [{
+        id: 'ws-default', displayName: 'Workspace', sortOrder: 0, isDefault: true,
+        color: null, createdAt: '2026-07-12T00:00:00Z', projects: [{
+          sourceType: 'local-folder', id: 'PROJ-001', displayName: 'Demo', shortCode: 'DEM',
+          workspaceId: 'ws-default', color: null, cliDefault: null, modelDefault: null,
+          sortOrder: 0, storageLocation: '/tmp/demo/jobs', urls: [], archived: false,
+          createdAt: '2026-07-12T00:00:00Z', wikiSourceBranch: 'origin/develop',
+        }],
+      }] });
+    }
+    if (endpoint === '/api/git/inventory') {
+      return route.fulfill({ json: {
+        isRepo: true, currentBranch: 'main',
+        branches: [{ name: 'develop', upstream: 'origin/develop' }],
+      } });
+    }
+    if (endpoint === '/api/projects/PROJ-001' && route.request().method() === 'PUT') {
+      settingsUpdate = route.request().postDataJSON();
+      await new Promise<void>(resolve => { releaseSettingsUpdate = resolve; });
+      return route.fulfill({ json: { wikiSourceBranch: null } });
+    }
+    if (endpoint === '/api/projects/Demo/wiki/tree') return route.fulfill({ json: tree });
+    if (endpoint === '/api/projects/Demo/wiki/pulse') return route.fulfill({ json: pulse });
+    if (endpoint === '/api/projects/Demo/snapshot') {
+      return route.fulfill({ json: {
+        project: 'Demo', capturedAt: '2026-07-12T03:00:00Z',
+        paths: { path: '/tmp/demo/jobs', rootPath: '/tmp/demo', repositoryPath: '/tmp/demo' },
+        settings: {
+          autoCommit: false, crashRecoveryEnabled: false, autoPushStrategy: 'never',
+          runnerMode: null, orchestratorModel: null, laneSortStrategies: {},
+        },
+        runnerStatus: null, orchestratorLogTail: [], orchestratorSession: null,
+        reviewDecisionsPending: [], runnerPendingDecisions: [], publishTargets: [],
+        queueHealth: {
+          severity: 'ok', issueCount: 0, missingJobJson: [], duplicates: [], stateMismatches: [],
+        },
+      } });
+    }
+    if (endpoint === '/api/projects/Demo/style-guides') {
+      return route.fulfill({ json: {
+        projectKey: 'PROJ-001', projectDisplayName: 'Demo', technologies: [], guides: [],
+        warnings: [], snapshotId: 'wiki-source-branch-e2e',
+        capturedAtUtc: '2026-07-12T03:00:00Z', refreshAfterUtc: '2026-07-12T04:00:00Z',
+      } });
+    }
+    if (endpoint === '/api/projects/PROJ-001/url-suggestions') return route.fulfill({ json: [] });
+    if (endpoint === '/api/cli/maintenance-model') {
+      return route.fulfill({ json: { cliType: 'claude', model: null, thinkingLevel: null } });
+    }
+    if (endpoint.endsWith('/wiki/grading/status')) return route.fulfill({ json: { status: null } });
+    return route.fulfill({ json: {} });
+  });
 
   await page.goto('/#/projects/demo/wiki');
   await expect(page.getByTestId('project-wiki-section')).toBeVisible({ timeout: 10_000 });
