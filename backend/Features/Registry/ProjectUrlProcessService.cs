@@ -69,6 +69,7 @@ public sealed class ProjectUrlProcessService : IDisposable
 {
     private const int MaxOutputLines = 1000;
     internal const int OutputTailLimit = 8_192;
+    private static readonly TimeSpan PortProbeTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex SecretRegex = new(
         @"(?im)(?<userinfo>https?://)[^/\s:@]+(?::[^/\s@]*)?@|(?<bearer>bearer\s+)[a-z0-9._~+/=-]+|(?<key>(?:api[_-]?key|token|password|secret|authorization)\s*[:=]\s*)(?<value>(?:bearer\s+)?[^\s\r\n]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -504,7 +505,7 @@ public sealed class ProjectUrlProcessService : IDisposable
         try
         {
             using var tcp = new TcpClient();
-            await tcp.ConnectAsync(host, port, cancellationToken).AsTask().WaitAsync(TimeSpan.FromMilliseconds(350), cancellationToken);
+            await tcp.ConnectAsync(host, port, cancellationToken).AsTask().WaitAsync(PortProbeTimeout, cancellationToken);
             return true;
         }
         catch { return false; }
