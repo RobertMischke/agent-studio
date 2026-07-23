@@ -23,7 +23,7 @@ Read the epic goal above. Inspect the repository read-only if it helps you scope
 - A short, imperative `title` (what the sub-task delivers).
 - A self-contained `prompt`: everything an agent needs to do that one sub-task without re-reading the epic. State the goal, the relevant files/areas, and the acceptance criteria.
 - A `purpose`: `delivery` for implementation or `verification` for an independent check.
-- A `dependsOn` array of local ids. Keep the graph acyclic. A verification task must depend on every delivery task whose output it checks.
+- A `dependsOn` array of local ids. Keep the graph acyclic. When the plan contains delivery work, every verification task must be downstream of at least one delivery task and must depend on every delivery task whose output it checks. The server rejects unordered verification.
 
 Guidance:
 
@@ -32,7 +32,7 @@ Guidance:
 - Each sub-task should be doable in a single focused agent run.
 - Do not invent work the epic did not ask for.
 - Add a verification task when the goal is risky, cross-cutting, user-visible, or needs proof that should not be produced and judged by the same implementation run. Do not add ceremonial verification to trivial work.
-- A verification prompt must inspect the submitted revision and actual evidence such as command results, test reports, screenshots, or result artifacts. It must disclose missing, stale, or contradictory evidence. It must not decide from success wording, terminal sentinels, or keyword scans alone.
+- A verification prompt must order its checks as a concrete checklist, name the expected evidence for each check, inspect the submitted revision and actual evidence such as command results, test reports, screenshots, or result artifacts, and record the result of each check. It must disclose missing, stale, or contradictory evidence. It must not decide from success wording, terminal sentinels, or keyword scans alone.
 
 ## Required output format
 

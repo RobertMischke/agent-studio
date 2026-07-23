@@ -106,6 +106,39 @@ public sealed class EpicGoalDecompositionEndpointsTests : IDisposable
         Assert.Equal(0, rollup.RootElement.GetProperty("subTaskTotal").GetInt32());
     }
 
+    [Fact]
+    public async Task PostSubTasks_RejectsVerificationThatIsNotOrderedAfterDelivery()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+        var epicId = await CreateEpic(client);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/epics/{epicId}/sub-tasks?watchPath={Uri.EscapeDataString(_projectRoot)}",
+            new
+            {
+                subTasks = new object[]
+                {
+                    new { id = "delivery", title = "Deliver goal", purpose = "delivery", dependsOn = Array.Empty<string>() },
+                    new { id = "verify", title = "Verify goal", purpose = "verification", dependsOn = Array.Empty<string>() },
+                }
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Contains(
+            "ordered after",
+            body.RootElement.GetProperty("error").GetString(),
+            StringComparison.OrdinalIgnoreCase);
+
+        using var rollupResponse = await client.GetAsync(
+            $"/api/epics/{epicId}?watchPath={Uri.EscapeDataString(_projectRoot)}");
+        rollupResponse.EnsureSuccessStatusCode();
+        using var rollup = JsonDocument.Parse(await rollupResponse.Content.ReadAsStringAsync());
+        Assert.Equal(0, rollup.RootElement.GetProperty("subTaskTotal").GetInt32());
+    }
+
     private async Task<string> CreateEpic(HttpClient client)
     {
         using var response = await client.PostAsJsonAsync("/api/tasks", new

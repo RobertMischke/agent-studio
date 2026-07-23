@@ -113,8 +113,10 @@ cannot erase an operator decision.
 - Epic planning is the goal-decomposition boundary. Plan nodes may carry a
   local `id`, `dependsOn`, and `purpose=delivery|verification`. The pure
   validator rejects unknown ids, self-dependencies, duplicates, and cycles
-  before any child is created. The factory materializes valid nodes in
-  topological order and translates local dependencies into stable task keys in
+  before any child is created. When a plan contains delivery work, it also
+  rejects a verification node that is not transitively ordered after at least
+  one delivery node. The factory materializes valid nodes in topological order
+  and translates local dependencies into stable task keys in
   `references.dependsOn`.
 - Children created by a planning run persist server-authored
   `creationProvenance`: `initiator=orchestrator`,
@@ -124,7 +126,8 @@ cannot erase an operator decision.
   field.
 - Verification is first-class scheduled work, not a title convention. A
   `purpose=verification` card waits on every delivery node it checks and its
-  prompt must inspect the submitted revision and actual evidence. See
+  prompt orders concrete checks, names their expected evidence, and inspects
+  the submitted revision and actual artifacts. See
   [Orchestrator Supervision Loop](../../concepts/orchestrator-supervision-loop.html#goal-horizon)
   and the [Evidence Gate analysis](../../concepts/auto-review-evidence-gate-analysis.html#plan).
 - `GET /api/epics` is archive-inclusive. A finished epic remains queryable when

@@ -148,6 +148,14 @@ public class EpicDecompositionTests : IDisposable
                 ],
                 ErrorFragment: "itself"
             ),
+            (
+                Specs: (IReadOnlyList<EpicSubTaskSpec>)
+                [
+                    new("Deliver", PlanId: "delivery", Purpose: GoalTaskPurposes.Delivery),
+                    new("Verify", PlanId: "verify", Purpose: GoalTaskPurposes.Verification),
+                ],
+                ErrorFragment: "ordered after"
+            ),
         };
 
         foreach (var (specs, errorFragment) in invalidPlans)
@@ -157,6 +165,36 @@ public class EpicDecompositionTests : IDisposable
             Assert.False(validation.IsValid);
             Assert.Contains(errorFragment, validation.Error, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public void GoalPlanValidator_AcceptsVerificationTransitivelyOrderedAfterDelivery()
+    {
+        var specs = new[]
+        {
+            new EpicSubTaskSpec("Deliver", PlanId: "delivery", Purpose: GoalTaskPurposes.Delivery),
+            new EpicSubTaskSpec("Prepare evidence", PlanId: "evidence", DependsOn: ["delivery"]),
+            new EpicSubTaskSpec(
+                "Verify",
+                PlanId: "verify",
+                DependsOn: ["evidence"],
+                Purpose: GoalTaskPurposes.Verification),
+        };
+
+        Assert.True(EpicGoalPlanValidator.Validate(specs).IsValid);
+    }
+
+    [Fact]
+    public void EpicDecompositionPrompt_RequiresOrderedEvidenceBasedVerification()
+    {
+        var prompt = File.ReadAllText(
+            Path.Combine(FindPromptRoot(), RuntimePromptService.EpicDecomposition));
+
+        Assert.Contains("server rejects unordered verification", prompt, StringComparison.Ordinal);
+        Assert.Contains("concrete checklist", prompt, StringComparison.Ordinal);
+        Assert.Contains("name the expected evidence for each check", prompt, StringComparison.Ordinal);
+        Assert.Contains("missing, stale, or contradictory evidence", prompt, StringComparison.Ordinal);
+        Assert.Contains("keyword scans alone", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -506,4 +544,17 @@ public class EpicDecompositionTests : IDisposable
                 ["WatchPaths:0:RootPath"] = _watchPath,
             })
             .Build();
+
+    private static string FindPromptRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "prompts", "runtime");
+            if (Directory.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate prompts/runtime from test base directory.");
+    }
 }

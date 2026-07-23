@@ -256,14 +256,16 @@
       <code>dependsOn</code> edges. The server validates the graph as a DAG, creates nodes in topological order, translates
       the local edges into stable task keys, and persists <code>creationProvenance</code> with initiator, method, owning
       goal, orchestrator context, purpose, and creation time. Generated work lands in Backlog by default or Ready only
-      through the project setting; unresolved dependencies remain visibly blocked by the existing waits-on gate.
+      through the project setting; unresolved dependencies remain visibly blocked by the existing waits-on gate. If the
+      plan contains delivery work, the server rejects a verification node that is not transitively ordered after delivery.
     </div>
 
     <h3>Validation is planned work</h3>
     <p>The orchestrator may add an explicit verification task and order its checks after the delivery tasks whose output
        it inspects. This is separate scheduled work, not an extra success claim from the implementation run. Its prompt
-       must inspect the submitted revision and actual evidence such as command results, test reports, screenshots, or
-       result artifacts, and it must disclose missing, stale, or contradictory evidence.</p>
+       must provide a concrete checklist with expected evidence, inspect the submitted revision and actual evidence such
+       as command results, test reports, screenshots, or result artifacts, and record missing, stale, or contradictory
+       evidence.</p>
     <p>This follows the <a href="auto-review-evidence-gate-analysis.html">Evidence Gate analysis</a>: a reviewer must not
        decide from a truncated log, a terminal sentinel, expected keywords, or confident prose when the real artifacts
        say otherwise. Planned verification complements deterministic completion and evidence gates; it does not bypass
@@ -280,8 +282,10 @@
     </ul>
     <p class="small">See the <a href="drei-einheiten-architektur.html">three-unit architecture</a> for the deployment
        boundary, the <a href="designated-topics/evidence-gate.md">Evidence Gate designated topic</a> for current-state
-       routing, and the <a href="../operations/haertung-verteilte-ausfuehrung/historie.html">distributed-execution
-       hardening chronicle</a> for why durable provenance and control-plane ownership matter.</p>
+       routing, the <a href="../operations/common-problems/completion-gate-dead-code/">Completion Gate dead-code
+       incident</a> for why configured checks are not evidence that a check ran, and the
+       <a href="../operations/haertung-verteilte-ausfuehrung/historie.html">distributed-execution hardening
+       chronicle</a> for why durable provenance and control-plane ownership matter.</p>
 
     <h3>L1 / L2 / L3 layering (vocabulary already in the code)</h3>
     <p>The heartbeat comment in the supervisor code already names a "Layer 3 system review". The watch loop unifies the

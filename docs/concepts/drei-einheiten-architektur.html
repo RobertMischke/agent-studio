@@ -232,7 +232,11 @@
   verification tasks. Dependencies and orchestrator creation provenance belong to durable task truth; the Runner only
   executes admitted nodes and does not own the plan. Verification is ordered work that inspects the submitted revision
   and real evidence, following the lessons in the
-  <a href="auto-review-evidence-gate-analysis.html">Evidence Gate analysis</a>. The full role contract lives in
+  <a href="auto-review-evidence-gate-analysis.html">Evidence Gate analysis</a> and its
+  <a href="designated-topics/evidence-gate.md">designated current-state topic</a>. A configured check only counts when
+  execution and output are observable, as recorded by the
+  <a href="../operations/common-problems/completion-gate-dead-code/">Completion Gate dead-code incident</a>.
+  The full role contract lives in
   <a href="orchestrator-supervision-loop.html#goal-horizon">Orchestrator Supervision Loop</a>.</p>
 </div>
 

@@ -60,10 +60,11 @@ public sealed record EpicGoalPlanValidation(bool IsValid, string? Error)
 }
 
 /// <summary>
-/// Validates the local dependency graph before any cards are created. Plans
-/// without dependency metadata remain backwards compatible. Once a task uses
-/// <c>dependsOn</c>, every referenced node must have a unique plan id and the
-/// graph must remain acyclic.
+/// Validates the local dependency graph before any cards are created. Legacy
+/// plans without verification or dependency metadata remain backwards
+/// compatible. Once a task uses <c>dependsOn</c>, every referenced node must
+/// have a unique plan id and the graph must remain acyclic. A verification
+/// node in a delivery plan must be transitively ordered after delivery.
 /// </summary>
 public static class EpicGoalPlanValidator
 {
@@ -115,7 +116,55 @@ public static class EpicGoalPlanValidator
                 return new(false, $"dependsOn contains a cycle involving plan id '{id}'");
         }
 
+        var hasDeliveryNode = specs.Any(spec =>
+            string.Equals(
+                GoalTaskPurposes.Normalize(spec.Purpose),
+                GoalTaskPurposes.Delivery,
+                StringComparison.Ordinal));
+        if (hasDeliveryNode)
+        {
+            foreach (var verification in specs.Where(spec =>
+                         string.Equals(
+                             GoalTaskPurposes.Normalize(spec.Purpose),
+                             GoalTaskPurposes.Verification,
+                             StringComparison.Ordinal)))
+            {
+                if (string.IsNullOrWhiteSpace(verification.PlanId)
+                    || !IsDownstreamOfDelivery(verification.PlanId.Trim(), byId))
+                {
+                    return new(
+                        false,
+                        $"verification task '{verification.Title}' must be ordered after at least one delivery task");
+                }
+            }
+        }
+
         return EpicGoalPlanValidation.Valid;
+    }
+
+    private static bool IsDownstreamOfDelivery(
+        string verificationId,
+        IReadOnlyDictionary<string, EpicSubTaskSpec> byId)
+    {
+        var pending = new Stack<string>(NormalizeDependencies(byId[verificationId].DependsOn));
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (pending.TryPop(out var dependency))
+        {
+            if (!visited.Add(dependency)) continue;
+            var task = byId[dependency];
+            if (string.Equals(
+                    GoalTaskPurposes.Normalize(task.Purpose),
+                    GoalTaskPurposes.Delivery,
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            foreach (var transitiveDependency in NormalizeDependencies(task.DependsOn))
+                pending.Push(transitiveDependency);
+        }
+
+        return false;
     }
 
     internal static IReadOnlyList<string> NormalizeDependencies(IReadOnlyList<string>? values) =>
