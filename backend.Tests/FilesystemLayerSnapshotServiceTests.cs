@@ -5,6 +5,10 @@ using Xunit;
 
 namespace AgentStudio.Tests;
 
+// Builds real git repos and walks folder metrics on disk; under gate load the
+// commit-bound snapshot timing flakes (night-flake tail, same pattern as the
+// other MachineBound heavyweights).
+[Trait("Category", "MachineBound")]
 public class FilesystemLayerSnapshotServiceTests : IDisposable
 {
     private readonly string _tempDir;

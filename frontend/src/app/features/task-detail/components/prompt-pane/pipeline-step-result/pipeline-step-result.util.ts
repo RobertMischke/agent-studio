@@ -30,9 +30,76 @@ export function cleanStepResultMarkdown(raw: string | null | undefined): string 
   let lines = raw.replace(/\r\n/g, '\n').split('\n');
   lines = stripFrontmatter(lines);
   lines = unwrapReplyFence(lines);
+  lines = extractAgentTextFromEventDump(lines);
   lines = stripSentinelLines(lines);
   lines = removeEmptyFences(lines);
   return collapseBlankRuns(lines).join('\n').trim();
+}
+
+/**
+ * A codex CLI run in JSON mode can leave its raw JSONL event stream in the
+ * report body (`{"type":"thread.started"…}` lines instead of prose). The only
+ * part a reader cares about is the agent's message text, so when a line (or a
+ * run of concatenated objects on one line) parses as such events, it is
+ * replaced by the `agent_message` texts and the transport events are dropped.
+ * A body with no recognisable agent text is left untouched — never destroy
+ * evidence for the sake of formatting.
+ */
+function extractAgentTextFromEventDump(lines: string[]): string[] {
+  const out: string[] = [];
+  let foundText = false;
+  for (const line of lines) {
+    const events = parseConcatenatedJsonObjects(line.trim());
+    if (!events) {
+      out.push(line);
+      continue;
+    }
+    for (const ev of events) {
+      const item = (ev as { item?: { type?: string; text?: string } }).item;
+      if (item?.type === 'agent_message' && typeof item.text === 'string') {
+        foundText = true;
+        out.push(...item.text.split('\n'), '');
+      }
+    }
+  }
+  return foundText ? out : lines;
+}
+
+/**
+ * Parse a line consisting of one or more concatenated JSON objects (separated
+ * by nothing or whitespace). Returns null when the line is anything else, so
+ * ordinary prose that happens to contain braces is never misread.
+ */
+function parseConcatenatedJsonObjects(text: string): unknown[] | null {
+  if (!text.startsWith('{') || !text.includes('"type"')) return null;
+  const objects: unknown[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') { inString = true; continue; }
+    if (c === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (c === '}') {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        try { objects.push(JSON.parse(text.slice(start, i + 1))); } catch { return null; }
+        start = -1;
+      }
+    } else if (depth === 0 && c.trim() !== '') {
+      return null;
+    }
+  }
+  return depth === 0 && objects.length > 0 ? objects : null;
 }
 
 /** Drop a leading `---` … `---` YAML frontmatter block, if present. */

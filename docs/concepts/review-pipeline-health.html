@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review Pipeline Health — behavior, target and current state</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #ffffff; --bg-soft: #f6f6f7; --bg-elv: #ffffff;
+  --ink-1: #3c3c43; --ink-2: #67676c; --ink-3: #929295;
+  --line: #e2e2e3; --border: #c2c2c4;
+  --blue: #3b82f6; --blue-ink: #2f6fd6; --blue-soft: #e7f0fe;
+  --blue-bd: rgba(59,130,246,.42); --blue-glow: rgba(59,130,246,.20);
+  --teal: #14a37f; --teal-ink: #0f8e6e; --teal-soft: #e6f6f1;
+  --teal-bd: rgba(20,163,127,.42); --teal-glow: rgba(20,163,127,.18);
+  --coral: #e5484d;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --chip-shadow: 0 3px 12px rgba(0,0,0,.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1b1b1f; --bg-soft: #202127; --bg-elv: #202127;
+    --ink-1: #dfdfd6; --ink-2: #98989f; --ink-3: #6a6a71;
+    --line: #2e2e32; --border: #3c3f44;
+    --blue: #4c8dff; --blue-ink: #a8b1ff; --blue-soft: #1c2740;
+    --blue-bd: rgba(90,150,255,.50); --blue-glow: rgba(76,141,255,.30);
+    --teal: #34d3a6; --teal-ink: #4fe0b6; --teal-soft: #16302a;
+    --teal-bd: rgba(52,211,166,.48); --teal-glow: rgba(52,211,166,.24);
+    --coral: #f06a6f;
+    --chip-shadow: 0 3px 14px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1b1b1f; --bg-soft: #202127; --bg-elv: #202127;
+  --ink-1: #dfdfd6; --ink-2: #98989f; --ink-3: #6a6a71;
+  --line: #2e2e32; --border: #3c3f44;
+  --blue: #4c8dff; --blue-ink: #a8b1ff; --blue-soft: #1c2740;
+  --blue-bd: rgba(90,150,255,.50); --blue-glow: rgba(76,141,255,.30);
+  --teal: #34d3a6; --teal-ink: #4fe0b6; --teal-soft: #16302a;
+  --teal-bd: rgba(52,211,166,.48); --teal-glow: rgba(52,211,166,.24);
+  --coral: #f06a6f;
+  --chip-shadow: 0 3px 14px rgba(0,0,0,.45);
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink-1); font:15px/1.65 var(--font-sans); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+h1 { font-size: 26px; line-height:1.25; margin: 0 0 6px; }
+.lede { color: var(--ink-2); margin: 0 0 34px; max-width: 72ch; }
+.sec { font:700 11.5px/1 var(--font-mono); letter-spacing:.16em; text-transform:uppercase;
+  color:var(--coral); margin: 44px 0 14px; }
+h2 { font-size: 19px; margin: 4px 0 10px; }
+p { max-width: 76ch; }
+a { color: var(--blue-ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font: 12.5px var(--font-mono); background: var(--bg-soft); border:1px solid var(--line);
+  border-radius:4px; padding: 1px 5px; }
+
+/* chips + host boxes */
+.chip { display:inline-flex; align-items:center; gap:8px;
+  background:var(--bg-elv); color:var(--ink-1); border:1px solid var(--border);
+  border-radius:9px; padding:8px 13px; font:600 13px/1 var(--font-sans);
+  box-shadow:var(--chip-shadow); white-space:nowrap; }
+.chip .ic { width:9px; height:9px; border-radius:3px; flex:none; background:var(--ink-3); }
+.chip.client { border-color:var(--blue-bd); } .chip.client .ic { background:var(--blue); }
+.chip.exec   { border-color:var(--teal-bd); } .chip.exec   .ic { background:var(--teal); }
+.host { text-align:center; background:var(--blue-soft); border:1px solid var(--blue-bd);
+  border-radius:14px; padding:14px 18px; box-shadow:0 0 34px var(--blue-glow); }
+.host .lbl { display:block; font:700 12.5px/1 var(--font-mono); letter-spacing:.16em;
+  text-transform:uppercase; color:var(--blue-ink); margin-bottom:7px; }
+.host .sub { display:block; font-size:12.5px; color:var(--ink-2); line-height:1.5; }
+.host.exec { background:var(--teal-soft); border-color:var(--teal-bd); box-shadow:0 0 30px var(--teal-glow); }
+.host.exec .lbl { color:var(--teal-ink); }
+
+/* pipeline flow diagram */
+.flow { position:relative; margin: 18px 0 8px; }
+.flow svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.flow .rail { fill:none; stroke:var(--line); stroke-width:1.6; }
+.flow .fl { fill:none; stroke-width:2.4; stroke-dasharray:7 12; animation: dash 1.55s linear infinite; }
+.flow .fl.b { stroke:var(--blue); } .flow .fl.t { stroke:var(--teal); }
+@keyframes dash { to { stroke-dashoffset: -19; } }
+.flow-grid { position:relative; display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 26px 20px;
+  align-items:stretch; }
+.flow-cell { display:flex; flex-direction:column; gap:8px; justify-content:center; }
+.lane-note { font:600 10.5px/1.4 var(--font-mono); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--ink-3); text-align:center; }
+.lockpill { align-self:center; font:700 10.5px/1 var(--font-mono); letter-spacing:.14em;
+  text-transform:uppercase; color:var(--coral); border:1px solid var(--coral);
+  border-radius:999px; padding:5px 10px; background:var(--bg-elv); }
+
+/* soll/ist panels */
+.duo { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 14px 0 6px; }
+.panel { border:1px solid var(--line); border-radius:12px; background:var(--bg-elv); padding:14px 16px; }
+.panel .tag { display:inline-block; font:700 10.5px/1 var(--font-mono); letter-spacing:.16em;
+  text-transform:uppercase; border-radius:999px; padding:4px 10px; margin-bottom:9px; }
+.panel.ist .tag { color:var(--coral); border:1px solid var(--coral); }
+.panel.soll .tag { color:var(--teal-ink); border:1px solid var(--teal-bd); background:var(--teal-soft); }
+.panel h3 { margin:0 0 6px; font-size:14.5px; }
+.panel ul { margin:6px 0 0; padding-left: 18px; }
+.panel li { margin: 3px 0; font-size: 13.5px; color: var(--ink-2); }
+.panel li strong { color: var(--ink-1); }
+.panel .cards { margin-top:9px; font: 11.5px var(--font-mono); color: var(--ink-3); }
+
+/* failure classes */
+.fails { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+.fail { border:1px solid var(--line); border-left:3px solid var(--coral); border-radius:10px;
+  background:var(--bg-elv); padding:12px 14px; }
+.fail h3 { margin:0 0 5px; font-size:13.5px; }
+.fail p { margin:0; font-size:12.8px; color:var(--ink-2); }
+.fail .cards { margin-top:7px; font: 11px var(--font-mono); color: var(--ink-3); }
+
+/* sub-doc links */
+.subdocs { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 12px; }
+.sub { border:1px solid var(--line); border-radius:12px; background:var(--bg-soft); padding:13px 15px; }
+.sub .lbl { font:700 11px/1 var(--font-mono); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--blue-ink); display:block; margin-bottom:6px; }
+.sub p { margin:0; font-size:12.8px; color:var(--ink-2); }
+
+@media (max-width: 760px) {
+  .flow-grid, .duo, .fails, .subdocs { grid-template-columns: 1fr; }
+  .flow svg { display:none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Review Pipeline Health</h1>
+<p class="lede">How a delivered card travels through post-processing — and where that
+journey can silently stall. This page states the <strong>observed behavior (IST)</strong>,
+the <strong>target design (SOLL)</strong>, and links every gap to its tracked card.
+Subordinate documents in <a href="review-pipeline-health/README.md">review-pipeline-health/</a>
+hold the decision history, incident experience and the open-issues home.</p>
+
+<div class="sec">§1 · THE PIPELINE — WHERE WORK FLOWS AND WHERE IT WAITS</div>
+<h2>One delivery, two queues, one serial gate</h2>
+<div class="flow">
+  <svg viewBox="0 0 900 40" preserveAspectRatio="none" aria-hidden="true">
+    <path class="rail" d="M150,20 C 250,20 250,20 330,20"></path>
+    <path class="fl b" d="M150,20 C 250,20 250,20 330,20"></path>
+    <path class="rail" d="M570,20 C 650,20 650,20 750,20"></path>
+    <path class="fl t" d="M570,20 C 650,20 650,20 750,20"></path>
+  </svg>
+  <div class="flow-grid">
+    <div class="flow-cell">
+      <div class="host"><span class="lbl">4-auto-review queue</span>
+        <span class="sub">every finished run enqueues here · durable lane state on disk</span></div>
+      <div class="lane-note">entry order = scan order, not age</div>
+    </div>
+    <div class="flow-cell">
+      <div class="host"><span class="lbl">Admission</span>
+        <span class="sub">concurrent-card slots · derived from capacity (cores/2, clamped 3–12)</span></div>
+      <div class="lane-note">per card the step chain stays sequential</div>
+    </div>
+    <div class="flow-cell">
+      <div class="host exec"><span class="lbl">Step chain</span>
+        <span class="sub">build/test gate → aspect reviews → grade → orchestrator decision</span></div>
+      <div class="lockpill">machine-wide gate lock · serial</div>
+    </div>
+  </div>
+</div>
+<p>Admission decides <em>how many cards</em> post-process concurrently; the
+<strong>build/test gate</strong> is machine-wide serial regardless. A card holding an
+admission slot while waiting for the gate blocks nothing inside its own chain — but it
+does hold the slot. When all slots are held by gate-waiters, the queue behind them
+starves, however many cards are ready.</p>
+
+<div class="sec">§2 · IST ↔ SOLL — THE FOUR MECHANISMS</div>
+
+<h2>Admission</h2>
+<div class="duo">
+  <div class="panel ist"><span class="tag">IST</span>
+    <h3>Derived slots, FIFO order</h3>
+    <ul>
+      <li>Cap derived from capacity (cores/2 → <strong>8</strong> on the operator machine); a fixed
+          <code>PostProcessing:MaxParallelism</code> override silently beat the derivation until 2026-07-23.</li>
+      <li>Queue order = workspace scan order: whole projects can wait behind another project's backlog.</li>
+      <li>Gate-waiting chains hold general slots.</li>
+    </ul>
+    <div class="cards">delivered: b99b7ecf · override removed 23.07.</div>
+  </div>
+  <div class="panel soll"><span class="tag">SOLL</span>
+    <h3>Two pools, oldest first</h3>
+    <ul>
+      <li><strong>build pool</strong> (coding runs + gates) and <strong>api pool</strong> (LLM steps) are
+          admitted separately — a gate-waiter never consumes an api slot.</li>
+      <li>Admission by <strong>lane age with project fairness</strong>: the oldest waiting card goes first.</li>
+      <li>Latency (run finished → post-processing done) is a first-class metric.</li>
+    </ul>
+    <div class="cards">AGT-2222 (remainder) · AGT-2229</div>
+  </div>
+</div>
+
+<h2>Build/test gate</h2>
+<div class="duo">
+  <div class="panel ist"><span class="tag">IST</span>
+    <h3>Serial lock, branch-tip subject, no watchdog</h3>
+    <ul>
+      <li>One machine-wide lock; every project queues behind every other.</li>
+      <li>The gate tests the <strong>branch tip</strong> — develop-side suite fixes never reach
+          in-flight branches (<em>stale-branch trap</em>).</li>
+      <li>After lock acquisition there is <strong>no watchdog</strong>: a hung spawn held the lock
+          for 2.5&nbsp;h on 23.07.; ~12 queued gates died at the 62-min queue SLA.</li>
+      <li>Queue-SLA victims count as card failures and consume anti-churn budget.</li>
+      <li><strong>Since 23.07.:</strong> the <strong>ssh-gate bridge</strong> runs gates on the
+          remote host first (2 in parallel, full suite ≈ 2&nbsp;min, disposable worktree at the
+          exact SHA, remote-side timeout); the local path remains only as fallback.</li>
+    </ul>
+    <div class="cards">containment: MachineBound traits + build-profile filter · bridge: AGT-2222 T2 (cleanup card tracks its removal)</div>
+  </div>
+  <div class="panel soll"><span class="tag">SOLL</span>
+    <h3>Merged subject, watchdog, distributed</h3>
+    <ul>
+      <li>Gate tests the subject <strong>merged onto current develop</strong> — “would this land
+          green today?”; merge conflict is its own honest outcome.</li>
+      <li>Hard wall-clock watchdog from lock acquisition; a hung gate frees the lock and reports
+          an <strong>infrastructure failure</strong>, which never consumes card budget.</li>
+      <li>Gates run on remote hosts in parallel; the local lock stops being the global bottleneck.</li>
+    </ul>
+    <div class="cards">AGT-2258 · AGT-2257 · AGT-2229</div>
+  </div>
+</div>
+
+<h2>Claims &amp; leases</h2>
+<div class="duo">
+  <div class="panel ist"><span class="tag">IST</span>
+    <h3>A claim is just an entry</h3>
+    <ul>
+      <li>Nothing verifies that a living process backs a claim: three cards held host slots for
+          <strong>9+ hours</strong> with no process and no worktree (23.07.), starving 12 ready cards.</li>
+      <li>Healing is manual (operator zombie-heal moves).</li>
+    </ul>
+    <div class="cards">observed: CAC-6/10/14 zombie leases</div>
+  </div>
+  <div class="panel soll"><span class="tag">SOLL</span>
+    <h3>Heartbeat leases with self-expiry</h3>
+    <ul>
+      <li>Every claim carries a lease the host must actively renew; no living run → the lease
+          expires and the slot frees itself.</li>
+      <li>Typed abort causes and capability health drive targeted drain instead of blanket stalls.</li>
+    </ul>
+    <div class="cards">AGT-2182 · AGT-2185 · AGT-2186</div>
+  </div>
+</div>
+
+<h2>Verdicts &amp; operator authority</h2>
+<div class="duo">
+  <div class="panel ist"><span class="tag">IST</span>
+    <h3>Stale artifacts outrank the operator</h3>
+    <ul>
+      <li>Re-processing derives its verdict from leftover artifacts (consumed attempt ledger,
+          escalation status corpse) — an explicit operator requeue is instantly re-escalated
+          without any new evidence (<em>requeue ping-pong</em>).</li>
+      <li>A passing grade that names defects can close a card without any reaction to the findings.</li>
+    </ul>
+    <div class="cards">observed: AGT-1934 / 2110 / 2199</div>
+  </div>
+  <div class="panel soll"><span class="tag">SOLL</span>
+    <h3>Attempt epochs &amp; the council loop</h3>
+    <ul>
+      <li>A <strong>manual</strong> move out of an escalated lane bumps the attempt epoch: old budget
+          becomes history, evaluation starts fresh; automatic moves never bump — loop protection stays intact.</li>
+      <li>Escalation artifacts rotate into history on operator requeue; a new escalate is only valid
+          on post-requeue evidence.</li>
+      <li><strong>Council</strong>: the orchestrator reacts to every named review finding —
+          fix now (targeted follow-up round), accept with reasoning, or escalate — visibly at the review entry.</li>
+    </ul>
+    <div class="cards">AGT-2260 · AGT-2253</div>
+  </div>
+</div>
+
+<div class="sec">§3 · FAILURE CLASSES — WHAT ACTUALLY WENT WRONG (NIGHT OF 22./23.07.)</div>
+<h2>Four traps, one family: derived state without a feedback loop to reality</h2>
+<div class="fails">
+  <div class="fail"><h3>Stale-branch trap</h3>
+    <p>Gates ran the card branch's <em>old</em> test suite; develop-side fixes (MachineBound
+    taggings) never arrived. Cards looped gate-fail → reissue on the same old base — one card
+    reached 46 transitions.</p>
+    <div class="cards">fix: build-profile filter (immediate) · AGT-2258 (structural)</div></div>
+  <div class="fail"><h3>Gate wedge</h3>
+    <p>A gate acquired the lock, prepared its workspace and then hung before spawning any process.
+    No watchdog fired for 2.5&nbsp;h; a dozen queued gates timed out and burned card budgets.</p>
+    <div class="cards">AGT-2257 (watchdog + honest infra failures)</div></div>
+  <div class="fail"><h3>Zombie leases</h3>
+    <p>Dead claims blocked host slots for 9+ hours; a whole project's ready column starved while
+    the system reported the claims as healthy.</p>
+    <div class="cards">AGT-2182 / 2185 / 2186 (heartbeat leases)</div></div>
+  <div class="fail"><h3>Silent starvation &amp; overrides</h3>
+    <p>A forgotten <code>MaxParallelism=3</code> override pinned admission; FIFO order kept the
+    oldest cards (20&nbsp;h wait) unprocessed. No sensor reported any of it.</p>
+    <div class="cards">override removed · AGT-2259 (health sensors) · AGT-2222 (fairness)</div></div>
+</div>
+<p style="margin-top:14px">Two further defects surfaced while fixing: the lane move can report
+<strong>Success while the source folder survives</strong> (AGT-2255), and build-profile validation
+launches <code>bash</code> on Windows and always fails, silently blocking pickup (AGT-2256).</p>
+
+<div class="sec">§4 · SUBORDINATE DOCUMENTS — THE HOME FOR THIS PROBLEM CLASS</div>
+<h2>Decision history · experience · issues</h2>
+<p>Future incidents and design decisions of this class belong in this folder — one place,
+coupled to the concept above. The documentation pipeline step should resolve this page as the
+canonical entry point for review-pipeline health topics (step productization is tracked separately).</p>
+<div class="subdocs">
+  <div class="sub"><span class="lbl">Decision history</span>
+    <p><a href="review-pipeline-health/decision-history.md">decision-history.md</a> — every design
+    decision with date, reasoning and card reference.</p></div>
+  <div class="sub"><span class="lbl">Experience</span>
+    <p><a href="review-pipeline-health/incident-2026-07-22-gate-churn.md">incident-2026-07-22-gate-churn.md</a>
+    — the full night incident: timeline, diagnosis, what worked.</p></div>
+  <div class="sub"><span class="lbl">Issues</span>
+    <p><a href="review-pipeline-health/issues.md">issues.md</a> — open issues of this class,
+    each linked to its board card; new ones start here.</p></div>
+</div>
+
+<div class="sec">§5 · RELATED &amp; CONSOLIDATED</div>
+<p>This page is the entry point; the following existing documents remain valid detail views and
+are consolidated under it:
+<a href="run-liveness-and-slot-semantics.md">run-liveness-and-slot-semantics.md</a> ·
+<a href="token-budget-load-management.md">token-budget-load-management.md</a> ·
+<a href="auto-review-evidence-gate-analysis.html">auto-review-evidence-gate-analysis</a> ·
+<a href="completion-review-and-remote-runner-stability.html">completion-review-and-remote-runner-stability</a> ·
+<a href="task-processing-pipeline/README.md">task-processing-pipeline/</a> ·
+<a href="zielarchitektur-diagramm.html">zielarchitektur-diagramm</a> (target architecture:
+two pools, remote gates, host orchestrator).</p>
+
+</div>
+</body>
+</html>

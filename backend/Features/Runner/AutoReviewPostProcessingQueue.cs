@@ -47,13 +47,30 @@ public sealed class AutoReviewPostProcessingQueue : IAutoReviewPostProcessingQue
 public sealed class AutoReviewPostProcessingWorker : BackgroundService
 {
     /// <summary>
-    /// Default cap on cards whose post-processing runs concurrently. Remote runners
-    /// deliver several completed cards in parallel; a serial drain let the
-    /// 4-auto-review lane back up. Override with <c>PostProcessing:MaxParallelism</c>
-    /// (read from appsettings like the gate timeouts). Per card the step order stays
-    /// sequential - only across cards is there parallelism.
+    /// Floor for the concurrent-card cap. The effective cap is derived from
+    /// machine capacity (<see cref="DeriveMaxParallelism"/>): remote runners
+    /// deliver waves of completed cards, and a fixed small cap let the
+    /// 4-auto-review lane back up while cores sat idle. Effective concurrency
+    /// still follows queue depth naturally - the cap only bounds it. Override
+    /// with <c>PostProcessing:MaxParallelism</c> (read from appsettings like the
+    /// gate timeouts). Per card the step order stays sequential - only across
+    /// cards is there parallelism; build-heavy steps keep serializing on the
+    /// machine-wide build-test-gate lock, so a wider admission mainly lets the
+    /// LLM-bound steps of distinct cards overlap instead of queueing behind a
+    /// card that is waiting for the gate.
     /// </summary>
     public const int DefaultMaxParallelism = 3;
+
+    /// <summary>
+    /// Upper bound for the derived cap: beyond this, more concurrent cards no
+    /// longer add throughput (the gate lock and the orchestrator's per-hour
+    /// call budget become the binding constraints) but do add workspace churn.
+    /// </summary>
+    public const int MaxDerivedParallelism = 12;
+
+    /// <summary>Capacity-derived concurrent-card cap; clamped to [<see cref="DefaultMaxParallelism"/>, <see cref="MaxDerivedParallelism"/>].</summary>
+    internal static int DeriveMaxParallelism(int processorCount) =>
+        Math.Clamp(processorCount / 2, DefaultMaxParallelism, MaxDerivedParallelism);
 
     private readonly AutoReviewPostProcessingQueue _queue;
     private readonly ReviewDecisionOrchestrator _reviewDecisionOrchestrator;
@@ -102,7 +119,8 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
         // never tears down the pool. The workspace-wide backstop sweep remains the
         // safety net for anything a slot missed.
         var maxParallelism = Math.Max(1,
-            _configuration.GetValue("PostProcessing:MaxParallelism", DefaultMaxParallelism));
+            _configuration.GetValue("PostProcessing:MaxParallelism",
+                DeriveMaxParallelism(Environment.ProcessorCount)));
         var slots = new SemaphoreSlim(maxParallelism, maxParallelism);
         var inFlight = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
         var running = new ConcurrentDictionary<Task, byte>();
@@ -201,19 +219,22 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
         }
 
         var sw = Stopwatch.StartNew();
+        var queueWaitMs = (long)Math.Max(0, (DateTime.UtcNow - request.EnqueuedAtUtc).TotalMilliseconds);
         MarkReviewDecisionRunning(request);
         _logger.LogInformation(
-            "auto-review-postprocessing-started project={Project} job={JobId} source={Source}",
-            request.ProjectName, request.JobId, request.Source);
+            "auto-review-postprocessing-started project={Project} job={JobId} source={Source} queueWaitMs={QueueWaitMs}",
+            request.ProjectName, request.JobId, request.Source, queueWaitMs);
 
         try
         {
             await _reviewDecisionOrchestrator.ProcessCardAsync(
                 workspace, request.ProjectName, request.JobId, request.WatchPath, ct);
             sw.Stop();
+            // completion latency = run finished (enqueue) -> post-processing done;
+            // the queue-wait share separates "stau" from "step cost" in the metric.
             _logger.LogInformation(
-                "auto-review-postprocessing-finished project={Project} job={JobId} elapsedMs={ElapsedMs}",
-                request.ProjectName, request.JobId, sw.ElapsedMilliseconds);
+                "auto-review-postprocessing-finished project={Project} job={JobId} elapsedMs={ElapsedMs} queueWaitMs={QueueWaitMs} completionLatencyMs={CompletionLatencyMs}",
+                request.ProjectName, request.JobId, sw.ElapsedMilliseconds, queueWaitMs, queueWaitMs + sw.ElapsedMilliseconds);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

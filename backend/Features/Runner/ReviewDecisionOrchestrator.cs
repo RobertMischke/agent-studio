@@ -94,6 +94,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     public const int DefaultMaxParallelReviews = 4;
 
+    /// <summary>
+    /// Default per-hour budget for orchestrator LLM calls (decisions and DONE
+    /// aspect reviews share it). The budget is a runaway backstop, not a pacing
+    /// device: at ~5 calls per card, 30/h throttled healthy remote delivery
+    /// waves to ~6 cards/h and became the binding constraint of the
+    /// 4-auto-review drain. 120/h keeps the loop-protection while letting a
+    /// full wave pass. Override with <c>ReviewDecisionOrchestrator:CallsPerHour</c>.
+    /// </summary>
+    public const int DefaultCallsPerHour = 120;
+
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _stateMachine;
     private readonly ITaskAccess _taskAccess;
@@ -409,7 +419,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private async Task TickOnceCoreAsync(string workspace, CancellationToken ct)
     {
-        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
+        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", DefaultCallsPerHour);
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", CliTypes.Codex);
         var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
@@ -596,7 +606,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
         var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
-        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
+        var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", DefaultCallsPerHour);
         var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
 
         var entry = _scanner.GetWatchPaths().FirstOrDefault(e =>
@@ -2809,6 +2819,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         });
     }
 
+    /// <summary>
+    /// ssh-gate bridge (AGT-2222 tranche 2): derive the ssh alias from the
+    /// project's execution runner by convention - "agent-runner-01" connects via
+    /// the "agent-runner" ssh host alias (trailing instance number stripped).
+    /// Projects without a remote runner gate locally. Removed together with the
+    /// bridge once AGT-2229 ships claimable remote gate steps.
+    /// </summary>
+    private static string? ResolveRemoteGateSshHost(ProjectSettings? settings)
+    {
+        var runner = settings?.ExecutionRunner;
+        if (string.IsNullOrWhiteSpace(runner)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(runner.Trim(), @"^(.+?)-\d+$");
+        return match.Success ? match.Groups[1].Value : runner.Trim();
+    }
+
     private async Task<BuildTestGateResult?> RunBuildTestGatePostStepAsync(
         string workspace,
         WatchPathEntry entry,
@@ -2881,6 +2906,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             SubjectRef = subject.SubjectRef,
             InfrastructureTimeout = TimeSpan.FromSeconds(Math.Max(1, infrastructureTimeoutSeconds)),
             QueueWaitTimeout = TimeSpan.FromSeconds(Math.Max(1, queueWaitTimeoutSeconds)),
+            RemoteSshHost = ResolveRemoteGateSshHost(settings),
         };
 
         BuildTestGateResult? result = null;
@@ -5005,12 +5031,43 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         try
         {
-            return !ReviewDecisionLog.ReadAll(workspace, project).Any(r => r.JobId == info.Id);
+            // Operator authority (AGT-2260): verdicts recorded BEFORE the card's
+            // current review-cycle epoch belong to a closed cycle (the operator
+            // requeued the card afterwards). They do not count as "this cycle
+            // has a verdict" - otherwise a requeued card would sit inert forever:
+            // its old sentinel is resolved, its old verdict is ignored by the
+            // stale-with-verdict guard, and nothing would ever drive it again.
+            var epoch = CurrentReviewCycleEpoch(info);
+            return !ReviewDecisionLog.ReadAll(workspace, project).Any(r =>
+                r.JobId == info.Id
+                && (epoch is null || r.CreatedAt >= epoch));
         }
         catch
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Operator authority (AGT-2260): the current review-cycle epoch is the
+    /// card's most recent recorded transition INTO <c>4-auto-review</c> (written
+    /// by the single recording hook in <c>TaskTransitionService.MoveAsync</c>).
+    /// Verdicts older than it belong to a closed cycle - typically one the
+    /// operator ended by requeueing the escalated card - and must neither be
+    /// backfilled as "due moves" nor count as this cycle's verdict. Cards
+    /// without recorded transitions (legacy folders, unit-test fixtures) keep
+    /// the pre-epoch behavior.
+    /// </summary>
+    private static DateTime? CurrentReviewCycleEpoch(TaskInfo info)
+    {
+        var transitions = info.Provenance?.Transitions;
+        if (transitions is not { Count: > 0 }) return null;
+        for (var i = transitions.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(transitions[i].Lane, TaskStates.AutoReview, StringComparison.Ordinal))
+                return transitions[i].AtUtc;
+        }
+        return null;
     }
 
     /// <summary>
@@ -5059,6 +5116,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             if (records[i].JobId == info.Id) { latest = records[i]; break; }
         }
         if (latest == null) return null;
+
+        // Operator authority (AGT-2260): a verdict recorded BEFORE the card's
+        // current review-cycle epoch has already had its move - and someone
+        // (typically the operator, requeueing an escalated card) deliberately
+        // moved the card back afterwards. Backfilling that old move would
+        // override the operator and re-escalate from stale artifacts without
+        // any new evidence (the requeue ping-pong of 23.07.). Only a verdict
+        // YOUNGER than the current lane entry is a genuinely un-executed move.
+        if (CurrentReviewCycleEpoch(info) is { } epoch && latest.CreatedAt < epoch)
+            return null;
 
         return latest.Kind switch
         {
