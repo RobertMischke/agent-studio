@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
   "schemaVersion": "wiki-document-companion/v1",
-  "title": "Review Pipeline Health — behavior, target and current state",
+  "title": "Review Pipeline Health \u2014 behavior, target and current state",
   "source": {
     "path": "docs/concepts/review-pipeline-health.html",
     "type": "html"
@@ -17,14 +17,65 @@
     "analyzedAt": "2026-07-23"
   },
   "relatedTasks": [
-    { "key": "AGT-2222", "title": "Post-Processing parallel, remote-fähig, zeitnah (T1+T2 delivered)", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" },
-    { "key": "AGT-2229", "title": "Host orchestrator instance: claimable remote steps", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" },
-    { "key": "AGT-2255", "title": "Lane move false-success, source folder survives", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" },
-    { "key": "AGT-2256", "title": "Build-profile validation launches bash on Windows", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" },
-    { "key": "AGT-2257", "title": "Gate watchdog after lock acquisition; honest infra failures", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" },
-    { "key": "AGT-2258", "title": "Gate tests subject on current develop", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" },
-    { "key": "AGT-2259", "title": "Pipeline health sensors: lock, fingerprints, drain rate", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" },
-    { "key": "AGT-2260", "title": "Operator requeue authority / attempt epoch", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" },
-    { "key": "AGT-2182", "title": "Remote attempt authority: run and review fencing", "linkedAt": "2026-07-23T00:00:00.0000000Z", "source": "manual" }
+    {
+      "key": "AGT-2222",
+      "title": "Post-Processing parallel, remote-f\u00E4hig, zeitnah (T1\u002BT2 delivered)",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2229",
+      "title": "Host orchestrator instance: claimable remote steps",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2255",
+      "title": "Lane move false-success, source folder survives",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2256",
+      "title": "Build-profile validation launches bash on Windows",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2257",
+      "title": "Gate watchdog after lock acquisition; honest infra failures",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2258",
+      "title": "Gate tests subject on current develop",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2259",
+      "title": "Pipeline health sensors: lock, fingerprints, drain rate",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2260",
+      "title": "Operator requeue authority / attempt epoch",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2182",
+      "title": "Remote attempt authority: run and review fencing",
+      "linkedAt": "2026-07-23T00:00:00.0000000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2253",
+      "title": "Council: Orchestrator-Reaktion auf jedes Review, gezielte Folgeschleifen",
+      "linkedAt": "2026-07-23T11:46:26.0311705Z",
+      "source": "auto"
+    }
   ]
 }
