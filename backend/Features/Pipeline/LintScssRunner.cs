@@ -103,7 +103,7 @@ public sealed class LintScssRunner : ILintScssRunner
             // tooling repos) skip silently; the post-step is a no-op for
             // them rather than a permanent failure.
             return new LintScssResult(LintScssVerdict.Skipped, null, 0, "",
-                $"no Angular workspace at {repositoryPath}");
+                $"no frontend/ or root Angular workspace at {repositoryPath}");
         }
 
         var sw = Stopwatch.StartNew();
