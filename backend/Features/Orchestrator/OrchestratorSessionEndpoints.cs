@@ -50,10 +50,13 @@ public static class OrchestratorSessionEndpoints
             if (registry.SessionsRoot == null)
                 return Results.Problem("TaskRepository is not configured.", statusCode: StatusCodes.Status500InternalServerError);
 
-            if (!OrchestratorContextKey.TryParse(contextKey, out _))
+            if (!OrchestratorContextKey.TryParse(contextKey, out var parsedGet))
                 return Results.BadRequest(new { error = "Invalid orchestrator context key." });
 
-            return Results.Ok(registry.GetOrCreate(contextKey));
+            // Always continue with the parsed canonical Value: the forgiving
+            // parse accepts once-more-percent-encoded keys (AGT-2165), and the
+            // raw form must never become a separate registry identity.
+            return Results.Ok(registry.GetOrCreate(parsedGet.Value));
         });
 
         static IResult PostTurn(string contextKey, OrchestratorTurnRequest request, OrchestratorSessionRegistry registry, OrchestratorTurnService turns)
@@ -61,13 +64,13 @@ public static class OrchestratorSessionEndpoints
             if (registry.SessionsRoot == null)
                 return Results.Problem("TaskRepository is not configured.", statusCode: StatusCodes.Status500InternalServerError);
 
-            if (!OrchestratorContextKey.TryParse(contextKey, out _))
+            if (!OrchestratorContextKey.TryParse(contextKey, out var parsed))
                 return Results.BadRequest(new { error = "Invalid orchestrator context key." });
 
             if (string.IsNullOrWhiteSpace(request.Prompt))
                 return Results.BadRequest(new { error = "Prompt is required." });
 
-            return Results.Accepted($"/api/orchestrator/sessions/{contextKey}", turns.Enqueue(contextKey, request));
+            return Results.Accepted($"/api/orchestrator/sessions/{parsed.Value}", turns.Enqueue(parsed.Value, request));
         }
 
         static IResult Park(string contextKey, OrchestratorSessionRegistry registry, OrchestratorTurnService turns)
@@ -75,10 +78,10 @@ public static class OrchestratorSessionEndpoints
             if (registry.SessionsRoot == null)
                 return Results.Problem("TaskRepository is not configured.", statusCode: StatusCodes.Status500InternalServerError);
 
-            if (!OrchestratorContextKey.TryParse(contextKey, out _))
+            if (!OrchestratorContextKey.TryParse(contextKey, out var parsedPark))
                 return Results.BadRequest(new { error = "Invalid orchestrator context key." });
 
-            return Results.Ok(turns.Park(contextKey));
+            return Results.Ok(turns.Park(parsedPark.Value));
         }
 
         group.MapPost("/global/turns", (OrchestratorTurnRequest request, OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
