@@ -77,6 +77,7 @@ import {
 import { PipelineHistoryNoticeComponent } from './pipeline-history-notice/pipeline-history-notice.component';
 import type { ProtocolVerdict } from '../../protocol-pane/protocol-verdict';
 import { outcomeDecisionBadge, type DecisionBadgeVm } from './outcome-decision-badge.util';
+import { hasRecordedStepExecution, reconcileCoreStatus } from './pipeline-execution-reconciliation.util';
 
 interface PipelineRowVm {
   id: string;
@@ -885,6 +886,7 @@ export class OverviewPaneComponent {
       const modelOverride = cfg?.model ?? '';
       const thinkingLevelOverride = cfg?.thinkingLevel ?? null;
       let verdict = e?.verdict ?? null;
+      if (step.kind === 'core') status = reconcileCoreStatus(status, verdict);
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
       const statusDetail = e?.verdictSummary ?? e?.reason ?? null;
       const tokenTooltip = buildPipelineStepTokenTooltip(label, c ?? null);
@@ -1394,7 +1396,7 @@ export class OverviewPaneComponent {
   /** A settled run without step telemetry must not look like future work. */
   readonly showPipelineNoExecution = computed<boolean>(() => {
     const selected = this.selectedPipelineExecution();
-    if ((selected?.steps?.length ?? 0) > 0) return false;
+    if (selected?.steps?.some(hasRecordedStepExecution)) return false;
     if (selected != null && !this.selectedPipelineIsCurrent()) return selected.completedAt != null;
     return OverviewPaneComponent.PIPELINE_TERMINAL_STATES.has(this.job().state);
   });

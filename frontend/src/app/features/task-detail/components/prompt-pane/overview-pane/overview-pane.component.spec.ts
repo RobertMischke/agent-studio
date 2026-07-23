@@ -301,6 +301,68 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step"]').length).toBe(2);
   });
 
+  it('pipeline block: a terminal task with a pre-filled all-pending execution still shows no-execution', async () => {
+    const fixture = await build(baseJob({ state: TaskState.Escalated }));
+    const pipe = unrecordedPipeline();
+    pipe.execution = {
+      pipelineId: pipe.pipeline.id,
+      pipelineVersion: pipe.pipeline.version,
+      jobId: 'test-1',
+      project: 'test',
+      startedAt: '2026-07-22T10:00:00Z',
+      steps: pipe.pipeline.allSteps!.map(step => ({
+        stepId: step.id,
+        kind: step.kind,
+        status: 'pending',
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+      })),
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-no-execution"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-steps"]')).toBeNull();
+  });
+
+  it.each([
+    ['success', 'passed'],
+    ['failed', 'failed'],
+  ] as const)('pipeline block: reconciles legacy pending CORE verdict %s to %s', async (verdict, status) => {
+    const fixture = await build(baseJob({ state: TaskState.Completed }));
+    const pipe = unrecordedPipeline();
+    pipe.execution = {
+      pipelineId: pipe.pipeline.id,
+      pipelineVersion: pipe.pipeline.version,
+      jobId: 'test-1',
+      project: 'test',
+      startedAt: '2026-07-22T10:00:00Z',
+      steps: [{
+        stepId: 'core-agent-run',
+        kind: 'core',
+        status: 'pending',
+        verdict,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+      }],
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.componentInstance.expandAllPipelineGroups();
+    fixture.detectChanges();
+
+    const core = fixture.nativeElement.querySelector(
+      '[data-testid="overview-pipeline-step"][data-step-id="core-agent-run"]',
+    );
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-no-execution"]')).toBeNull();
+    expect(core?.getAttribute('data-status')).toBe(status);
+  });
+
   it('pipeline block: exposes the recorded reason behind an escalated open-items check', async () => {
     const fixture = await build(baseJob({ state: TaskState.HumanReview }));
     const pipe: TaskPipelineResponse = {

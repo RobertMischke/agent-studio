@@ -279,18 +279,28 @@ async function dismissErrorDialog(page: Page): Promise<void> {
 }
 
 async function expandAllPipelineSections(page: Page): Promise<void> {
-  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
   for (let i = 0; i < 20; i++) {
-    if ((await collapsed.count()) === 0) break;
-    await collapsed.first().click();
+    const clicked = await page.locator(
+      '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
+    ).evaluateAll((headers) => {
+      const first = headers[0] as HTMLElement | undefined;
+      first?.click();
+      return first != null;
+    });
+    if (!clicked) break;
   }
 }
 
 async function collapseAllPipelineSections(page: Page): Promise<void> {
-  const expanded = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="true"]');
   for (let i = 0; i < 20; i++) {
-    if ((await expanded.count()) === 0) break;
-    await expanded.first().click();
+    const clicked = await page.locator(
+      '[data-testid="overview-pipeline-phase"][aria-expanded="true"]',
+    ).evaluateAll((headers) => {
+      const first = headers[0] as HTMLElement | undefined;
+      first?.click();
+      return first != null;
+    });
+    if (!clicked) break;
   }
 }
 
