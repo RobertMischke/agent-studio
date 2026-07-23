@@ -4579,7 +4579,7 @@ public class GitService
     }
 
     /// <summary>
-    /// AGT-2202 — the curated-merge map for an integration ref: task KEY -&gt; the
+    /// AGT-2202 - the curated-merge map for an integration ref: task KEY -&gt; the
     /// SHA of the <c>merge(&lt;KEY&gt;)</c> / <c>merge-recut(&lt;KEY&gt;)</c> commit that
     /// folded that task into develop. ONE bounded <c>git log --grep</c> spawn per
     /// repo (the grep pre-filters to only the curated integrator merges, so the
