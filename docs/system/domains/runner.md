@@ -252,11 +252,12 @@ state.
   aspect-runner / orchestrator wiring.
 - Environmental cycles do not count against progress or budget: a transient
   environmental fault never accrues toward the no-progress quarantine streak
-  (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and the shared reissue
-  budget is counted per attempt chain, not over the job's whole lifetime -
-  `ReviewDecisionOrchestrator.CountReissuesInCurrentChain` resets the count on the
-  most recent chain-ending verdict (`Escalate` / `AcceptAsDone`) so a reopened
-  card gets a fresh budget instead of escalating on the first new concern.
+  (`RunQuarantineBreaker.CountsAsNoProgressFailure`). The shared reissue budget
+  belongs to a review-attempt epoch. Only an explicit human move out of
+  `5-human-review` / `5e-escalated` opens the next epoch and rotates stale
+  verdict artefacts; automatic verdicts and moves retain the current epoch and
+  cannot replenish the ceiling. `OperatorReviewRequeueService` owns the epoch
+  boundary, history rotation, decision-journal row, and timeline event.
 - Host-load admission (AGT-2077) samples total system CPU every 15 seconds. A
   continuous minute above 90 percent activates `load-throttle`: existing runs
   continue, new slot picks are deferred with timeline and orchestrator-feed

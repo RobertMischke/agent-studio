@@ -199,7 +199,11 @@ public sealed class OperatorReviewRequeueService
         AddFile(candidates, folderPath, "orchestrator-follow-up.md");
 
         var postSteps = Path.Combine(folderPath, "post-steps");
-        if (Directory.Exists(postSteps)) candidates.Add(postSteps);
+        if (Directory.Exists(postSteps)
+            && Directory.EnumerateFiles(postSteps, "*", SearchOption.AllDirectories).Any())
+        {
+            candidates.Add(postSteps);
+        }
 
         var statusPath = Path.Combine(folderPath, "status.md");
         if (File.Exists(statusPath)
@@ -227,7 +231,10 @@ public sealed class OperatorReviewRequeueService
                 var name = Path.GetFileName(source);
                 var destination = UniqueDestination(historyDir, name);
                 if (Directory.Exists(source))
-                    Directory.Move(source, destination);
+                {
+                    if (!MoveDirectoryFiles(source, destination))
+                        continue;
+                }
                 else if (File.Exists(source))
                     File.Move(source, destination);
                 else
@@ -244,6 +251,23 @@ public sealed class OperatorReviewRequeueService
         }
 
         return rotated;
+    }
+
+    private static bool MoveDirectoryFiles(string source, string destination)
+    {
+        var files = Directory
+            .EnumerateFiles(source, "*", SearchOption.AllDirectories)
+            .ToList();
+        if (files.Count == 0) return false;
+
+        foreach (var file in files)
+        {
+            var relative = Path.GetRelativePath(source, file);
+            var target = Path.Combine(destination, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Move(file, target);
+        }
+        return true;
     }
 
     private static bool IsEscalationStatus(string path)
@@ -263,7 +287,10 @@ public sealed class OperatorReviewRequeueService
     private static void AddMatches(List<string> paths, string folderPath, string pattern)
     {
         try { paths.AddRange(Directory.EnumerateFiles(folderPath, pattern, SearchOption.TopDirectoryOnly)); }
-        catch { }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "operator-requeue: optional verdict artefact enumeration failed");
+        }
     }
 
     private static void AddFile(List<string> paths, string folderPath, string name)

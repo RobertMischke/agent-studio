@@ -165,6 +165,28 @@ The application owns transitions between these states. Successful CLI runs move 
 
 Optional sidecar carrying the richer phase history that does not fit on the wire-level `phase` field: which intake or post-processing checks were scheduled, when the current phase was entered, and the last blocking reason. Absent on legacy job folders; the wire-level `phase` field is the source of truth. The follow-up tasks `ready-orchestrator-intake-lane` and `post-processing-orchestrator-lane` populate this file.
 
+### .metadata/review-attempt.json and results/history/ (optional)
+
+An explicit operator move out of `5-human-review` or `5e-escalated` into a
+work/review lane opens a new review-attempt epoch:
+
+```json
+{
+  "epoch": 1,
+  "startedAt": "2026-07-23T08:30:00Z",
+  "actor": "human:operator@example.com",
+  "reason": "Infrastructure repaired; reassess from fresh evidence.",
+  "fromState": "5e-escalated",
+  "toState": "4-auto-review"
+}
+```
+
+Legacy tasks without this file are in epoch 0. Automatic moves never change it.
+Before fresh Post Processing starts, active verdict residue is moved under
+`results/history/review-epoch-NNNN/operator-requeue-<timestamp>/`. These files
+remain available for audit but are not active deliverables and are excluded from
+review prompt inventories.
+
 ### post-processing-outcomes.jsonl (optional)
 
 Append-only JSON-Lines file holding orchestrator-owned Post Processing outcomes. This file records what happened between the coding CLI finishing and the task reaching Human Review; it does not authorize source edits or lane moves by the supporting identity.

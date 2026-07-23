@@ -325,6 +325,90 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         Assert.Contains(status.Files, f => f.Path.EndsWith("resume-work.txt", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task OperatorMoveFromEscalatedToAutoReview_OpensEpochRotatesVerdictAndQueuesFreshGate()
+    {
+        const string slug = "operator-requeue";
+        WriteJob(TaskStates.Escalated, slug);
+        var oldFolder = Path.Combine(_watchPath, TaskStates.Escalated, slug);
+        File.WriteAllText(Path.Combine(oldFolder, "status.md"),
+            "# Result\n\nResult: Escalated\n\nOld escalation must not drive the next verdict.");
+        File.WriteAllText(Path.Combine(oldFolder, "aspect-code-quality.md"), "old BLOCK verdict");
+        File.WriteAllText(Path.Combine(oldFolder, "lifecycle.json"), "{\"phase\":\"escalated\"}");
+
+        ReviewDecisionLog.Append(_watchPath, Decision(ReviewDecisionKind.Reissue));
+        ReviewDecisionLog.Append(_watchPath, Decision(ReviewDecisionKind.Reissue));
+        ReviewDecisionLog.Append(_watchPath, Decision(ReviewDecisionKind.Escalate));
+
+        var queue = new RecordingAutoReviewQueue();
+        var deps = BuildDeps(queue);
+        var outcome = await deps.Transitions.MoveAsync(
+            slug,
+            TaskStates.AutoReview,
+            _watchPath,
+            cause: TimelineActors.Human(""),
+            reason: "Infrastructure repaired; reassess from fresh evidence.");
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var moved = Assert.IsType<TaskInfo>(deps.Scanner.FindJob(slug, _watchPath));
+        Assert.Equal(TaskStates.AutoReview, moved.State);
+        Assert.Equal(1, OperatorReviewRequeueService.ReadEpoch(moved.FolderPath));
+
+        var decisions = ReviewDecisionLog.ReadAll(_watchPath, ProjectName)
+            .Where(r => r.JobId == slug)
+            .ToList();
+        var boundary = Assert.Single(decisions, r => r.Kind == ReviewDecisionKind.OperatorRequeue);
+        Assert.Equal(1, boundary.AttemptEpoch);
+        Assert.Contains("Infrastructure repaired", boundary.Reason);
+        Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(decisions, slug));
+        Assert.True(ReviewDecisionOrchestrator.IsPendingOperatorRequeueAssessment(
+            boundary, 1));
+
+        Assert.False(File.Exists(Path.Combine(moved.FolderPath, "status.md")));
+        Assert.False(File.Exists(Path.Combine(moved.FolderPath, "aspect-code-quality.md")));
+        Assert.Contains(
+            Directory.EnumerateFiles(Path.Combine(moved.FolderPath, "results", "history"), "status.md", SearchOption.AllDirectories),
+            _ => true);
+        Assert.Contains(
+            Directory.EnumerateFiles(Path.Combine(moved.FolderPath, "results", "history"), "aspect-code-quality.md", SearchOption.AllDirectories),
+            _ => true);
+
+        // EnterPostProcessingPhase recreated active lifecycle evidence after the
+        // stale copy was rotated, and the full gate/aspect worker is queued.
+        var lifecycle = File.ReadAllText(Path.Combine(moved.FolderPath, "lifecycle.json"));
+        Assert.Contains("post-processing-running", lifecycle);
+        Assert.Single(queue.Requests);
+
+        var events = new TimelineLog(NullLogger<TimelineLog>.Instance).ReadAll(moved.FolderPath);
+        var requeue = Assert.Single(events, e => e.Kind == TimelineEventKinds.OperatorRequeued);
+        Assert.Equal("1", requeue.Details!["attemptEpoch"]);
+        Assert.Equal("Infrastructure repaired; reassess from fresh evidence.", requeue.Details["reason"]);
+    }
+
+    [Fact]
+    public async Task AutomaticMoveOutOfEscalated_DoesNotOpenEpoch()
+    {
+        const string slug = "automatic-recovery";
+        WriteJob(TaskStates.Escalated, slug);
+        var deps = BuildDeps();
+
+        var outcome = await deps.Transitions.MoveAsync(
+            slug,
+            TaskStates.Ready,
+            _watchPath,
+            cause: TimelineActors.Orchestrator);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var moved = Assert.IsType<TaskInfo>(deps.Scanner.FindJob(slug, _watchPath));
+        Assert.Equal(0, OperatorReviewRequeueService.ReadEpoch(moved.FolderPath));
+        Assert.DoesNotContain(
+            ReviewDecisionLog.ReadAll(_watchPath, ProjectName),
+            r => r.JobId == slug && r.Kind == ReviewDecisionKind.OperatorRequeue);
+        Assert.DoesNotContain(
+            new TimelineLog(NullLogger<TimelineLog>.Instance).ReadAll(moved.FolderPath),
+            e => e.Kind == TimelineEventKinds.OperatorRequeued);
+    }
+
     private Deps BuildDeps(IAutoReviewPostProcessingQueue? autoReviewQueue = null)
     {
         var config = new ConfigurationBuilder()
@@ -350,13 +434,34 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
+        var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
+        var operatorRequeue = new OperatorReviewRequeueService(
+            config,
+            NullLogger<OperatorReviewRequeueService>.Instance,
+            timeline);
         var transitions = new TaskTransitionService(
             scanner, states, mutations, git, settings,
             NullLogger<TaskTransitionService>.Instance,
             sessions,
-            autoReviewQueue: autoReviewQueue);
+            autoReviewQueue: autoReviewQueue,
+            timeline: timeline,
+            operatorReviewRequeue: operatorRequeue);
         return new Deps(scanner, transitions, git, settings);
     }
+
+    private static ReviewDecisionRecord Decision(ReviewDecisionKind kind)
+        => new(
+            CreatedAt: DateTime.UtcNow,
+            JobId: "operator-requeue",
+            Project: ProjectName,
+            Kind: kind,
+            Reason: kind.ToString(),
+            Prompt: string.Empty,
+            Response: string.Empty,
+            FollowUp: string.Empty)
+        {
+            AttemptEpoch = 0,
+        };
 
     private void WriteJob(string state, string slug, string? mode = null)
     {

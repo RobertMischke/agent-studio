@@ -1813,6 +1813,84 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Equal(firstCalls, calls);
     }
 
+    [Fact]
+    public async Task OperatorRequeue_WithResolvedOldSentinel_ForcesFreshAspectAssessment()
+    {
+        const string slug = "operator-fresh-assessment";
+        SeedResolvedReviewCardPastGrace(slug);
+        for (var i = 0; i < 2; i++)
+        {
+            ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow.AddMinutes(-3 + i),
+                JobId: slug,
+                Project: Project,
+                Kind: ReviewDecisionKind.Reissue,
+                Reason: "old spent attempt",
+                Prompt: string.Empty,
+                Response: string.Empty,
+                FollowUp: string.Empty)
+            {
+                AttemptEpoch = 0,
+            });
+        }
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow.AddMinutes(-1),
+            JobId: slug,
+            Project: Project,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: "old escalation",
+            Prompt: string.Empty,
+            Response: string.Empty,
+            FollowUp: string.Empty)
+        {
+            AttemptEpoch = 0,
+        });
+
+        var requeueConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+            })
+            .Build();
+        var folder = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        new OperatorReviewRequeueService(
+            requeueConfig,
+            NullLogger<OperatorReviewRequeueService>.Instance,
+            _timeline)
+            .Apply(
+                folder,
+                slug,
+                Project,
+                TaskStates.Escalated,
+                TaskStates.AutoReview,
+                "Host recovered; run the complete assessment again.",
+                TimelineActors.Human("operator@example.com"));
+
+        var calls = 0;
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: _ =>
+        {
+            calls++;
+            return "[[ASPECT_VERDICT: status=pass; summary=fresh pass]]\n[[TASK_DONE]]";
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(4, calls);
+        var reviewedFolder = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
+        Assert.True(Directory.Exists(reviewedFolder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, slug)));
+        Assert.All(
+            new[] { "requirement-fit", "code-quality", "documentation-impact", "tests-and-evidence" },
+            aspect => Assert.True(File.Exists(Path.Combine(reviewedFolder, $"aspect-{aspect}.md"))));
+
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project)
+            .Where(r => r.JobId == slug)
+            .ToList();
+        Assert.Equal(ReviewDecisionKind.AcceptAsDone, records[^1].Kind);
+        Assert.Equal(1, records[^1].AttemptEpoch);
+        Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, slug));
+    }
+
     private void SeedHumanReviewCard(string slug, IReadOnlyList<string> tags)
     {
         var dir = Path.Combine(_watchPath, TaskStates.HumanReview, slug);

@@ -3,19 +3,20 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Locks the per-attempt-chain reissue budget (AGT-1935 sticky-budget belege):
+/// Locks the per-attempt-epoch reissue budget (AGT-1935 / AGT-2260):
 /// <see cref="ReviewDecisionOrchestrator.CountReissuesInCurrentChain"/> counts the
-/// reissues recorded SINCE the most recent chain-ending verdict
-/// (Escalate / AcceptAsDone), not the job's whole lifetime total. A closed chain
-/// must not spend a reopened card's fresh budget, while in-chain counting stays
-/// identical to the old lifetime total when no chain-ender sits in between.
+/// reissues recorded in the latest operator-owned attempt epoch. Automated
+/// verdicts do not replenish the budget; an explicit OperatorRequeue does.
 /// </summary>
 public class ReviewDecisionChainBudgetTests
 {
     private const string Job = "job-1";
     private const string Other = "job-2";
 
-    private static ReviewDecisionRecord Rec(ReviewDecisionKind kind, string jobId = Job)
+    private static ReviewDecisionRecord Rec(
+        ReviewDecisionKind kind,
+        string jobId = Job,
+        int? epoch = null)
         => new(
             CreatedAt: DateTime.UnixEpoch,
             JobId: jobId,
@@ -24,7 +25,10 @@ public class ReviewDecisionChainBudgetTests
             Reason: kind.ToString(),
             Prompt: string.Empty,
             Response: string.Empty,
-            FollowUp: string.Empty);
+            FollowUp: string.Empty)
+        {
+            AttemptEpoch = epoch,
+        };
 
     [Fact]
     public void NoRecords_IsZero()
@@ -46,11 +50,8 @@ public class ReviewDecisionChainBudgetTests
     }
 
     [Fact]
-    public void ReissuesBeforeEscalate_DoNotCount_AfterReset()
+    public void AutomaticEscalate_DoesNotResetBudget()
     {
-        // Two reissues then an Escalate closed the FIRST chain. A human reopened
-        // the card and it reissued once more: only that last reissue is the
-        // current chain's budget - the pre-Escalate ones must not stick.
         var records = new[]
         {
             Rec(ReviewDecisionKind.Reissue),
@@ -58,11 +59,11 @@ public class ReviewDecisionChainBudgetTests
             Rec(ReviewDecisionKind.Escalate),
             Rec(ReviewDecisionKind.Reissue),
         };
-        Assert.Equal(1, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, Job));
+        Assert.Equal(3, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, Job));
     }
 
     [Fact]
-    public void AcceptAsDone_AlsoResetsTheChain()
+    public void AutomaticAccept_DoesNotResetBudget()
     {
         var records = new[]
         {
@@ -71,21 +72,21 @@ public class ReviewDecisionChainBudgetTests
             Rec(ReviewDecisionKind.Reissue),
             Rec(ReviewDecisionKind.Reissue),
         };
-        Assert.Equal(2, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, Job));
+        Assert.Equal(3, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, Job));
     }
 
     [Fact]
-    public void ChainEnderAfterLastReissue_ResetsToZero()
+    public void OperatorRequeue_OpensFreshEpoch()
     {
-        // The most recent verdict is a chain-ender: the current chain is empty, so
-        // a card reopened from here starts with a full budget again.
         var records = new[]
         {
             Rec(ReviewDecisionKind.Reissue),
             Rec(ReviewDecisionKind.Reissue),
             Rec(ReviewDecisionKind.Escalate),
+            Rec(ReviewDecisionKind.OperatorRequeue, epoch: 1),
+            Rec(ReviewDecisionKind.Reissue, epoch: 1),
         };
-        Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, Job));
+        Assert.Equal(1, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, Job));
     }
 
     [Fact]
@@ -105,27 +106,52 @@ public class ReviewDecisionChainBudgetTests
     [Fact]
     public void CountsOnlyTheRequestedJob()
     {
-        // Another job's records - including its chain-enders - must not touch this
+        // Another job's records, including a newer epoch, must not touch this
         // job's count.
         var records = new[]
         {
             Rec(ReviewDecisionKind.Reissue),
-            Rec(ReviewDecisionKind.Escalate, Other),
-            Rec(ReviewDecisionKind.Reissue, Other),
+            Rec(ReviewDecisionKind.OperatorRequeue, Other, epoch: 4),
+            Rec(ReviewDecisionKind.Reissue, Other, epoch: 4),
             Rec(ReviewDecisionKind.Reissue),
         };
         Assert.Equal(2, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, Job));
     }
+
+    [Fact]
+    public void LegacyRowsBelongToEpochZero()
+    {
+        Assert.True(ReviewDecisionOrchestrator.IsInAttemptEpoch(Rec(ReviewDecisionKind.Reissue), 0));
+        Assert.False(ReviewDecisionOrchestrator.IsInAttemptEpoch(Rec(ReviewDecisionKind.Reissue), 1));
+        Assert.True(ReviewDecisionOrchestrator.IsInAttemptEpoch(
+            Rec(ReviewDecisionKind.Reissue, epoch: 2), 2));
+    }
+
+    [Fact]
+    public void OperatorBoundary_ForcesAssessmentUntilFreshVerdictArrives()
+    {
+        var boundaryOnly = new[]
+        {
+            Rec(ReviewDecisionKind.Escalate),
+            Rec(ReviewDecisionKind.OperatorRequeue, epoch: 1),
+        };
+        Assert.True(ReviewDecisionOrchestrator.IsPendingOperatorRequeueAssessment(
+            boundaryOnly[^1], 1));
+
+        var assessed = Rec(ReviewDecisionKind.AcceptAsDone, epoch: 1);
+        Assert.False(ReviewDecisionOrchestrator.IsPendingOperatorRequeueAssessment(
+            assessed, 1));
+    }
 }
 
 /// <summary>
-/// End-to-end coverage of the per-attempt-chain reissue budget (AGT-1935) through
+/// End-to-end coverage of the per-attempt-epoch reissue budget through
 /// the REAL on-disk decision journal: records are appended with
 /// <see cref="ReviewDecisionLog.Append"/> and counted back with
 /// <see cref="ReviewDecisionOrchestrator.CountReissuesInCurrentChain"/> over
 /// <see cref="ReviewDecisionLog.ReadAll"/> - the exact composition the private
 /// production <c>CountPriorReissues(workspace, project, jobId)</c> performs. This
-/// proves the chain reset survives the JSONL serialize/deserialize round-trip
+/// proves the operator epoch boundary survives the JSONL round-trip
 /// (including the <see cref="ReviewDecisionKind"/> string-enum converter), which
 /// the in-memory unit cases above do not exercise. It runs fully isolated in a
 /// temp workspace - no live backend or integration host is required - which is the
@@ -145,7 +171,11 @@ public sealed class ReviewDecisionChainBudgetJournalTests : IDisposable
         try { Directory.Delete(_workspace, recursive: true); } catch { /* best-effort */ }
     }
 
-    private void Append(ReviewDecisionKind kind, int minute, string jobId = Job)
+    private void Append(
+        ReviewDecisionKind kind,
+        int minute,
+        string jobId = Job,
+        int? epoch = null)
         => ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
             CreatedAt: new DateTime(2026, 1, 1, 0, minute, 0, DateTimeKind.Utc),
             JobId: jobId,
@@ -154,7 +184,10 @@ public sealed class ReviewDecisionChainBudgetJournalTests : IDisposable
             Reason: kind.ToString(),
             Prompt: "p",
             Response: "r",
-            FollowUp: string.Empty));
+            FollowUp: string.Empty)
+        {
+            AttemptEpoch = epoch,
+        });
 
     private int CurrentChainReissues(string jobId = Job)
         => ReviewDecisionOrchestrator.CountReissuesInCurrentChain(
@@ -165,17 +198,25 @@ public sealed class ReviewDecisionChainBudgetJournalTests : IDisposable
         => Assert.Equal(0, CurrentChainReissues());
 
     [Fact]
-    public void PersistedReissuesBeforeEscalate_DoNotStick_AfterReopen()
+    public void PersistedOperatorRequeueStartsFreshEpoch()
     {
-        // Old, already-resolved chain: two reissues then an Escalate parked the
-        // card. A human reopened it and it reissued once more - only that last
-        // reissue is the current chain's budget, even after a journal round-trip.
         Append(ReviewDecisionKind.Reissue, 1);
         Append(ReviewDecisionKind.Reissue, 2);
         Append(ReviewDecisionKind.Escalate, 3);
-        Append(ReviewDecisionKind.Reissue, 4);
+        Append(ReviewDecisionKind.OperatorRequeue, 4, epoch: 1);
+        Append(ReviewDecisionKind.Reissue, 5, epoch: 1);
 
         Assert.Equal(1, CurrentChainReissues());
+    }
+
+    [Fact]
+    public void PersistedAutomaticEscalateDoesNotResetEpochZero()
+    {
+        Append(ReviewDecisionKind.Reissue, 1);
+        Append(ReviewDecisionKind.Escalate, 2);
+        Append(ReviewDecisionKind.Reissue, 3);
+
+        Assert.Equal(2, CurrentChainReissues());
     }
 
     [Fact]

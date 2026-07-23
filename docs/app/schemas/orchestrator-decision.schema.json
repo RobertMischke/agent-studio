@@ -24,8 +24,8 @@
     },
     "kind": {
       "type": "string",
-      "enum": ["Reissue", "Escalate", "AcceptAsDone", "Skipped"],
-      "description": "Action chosen by the orchestrator. 'Skipped' covers cases where the fast-model response did not contain a parsable [[ORCHESTRATOR_DECISION]] sentinel; the task is left untouched and re-evaluated next tick."
+      "enum": ["Reissue", "Escalate", "AcceptAsDone", "Skipped", "OperatorRequeue"],
+      "description": "Action or explicit operator boundary. 'Skipped' leaves the task untouched for the next tick. 'OperatorRequeue' opens a fresh attempt epoch after a human moves a task out of Human Review or Escalated."
     },
     "reason": {
       "type": "string",
@@ -43,11 +43,31 @@
       "type": "string",
       "description": "For Reissue, the follow-up text the orchestrator wrote back into the chat log and the orchestrator-follow-up.md file in the job folder. Empty string for the other kinds."
     },
-    "attemptChainId": { "type": ["string", "null"] },
-    "gateId": { "type": ["string", "null"] },
-    "subjectSha": { "type": ["string", "null"] },
-    "failureFingerprint": { "type": ["string", "null"] },
-    "failureKind": { "type": ["string", "null"] },
+    "attemptChainId": {
+      "type": ["string", "null"],
+      "description": "Optional stable identity for a gate retry chain."
+    },
+    "gateId": {
+      "type": ["string", "null"],
+      "description": "Optional deterministic gate identity."
+    },
+    "subjectSha": {
+      "type": ["string", "null"],
+      "description": "Optional immutable git subject assessed by the gate."
+    },
+    "failureFingerprint": {
+      "type": ["string", "null"],
+      "description": "Optional normalized failure identity used by bounded retry guards."
+    },
+    "failureKind": {
+      "type": ["string", "null"],
+      "description": "Optional typed failure classification."
+    },
+    "attemptEpoch": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Operator-owned review-attempt epoch. Legacy rows without the field belong to epoch 0; only an explicit human requeue opens the next epoch."
+    },
     "councilReaction": {
       "type": ["object", "null"],
       "additionalProperties": false,

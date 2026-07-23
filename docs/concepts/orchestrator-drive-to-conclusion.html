@@ -458,8 +458,32 @@
             escalates flagged <code>environmental</code> / <code>cli-launch-failed</code>; environmental cycles no longer accrue
             toward the quarantine streak; an inconclusive run that left files in <code>results/</code> escalates as
             <code>inconclusive-with-results</code> (a "work to inspect" hint) rather than the bare park; and the reissue budget is
-            counted per attempt chain (reset on Escalate / AcceptAsDone), so a reopened card gets a fresh budget. See
+            counted per operator-owned attempt epoch. Only an explicit human requeue opens a fresh budget; automatic
+            Escalate / AcceptAsDone verdicts do not reset it. See
             <code>docs/system/contracts/run-outcome.md</code> &sect; "Post-processing outcome taxonomy".
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2260</code><br><span class="small">operator-requeue-attempt-epochs<br>(belege <code>AGT-1934/2110/2199</code>)</span></td>
+          <td>
+            An operator explicitly moved an escalated card back into <span class="lane">4-auto-review</span> with a reason.
+            Post Processing immediately consumed the previous escalation's spent retry counters and verdict artefacts, then
+            escalated the card again without a fresh gate, aspects, or decision-journal boundary. Requeue became lane ping-pong
+            and derived stale state overruled the operator.
+          </td>
+          <td>
+            Retry guards had no operator-owned epoch. The general counter inferred resets from automatic terminal verdicts,
+            while build/test and lint guards counted matching records over the full journal. Escalation summaries, aspect
+            verdicts, lifecycle state, and post-step outputs also remained in the active task root.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a human move out of <span class="lane">5-human-review</span> or
+            <span class="lane">5e-escalated</span> now increments <code>.metadata/review-attempt.json</code>, appends an
+            <code>OperatorRequeue</code> decision plus <code>operator_requeued</code> timeline event with the reason, and
+            rotates stale verdict evidence into <code>results/history/</code>. Every anti-churn guard reads only the active
+            epoch. Automatic moves retain the epoch. A direct requeue into <span class="lane">4-auto-review</span> recreates
+            Post Processing state and queues the complete gate/aspect path before another escalation is possible.
           </td>
         </tr>
         <tr>
