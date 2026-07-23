@@ -7,10 +7,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskServerPanelComponent } from './task-server-panel';
 
 /**
- * Render-path test: the panel seeds its status on init and renders the
- * connection / store / evidence blocks, a client-registry list, and the
- * management panel. The summary client count reconciles to the visible client
- * rows (R3 sum invariant), and running a sweep produces a result row.
+ * Render-path test: the panel loads live management status and renders the
+ * connection / store / evidence blocks, the Runner registry, and the management
+ * panel. The summary count reconciles to the visible Runner rows (R3), and a
+ * command response produces a result row.
  */
 describe('TaskServerPanelComponent', () => {
   async function mount() {
@@ -42,7 +42,7 @@ describe('TaskServerPanelComponent', () => {
     return fixture;
   }
 
-  it('mounts, seeds the status, and renders every block', async () => {
+  it('mounts, loads the status, and renders every block', async () => {
     const fixture = await mount();
     const el: HTMLElement = fixture.nativeElement;
 
@@ -51,10 +51,14 @@ describe('TaskServerPanelComponent', () => {
     expect(el.querySelector('[data-testid="task-server-store"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="task-server-evidence"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="task-server-management"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="task-server-evidence"]')?.textContent).toContain('Event files');
+    expect(el.querySelector('[data-testid="task-server-evidence"]')?.textContent).not.toContain('Branch');
 
     // The connected URL is reported by the Task Server.
     expect(el.querySelector('[data-testid="task-server-url"]')?.textContent)
       .toContain('http://localhost:4010');
+    expect(el.querySelector('[data-testid="task-server-store"] .ts__mono')?.hasAttribute('title'))
+      .toBe(false);
 
     fixture.destroy();
   });

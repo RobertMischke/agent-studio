@@ -76,6 +76,13 @@ public sealed record RunnerServiceIdentity
     public required string Name { get; init; }
     public required DateTime CreatedAt { get; init; }
     public DateTime? RevokedAt { get; init; }
+    public DateTime? DrainRequestedAt { get; init; }
+    public DateTime? RetireRequestedAt { get; init; }
+    public DateTime? RetiredAt { get; init; }
+    public DateTime? LastSeenAt { get; init; }
+    public DateTime? LastClaimAt { get; init; }
+    public int ActiveSlots { get; init; }
+    public int AvailableSlots { get; init; }
     public List<RunnerCredential> Credentials { get; init; } = [];
 }
 

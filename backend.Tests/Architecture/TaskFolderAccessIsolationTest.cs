@@ -109,6 +109,12 @@ public class TaskFolderAccessIsolationTest
             ["backend/Features/Configuration/WorkspaceManagementService.cs"] =
                 "Owns project-storage folder lifecycle (create on workspace add, recursive delete on project delete).",
 
+            // Restore verification extracts into the server-owned backup
+            // directory, which is required to live outside TaskRepository,
+            // then removes only that isolated staging directory.
+            ["backend/Features/Management/ManagementService.cs"] =
+                "Deletes isolated restore-verification staging outside the task store, never task folders.",
+
             // Tier 2 (boot): the crash-recovery sweep walks 3-progress
             // before the in-memory store boots. Explicitly carved out in
             // the prompt for this task.

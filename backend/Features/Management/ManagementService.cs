@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
+using AgentStudio.Registry;
 
 namespace AgentStudio.Management;
 
@@ -18,7 +19,9 @@ public sealed class ManagementService
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _states;
     private readonly ClientIdentityStore _clients;
-    private readonly IServiceProvider _services;
+    private readonly AccessSecurityStore _security;
+    private readonly ProjectRegistry _projects;
+    private readonly MigrationStateStore _migrations;
     private readonly object _gate = new();
 
     public ManagementService(
@@ -26,13 +29,17 @@ public sealed class ManagementService
         TaskScannerService scanner,
         TaskStateMachine states,
         ClientIdentityStore clients,
-        IServiceProvider services)
+        AccessSecurityStore security,
+        ProjectRegistry projects,
+        MigrationStateStore migrations)
     {
         _configuration = configuration;
         _scanner = scanner;
         _states = states;
         _clients = clients;
-        _services = services;
+        _security = security;
+        _projects = projects;
+        _migrations = migrations;
     }
 
     private string Root => Path.GetFullPath(_configuration["TaskRepository"]
@@ -48,12 +55,17 @@ public sealed class ManagementService
     {
         var jobs = _scanner.ScanAllJobs();
         var maintenance = ReadState();
-        var migrations = ReadMigrations();
+        var migrations = _migrations.List();
+        var backupFailure = ReadBackupFailure();
         var reasons = new List<string>();
         if (!Directory.Exists(Root)) reasons.Add("data-directory-missing");
-        if (migrations.Any(x => x.State is "running" or "failed")) reasons.Add("migration-active");
+        if (migrations.Any(x => x.State == "running")) reasons.Add("migration-running");
+        if (migrations.Any(x => x.State == "failed")) reasons.Add("migration-failed");
         if (maintenance.Mode != "normal") reasons.Add("maintenance-" + maintenance.Mode);
-        var ready = reasons.Count == 0;
+        if (!string.IsNullOrWhiteSpace(backupFailure)) reasons.Add("backup-failed");
+        var ready = Directory.Exists(Root)
+                    && maintenance.Mode == "normal"
+                    && migrations.All(x => x.State is not ("running" or "failed"));
         var files = Directory.Exists(Root)
             ? Directory.EnumerateFiles(Root, "*", SearchOption.AllDirectories).ToArray()
             : [];
@@ -65,21 +77,30 @@ public sealed class ManagementService
         var assembly = typeof(ManagementService).Assembly;
         var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? assembly.GetName().Version?.ToString() ?? "unknown";
-        var identities = _clients.ListAll();
+        var networked = SecurityProfiles.IsNetworked(_configuration);
+        var identities = networked ? [] : _clients.ListAll();
         var runners = ReadRunners(identities);
+        var identityCount = networked
+            ? _security.ListUsers().Count + _security.ListRunners().Count
+            : identities.Count;
+        var healthState = maintenance.Mode != "normal" || migrations.Any(x => x.State == "running")
+            ? "maintenance"
+            : reasons.Any(reason => reason is "data-directory-missing" or "migration-failed" or "backup-failed")
+                ? "degraded"
+                : "healthy";
 
         return new ManagementStatus(
             new ServerIdentity(
                 _configuration["Management:ServerId"] ?? Environment.MachineName.ToLowerInvariant(),
                 url.TrimEnd('/'), version, "1.0", "1.0",
                 Math.Max(0, (long)(DateTime.UtcNow - StartedAt).TotalSeconds)),
-            new ServerHealth(ready ? "healthy" : reasons.Contains("data-directory-missing") ? "degraded" : "maintenance", true, ready, reasons),
+            new ServerHealth(healthState, true, ready, reasons),
             new StoreStatus(
                 files.Sum(SafeLength),
-                jobs.Select(x => x.ProjectName).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                _projects.List().Count,
                 jobs.Count(x => x.State != TaskStates.Archive),
                 jobs.Count(x => x.State == TaskStates.Archive),
-                CountJsonLines(eventFiles), artifactFiles.LongLength, identities.Count),
+                CountJsonLines(eventFiles), artifactFiles.LongLength, identityCount),
             new EvidenceStatus(
                 eventFiles.Length + artifactFiles.Length == 0 ? "empty" : "available",
                 eventFiles.LongLength, artifactFiles.LongLength,
@@ -88,7 +109,7 @@ public sealed class ManagementService
             migrations,
             runners,
             ReadSecurityStatus(),
-            new BackupStatus(BackupDirectory, DefaultRetention, ListBackups(), ReadBackupFailure()));
+            new BackupStatus("server-owned backup directory", DefaultRetention, ListBackups(), backupFailure));
     }
 
     public RecoveryDiagnostics Diagnostics()
@@ -110,16 +131,28 @@ public sealed class ManagementService
     public ManagementCommandResult Execute(ManagementCommandRequest request, string actor, string headerKey)
     {
         var kind = (request.Kind ?? "").Trim().ToLowerInvariant();
-        var key = string.IsNullOrWhiteSpace(request.IdempotencyKey) ? headerKey : request.IdempotencyKey.Trim();
+        var bodyKey = request.IdempotencyKey?.Trim();
+        headerKey = headerKey.Trim();
+        if (!string.IsNullOrWhiteSpace(bodyKey) && !string.IsNullOrWhiteSpace(headerKey)
+            && !string.Equals(bodyKey, headerKey, StringComparison.Ordinal))
+            throw new ManagementException(409, "idempotency-key-conflict");
+        var key = string.IsNullOrWhiteSpace(bodyKey) ? headerKey : bodyKey;
         if (string.IsNullOrWhiteSpace(key)) throw new ManagementException(400, "idempotency-key-required");
+        if (key.Length > 128) throw new ManagementException(400, "idempotency-key-too-long");
+        var requestFingerprint = Fingerprint(request, kind);
 
         lock (_gate)
         {
-            var prior = FindPrior(key, kind);
+            var prior = FindPrior(key, kind, request.DryRun, actor, requestFingerprint);
             if (prior is not null) return prior;
             if (!request.DryRun && !string.Equals(request.Confirmation, kind, StringComparison.Ordinal))
                 throw new ManagementException(400, $"confirmation must exactly equal '{kind}'");
 
+            var commandId = "cmd_" + Guid.NewGuid().ToString("N");
+            AppendAudit(new ManagementCommandResult(
+                commandId, kind, request.DryRun, "started", 0, 0,
+                "Command accepted for execution.", DateTime.UtcNow.ToString("O"), actor, key),
+                requestFingerprint);
             try
             {
                 var result = kind switch
@@ -134,20 +167,38 @@ public sealed class ManagementService
                     "maintenance-read-only" => SetMaintenance(request.DryRun, actor, key, "read-only", request.Reason),
                     "maintenance-exit" => SetMaintenance(request.DryRun, actor, key, "normal", request.Reason),
                     "shutdown-prepare" => PrepareShutdown(request.DryRun, actor, key, request.Reason),
+                    "runner-enrollment-create" => CreateRunnerEnrollment(request, actor, key),
+                    "runner-credential-rotate" => RotateRunnerCredential(request, actor, key),
+                    "runner-credential-revoke" => RevokeRunnerCredential(request, actor, key),
+                    "runner-revoke" => RevokeRunner(request, actor, key),
+                    "runner-drain" => DrainRunner(request, actor, key, retire: false),
+                    "runner-retire" => DrainRunner(request, actor, key, retire: true),
                     _ => throw new ManagementException(400, "unknown-management-command")
                 };
-                AppendAudit(result);
+                result = result with { CommandId = commandId };
+                AppendAudit(result, requestFingerprint);
                 return result;
+            }
+            catch (SecurityOperationException ex)
+            {
+                AppendAudit(new ManagementCommandResult(
+                    commandId, kind, request.DryRun, "failed",
+                    0, 0, ex.Code, DateTime.UtcNow.ToString("O"), actor, key),
+                    requestFingerprint);
+                throw new ManagementException(ex.Status, ex.Code);
             }
             catch (Exception ex)
             {
                 AppendAudit(new ManagementCommandResult(
-                    "cmd_" + Guid.NewGuid().ToString("N"), kind, request.DryRun, "failed",
-                    0, 0, ex.Message, DateTime.UtcNow.ToString("O"), actor, key));
+                    commandId, kind, request.DryRun, "failed",
+                    0, 0, ex.Message, DateTime.UtcNow.ToString("O"), actor, key),
+                    requestFingerprint);
                 throw;
             }
         }
     }
+
+    public MaintenanceStatus CurrentMaintenance() => ReadState();
 
     private ManagementCommandResult SweepArchive(bool dry, string actor, string key)
     {
@@ -194,21 +245,44 @@ public sealed class ManagementService
     private ManagementCommandResult CreateBackup(bool dry, string actor, string key, int? retention)
     {
         if (!Directory.Exists(Root)) throw new ManagementException(409, "data-directory-missing");
+        EnsureBackupDirectoryOutsideRoot();
         if (dry) return Result("backup-create", true, 1, 0, "A consistent data-directory backup would be created and verified.", actor, key);
+        if (ReadState().Mode == "normal")
+            throw new ManagementException(409, "backup-requires-maintenance");
+        if (_migrations.List().Any(item => item.State is "running" or "failed"))
+            throw new ManagementException(409, "backup-requires-settled-migrations");
+        var legacy = SecurityProfiles.IsNetworked(_configuration) ? [] : _clients.ListAll();
+        if (ReadRunners(legacy).Any(x => x.ActiveSlots > 0))
+            throw new ManagementException(409, "backup-requires-drained-runners");
         Directory.CreateDirectory(BackupDirectory);
         var id = "backup-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8];
         var path = Path.Combine(BackupDirectory, id + ".zip");
+        var temp = path + ".tmp";
         try
         {
-            ZipFile.CreateFromDirectory(Root, path, CompressionLevel.Fastest, includeBaseDirectory: false);
+            ZipFile.CreateFromDirectory(Root, temp, CompressionLevel.Fastest, includeBaseDirectory: false);
+            var archive = InspectArchive(temp);
+            if (archive.EntryCount == 0) throw new InvalidDataException("Backup verification failed: archive is empty.");
+            File.Move(temp, path);
+            WriteBackupManifest(path, archive with
+            {
+                Id = id,
+                FileName = Path.GetFileName(path),
+                CreatedAt = DateTime.UtcNow.ToString("O"),
+            });
             var verified = InspectBackup(path);
-            if (verified.VerificationState != "verified") throw new InvalidDataException("Backup verification failed.");
+            if (verified.VerificationState != "verified")
+                throw new InvalidDataException("Backup verification failed after publication.");
             Retain(Math.Clamp(retention ?? DefaultRetention, 1, 100));
             ClearBackupFailure();
             return Result("backup-create", false, 1, 1, $"Created and verified backup {id}.", actor, key, verified);
         }
         catch (Exception ex)
         {
+            if (File.Exists(temp)) File.Delete(temp);
+            if (File.Exists(path)) File.Delete(path);
+            var manifest = BackupManifestPath(path);
+            if (File.Exists(manifest)) File.Delete(manifest);
             WriteBackupFailure(ex.Message);
             throw;
         }
@@ -220,6 +294,10 @@ public sealed class ManagementService
         if (dry) return Result("restore-verify", true, 1, 0, $"Backup {summary.Id} would be extracted into isolated restore staging and verified.", actor, key);
         var backupPath = Path.Combine(BackupDirectory, summary.FileName);
         var verified = InspectBackup(backupPath);
+        if (verified.VerificationState != "verified")
+            return Result("restore-verify", false, 1, 0,
+                $"Backup {verified.Id} restore verification failed before extraction.",
+                actor, key, new { backup = verified, stagingState = "failed", extractedFiles = 0 });
         var staging = Path.Combine(BackupDirectory, ".restore-verification", summary.Id + "-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -261,33 +339,176 @@ public sealed class ManagementService
             dry ? "Server would drain and prepare for service-manager shutdown." : "Server drained and is prepared for service-manager shutdown.", actor, key);
     }
 
+    private ManagementCommandResult CreateRunnerEnrollment(ManagementCommandRequest request, string actor, string key)
+    {
+        if (string.IsNullOrWhiteSpace(request.RunnerName))
+            throw new ManagementException(400, "runner-name-required");
+        if (request.DryRun)
+            return Result("runner-enrollment-create", true, 1, 0,
+                $"A one-time enrollment would be created for {request.RunnerName.Trim()}.", actor, key);
+        var created = _security.CreateEnrollment(new RunnerEnrollmentRequest(
+            request.RunnerName.Trim(), request.Scopes, request.ExpiresAt, null));
+        return Result("runner-enrollment-create", false, 1, 1,
+            $"Created one-time Runner enrollment for {created.Enrollment.Name}.", actor, key,
+            new
+            {
+                enrollmentCode = created.Code,
+                created.Enrollment.Name,
+                created.Enrollment.Scopes,
+                created.Enrollment.ExpiresAt,
+            });
+    }
+
+    private ManagementCommandResult RotateRunnerCredential(ManagementCommandRequest request, string actor, string key)
+    {
+        var runner = RequireRunner(request.RunnerId);
+        if (request.DryRun)
+            return Result("runner-credential-rotate", true, 1, 0,
+                $"A new credential would be issued for {runner.Name}; existing credentials would remain valid until revoked.", actor, key,
+                new { runnerId = runner.Id });
+        var rotated = _security.RotateRunner(runner.Id, new RunnerRotateRequest(request.Scopes, request.ExpiresAt));
+        return Result("runner-credential-rotate", false, 1, 1,
+            $"Issued a new one-time credential for {rotated.Runner.Name}.", actor, key,
+            new
+            {
+                runnerId = rotated.Runner.Id,
+                credentialId = rotated.Credential.Id,
+                secret = rotated.Secret,
+                rotated.Credential.Scopes,
+                rotated.Credential.ExpiresAt,
+            });
+    }
+
+    private ManagementCommandResult RevokeRunnerCredential(ManagementCommandRequest request, string actor, string key)
+    {
+        var runner = RequireRunner(request.RunnerId);
+        if (string.IsNullOrWhiteSpace(request.CredentialId)
+            || runner.Credentials.All(x => x.Id != request.CredentialId))
+            throw new ManagementException(404, "credential-not-found");
+        if (!request.DryRun) _security.RevokeCredential(runner.Id, request.CredentialId);
+        return Result("runner-credential-revoke", request.DryRun, 1, request.DryRun ? 0 : 1,
+            request.DryRun
+                ? $"Credential {request.CredentialId} for {runner.Name} would be revoked."
+                : $"Revoked credential {request.CredentialId} for {runner.Name}.", actor, key,
+            new { runnerId = runner.Id, credentialId = request.CredentialId });
+    }
+
+    private ManagementCommandResult RevokeRunner(ManagementCommandRequest request, string actor, string key)
+    {
+        if (!SecurityProfiles.IsNetworked(_configuration))
+        {
+            var legacy = RequireLegacyRunner(request.RunnerId);
+            if (!request.DryRun) _clients.SoftDelete(legacy.Id);
+            return Result("runner-revoke", request.DryRun, 1, request.DryRun ? 0 : 1,
+                request.DryRun ? $"Runner {legacy.DisplayName} would be retired." : $"Retired Runner {legacy.DisplayName}.", actor, key,
+                new { runnerId = legacy.Id });
+        }
+        var runner = RequireRunner(request.RunnerId);
+        if (!request.DryRun) _security.RevokeRunner(runner.Id);
+        return Result("runner-revoke", request.DryRun, 1, request.DryRun ? 0 : 1,
+            request.DryRun ? $"Runner {runner.Name} would be revoked immediately." : $"Revoked Runner {runner.Name}.", actor, key,
+            new { runnerId = runner.Id });
+    }
+
+    private ManagementCommandResult DrainRunner(ManagementCommandRequest request, string actor, string key, bool retire)
+    {
+        var kind = retire ? "runner-retire" : "runner-drain";
+        if (!SecurityProfiles.IsNetworked(_configuration))
+        {
+            var legacy = RequireLegacyRunner(request.RunnerId);
+            if (!request.DryRun) _clients.RequestDrain(legacy.Id, retire);
+            return Result(kind, request.DryRun, 1, request.DryRun ? 0 : 1,
+                request.DryRun
+                    ? $"Runner {legacy.DisplayName} would stop receiving claims{(retire ? " and retire after active work finishes" : "")}."
+                    : $"Runner {legacy.DisplayName} is draining{(retire ? " and will retire after active work finishes" : "")}.", actor, key,
+                new { runnerId = legacy.Id });
+        }
+        var runner = RequireRunner(request.RunnerId);
+        if (!request.DryRun) _security.RequestRunnerDrain(runner.Id, retire);
+        return Result(kind, request.DryRun, 1, request.DryRun ? 0 : 1,
+            request.DryRun
+                ? $"Runner {runner.Name} would stop receiving claims{(retire ? " and retire after active work finishes" : "")}."
+                : $"Runner {runner.Name} is draining{(retire ? " and will retire after active work finishes" : "")}.", actor, key,
+            new { runnerId = runner.Id });
+    }
+
+    private RunnerServiceIdentity RequireRunner(string? runnerId)
+    {
+        if (string.IsNullOrWhiteSpace(runnerId)) throw new ManagementException(400, "runner-id-required");
+        return _security.ListRunners().FirstOrDefault(x => x.Id == runnerId)
+            ?? throw new ManagementException(404, "runner-not-found");
+    }
+
+    private ClientIdentity RequireLegacyRunner(string? runnerId)
+    {
+        if (string.IsNullOrWhiteSpace(runnerId)) throw new ManagementException(400, "runner-id-required");
+        var runner = _clients.Find(runnerId);
+        return runner is { Kind: ClientIdentityKind.AgentInstance or ClientIdentityKind.Service or ClientIdentityKind.Retired }
+            ? runner
+            : throw new ManagementException(404, "runner-not-found");
+    }
+
     private ManagementCommandResult Result(string kind, bool dry, int matched, int affected, string summary, string actor, string key, object? detail = null)
         => new("cmd_" + Guid.NewGuid().ToString("N"), kind, dry, "completed", matched, affected,
             summary, DateTime.UtcNow.ToString("O"), actor, key, detail);
 
-    private void AppendAudit(ManagementCommandResult result)
+    private static string Fingerprint(ManagementCommandRequest request, string kind)
+    {
+        var canonical = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            kind,
+            request.DryRun,
+            confirmation = request.Confirmation?.Trim(),
+            request.RetentionCount,
+            backupId = request.BackupId?.Trim(),
+            reason = request.Reason?.Trim(),
+            runnerId = request.RunnerId?.Trim(),
+            credentialId = request.CredentialId?.Trim(),
+            runnerName = request.RunnerName?.Trim(),
+            scopes = request.Scopes?.ToArray(),
+            request.ExpiresAt,
+        }, Json);
+        return Convert.ToHexString(SHA256.HashData(canonical)).ToLowerInvariant();
+    }
+
+    private void AppendAudit(ManagementCommandResult result, string requestFingerprint)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(AuditPath)!);
         var row = new ManagementAuditEvent(result.CompletedAt, result.CommandId, result.Actor,
             result.Kind, result.DryRun, result.IdempotencyKey, result.State,
-            result.Matched, result.Affected, result.Summary);
-        File.AppendAllText(AuditPath, JsonSerializer.Serialize(row, Json) + Environment.NewLine);
+            result.Matched, result.Affected, result.Summary, requestFingerprint);
+        using var stream = new FileStream(AuditPath, FileMode.Append, FileAccess.Write, FileShare.Read);
+        using var writer = new StreamWriter(stream);
+        writer.WriteLine(JsonSerializer.Serialize(row, Json));
+        writer.Flush();
+        stream.Flush(flushToDisk: true);
     }
 
-    private ManagementCommandResult? FindPrior(string key, string kind)
+    private ManagementCommandResult? FindPrior(
+        string key, string kind, bool dryRun, string actor, string requestFingerprint)
     {
         if (!File.Exists(AuditPath)) return null;
+        ManagementAuditEvent? started = null;
         foreach (var line in File.ReadLines(AuditPath).Reverse())
         {
             try
             {
                 var row = JsonSerializer.Deserialize<ManagementAuditEvent>(line, Json);
-                if (row?.IdempotencyKey == key && row.Kind == kind)
-                    return new ManagementCommandResult(row.CommandId, row.Kind, row.DryRun, row.Outcome,
-                        row.Matched, row.Affected, row.Summary, row.Timestamp, row.Actor, row.IdempotencyKey);
+                if (row?.IdempotencyKey != key) continue;
+                if (row.Kind != kind || row.DryRun != dryRun || row.Actor != actor
+                    || !string.Equals(row.RequestFingerprint, requestFingerprint, StringComparison.Ordinal))
+                    throw new ManagementException(409, "idempotency-key-conflict");
+                if (row.Outcome == "started")
+                {
+                    started ??= row;
+                    continue;
+                }
+                return new ManagementCommandResult(row.CommandId, row.Kind, row.DryRun, row.Outcome,
+                    row.Matched, row.Affected, row.Summary, row.Timestamp, row.Actor, row.IdempotencyKey);
             }
             catch (JsonException) { continue; }
         }
+        if (started is not null) throw new ManagementException(409, "idempotency-key-in-doubt");
         return null;
     }
 
@@ -305,65 +526,39 @@ public sealed class ManagementService
         File.Move(temp, StatePath, true);
     }
 
-    private IReadOnlyList<MigrationStatus> ReadMigrations()
-    {
-        var path = Path.Combine(Metadata, "migrations.json");
-        try { return File.Exists(path) ? JsonSerializer.Deserialize<List<MigrationStatus>>(File.ReadAllText(path), Json) ?? [] : []; }
-        catch (JsonException ex) { return [new("migration-state", "failed", null, ex.Message)]; }
-    }
-
     private SecurityManagementStatus ReadSecurityStatus()
     {
-        var (type, store) = TrySecurityStore();
-        if (type is null)
-            return new(false, 0, 0, "/api/auth/session", "/api/auth/users", "/api/auth/runners",
-                "AGT-2193 security store is not present in this build");
-        if (store is null)
-            return new(false, 0, 0, "/api/auth/session", "/api/auth/users", "/api/auth/runners",
-                "AGT-2193 security store is not registered");
-        var users = type.GetMethod("ListUsers")?.Invoke(store, null);
-        var runners = type.GetMethod("ListRunners")?.Invoke(store, null);
-        return new(true, CountEnumerable(users), CountEnumerable(runners),
+        var networked = SecurityProfiles.IsNetworked(_configuration);
+        return new(networked, _security.ListUsers().Count, _security.ListRunners().Count,
             "/api/auth/session", "/api/auth/users", "/api/auth/runners",
-            "Shared AGT-2193 user, session, and Runner credential authority");
-    }
-
-    private static int CountEnumerable(object? value)
-        => value is System.Collections.IEnumerable rows ? rows.Cast<object>().Count() : 0;
-
-    private (Type? Type, object? Store) TrySecurityStore()
-    {
-        var type = typeof(ManagementService).Assembly.GetType("AgentStudio.Security.AccessSecurityStore");
-        return (type, type is null ? null : _services.GetService(type));
+            networked
+                ? "Shared AGT-2193 user, session, and Runner credential authority"
+                : "Local attribution compatibility profile");
     }
 
     private IReadOnlyList<RunnerManagementStatus> ReadRunners(IReadOnlyList<ClientIdentity> legacy)
     {
-        var (type, store) = TrySecurityStore();
-        var secured = type?.GetMethod("ListRunners")?.Invoke(store, null) as System.Collections.IEnumerable;
-        if (secured is not null)
-        {
-            var rows = new List<RunnerManagementStatus>();
-            foreach (var runner in secured.Cast<object>())
+        var secured = _security.ListRunners();
+        if (SecurityProfiles.IsNetworked(_configuration) || secured.Count > 0)
+            return secured.Select(runner =>
             {
-                var runnerType = runner.GetType();
-                var id = runnerType.GetProperty("Id")?.GetValue(runner)?.ToString() ?? "unknown";
-                var name = runnerType.GetProperty("Name")?.GetValue(runner)?.ToString() ?? id;
-                var revokedAt = runnerType.GetProperty("RevokedAt")?.GetValue(runner) as DateTime?;
-                var credentialRows = runnerType.GetProperty("Credentials")?.GetValue(runner) as System.Collections.IEnumerable;
-                var lastUsed = credentialRows?.Cast<object>()
-                    .Select(item => item.GetType().GetProperty("LastUsedAt")?.GetValue(item) as DateTime?)
-                    .Where(value => value is not null).Max();
-                var runtime = legacy.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
-                rows.Add(new RunnerManagementStatus(
-                    id, name, revokedAt is not null ? "revoked" : runtime?.RunnerDaemonState ?? "enrolled",
-                    lastUsed?.ToUniversalTime().ToString("O"), runtime?.RunnerLastClaimAt?.ToUniversalTime().ToString("O"),
-                    runtime?.RunnerActiveSlots ?? 0, runtime?.RunnerAvailableSlots ?? 0,
-                    runtime?.DrainRequestedAt is not null, runtime?.RetireRequestedAt is not null,
-                    $"/api/auth/runners/{Uri.EscapeDataString(id)}"));
-            }
-            return rows;
-        }
+                var lastUsed = runner.Credentials
+                    .Where(item => item.LastUsedAt is not null)
+                    .Select(item => item.LastUsedAt!.Value)
+                    .DefaultIfEmpty().Max();
+                var state = runner.RevokedAt is not null ? "revoked"
+                    : runner.RetiredAt is not null ? "retired"
+                    : runner.DrainRequestedAt is not null ? "draining"
+                    : runner.LastSeenAt is not null ? "running"
+                    : "enrolled";
+                return new RunnerManagementStatus(
+                    runner.Id, runner.Name, state,
+                    lastUsed == default ? null : lastUsed.ToUniversalTime().ToString("O"),
+                    runner.LastClaimAt?.ToUniversalTime().ToString("O"),
+                    runner.ActiveSlots, runner.AvailableSlots,
+                    runner.DrainRequestedAt is not null, runner.RetireRequestedAt is not null,
+                    "/api/auth/runners");
+            }).ToArray();
 
         return legacy
             .Where(x => x.Kind is ClientIdentityKind.AgentInstance or ClientIdentityKind.Service or ClientIdentityKind.Retired)
@@ -372,7 +567,7 @@ public sealed class ManagementService
                 x.LastSeenAt?.ToUniversalTime().ToString("O"), x.RunnerLastClaimAt?.ToUniversalTime().ToString("O"),
                 x.RunnerActiveSlots.GetValueOrDefault(), x.RunnerAvailableSlots.GetValueOrDefault(),
                 x.DrainRequestedAt is not null, x.RetireRequestedAt is not null,
-                $"/api/auth/runners/{Uri.EscapeDataString(x.Id)}"))
+                "/api/clients"))
             .ToArray();
     }
 
@@ -389,32 +584,100 @@ public sealed class ManagementService
     }
     private static BackupSummary InspectBackup(string path)
     {
+        BackupManifest actual;
+        try { actual = InspectArchive(path); }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            var info = new FileInfo(path);
+            return new(Path.GetFileNameWithoutExtension(path), Path.GetFileName(path), info.Exists ? info.Length : 0,
+                info.Exists ? info.CreationTimeUtc.ToString("O") : DateTime.MinValue.ToString("O"), "", "failed", 0);
+        }
+
+        var manifestPath = BackupManifestPath(path);
+        BackupManifest? expected = null;
+        try
+        {
+            if (File.Exists(manifestPath))
+                expected = JsonSerializer.Deserialize<BackupManifest>(File.ReadAllText(manifestPath), Json);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            expected = null;
+        }
+
+        var verified = expected is not null
+                       && expected.Id == actual.Id
+                       && expected.FileName == actual.FileName
+                       && expected.SizeBytes == actual.SizeBytes
+                       && expected.EntryCount == actual.EntryCount
+                       && string.Equals(expected.Sha256, actual.Sha256, StringComparison.OrdinalIgnoreCase);
+        return new(actual.Id, actual.FileName, actual.SizeBytes,
+            expected?.CreatedAt ?? actual.CreatedAt, actual.Sha256,
+            verified ? "verified" : "failed", actual.EntryCount);
+    }
+
+    private static BackupManifest InspectArchive(string path)
+    {
         var info = new FileInfo(path);
-        var state = "verified";
-        var entries = 0;
-        try { using var zip = ZipFile.OpenRead(path); entries = zip.Entries.Count(entry => !string.IsNullOrEmpty(entry.Name)); if (entries == 0) state = "failed"; }
-        catch (InvalidDataException) { state = "failed"; }
+        using var zip = ZipFile.OpenRead(path);
+        var entries = zip.Entries.Count(entry => !string.IsNullOrEmpty(entry.Name));
         using var stream = File.OpenRead(path);
         var hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        return new(Path.GetFileNameWithoutExtension(path), Path.GetFileName(path), info.Length,
-            info.CreationTimeUtc.ToString("O"), hash, state, entries);
+        return new BackupManifest(Path.GetFileNameWithoutExtension(path), Path.GetFileName(path), info.Length,
+            info.CreationTimeUtc.ToString("O"), hash, entries);
     }
+
+    private static void WriteBackupManifest(string archivePath, BackupManifest manifest)
+    {
+        var path = BackupManifestPath(archivePath);
+        var temporary = path + ".tmp";
+        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            JsonSerializer.Serialize(stream, manifest, Json);
+            stream.Flush(flushToDisk: true);
+        }
+        File.Move(temporary, path, true);
+    }
+
+    private static string BackupManifestPath(string archivePath) => archivePath + ".manifest.json";
+
     private int Retain(int keep)
     {
         var removed = 0;
-        foreach (var item in ListBackups().Skip(keep)) { File.Delete(Path.Combine(BackupDirectory, item.FileName)); removed++; }
+        foreach (var item in ListBackups().Skip(keep))
+        {
+            var archive = Path.Combine(BackupDirectory, item.FileName);
+            File.Delete(archive);
+            var manifest = BackupManifestPath(archive);
+            if (File.Exists(manifest)) File.Delete(manifest);
+            removed++;
+        }
         return removed;
+    }
+
+    private void EnsureBackupDirectoryOutsideRoot()
+    {
+        var root = Root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var backup = BackupDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(root, backup, StringComparison.OrdinalIgnoreCase)
+            || backup.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new ManagementException(409, "backup-directory-must-be-outside-data-directory");
     }
 
     private bool CanWriteRoot()
     {
+        if (!Directory.Exists(Root)) return false;
         try
         {
-            Directory.CreateDirectory(Metadata);
-            var path = Path.Combine(Metadata, ".management-write-probe-" + Guid.NewGuid().ToString("N"));
-            File.WriteAllText(path, "probe"); File.Delete(path); return true;
+            if (OperatingSystem.IsWindows())
+                return (File.GetAttributes(Root) & FileAttributes.ReadOnly) == 0;
+            var mode = File.GetUnixFileMode(Root);
+            return (mode & (UnixFileMode.UserWrite | UnixFileMode.GroupWrite | UnixFileMode.OtherWrite)) != 0;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return false;
+        }
     }
     private static long SafeLength(string path) { try { return new FileInfo(path).Length; } catch (IOException) { return 0; } }
     private static bool IsEventFile(string path) => path.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase) || path.Contains("timeline", StringComparison.OrdinalIgnoreCase);
@@ -431,6 +694,10 @@ public sealed class ManagementService
     private void WriteBackupFailure(string message) { Directory.CreateDirectory(Metadata); File.WriteAllText(Path.Combine(Metadata, "last-backup-failure.txt"), message); }
     private void ClearBackupFailure() { var path = Path.Combine(Metadata, "last-backup-failure.txt"); if (File.Exists(path)) File.Delete(path); }
 }
+
+internal sealed record BackupManifest(
+    string Id, string FileName, long SizeBytes, string CreatedAt,
+    string Sha256, int EntryCount);
 
 public sealed class ManagementException(int statusCode, string message) : Exception(message)
 {

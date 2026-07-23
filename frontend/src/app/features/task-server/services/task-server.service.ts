@@ -1,4 +1,4 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type {
@@ -26,6 +26,12 @@ interface ApiStatus {
 interface ApiCommandResult {
   commandId: string; kind: ManagementActionKind; dryRun: boolean; state: string;
   matched: number; affected: number; summary: string; completedAt: string;
+  detail?: {
+    runnerId?: string;
+    credentialId?: string;
+    secret?: string;
+    enrollmentCode?: string;
+  } | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -55,7 +61,7 @@ export class TaskServerService {
     }
   }
 
-  async runAction(kind: ManagementActionKind, confirmed = false): Promise<void> {
+  async runAction(kind: ManagementActionKind, confirmed = false, runnerId?: string, runnerName?: string): Promise<void> {
     if (this.busyAction()) return;
     this.busyAction.set(kind);
     this.error.set(null);
@@ -66,6 +72,8 @@ export class TaskServerService {
         dryRun: !confirmed,
         confirmation: confirmed ? kind : null,
         idempotencyKey,
+        runnerId: runnerId ?? null,
+        runnerName: runnerName ?? null,
       };
       const result = await firstValueFrom(this.http.post<ApiCommandResult>(
         '/api/v1/management/commands', body,
@@ -82,48 +90,47 @@ export class TaskServerService {
           dryRun: result.dryRun,
           commandId: result.commandId,
           state: result.state,
+          targetId: result.detail?.runnerId ?? runnerId ?? runnerName ?? null,
+          credentialId: result.detail?.credentialId ?? null,
+          secret: result.detail?.secret ?? null,
+          enrollmentCode: result.detail?.enrollmentCode ?? null,
         };
         this.status.set({ ...snapshot, recentResults: [mapped, ...snapshot.recentResults].slice(0, 12) });
       }
       if (confirmed) await this.reload();
-    } catch {
-      this.error.set(`The ${kind} command failed. No server files were changed by the console.`);
+    } catch (error: unknown) {
+      const code = error instanceof HttpErrorResponse
+        ? error.error?.message ?? error.error?.error
+        : null;
+      this.error.set(code || `The ${kind} command failed. Inspect the durable management audit before retrying.`);
     } finally {
       this.busyAction.set(null);
     }
   }
 
   private mapStatus(api: ApiStatus, recentResults: readonly ManagementActionResult[]): TaskServerStatus {
-    const health = api.health.state === 'maintenance' ? 'degraded' : api.health.state;
     return {
       connection: {
         id: api.server.id,
         url: api.server.url,
         phase: isLocalUrl(api.server.url) ? 'local' : 'central',
-        health,
+        health: api.health.state,
         version: api.server.version,
         uptimeLabel: formatUptime(api.server.uptimeSeconds),
         protocolMinimum: api.server.protocolMinimum,
         protocolMaximum: api.server.protocolMaximum,
         ready: api.health.ready,
-        authMode: 'Authenticated session / scoped Runner credential',
+        authMode: api.security.available
+          ? 'Authenticated session / scoped Runner credential'
+          : 'Local loopback profile; X-Client-Id is attribution only',
       },
       store: { ...api.store, root: 'Server-owned data directory (path is not exposed)' },
-      evidence: {
-        branch: 'server evidence store',
-        state: api.evidence.state === 'available' ? 'clean' : 'dirty',
-        uncommittedFiles: 0,
-        ahead: 0,
-        behind: 0,
-        lastCommitSha: null,
-        lastCommitSubject: `${api.evidence.eventFiles} event files · ${api.evidence.artifactFiles} artifact files`,
-        lastCommitAt: api.evidence.lastWriteAt,
-      },
+      evidence: { ...api.evidence },
       clients: api.runners.map(runner => ({
         id: runner.id,
         displayName: runner.displayName,
         emoji: null,
-        kind: runner.state === 'retired' ? 'retired' : 'agent-instance',
+        kind: runner.state === 'retired' || runner.state === 'revoked' ? 'retired' : 'agent-instance',
         lastSeenAt: runner.lastUsedAt,
         ownedTaskCount: runner.activeSlots,
         managementState: runner.state,

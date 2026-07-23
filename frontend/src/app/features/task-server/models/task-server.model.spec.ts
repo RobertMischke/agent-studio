@@ -43,17 +43,18 @@ describe('task-server.model helpers', () => {
     });
   });
 
-  describe('tones (R4: only unreachable / dirty are non-calm)', () => {
+  describe('tones (R4: acute states stay distinct)', () => {
     it('maps health to a tone', () => {
       expect(healthTone('healthy')).toBe('ok');
       expect(healthTone('degraded')).toBe('warn');
       expect(healthTone('unreachable')).toBe('error');
       expect(healthLabel('unreachable')).toBe('Unreachable');
     });
-    it('maps evidence state to a tone; clean stays calm', () => {
-      expect(evidenceStateTone('clean')).toBe('ok');
-      expect(evidenceStateTone('dirty')).toBe('warn');
-      expect(evidenceStateLabel('dirty')).toBe('Uncommitted changes');
+    it('maps the authoritative evidence state without inventing git state', () => {
+      expect(evidenceStateTone('available')).toBe('ok');
+      expect(evidenceStateTone('empty')).toBe('calm');
+      expect(evidenceStateTone('failed')).toBe('warn');
+      expect(evidenceStateLabel('available')).toBe('Available');
     });
   });
 

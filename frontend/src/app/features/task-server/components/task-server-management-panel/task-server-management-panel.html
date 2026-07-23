@@ -34,6 +34,16 @@
         <li class="mgmt__result" [attr.data-testid]="'task-server-result-' + result.kind">
           <span class="mgmt__result-kind">{{ actionLabel(result.kind) }}</span>
           <span class="mgmt__result-summary">{{ result.summary }}</span>
+          @if (result.secret) {
+            <span class="mgmt__result-secret">
+              One-time credential <code>{{ result.secret }}</code>
+            </span>
+          }
+          @if (result.enrollmentCode) {
+            <span class="mgmt__result-secret">
+              One-time enrollment <code>{{ result.enrollmentCode }}</code>
+            </span>
+          }
           <span class="mgmt__result-kind">{{ result.dryRun ? 'Preview' : 'Applied' }}</span>
           <span class="mgmt__result-count"
                 [class.mgmt__result-count--none]="result.affected === 0">{{ result.affected }}</span>

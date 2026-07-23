@@ -4,8 +4,8 @@
  * The "Task Server" settings page is the operator's one place to read the
  * durable task server the whole platform talks to: the connected local or
  * networked URL, the workspace store it owns (root, size,
- * counts), the git-backed evidence repository's status, the registered client
- * identities, and the management functions (archive sweep, orphan scan, fixture
+ * counts), the durable evidence inventory, the registered Runner identities,
+ * and the management functions (archive sweep, orphan scan, fixture
  * cleanup). See docs/research/remote-ready-kickoff-2026-07.md for the theme.
  *
  * Live projection of `GET /api/v1/management/status`. The recovery console and
@@ -16,10 +16,7 @@
 export type TaskServerPhase = 'local' | 'central';
 
 /** Server liveness. Only `unreachable` is acute (R4). */
-export type TaskServerHealth = 'healthy' | 'degraded' | 'unreachable';
-
-/** Working-tree state of the git-backed evidence store. */
-export type EvidenceGitState = 'clean' | 'dirty';
+export type TaskServerHealth = 'healthy' | 'degraded' | 'maintenance' | 'unreachable';
 
 /**
  * Client identity kind, mirrors the `/api/clients` `ClientSummary.kind` union so
@@ -36,7 +33,9 @@ export type TaskServerClientKind =
 export type ManagementActionKind =
   | 'archive-sweep' | 'orphan-sweep' | 'fixture-sweep'
   | 'backup-create' | 'restore-verify' | 'backup-retention'
-  | 'maintenance-enter' | 'maintenance-read-only' | 'maintenance-exit' | 'shutdown-prepare';
+  | 'maintenance-enter' | 'maintenance-read-only' | 'maintenance-exit' | 'shutdown-prepare'
+  | 'runner-enrollment-create' | 'runner-credential-rotate' | 'runner-credential-revoke'
+  | 'runner-revoke' | 'runner-drain' | 'runner-retire';
 
 /** How connected the UI is to the task server. */
 export interface TaskServerConnection {
@@ -72,19 +71,13 @@ export interface TaskServerStore {
   artifactCount: number;
 }
 
-/** Status of the git repository that backs run evidence. */
-export interface EvidenceGitStatus {
-  branch: string;
-  state: EvidenceGitState;
-  /** Uncommitted (dirty) working-tree entries. */
-  uncommittedFiles: number;
-  /** Commits ahead of / behind the configured upstream. */
-  ahead: number;
-  behind: number;
-  lastCommitSha: string | null;
-  lastCommitSubject: string | null;
-  /** ISO timestamp of the last commit, or null when unknown. */
-  lastCommitAt: string | null;
+/** Authoritative evidence inventory reported by the Task Server. */
+export interface TaskServerEvidenceStatus {
+  state: string;
+  eventFiles: number;
+  artifactFiles: number;
+  /** ISO timestamp of the latest evidence write, or null when empty. */
+  lastWriteAt: string | null;
 }
 
 /** One registered client identity in the server's registry. */
@@ -113,13 +106,19 @@ export interface ManagementActionResult {
   dryRun: boolean;
   commandId: string;
   state: string;
+  targetId?: string | null;
+  credentialId?: string | null;
+  /** One-time credential reveal. Kept only in this browser session. */
+  secret?: string | null;
+  /** One-time enrollment reveal. Kept only in this browser session. */
+  enrollmentCode?: string | null;
 }
 
-/** The whole Task-Server status snapshot, shaped like the future endpoint. */
+/** The whole live Task-Server management status snapshot. */
 export interface TaskServerStatus {
   connection: TaskServerConnection;
   store: TaskServerStore;
-  evidence: EvidenceGitStatus;
+  evidence: TaskServerEvidenceStatus;
   clients: readonly TaskServerClient[];
   /** Recent management-sweep outcomes, newest first. Starts empty. */
   recentResults: readonly ManagementActionResult[];
@@ -182,6 +181,7 @@ export function healthLabel(health: TaskServerHealth): string {
   switch (health) {
     case 'healthy': return 'Healthy';
     case 'degraded': return 'Degraded';
+    case 'maintenance': return 'Maintenance';
     case 'unreachable': return 'Unreachable';
   }
 }
@@ -191,13 +191,17 @@ export function healthTone(health: TaskServerHealth): StatusTone {
   switch (health) {
     case 'healthy': return 'ok';
     case 'degraded': return 'warn';
+    case 'maintenance': return 'warn';
     case 'unreachable': return 'error';
   }
 }
 
 /** Human label for the evidence working-tree state. */
-export function evidenceStateLabel(state: EvidenceGitState): string {
-  return state === 'clean' ? 'Clean' : 'Uncommitted changes';
+export function evidenceStateLabel(state: string): string {
+  if (state === 'available') return 'Available';
+  if (state === 'empty') return 'Empty';
+  if (state === 'failed') return 'Failed';
+  return state || 'Unknown';
 }
 
 /**
@@ -205,8 +209,10 @@ export function evidenceStateLabel(state: EvidenceGitState): string {
  * soft warn (pending work), never acute - the platform commits after each run,
  * so an uncommitted tree is notable but not an emergency (R4).
  */
-export function evidenceStateTone(state: EvidenceGitState): StatusTone {
-  return state === 'clean' ? 'ok' : 'warn';
+export function evidenceStateTone(state: string): StatusTone {
+  if (state === 'available') return 'ok';
+  if (state === 'empty') return 'calm';
+  return 'warn';
 }
 
 /** Human label for a client identity kind. */
@@ -233,6 +239,12 @@ export function managementActionLabel(kind: ManagementActionKind): string {
     case 'maintenance-read-only': return 'Enter read-only';
     case 'maintenance-exit': return 'Exit maintenance';
     case 'shutdown-prepare': return 'Prepare shutdown';
+    case 'runner-enrollment-create': return 'Create Runner enrollment';
+    case 'runner-credential-rotate': return 'Rotate Runner credential';
+    case 'runner-credential-revoke': return 'Revoke Runner credential';
+    case 'runner-revoke': return 'Revoke Runner';
+    case 'runner-drain': return 'Drain Runner';
+    case 'runner-retire': return 'Retire Runner';
   }
 }
 

@@ -72,6 +72,7 @@
 }
 .mgmt__result {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--studio-spacing-2);
   font-size: 11px;
@@ -87,6 +88,15 @@
   color: var(--studio-fg-dim);
   min-width: 0;
 }
+.mgmt__result-secret {
+  flex: 1 1 100%;
+  padding: var(--studio-spacing-2);
+  border-radius: 6px;
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
+  overflow-wrap: anywhere;
+}
+.mgmt__result-secret code { font-family: var(--font-mono, monospace); }
 .mgmt__result-count {
   flex: 0 0 auto;
   font-family: var(--font-mono, monospace);

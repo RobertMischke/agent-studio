@@ -4,8 +4,8 @@
       <h2 class="ts__title">Task Server</h2>
       <p class="ts__subtitle">
         The durable task server the whole platform talks to. Read its connected
-        URL, the workspace store it owns, the git-backed evidence status, and the
-        registered Runners, backups, migrations, and maintenance state.
+        URL, the workspace store it owns, the durable evidence status, and the
+        authoritative Runners, backups, migrations, and maintenance state.
       </p>
     </div>
     <button class="ts__refresh"
@@ -28,7 +28,7 @@
       <span class="ts__sep" aria-hidden="true">·</span>
       <span class="ts__count"><strong>{{ s.store.taskCount }}</strong> tasks</span>
       <span class="ts__sep" aria-hidden="true">·</span>
-      <span class="ts__count"><strong>{{ s.clients.length }}</strong> clients</span>
+      <span class="ts__count"><strong>{{ s.clients.length }}</strong> Runners</span>
     </div>
 
     <div class="ts__blocks">
@@ -67,7 +67,7 @@
           <dl class="ts__rows">
             <div class="ts__row">
               <dt>Root</dt>
-              <dd class="ts__mono" [appTooltip]="st.root">{{ st.root }}</dd>
+              <dd class="ts__mono" [cacTooltip]="st.root">{{ st.root }}</dd>
             </div>
             <div class="ts__row"><dt>Projects</dt><dd>{{ st.projectCount }}</dd></div>
             <div class="ts__row"><dt>Active tasks</dt><dd>{{ st.taskCount }}</dd></div>
@@ -83,24 +83,13 @@
         <section class="ts__block" data-testid="task-server-evidence" [attr.data-tone]="evidenceStateTone(ev.state)">
           <header class="ts__block-head">
             <span class="ts__dot" [attr.data-tone]="evidenceStateTone(ev.state)" aria-hidden="true"></span>
-            <h3 class="ts__block-title">Evidence git</h3>
+            <h3 class="ts__block-title">Evidence</h3>
             <span class="ts__badge" [attr.data-tone]="evidenceStateTone(ev.state)" data-testid="task-server-evidence-state">{{ evidenceStateLabel(ev.state) }}</span>
           </header>
           <dl class="ts__rows">
-            <div class="ts__row"><dt>Branch</dt><dd class="ts__mono">{{ ev.branch }}</dd></div>
-            <div class="ts__row"><dt>Uncommitted</dt><dd>{{ ev.uncommittedFiles }} {{ ev.uncommittedFiles === 1 ? 'file' : 'files' }}</dd></div>
-            <div class="ts__row"><dt>Ahead / behind</dt><dd>{{ ev.ahead }} / {{ ev.behind }}</dd></div>
-            <div class="ts__row">
-              <dt>Last commit</dt>
-              <dd>
-                @if (ev.lastCommitSha) {
-                  <span class="ts__mono">{{ ev.lastCommitSha }}</span> · {{ lastCommitLabel() }}
-                } @else { - }
-              </dd>
-            </div>
-            @if (ev.lastCommitSubject) {
-              <div class="ts__row"><dt></dt><dd class="ts__subject">{{ ev.lastCommitSubject }}</dd></div>
-            }
+            <div class="ts__row"><dt>Event files</dt><dd>{{ ev.eventFiles }}</dd></div>
+            <div class="ts__row"><dt>Artifact files</dt><dd>{{ ev.artifactFiles }}</dd></div>
+            <div class="ts__row"><dt>Latest write</dt><dd>{{ ev.lastWriteAt ? lastEvidenceLabel() : '-' }}</dd></div>
           </dl>
         </section>
       }
@@ -144,12 +133,18 @@
 
     <section class="ts__section" data-testid="task-server-clients-section">
       <header class="ts__section-head">
-        <h3 class="ts__section-title">Client registry</h3>
+        <h3 class="ts__section-title">Runner registry</h3>
         <span class="ts__section-count">
           <strong>{{ s.clients.length }}</strong> {{ s.clients.length === 1 ? 'identity' : 'identities' }}
         </span>
       </header>
-      <app-task-server-clients-card [clients]="clients()" [now]="now()" />
+      <app-task-server-clients-card
+        [clients]="clients()"
+        [securityAvailable]="s.security.available"
+        [results]="results()"
+        [busyAction]="busyAction()"
+        [now]="now()"
+        (run)="onRunnerRun($event)" />
     </section>
 
     <section class="ts__section" data-testid="task-server-management-section">

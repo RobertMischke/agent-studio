@@ -82,15 +82,27 @@ public static class LeaseEndpoints
             if (!RunnerMatches(context, req.RunnerId, req.RunnerName))
                 return Results.Unauthorized();
 
+            var runnerPrincipal = context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] as RunnerPrincipal;
             var clientId = context.Items["ClientId"] as string ?? context.Request.Headers["X-Client-Id"].ToString();
             if (req.Telemetry is not null && !string.IsNullOrWhiteSpace(clientId))
                 telemetry.Append(clientId, req.Telemetry);
             int? activeSlots = req.Telemetry is null
                 ? null
                 : Math.Max(0, req.Telemetry.ActiveSlots);
-            var client = string.IsNullOrWhiteSpace(clientId)
+            var securedRunner = runnerPrincipal is null
+                ? null
+                : accessSecurity.RecordRunnerActivity(
+                    runnerPrincipal.RunnerId, activeSlots, req.AvailableSlots, claimed: false);
+            var client = runnerPrincipal is not null || string.IsNullOrWhiteSpace(clientId)
                 ? null
                 : clients.RecordRunnerActivity(clientId, activeSlots, req.AvailableSlots, claimed: false);
+            if (securedRunner is not null && !accessSecurity.RunnerAcceptsClaims(securedRunner.Id))
+                return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty,
+                    Message: securedRunner.RetiredAt is not null
+                        ? "runner is retired"
+                        : securedRunner.RetireRequestedAt is not null
+                            ? "runner is draining and will retire after active work finishes"
+                            : "runner is draining; no new leases are admitted"));
             if (client?.DrainRequestedAt is not null || client?.Kind == ClientIdentityKind.Retired)
                 return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty,
                     Message: client.Kind == ClientIdentityKind.Retired
@@ -236,13 +248,19 @@ public static class LeaseEndpoints
                         TrustReason = "Captured from the fenced run lease granted by the task server.",
                     },
                 }, candidate.WatchPath);
-                if (!string.IsNullOrWhiteSpace(clientId))
+                if (runnerPrincipal is not null)
+                    accessSecurity.RecordRunnerActivity(
+                        runnerPrincipal.RunnerId,
+                        (activeSlots ?? securedRunner?.ActiveSlots ?? 0) + 1,
+                        Math.Max(0, req.AvailableSlots - 1),
+                        claimed: true);
+                else if (!string.IsNullOrWhiteSpace(clientId))
                     clients.RecordRunnerActivity(
                         clientId,
                         (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
                         Math.Max(0, req.AvailableSlots - 1),
                         claimed: true);
-                if (context.Items[AccessSecurityMiddleware.RunnerPrincipalItem] is RunnerPrincipal runnerPrincipal)
+                if (runnerPrincipal is not null)
                 {
                     accessSecurity.AppendRunAudit(new RunSecurityAuditEvent(
                         DateTime.UtcNow, "claim", taskKey, candidate.ProjectName,

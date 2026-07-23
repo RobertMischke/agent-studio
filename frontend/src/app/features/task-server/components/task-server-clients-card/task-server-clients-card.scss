@@ -1,8 +1,29 @@
-// Task-Server client registry (AGT-1924). Rows encode status with a kind badge
+// Task Server Runner registry (AGT-1924). Rows encode status with a kind badge
 // and calm styling for retired identities - never a left accent bar (R1). All
 // colours read --studio-* tokens (R5); spacing reads the --studio-spacing-* scale.
 
 :host { display: block; }
+
+.clients__enrollment {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  margin-bottom: var(--studio-spacing-3);
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+}
+.clients__enrollment label { font-weight: 700; color: var(--studio-fg-strong); }
+.clients__enrollment input {
+  min-width: 220px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  font: inherit;
+}
+.clients__enrollment input:focus-visible { outline: 2px solid var(--studio-focus); outline-offset: 1px; }
 
 .clients {
   list-style: none;
@@ -87,6 +108,29 @@
   text-align: right;
 }
 .client__owned strong { color: var(--studio-fg-strong); font-weight: 700; }
+
+.client__actions {
+  display: flex;
+  flex: 1 1 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-1);
+}
+
+.client__action {
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.client__action:hover:not(:disabled) { background: var(--studio-bg-selected); }
+.client__action:focus-visible { outline: 2px solid var(--studio-focus); outline-offset: 1px; }
+.client__action:disabled { opacity: 0.55; cursor: default; }
+.client__action--danger { color: var(--studio-danger, var(--studio-fg)); }
+.client__action--confirm { font-weight: 700; }
 
 .clients__empty {
   margin: 0;

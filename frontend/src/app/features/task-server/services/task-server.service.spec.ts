@@ -47,4 +47,39 @@ describe('TaskServerService', () => {
     expect(service.recentResults()[0].commandId).toBe('cmd_1');
     expect(service.recentResults()[0].dryRun).toBe(true);
   });
+
+  it('targets Runner lifecycle commands at the authoritative Runner id', async () => {
+    const load = service.reload();
+    http.expectOne('/api/v1/management/status').flush(STATUS);
+    await load;
+
+    const pending = service.runAction('runner-drain', false, 'runner-1');
+    const request = http.expectOne('/api/v1/management/commands');
+    expect(request.request.body).toMatchObject({ kind: 'runner-drain', dryRun: true, runnerId: 'runner-1' });
+    request.flush({
+      commandId: 'cmd_runner', kind: 'runner-drain', dryRun: true, state: 'completed',
+      matched: 1, affected: 0, summary: 'Runner 1 would drain.',
+      completedAt: '2026-07-20T00:00:00Z', detail: { runnerId: 'runner-1' },
+    });
+    await pending;
+    expect(service.recentResults()[0].targetId).toBe('runner-1');
+  });
+
+  it('keeps a rotated credential reveal only in the in-memory result', async () => {
+    const load = service.reload();
+    http.expectOne('/api/v1/management/status').flush(STATUS);
+    await load;
+
+    const pending = service.runAction('runner-credential-rotate', true, 'runner-1');
+    const request = http.expectOne('/api/v1/management/commands');
+    request.flush({
+      commandId: 'cmd_rotate', kind: 'runner-credential-rotate', dryRun: false, state: 'completed',
+      matched: 1, affected: 1, summary: 'Credential rotated.', completedAt: '2026-07-20T00:00:00Z',
+      detail: { runnerId: 'runner-1', credentialId: 'cred-2', secret: 'one-time-secret' },
+    });
+    await Promise.resolve();
+    http.expectOne('/api/v1/management/status').flush(STATUS);
+    await pending;
+    expect(service.recentResults()[0]).toMatchObject({ credentialId: 'cred-2', secret: 'one-time-secret' });
+  });
 });

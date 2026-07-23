@@ -9,8 +9,8 @@ import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
  * The new "Task Server" section of the consolidated Workspace-settings home is
  * the operator's read-context for the durable task server the platform talks
  * to: the connected URL (localhost today, a central URL in Phase 2), the
- * workspace store it owns, the git-backed evidence status, the registered
- * client identities, and the management sweeps (archive / orphan / fixture).
+ * workspace store it owns, the evidence status, the authoritative Runner
+ * identities, and the management commands.
  *
  * The page renders from the authenticated management API, shared with the
  * server-hosted recovery console. This spec stubs that wire contract and drives
@@ -19,7 +19,7 @@ import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
  *   - the section renders the connection / store / evidence blocks, the client
  *     registry, and the management panel;
  *   - the summary client count reconciles to the visible client rows (R3);
- *   - running a sweep records a result row (optimistic);
+ *   - running a sweep records the API command result;
  *   - a #/workspace/settings/task-server deep-link opens the section;
  *   - the section renders on the light theme too (R5).
  */
@@ -51,6 +51,7 @@ async function stubBackgroundApis(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
   await page.route('**/api/tasks', json([]));
+  await page.route('**/api/auth/status', json({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null }));
   await page.route('**/api/tasks/grouped', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
   await page.route('**/api/watch-paths', json([]));
   await page.route('**/api/runner/status', json({ projects: {} }));
@@ -153,6 +154,7 @@ test.describe('Task Server settings section', () => {
 
   test('captures degraded, maintenance, migration, credential rotation, and failed backup states in both themes', async ({ page }) => {
     const states = [
+      { name: 'healthy', patch: {} },
       { name: 'degraded', patch: { health: { state: 'degraded', ready: false } } },
       { name: 'maintenance', patch: { health: { state: 'maintenance', ready: false }, maintenance: { mode: 'maintenance', drainRequested: true, shutdownPrepared: false, reason: 'Operator rehearsal' } } },
       { name: 'migration', patch: { health: { state: 'maintenance', ready: false }, migrations: [{ id: 'schema-42', state: 'running', startedAt: '2026-07-20T10:00:00Z', detail: 'Adding audit index' }] } },
@@ -170,6 +172,10 @@ test.describe('Task Server settings section', () => {
         await page.reload();
         await setTheme(page, theme);
         await expect(page.getByTestId('task-server-panel')).toBeVisible({ timeout: 5_000 });
+        if (state.name === 'credential-rotation') {
+          await page.getByTestId('task-server-clients-section').scrollIntoViewIfNeeded();
+          await expect(page.getByTestId('task-server-client-runner-1')).toContainText('credential-rotated');
+        }
         await page.screenshot({ path: join(SHOT_DIR, `task-server-${state.name}-${theme}.png`), fullPage: false });
       }
     }

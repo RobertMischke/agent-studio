@@ -50,7 +50,10 @@ public sealed record BackupSummary(
 public sealed record ManagementCommandRequest(
     string Kind, bool DryRun = true, string? Confirmation = null,
     string? IdempotencyKey = null, int? RetentionCount = null,
-    string? BackupId = null, string? Reason = null);
+    string? BackupId = null, string? Reason = null,
+    string? RunnerId = null, string? CredentialId = null,
+    string? RunnerName = null, IReadOnlyList<string>? Scopes = null,
+    DateTime? ExpiresAt = null);
 
 public sealed record ManagementCommandResult(
     string CommandId, string Kind, bool DryRun, string State,
@@ -60,7 +63,7 @@ public sealed record ManagementCommandResult(
 public sealed record ManagementAuditEvent(
     string Timestamp, string CommandId, string Actor, string Kind,
     bool DryRun, string IdempotencyKey, string Outcome, int Matched,
-    int Affected, string Summary);
+    int Affected, string Summary, string? RequestFingerprint = null);
 
 public sealed record RecoveryDiagnostics(
     string GeneratedAt, string Health, bool Ready, string MaintenanceMode,
