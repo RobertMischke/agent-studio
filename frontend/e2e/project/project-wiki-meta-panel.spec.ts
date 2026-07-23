@@ -1,9 +1,8 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { api } from '../helpers/api';
 import { setTheme } from '../helpers/theme';
 
-interface WatchPath { name: string }
-
+const PROJECT_NAME = 'Wiki Meta Panel Fixture';
+const REPOSITORY_PATH = '/tmp/wiki-meta-panel-fixture';
 const FIRST_PAGE = 'guide/one.md';
 const SECOND_PAGE = 'guide/two.md';
 
@@ -21,6 +20,12 @@ function slugFor(name: string): string {
 
 async function mockWiki(page: Page, projectName: string): Promise<void> {
   const project = encodeURIComponent(projectName);
+  await page.route('**/api/watch-paths**', route => json(route, [{
+    name: projectName,
+    path: REPOSITORY_PATH,
+    rootPath: REPOSITORY_PATH,
+    repositoryPath: REPOSITORY_PATH,
+  }]));
   await page.route('**/api/auth/status', route => json(route, {
     profile: 'local',
     bootstrapRequired: false,
@@ -93,12 +98,9 @@ async function mockWiki(page: Page, projectName: string): Promise<void> {
 }
 
 test('meta-panel and section choices survive wiki navigation and reload', async ({ page }, testInfo) => {
-  const projects = await api<WatchPath[]>('/api/watch-paths');
-  expect(projects.length).toBeGreaterThan(0);
-  const projectName = projects[0].name;
-  await mockWiki(page, projectName);
+  await mockWiki(page, PROJECT_NAME);
 
-  await page.goto(`/#/projects/${slugFor(projectName)}/wiki?page=${encodeURIComponent(FIRST_PAGE)}`);
+  await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/wiki?page=${encodeURIComponent(FIRST_PAGE)}`);
   await expect(page.getByTestId('project-wiki-viewer-path')).toContainText(FIRST_PAGE);
 
   const metaToggle = page.getByTestId('project-wiki-meta-toggle');
@@ -116,9 +118,9 @@ test('meta-panel and section choices survive wiki navigation and reload', async 
   });
   expect(linkedBeforeHistory).toBe(true);
 
-  const pageLink = page.locator('.pwiki__linked-element', { hasText: 'Second page' });
+  const pageLink = page.getByTestId('project-wiki-linked-element').filter({ hasText: 'Second page' });
   await expect(pageLink).toHaveAttribute('title', 'Open wiki page: Second page');
-  await expect(page.locator('.pwiki__linked-element', { hasText: 'AGT-2050' }))
+  await expect(page.getByTestId('project-wiki-linked-element').filter({ hasText: 'AGT-2050' }))
     .toHaveAttribute('title', 'Open task AGT-2050');
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);

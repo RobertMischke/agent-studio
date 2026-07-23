@@ -984,16 +984,15 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
 
     const root = el(fixture);
-    const taskLink = root.querySelector<HTMLAnchorElement>(
-      '.pwiki__linked-element[title="Open task AGT-2050"]',
-    )!;
+    const linkedElements = [...root.querySelectorAll<HTMLAnchorElement>(
+      '[data-testid="project-wiki-linked-element"]',
+    )];
+    const taskLink = linkedElements.find(link => link.title === 'Open task AGT-2050')!;
     expect(taskLink).toBeTruthy();
     taskLink.click();
     expect(openTaskKey).toHaveBeenCalledWith('PROJ-001::agt-2050');
 
-    const wikiLink = root.querySelector<HTMLAnchorElement>(
-      '.pwiki__linked-element[title="Open wiki page: Docs index"]',
-    )!;
+    const wikiLink = linkedElements.find(link => link.title === 'Open wiki page: Docs index')!;
     expect(wikiLink).toBeTruthy();
     wikiLink.click();
     fixture.detectChanges();

@@ -601,6 +601,7 @@
                       @for (link of docLinks(); track link.target + link.label) {
                         <li>
                           <a class="pwiki__linked-element"
+                             data-testid="project-wiki-linked-element"
                              [href]="linkedElementHref(link)"
                              [attr.title]="linkedElementTitle(link)"
                              [attr.target]="link.kind === 'external' ? '_blank' : null"

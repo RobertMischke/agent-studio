@@ -203,6 +203,7 @@
         "src/app/features/project-detail/components/project-wiki-section/wiki-dashboard/wiki-dashboard.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-folder-view/wiki-folder-view.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-home-links/wiki-home-links.component.scss",
+        "src/app/features/project-detail/components/project-wiki-section/wiki-meta-section/wiki-meta-section.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-search-results/wiki-search-results.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-starred-panel/wiki-starred-panel.component.scss",
         "src/app/features/project-detail/components/project-wiki-section/wiki-pulse/wiki-pulse.component.scss",
