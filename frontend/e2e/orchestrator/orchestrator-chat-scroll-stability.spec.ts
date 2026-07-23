@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 import { setTheme } from '../helpers/theme';
 
 /**
@@ -179,6 +180,13 @@ test('mixed-height streamed rows stay mounted without scrollbar correction', asy
       maxBackwardScroll: Math.max(0, ...backwards),
       distanceFromBottom: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
     };
+  });
+
+  const probePath = testInfo.outputPath('scroll-probe.json');
+  await writeFile(probePath, JSON.stringify(snapshot, null, 2), 'utf8');
+  await testInfo.attach('scroll-probe.json', {
+    path: probePath,
+    contentType: 'application/json',
   });
 
   expect(snapshot.topSpacers).toBe(0);
