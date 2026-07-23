@@ -171,6 +171,65 @@ export type OptimisticOrchestratorChatTurn = OrchestratorChatTurn & {
 };
 
 /**
+ * Signal equality for the polled server transcript.
+ *
+ * The endpoint deserializes a fresh object graph on every heartbeat even when
+ * no turn changed. Treating that graph as new makes the conversation projection
+ * and every Markdown host run again; Studio's task-reference hydrator then has
+ * to replace the same AGT-* text with the same microcards, which is visible as
+ * selective pill flicker. Compare the complete persisted turn contract so a
+ * real text, metadata, token, error, or attachment change still propagates.
+ */
+export function sameOrchestratorChatTurns(
+  previous: readonly OrchestratorChatTurn[],
+  current: readonly OrchestratorChatTurn[],
+): boolean {
+  if (previous === current) return true;
+  if (previous.length !== current.length) return false;
+  return previous.every((left, index) => {
+    const right = current[index];
+    return left.id === right.id
+      && left.ts === right.ts
+      && left.role === right.role
+      && left.text === right.text
+      && (left.model ?? null) === (right.model ?? null)
+      && (left.errorMessage ?? null) === (right.errorMessage ?? null)
+      && sameTokenUsage(left.tokenUsage, right.tokenUsage)
+      && sameAttachments(left.attachments, right.attachments);
+  });
+}
+
+function sameTokenUsage(
+  left: OrchestratorChatTurn['tokenUsage'],
+  right: OrchestratorChatTurn['tokenUsage'],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left == null && right == null;
+  return (left.model ?? null) === (right.model ?? null)
+    && (left.thinkingLevel ?? null) === (right.thinkingLevel ?? null)
+    && left.inputTokens === right.inputTokens
+    && left.outputTokens === right.outputTokens
+    && left.cacheReadTokens === right.cacheReadTokens
+    && left.cacheCreationTokens === right.cacheCreationTokens;
+}
+
+function sameAttachments(
+  left: OrchestratorChatTurn['attachments'],
+  right: OrchestratorChatTurn['attachments'],
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left == null && right == null;
+  if (left.length !== right.length) return false;
+  return left.every((attachment, index) => {
+    const candidate = right[index];
+    return attachment.alt === candidate.alt
+      && attachment.relativePath === candidate.relativePath
+      && (attachment.inlineBase64 ?? null) === (candidate.inlineBase64 ?? null)
+      && (attachment.mimeType ?? null) === (candidate.mimeType ?? null);
+  });
+}
+
+/**
  * Project the side sheet's transport-specific transcript into the canonical
  * `coding-agent-chat` conversation grammar.
  *

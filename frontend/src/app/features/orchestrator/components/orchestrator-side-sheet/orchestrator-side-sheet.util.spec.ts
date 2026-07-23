@@ -4,6 +4,7 @@ import {
   buildOrchestratorConversationEvents,
   parseBugHashtags,
   resolveAttachmentUrl,
+  sameOrchestratorChatTurns,
   suppressLocalDuplicates,
 } from './orchestrator-side-sheet.util';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
@@ -59,6 +60,47 @@ describe('orchestrator-side-sheet.util', () => {
       const server = [turn('s1', 'hello'), turn('s2', 'world')];
       const local = [turn('l1', 'hello')];
       expect(suppressLocalDuplicates(server, local).map((t) => t.id)).toEqual(['s2']);
+    });
+  });
+
+  describe('sameOrchestratorChatTurns', () => {
+    const turn: OrchestratorChatTurn = {
+      id: 'turn-1',
+      ts: '2026-07-23T12:00:00Z',
+      role: 'orchestrator',
+      text: 'AGT-2235 is ready',
+      model: 'gpt-5',
+      tokenUsage: {
+        model: 'gpt-5',
+        thinkingLevel: 'high',
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 2,
+        cacheCreationTokens: 1,
+      },
+      attachments: [{
+        alt: 'evidence',
+        relativePath: 'chat-attachments/evidence.png',
+        mimeType: 'image/png',
+      }],
+    };
+
+    it('treats a freshly deserialized but unchanged poll as equal', () => {
+      const copy = JSON.parse(JSON.stringify([turn])) as OrchestratorChatTurn[];
+      expect(sameOrchestratorChatTurns([turn], copy)).toBe(true);
+    });
+
+    it('propagates real turn and nested metadata changes', () => {
+      expect(sameOrchestratorChatTurns([turn], [{ ...turn, text: 'changed' }])).toBe(false);
+      expect(sameOrchestratorChatTurns([turn], [{
+        ...turn,
+        tokenUsage: { ...turn.tokenUsage!, outputTokens: 6 },
+      }])).toBe(false);
+      expect(sameOrchestratorChatTurns([turn], [{
+        ...turn,
+        attachments: [{ ...turn.attachments![0], relativePath: 'changed.png' }],
+      }])).toBe(false);
+      expect(sameOrchestratorChatTurns([turn], [turn, { ...turn, id: 'turn-2' }])).toBe(false);
     });
   });
 

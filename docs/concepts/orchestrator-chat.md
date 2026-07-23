@@ -130,6 +130,14 @@ directive follows the host scroll container only when the operator is already
 at the latest turn. Long, searchable history remains the responsibility of the
 separate virtualised project-chat history surface.
 
+Polling also preserves semantic signal identity. The chat-turn signal compares
+the complete persisted turn contract before publishing a fresh response graph,
+and the Markdown task-reference catalogue compares its ordered label/key pairs.
+An unchanged chat or board heartbeat therefore does not invalidate every
+Markdown body. This is load-bearing for task microcards: they are host-hydrated
+inside rendered Markdown, so an unnecessary `safeHtml` refresh would discard
+and recreate only those enriched nodes while ordinary text appeared stable.
+
 ## Application Read Context (ORCH-1)
 
 Both chat dispatch paths use one deterministic context builder:

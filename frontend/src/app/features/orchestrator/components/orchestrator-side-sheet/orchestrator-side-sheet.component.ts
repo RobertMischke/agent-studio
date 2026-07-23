@@ -39,6 +39,7 @@ import {
   readFileAsBase64,
   buildDemoEvents,
   buildOrchestratorConversationEvents,
+  sameOrchestratorChatTurns,
 } from './orchestrator-side-sheet.util';
 /**
  * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
@@ -244,7 +245,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     return `project:${proj}`;
   });
 
-  readonly turns = signal<OrchestratorChatTurn[]>([]);
+  readonly turns = signal<OrchestratorChatTurn[]>([], { equal: sameOrchestratorChatTurns });
   readonly loading = signal(false);
   readonly sending = signal(false);
   readonly errorMsg = signal<string | null>(null);
