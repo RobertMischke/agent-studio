@@ -2,13 +2,13 @@
 
 **Purpose.** This document makes the diagram and page style of
 [microsoft.github.io/agent-host-protocol](https://microsoft.github.io/agent-host-protocol/)
-reproducible. It provides (a) the style principles, (b) ready-to-use design
+reproducible. It provides (a) the style principles, (b) design
 tokens as CSS variables for light and dark themes, (c) HTML/CSS template
 snippets for the building blocks (unit box, lane/host, connection/wire, number
 badge, pool, and sequence row), and (d) instructions an agent can follow.
 
 **Reference implementation:** `docs/concepts/zielarchitektur-diagramm.html`,
-the Agent Studio target architecture in this exact self-contained,
+the Agent Studio target architecture in this self-contained,
 theme-aware style.
 
 **Usage.** The **Agent Studio website** (`agent-studio-marketing`) also uses
@@ -90,7 +90,7 @@ reference these variables. Never hardcode colors in a snippet.
 ```
 
 > **Token origin:** extracted from the reference with Playwright (VitePress
-> default theme plus the bespoke `arch-wires` hero). Blue `#3b82f6`, teal
+> default theme and the `arch-wires` implementation). Blue `#3b82f6`, teal
 > `#14a37f`, rail gray `#e2e2e3`, host soft `#e7f0fe`; dark surfaces
 > `#1b1b1f`/`#202127`, text `#dfdfd6`. The Inter font is represented here by
 > the system sans-serif stack.
@@ -271,7 +271,7 @@ outward, and blue comes back. Do not use heavy arrows.
 ---
 
 *Style analyzed on 22 July 2026 with Playwright against
-microsoft.github.io/agent-host-protocol (VitePress plus the bespoke
-`arch-wires` hero). Screenshots and token dump are in the session scratchpad.
+microsoft.github.io/agent-host-protocol (VitePress and the `arch-wires`
+implementation). Screenshots and token dump are in the session scratchpad.
 Reference implementation: `docs/concepts/zielarchitektur-diagramm.html`. This
 style is also used for the public `agent-studio-marketing` website.*
