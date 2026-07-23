@@ -1,7 +1,7 @@
 :host { display: block; min-width: 0; }
 .test-evidence { display: flex; align-items: center; gap: var(--studio-spacing-2); min-width: 0; margin-top: var(--studio-card-section-gap); padding: var(--studio-spacing-2); border-radius: 7px; background: var(--studio-card-muted-bg); color: var(--studio-fg-dim); }
 .test-evidence__dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--studio-fg-muted); }
-.test-evidence__copy { display: grid; min-width: 0; gap: 2px; }
+.test-evidence__copy { display: grid; min-width: 0; gap: var(--studio-spacing-1); }
 .test-evidence__copy strong, .test-evidence__copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .test-evidence__copy strong { color: inherit; font-size: 11px; }
 .test-evidence__copy small { color: var(--studio-fg-muted); font-size: 10px; }

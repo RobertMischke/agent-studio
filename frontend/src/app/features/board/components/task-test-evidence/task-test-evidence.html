@@ -1,7 +1,7 @@
 <div class="test-evidence"
      [attr.data-evidence-state]="evidence().evidenceState"
      [attr.data-match-quality]="evidence().matchQuality"
-     [cacTooltip]="evidence().runId ? ('Test run ' + evidence().runId + ' at ' + (evidence().runCommit || 'unknown commit')) : evidence().summary"
+     [appTooltip]="evidence().runId ? ('Test run ' + evidence().runId + ' at ' + (evidence().runCommit || 'unknown commit')) : evidence().summary"
      data-testid="task-card-test-evidence">
   <span class="test-evidence__dot" aria-hidden="true"></span>
   <span class="test-evidence__copy">
