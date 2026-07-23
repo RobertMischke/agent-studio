@@ -1,3 +1,16 @@
+---
+lifecycleSchema: wiki-page-lifecycle/v1
+pageKind: exploration
+lifecycleState: review-requested
+editedBy: "Codex / AGT-2137"
+editedAt: 2026-07-21T05:46:33Z
+lifecycleHistory:
+  - state: review-requested
+    editedBy: "Codex / AGT-2137"
+    editedAt: 2026-07-21T05:46:33Z
+    note: "Initial classification: options A and E are ready for stakeholder review."
+---
+
 # Project State Indicator Alternatives
 
 ## Decision context

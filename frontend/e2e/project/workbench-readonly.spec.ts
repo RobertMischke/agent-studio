@@ -30,6 +30,14 @@ async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
       return json({ at: new Date().toISOString(), sessions: [] });
     if (url.pathname === '/api/crash-recovery/pending')
       return json({ pending: [] });
+    // This spec verifies the real Workbench catalogue and Pulse lifecycle, not
+    // Wiki tree caching. Keep the unrelated tree ETag path out of the setup so
+    // a malformed cache header cannot blank the lifecycle surface.
+    if (url.pathname.endsWith('/wiki/tree'))
+      return json({
+        exists: true,
+        root: [{ type: 'md', name: 'README.md', title: 'Readme', relPath: 'README.md', children: [] }],
+      });
     const response = await route.fetch({
       url: `${baseUrl}${url.pathname}${url.search}`,
       timeout: 30_000,
@@ -38,7 +46,7 @@ async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
   });
 }
 
-test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real repository artifacts in both themes', async ({ page, devBackend }, testInfo) => {
+test('Workbench Explorer, isolated viewer, and Pulse lifecycle use real repository artifacts in both themes', async ({ page, devBackend }, testInfo) => {
   test.setTimeout(180_000);
   const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
   expect(pathsResponse.ok).toBe(true);
@@ -172,9 +180,22 @@ test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real rep
   await expect(page.getByTestId('workbench-viewer-working-tree')).toContainText('uncommitted');
 
   await page.getByTestId(`studio-explorer-project-wiki-${project.name}`).click();
-  await expect(page.getByTestId('project-wiki-pulse-workbenches')).toBeVisible();
-  await expect(page.getByTestId('project-wiki-pulse-workbench-pipeline-workbench')).toBeVisible();
-  await expect(page.getByTestId('project-wiki-pulse-workbench-app-survey')).toBeVisible();
+  const pipelineLifecycleRow = page.getByTestId(
+    'project-wiki-lifecycle-open-docs/system/domains/pipeline.md.report.html');
+  const surveyLifecycleRow = page.getByTestId(
+    'project-wiki-lifecycle-open-docs/quality/design/app-survey-2026-07-11.html');
+  const lifecycle = page.getByTestId('project-wiki-pulse-lifecycle');
+  await expect(lifecycle).toBeVisible();
+  await expect(pipelineLifecycleRow).toBeVisible();
+  await expect(surveyLifecycleRow).toBeVisible();
+  const firstCuratedSection = page.locator('[data-testid^="wiki-home-section-"]').first();
+  await expect(firstCuratedSection).toBeVisible();
+  const lifecycleBox = await lifecycle.boundingBox();
+  const curatedBox = await firstCuratedSection.boundingBox();
+  expect(lifecycleBox, 'The lifecycle surface must participate in dashboard layout.').not.toBeNull();
+  expect(curatedBox, 'The curated home surface must participate in dashboard layout.').not.toBeNull();
+  expect(lifecycleBox!.y, 'Fresh concepts must appear before the ordinary curated entry cards.')
+    .toBeLessThan(curatedBox!.y);
   await page.getByTestId('project-wiki-toggle-nav').click();
   await page.getByTestId('project-wiki-meta-toggle').click();
   for (const theme of ['light', 'dark'] as const) {
@@ -182,7 +203,7 @@ test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real rep
     await page.screenshot({ path: evidencePath(testInfo, `workbench-pulse-${theme}.png`), fullPage: true });
   }
 
-  await page.getByTestId('project-wiki-pulse-workbench-pipeline-workbench').click();
+  await pipelineLifecycleRow.click();
   await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/system/domains/pipeline.md.report.html');
   } finally {
     if (createdProjectId) await fetch(`${devBackend.baseUrl}/api/projects/${createdProjectId}`, {

@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../../../models/project-docs.model';
+import type { WikiLifecycleItem, WikiPulseLifecycle, WorkbenchCatalogue, WorkbenchListItem } from '../../../../../../models/project-docs.model';
 import { WorkbenchInboxComponent } from './workbench-inbox.component';
 
 function item(id: string, valid = true): WorkbenchListItem {
@@ -19,7 +19,7 @@ function item(id: string, valid = true): WorkbenchListItem {
 }
 
 describe('WorkbenchInboxComponent', () => {
-  it('renders catalogue state, disables invalid entries, and emits valid selections', async () => {
+  it('groups lifecycle pages by state and opens Wiki pages or Workbenches directly', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchInboxComponent],
       providers: [provideZonelessChangeDetection()],
@@ -30,19 +30,52 @@ describe('WorkbenchInboxComponent', () => {
     const catalogue: WorkbenchCatalogue = {
       projectName: 'Demo', includesHistory: false, count: 2, items: [valid, invalid],
     };
+    const page: WikiLifecycleItem = {
+      relPath: 'concepts/indicator.md', title: 'Indicator alternatives', pageKind: 'exploration',
+      state: 'review-requested', editedBy: 'Robert', editedAtUtc: new Date().toISOString(),
+      history: [], workbenchId: null, valid: true, error: null,
+    };
+    const workbenchPage: WikiLifecycleItem = {
+      relPath: valid.entryPath, title: valid.title, pageKind: 'workbench', state: 'in-progress',
+      editedBy: 'Robert', editedAtUtc: valid.updatedAtUtc, history: [], workbenchId: valid.id,
+      valid: true, error: null,
+    };
+    const invalidPage: WikiLifecycleItem = {
+      relPath: invalid.entryPath, title: invalid.title, pageKind: 'workbench', state: 'review-requested',
+      editedBy: null, editedAtUtc: invalid.updatedAtUtc, history: [], workbenchId: invalid.id,
+      valid: false, error: invalid.error,
+    };
+    const lifecycle: WikiPulseLifecycle = {
+      available: true, reason: null, count: 3, items: [page, invalidPage, workbenchPage],
+    };
     fixture.componentRef.setInput('catalogue', catalogue);
-    let opened: WorkbenchListItem | null = null;
-    fixture.componentInstance.openWorkbench.subscribe(value => opened = value);
+    fixture.componentRef.setInput('lifecycle', lifecycle);
+    let openedWorkbench: WorkbenchListItem | null = null;
+    let openedPage: WikiLifecycleItem | null = null;
+    fixture.componentInstance.openWorkbench.subscribe(value => openedWorkbench = value);
+    fixture.componentInstance.openPage.subscribe(value => openedPage = value);
     fixture.detectChanges();
 
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="project-wiki-lifecycle-group-review-requested"]')?.textContent).toContain('Indicator alternatives');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="project-wiki-lifecycle-group-in-progress"]')?.textContent).toContain('valid');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="project-wiki-lifecycle-group-invalid"]')?.textContent).toContain('invalid');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="project-wiki-lifecycle-group-review-requested"]')?.textContent).not.toContain('Descriptor needs repair.');
+    const pageButton = fixture.nativeElement.querySelector(
+      '[data-testid="project-wiki-lifecycle-open-concepts/indicator.md"]') as HTMLButtonElement;
     const validButton = fixture.nativeElement.querySelector(
-      '[data-testid="project-wiki-pulse-workbench-valid"]') as HTMLButtonElement;
+      `[data-testid="project-wiki-lifecycle-open-${valid.entryPath}"]`) as HTMLButtonElement;
     const invalidButton = fixture.nativeElement.querySelector(
-      '[data-testid="project-wiki-pulse-workbench-invalid"]') as HTMLButtonElement;
+      `[data-testid="project-wiki-lifecycle-open-${invalid.entryPath}"]`) as HTMLButtonElement;
     expect(validButton.disabled).toBe(false);
     expect(invalidButton.disabled).toBe(true);
     expect(invalidButton.textContent).toContain('Descriptor needs repair.');
+    pageButton.click();
+    expect(openedPage).toEqual(page);
     validButton.click();
-    expect(opened).toEqual(valid);
+    expect(openedWorkbench).toEqual(valid);
   });
 });

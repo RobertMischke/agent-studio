@@ -610,7 +610,8 @@ public class ProjectDocsService
                 WikiPulseDrift.Unavailable(reason),
                 WikiPulseCritical.Unavailable(reason),
                 WikiPulseWarnings.Unavailable(reason),
-                WikiPulseActivity.Unavailable(reason));
+                WikiPulseActivity.Unavailable(reason))
+            { Lifecycle = WikiPulseLifecycle.Unavailable(reason) };
         }
 
         // Inbox + the LLM critical-pages list are pure filesystem reads (no git),
@@ -618,6 +619,7 @@ public class ProjectDocsService
         // critical list is the wiki-grading verdict surfaced in Pulse (AGT-2051),
         // supplementing the deterministic drift bar below.
         var allDocs = ListWikiDocs(wikiDir);
+        var lifecycle = BuildPulseLifecycle(wikiDir, allDocs);
         var inbox = BuildPulseInbox(allDocs);
         var critical = BuildPulseCritical(allDocs, LoadWikiMetadataIndex(wikiDir));
         var warnings = BuildPulseWarnings(wikiDir, allDocs);
@@ -633,7 +635,8 @@ public class ProjectDocsService
                 WikiPulseDrift.Unavailable(reason),
                 critical,
                 warnings,
-                activity);
+                activity)
+            { Lifecycle = lifecycle };
         }
 
         const string docsRepoRel = "docs";
@@ -682,7 +685,8 @@ public class ProjectDocsService
             allDocs, lastUpdateByRel, repoRoot, codeRoots, git,
             BuildFolderOrderIndex(LoadWikiFolderOrder(wikiDir), parentRel: string.Empty));
 
-        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity);
+        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity)
+        { Lifecycle = lifecycle };
     }
 
     private static readonly Regex MarkdownLinkRegex =
@@ -893,6 +897,224 @@ public class ProjectDocsService
         items.Sort((a, b) => string.Compare(a.RelPath, b.RelPath, StringComparison.OrdinalIgnoreCase));
         return new WikiPulseInbox(true, null, items.Count, items);
     }
+
+    /// <summary>
+    /// Projects lifecycle-aware Markdown pages into Pulse. The page frontmatter
+    /// is the only durable lifecycle source for Markdown: companion sidecars
+    /// keep grading, classification, and task links, but never duplicate this
+    /// workflow state. Workbench descriptors are merged by
+    /// <see cref="MergeWorkbenchLifecycle"/> because HTML cannot carry leading
+    /// YAML without becoming invalid HTML.
+    /// </summary>
+    private static WikiPulseLifecycle BuildPulseLifecycle(
+        string wikiDir, IReadOnlyList<WikiFileEntry> docs)
+    {
+        var items = new List<WikiLifecycleItem>();
+        foreach (var doc in docs.Where(d =>
+                     Path.GetExtension(d.RelPath).Equals(".md", StringComparison.OrdinalIgnoreCase)))
+        {
+            var full = Path.Combine(wikiDir, doc.RelPath.Replace('/', Path.DirectorySeparatorChar));
+            try
+            {
+                var parsed = ParseLifecycleFrontmatter(File.ReadAllText(full));
+                if (parsed == null) continue;
+                items.Add(new WikiLifecycleItem(
+                    doc.RelPath, doc.Title, parsed.PageKind, parsed.State,
+                    parsed.EditedBy, parsed.EditedAtUtc, parsed.History,
+                    WorkbenchId: null, Valid: parsed.Valid, Error: parsed.Error));
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "ProjectDocsService: unreadable lifecycle page ignored.");
+            }
+        }
+
+        SortLifecycleItems(items);
+        return new WikiPulseLifecycle(true,
+            items.Count == 0 ? "No lifecycle-aware designs, concepts, explorations, or Workbenches yet." : null,
+            items.Count, items);
+    }
+
+    /// <summary>
+    /// Adds Workbenches to the same lifecycle projection without copying their
+    /// state into Markdown or companion metadata. Schema-v2 descriptors expose
+    /// the common lifecycle fields directly; v1 descriptors are normalized by
+    /// the Workbench catalogue as a bounded compatibility path.
+    /// </summary>
+    public static WikiPulseLifecycle MergeWorkbenchLifecycle(
+        WikiPulseLifecycle lifecycle, WorkbenchCatalogue? catalogue)
+    {
+        if (catalogue == null || catalogue.Items.Count == 0) return lifecycle;
+        var items = lifecycle.Items.ToList();
+        items.AddRange(catalogue.Items.Select(workbench => new WikiLifecycleItem(
+            workbench.EntryPath,
+            workbench.Title,
+            "workbench",
+            workbench.LifecycleState ?? WorkbenchLifecycleState(workbench.Status, workbench.Phase),
+            workbench.EditedBy,
+            workbench.UpdatedAtUtc.ToString("o"),
+            workbench.LifecycleHistory ?? [],
+            workbench.Id,
+            workbench.Valid,
+            workbench.Error)));
+        SortLifecycleItems(items);
+        return new WikiPulseLifecycle(true, null, items.Count, items);
+    }
+
+    private static WikiLifecycleFrontmatter? ParseLifecycleFrontmatter(string text)
+    {
+        var frontmatter = AgentStudio.Cli.FrontmatterParser.TryExtractRawFrontmatter(text);
+        if (frontmatter == null) return null;
+        var fields = ParseLifecycleTopLevel(frontmatter);
+        string? Get(string key) => fields.TryGetValue(key, out var value)
+            && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
+
+        var schema = Get("lifecycleSchema");
+        var kind = Get("pageKind");
+        var state = Get("lifecycleState");
+        if (schema == null && kind == null && state == null) return null;
+
+        var errors = new List<string>();
+        if (schema != "wiki-page-lifecycle/v1")
+            errors.Add($"Unsupported lifecycleSchema '{schema ?? "(missing)"}'.");
+        if (!WikiLifecycleKinds.Contains(kind ?? string.Empty))
+            errors.Add($"Unsupported pageKind '{kind ?? "(missing)"}'.");
+        if (!WikiLifecycleStates.Contains(state ?? string.Empty))
+            errors.Add($"Unsupported lifecycleState '{state ?? "(missing)"}'.");
+        var editedBy = Get("editedBy");
+        var editedAt = Get("editedAt");
+        if (editedBy == null) errors.Add("editedBy is required.");
+        if (!IsUtcLifecycleTimestamp(editedAt))
+            errors.Add("editedAt must be an ISO UTC timestamp ending in Z.");
+
+        var history = ParseLifecycleHistory(frontmatter, errors);
+        if (history.Count == 0) errors.Add("lifecycleHistory needs at least one entry.");
+        else
+        {
+            var latest = history[^1];
+            if (state != null && latest.State != state)
+                errors.Add("The latest lifecycleHistory state must match lifecycleState.");
+            if (editedBy != null && latest.EditedBy != editedBy)
+                errors.Add("The latest lifecycleHistory editedBy must match editedBy.");
+            if (editedAt != null && latest.EditedAtUtc != editedAt)
+                errors.Add("The latest lifecycleHistory editedAt must match editedAt.");
+        }
+        return new WikiLifecycleFrontmatter(
+            kind ?? "concept", state ?? "in-progress", editedBy, editedAt,
+            history, errors.Count == 0, errors.Count == 0 ? null : string.Join(' ', errors));
+    }
+
+    /// <summary>
+    /// Reads only unindented frontmatter scalars. The shared flat parser also
+    /// sees fields nested below lifecycleHistory, which would let an older
+    /// history entry overwrite the current editedBy/editedAt values.
+    /// </summary>
+    private static Dictionary<string, string> ParseLifecycleTopLevel(string frontmatter)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in frontmatter.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (raw.Length == 0 || char.IsWhiteSpace(raw[0]) || raw.StartsWith('#')) continue;
+            var colon = raw.IndexOf(':');
+            if (colon <= 0) continue;
+            fields[raw[..colon].Trim()] = UnquoteLifecycleScalar(raw[(colon + 1)..]);
+        }
+        return fields;
+    }
+
+    private static List<WikiLifecycleHistoryEntry> ParseLifecycleHistory(
+        string frontmatter, List<string> errors)
+    {
+        var entries = new List<WikiLifecycleHistoryEntry>();
+        Dictionary<string, string>? current = null;
+        var inside = false;
+        var entryNumber = 0;
+
+        void Flush()
+        {
+            if (current == null) return;
+            entryNumber++;
+            current.TryGetValue("state", out var state);
+            current.TryGetValue("editedBy", out var editedBy);
+            current.TryGetValue("editedAt", out var editedAt);
+            current.TryGetValue("note", out var note);
+            if (!WikiLifecycleStates.Contains(state ?? string.Empty))
+                errors.Add($"lifecycleHistory entry {entryNumber} has an unsupported state.");
+            if (string.IsNullOrWhiteSpace(editedBy))
+                errors.Add($"lifecycleHistory entry {entryNumber} needs editedBy.");
+            if (!IsUtcLifecycleTimestamp(editedAt))
+                errors.Add($"lifecycleHistory entry {entryNumber} needs an ISO UTC editedAt ending in Z.");
+            if (!string.IsNullOrWhiteSpace(state)
+                && !string.IsNullOrWhiteSpace(editedBy)
+                && !string.IsNullOrWhiteSpace(editedAt))
+                entries.Add(new(state, editedBy, editedAt, note));
+            current = null;
+        }
+
+        foreach (var raw in frontmatter.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (!inside)
+            {
+                if (raw.Trim().Equals("lifecycleHistory:", StringComparison.OrdinalIgnoreCase)) inside = true;
+                continue;
+            }
+            if (raw.Length > 0 && !char.IsWhiteSpace(raw[0])) { Flush(); break; }
+            var line = raw.Trim();
+            if (line.StartsWith("- ", StringComparison.Ordinal))
+            {
+                Flush();
+                current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                line = line[2..].Trim();
+            }
+            if (current == null || line.Length == 0) continue;
+            var colon = line.IndexOf(':');
+            if (colon <= 0) continue;
+            current[line[..colon].Trim()] = UnquoteLifecycleScalar(line[(colon + 1)..]);
+        }
+        Flush();
+        return entries;
+    }
+
+    private static string UnquoteLifecycleScalar(string value) =>
+        value.Trim().Trim('"', '\'');
+
+    private static bool IsUtcLifecycleTimestamp(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value.EndsWith('Z')
+        && DateTimeOffset.TryParse(value, out var parsed)
+        && parsed.Offset == TimeSpan.Zero;
+
+    private static string WorkbenchLifecycleState(string status, string? phase) => status switch
+    {
+        "decision-pending" => "review-requested",
+        "decided" => "decided",
+        "archived" => "done",
+        "invalid" => "review-requested",
+        _ when phase == "decision-ready" => "review-requested",
+        _ => "in-progress",
+    };
+
+    private static void SortLifecycleItems(List<WikiLifecycleItem> items) => items.Sort((a, b) =>
+    {
+        var byState = LifecycleStateRank(a.State).CompareTo(LifecycleStateRank(b.State));
+        if (byState != 0) return byState;
+        var byDate = string.Compare(b.EditedAtUtc, a.EditedAtUtc, StringComparison.Ordinal);
+        return byDate != 0 ? byDate : string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
+    });
+
+    private static int LifecycleStateRank(string state) => state switch
+    {
+        "review-requested" => 0,
+        "in-progress" => 1,
+        "decided" => 2,
+        "done" => 3,
+        _ => 4,
+    };
+
+    private static readonly HashSet<string> WikiLifecycleKinds = new(StringComparer.Ordinal)
+        { "design", "concept", "exploration", "workbench" };
+    private static readonly HashSet<string> WikiLifecycleStates = new(StringComparer.Ordinal)
+        { "in-progress", "review-requested", "decided", "done" };
 
     /// <summary>
     /// The top-level docs folder a page lives under (the first path segment), or
@@ -2553,7 +2775,38 @@ public record WikiPulse(
 {
     /// <summary>Open experiment questions projected into Pulse as a thinking inbox.</summary>
     public WorkbenchCatalogue? Workbenches { get; init; }
+
+    /// <summary>Lifecycle-aware designs, concepts, explorations, and Workbenches.</summary>
+    public WikiPulseLifecycle Lifecycle { get; init; } = WikiPulseLifecycle.Unavailable("Lifecycle projection unavailable.");
 }
+
+public record WikiPulseLifecycle(bool Available, string? Reason, int Count, List<WikiLifecycleItem> Items)
+{
+    public static WikiPulseLifecycle Unavailable(string reason) => new(false, reason, 0, []);
+}
+
+public record WikiLifecycleItem(
+    string RelPath,
+    string Title,
+    string PageKind,
+    string State,
+    string? EditedBy,
+    string? EditedAtUtc,
+    List<WikiLifecycleHistoryEntry> History,
+    string? WorkbenchId,
+    bool Valid,
+    string? Error);
+
+public record WikiLifecycleHistoryEntry(string State, string? EditedBy, string EditedAtUtc, string? Note);
+
+internal record WikiLifecycleFrontmatter(
+    string PageKind,
+    string State,
+    string? EditedBy,
+    string? EditedAtUtc,
+    List<WikiLifecycleHistoryEntry> History,
+    bool Valid,
+    string? Error);
 
 public record WikiPulseWarnings(bool Available, string? Reason, int Count, List<WikiPulseWarningItem> Items)
 {

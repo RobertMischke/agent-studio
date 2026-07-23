@@ -79,6 +79,39 @@ raises a Pulse warning (`kind: human-action`) until its `status` leaves
 `observed`/`active` (e.g. becomes `resolved`). The `human-action` value is the
 action text shown to the operator.
 
+## Page lifecycle frontmatter
+
+Designs, concepts, and explorations opt into one shared lifecycle by carrying
+the fields defined in
+[`wiki-page-lifecycle.schema.json`](../../app/schemas/wiki-page-lifecycle.schema.json):
+
+```yaml
+---
+lifecycleSchema: wiki-page-lifecycle/v1
+pageKind: exploration
+lifecycleState: review-requested
+editedBy: "Robert"
+editedAt: 2026-07-21T05:46:33Z
+lifecycleHistory:
+  - state: review-requested
+    editedBy: "Robert"
+    editedAt: 2026-07-21T05:46:33Z
+    note: "Options are ready for a decision."
+---
+```
+
+The states are `in-progress`, `review-requested`, `decided`, and `done`.
+`editedBy` and `editedAt` describe the lifecycle edit, not an inferred Git
+author. Every transition appends a history entry and updates the current state,
+editor, and timestamp together.
+
+This frontmatter is the lifecycle source of truth for Markdown. The adjacent
+`.meta.json` companion remains authoritative for grading, consolidation
+classification, and task links and must not copy lifecycle fields. HTML cannot
+carry leading YAML, so a Workbench uses the same field names and values in its
+single `workbench.json` descriptor (`schemaVersion: 2`). Pulse normalizes both
+authoring shapes into one projection and groups them by the same state machine.
+
 ## API endpoints
 
 All paths are rooted at `/api/projects/{projectName}/wiki`. `{projectName}` is a

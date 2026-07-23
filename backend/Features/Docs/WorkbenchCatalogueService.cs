@@ -143,18 +143,30 @@ public sealed class WorkbenchCatalogueService
                 using var json = JsonDocument.Parse(File.ReadAllText(descriptor));
                 var obj = json.RootElement;
                 var schema = RequiredInt(obj, "schemaVersion");
+                if (schema is not (1 or 2)) throw new InvalidDataException("schemaVersion must be 1 or 2.");
                 var id = RequiredString(obj, "id");
                 var title = RequiredString(obj, "title");
                 var summary = RequiredString(obj, "summary");
                 var entrypoint = RequiredString(obj, "entrypoint");
-                var status = RequiredString(obj, "status");
-                var updatedText = RequiredString(obj, "updatedAt");
+                var lifecycleState = schema >= 2 ? RequiredString(obj, "lifecycleState") : null;
+                if (schema >= 2 && !AllowedLifecycleStates.Contains(lifecycleState!))
+                    throw new InvalidDataException($"Unsupported lifecycleState '{lifecycleState}'.");
+                var status = schema >= 2 ? StatusFromLifecycle(lifecycleState!) : RequiredString(obj, "status");
+                var updatedText = schema >= 2 ? RequiredString(obj, "editedAt") : RequiredString(obj, "updatedAt");
+                var editedBy = schema >= 2 ? RequiredString(obj, "editedBy") : OptionalString(obj, "editedBy");
+                var lifecycleHistory = schema >= 2
+                    ? RequiredLifecycleHistory(obj, lifecycleState!, editedBy!, updatedText)
+                    : [];
                 var phase = OptionalString(obj, "phase");
-                if (schema != 1) throw new InvalidDataException("schemaVersion must be 1.");
                 if (!SafeId(id) || id != folder) throw new InvalidDataException("id must match the containing folder.");
                 if (!AllowedStatuses.Contains(status)) throw new InvalidDataException($"Unsupported status '{status}'.");
+                if (schema >= 2 && RequiredString(obj, "pageKind") != "workbench")
+                    throw new InvalidDataException("pageKind must be workbench.");
+                if (schema >= 2 && (obj.TryGetProperty("status", out _) || obj.TryGetProperty("updatedAt", out _)))
+                    throw new InvalidDataException("schemaVersion 2 must not store legacy status or updatedAt fields.");
                 if (phase != null && !AllowedPhases.Contains(phase)) throw new InvalidDataException($"Unsupported phase '{phase}'.");
-                if (!DateTimeOffset.TryParse(updatedText, out var updated)) throw new InvalidDataException("updatedAt must be an ISO timestamp.");
+                if (!IsUtcLifecycleTimestamp(updatedText, out var updated))
+                    throw new InvalidDataException($"{(schema >= 2 ? "editedAt" : "updatedAt")} must be an ISO UTC timestamp ending in Z.");
                 var extension = Path.GetExtension(entrypoint);
                 if (!extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
                     && !extension.Equals(".htm", StringComparison.OrdinalIgnoreCase))
@@ -165,7 +177,12 @@ public sealed class WorkbenchCatalogueService
                     throw new InvalidDataException($"HTML exceeds the {MaxHtmlBytes / (1024 * 1024)} MiB Workbench limit.");
                 var repoRel = Path.GetRelativePath(root, full).Replace('\\', '/');
                 result.Add(new WorkbenchListItem(id, title, summary, status, phase,
-                    updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys")));
+                    updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys"))
+                {
+                    LifecycleState = lifecycleState ?? LifecycleFromStatus(status, phase),
+                    EditedBy = editedBy,
+                    LifecycleHistory = lifecycleHistory,
+                });
             }
             catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException)
             {
@@ -325,10 +342,67 @@ public sealed class WorkbenchCatalogueService
         obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
             ? value.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToArray()
             : [];
+
+    private static readonly HashSet<string> AllowedLifecycleStates = new(StringComparer.Ordinal)
+        { "in-progress", "review-requested", "decided", "done" };
+    private static string StatusFromLifecycle(string state) => state switch
+    {
+        "in-progress" or "review-requested" => "active",
+        "decided" => "decided",
+        "done" => "archived",
+        _ => "invalid",
+    };
+    private static string LifecycleFromStatus(string status, string? phase) => status switch
+    {
+        "decision-pending" => "review-requested",
+        "decided" => "decided",
+        "archived" => "done",
+        _ when phase == "decision-ready" => "review-requested",
+        _ => "in-progress",
+    };
+    private static List<WikiLifecycleHistoryEntry> RequiredLifecycleHistory(
+        JsonElement obj, string currentState, string currentEditor, string currentEditedAt)
+    {
+        if (!obj.TryGetProperty("lifecycleHistory", out var value)
+            || value.ValueKind != JsonValueKind.Array
+            || value.GetArrayLength() == 0)
+            throw new InvalidDataException("lifecycleHistory needs at least one entry.");
+        var result = new List<WikiLifecycleHistoryEntry>();
+        foreach (var entry in value.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("Every lifecycleHistory entry must be an object.");
+            var state = RequiredString(entry, "state");
+            var editedBy = RequiredString(entry, "editedBy");
+            var editedAt = RequiredString(entry, "editedAt");
+            if (!AllowedLifecycleStates.Contains(state))
+                throw new InvalidDataException($"Unsupported lifecycleHistory state '{state}'.");
+            if (!IsUtcLifecycleTimestamp(editedAt, out _))
+                throw new InvalidDataException("lifecycleHistory editedAt must be an ISO UTC timestamp ending in Z.");
+            result.Add(new(state, editedBy, editedAt, OptionalString(entry, "note")));
+        }
+        var latest = result[^1];
+        if (latest.State != currentState || latest.EditedBy != currentEditor || latest.EditedAtUtc != currentEditedAt)
+            throw new InvalidDataException("The latest lifecycleHistory entry must match lifecycleState, editedBy, and editedAt.");
+        return result;
+    }
+
+    private static bool IsUtcLifecycleTimestamp(string value, out DateTimeOffset parsed)
+    {
+        parsed = default;
+        return value.EndsWith('Z')
+            && DateTimeOffset.TryParse(value, out parsed)
+            && parsed.Offset == TimeSpan.Zero;
+    }
 }
 
 public record WorkbenchCatalogue(string ProjectName, bool IncludesHistory, int Count, List<WorkbenchListItem> Items);
 public record WorkbenchListItem(string Id, string Title, string Summary, string Status, string? Phase,
-    DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys);
+    DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys)
+{
+    public string? LifecycleState { get; init; }
+    public string? EditedBy { get; init; }
+    public List<WikiLifecycleHistoryEntry>? LifecycleHistory { get; init; }
+}
 public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision,
     bool WorkingTreeModified);

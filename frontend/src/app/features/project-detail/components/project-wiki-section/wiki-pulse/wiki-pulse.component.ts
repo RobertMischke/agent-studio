@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { StudioIconComponent } from '../../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
-import { WikiNodeType, WikiPulse, WikiPulseDriftArea, WikiPulseFeedItem, WorkbenchListItem } from '../../../../../models/project-docs.model';
+import { WikiLifecycleItem, WikiNodeType, WikiPulse, WikiPulseDriftArea, WikiPulseFeedItem, WorkbenchListItem } from '../../../../../models/project-docs.model';
 import { WorkbenchInboxComponent } from './workbench-inbox/workbench-inbox.component';
 
 /** What the parent needs to open a page from a Pulse row. */
@@ -90,6 +90,10 @@ export class WikiPulseComponent {
   }
 
   openFeed(item: WikiPulseFeedItem): void {
+    this.openPage.emit({ relPath: item.relPath, type: this.typeForRel(item.relPath) });
+  }
+
+  openLifecyclePage(item: WikiLifecycleItem): void {
     this.openPage.emit({ relPath: item.relPath, type: this.typeForRel(item.relPath) });
   }
 

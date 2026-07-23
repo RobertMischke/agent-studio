@@ -1,6 +1,25 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { StudioIconComponent } from '../../../../../../components/studio-icon/studio-icon.component';
-import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../../../models/project-docs.model';
+import type {
+  WikiLifecycleItem,
+  WikiLifecycleState,
+  WikiPulseLifecycle,
+  WorkbenchCatalogue,
+  WorkbenchListItem,
+} from '../../../../../../models/project-docs.model';
+
+interface LifecycleGroup {
+  state: WikiLifecycleState | 'invalid';
+  label: string;
+  items: WikiLifecycleItem[];
+}
+
+const GROUPS: readonly { state: WikiLifecycleState; label: string }[] = [
+  { state: 'review-requested', label: 'New, wants review' },
+  { state: 'in-progress', label: 'In progress' },
+  { state: 'decided', label: 'Decided' },
+  { state: 'done', label: 'Done' },
+];
 
 @Component({
   selector: 'app-workbench-inbox',
@@ -11,8 +30,36 @@ import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../../../mo
   styleUrl: './workbench-inbox.component.scss',
 })
 export class WorkbenchInboxComponent {
+  readonly lifecycle = input<WikiPulseLifecycle | null>(null);
   readonly catalogue = input<WorkbenchCatalogue | null>(null);
+  readonly openPage = output<WikiLifecycleItem>();
   readonly openWorkbench = output<WorkbenchListItem>();
+
+  readonly groups = computed<LifecycleGroup[]>(() => {
+    const items = this.lifecycle()?.items ?? [];
+    const groups: LifecycleGroup[] = GROUPS
+      .map(group => ({ ...group, items: items.filter(item => item.valid && item.state === group.state) }))
+      .filter(group => group.items.length > 0);
+    const invalid = items.filter(item => !item.valid);
+    if (invalid.length > 0) groups.push({ state: 'invalid', label: 'Needs metadata repair', items: invalid });
+    return groups;
+  });
+
+  open(item: WikiLifecycleItem): void {
+    if (item.workbenchId) {
+      const workbench = this.catalogue()?.items.find(candidate => candidate.id === item.workbenchId);
+      if (workbench?.valid) this.openWorkbench.emit(workbench);
+      return;
+    }
+    if (item.valid) this.openPage.emit(item);
+  }
+
+  stateTone(state: string): string {
+    if (state === 'invalid') return 'repair';
+    if (state === 'review-requested') return 'review';
+    if (state === 'in-progress') return 'active';
+    return 'settled';
+  }
 
   relativeTime(iso: string): string {
     const ms = new Date(iso).getTime();

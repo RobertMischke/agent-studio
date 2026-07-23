@@ -84,6 +84,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Wiki classification | [product/wiki-document-classification.md](./wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](./wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../app/schemas/wiki-document-companion.schema.json) |
+| Wiki page lifecycle schema | [schemas/wiki-page-lifecycle.schema.json](../app/schemas/wiki-page-lifecycle.schema.json) |
 | Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](../app/schemas/model-qualification-event.schema.json) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
