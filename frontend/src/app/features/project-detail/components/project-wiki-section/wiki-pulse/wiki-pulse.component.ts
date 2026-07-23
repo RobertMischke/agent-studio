@@ -82,6 +82,10 @@ export class WikiPulseComponent {
   readonly attentionCount = computed(() =>
     (this.warnings()?.count ?? 0) + (this.inbox()?.count ?? 0));
 
+  openWarning(warning: { relPath: string }): void {
+    this.openPage.emit({ relPath: warning.relPath, type: this.typeForRel(warning.relPath) });
+  }
+
   openFeed(item: WikiPulseFeedItem): void {
     this.openPage.emit({ relPath: item.relPath, type: this.typeForRel(item.relPath) });
   }
