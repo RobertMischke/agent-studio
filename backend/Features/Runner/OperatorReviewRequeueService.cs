@@ -226,17 +226,14 @@ public sealed class OperatorReviewRequeueService
         AddMatches(candidates, folderPath, "aspect-*.md");
         AddMatches(candidates, folderPath, "aspect-*.json");
         AddMatches(candidates, folderPath, "code-review-*.md");
+        AddMatches(candidates, folderPath, "post-abort-review-*.md");
         AddFile(candidates, folderPath, PipelineExecutionLog.FileName);
         AddFile(candidates, folderPath, PostProcessingOutcomeLog.FileName);
         AddFile(candidates, folderPath, "lifecycle.json");
         AddFile(candidates, folderPath, "orchestrator-follow-up.md");
 
-        var postSteps = Path.Combine(folderPath, "post-steps");
-        if (Directory.Exists(postSteps)
-            && Directory.EnumerateFiles(postSteps, "*", SearchOption.AllDirectories).Any())
-        {
-            candidates.Add(postSteps);
-        }
+        AddNonEmptyDirectory(candidates, folderPath, "post-steps");
+        AddNonEmptyDirectory(candidates, folderPath, PostAbortReviewStepService.ContractsDirName);
 
         var statusPath = Path.Combine(folderPath, "status.md");
         if (File.Exists(statusPath)
@@ -330,6 +327,26 @@ public sealed class OperatorReviewRequeueService
     {
         var path = Path.Combine(folderPath, name);
         if (File.Exists(path)) paths.Add(path);
+    }
+
+    private static void AddNonEmptyDirectory(
+        List<string> paths,
+        string folderPath,
+        string name)
+    {
+        var path = Path.Combine(folderPath, name);
+        try
+        {
+            if (Directory.Exists(path)
+                && Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Any())
+            {
+                paths.Add(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "operator-requeue: optional verdict directory enumeration failed");
+        }
     }
 
     private static int? CountCliLogLines(string folderPath)

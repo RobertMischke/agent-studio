@@ -334,6 +334,14 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         File.WriteAllText(Path.Combine(oldFolder, "status.md"),
             "# Result\n\nResult: Escalated\n\nOld escalation must not drive the next verdict.");
         File.WriteAllText(Path.Combine(oldFolder, "aspect-code-quality.md"), "old BLOCK verdict");
+        File.WriteAllText(
+            Path.Combine(oldFolder, "post-abort-review-2026-07-23T01-00-00Z.md"),
+            "old reviewer verdict");
+        var contracts = Path.Combine(oldFolder, PostAbortReviewStepService.ContractsDirName);
+        Directory.CreateDirectory(contracts);
+        File.WriteAllText(
+            Path.Combine(contracts, PostAbortReviewStepService.OutputContractName),
+            "{\"action\":\"human-review\"}");
         File.WriteAllText(Path.Combine(oldFolder, "lifecycle.json"), "{\"phase\":\"escalated\"}");
 
         ReviewDecisionLog.Append(_watchPath, Decision(ReviewDecisionKind.Reissue));
@@ -367,11 +375,27 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
 
         Assert.False(File.Exists(Path.Combine(moved.FolderPath, "status.md")));
         Assert.False(File.Exists(Path.Combine(moved.FolderPath, "aspect-code-quality.md")));
+        Assert.False(File.Exists(Path.Combine(
+            moved.FolderPath,
+            PostAbortReviewStepService.ContractsDirName,
+            PostAbortReviewStepService.OutputContractName)));
         Assert.Contains(
             Directory.EnumerateFiles(Path.Combine(moved.FolderPath, "results", "history"), "status.md", SearchOption.AllDirectories),
             _ => true);
         Assert.Contains(
             Directory.EnumerateFiles(Path.Combine(moved.FolderPath, "results", "history"), "aspect-code-quality.md", SearchOption.AllDirectories),
+            _ => true);
+        Assert.Contains(
+            Directory.EnumerateFiles(
+                Path.Combine(moved.FolderPath, "results", "history"),
+                "post-abort-review-*.md",
+                SearchOption.AllDirectories),
+            _ => true);
+        Assert.Contains(
+            Directory.EnumerateFiles(
+                Path.Combine(moved.FolderPath, "results", "history"),
+                PostAbortReviewStepService.OutputContractName,
+                SearchOption.AllDirectories),
             _ => true);
 
         // EnterPostProcessingPhase recreated active lifecycle evidence after the
