@@ -394,6 +394,7 @@ test.describe('Project Overview · operator dashboard', () => {
     await expect(page.getByTestId('test-run-pipeline-summary')).toContainText('1 running');
     await expect(page.getByTestId('test-run-pipeline-summary')).toContainText('1 completed');
     await expect(page.getByTestId('test-run-lane-planned')).toContainText('OPD-221');
+    await expect(page.getByTestId('test-run-lane-planned')).toContainText('Queue#1');
     await expect(page.getByTestId('test-run-lane-running')).toContainText('runner-02');
     await expect(page.getByTestId('test-run-lane-completed')).toContainText('passed');
 
@@ -401,6 +402,26 @@ test.describe('Project Overview · operator dashboard', () => {
       await setTheme(page, theme);
       await panel.screenshot({
         path: path.join(RESULTS_DIR, `test-run-pipeline--${theme}--mocked.png`),
+      });
+    }
+  });
+
+  test('defaults deployment to the last green run and shows its directed Head distance', async ({ page, devBackend }) => {
+    await proxyBackend(page, devBackend.baseUrl);
+    await mockDashboard(page);
+    await openDashboard(page);
+
+    await page.getByTestId('project-overview-open-deployment').click();
+    const launcher = page.getByTestId('project-deployment-launcher');
+    await expect(launcher).toBeVisible();
+    await expect(launcher).toContainText('Run TR-202607110930-green');
+    await expect(launcher).toContainText('Head is 2 commits ahead');
+    await expect(page.locator('#deployment-tested-revision')).toBeChecked();
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await launcher.screenshot({
+        path: path.join(RESULTS_DIR, `deployment-test-run-evidence--${theme}--mocked.png`),
       });
     }
   });
@@ -472,6 +493,7 @@ test.describe('Project Overview · operator dashboard', () => {
     await expect(page.getByTestId('project-deployment-panel')).not.toContainText('Compile typed UI');
     await expect(page.getByTestId('project-deployment-launcher')).toContainText('Stable environment');
     await expect(page.getByTestId('project-deployment-launcher')).toContainText('Idle required');
+    await expect(page.getByTestId('project-deployment-launcher')).toContainText('Head is 2 commits ahead');
     await expect(page.getByTestId('project-deployment-launcher')).toContainText('Require the stable environment to be idle before deployment');
     const visibleTask = page.getByTestId('deployment-visible-task');
     await expect(visibleTask).toBeChecked();

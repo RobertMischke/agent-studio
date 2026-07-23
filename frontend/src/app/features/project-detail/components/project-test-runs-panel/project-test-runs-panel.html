@@ -32,6 +32,9 @@
                   <div><strong>{{ item.run.id }}</strong><small>{{ item.run.trigger }} · {{ item.run.host || 'host pending' }}</small></div>
                 </div>
                 <dl>
+                  @if (item.run.state === 'planned') {
+                    <div data-testid="test-run-planned-order"><dt>Queue</dt><dd>#{{ item.run.plannedOrder }}</dd></div>
+                  }
                   <div><dt>Commit</dt><dd><code>{{ shortSha(item.run.commit) }}</code> on {{ item.run.branch }}</dd></div>
                   <div><dt>Scope</dt><dd>{{ item.run.scope.level }} · {{ item.run.scope.testSet }}</dd></div>
                   <div><dt>Result</dt><dd>{{ item.run.result || item.run.state }}</dd></div>

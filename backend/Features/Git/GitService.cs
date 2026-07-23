@@ -4625,6 +4625,59 @@ public class GitService
     }
 
     /// <summary>
+    /// All curated integration commits reachable from the supplied test-run
+    /// revisions, grouped by task key. Unlike
+    /// <see cref="GetIntegrationMergeShaByKey"/>, this keeps older integrations
+    /// for a key because an earlier test run may predate its newest re-cut.
+    /// Consumers still verify ancestry against each individual run revision.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> GetIntegrationMergeShasByKey(
+        string repoRoot,
+        IReadOnlyCollection<string> tipRefs)
+    {
+        var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return
+            new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var refs = tipRefs.Where(IsLikelyBranchName).Distinct(StringComparer.Ordinal).ToArray();
+        if (refs.Length == 0) return
+            new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+        var args = new List<string>
+        {
+            "log",
+            "--no-color",
+            "-E",
+            "--grep=^merge(-recut)?\\(",
+            "--format=%H%x1f%s",
+        };
+        args.AddRange(refs);
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return
+            new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var separator = line.IndexOf('\x1f');
+            if (separator <= 0) continue;
+            var sha = line[..separator].Trim();
+            var key = ParseIntegrationMergeKey(line[(separator + 1)..]);
+            if (sha.Length == 0 || key is null) continue;
+            if (!map.TryGetValue(key, out var commits))
+            {
+                commits = [];
+                map[key] = commits;
+            }
+            if (!commits.Contains(sha, StringComparer.OrdinalIgnoreCase)) commits.Add(sha);
+        }
+
+        return map.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<string>)pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Extracts the task KEY from a curated integrator merge subject:
     /// <c>merge(AGT-2202): ...</c> or <c>merge-recut(AGT-2202): ...</c> -&gt;
     /// <c>AGT-2202</c>. Returns null when the subject is not a curated merge.

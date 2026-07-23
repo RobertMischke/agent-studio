@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,

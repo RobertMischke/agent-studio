@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-22
+Version: 2026-07-23
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -211,7 +211,9 @@ cannot erase an operator decision.
 - Direct filesystem access by app code is restricted to the bounded service
   layer and covered by architecture tests.
 - Test evidence is never persisted on a task. A successful run proves a card
-  only when its commit equals the card commit or contains that commit. Planned
+  only when its commit equals the card commit or contains its change. Direct
+  ancestry proves ordinary commits; a reachable curated `merge(KEY)` or
+  `merge-recut(KEY)` integration anchor proves rewritten task commits. Planned
   and running matches are pending evidence; an older green run remains visible
   as `diff not included` and never turns the card green.
 

@@ -97,7 +97,7 @@
             <label class="deployment__option" for="deployment-tested-revision">
               <input id="deployment-tested-revision" type="radio" name="deployment-revision" value="tested"
                 [checked]="revisionMode() === 'tested'" (change)="revisionMode.set('tested')" />
-              <span><strong>Last green test run (recommended)</strong><small>Run {{ evidence.id }} · <code>{{ shortSha(evidence.commit) }}</code> · {{ evidence.distanceToHead ?? 'unknown' }} commit{{ evidence.distanceToHead === 1 ? '' : 's' }} from Head</small></span>
+              <span><strong>Last green test run (recommended)</strong><small>Run {{ evidence.id }} · <code>{{ shortSha(evidence.commit) }}</code> · {{ headDistanceLabel(evidence.distanceToHead, evidence.headDirection) }}</small></span>
             </label>
             <label class="deployment__option" for="deployment-head-revision">
               <input id="deployment-head-revision" type="radio" name="deployment-revision" value="head"

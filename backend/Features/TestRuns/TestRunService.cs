@@ -162,7 +162,13 @@ public sealed class TestRunService
                         .ToArray();
                     var graph = _git.GetCommitParentGraph(repo, refs);
                     var distances = refs.ToDictionary(reference => reference, reference => AncestorDistances(graph, reference), StringComparer.OrdinalIgnoreCase);
-                    value = groupedJobs.ToDictionary(job => job.TaskKey, job => Match(job, runs, distances), StringComparer.Ordinal);
+                    var integrationMerges = _git.GetIntegrationMergeShasByKey(
+                        repo,
+                        runs.Select(run => run.Commit).ToArray());
+                    value = groupedJobs.ToDictionary(
+                        job => job.TaskKey,
+                        job => Match(job, runs, distances, integrationMerges),
+                        StringComparer.Ordinal);
                 }
                 cached = (signature, DateTime.UtcNow, value);
                 _evidenceCache[projectJobs.Key] = cached;
@@ -200,10 +206,14 @@ public sealed class TestRunService
     private static TaskTestRunEvidence Match(
         TaskInfo job,
         IReadOnlyList<TestRunRecord> runs,
-        IReadOnlyDictionary<string, Dictionary<string, int>> distances)
+        IReadOnlyDictionary<string, Dictionary<string, int>> distances,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> integrationMerges)
     {
         var anchor = BoardMergeStatusService.AnchorFor(job);
         if (string.IsNullOrWhiteSpace(anchor)) return None(job, "No test run assigned: card has no commit");
+        var integratedAnchors = string.IsNullOrWhiteSpace(job.Key)
+            ? []
+            : integrationMerges.GetValueOrDefault(job.Key) ?? [];
 
         var candidates = new List<(TestRunRecord Run, string Quality, string Direction, int Distance, bool Contains)>();
         foreach (var run in runs)
@@ -216,6 +226,19 @@ public sealed class TestRunService
             if (distances.GetValueOrDefault(run.Commit)?.TryGetValue(anchor, out var afterDistance) == true)
             {
                 candidates.Add((run, "contains-diff", "after", afterDistance, true));
+                continue;
+            }
+            var integrationDistance = integratedAnchors
+                .Select(merge =>
+                    distances.GetValueOrDefault(run.Commit) is { } runDistances
+                    && runDistances.TryGetValue(merge, out var distance)
+                        ? (int?)distance
+                        : null)
+                .Where(distance => distance is not null)
+                .Min();
+            if (integrationDistance is not null)
+            {
+                candidates.Add((run, "contains-diff", "after", integrationDistance.Value, true));
                 continue;
             }
             if (distances.GetValueOrDefault(anchor)?.TryGetValue(run.Commit, out var beforeDistance) == true)

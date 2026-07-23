@@ -36,6 +36,7 @@ describe('ProjectDeploymentPanelComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('[data-testid="project-deployment-history"] > li').length).toBe(2);
     expect(fixture.nativeElement.textContent).toContain('deploy-stable');
     expect(fixture.nativeElement.textContent).not.toContain('Run deployment');
+    expect(fixture.nativeElement.textContent).toContain('Head is 2 commits ahead');
 
     fixture.nativeElement.querySelector('[data-testid="deployment-visible-task"]').click();
     fixture.detectChanges();
@@ -50,6 +51,7 @@ describe('ProjectDeploymentPanelComponent', () => {
     expect(create.request.body.promptMarkdown).toContain('deploymentTarget: deploy-stable');
     expect(create.request.body.promptMarkdown).toContain('testRunId: TR-green');
     expect(create.request.body.promptMarkdown).toContain('deploymentCommit: bbbbbbbb');
+    expect(create.request.body.promptMarkdown).toContain('headDirection: head-ahead');
     create.flush({ id: 'AGT-3000' });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="project-deployment-created"]').textContent).toContain('AGT-3000');

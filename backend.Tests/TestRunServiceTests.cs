@@ -109,6 +109,32 @@ public sealed class TestRunServiceTests : IDisposable
     }
 
     [Fact]
+    public void CardEvidence_RecognizesDiffInCuratedRecut_WhenOriginalCommitIsNotAnAncestor()
+    {
+        var stack = BuildStack();
+        var olderRunCommit = RevParse(stack.Repo, "HEAD");
+        stack.Service.Create("Demo", Request(olderRunCommit, "completed", "passed"));
+        Git(stack.Repo, "checkout", "-q", "-b", "task/rewritten");
+        Commit(stack.Repo, "rewritten.txt", "task version", "Original task commit");
+        var taskCommit = RevParse(stack.Repo, "HEAD");
+
+        Git(stack.Repo, "checkout", "-q", "develop");
+        Commit(stack.Repo, "rewritten.txt", "integrated version", "merge-recut(DEM-9): integrate rewritten task");
+        Commit(stack.Repo, "later.txt", "later", "Later test revision");
+        var runCommit = RevParse(stack.Repo, "HEAD");
+        var containingRun = stack.Service.Create("Demo", Request(runCommit, "completed", "passed"))!;
+        var job = Task("rewritten", stack.Storage, taskCommit);
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(containingRun.Id, evidence.RunId);
+        Assert.Equal("contains-diff", evidence.MatchQuality);
+        Assert.Equal("proven", evidence.EvidenceState);
+        Assert.Equal(1, evidence.Distance);
+        Assert.True(evidence.DiffContained);
+    }
+
+    [Fact]
     public void Deployment_DefaultsToLatestGreenRun_AndReportsDistanceToHead()
     {
         var stack = BuildStack();

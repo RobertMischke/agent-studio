@@ -137,6 +137,7 @@ export class ProjectDeploymentPanelComponent {
         deploymentCommit,
         testRunId: tested ? evidence.id : 'HEAD_EXCEPTION',
         distanceToHead: tested ? String(evidence.distanceToHead ?? 'unknown') : '0',
+        headDirection: tested ? evidence.headDirection : 'exact',
         headExceptionReason: tested ? '' : this.headExceptionReason().trim(),
         ...Object.fromEntries(Object.entries(values).map(([key, value]) => [key, String(value)])),
       },
@@ -153,6 +154,16 @@ export class ProjectDeploymentPanelComponent {
 
   shortSha(sha: string): string {
     return sha.slice(0, 8);
+  }
+
+  headDistanceLabel(distance: number | null, direction: string): string {
+    if (direction === 'exact') return 'matches Head';
+    if (direction === 'diverged') return 'diverged from Head';
+    if (distance === null) return 'Head distance unknown';
+    const commits = `${distance} commit${distance === 1 ? '' : 's'}`;
+    return direction === 'head-behind'
+      ? `${commits} ahead of Head`
+      : `Head is ${commits} ahead`;
   }
 
   private load(projectName: string): void {

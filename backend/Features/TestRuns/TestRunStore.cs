@@ -97,4 +97,3 @@ public sealed class TestRunStore
         public List<TestRunRecord> Runs { get; init; } = [];
     }
 }
-

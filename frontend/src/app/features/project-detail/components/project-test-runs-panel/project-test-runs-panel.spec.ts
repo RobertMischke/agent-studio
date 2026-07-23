@@ -28,6 +28,7 @@ describe('ProjectTestRunsPanelComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="test-run-lane-completed"]').textContent).toContain('TR-done');
     expect(fixture.nativeElement.textContent).toContain('DEM-1');
     expect(fixture.nativeElement.querySelector('[data-testid="test-run-pipeline-summary"]').textContent).toContain('1 planned');
+    expect(fixture.nativeElement.querySelector('[data-testid="test-run-planned-order"]').textContent).toContain('#1');
   });
 });
 
