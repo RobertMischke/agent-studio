@@ -1,15 +1,20 @@
 :host { display: contents; }
-.studio-workbench-topics { padding-left: var(--studio-spacing-3); }
-.studio-workbench-topics__state { display: block; padding: var(--studio-spacing-2) var(--studio-spacing-5); color: var(--studio-fg-muted); font-size: 0.7rem; }
-.studio-workbench-topic { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: var(--studio-spacing-1); padding: var(--studio-spacing-2) var(--studio-spacing-3); border: 0; border-radius: 4px; background: transparent; color: var(--studio-fg); text-align: left; cursor: pointer; }
+// Nest the expanded workbench items under the "Workbenches" child row: tree
+// levels are fixed px (root 8px, child 44px in tree-row), so the topic text
+// aligns with the child row's LABEL column (44px indent + glyph column).
+.studio-workbench-topics { padding-left: 60px; padding-right: var(--studio-rail-trailing-gutter, var(--studio-spacing-3)); }
+.studio-workbench-topics__state { display: block; padding: var(--studio-spacing-1) 0; color: var(--studio-fg-muted); font-size: 11px; }
+.studio-workbench-topic { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 3px var(--studio-spacing-2); border: 0; border-radius: 4px; background: transparent; color: var(--studio-fg); text-align: left; cursor: pointer; }
 .studio-workbench-topic:hover { background: var(--studio-bg-hover); }
 .studio-workbench-topic:focus-visible { outline: 2px solid var(--studio-accent-4-strong); outline-offset: -2px; }
 .studio-workbench-topic:disabled { cursor: default; }
-.studio-workbench-topic__title { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.74rem; }
-.studio-workbench-topic__meta { display: flex; align-items: center; gap: var(--studio-spacing-1); color: var(--studio-fg-muted); font-size: 0.64rem; }
-.studio-workbench-topic__meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-accent-3); }
+// Match the tree-row type scale (13px rows) so the section reads as part of
+// the tree instead of a foreign block.
+.studio-workbench-topic__title { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.35; }
+.studio-workbench-topic__meta { display: flex; align-items: center; gap: var(--studio-spacing-1); color: var(--studio-fg-muted); font-size: 10px; line-height: 1.3; }
+.studio-workbench-topic__meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-accent-3); flex: none; }
 .studio-workbench-topic__meta i[data-status='decision-pending'], .studio-workbench-topic__meta i[data-status='invalid'] { background: var(--studio-warn); }
-.studio-workbench-history { margin: var(--studio-spacing-1) var(--studio-spacing-3); padding: var(--studio-spacing-1) 0; border: 0; background: transparent; color: var(--studio-fg-muted); font: inherit; font-size: 0.66rem; cursor: pointer; }
-.studio-workbench-history:hover { color: var(--studio-fg); }
+.studio-workbench-history { margin: var(--studio-spacing-1) 0 0; padding: 2px var(--studio-spacing-2); border: 0; background: transparent; color: var(--studio-fg-muted); font: inherit; font-size: 10.5px; cursor: pointer; border-radius: 4px; }
+.studio-workbench-history:hover { color: var(--studio-fg); background: var(--studio-bg-hover); }
 .studio-workbench-history__items { opacity: 0.78; }
 .studio-workbench-topic--settled { background: transparent; }
