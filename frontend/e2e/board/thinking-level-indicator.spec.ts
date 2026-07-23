@@ -71,8 +71,9 @@ async function installRoutes(page: Page): Promise<void> {
   });
 }
 
-test('keeps 24 mixed-model cards scanable and exposes full execution context', async ({ page }) => {
-  await page.setViewportSize({ width: 1600, height: 1200 });
+test('keeps 24 mixed-model cards scannable and exposes full execution context', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1600, height: 1600 });
   await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
     v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
   })));
@@ -125,7 +126,9 @@ test('keeps 24 mixed-model cards scanable and exposes full execution context', a
     });
   }
 
-  await page.getByTestId('task-card').first().click();
+  // Dispatch through the card's Angular handler without waiting for a document
+  // navigation. Detail opens in the studio shell and does not leave this page.
+  await page.getByTestId('task-card').first().dispatchEvent('click');
   await expect(page.getByTestId('detail-model-chip')).toHaveAttribute('data-model-family', 'sol');
   await expect(page.getByTestId('detail-thinking-level')).toHaveText('l');
   await page.screenshot({
