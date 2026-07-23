@@ -210,3 +210,8 @@
   color: var(--studio-fg);
 }
 .ps-settings__select:disabled { opacity: 0.6; cursor: progress; }
+.ps-settings__error {
+  margin: 0;
+  color: var(--studio-danger, var(--studio-fg-strong));
+  font-size: 0.78rem;
+}

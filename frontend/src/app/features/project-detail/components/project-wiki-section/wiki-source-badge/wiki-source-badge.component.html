@@ -1,0 +1,6 @@
+<span class="source"
+      [class.source--readonly]="!source().writable"
+      data-testid="project-wiki-source"
+      [cacTooltip]="source().writable ? 'Wiki source follows this checkout.' : 'Read-only branch source. Change it in Project Settings to enable edits.'">
+  {{ label() }}
+</span>
