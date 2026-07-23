@@ -1,6 +1,7 @@
-import { test, expect, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { test, expect } from '../fixtures/dev-backend';
 
 const JOB_ID = 'pipeline-step-usage-fixture';
 const WATCH_PATH = 'C:/fixtures/agent-taskboard';
