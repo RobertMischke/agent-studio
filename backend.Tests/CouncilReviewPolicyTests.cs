@@ -56,6 +56,22 @@ public sealed class CouncilReviewPolicyTests
         Assert.Empty(reaction.Assessments);
     }
 
+    [Fact]
+    public void GradeAWithNamedDeficiency_ReissuesInsteadOfLettingThePassHideIt()
+    {
+        var reaction = CouncilReviewPolicy.Derive(
+            "code-review-grade.md",
+            CodeReviewGrade.A,
+            new[] { "The dark theme still uses incorrect colors; provide both-theme screenshots." },
+            priorReissues: 0,
+            maxReissues: 2,
+            jobId: "AGT-2108");
+
+        Assert.Equal(CouncilReactionDisposition.Reissue, reaction.Disposition);
+        Assert.True(reaction.StartsNewRound);
+        Assert.Equal(CouncilFindingAction.FixNextRound, Assert.Single(reaction.Assessments).Action);
+    }
+
     [Theory]
     [InlineData(CodeReviewGrade.B)]
     [InlineData(CodeReviewGrade.C)]

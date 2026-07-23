@@ -102,34 +102,9 @@
               }
             </span>
           </button>
-          @if (entry.councilReaction; as reaction) {
-            <section class="cr-reaction"
-                     [attr.data-disposition]="reaction.disposition.toLowerCase()"
-                     data-testid="code-review-council-reaction">
-              <header class="cr-reaction__header">
-                <span class="cr-reaction__eyebrow">Orchestrator reaction</span>
-                <span class="cr-reaction__decision">{{ reaction.summary }}</span>
-              </header>
-              @if (reaction.assessments.length) {
-                <ul class="cr-reaction__findings">
-                  @for (assessment of reaction.assessments; track assessment.finding) {
-                    <li>
-                      <span class="cr-reaction__action">{{ reactionActionLabel(assessment.action) }}</span>
-                      <span>{{ assessment.finding }}</span>
-                      <small>{{ assessment.reason }}</small>
-                    </li>
-                  }
-                </ul>
-              }
-              @if (reaction.startsNewRound && reactionHref(entry); as href) {
-                <a class="cr-reaction__round"
-                   data-testid="code-review-council-round-link"
-                   [href]="href">
-                  Open round {{ reaction.targetRunAttempt }} &rarr;
-                </a>
-              }
-            </section>
-          }
+          <app-council-review-reaction
+            [job]="job()"
+            [reaction]="entry.councilReaction" />
           @if (expandedFile() === entry.fileName) {
             <div class="cr-body" data-testid="code-review-body">
               <header class="cr-body-header" [attr.data-verdict]="verdictTone(entry.verdict)">

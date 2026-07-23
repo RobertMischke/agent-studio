@@ -285,7 +285,10 @@ operator changes cause the step to fail before its writer runs.
   reopens the same attempt, that follow-up includes both the build output and
   the selected council findings. The sibling `*.council-reaction.json` and the
   action decision journal entry are the read-side chain for review -> reaction
-  -> target task/run.
+  -> target task/run. Task-detail renders this reaction on the review row. A
+  legacy or manually triggered review without a sidecar shows an explicit
+  `No orchestrator reaction recorded` audit state instead of silently omitting
+  the reaction.
 - `post-code-review-grade` is the automatic quality-grade step (ASS-1657). It is
   `DefaultEnabled`, runs after the four aspect reviews and before
   `post-orchestrator-decision`, and assigns every pipelined task an A/B/C/D grade
