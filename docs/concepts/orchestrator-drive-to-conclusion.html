@@ -1182,10 +1182,11 @@
           </td>
           <td>
             <span class="pill ok">fixed</span> quoted and clearly contextualised Pipeline status tokens are ignored only when
-            they are the line's complete set of unfinished-work matches. The final sweep also excludes <code>apply_patch</code>
-            addition echoes carrying this vocabulary; a structured stderr prefix plus the diff <code>+ </code> marker is
-            required, so genuine close-out prose such as "verification is still pending" remains blocking. The exact
-            exhausted-budget gate log now passes and continues to auto-review.
+            they are the line's complete set of unfinished-work matches. The final sweep excludes <code>apply_patch</code>
+            addition echoes and complete <code>git show</code>/<code>git diff</code> stderr batches carrying this vocabulary.
+            Git batches are identified by a <code>diff --git</code> header and their exact structured timestamp/channel prefix,
+            so genuine close-out prose such as "verification is still pending" remains blocking. The exact exhausted-budget
+            gate log now passes and continues to auto-review.
           </td>
         </tr>
       </tbody>

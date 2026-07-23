@@ -513,6 +513,49 @@ public class CompletionGateTests
         Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
     }
 
+    [Fact]
+    public void Evaluate_PipelinePendingFixGitDiffEcho_Passes()
+    {
+        // AGT-2209 exhausted-budget regression: the final git show emitted
+        // complete diff hunks in one structured stderr batch. Context and
+        // deletion lines repeated completion-gate vocabulary from the fix.
+        var log = string.Join('\n',
+            "[17:25:35.403] [stderr] diff --git a/backend/Features/Runner/CompletionGate.cs b/backend/Features/Runner/CompletionGate.cs",
+            "[17:25:35.403] [stderr] // JSON can contain the gate's own old \"Build FAILED\" finding; treating that",
+            "[17:25:35.403] [stderr] + // unfinished-work vocabulary from the fix itself, but are not",
+            "[17:25:35.403] [stderr] // out-of-scope: they are not unfinished work this change owns",
+            "[17:25:35.403] [stderr] diff --git a/docs/concepts/orchestrator-drive-to-conclusion.html b/docs/concepts/orchestrator-drive-to-conclusion.html",
+            "[17:25:35.403] [stderr] - they are the line's complete set of unfinished-work matches. Genuine prose such as \"verification is still pending\"",
+            "[17:25:35.403] [stderr] + they are the line's complete set of unfinished-work matches. The final sweep also excludes <code>apply_patch</code>",
+            "[17:25:35.403] [stderr] + required, so genuine close-out prose such as \"verification is still pending\" remains blocking. The exact",
+            "[17:25:35.478] [stdout] [[TASK_DONE]]");
+
+        var findings = CompletionGate.ExtractFindings(statusMarkdown: null, log);
+        var decision = CompletionGate.Evaluate(
+            statusMarkdown: null,
+            log,
+            priorReissues: MaxReissues,
+            maxReissues: MaxReissues);
+
+        Assert.Empty(findings);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
+    }
+
+    [Fact]
+    public void ExtractFindings_GitDiffBatch_DoesNotHideLaterFailure()
+    {
+        var log = string.Join('\n',
+            "[17:25:35.403] [stderr] diff --git a/source.cs b/source.cs",
+            "[17:25:35.403] [stderr] // unfinished work from printed source",
+            "[17:25:35.404] [stderr] Tests failed.",
+            "[17:25:35.478] [stdout] [[TASK_DONE]]");
+
+        var findings = CompletionGate.ExtractFindings(statusMarkdown: null, log);
+
+        Assert.Single(findings);
+        Assert.Contains("Tests failed.", findings[0]);
+    }
+
     [Theory]
     [InlineData("Pipeline verification is still pending.")]
     [InlineData("VERIFICATION PENDING")]

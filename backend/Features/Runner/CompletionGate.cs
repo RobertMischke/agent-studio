@@ -54,6 +54,16 @@ public static class CompletionGate
         @"^(?:\[[^\]]*\]\s*)*\[stderr\]\s*\+\s+\S",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // git show/diff output arrives as one structured stderr batch: every line
+    // has the same timestamp/channel prefix. Once that batch contains a
+    // "diff --git" header, its context and deletion lines are also source/docs
+    // echoes, even though they do not carry the "+ " marker above. Capture the
+    // exact batch prefix so unrelated stderr at another timestamp remains
+    // actionable (AGT-2209 exhausted-budget follow-up).
+    private static readonly Regex GitDiffBatchStartRegex = new(
+        @"^(?<prefix>(?:\[[^\]]*\]\s*)*\[stderr\]\s*)diff\s+--git\s+\S",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // An echoed line from the durable pipeline history, usually produced by
     // rg/Get-Content while investigating a prior completion-gate verdict. The
     // JSON can contain the gate's own old "Build FAILED" finding; treating that
@@ -508,10 +518,19 @@ public static class CompletionGate
     private static IEnumerable<string> EvidenceLines(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) yield break;
-        foreach (var raw in text.Replace("\r\n", "\n").Split('\n'))
+        var lines = text.Replace("\r\n", "\n")
+            .Split('\n')
+            .Select(raw => raw.Trim())
+            .Where(line => line.Length > 0)
+            .ToArray();
+        var gitDiffBatchPrefixes = lines
+            .Select(line => GitDiffBatchStartRegex.Match(line))
+            .Where(match => match.Success)
+            .Select(match => match.Groups["prefix"].Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var line in lines)
         {
-            var line = raw.Trim();
-            if (line.Length == 0) continue;
             if (IsNoneLine(line)) continue;
             // Drop echoed source code (grep/cat line-number output): its keywords
             // are identifiers/comments in printed source, not the run's own
@@ -521,6 +540,11 @@ public static class CompletionGate
             // unfinished-work vocabulary from the fix itself, but are not
             // current completion evidence.
             if (PatchAdditionEchoRegex.IsMatch(line)) continue;
+            // Drop the full git diff/show batch, including unmarked context and
+            // "- " deletion lines. The exact structured prefix confines this
+            // to the tool dump that also carried a "diff --git" header.
+            if (gitDiffBatchPrefixes.Any(prefix =>
+                    line.StartsWith(prefix, StringComparison.Ordinal))) continue;
             // Drop items the run explicitly disclaimed as pre-existing /
             // out-of-scope: they are not unfinished work this change owns
             // (AGT-1986). See PreExistingOutOfScopeRegex.
