@@ -55,6 +55,35 @@ public sealed class RemoteTaskRunnerRestartTests : IDisposable
         Assert.False(Directory.Exists(workspace.RepoPath));
     }
 
+    [Fact]
+    public async Task Restarted_runner_releases_a_dead_job_instead_of_adopting_its_lease()
+    {
+        var work = Path.Combine(_root, "runner-work");
+        var stateRoot = Path.Combine(_root, "state");
+        var worktree = Path.Combine(work, "dead-worktree");
+        Directory.CreateDirectory(worktree);
+        var options = Options(work, stateRoot, Path.Combine(_root, "unused-origin.git"));
+        var lease = Lease();
+        var originalStore = new RunnerStateStore(stateRoot);
+        originalStore.Create(lease.TaskKey, lease, worktree);
+
+        var replacementStore = new RunnerStateStore(stateRoot);
+        var recovered = Assert.Single(replacementStore.LoadAll());
+        Assert.False(DurableAgentProcess.VerifyLive(recovered, out var reason));
+        Assert.Contains("no persisted process identity", reason);
+
+        var server = new RunnerApiHandler(lease);
+        using var http = new HttpClient(server) { BaseAddress = new Uri("http://task-server") };
+        using var client = new TaskServerClient(http, options.RunnerId);
+        var replacement = new RemoteTaskRunner(options, client, _ => { }, replacementStore);
+
+        var released = await replacement.ReleaseDeadAsync(recovered, reason);
+
+        Assert.True(released);
+        Assert.Equal(["/api/runner/lease/release"], server.Paths);
+        Assert.Empty(replacementStore.LoadAll());
+    }
+
     private static RunnerOptions Options(string work, string stateRoot, string origin) => new()
     {
         ServerUrl = "http://task-server",

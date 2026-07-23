@@ -548,6 +548,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             SalvageRecoveryCommitSha: localSha,
             SalvageAuthoritativeBaseBranch: canonical,
             SalvageAuthoritativeBaseSha: canonicalSha,
+            ResultSha: canonicalSha,
+            AttemptChainId: lease.Lease.LeaseId,
             AttemptId: lease.Lease.AttemptId,
             AuthorityEpoch: lease.Lease.AuthorityEpoch,
             IdempotencyKey: "salvage-collision-completion"), ct);

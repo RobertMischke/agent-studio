@@ -61,6 +61,26 @@ public class RunnerOptionsTests
     }
 
     [Fact]
+    public void Durable_state_defaults_below_the_configured_work_directory()
+    {
+        var work = Path.Combine("runner", "persistent-work");
+
+        var (options, _, _, _) = RunnerOptions.Parse(["--poll", "--workdir", work]);
+
+        Assert.Equal(Path.Combine(work, ".runner-state"), options.StateDir);
+    }
+
+    [Fact]
+    public void Durable_state_directory_can_be_configured_separately()
+    {
+        var state = Path.Combine("runner", "persistent-state");
+
+        var (options, _, _, _) = RunnerOptions.Parse(["--poll", "--state-dir", state]);
+
+        Assert.Equal(state, options.StateDir);
+    }
+
+    [Fact]
     public void Existing_client_identity_can_be_pinned_from_the_cli()
     {
         var (options, _, _, _) = RunnerOptions.Parse(["--client-id", "  agent-runner-01  "]);

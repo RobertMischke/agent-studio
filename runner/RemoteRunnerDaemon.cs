@@ -201,15 +201,39 @@ public sealed class RemoteRunnerDaemon
                         TakeTelemetry(),
                         AvailableSlots: _options.HostMaxParallelism - active.Count,
                         ActiveSlots: active.Count,
-                        IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}"), shutdown);
+                        IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}"),
+                    // A claim is an atomic server-side mutation. Once sent, do
+                    // not cancel the HTTP request on SIGTERM: the server may
+                    // already have committed it, leaving the replacement with
+                    // no durable slot evidence. The HttpClient timeout still
+                    // bounds this handoff below systemd's TimeoutStopSec.
+                        CancellationToken.None);
                     if (claim.Status != RunnerClaimStatus.Claimed
                         || string.IsNullOrWhiteSpace(claim.TaskKey)
                         || claim.Lease is null)
                         break;
 
+                    var taskRunner = new RemoteTaskRunner(_options, _client, _log, state);
+                    if (shutdown.IsCancellationRequested)
+                    {
+                        var workspace = new GitWorkspace(
+                            _options, claim.TaskKey, _log,
+                            claim.ProjectId, claim.RepositoryUrl, claim.DefaultBranch);
+                        var slot = state.Create(
+                            claim.TaskKey, claim.Lease, workspace.RepoPath,
+                            claim.RunId, claim.LeaseInstanceId, claim.ProjectId,
+                            claim.RepositoryUrl, claim.DefaultBranch, claim.TaskKind);
+                        const string reason = "planned daemon shutdown completed an in-flight claim before worker start";
+                        _log($"releasing claim completed during shutdown task={claim.TaskKey} lease={claim.Lease.LeaseId}");
+                        if (!await taskRunner.ReleaseDeadAsync(slot, reason))
+                            throw new InvalidOperationException(
+                                $"Claim '{claim.Lease.LeaseId}' completed during shutdown but could not be released. " +
+                                "Durable state was retained for replacement startup.");
+                        break;
+                    }
+
                     claimedAny = true;
                     _log($"claimed {claim.ProjectName}/{claim.TaskKey} using project cache {claim.ProjectId ?? "legacy fallback"} into slot {active.Count + 1}/{_options.HostMaxParallelism}");
-                    var taskRunner = new RemoteTaskRunner(_options, _client, _log, state);
                     active.Add(taskRunner.RunClaimedAsync(
                         claim.TaskKey,
                         claim.Lease,
