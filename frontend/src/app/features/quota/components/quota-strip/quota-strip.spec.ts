@@ -37,4 +37,19 @@ describe('QuotaStripComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('formats a reported quota without a percentage as Unknown', async () => {
+    await TestBed.configureTestingModule({
+      imports: [QuotaStripComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(QuotaStripComponent);
+
+    expect(fixture.componentInstance.formatPct(null)).toBe('Unknown');
+  });
 });

@@ -258,6 +258,14 @@ internal static class BuiltInCliBehaviors
             ClaudeTryCaptureInitContext(ctx, info, line);
         }
 
+        // Keep the rate-limit path local and forgiving. The packaged adapter
+        // pins the original camelCase schema; this shim also accepts the
+        // snake_case/string variants observed on adjacent Claude surfaces and
+        // prevents an optional field type from breaking the read loop.
+        if (ClaudeRateLimitEventParser.TryMap(line.Text, jobKey, out var rateLimit)
+            && rateLimit != null)
+            return [rateLimit];
+
         return ClaudeEventAdapter.Map(line.Text, jobKey);
     }
 

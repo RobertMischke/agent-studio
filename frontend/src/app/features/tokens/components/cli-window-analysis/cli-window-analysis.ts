@@ -87,7 +87,7 @@ export class CliWindowAnalysisComponent {
     if (value < 1_000_000) return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)}K`;
     return `${(value / 1_000_000).toFixed(2)}M`;
   }
-  formatPct(value: number | null): string { return value == null ? 'Unavailable' : `${value.toFixed(1)}% / h`; }
+  formatPct(value: number | null): string { return value == null ? 'Unknown' : `${value.toFixed(1)}% / h`; }
 
   private adhocTotal(): number {
     const value = this.adhoc();

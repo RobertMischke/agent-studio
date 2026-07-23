@@ -221,6 +221,20 @@ describe('HeaderQuotaComponent (semantic state)', () => {
     expect(chips[0].windowKey).toBe('none');
     expect(chips[0].value).toBe('—');
   });
+
+  it('renders a reported but unparseable quota as Unknown', async () => {
+    const c = await buildComponent();
+    const windows: QuotaWindowInput[] = [
+      { label: 'Quota', usedPct: null, used: null, limit: null, unit: '%', resetAt: null, resetLabel: null },
+    ];
+
+    const chips = c.buildChips(undefined, undefined, noPrimary, windows);
+
+    expect(chips).toHaveLength(1);
+    expect(chips[0].windowKey).toBe('quota');
+    expect(chips[0].value).toBe('Unknown');
+    expect(chips[0].tone).toBe('unknown');
+  });
 });
 
 /**

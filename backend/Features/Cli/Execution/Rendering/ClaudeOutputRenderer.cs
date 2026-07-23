@@ -39,19 +39,23 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
             yield break;
         }
 
-        var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+        var type = String(root, "type");
         switch (type)
         {
             case "system":
             {
-                var subtype = root.TryGetProperty("subtype", out var st) ? st.GetString() : null;
-                var sessionId = root.TryGetProperty("session_id", out var sid) ? sid.GetString() : null;
+                var subtype = String(root, "subtype");
+                var sessionId = String(root, "session_id");
                 yield return raw with { Text = $"● Session {subtype ?? "system"} {sessionId ?? ""}".TrimEnd() };
                 yield break;
             }
             case "assistant":
             {
-                if (!root.TryGetProperty("message", out var msg)) { yield return raw; yield break; }
+                if (!root.TryGetProperty("message", out var msg) || msg.ValueKind != JsonValueKind.Object)
+                {
+                    yield return raw;
+                    yield break;
+                }
                 if (!msg.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
                 {
                     yield return raw;
@@ -59,10 +63,11 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
                 }
                 foreach (var part in content.EnumerateArray())
                 {
-                    var partType = part.TryGetProperty("type", out var pt) ? pt.GetString() : null;
+                    if (part.ValueKind != JsonValueKind.Object) continue;
+                    var partType = String(part, "type");
                     if (partType == "text")
                     {
-                        var text = part.TryGetProperty("text", out var txt) ? txt.GetString() ?? "" : "";
+                        var text = String(part, "text") ?? "";
                         // Multi-line model text: split so the parser groups it as
                         // continuation lines on the same MESSAGES group.
                         foreach (var line in CliMarkerFormat.SplitLines(text))
@@ -70,7 +75,7 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
                     }
                     else if (partType == "tool_use")
                     {
-                        var name  = part.TryGetProperty("name",  out var n) ? n.GetString() ?? "Tool" : "Tool";
+                        var name  = String(part, "name") ?? "Tool";
                         var input = part.TryGetProperty("input", out var i) ? i : default;
                         yield return raw with { Text = FormatToolUse(name, input) };
                     }
@@ -89,9 +94,13 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
             }
             case "user":
             {
-                // Tool results — emit a short indented continuation so the
+                // Tool results: emit a short indented continuation so the
                 // parser keeps it under the preceding tool_use group.
-                if (!root.TryGetProperty("message", out var msg)) { yield return raw; yield break; }
+                if (!root.TryGetProperty("message", out var msg) || msg.ValueKind != JsonValueKind.Object)
+                {
+                    yield return raw;
+                    yield break;
+                }
                 if (!msg.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
                 {
                     yield return raw;
@@ -99,7 +108,8 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
                 }
                 foreach (var part in content.EnumerateArray())
                 {
-                    var partType = part.TryGetProperty("type", out var pt) ? pt.GetString() : null;
+                    if (part.ValueKind != JsonValueKind.Object) continue;
+                    var partType = String(part, "type");
                     if (partType != "tool_result") continue;
                     var isError = part.TryGetProperty("is_error", out var ie) && ie.ValueKind == JsonValueKind.True;
                     var resultText = ExtractToolResultText(part);
@@ -115,9 +125,9 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
             }
             case "result":
             {
-                var subtype = root.TryGetProperty("subtype", out var st) ? st.GetString() : "result";
+                var subtype = String(root, "subtype") ?? "result";
                 var isError = root.TryGetProperty("is_error", out var ie) && ie.ValueKind == JsonValueKind.True;
-                var resultText = root.TryGetProperty("result", out var rs) ? rs.GetString() : null;
+                var resultText = String(root, "result");
                 if (!string.IsNullOrWhiteSpace(resultText))
                 {
                     foreach (var line in CliMarkerFormat.SplitLines(resultText!))
@@ -138,13 +148,12 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
                 // typed snapshot for the live header pill.
                 //
                 //   ● Rate limit · five-hour · allowed · reset in 109 min  [window=five_hour status=allowed resetsAt=1777393800 overage=allowed usingOverage=false]
-                var info = root.TryGetProperty("rate_limit_info", out var rli) && rli.ValueKind == JsonValueKind.Object
-                    ? rli : default;
-                var status        = info.ValueKind == JsonValueKind.Object && info.TryGetProperty("status",         out var s)  ? s.GetString()  : null;
-                var window        = info.ValueKind == JsonValueKind.Object && info.TryGetProperty("rateLimitType",  out var rt) ? rt.GetString() : null;
-                var resetsAt      = info.ValueKind == JsonValueKind.Object && info.TryGetProperty("resetsAt",       out var ra) && ra.ValueKind == JsonValueKind.Number ? ra.GetInt64() : 0;
-                var overageStatus = info.ValueKind == JsonValueKind.Object && info.TryGetProperty("overageStatus",  out var os) ? os.GetString() : null;
-                var usingOverage  = info.ValueKind == JsonValueKind.Object && info.TryGetProperty("isUsingOverage", out var uo) && uo.ValueKind == JsonValueKind.True;
+                ClaudeRateLimitEventParser.TryParse(raw.Text, out var info);
+                var status = info?.Status;
+                var window = info?.Window;
+                var resetsAt = info?.ResetsAt ?? 0;
+                var overageStatus = info?.OverageStatus;
+                var usingOverage = info?.IsUsingOverage ?? false;
                 var resetIn = resetsAt > 0
                     ? CliMarkerFormat.FormatRelative(DateTimeOffset.FromUnixTimeSeconds(resetsAt) - DateTimeOffset.UtcNow)
                     : null;
@@ -202,9 +211,16 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
             JsonValueKind.Array  => string.Join("\n",
                 c.EnumerateArray()
                  .Where(e => e.ValueKind == JsonValueKind.Object
-                          && e.TryGetProperty("type", out var et) && et.GetString() == "text")
-                 .Select(e => e.TryGetProperty("text", out var tx) ? tx.GetString() ?? "" : "")),
+                          && String(e, "type") == "text")
+                 .Select(e => String(e, "text") ?? "")),
             _ => c.ToString()
         };
     }
+
+    private static string? String(JsonElement parent, string name)
+        => parent.ValueKind == JsonValueKind.Object
+           && parent.TryGetProperty(name, out var value)
+           && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 }

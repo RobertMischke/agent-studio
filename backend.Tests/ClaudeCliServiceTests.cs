@@ -177,6 +177,31 @@ public class ClaudeCliServiceTests
     }
 
     [Fact]
+    public void TransformReadLine_RateLimitEventAcceptsSnakeCaseAndUnknownFields()
+    {
+        var svc = NewService();
+        var raw = StdoutFrame("""{"type":"rate_limit_event","future":{"ignored":true},"rate_limit_info":{"rate_limit_type":"seven_day","status":"allowed_warning","resets_at":"1777393800","overage_status":"not_allowed","is_using_overage":"false","unknown_field":42}}""");
+
+        var line = Assert.Single(svc.TransformReadLine(raw));
+
+        Assert.StartsWith("● Rate limit", line.Text);
+        Assert.Matches(@"\[window=seven_day status=allowed_warning resetsAt=1777393800 overage=not_allowed usingOverage=false\]", line.Text);
+    }
+
+    [Fact]
+    public void TransformReadLine_RateLimitEventWithUnexpectedOptionalFieldTypesDoesNotThrow()
+    {
+        var svc = NewService();
+        var raw = StdoutFrame("""{"type":"rate_limit_event","rate_limit_info":{"rateLimitType":{"future":"shape"},"status":["allowed"],"resetsAt":[],"overageStatus":17,"isUsingOverage":null}}""");
+
+        var exception = Record.Exception(() => svc.TransformReadLine(raw).ToList());
+        var line = Assert.Single(svc.TransformReadLine(raw));
+
+        Assert.Null(exception);
+        Assert.Matches(@"\[window=\? status=\? resetsAt=0 overage=- usingOverage=false\]", line.Text);
+    }
+
+    [Fact]
     public void TransformReadLine_ResultFrameSurfacesText()
     {
         var svc = NewService();
