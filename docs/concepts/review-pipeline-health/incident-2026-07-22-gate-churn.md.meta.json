@@ -1,0 +1,10 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2257",
+      "title": "Gate haengt nach Lock-Erwerb ohne Watchdog - 2.5h Vollblockade",
+      "linkedAt": "2026-07-23T11:53:12.5524622Z",
+      "source": "auto"
+    }
+  ]
+}
