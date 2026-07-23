@@ -41,10 +41,10 @@
          ACCEPTED verdict it would only restate the per-step "Auto-review
          accepted … Moved to 5-human-review" copy, so it is suppressed here to
          avoid a redundant top-NOTE banner duplicating the final review step. -->
-    @if (isHistoricalOutcome() && currentOutcomeLabel(); as outcome) {
+    @if (historicalOutcomeExplanation(); as explanation) {
       <div class="loop__reason loop__reason--history" data-testid="overview-loop-history">
         <span class="loop__reason-label">History</span>
-        <span class="loop__reason-text">This earlier pipeline verdict was superseded when the task moved to {{ outcome }}.</span>
+        <span class="loop__reason-text">{{ explanation }}</span>
       </div>
     } @else if (loop.latestVerdict !== 'accepted') {
       @if (loop.findings.length > 0) {

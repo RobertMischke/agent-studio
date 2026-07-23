@@ -364,7 +364,8 @@ test.describe('Pipeline workbench state evidence', () => {
     await expect(page.getByTestId('overview-loop-verdict')).toHaveAttribute('data-historical', 'true');
     await expect(page.getByTestId('overview-loop-verdict')).toContainText('Earlier:');
     await expect(page.getByTestId('overview-loop-current-outcome')).toContainText('Delivered');
-    await expect(page.getByTestId('overview-loop-history')).toContainText('superseded');
+    await expect(page.getByTestId('overview-loop-history')).toContainText('prior attempt');
+    await expect(page.getByTestId('overview-loop-history')).toContainText('reopened');
     await expect(page.getByTestId('overview-loop-reason')).toHaveCount(0);
     await shot(page, pipeline, 'pipeline-no-execution-delivered-history--mocked.png');
   });

@@ -8,7 +8,7 @@ export function reconcileCoreStatus(
   if (status !== 'pending' && status !== 'planned') return status;
   const outcome = verdict?.trim().toLowerCase();
   if (!outcome) return status;
-  return ['failed', 'failure', 'error', 'interrupted', 'cancelled', 'canceled', 'stopped'].includes(outcome)
+  return ['failed', 'failure', 'error', 'interrupted', 'committed-partial', 'cancelled', 'canceled', 'stopped'].includes(outcome)
     ? 'failed'
     : 'passed';
 }

@@ -328,9 +328,38 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-steps"]')).toBeNull();
   });
 
+  it('pipeline block: a terminal all-pending record stays hidden even when a step has stale timing metadata', async () => {
+    const fixture = await build(baseJob({ state: TaskState.Completed }));
+    const pipe = unrecordedPipeline();
+    pipe.execution = {
+      pipelineId: pipe.pipeline.id,
+      pipelineVersion: pipe.pipeline.version,
+      jobId: 'test-1',
+      project: 'test',
+      startedAt: '2026-07-22T10:00:00Z',
+      steps: [{
+        stepId: 'aspect-code-quality',
+        kind: 'aspect',
+        status: 'pending',
+        startedAt: '2026-07-22T10:01:00Z',
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+      }],
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-no-execution"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-pipeline-steps"]')).toBeNull();
+  });
+
   it.each([
     ['success', 'passed'],
     ['failed', 'failed'],
+    ['committed-partial', 'failed'],
   ] as const)('pipeline block: reconciles legacy pending CORE verdict %s to %s', async (verdict, status) => {
     const fixture = await build(baseJob({ state: TaskState.Completed }));
     const pipe = unrecordedPipeline();

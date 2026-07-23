@@ -1396,9 +1396,13 @@ export class OverviewPaneComponent {
   /** A settled run without step telemetry must not look like future work. */
   readonly showPipelineNoExecution = computed<boolean>(() => {
     const selected = this.selectedPipelineExecution();
-    if (selected?.steps?.some(hasRecordedStepExecution)) return false;
-    if (selected != null && !this.selectedPipelineIsCurrent()) return selected.completedAt != null;
-    return OverviewPaneComponent.PIPELINE_TERMINAL_STATES.has(this.job().state);
+    const selectedHistoryIsSettled = selected != null && !this.selectedPipelineIsCurrent() && selected.completedAt != null;
+    const currentTaskIsTerminal = OverviewPaneComponent.PIPELINE_TERMINAL_STATES.has(this.job().state);
+    if (!selectedHistoryIsSettled && !currentTaskIsTerminal) return false;
+
+    const allRowsStillFuture = this.pipelineRows()
+      .every(row => row.status === 'pending' || row.status === 'planned' || row.status === 'disabled');
+    return allRowsStillFuture || !selected?.steps?.some(hasRecordedStepExecution);
   });
 
   readonly pipelineOutcomeLabel = computed<string | null>(() =>

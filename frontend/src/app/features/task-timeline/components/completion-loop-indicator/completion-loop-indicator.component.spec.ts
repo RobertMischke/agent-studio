@@ -89,7 +89,8 @@ describe('CompletionLoopIndicatorComponent', () => {
     expect(verdict?.getAttribute('data-historical')).toBe('true');
     expect(verdict?.textContent).toContain('Earlier:');
     expect(html.querySelector('[data-testid="overview-loop-current-outcome"]')?.textContent).toContain('Delivered');
-    expect(html.querySelector('[data-testid="overview-loop-history"]')?.textContent).toContain('superseded');
+    expect(html.querySelector('[data-testid="overview-loop-history"]')?.textContent).toContain('prior attempt');
+    expect(html.querySelector('[data-testid="overview-loop-history"]')?.textContent).toContain('reopened');
     expect(html.querySelector('[data-testid="overview-loop-reason"]')).toBeNull();
   });
 

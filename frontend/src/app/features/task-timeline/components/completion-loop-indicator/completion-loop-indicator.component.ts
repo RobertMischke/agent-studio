@@ -65,6 +65,15 @@ export class CompletionLoopIndicatorComponent {
     this.isHistoricalOutcome() ? 'neutral' : this.verdictTone(this.completionLoop().latestVerdict),
   );
 
+  readonly historicalOutcomeExplanation = computed<string | null>(() => {
+    const outcome = this.currentOutcomeLabel();
+    if (!this.isHistoricalOutcome() || !outcome) return null;
+    if (this.taskState() === TaskState.Completed && this.completionLoop().latestVerdict === 'escalated') {
+      return 'This earlier escalation belongs to a prior attempt. The task was reopened, continued, and later moved to Delivered.';
+    }
+    return `This earlier pipeline verdict was superseded when the task moved to ${outcome}.`;
+  });
+
   /** "N / M" attempt counter, or just "N" when the budget is unknown. */
   readonly attemptLabel = computed<string | null>(() => {
     const loop = this.completionLoop();
