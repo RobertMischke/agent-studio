@@ -162,6 +162,14 @@ state.
   visibly queued when no seat is free. A heartbeat-less `3-progress` card may
   survive the liveness grace only with one of the explicit waiting phases.
 
+- Remote host capacity is reported as distinct workload classes. RUN occupancy
+  comes from every daemon claim poll (`ActiveSlots` plus `AvailableSlots`, whose
+  sum is the configured host maximum). Remote SSH build/test GATE occupancy
+  comes from gate start/completion events and runs outside RUN slots. Host CPU
+  and load include both pools and unrelated processes, so neither is inferred
+  from lane membership or from CPU percentage. This keeps claim/lane drift
+  visible instead of silently folding it into a slot count.
+
 - Remote pickup ownership lives in the project record (`executionRunner` plus
   `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner
   consult the same record; assigned remote-capable projects are never locally

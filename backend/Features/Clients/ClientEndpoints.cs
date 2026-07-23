@@ -30,9 +30,19 @@ public static class ClientEndpoints
             }
         });
 
-        clients.MapGet("/", (ClientIdentityStore store) =>
+        clients.MapGet("/", (ClientIdentityStore store, AgentStudio.Pipeline.RemoteGateActivityStore gateActivity) =>
         {
-            var summaries = store.ListAll().Select(ClientSummary.From).ToList();
+            var summaries = store.ListAll().Select(record =>
+            {
+                if (record.RunnerDaemonState is null && record.RunnerGitStatus is null)
+                    return ClientSummary.From(record);
+                var gates = gateActivity.ForRunner(record.Id);
+                return ClientSummary.From(record) with
+                {
+                    RunnerActiveGateCount = gates.Active,
+                    RunnerGateCapacity = gates.Capacity,
+                };
+            }).ToList();
             return Results.Ok(summaries);
         });
 

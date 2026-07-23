@@ -34,11 +34,11 @@ describe('RemoteHostsService', () => {
     expect(svc.error()).toBeNull();
   });
 
-  it('ensureLoaded only seeds once; reload re-seeds explicitly', () => {
+  it('ensureLoaded revalidates live state on every mount', () => {
     const spy = vi.spyOn(svc, 'reload');
     svc.ensureLoaded();
     svc.ensureLoaded();
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it('adds a wizard-completed host as an idle remote runner', () => {
@@ -79,6 +79,10 @@ describe('RemoteHostsService client registry hydration', () => {
       notes: null,
       runnerGitStatus: 'read-only',
       runnerGitDetail: 'push-dry-run failed (128): permission denied',
+      runnerActiveSlots: 1,
+      runnerAvailableSlots: 19,
+      runnerActiveGateCount: 2,
+      runnerGateCapacity: 2,
     }]);
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
@@ -88,6 +92,11 @@ describe('RemoteHostsService client registry hydration', () => {
       lastHeartbeatAt: new Date(now - 30_000).toISOString(),
       gitPushStatus: 'read-only',
       gitPushDetail: 'push-dry-run failed (128): permission denied',
+      activeTaskCount: 1,
+      availableSlots: 19,
+      activeGateCount: 2,
+      gateCapacity: 2,
+      liveDataState: 'ready',
     });
 
     svc.reload();

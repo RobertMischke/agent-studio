@@ -27,6 +27,10 @@ const HOST: RemoteHost = {
     diskTotalGb: 240,
     diskFreeGb: 96,
   },
+  activeTaskCount: 1,
+  availableSlots: 19,
+  activeGateCount: 2,
+  gateCapacity: 2,
 };
 
 function mount(host: RemoteHost) {
@@ -51,6 +55,23 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelectorAll('.meter').length).toBe(3);
     // RAM 24/62 GB used => 39%
     expect(el.querySelector('[data-meter="ram"] .meter__pct')?.textContent).toContain('39%');
+    expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('1 active · 19 free · 20 max');
+    expect(el.querySelector('[data-testid="remote-host-gate-pool"]')?.textContent).toContain('2 running · pool 2');
+    expect(el.querySelector('[data-testid="remote-host-cpu-context"]')?.textContent).toContain('does not consume a RUN slot');
+  });
+
+  it('shows a neutral live-loading state instead of cached stopped data', () => {
+    const el: HTMLElement = mount({
+      ...HOST,
+      status: 'offline',
+      lastHeartbeatAt: '2026-07-10T09:00:00Z',
+      liveDataState: 'loading',
+      stats: null,
+    }).nativeElement;
+    expect(el.querySelector('[data-testid="remote-host-status"]')?.textContent).toContain('Loading live status');
+    expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('Loading daemon telemetry');
+    expect(el.textContent).not.toContain('Daemonstopped');
+    expect(el.querySelector('[data-testid="remote-host-stale"]')).toBeNull();
   });
 
   it('reflects an acute status as a data-tone on the host element', () => {
@@ -127,7 +148,7 @@ describe('RemoteHostCardComponent', () => {
     const fixture = mount({ ...HOST, telemetry });
     const el: HTMLElement = fixture.nativeElement;
     expect(el.querySelectorAll('[data-chart]').length).toBe(4);
-    expect(el.querySelector('[data-testid="remote-host-slots-context"]')?.textContent).toContain('6 active slots · load 6.4 of 12 cores');
+    expect(el.querySelector('[data-testid="remote-host-slots-context"]')?.textContent).toContain('6 RUN active · host load 6.4 of 12 cores');
     expect(el.querySelector('[data-testid="remote-host-findings"]')?.textContent).toContain('VM throttled');
     (el.querySelector('[data-testid="remote-host-window-1h"]') as HTMLButtonElement).click();
     fixture.detectChanges();

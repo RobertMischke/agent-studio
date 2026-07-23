@@ -106,6 +106,7 @@ public sealed record RunnerClaimRequest(
     int? RequestedTtlSeconds = null,
     HostTelemetrySample? Telemetry = null,
     int AvailableSlots = 1,
+    int? ActiveSlots = null,
     string? IdempotencyKey = null);
 
 /// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>

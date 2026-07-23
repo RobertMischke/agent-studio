@@ -124,9 +124,11 @@ public static class LeaseEndpoints
             var clientId = context.Items["ClientId"] as string ?? context.Request.Headers["X-Client-Id"].ToString();
             if (req.Telemetry is not null && !string.IsNullOrWhiteSpace(clientId))
                 telemetry.Append(clientId, req.Telemetry);
-            int? activeSlots = req.Telemetry is null
-                ? null
-                : Math.Max(0, req.Telemetry.ActiveSlots);
+            int? activeSlots = req.ActiveSlots is not null
+                ? Math.Max(0, req.ActiveSlots.Value)
+                : req.Telemetry is null
+                    ? null
+                    : Math.Max(0, req.Telemetry.ActiveSlots);
             var securedRunner = runnerPrincipal is null
                 ? null
                 : accessSecurity.RecordRunnerActivity(
