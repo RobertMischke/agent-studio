@@ -601,10 +601,12 @@ export class TaskService {
     );
   }
 
-  getDetail(jobId: string, watchPath?: string) {
+  getDetail(jobId: string, watchPath?: string, project?: string) {
+    let params = this.withWatchPath(watchPath).params ?? new HttpParams();
+    if (project) params = params.set('project', project);
     return this.http.get<TaskDetail>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`,
-      this.withWatchPath(watchPath),
+      params.keys().length ? { params } : {},
     );
   }
 

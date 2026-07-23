@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed,
 import { FormsModule } from '@angular/forms';
 import type { TaskInfo } from '../../../../models/task.model';
 import { BoardFiltersService } from '../../../board';
-import { TaskSelectionService } from '../../../task-detail';
 import { StudioTabStateService } from '../../services/studio-tab-state.service';
 import { GlobalSearchItem, GlobalSearchService } from './global-search.service';
 
@@ -17,7 +16,6 @@ import { GlobalSearchItem, GlobalSearchService } from './global-search.service';
 export class GlobalSearchComponent {
   private readonly api = inject(GlobalSearchService);
   private readonly tabs = inject(StudioTabStateService);
-  private readonly taskSelection = inject(TaskSelectionService);
   private readonly boardFilters = inject(BoardFiltersService);
   readonly tasks = input<readonly TaskInfo[]>([]);
   readonly open = model(false);
@@ -94,7 +92,6 @@ export class GlobalSearchComponent {
       const task = this.tasks().find(candidate => candidate.taskKey === item.taskKey);
       if (task) {
         this.tabs.open({ kind: 'task', taskKey: task.taskKey });
-        this.taskSelection.openDetail(task);
       }
     } else if (item.domain === 'commits' && item.sha) {
       this.boardFilters.setSoleProject(item.projectName);
