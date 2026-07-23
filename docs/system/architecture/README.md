@@ -9,6 +9,7 @@ Architecture source material and decision records.
 | [project-map.md](project-map.md) | Generated, prompt-readable manifest inventory for every managed project, with per-repository provenance, internal dependencies, rough size, and dated JSON history. |
 | [decisions/](decisions/README.md) | Accepted ADR archive plus proposed ADR slices. |
 | [ADR-0061: orchestrator settings scope](decisions/adr-archive.md#adr-0061---orchestrator-settings-are-a-two-tier-config-project-override-wins-over-workspace-default-wins-over-platform-constant-2026-07-11) | Project override -> workspace default -> platform constant precedence, persistence, runtime wiring, and retired-modal routing. |
+| [ADR-0065: two-level orchestration](decisions/adr-archive.md#adr-0065---orchestration-is-two-level-central-card-authority-and-host-local-operational-authority-2026-07-22) | Keeps global card authority in Task Server while moving capacity, admission, local queueing, host lifecycle, and local post-processing to the Host Orchestrator. |
 | [bus/](bus/) | Agent Message Bus contract and implementation state. |
 | [backend-structure/](backend-structure/) | Backend feature-folder structure target and style guide. |
 | [runner-lanes/](runner-lanes/) | Architecture constraints for runner and lane writers. |

@@ -254,6 +254,8 @@ PUT  /api/v1/runners/{runnerId}
 POST /api/v1/runners/{runnerId}/reports
 POST /api/v1/work-permits/{permitId}/accept
 POST /api/v1/runs/{runId}/reconcile
+POST /api/v1/runs/{runId}/post-steps/{stepExecutionId}/claim
+POST /api/v1/runs/{runId}/post-steps/{stepExecutionId}/complete
 ```
 
 Registration declares the host-orchestrator contract range and capabilities.
@@ -269,8 +271,14 @@ Every exchange is an authenticated, idempotent pair:
 | `capacity.configured`, `capacity.effective`, `capacity.active`, `capacity.queued`, `capacity.free` | Host-owned slot truth. Task Server validates arithmetic but does not recalculate it from lanes. |
 | `capabilities[]` | Versioned toolchain, clone, push, post-step, and containment capabilities. Project readiness carries a reason and observation time, not one green boolean. |
 | `work[]` | Accepted permit, task/run identity, lease and fence, local phase, queue position, process identity, and last local activity. |
+| `postProcessing[]` | Step execution id, parent run and attempt, claim fence, local status, start/finish time, and last local activity for authorized post-processing. |
 | `faults[]` | Typed host, repository, worktree, process, or toolchain fault with affected scope and recovery hint. |
 | `acknowledgedCommands[]` | Idempotent acknowledgement of central policy or recovery commands. |
+
+Capacity values are non-negative integers. `effective <= configured`,
+`active <= effective`, and `free = effective - active`; queued work does not
+occupy a slot. A violated invariant rejects the report as
+`host-capacity-invalid` without replacing the last accepted projection.
 
 Task Server replies with:
 
@@ -289,6 +297,17 @@ offline authority deadline, and immutable execution plus post-processing plan.
 Only then may the host enqueue or start the work. A stale permit, policy, report
 sequence, or competing acceptance fails without creating local authority.
 
+Each post-processing unit in the immutable attempt plan has a stable step
+execution id and an eligible host id. The executing host claims that unit
+atomically with its host instance, parent run lease, current fence, report
+sequence, and idempotency key. Claim returns a step-specific fence and offline
+deadline. Completion carries that fence, an outcome, artifact hashes, and its
+idempotency key. Duplicate claim or completion calls return the original result;
+a stale fence, wrong host, or second claimant is rejected and cannot advance a
+global gate. Unclaimed units may return to the central compatibility worker
+during migration; claimed units remain bound to their host until completion or
+positive no-overlap recovery.
+
 Compatibility fails before work acceptance. A server requiring
 `host-orchestrator/v1` answers an older host with HTTP 426 and the typed code
 `host-orchestrator-contract-unsupported`, plus its supported range. During the
@@ -297,9 +316,12 @@ is no silent fallback when a project has switched to host orchestration.
 
 Report snapshots are facts, while events remain the durable history. A newer
 snapshot replaces the central host projection only when its sequence is higher.
-Replayed events and artifacts retain idempotency keys and fences. This lets the
-central UI show the last reported fact and its age without presenting inference
-as live host state.
+Re-sending the accepted sequence with the same payload digest is an idempotent
+acknowledgement. The same sequence with a different digest is rejected as
+`host-report-sequence-conflict`; a lower sequence is acknowledged as stale and
+never replaces the projection. Replayed events and artifacts retain idempotency
+keys and fences. This lets the central UI show the last reported fact and its
+age without presenting inference as live host state.
 
 ### Management API
 
