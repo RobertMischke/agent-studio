@@ -1237,12 +1237,14 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
 
   const activity = status?.activeJobs?.find(item =>
     item.jobId === job.id && item.project === job.projectName);
+  const lifecycleStep = runningLifecycleStep(job);
   const matchesLegacyCurrent = !activity
     && !!status?.currentJob
     && status.currentJob === job.id
     && (!status.currentProject || status.currentProject === job.projectName);
-  if (activity || matchesLegacyCurrent) {
-    const step = activity?.step ?? runningLifecycleStep(job) ?? 'aspects';
+  const phaseOnlyActive = !status && job.phase === 'post-processing-running';
+  if (activity || matchesLegacyCurrent || lifecycleStep || phaseOnlyActive) {
+    const step = activity?.step ?? lifecycleStep ?? (matchesLegacyCurrent ? 'aspects' : 'processing');
     const stepLabel = autoReviewStepLabel(step);
     if (step === 'gate-queued') {
       const queueStartedAt = Date.parse(activity?.startedAt ?? job.enteredLaneAt ?? job.lastActivity);
@@ -1271,7 +1273,7 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
 
 function runningLifecycleStep(job: TaskInfo): string | null {
   const running = job.postProcessingChecks?.find(check => check.status === 'running');
-  if (!running) return job.phase === 'post-processing-running' ? 'processing' : null;
+  if (!running) return null;
   const name = running.name.toLowerCase();
   if (name.includes('build') || name.includes('gate')) return 'gate';
   if (name.includes('aspect')) return 'aspects';

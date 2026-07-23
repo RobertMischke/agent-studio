@@ -79,4 +79,35 @@ describe('post-processing card activity', () => {
       postProcessingChecks: [{ name: 'code-review-grade', status: 'running' }],
     }), legacy, now)?.label).toBe('Grade');
   });
+
+  it('uses a running lifecycle check when the status snapshot is unavailable', () => {
+    expect(buildAutoReviewProcessBadge(task({
+      postProcessingChecks: [{ name: 'build-test-gate', status: 'running' }],
+    }), null, now)).toMatchObject({
+      tone: 'active',
+      label: 'Gate running',
+    });
+  });
+
+  it('uses the running phase only when no newer status snapshot is available', () => {
+    expect(buildAutoReviewProcessBadge(task({
+      phase: 'post-processing-running',
+    }), null, now)).toMatchObject({
+      tone: 'active',
+      label: 'Processing',
+    });
+    expect(buildAutoReviewProcessBadge(task({
+      phase: 'post-processing-running',
+    }), status('grade'), now)).toMatchObject({
+      tone: 'active',
+      label: 'Grade',
+    });
+    expect(buildAutoReviewProcessBadge(task({
+      id: 'another-review',
+      phase: 'post-processing-running',
+    }), status('grade'), now)).toMatchObject({
+      tone: 'waiting',
+      label: 'waiting 2h 10m',
+    });
+  });
 });

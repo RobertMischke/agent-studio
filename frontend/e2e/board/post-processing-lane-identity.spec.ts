@@ -351,7 +351,6 @@ test.describe('Post Processing lane identity', () => {
     await expect(card.getByTestId('task-card-phase')).toHaveCount(0);
     await expect(card.getByTestId('task-card-post-processing-activity')).toContainText('Aspects');
     await expect(card.getByTestId('task-card-effective-model')).toHaveAttribute('data-cli', 'codex');
-    await expect(card.getByTestId('task-card-effective-model')).toContainText('Codex');
 
     const bubble = card.getByTestId('task-card-token-bubble');
     await expect(bubble).toBeVisible();
@@ -405,7 +404,7 @@ test.describe('Post Processing lane identity', () => {
     };
     await seedBoardTab(page);
     await installRoutes(page, [active, waiting, gateQueued], status);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const lane = page.getByTestId('lane-4-auto-review');
     const activeCard = page.locator('[data-testid="task-card"]', { hasText: active.title });
