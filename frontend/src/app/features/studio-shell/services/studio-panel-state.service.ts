@@ -8,7 +8,6 @@ const STUDIO_PANEL_KINDS = new Set<StudioPanelKind>([
   'cli',
   'activity',
   'runbook',
-  'admin',
   'settings',
 ]);
 
@@ -108,6 +107,10 @@ function readPanelState(): StudioPanelPersistedState {
     let active = typeof parsed.active === 'string' && STUDIO_PANEL_KINDS.has(parsed.active as StudioPanelKind)
       ? parsed.active as StudioPanelKind
       : undefined;
+    // The workspace Admin sidebar panel was removed (its destinations live in
+    // the CLI/Activity panels). A persisted active:'admin' would land on the
+    // "Panel not implemented" fallback, so fall back to the Explorer.
+    if ((parsed.active as string) === 'admin') active = 'explorer';
     // AGT-2035 migration: the 'settings' sidebar panel was removed (settings is
     // now a full editor tab). A persisted active:'settings' would land on the
     // "Panel not implemented" fallback, so fall back to the Explorer.

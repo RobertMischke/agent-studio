@@ -12,7 +12,7 @@
 export type StudioTabKind = 'board' | 'epics' | 'epic' | 'task' | 'hub' | 'workbench' | 'diff' | 'activity' | 'url-preview' | 'workspace-settings' | 'welcome';
 
 /** Sidebar panel kinds reachable from the ActivityBar. */
-export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'admin' | 'settings';
+export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'settings';
 
 /** Board tab - one per project; key `board:<projectName>` or `board:__all__`. */
 export interface BoardTab { kind: 'board'; projectName: string; }

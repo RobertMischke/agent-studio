@@ -32,7 +32,7 @@ export class StudioActivityBarComponent {
   readonly badgeCounts = input<Readonly<Record<string, number>>>({});
   /** Whether any epics exist. The Epics button is hidden when false. */
   readonly hasEpics = input<boolean>(false);
-  readonly panelToggle = output<StudioActivityPanelKey | 'settings' | 'admin'>();
+  readonly panelToggle = output<StudioActivityPanelKey | 'settings'>();
   /** Fires when the user clicks the Epics button (shown only when epics exist). */
   readonly openEpicsRequest = output<void>();
 }
