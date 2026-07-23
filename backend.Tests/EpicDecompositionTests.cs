@@ -446,6 +446,18 @@ public class EpicDecompositionTests : IDisposable
         Assert.Equal("project:test-project", verification.CreationProvenance?.ContextKey);
         Assert.Equal(GoalTaskPurposes.Verification, verification.CreationProvenance?.Purpose);
         Assert.NotEqual(default, verification.CreationProvenance?.CreatedAt);
+
+        using var persisted = System.Text.Json.JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(verification.FolderPath, "task.json")));
+        var persistedProvenance = persisted.RootElement.GetProperty("creationProvenance");
+        Assert.Equal(
+            TaskCreationInitiators.Orchestrator,
+            persistedProvenance.GetProperty("initiator").GetString());
+        Assert.Equal(epic.Id, persistedProvenance.GetProperty("goalId").GetString());
+        Assert.Equal(
+            GoalTaskPurposes.Verification,
+            persistedProvenance.GetProperty("purpose").GetString());
+        Assert.False(persistedProvenance.TryGetProperty("Initiator", out _));
     }
 
     // ---- harness -----------------------------------------------------------
