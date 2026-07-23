@@ -147,7 +147,9 @@ pipeline view.
   fixed baseline, `work-package` adds tests selected from the current diff and
   Test Hub history, and `full` runs every declared test command. Project
   settings map task lanes to levels. Auto Review defaults to `work-package`
-  when no mapping exists; an unavailable diff falls back to `full`.
+  when no mapping exists; an unavailable diff falls back to `full`. A configured
+  continuous baseline also runs for documentation-only diffs, and an explicitly
+  required `full` level can never be bypassed by the no-code-diff optimization.
 - The build/test step reason always states the effective level, selected count,
   whether the full suite ran, and how many full-suite commands were omitted.
   Its `post-steps/build-test-gate-*.log` contains the exact diff input, history

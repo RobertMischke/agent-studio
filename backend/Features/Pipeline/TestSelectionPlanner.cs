@@ -63,8 +63,15 @@ public static class TestSelectionPlanner
         if (!string.IsNullOrWhiteSpace(requiredLevel))
             return TestExecutionLevels.Normalize(requiredLevel);
         if (!string.IsNullOrWhiteSpace(lane)
-            && policy?.LaneLevels?.TryGetValue(lane, out var configured) == true)
-            return TestExecutionLevels.Normalize(configured);
+            && policy?.LaneLevels is { } laneLevels)
+        {
+            if (laneLevels.TryGetValue(lane, out var configured))
+                return TestExecutionLevels.Normalize(configured);
+            var caseInsensitiveMatch = laneLevels.FirstOrDefault(pair =>
+                string.Equals(pair.Key, lane, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(caseInsensitiveMatch.Key))
+                return TestExecutionLevels.Normalize(caseInsensitiveMatch.Value);
+        }
         return TestExecutionLevels.WorkPackage;
     }
 

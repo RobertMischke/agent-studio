@@ -189,6 +189,23 @@ public sealed class TestSelectionPlannerTests : IDisposable
         Assert.Contains("feature regression set", selected.SelectionReason);
     }
 
+    [Fact]
+    public void LaneLevelResolution_IsCaseInsensitiveAfterSettingsDeserialization()
+    {
+        var policy = new TestExecutionPolicy
+        {
+            LaneLevels = new Dictionary<string, string>
+            {
+                ["4-AUTO-REVIEW"] = TestExecutionLevels.Continuous,
+            },
+        };
+
+        var level = TestSelectionPlanner.ResolveLevel(
+            policy, TaskStates.AutoReview, requiredLevel: null);
+
+        Assert.Equal(TestExecutionLevels.Continuous, level);
+    }
+
     private void Write(string relativePath, string contents)
     {
         var path = Path.Combine(_root, relativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -322,6 +339,58 @@ public sealed class StagedBuildTestGateBehaviorTests : IDisposable
         Assert.Equal(TestExecutionLevels.Continuous, finding.Scope);
         Assert.True(File.Exists(marker), "the selected work-package command must continue after the unrelated failure");
         Assert.Contains("full-suite=not-run", result.Reason);
+    }
+
+    [Fact]
+    public async Task ContinuousBaselineStillRunsForDocumentationOnlyDiff()
+    {
+        var marker = Path.Combine(_root, "continuous-ran.txt");
+        var writeMarker = OperatingSystem.IsWindows()
+            ? $"type nul > \"{marker}\""
+            : $"touch \"{marker}\"";
+        var request = new BuildTestGateRequest(_root, null, "test", RequireExactSubject: false)
+        {
+            TestExecution = new TestExecutionPolicy
+            {
+                ContinuousCommands = [writeMarker],
+            },
+            Lane = TaskStates.AutoReview,
+        };
+
+        var result = await _runner.RunAsync(
+            request, ["docs/contract.md"],
+            new BuildProfile { TestCmds = ["exit 0"] },
+            PostStepMode.Fail, TimeSpan.FromSeconds(30), CancellationToken.None);
+
+        Assert.Equal(BuildTestGateVerdict.Ok, result.Verdict);
+        Assert.True(File.Exists(marker));
+        Assert.Equal(TestExecutionLevels.WorkPackage, result.TestSelection!.Level);
+        Assert.Contains(writeMarker, result.TestSelection.SelectedCommands);
+        Assert.Contains("full-suite=not-run", result.Reason);
+    }
+
+    [Fact]
+    public async Task RequiredFullSuiteCannotBeSkippedByDocumentationOnlyDiff()
+    {
+        var marker = Path.Combine(_root, "full-ran.txt");
+        var writeMarker = OperatingSystem.IsWindows()
+            ? $"type nul > \"{marker}\""
+            : $"touch \"{marker}\"";
+        var request = new BuildTestGateRequest(_root, null, "release", RequireExactSubject: false)
+        {
+            RequiredTestLevel = TestExecutionLevels.Full,
+        };
+
+        var result = await _runner.RunAsync(
+            request, ["docs/release.md"],
+            new BuildProfile { TestCmds = [writeMarker] },
+            PostStepMode.Fail, TimeSpan.FromSeconds(30), CancellationToken.None);
+
+        Assert.Equal(BuildTestGateVerdict.Ok, result.Verdict);
+        Assert.True(File.Exists(marker));
+        Assert.True(result.TestSelection!.FullSuiteRequired);
+        Assert.True(result.TestSelection.FullSuiteRan);
+        Assert.Contains("full-suite=required-and-run", result.Reason);
     }
 
     [Fact]

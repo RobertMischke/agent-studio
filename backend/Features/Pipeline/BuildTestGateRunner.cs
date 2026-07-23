@@ -198,7 +198,14 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         CancellationToken ct)
     {
         if (mode == PostStepMode.Off) return Skipped("mode=off");
-        if (changedFiles is { Count: > 0 } && !HasCodeDiff(changedFiles))
+        var requestedLevel = TestSelectionPlanner.ResolveLevel(
+            request.TestExecution, request.Lane, request.RequiredTestLevel);
+        var hasContinuousBaseline = request.TestExecution?.ContinuousCommands?
+            .Any(command => !string.IsNullOrWhiteSpace(command)) == true;
+        if (changedFiles is { Count: > 0 }
+            && !HasCodeDiff(changedFiles)
+            && requestedLevel != TestExecutionLevels.Full
+            && !hasContinuousBaseline)
             return Skipped("no code diff");
 
         var repositoryPath = Path.GetFullPath(request.RepositoryPath);
