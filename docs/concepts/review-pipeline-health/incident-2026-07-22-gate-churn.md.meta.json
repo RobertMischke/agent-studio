@@ -23,6 +23,12 @@
       "title": "Gate testet Subject auf aktuellem develop (Stale-Branch-Falle schliessen)",
       "linkedAt": "2026-07-23T13:23:59.4340374Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2255",
+      "title": "Lane-Move meldet Success, obwohl der Quellordner vollstaendig zurueckbleibt",
+      "linkedAt": "2026-07-23T15:04:36.5873413Z",
+      "source": "auto"
     }
   ]
 }
