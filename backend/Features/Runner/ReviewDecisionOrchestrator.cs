@@ -2819,6 +2819,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         });
     }
 
+    /// <summary>
+    /// ssh-gate bridge (AGT-2222 tranche 2): derive the ssh alias from the
+    /// project's execution runner by convention - "agent-runner-01" connects via
+    /// the "agent-runner" ssh host alias (trailing instance number stripped).
+    /// Projects without a remote runner gate locally. Removed together with the
+    /// bridge once AGT-2229 ships claimable remote gate steps.
+    /// </summary>
+    private static string? ResolveRemoteGateSshHost(ProjectSettings? settings)
+    {
+        var runner = settings?.ExecutionRunner;
+        if (string.IsNullOrWhiteSpace(runner)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(runner.Trim(), @"^(.+?)-\d+$");
+        return match.Success ? match.Groups[1].Value : runner.Trim();
+    }
+
     private async Task<BuildTestGateResult?> RunBuildTestGatePostStepAsync(
         string workspace,
         WatchPathEntry entry,
@@ -2891,6 +2906,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             SubjectRef = subject.SubjectRef,
             InfrastructureTimeout = TimeSpan.FromSeconds(Math.Max(1, infrastructureTimeoutSeconds)),
             QueueWaitTimeout = TimeSpan.FromSeconds(Math.Max(1, queueWaitTimeoutSeconds)),
+            RemoteSshHost = ResolveRemoteGateSshHost(settings),
         };
 
         BuildTestGateResult? result = null;
