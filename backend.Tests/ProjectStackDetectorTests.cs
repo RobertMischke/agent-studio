@@ -110,6 +110,48 @@ public sealed class ProjectStackDetectorTests : IDisposable
         Assert.Contains(FrontendStylelintCommand.Command, fakeGate.Profile?.BuildCmds ?? []);
     }
 
+    [Fact]
+    public async Task StylelintStep_IsProjectSpecific_AndDoesNotProbePureDotNetRepository()
+    {
+        var angularRoot = Path.Combine(_root, "angular-app");
+        var dotNetRoot = Path.Combine(_root, "dotnet-app");
+        Write("angular-app/angular.json", "{}");
+        Write("angular-app/package.json", "{}");
+        Write("dotnet-app/App.csproj", "<Project />");
+        var step = PipelineCatalogue.Standard.Post.Single(candidate =>
+            candidate.Id == PipelineCatalogue.LintScssStepId);
+
+        var angularStacks = ProjectStackDetector.Detect(angularRoot);
+        var dotNetStacks = ProjectStackDetector.Detect(dotNetRoot);
+
+        Assert.Equal(PipelineStepStacks.Angular, step.AppliesTo);
+        Assert.Equal([PipelineStepStacks.Angular, PipelineStepStacks.Node], angularStacks);
+        Assert.Equal([PipelineStepStacks.DotNet], dotNetStacks);
+        Assert.True(ProjectStackDetector.Applies(step.AppliesTo, angularStacks));
+        Assert.False(ProjectStackDetector.Applies(step.AppliesTo, dotNetStacks));
+
+        var execution = PipelineStepExecutionResolver.Resolve(step, angularRoot, settings: null);
+        var command = Assert.Single(execution.Commands);
+        Assert.Equal("", command.WorkingSubdir);
+        Assert.Equal(FrontendStylelintCommand.Command, command.Command);
+
+        var fakeGate = new FakeBuildTestGateRunner();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _root })
+            .Build();
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        var probes = new PipelineStepProbeService(fakeGate, settings, config);
+
+        var angularProbe = await probes.RunAsync("Angular", angularRoot, step, CancellationToken.None);
+        var dotNetProbe = await probes.RunAsync(".NET", dotNetRoot, step, CancellationToken.None);
+
+        Assert.Equal("passed", angularProbe.Status);
+        Assert.Equal("not-applicable", dotNetProbe.Status);
+        Assert.False(dotNetProbe.Applicable);
+        Assert.Contains("requires angular", dotNetProbe.Output, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, fakeGate.InvocationCount);
+    }
+
     private void Write(string relativePath, string content)
     {
         var path = Path.Combine(_root, relativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -121,6 +163,7 @@ public sealed class ProjectStackDetectorTests : IDisposable
     {
         public BuildTestGateRequest? Request { get; private set; }
         public BuildProfile? Profile { get; private set; }
+        public int InvocationCount { get; private set; }
 
         public Task<BuildTestGateResult> RunAsync(
             BuildTestGateRequest request,
@@ -130,6 +173,7 @@ public sealed class ProjectStackDetectorTests : IDisposable
             TimeSpan timeout,
             CancellationToken ct)
         {
+            InvocationCount++;
             Request = request;
             Profile = profile;
             return Task.FromResult(new BuildTestGateResult(
