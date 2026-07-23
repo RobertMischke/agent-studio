@@ -29,6 +29,7 @@ import {
   WikiGradingRunStatus,
   WikiNodeType,
   WikiPulse,
+  RelatedTaskReference,
   WikiSearchResponse,
   WikiSearchResult,
   WikiTree,
@@ -47,6 +48,7 @@ import { WikiFolderViewComponent } from './wiki-folder-view/wiki-folder-view.com
 import { WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiSearchResultsComponent } from './wiki-search-results/wiki-search-results.component';
 import { WikiSourceBadgeComponent } from './wiki-source-badge/wiki-source-badge.component';
+import { WikiRelatedTasksComponent } from './wiki-related-tasks/wiki-related-tasks.component';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -66,11 +68,21 @@ import {
 import { WikiMetricTone, documentMetricChips, driftChip } from './wiki-metric-chips';
 import { WikiClassMeta, classificationBadges, classificationMeta } from './wiki-classification';
 import { withRouteSegment } from '../../../../services/url-hash.util';
+import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
+import {
+  WikiLinkedElement,
+  extractWikiLinkedElements,
+  resolveWikiPageTarget,
+  scrollToWikiAnchor,
+  wikiLinkedElementKindLabel,
+  wikiLinkedElementTitle,
+} from './wiki-linked-element';
+import { WikiMetaPanelStateService } from './wiki-meta-panel-state.service';
+import { WikiMetaSectionComponent } from './wiki-meta-section/wiki-meta-section.component';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
 const WIKI_STATE_STORAGE_PREFIX = 'atp.projectWiki.v1.';
-const WIKI_META_PANEL_STORAGE_KEY = 'atp.wikiMetaPanel.v1';
 const WIKI_NAV_MIN_WIDTH = 216;
 const WIKI_NAV_MAX_WIDTH = 420;
 const WIKI_NAV_DEFAULT_WIDTH = 286;
@@ -94,12 +106,6 @@ interface WikiResizeState {
   pointerId: number;
   startX: number;
   startWidth: number;
-}
-
-interface WikiDocLink {
-  label: string;
-  target: string;
-  kind: 'doc' | 'anchor' | 'external';
 }
 
 const WIKI_SEARCH_DEBOUNCE_MS = 300;
@@ -137,9 +143,12 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     WikiDashboardComponent,
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
+    WikiMetaSectionComponent,
+    WikiRelatedTasksComponent,
     WikiSearchResultsComponent,
     WikiSourceBadgeComponent,
   ],
+  providers: [WikiMetaPanelStateService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
   styleUrl: './project-wiki-section.scss',
@@ -156,6 +165,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly notifications = inject(NotificationService);
+  private readonly taskNavigation = inject(TaskReferenceNavigationService);
+  private readonly metaPanelState = inject(WikiMetaPanelStateService);
 
   readonly cliTypes = CLI_TYPES;
 
@@ -187,7 +198,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly navCollapsed = signal(false);
   // One global preference covers the landing and every document. Page
   // navigation must never alter it.
-  readonly contextCollapsed = signal(false);
+  readonly contextCollapsed = this.metaPanelState.collapsed;
   readonly navWidth = signal(WIKI_NAV_DEFAULT_WIDTH);
   readonly contextWidth = signal(WIKI_CONTEXT_DEFAULT_WIDTH);
   readonly navWidthStyle = computed(() => `${this.navWidth()}px`);
@@ -442,7 +453,25 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     return raw.trim() ? raw.trim().split(/\s+/).length : 0;
   });
 
-  readonly docLinks = computed<WikiDocLink[]>(() => this.extractLinks(this.displayContent()));
+  readonly docLinks = computed<WikiLinkedElement[]>(() => extractWikiLinkedElements(this.displayContent()));
+  readonly linkedTaskReferences = computed<RelatedTaskReference[]>(() => {
+    const history = this.history();
+    const related = [...(history?.relatedTasks ?? [])];
+    const taskKey = history?.metadata.taskKey?.trim();
+    if (taskKey && !related.some(item => item.key.toUpperCase() === taskKey.toUpperCase())) {
+      related.unshift({
+        key: taskKey,
+        title: `Source task ${taskKey}`,
+        linkedAt: history?.metadata.updatedAt ?? '',
+        source: 'auto',
+        exists: null,
+      });
+    }
+    return related;
+  });
+  readonly linkedElementCount = computed(() => this.docLinks().length + this.linkedTaskReferences().length);
+  protected readonly linkKindLabel = wikiLinkedElementKindLabel;
+  protected readonly linkedElementTitle = wikiLinkedElementTitle;
 
   /**
    * Compact drift grade for the open page, surfaced in the meta rail's toggle
@@ -972,12 +1001,38 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   }
 
   toggleContext(): void {
-    this.setContextCollapsed(!this.contextCollapsed());
+    this.metaPanelState.togglePanel();
   }
 
   private setContextCollapsed(collapsed: boolean): void {
-    this.contextCollapsed.set(collapsed);
-    this.writeMetaPanelState(collapsed);
+    this.metaPanelState.setPanelCollapsed(collapsed);
+  }
+
+  linkedElementHref(link: WikiLinkedElement): string {
+    if (link.kind === 'external' || link.kind === 'anchor') return link.target;
+    if (link.kind === 'task') return `#task:${link.taskReference ?? link.label}`;
+    const rel = this.resolveLinkedWikiPage(link);
+    return rel
+      ? buildWikiRouteHash(this.slug(), { kind: 'page', relPath: rel })
+      : link.target;
+  }
+
+  openLinkedElement(event: MouseEvent, link: WikiLinkedElement): void {
+    if (link.kind === 'external') return;
+    event.preventDefault();
+    if (link.kind === 'task') {
+      const reference = link.taskReference ?? link.label;
+      const match = this.taskNavigation.markdownReferences()
+        .find(item => item.label.toUpperCase() === reference.toUpperCase());
+      this.taskNavigation.openTaskKey(match?.taskKey ?? reference);
+      return;
+    }
+    if (link.kind === 'anchor') {
+      scrollToWikiAnchor(this.host.nativeElement as HTMLElement, link.target);
+      return;
+    }
+    const rel = this.resolveLinkedWikiPage(link);
+    if (rel) this.openFile(rel, this.wikiTypeForRel(rel));
   }
 
   startPanelResize(event: PointerEvent, panel: WikiResizablePanel): void {
@@ -1544,7 +1599,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private restorePersistedState(projectName: string): void {
     const state = this.readPersistedState(projectName);
     this.navCollapsed.set(state?.navCollapsed === true);
-    this.contextCollapsed.set(this.readMetaPanelState());
+    this.metaPanelState.restore();
     this.navWidth.set(this.clampNavWidth(state?.navWidth ?? WIKI_NAV_DEFAULT_WIDTH));
     this.contextWidth.set(this.clampContextWidth(state?.contextWidth ?? WIKI_CONTEXT_DEFAULT_WIDTH));
     this.expanded.set(new Set(state?.expandedIds ?? []));
@@ -1773,25 +1828,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     return `${WIKI_STATE_STORAGE_PREFIX}${encodeURIComponent(projectName)}`;
   }
 
-  private readMetaPanelState(): boolean {
-    try {
-      return globalThis.localStorage?.getItem(WIKI_META_PANEL_STORAGE_KEY) === 'collapsed';
-    } catch {
-      return false;
-    }
-  }
-
-  private writeMetaPanelState(collapsed: boolean): void {
-    try {
-      globalThis.localStorage?.setItem(
-        WIKI_META_PANEL_STORAGE_KEY,
-        collapsed ? 'collapsed' : 'expanded',
-      );
-    } catch {
-      /* persistence is a convenience; the panel remains interactive without storage */
-    }
-  }
-
   private safeViewerTab(value: unknown): WikiViewerTab {
     return value === 'source' || value === 'doc' || value === 'report' || value === 'edit'
       ? value
@@ -1966,6 +2002,14 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
     return null;
   }
 
+  private resolveLinkedWikiPage(link: WikiLinkedElement): string | null {
+    const openedRel = this.openedRel();
+    if (!openedRel) return null;
+    const rel = resolveWikiPageTarget(link.target, openedRel);
+    const node = rel ? this.findNode(this.roots(), rel) : null;
+    return node && node.type !== 'folder' ? rel : null;
+  }
+
   private expandAncestors(rel: string): void {
     const parts = rel.split('/');
     if (parts.length <= 1) return;
@@ -1974,50 +2018,6 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
       next.add(parts.slice(0, i).join('/'));
     }
     this.expanded.set(next);
-  }
-
-  private extractLinks(content: string): WikiDocLink[] {
-    const links: WikiDocLink[] = [];
-    const seen = new Set<string>();
-    const push = (label: string, target: string): void => {
-      const cleanTarget = target.trim();
-      if (!cleanTarget || cleanTarget.startsWith('mailto:')) return;
-      const key = `${label}\u0000${cleanTarget}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      links.push({
-        label: label.trim() || cleanTarget,
-        target: cleanTarget,
-        kind: this.linkKind(cleanTarget),
-      });
-    };
-
-    const markdownLink = /(!)?\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-    for (const match of content.matchAll(markdownLink)) {
-      if (match[1]) continue;
-      push(match[2] ?? '', match[3] ?? '');
-    }
-
-    const htmlLink = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gis;
-    for (const match of content.matchAll(htmlLink)) {
-      push((match[2] ?? '').replace(/<[^>]+>/g, '').trim(), match[1] ?? '');
-    }
-
-    return links.slice(0, 8);
-  }
-
-  private linkKind(target: string): WikiDocLink['kind'] {
-    if (target.startsWith('#')) return 'anchor';
-    if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return 'external';
-    return 'doc';
-  }
-
-  linkKindLabel(kind: WikiDocLink['kind']): string {
-    switch (kind) {
-      case 'anchor': return 'Anchor';
-      case 'external': return 'External';
-      default: return 'Doc';
-    }
   }
 
   navPath(node: WikiTreeNode): string {

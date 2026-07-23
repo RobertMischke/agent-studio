@@ -1,0 +1,15 @@
+<button class="wms__toggle"
+        type="button"
+        [attr.data-testid]="toggleTestId()"
+        [attr.aria-expanded]="!collapsed()"
+        [attr.aria-controls]="bodyId()"
+        (click)="toggle()">
+  <span>{{ title() }}</span>
+  <span class="wms__end">
+    <ng-content select="[meta-section-count]" />
+    <app-studio-icon [name]="collapsed() ? 'chevronRight' : 'chevronDown'" [size]="12" />
+  </span>
+</button>
+<div [id]="bodyId()" [hidden]="collapsed()">
+  <ng-content />
+</div>

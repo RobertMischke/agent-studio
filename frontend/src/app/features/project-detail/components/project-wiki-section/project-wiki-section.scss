@@ -1308,20 +1308,6 @@
   background: color-mix(in srgb, var(--studio-accent) 6%, transparent);
 }
 
-.pwiki__panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 32px;
-  padding: 0 var(--studio-spacing-3);
-  border-bottom: 1px solid var(--studio-border);
-  color: var(--studio-fg-muted);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
 .pwiki__info-list {
   display: flex;
   flex-direction: column;
@@ -1395,10 +1381,6 @@
 }
 
 .pwiki__links li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--studio-spacing-1) var(--studio-spacing-2);
-  align-items: baseline;
   padding-bottom: var(--studio-spacing-2);
   border-bottom: 1px solid color-mix(in srgb, var(--studio-border) 70%, transparent);
 }
@@ -1416,6 +1398,24 @@
   text-transform: uppercase;
 }
 
+.pwiki__linked-element {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--studio-spacing-1) var(--studio-spacing-2);
+  align-items: baseline;
+  color: inherit;
+  text-decoration: none;
+}
+
+.pwiki__linked-element:hover .pwiki__link-label {
+  color: var(--studio-accent);
+  text-decoration: underline;
+}
+.pwiki__linked-element:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
 .pwiki__link-label {
   min-width: 0;
   color: var(--studio-fg);

@@ -7,6 +7,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { vi } from 'vitest';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
 import { WikiStarsService } from './wiki-stars.service';
+import { TaskReferenceNavigationService } from '../../../../services/task-reference-navigation.service';
 import type {
   ProjectStyleGuideCatalogue,
   WikiFileHistory,
@@ -59,6 +60,15 @@ const TREE: WikiTree = {
     },
     { name: 'README.md', title: 'Docs index', relPath: 'README.md', type: 'md', children: [] },
   ],
+};
+
+const openTaskKey = vi.fn(() => true);
+const taskNavigationStub = {
+  markdownReferences: () => [
+    { label: 'AGT-2050', taskKey: 'PROJ-001::agt-2050' },
+    { label: 'QS-17', taskKey: 'PROJ-001::qs-17' },
+  ],
+  openTaskKey,
 };
 
 /** Three top-level categories (beta with a nested folder) for reorder tests. */
@@ -209,6 +219,7 @@ async function setup(tree: WikiTree = TREE, pulse: WikiPulse = PULSE) {
       provideHttpClient(),
       provideHttpClientTesting(),
       provideRouter([]),
+      { provide: TaskReferenceNavigationService, useValue: taskNavigationStub },
     ],
   }).compileComponents();
 
@@ -276,6 +287,13 @@ function wikiStorageKey(projectName = 'Demo'): string {
   return `atp.projectWiki.v1.${encodeURIComponent(projectName)}`;
 }
 
+function metaPanelStorage(): {
+  collapsed?: boolean;
+  sections?: Record<string, boolean>;
+} {
+  return JSON.parse(localStorage.getItem('atp.wikiMetaPanel.v1') ?? '{}');
+}
+
 function clearWikiStorage(): void {
   for (const key of Object.keys(localStorage)) {
     if (key.startsWith('atp.projectWiki.v1.')
@@ -332,6 +350,7 @@ const HISTORY: WikiFileHistory = {
 describe('ProjectWikiSectionComponent', () => {
   beforeEach(() => {
     clearWikiStorage();
+    openTaskKey.mockClear();
     // Deep-link tests drive the hash; reset it so each test starts clean and
     // the existing (hash-agnostic) tests never inherit a stale wiki route.
     window.history.replaceState(null, '', '/');
@@ -844,7 +863,7 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     expect(cmp.contextCollapsed()).toBe(false);
 
-    expect(localStorage.getItem('atp.wikiMetaPanel.v1')).toBe('expanded');
+    expect(metaPanelStorage().collapsed).toBe(false);
     http.verify();
   });
 
@@ -861,7 +880,7 @@ describe('ProjectWikiSectionComponent', () => {
   it('round-trips the meta-rail preference through localStorage', async () => {
     const { fixture, http } = await setup();
     fixture.componentInstance.toggleContext();
-    expect(localStorage.getItem('atp.wikiMetaPanel.v1')).toBe('collapsed');
+    expect(metaPanelStorage().collapsed).toBe(true);
     fixture.destroy();
 
     const reloaded = TestBed.createComponent(ProjectWikiSectionComponent);
@@ -878,6 +897,118 @@ describe('ProjectWikiSectionComponent', () => {
     expect(reloaded.componentInstance.contextCollapsed()).toBe(true);
     expect(el(reloaded).querySelector('[data-testid="project-wiki-meta-toggle"]')?.getAttribute('aria-expanded'))
       .toBe('false');
+    http.verify();
+  });
+
+  it('defaults Linked elements open and History closed, with Linked elements first', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>(
+      '[data-testid="project-wiki-file-concepts/overview.md"]',
+    )!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Overview\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    const root = el(fixture);
+    const linked = root.querySelector<HTMLElement>('[data-testid="project-wiki-linked-elements"]')!;
+    const history = root.querySelector<HTMLElement>('[data-testid="project-wiki-history-panel"]')!;
+    expect(linked.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(root.querySelector('[data-testid="project-wiki-section-toggle-linked-elements"]')
+      ?.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector('[data-testid="project-wiki-section-toggle-history"]')
+      ?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('#project-wiki-section-linked-elements')?.hasAttribute('hidden')).toBe(false);
+    expect(root.querySelector('#project-wiki-section-history')?.hasAttribute('hidden')).toBe(true);
+    http.verify();
+  });
+
+  it('round-trips independent meta-section states through the shared storage key', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>(
+      '[data-testid="project-wiki-file-concepts/overview.md"]',
+    )!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Overview\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    const root = el(fixture);
+    root.querySelector<HTMLButtonElement>(
+      '[data-testid="project-wiki-section-toggle-linked-elements"]',
+    )!.click();
+    root.querySelector<HTMLButtonElement>(
+      '[data-testid="project-wiki-section-toggle-history"]',
+    )!.click();
+    expect(metaPanelStorage().sections?.['linkedElements']).toBe(true);
+    expect(metaPanelStorage().sections?.['history']).toBe(false);
+    fixture.destroy();
+
+    const reloaded = TestBed.createComponent(ProjectWikiSectionComponent);
+    reloaded.componentRef.setInput('projectName', 'Demo');
+    reloaded.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
+    flushWikiPulse(http);
+    flushGradingContext(http);
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Restored overview\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    reloaded.detectChanges();
+    flushStyleGuidesIfRendered(http);
+    flushWikiHomeIfRendered(http);
+    reloaded.detectChanges();
+
+    expect(el(reloaded).querySelector('[data-testid="project-wiki-section-toggle-linked-elements"]')
+      ?.getAttribute('aria-expanded')).toBe('false');
+    expect(el(reloaded).querySelector('[data-testid="project-wiki-section-toggle-history"]')
+      ?.getAttribute('aria-expanded')).toBe('true');
+    http.verify();
+  });
+
+  it('opens linked wiki pages in place and task references in task detail', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>(
+      '[data-testid="project-wiki-file-concepts/overview.md"]',
+    )!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md').flush({
+      relPath: 'concepts/overview.md',
+      content: '# Overview\n\n[Docs index](../README.md)\n[AGT-2050](task:AGT-2050)',
+    });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    const root = el(fixture);
+    const taskLink = root.querySelector<HTMLAnchorElement>(
+      '.pwiki__linked-element[title="Open task AGT-2050"]',
+    )!;
+    expect(taskLink).toBeTruthy();
+    taskLink.click();
+    expect(openTaskKey).toHaveBeenCalledWith('PROJ-001::agt-2050');
+
+    const wikiLink = root.querySelector<HTMLAnchorElement>(
+      '.pwiki__linked-element[title="Open wiki page: Docs index"]',
+    )!;
+    expect(wikiLink).toBeTruthy();
+    wikiLink.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/README.md')
+      .flush({ relPath: 'README.md', content: '# Docs index' });
+    http.expectOne('/api/projects/Demo/wiki/history/README.md').flush({
+      ...HISTORY,
+      relPath: 'README.md',
+      commits: [],
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedRel()).toBe('README.md');
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')?.textContent)
+      .toContain('README.md');
     http.verify();
   });
 

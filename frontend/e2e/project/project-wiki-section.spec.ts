@@ -192,12 +192,43 @@ test.describe('Project detail - Knowledge section', () => {
     await expect(viewer).toBeVisible();
     await expect(page.getByTestId('project-wiki-history-panel')).toBeVisible();
 
+    // Meta sections have independent defaults and Linked elements precedes
+    // History in DOM/reading order.
+    const linkedToggle = page.getByTestId('project-wiki-section-toggle-linked-elements');
+    const historyToggle = page.getByTestId('project-wiki-section-toggle-history');
+    await expect(linkedToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(historyToggle).toHaveAttribute('aria-expanded', 'false');
+    const linkedBeforeHistory = await page.evaluate(() => {
+      const linked = document.querySelector('[data-testid="project-wiki-linked-elements"]');
+      const history = document.querySelector('[data-testid="project-wiki-history-panel"]');
+      return !!linked && !!history
+        && (linked.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    });
+    expect(linkedBeforeHistory).toBe(true);
+
+    await linkedToggle.click();
+    await historyToggle.click();
+    await expect(linkedToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(historyToggle).toHaveAttribute('aria-expanded', 'true');
+
     // Navigating between documents keeps the open meta rail open.
     const secondFile = tree.locator('[data-testid^="project-wiki-file-"]').nth(1);
     await expect(secondFile).toBeVisible({ timeout: 10_000 });
     await secondFile.click();
     await expect(page.getByTestId('project-wiki-meta-toggle')).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByTestId('project-wiki-meta-panel')).toBeVisible();
+    await expect(page.getByTestId('project-wiki-section-toggle-linked-elements'))
+      .toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('project-wiki-section-toggle-history'))
+      .toHaveAttribute('aria-expanded', 'true');
+
+    // A reload reads both section choices from the same browser-storage record.
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.getByTestId('project-wiki-meta-toggle')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('project-wiki-section-toggle-linked-elements'))
+      .toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('project-wiki-section-toggle-history'))
+      .toHaveAttribute('aria-expanded', 'true');
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-wiki-document.png'), fullPage: true });
 
