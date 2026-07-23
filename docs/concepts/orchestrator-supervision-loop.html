@@ -282,6 +282,24 @@
        task exists; the review subject proves what its execution actually delivered. Both are required for a traceable
        goal decision.</p>
 
+    <h3 id="goal-plan-review-map">Reviewer-facing acceptance map</h3>
+    <p>A review of this role contract must use the aggregate task change set, not only the newest incremental commit.
+       The following map keeps the requested behavior and its durable implementation evidence visible together:</p>
+    <ul>
+      <li><b>Goal-driven role:</b> the global orchestrator prompt compares an explicit goal with current work and may
+          create a goal Epic only when a real gap remains.</li>
+      <li><b>Traceable decomposition:</b> Epic plan nodes carry local dependencies and a delivery or verification
+          purpose; server validation, topological materialization, stable task-key dependencies, and
+          <code>creationProvenance</code> make the resulting plan auditable.</li>
+      <li><b>Planned validation:</b> verification nodes are ordered after the delivery they inspect and require concrete
+          checks plus real revision, command, report, screenshot, or result-artifact evidence.</li>
+      <li><b>Evidence discipline:</b> the Evidence Gate analysis remains the review policy. A success sentence, terminal
+          sentinel, keyword match, configured check, or salvage pointer cannot replace observed execution and output.</li>
+    </ul>
+    <p>If the supplied review subject contains only unrelated metadata or a recovery pointer, the role change is not
+       reviewable from that subject. Repair the subject and re-run review against the aggregate branch diff before
+       assigning a completion grade.</p>
+
     <h3>Ownership across the three units</h3>
     <ul>
       <li><b>Agent Studio / orchestrator role</b> compares goal, work, and evidence, then authors the optional plan.</li>
