@@ -1,0 +1,50 @@
+:host {
+  display: contents;
+}
+
+.studio-auto-pickup {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+
+  &::before {
+    content: '';
+    display: block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  &--active::before {
+    background: var(--studio-auto-pickup-active);
+  }
+
+  &--paused::before {
+    background: linear-gradient(
+      to right,
+      var(--studio-auto-pickup-paused) 0 38%,
+      transparent 38% 62%,
+      var(--studio-auto-pickup-paused) 62% 100%
+    );
+  }
+
+  &--manual::before {
+    box-sizing: border-box;
+    border: 1px solid var(--studio-auto-pickup-manual);
+  }
+
+  &--blocked::before {
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    background: var(--studio-auto-pickup-blocked);
+    transform: rotate(45deg) scale(0.78);
+  }
+
+  &--aggregate {
+    margin-left: var(--studio-spacing-1);
+  }
+}

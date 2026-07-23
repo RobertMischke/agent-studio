@@ -44,7 +44,10 @@ import { ThemeService } from './services/theme.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { resolveActiveActivityKey } from './components/studio-activity-bar/studio-activity-bar.active-key';
 import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
-import { deriveProjectPulseByName, type ProjectPulseState } from './studio-shell.pulse';
+import {
+  deriveProjectAutoPickupByName,
+  type ProjectAutoPickupIndicator,
+} from './studio-shell.auto-pickup';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { AppTooltipDirective } from '../../components/tooltip/app-tooltip.directive';
@@ -316,10 +319,13 @@ export class StudioShellComponent {
     return this.jobService.runnerStatus().projects[name]?.mode ?? 'manual';
   }
 
-  /** AGT-2031 — project name → auto-pickup pulse state for the Explorer tree's
-   *  subtle activity indicator (derivation lives in studio-shell.pulse). */
-  readonly projectPulseByName = computed<ReadonlyMap<string, ProjectPulseState>>(() =>
-    deriveProjectPulseByName(this.jobService.runnerStatus().projects, this.projectRows()),
+  /** Project name to effective auto-pickup mode plus admission-gate reason. */
+  readonly projectAutoPickupByName = computed<ReadonlyMap<string, ProjectAutoPickupIndicator>>(() =>
+    deriveProjectAutoPickupByName(
+      this.jobService.runnerStatus().projects,
+      this.jobService.projectPickupGates(),
+      this.projectRows(),
+    ),
   );
 
   /** Short label for the auto-mode chip ("auto", "single", "paused", "manual"). */

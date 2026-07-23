@@ -293,17 +293,31 @@ export class TaskService {
    * project setting, so polling it at the 2 s board cadence would be waste.
    */
   readonly laneSortStrategies = signal<Record<string, Record<string, string>>>({});
+  /** Explorer projection of the build-profile admission gate. */
+  readonly projectPickupGates = signal<Record<string, {
+    pickupAllowed: boolean;
+    buildProfileStatus: string | null;
+  }>>({});
   private laneSortStrategyTick = 0;
 
-  /** Re-read the per-project lane sort strategies into {@link laneSortStrategies}. */
+  /** Re-read slow-moving project settings used by the board and Explorer. */
   refreshLaneSortStrategies(): void {
     this.getAllProjectSettings().subscribe({
       next: (all) => {
         const map: Record<string, Record<string, string>> = {};
+        const pickupGates: Record<string, {
+          pickupAllowed: boolean;
+          buildProfileStatus: string | null;
+        }> = {};
         for (const [project, s] of Object.entries(all)) {
           if (s.laneSortStrategies) map[project] = s.laneSortStrategies;
+          pickupGates[project] = {
+            pickupAllowed: s.buildProfilePickupAllowed !== false,
+            buildProfileStatus: s.buildProfile?.status ?? null,
+          };
         }
         this.laneSortStrategies.set(map);
+        this.projectPickupGates.set(pickupGates);
       },
       // A settings-fetch failure must not surface a dialog — the board still
       // renders fine without strategy indicators; they just fall back.
@@ -1810,6 +1824,8 @@ export class TaskService {
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
           orchestratorModel: string | null;
+          buildProfilePickupAllowed?: boolean;
+          buildProfile?: { status?: string | null } | null;
           // F35: resolved per-lane sort strategy map (every lane key present).
           laneSortStrategies?: Record<string, string>;
           pipelineSteps?: Record<string, PipelineStepSetting>;

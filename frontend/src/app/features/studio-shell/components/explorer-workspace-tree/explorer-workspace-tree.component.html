@@ -9,14 +9,12 @@
     [count]="totalProjectCount()"
     testid="studio-explorer-workspace-head"
     (collapsedChange)="setCollapsed('workspace', $event)">
-    <!-- AGT-2031: whole tree collapsed → workspace-wide aggregate pulse. -->
-    @if (isCollapsed('workspace') && allPulseAggregate().state !== 'off') {
-      <app-explorer-auto-pulse actions
-        [state]="allPulseAggregate().state"
+    @if (isCollapsed('workspace') && allAutoPickupAggregate().state !== 'off') {
+      <app-explorer-auto-pickup-indicator actions
+        [state]="allAutoPickupAggregate().state"
         [aggregate]="true"
-        [tooltip]="aggregatePulseTooltip(allPulseAggregate())"
-        [ariaLabel]="aggregatePulseTooltip(allPulseAggregate())"
-        testid="studio-explorer-workspace-pulse" />
+        [tooltip]="aggregateAutoPickupTooltip(allAutoPickupAggregate())"
+        testid="studio-explorer-workspace-auto-pickup" />
     }
     <button actions
             type="button"
@@ -74,7 +72,7 @@
              testid + aria-expanded contract is preserved for the F46
              specs. -->
         <div class="studio-explorer-tree__ws-head">
-          @let wsAgg = wsPulseAggregate(g);
+          @let wsAgg = wsAutoPickupAggregate(g);
           <app-tree-row
             level="root"
             glyph="folder"
@@ -87,15 +85,12 @@
             (selectRequest)="onWsHeaderToggle(g)"
             (secondary)="startRenameWorkspace(g)"
             (contextmenu)="openWsContextMenu($event, g)">
-            <!-- AGT-2031: collapsed workspace → aggregate pulse (names on auto
-                 in the tooltip); expanded → the per-project dots carry it. -->
             @if (isCollapsed('ws:' + g.id) && wsAgg.state !== 'off') {
-              <app-explorer-auto-pulse
+              <app-explorer-auto-pickup-indicator
                 [state]="wsAgg.state"
                 [aggregate]="true"
-                [tooltip]="aggregatePulseTooltip(wsAgg)"
-                [ariaLabel]="aggregatePulseTooltip(wsAgg)"
-                [testid]="'studio-explorer-ws-pulse-' + g.id" />
+                [tooltip]="aggregateAutoPickupTooltip(wsAgg)"
+                [testid]="'studio-explorer-ws-auto-pickup-' + g.id" />
             }
           </app-tree-row>
           @if (g.id !== '__all__' && g.id !== '__unassigned__') {
@@ -153,13 +148,12 @@
                             (chevronClick)="toggleExpanded.emit(p.name)"
                             (selectRequest)="toggleExpanded.emit(p.name)"
                             (secondary)="openBoardRequest.emit(p.name)">
-                <!-- AGT-2031: subtle auto-pickup pulse (reserved slot → no
-                     reflow when auto toggles). -->
-                <app-explorer-auto-pulse
-                  [state]="pulseStateFor(p.name)"
-                  [tooltip]="pulseTooltip(pulseStateFor(p.name))"
-                  [ariaLabel]="pulseAriaLabel(pulseStateFor(p.name))"
-                  [testid]="'studio-explorer-project-pulse-' + p.name" />
+                @let autoPickup = autoPickupFor(p.name);
+                <app-explorer-auto-pickup-indicator
+                  [state]="autoPickup.state"
+                  [tooltip]="autoPickup.tooltip"
+                  [reason]="autoPickup.reason"
+                  [testid]="'studio-explorer-project-auto-pickup-' + p.name" />
                 <button type="button"
                         class="studio-tree-row__hub-link"
                         cacTooltip="Open Project Hub"
