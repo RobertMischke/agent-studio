@@ -13,7 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
  *   1. Closing every tab does NOT drop the user into blank limbo. The
  *      editor surface renders the creative idle empty-state
  *      (`studio-empty-state`) inside the welcome screen, which offers
- *      explicit ways back in (pick a project board / add a task).
+ *      explicit ways back in (open project chat / pick a project board).
  * The activity bar no longer carries a dedicated Board button (removed so
  * the cross-project "All projects" board opens only via the grid button in
  * the Explorer panel header). That entry point is covered by
@@ -46,10 +46,15 @@ async function bootStudio(page: Page): Promise<void> {
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     // Only these four boot GETs surface a *blocking* error-dialog overlay
     // when they fail; stub them with empty-but-valid payloads.
+    if (url.includes('/api/auth/status')) {
+      return json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null });
+    }
     if (url.includes('/api/tasks/grouped')) return json(EMPTY_GROUPED);
     if (url.includes('/api/runner/status')) return json({ projects: {} });
     if (/\/api\/tasks(\?|$)/.test(url)) return json([]);
-    if (url.includes('/api/watch-paths')) return json([]);
+    if (url.includes('/api/watch-paths')) {
+      return json([{ name: 'Agent Software Studio', path: '/workspace/agent-software-studio' }]);
+    }
     // Everything else (quota, workspaces, config, …) is left to fail the way
     // the app already handles it — inline, non-blocking. Returning a wrong-
     // shaped success here would crash a consumer (e.g. the header quota cards).
@@ -126,6 +131,11 @@ test.describe('studio-shell · navigation has no dead end', () => {
     await expect(page.getByTestId('studio-welcome')).toBeVisible();
     await expect(page.getByTestId('studio-empty-state')).toBeVisible();
     await expect(page.getByTestId('studio-empty-subtitle')).toBeVisible();
+    await expect(page.getByTestId('studio-welcome-chat-hint'))
+      .toContainText('Describe your first task in the project chat.');
+    await expect(page.getByTestId('studio-welcome-open-chat')).toBeVisible();
+    await expect(page.getByTestId('studio-welcome-add-task')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'New task', exact: true })).toHaveCount(0);
   });
 
   test('Epics is a normal closeable editor tab', async ({ page }) => {

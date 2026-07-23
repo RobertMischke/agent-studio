@@ -18,7 +18,7 @@ import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { StudioSidebarHeaderComponent } from '../../components/studio-sidebar-header/studio-sidebar-header.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
-import { StudioEmptyStateComponent } from './components/studio-empty-state/studio-empty-state.component';
+import { StudioWelcomeComponent } from './components/studio-welcome/studio-welcome.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
 import { CountBadgeComponent } from '../../components/count-badge/count-badge.component';
 import { ListRowComponent } from '../../components/list-row/list-row.component';
@@ -94,7 +94,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, AppTooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, ProjectDetailComponent, GlobalSearchComponent],
+  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioWelcomeComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, AppTooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, ProjectDetailComponent, GlobalSearchComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -241,7 +241,6 @@ export class StudioShellComponent {
   /** Bubbles to app.ts so the parent can flip the orchestrator side
    *  sheet open without the shell needing a reference to it. */
   readonly chatToggle = output<void>();
-  readonly addTaskRequested = output<void>();
   readonly openUsageSheet = output<void>();
   readonly openCliAdmin = output<void>();
   readonly openWorkspaceScreenshots = output<void>();
