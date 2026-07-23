@@ -122,6 +122,44 @@ public class EpicDecompositionTests : IDisposable
     }
 
     [Fact]
+    public void GoalPlanValidator_RejectsDuplicateUnknownAndSelfReferentialIds()
+    {
+        var invalidPlans = new[]
+        {
+            (
+                Specs: (IReadOnlyList<EpicSubTaskSpec>)
+                [
+                    new("First", PlanId: "same"),
+                    new("Second", PlanId: "same"),
+                ],
+                ErrorFragment: "duplicate"
+            ),
+            (
+                Specs: (IReadOnlyList<EpicSubTaskSpec>)
+                [
+                    new("Only", PlanId: "only", DependsOn: ["missing"]),
+                ],
+                ErrorFragment: "unknown"
+            ),
+            (
+                Specs: (IReadOnlyList<EpicSubTaskSpec>)
+                [
+                    new("Only", PlanId: "only", DependsOn: ["only"]),
+                ],
+                ErrorFragment: "itself"
+            ),
+        };
+
+        foreach (var (specs, errorFragment) in invalidPlans)
+        {
+            var validation = EpicGoalPlanValidator.Validate(specs);
+
+            Assert.False(validation.IsValid);
+            Assert.Contains(errorFragment, validation.Error, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void Parse_BareFencedArray_IsAccepted()
     {
         var output = """
@@ -380,9 +418,9 @@ public class EpicDecompositionTests : IDisposable
         var epic = CreateEpic("goal-epic");
         var specs = new List<EpicSubTaskSpec>
         {
-            new("Implement goal", "deliver", PlanId: "delivery", Purpose: GoalTaskPurposes.Delivery),
             new("Verify goal", "inspect submitted revision and real evidence",
                 PlanId: "verify", DependsOn: new[] { "delivery" }, Purpose: GoalTaskPurposes.Verification),
+            new("Implement goal", "deliver", PlanId: "delivery", Purpose: GoalTaskPurposes.Delivery),
         };
 
         var created = EpicSubTaskFactory.CreateSubTasks(
@@ -394,14 +432,20 @@ public class EpicDecompositionTests : IDisposable
             "project:test-project");
 
         Assert.Equal(2, created.Count);
+        // The authored plan intentionally puts verification first. The factory
+        // must still create the delivery node before the dependent verifier.
         var delivery = scanner.FindJob(created[0], _watchPath)!;
         var verification = scanner.FindJob(created[1], _watchPath)!;
+        Assert.Equal("Implement goal", delivery.Title);
+        Assert.Equal("Verify goal", verification.Title);
         Assert.Equal(new[] { delivery.Key }, verification.References.DependsOn);
         Assert.Equal(TaskCreationInitiators.Orchestrator, verification.CreationProvenance?.Initiator);
         Assert.Equal(TaskCreationMethods.GoalDecomposition, verification.CreationProvenance?.Method);
         Assert.Equal(epic.Id, verification.CreationProvenance?.GoalId);
+        Assert.Equal(epic.Key, verification.CreationProvenance?.GoalKey);
         Assert.Equal("project:test-project", verification.CreationProvenance?.ContextKey);
         Assert.Equal(GoalTaskPurposes.Verification, verification.CreationProvenance?.Purpose);
+        Assert.NotEqual(default, verification.CreationProvenance?.CreatedAt);
     }
 
     // ---- harness -----------------------------------------------------------

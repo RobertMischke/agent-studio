@@ -51,6 +51,7 @@ Agents must not:
 - Pick another task.
 - Move task folders between state lanes.
 - Edit the `state` or `phase` fields in job.json, or write to `lifecycle.json`. These are application-owned.
+- Add or edit `creationProvenance` in job.json. Goal-decomposition provenance is server-authored evidence.
 - Start or continue another task on their own.
 - Create branches, switch branches, merge branches, or manage worktrees. When parallel mode is enabled, branch and worktree lifecycle is still application/pipeline-owned.
 

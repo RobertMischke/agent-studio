@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
