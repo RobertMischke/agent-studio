@@ -28,6 +28,7 @@ import {
   stepTokenTooltip,
 } from './pipeline-config.util';
 import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
+import { PipelineHealthBlockComponent } from '../pipeline-health-block/pipeline-health-block';
 /**
  * Project-level Pipeline page (Nav-rebuild step 3 / T4a). Renders the
  * pre/core/post step catalogue as a calm CSS grid where each configurable
@@ -45,7 +46,7 @@ import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
 @Component({
   selector: 'app-project-pipeline-panel',
   standalone: true,
-  imports: [FormsModule, CliModelSelectorComponent, TooltipDirective],
+  imports: [FormsModule, CliModelSelectorComponent, TooltipDirective, PipelineHealthBlockComponent],
   hostDirectives: [{ directive: PipelineStepFocusDirective, inputs: ['focusStepId'] }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-pipeline-panel.component.html',

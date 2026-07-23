@@ -1,7 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import * as fs from 'fs';
 import * as path from 'path';
-import { api } from '../helpers/api';
 
 /**
  * T4a evidence — the reworked project-level Pipeline page.
@@ -77,19 +76,76 @@ let projectName = '';
 
 test.beforeAll(async () => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-  const paths = await api<WatchPath[]>('/api/watch-paths');
-  const preferred = paths.find(p => /playwright/i.test(p.name)) ?? paths[0];
+});
+
+test('pipeline page: reworked panel shows health, steps, models, prompt bindings, per-step tokens', async ({ page, devBackend }) => {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
+  const paths = await pathsResponse.json() as WatchPath[];
+  const preferred = paths.find(p => /playwright|worktree/i.test(p.name)) ?? paths[0];
   expect(preferred, 'needs at least one watched project').toBeTruthy();
   projectName = preferred.name;
   projectSlug = slugFor(projectName);
-});
 
-test('pipeline page: reworked panel shows steps, models, prompt bindings, per-step tokens', async ({ page }) => {
-  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-
+  await page.route('**/api/**', r => r.fulfill(json({})));
+  await page.route('**/api/auth/status', r => r.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  })));
+  await page.route('**/api/clients/', r => r.fulfill(json([])));
+  await page.route('**/api/tags', r => r.fulfill(json([])));
+  await page.route('**/api/orchestrator/sessions', r => r.fulfill(json({ sessions: [] })));
+  await page.route('**/api/crash-recovery/pending', r => r.fulfill(json({ pending: [] })));
+  await page.route('**/api/cli/*/models*', r => r.fulfill(json({ models: [], source: 'stubbed' })));
+  await page.route('**/api/watch-paths', r => r.fulfill(json([preferred])));
+  await page.route('**/api/workspaces', r => r.fulfill(json([{
+    id: 'WS-1', displayName: 'Workspace', sortOrder: 0, isDefault: true, color: null,
+    createdAt: '2026-07-22T00:00:00Z',
+    projects: [{
+      id: 'PROJ-1', displayName: projectName, shortCode: 'PLH', workspaceId: 'WS-1',
+      color: null, cliDefault: null, modelDefault: null, sortOrder: 0,
+      storageLocation: preferred.path, archived: false, createdAt: '2026-07-22T00:00:00Z',
+    }],
+  }])));
+  await page.route('**/api/environment', r => r.fulfill(json({
+    isDev: false, devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false },
+  })));
+  await page.route('**/api/cli/quota', r => r.fulfill(json({
+    at: '2026-07-23T01:00:00Z', ttlSeconds: 600, snapshots: [],
+  })));
+  await page.route('**/api/cli/usage**', r => r.fulfill(json({
+    at: '2026-07-23T01:00:00Z', sessions: [],
+  })));
+  await page.route('**/api/tasks/grouped', r => r.fulfill(json({
+    archive: [], autoReview: [], backlog: [], codeNotComplete: [], completed: [],
+    failedPickup: [], humanReview: [], orchestratorPrep: [], preparation: [],
+    progress: [], ready: [], review: [],
+  })));
+  await page.route('**/api/tasks/archive**', r => r.fulfill(json({ items: [], total: 0 })));
+  await page.route('**/api/runner/status', r => r.fulfill(json({ projects: {} })));
   await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(CATALOGUE)));
   await page.route('**/api/projects/settings', r => r.fulfill(json({ [projectName]: SETTINGS_PROJECTION })));
   await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));
+  await page.route('**/api/projects/*/pipeline-health', r => r.fulfill(json({
+    project: projectName,
+    capturedAtUtc: '2026-07-23T01:00:00Z',
+    status: 'alarm',
+    activeGate: {
+      gateRunId: 'gate-night-1', project: projectName, jobId: 'AGT-2183',
+      acquiredAtUtc: '2026-07-22T22:30:00Z', elapsedMinutes: 150,
+      budgetMinutes: 30, isHanging: true,
+    },
+    fingerprint: {
+      fingerprint: 'lock:9c2f19e4a88c73ab', consecutiveFailures: 3, threshold: 3,
+      projects: [projectName, 'Website'], isSystemic: true,
+    },
+    lanes: [
+      { lane: '2-ready', queueCount: 2, completedPerHour: 1, isStalled: false },
+      { lane: '3-progress', queueCount: 1, completedPerHour: 1, isStalled: false },
+      { lane: '4-auto-review', queueCount: 4, completedPerHour: 0, isStalled: true },
+      { lane: '5-human-review', queueCount: 3, completedPerHour: 2, isStalled: false },
+    ],
+    alerts: [],
+  })));
 
   // Tall viewport so the shell's inner scroll area shows the whole panel
   // (every phase group, each with its per-step token chips) in one shot.
@@ -100,6 +156,11 @@ test('pipeline page: reworked panel shows steps, models, prompt bindings, per-st
 
   const section = page.getByTestId('project-detail-pipeline');
   await expect(section).toBeVisible();
+  const health = page.getByTestId('pipeline-health');
+  await expect(health).toHaveAttribute('data-status', 'alarm');
+  await expect(page.getByTestId('pipeline-health-gate')).toContainText('Gate hanging since 150 min');
+  await expect(page.getByTestId('pipeline-health-fingerprint')).toContainText('Systemic gate problem');
+  await expect(page.getByTestId('pipeline-health-drain').locator('[data-lane="4-auto-review"]')).toContainText('0/h');
 
   // Phase groups: core renders "always on"; aspects expose a model picker; a
   // prompt cell deep-links to the Prompts registry rather than editing inline.
@@ -124,4 +185,5 @@ test('pipeline page: reworked panel shows steps, models, prompt bindings, per-st
 
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-full--mocked.png'), fullPage: true });
   await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-section--mocked.png') });
+  await health.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-health-night-alarms--mocked.png') });
 });

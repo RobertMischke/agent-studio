@@ -67,6 +67,7 @@ import type {
   PipelineStepSetting,
   PipelineStepCondition,
   StepPromptsResponse,
+  PipelineHealthSnapshot,
 } from '../features/task-pipeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { ExecutiveSummaryResponse } from '../features/summary';
@@ -1919,6 +1920,13 @@ export class TaskService {
     return this.http.get<PipelineCatalogue>(
       `${this.baseUrl}/projects/pipeline-catalogue`,
       params ? { params } : {},
+    );
+  }
+
+  /** Visibility-only pipeline health signals; this endpoint never mutates a task. */
+  getProjectPipelineHealth(projectName: string) {
+    return this.http.get<PipelineHealthSnapshot>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-health`,
     );
   }
 

@@ -1,0 +1,447 @@
+using System.Collections.Concurrent;
+using AgentStudio.Runner;
+using AgentStudio.Tasks;
+
+namespace AgentStudio.Pipeline;
+
+/// <summary>
+/// Code-owned alarm thresholds for the pipeline sensors. These are operational
+/// conventions, not project settings: every project and runner sees the same
+/// definition of a hanging gate, a repeated failure, and a stalled lane.
+/// </summary>
+public static class PipelineHealthConventions
+{
+    public static readonly TimeSpan GateCompletionBudget = TimeSpan.FromMinutes(30);
+    public const int RepeatedFingerprintCount = 3;
+    public static readonly TimeSpan DrainWindow = TimeSpan.FromHours(1);
+    public static readonly TimeSpan FilledQueueMinimumAge = TimeSpan.FromMinutes(15);
+    public const int FilledQueueMinimumTasks = 2;
+    public static readonly TimeSpan SensorInterval = TimeSpan.FromMinutes(1);
+    public static readonly TimeSpan AlertCooldown = TimeSpan.FromHours(1);
+}
+
+public sealed record PipelineGateContext(
+    string GateRunId,
+    string Project,
+    string WatchPath,
+    string JobId,
+    DateTime AcquiredAtUtc);
+
+public sealed record PipelineGateCompletion(
+    string GateRunId,
+    string Project,
+    string WatchPath,
+    string JobId,
+    DateTime CompletedAtUtc,
+    string? FailureFingerprint);
+
+public sealed record PipelineHealthAlert(
+    string Kind,
+    string Severity,
+    string Summary,
+    string Detail,
+    DateTime DetectedAtUtc,
+    string? JobId = null);
+
+public sealed record PipelineActiveGateHealth(
+    string GateRunId,
+    string Project,
+    string JobId,
+    DateTime AcquiredAtUtc,
+    int ElapsedMinutes,
+    int BudgetMinutes,
+    bool IsHanging);
+
+public sealed record PipelineFingerprintHealth(
+    string Fingerprint,
+    int ConsecutiveFailures,
+    int Threshold,
+    IReadOnlyList<string> Projects,
+    bool IsSystemic);
+
+public sealed record PipelineLaneDrainHealth(
+    string Lane,
+    int QueueCount,
+    double CompletedPerHour,
+    DateTime? OldestQueuedAtUtc,
+    bool IsStalled);
+
+public sealed record PipelineHealthSnapshot(
+    string Project,
+    DateTime CapturedAtUtc,
+    string Status,
+    PipelineActiveGateHealth? ActiveGate,
+    PipelineFingerprintHealth? Fingerprint,
+    IReadOnlyList<PipelineLaneDrainHealth> Lanes,
+    IReadOnlyList<PipelineHealthAlert> Alerts);
+
+/// <summary>
+/// Pure, deterministic state machine shared by live sensing and log replay.
+/// It never changes a task, gate, or lane.
+/// </summary>
+public sealed class PipelineHealthDetector
+{
+    private readonly object _sync = new();
+    private readonly Dictionary<string, PipelineGateContext> _activeGates =
+        new(StringComparer.Ordinal);
+    private readonly List<PipelineGateCompletion> _consecutiveFailures = [];
+
+    public void GateAcquired(PipelineGateContext gate)
+    {
+        lock (_sync) _activeGates[gate.GateRunId] = gate;
+    }
+
+    public PipelineHealthAlert? GateCompleted(PipelineGateCompletion completion)
+    {
+        lock (_sync)
+        {
+            _activeGates.Remove(completion.GateRunId);
+            if (string.IsNullOrWhiteSpace(completion.FailureFingerprint))
+            {
+                _consecutiveFailures.Clear();
+                return null;
+            }
+
+            if (_consecutiveFailures.Count > 0
+                && !string.Equals(
+                    _consecutiveFailures[^1].FailureFingerprint,
+                    completion.FailureFingerprint,
+                    StringComparison.Ordinal))
+            {
+                _consecutiveFailures.Clear();
+            }
+
+            if (_consecutiveFailures.Count > 0
+                && string.Equals(
+                    _consecutiveFailures[^1].JobId,
+                    completion.JobId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                // Environmental retry attempts for one card are still one card
+                // failure. Do not let a single noisy task manufacture the
+                // cross-card systemic signal by consuming its retry budget.
+                _consecutiveFailures[^1] = completion;
+                return null;
+            }
+
+            _consecutiveFailures.Add(completion);
+            if (_consecutiveFailures.Count != PipelineHealthConventions.RepeatedFingerprintCount)
+                return null;
+
+            var projects = _consecutiveFailures
+                .Select(item => item.Project)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var jobs = string.Join(", ", _consecutiveFailures.Select(item => item.JobId));
+            return new PipelineHealthAlert(
+                "systemic-gate-failure",
+                "high",
+                "Systemic gate problem detected",
+                $"Failure fingerprint {completion.FailureFingerprint} occurred in " +
+                $"{_consecutiveFailures.Count} consecutive gates across {projects.Length} project(s). " +
+                $"Tasks: {jobs}.",
+                completion.CompletedAtUtc,
+                completion.JobId);
+        }
+    }
+
+    public IReadOnlyList<(PipelineGateContext Gate, PipelineHealthAlert Alert)> DetectHangingGates(
+        DateTime nowUtc)
+    {
+        lock (_sync)
+        {
+            return _activeGates.Values
+                .Where(gate => nowUtc - gate.AcquiredAtUtc >= PipelineHealthConventions.GateCompletionBudget)
+                .Select(gate => (
+                    gate,
+                    new PipelineHealthAlert(
+                        "gate-hanging",
+                        "high",
+                        $"Build/test gate hanging for {ElapsedMinutes(nowUtc, gate.AcquiredAtUtc)} min",
+                        $"Gate {gate.GateRunId} was acquired at {gate.AcquiredAtUtc:O} and has no completed event. " +
+                        $"The visibility budget is {PipelineHealthConventions.GateCompletionBudget.TotalMinutes:F0} min.",
+                        nowUtc,
+                        gate.JobId)))
+                .ToArray();
+        }
+    }
+
+    public PipelineFingerprintHealth? FingerprintHealth()
+    {
+        lock (_sync)
+        {
+            if (_consecutiveFailures.Count == 0) return null;
+            var fingerprint = _consecutiveFailures[^1].FailureFingerprint!;
+            var projects = _consecutiveFailures
+                .Select(item => item.Project)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return new PipelineFingerprintHealth(
+                fingerprint,
+                _consecutiveFailures.Count,
+                PipelineHealthConventions.RepeatedFingerprintCount,
+                projects,
+                _consecutiveFailures.Count >= PipelineHealthConventions.RepeatedFingerprintCount);
+        }
+    }
+
+    public PipelineActiveGateHealth? ActiveGateHealth(string project, DateTime nowUtc)
+    {
+        lock (_sync)
+        {
+            var gate = _activeGates.Values
+                .Where(item => string.Equals(item.Project, project, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => item.AcquiredAtUtc)
+                .FirstOrDefault();
+            if (gate is null) return null;
+            var elapsed = nowUtc - gate.AcquiredAtUtc;
+            return new PipelineActiveGateHealth(
+                gate.GateRunId,
+                gate.Project,
+                gate.JobId,
+                gate.AcquiredAtUtc,
+                ElapsedMinutes(nowUtc, gate.AcquiredAtUtc),
+                (int)PipelineHealthConventions.GateCompletionBudget.TotalMinutes,
+                elapsed >= PipelineHealthConventions.GateCompletionBudget);
+        }
+    }
+
+    public static PipelineLaneDrainHealth MeasureLane(
+        string lane,
+        IReadOnlyList<DateTime> queuedAtUtc,
+        int completedInWindow,
+        DateTime nowUtc)
+    {
+        var oldest = queuedAtUtc
+            .Select(value => (DateTime?)value.ToUniversalTime())
+            .OrderBy(value => value)
+            .FirstOrDefault();
+        var rate = completedInWindow / PipelineHealthConventions.DrainWindow.TotalHours;
+        var stalled = queuedAtUtc.Count >= PipelineHealthConventions.FilledQueueMinimumTasks
+            && rate <= 0
+            && oldest is not null
+            && nowUtc - oldest.Value >= PipelineHealthConventions.FilledQueueMinimumAge;
+        return new PipelineLaneDrainHealth(lane, queuedAtUtc.Count, rate, oldest, stalled);
+    }
+
+    private static int ElapsedMinutes(DateTime nowUtc, DateTime startedAtUtc)
+        => Math.Max(0, (int)Math.Floor((nowUtc - startedAtUtc).TotalMinutes));
+}
+
+public interface IPipelineHealthSensor
+{
+    void GateAcquired(PipelineGateContext gate);
+    void GateCompleted(PipelineGateCompletion completion);
+    PipelineHealthSnapshot? Snapshot(string project, DateTime? nowUtc = null);
+}
+
+/// <summary>
+/// Visibility-only pipeline sensor. It observes gate lifecycle and the
+/// append-only lane ledger, emits deduplicated feed alarms, and exposes a
+/// compact read model. It never cancels gates or moves tasks.
+/// </summary>
+public sealed class PipelineHealthService : BackgroundService, IPipelineHealthSensor
+{
+    private static readonly string[] ObservedLanes =
+    [
+        TaskStates.Ready,
+        TaskStates.Progress,
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
+    ];
+
+    private readonly PipelineHealthDetector _detector;
+    private readonly TaskScannerService _scanner;
+    private readonly TimelineLog _timeline;
+    private readonly OrchestratorLog _orchestratorLog;
+    private readonly ILogger<PipelineHealthService> _logger;
+    private readonly ConcurrentDictionary<string, DateTime> _lastAlertAt =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, PipelineHealthAlert> _currentAlerts =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public PipelineHealthService(
+        PipelineHealthDetector detector,
+        TaskScannerService scanner,
+        TimelineLog timeline,
+        OrchestratorLog orchestratorLog,
+        ILogger<PipelineHealthService> logger)
+    {
+        _detector = detector;
+        _scanner = scanner;
+        _timeline = timeline;
+        _orchestratorLog = orchestratorLog;
+        _logger = logger;
+    }
+
+    public void GateAcquired(PipelineGateContext gate) => _detector.GateAcquired(gate);
+
+    public void GateCompleted(PipelineGateCompletion completion)
+    {
+        var alert = _detector.GateCompleted(completion);
+        if (alert is not null)
+        {
+            EmitAlert(
+                completion.Project,
+                completion.WatchPath,
+                alert,
+                $"fingerprint:{completion.FailureFingerprint}");
+        }
+    }
+
+    public PipelineHealthSnapshot? Snapshot(string project, DateTime? nowUtc = null)
+    {
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(item =>
+            string.Equals(item.Name, project, StringComparison.OrdinalIgnoreCase));
+        if (entry is null) return null;
+
+        var now = (nowUtc ?? DateTime.UtcNow).ToUniversalTime();
+        var lanes = BuildLaneDrainHealth(project, entry.Path, now);
+        var activeGate = _detector.ActiveGateHealth(project, now);
+        var fingerprint = _detector.FingerprintHealth();
+        var alerts = _currentAlerts
+            .Where(pair => pair.Key.StartsWith(project + "\0", StringComparison.OrdinalIgnoreCase))
+            .Select(pair => pair.Value)
+            .OrderByDescending(alert => alert.DetectedAtUtc)
+            .ToArray();
+        var unhealthy = activeGate?.IsHanging == true
+            || fingerprint?.IsSystemic == true
+            || lanes.Any(lane => lane.IsStalled);
+        return new PipelineHealthSnapshot(
+            project,
+            now,
+            unhealthy ? "alarm" : activeGate is null ? "healthy" : "running",
+            activeGate,
+            fingerprint,
+            lanes,
+            alerts);
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await EvaluateAsync(DateTime.UtcNow, stoppingToken).ConfigureAwait(false);
+        using var timer = new PeriodicTimer(PipelineHealthConventions.SensorInterval);
+        while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+        {
+            await EvaluateAsync(DateTime.UtcNow, stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    internal Task EvaluateAsync(DateTime nowUtc, CancellationToken ct = default)
+    {
+        foreach (var (gate, alert) in _detector.DetectHangingGates(nowUtc))
+        {
+            EmitAlert(gate.Project, gate.WatchPath, alert, $"gate:{gate.GateRunId}");
+        }
+
+        foreach (var entry in _scanner.GetWatchPaths())
+        {
+            ct.ThrowIfCancellationRequested();
+            foreach (var lane in BuildLaneDrainHealth(entry.Name, entry.Path, nowUtc).Where(item => item.IsStalled))
+            {
+                var oldest = lane.OldestQueuedAtUtc is null
+                    ? "unknown"
+                    : $"{Math.Max(0, (int)(nowUtc - lane.OldestQueuedAtUtc.Value).TotalMinutes)} min";
+                var alert = new PipelineHealthAlert(
+                    "lane-drain-stalled",
+                    "high",
+                    $"{lane.Lane} drain rate is 0/h with {lane.QueueCount} queued",
+                    $"No task left {lane.Lane} in the last hour while the queue remained filled. " +
+                    $"Oldest queued age: {oldest}.",
+                    nowUtc);
+                EmitAlert(entry.Name, entry.Path, alert, $"lane:{lane.Lane}");
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    internal IReadOnlyList<PipelineLaneDrainHealth> BuildLaneDrainHealth(
+        string project,
+        string watchPath,
+        DateTime nowUtc)
+    {
+        var since = nowUtc - PipelineHealthConventions.DrainWindow;
+        var tasks = _scanner.ScanAllJobsWithArchive()
+            .Where(task => string.Equals(task.ProjectName, project, StringComparison.OrdinalIgnoreCase)
+                || WatchPathComparison.PathsEqual(task.WatchPath, watchPath))
+            .ToArray();
+        var exits = ObservedLanes.ToDictionary(lane => lane, _ => 0, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var task in tasks)
+        {
+            IReadOnlyList<TimelineEvent> events;
+            try
+            {
+                events = _timeline.ReadAll(task.FolderPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex,
+                    "pipeline-health-timeline-read-failed project={Project} task={TaskId}",
+                    project,
+                    task.Id);
+                continue;
+            }
+
+            foreach (var evt in events)
+            {
+                if (evt.Ts < since || evt.Ts > nowUtc
+                    || !string.Equals(evt.Kind, TimelineEventKinds.LaneChanged, StringComparison.Ordinal)
+                    || evt.Details is null
+                    || !evt.Details.TryGetValue("from", out var from)
+                    || !exits.ContainsKey(from))
+                {
+                    continue;
+                }
+                exits[from]++;
+            }
+        }
+
+        return ObservedLanes.Select(lane =>
+        {
+            var queued = tasks
+                .Where(task => string.Equals(task.State, lane, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var queuedAt = queued
+                .Where(task => task.EnteredLaneAt != default)
+                .Select(task => task.EnteredLaneAt.ToUniversalTime())
+                .ToArray();
+            return PipelineHealthDetector.MeasureLane(lane, queuedAt, exits[lane], nowUtc);
+        }).ToArray();
+    }
+
+    private void EmitAlert(
+        string project,
+        string watchPath,
+        PipelineHealthAlert alert,
+        string identity)
+    {
+        var key = project + "\0" + identity;
+        var now = alert.DetectedAtUtc;
+        _currentAlerts[key] = alert;
+        if (_lastAlertAt.TryGetValue(key, out var prior)
+            && now - prior < PipelineHealthConventions.AlertCooldown)
+        {
+            return;
+        }
+        _lastAlertAt[key] = now;
+        _orchestratorLog.Append(watchPath, new OrchestratorLogEntry
+        {
+            Ts = now,
+            Kind = OrchestratorLogKinds.Alert,
+            Topic = OrchestratorLogTopics.PipelineHealth,
+            Summary = alert.Summary,
+            Reasoning = alert.Detail,
+            JobId = alert.JobId,
+        });
+        _logger.LogWarning(
+            "pipeline_health_alarm kind={Kind} project={Project} job_id={JobId} summary={Summary}",
+            alert.Kind,
+            project,
+            alert.JobId ?? "n/a",
+            alert.Summary);
+    }
+}

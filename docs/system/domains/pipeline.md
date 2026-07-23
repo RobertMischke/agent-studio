@@ -319,6 +319,20 @@ operator changes cause the step to fail before its writer runs.
   a shared checkout and its linked worktrees cannot launch overlapping full
   builds or test suites. Admission and host-load waits are cancellable and do
   not consume the per-command execution timeout.
+- `PipelineHealthService` is the visibility-only sensor for pipeline-wide
+  failure modes. `BuildTestGateRunner` reports acquired/completed pairs into
+  it, and the service reads the existing append-only `lane_changed` ledgers.
+  It never cancels a gate or moves a task. Code-owned conventions are a
+  30-minute acquired-without-completed budget, three consecutive matching
+  `failure_fingerprint` values on distinct cards, and a one-hour lane drain
+  window that alarms when at least two cards have waited for 15 minutes with
+  zero exits. Environmental retries of one card count once for the cross-card
+  fingerprint sequence. Alarms append as `alert` / `pipeline-health` rows in
+  the orchestrator feed; `GET /api/projects/{projectName}/pipeline-health`
+  supplies the compact Pipeline page block with the active gate, global
+  fingerprint streak, and completed/hour for each observed lane. This is
+  sensor and alarm behavior only. Gate termination remains owned by the
+  separate post-acquisition watchdog.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
@@ -421,3 +435,6 @@ operator changes cause the step to fail before its writer runs.
   before the decision, kept in the read-only pipeline).
 - Frontend pipeline rendering changes need Playwright or component coverage plus
   screenshots when the user-facing view changes.
+- Pipeline health changes need `PipelineHealthNightReplayTests`, the
+  `pipeline-health-block` component spec, and the mocked night-alarm screenshot
+  in `pipeline-page-evidence.spec.ts`.

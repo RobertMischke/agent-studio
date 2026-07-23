@@ -24,3 +24,10 @@ export type {
   StepPromptEntry,
   StepPromptsResponse,
 } from './models/task-pipeline.model';
+export type {
+  PipelineHealthAlert,
+  PipelineActiveGateHealth,
+  PipelineFingerprintHealth,
+  PipelineLaneDrainHealth,
+  PipelineHealthSnapshot,
+} from './models/pipeline-health.model';
