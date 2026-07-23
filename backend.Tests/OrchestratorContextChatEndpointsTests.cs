@@ -6,6 +6,7 @@ using AgentStudio.Runner;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -138,6 +139,74 @@ public sealed class OrchestratorContextChatEndpointsTests : IDisposable
         resp.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         Assert.Empty(doc.RootElement.GetProperty("turns").EnumerateArray());
+        var execution = doc.RootElement.GetProperty("executionContext");
+        Assert.Equal("local", execution.GetProperty("executionKind").GetString());
+        Assert.Equal("local", execution.GetProperty("hostName").GetString());
+        Assert.Equal(_codeRoot, execution.GetProperty("repoPath").GetString());
+    }
+
+    [Fact]
+    public async Task Get_RemoteProject_QueuesAssignedRunnerAndReturnsItsExactCheckoutContext()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var registry = factory.Services.GetRequiredService<ProjectRegistry>();
+        var settings = factory.Services.GetRequiredService<ProjectSettingsService>();
+        var broker = factory.Services.GetRequiredService<RemoteChatWorkBroker>();
+        var project = registry.FindByStorageLocation(_projectRoot)
+                      ?? registry.EnsureProjectForStorage(
+                          _projectRoot,
+                          Project,
+                          "default");
+        registry.AddUrl(project.Id, "repo", "https://git.example.invalid/agent-studio.git");
+        settings.SetExecutionRunner(Project, "runner-01", remoteExecutionEnabled: true);
+
+        using (var resolvingResponse =
+               await client.GetAsync($"/api/runner/project:{Project}/orchestrator-chat"))
+        {
+            resolvingResponse.EnsureSuccessStatusCode();
+            using var resolving = JsonDocument.Parse(
+                await resolvingResponse.Content.ReadAsStringAsync());
+            var execution = resolving.RootElement.GetProperty("executionContext");
+            Assert.Equal("remote", execution.GetProperty("executionKind").GetString());
+            Assert.Equal("runner-01", execution.GetProperty("hostName").GetString());
+            Assert.Equal("resolving", execution.GetProperty("state").GetString());
+        }
+
+        var claim = broker.TryClaim(new RemoteChatWorkClaimRequest(
+            "runner-01", "agent-runner-01", "agent-runner-01"));
+        Assert.Equal(RemoteChatWorkClaimStatuses.Claimed, claim.Status);
+        Assert.Equal("https://git.example.invalid/agent-studio.git", claim.Work?.RepositoryUrl);
+
+        var hostContext = new ChatExecutionContext(
+            "remote",
+            "agent-runner-01",
+            "/srv/agent-runner/work/PROJ-002/project-chat",
+            "develop",
+            "0123456789abcdef0123456789abcdef01234567",
+            "ready",
+            DateTime.UtcNow);
+        Assert.True(broker.Complete(new RemoteChatWorkCompletionRequest(
+            claim.Work!.WorkId,
+            claim.Work.ClaimToken,
+            "runner-01",
+            true,
+            "",
+            null,
+            null,
+            null,
+            hostContext)));
+
+        using var readyResponse =
+            await client.GetAsync($"/api/runner/project:{Project}/orchestrator-chat");
+        readyResponse.EnsureSuccessStatusCode();
+        using var ready = JsonDocument.Parse(await readyResponse.Content.ReadAsStringAsync());
+        var reported = ready.RootElement.GetProperty("executionContext");
+        Assert.Equal("agent-runner-01", reported.GetProperty("hostName").GetString());
+        Assert.Equal(hostContext.RepoPath, reported.GetProperty("repoPath").GetString());
+        Assert.Equal(hostContext.Branch, reported.GetProperty("branch").GetString());
+        Assert.Equal(hostContext.HeadSha, reported.GetProperty("headSha").GetString());
+        Assert.Equal("ready", reported.GetProperty("state").GetString());
     }
 
     [Fact]

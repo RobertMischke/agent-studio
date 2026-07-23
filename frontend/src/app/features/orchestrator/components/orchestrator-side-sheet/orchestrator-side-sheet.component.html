@@ -19,7 +19,14 @@
       <span class="sheet__execution-dot" aria-hidden="true"></span>
       <span class="sheet__execution-copy">
         <strong data-testid="orch-execution-host">{{ executionHostLabel() }}</strong>
-        <small data-testid="orch-execution-ref">{{ executionRefLabel() }}</small>
+        <small data-testid="orch-execution-ref" [attr.aria-label]="executionRefLabel()">
+          <span class="sheet__execution-repo"
+                data-testid="orch-execution-repo">{{ executionRepoLabel() }}</span>
+          @if (executionRevisionLabel(); as revision) {
+            <span class="sheet__execution-revision"
+                  data-testid="orch-execution-revision">{{ revision }}</span>
+          }
+        </small>
       </span>
     </div>
 

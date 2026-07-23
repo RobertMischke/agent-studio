@@ -884,7 +884,7 @@ public class OrchestratorChatService
         var route = ResolveRemoteRoute(projectName, watchPath);
         if (route != null && _remoteWork != null)
         {
-            var observed = _remoteWork.GetContext(projectName);
+            var observed = _remoteWork.GetContext(route);
             if (observed != null) return observed;
             _remoteWork.RequestInspection(route);
             return new ChatExecutionContext(

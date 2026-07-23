@@ -77,7 +77,7 @@
 }
 
 .sheet__execution-copy strong,
-.sheet__execution-copy small {
+.sheet__execution-repo {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -90,9 +90,21 @@
 }
 
 .sheet__execution-copy small {
+  display: flex;
+  gap: var(--studio-spacing-1);
+  min-width: 0;
   color: var(--studio-fg-muted);
   font-family: var(--studio-font-mono, var(--font-mono));
   font-size: 9px;
+}
+
+.sheet__execution-repo {
+  min-width: 0;
+}
+
+.sheet__execution-revision {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .sheet__context-badge {

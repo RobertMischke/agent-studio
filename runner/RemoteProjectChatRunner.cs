@@ -36,7 +36,7 @@ public sealed class RemoteProjectChatRunner
             var checkout = await workspace.PrepareAsync(shutdown);
             executionContext = new ChatExecutionContext(
                 "remote",
-                _options.RunnerName,
+                _options.Hostname,
                 checkout.RepoPath,
                 checkout.Branch,
                 checkout.HeadSha,
@@ -44,7 +44,7 @@ public sealed class RemoteProjectChatRunner
                 DateTime.UtcNow);
 
             _log(
-                $"project-chat-execution-context host={_options.RunnerName} " +
+                $"project-chat-execution-context host={_options.Hostname} " +
                 $"path={checkout.RepoPath} branch={checkout.Branch} head={checkout.HeadSha}");
 
             if (work.Kind == RemoteChatWorkKinds.Inspect)
@@ -59,7 +59,7 @@ public sealed class RemoteProjectChatRunner
 
             var contextPrompt = $"""
                 === EXECUTION CONTEXT ===
-                This project chat is executing on remote host "{_options.RunnerName}".
+                This project chat is executing on remote host "{_options.Hostname}".
                 Repository checkout: {checkout.RepoPath}
                 Branch context: {checkout.Branch}
                 HEAD: {checkout.HeadSha}

@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace AgentStudio.Runner;
 
 /// <summary>
@@ -16,7 +14,7 @@ public sealed class RemoteChatWorkBroker
     private static readonly TimeSpan ClaimTtl = TimeSpan.FromMinutes(2);
     private readonly object _gate = new();
     private readonly List<PendingRemoteChatWork> _work = [];
-    private readonly Dictionary<string, ChatExecutionContext> _contexts =
+    private readonly Dictionary<string, CachedChatExecutionContext> _contexts =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<RemoteChatWorkBroker> _logger;
 
@@ -25,7 +23,7 @@ public sealed class RemoteChatWorkBroker
         _logger = logger;
     }
 
-    public Task<RemoteChatWorkResult> EnqueueTurnAsync(
+    public async Task<RemoteChatWorkResult> EnqueueTurnAsync(
         RemoteChatWorkRoute route,
         string prompt,
         string model,
@@ -41,7 +39,23 @@ public sealed class RemoteChatWorkBroker
         _logger.LogInformation(
             "remote-chat-work-queued workId={WorkId} project={Project} runner={Runner} kind={Kind}",
             pending.Id, route.ProjectName, route.RunnerId, pending.Kind);
-        return pending.Completion.Task.WaitAsync(ct);
+        try
+        {
+            return await pending.Completion.Task.WaitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            lock (_gate)
+            {
+                // A request cancelled before pickup must not become surprise
+                // work on the host later. Once claimed, completion fencing owns
+                // cleanup and the host is allowed to finish the already-started
+                // CLI process.
+                if (pending.State == PendingRemoteChatWorkState.Pending)
+                    _work.Remove(pending);
+            }
+            throw;
+        }
     }
 
     public void RequestInspection(RemoteChatWorkRoute route)
@@ -58,11 +72,13 @@ public sealed class RemoteChatWorkBroker
         }
     }
 
-    public ChatExecutionContext? GetContext(string projectName)
+    public ChatExecutionContext? GetContext(RemoteChatWorkRoute route)
     {
         lock (_gate)
         {
-            return _contexts.GetValueOrDefault(projectName);
+            if (!_contexts.TryGetValue(route.ProjectName, out var cached))
+                return null;
+            return cached.Route == route ? cached.Context : null;
         }
     }
 
@@ -122,7 +138,8 @@ public sealed class RemoteChatWorkBroker
             if (item == null) return false;
             item.State = PendingRemoteChatWorkState.Completed;
             if (request.ExecutionContext != null)
-                _contexts[item.Route.ProjectName] = request.ExecutionContext;
+                _contexts[item.Route.ProjectName] =
+                    new CachedChatExecutionContext(item.Route, request.ExecutionContext);
             _work.Remove(item);
         }
 
@@ -211,6 +228,10 @@ public sealed class RemoteChatWorkBroker
                 State = PendingRemoteChatWorkState.Pending,
             };
     }
+
+    private sealed record CachedChatExecutionContext(
+        RemoteChatWorkRoute Route,
+        ChatExecutionContext Context);
 }
 
 public static class RemoteChatWorkKinds

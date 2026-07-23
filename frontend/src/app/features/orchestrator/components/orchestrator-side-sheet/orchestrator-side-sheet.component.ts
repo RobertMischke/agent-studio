@@ -268,6 +268,19 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const head = context.headSha ? context.headSha.slice(0, 8) : 'unknown';
     return `${context.repoPath} · ${context.branch ?? 'detached'}@${head}`;
   });
+  readonly executionRepoLabel = computed(() => {
+    const context = this.executionContext();
+    if (!context) return '';
+    if (context.state !== 'ready' || !context.repoPath) return 'Resolving checkout';
+    return context.repoPath;
+  });
+  readonly executionRevisionLabel = computed(() => {
+    const context = this.executionContext();
+    if (!context) return '';
+    if (context.state !== 'ready' || !context.repoPath) return context.branch ?? 'project';
+    const head = context.headSha ? context.headSha.slice(0, 8) : 'unknown';
+    return `· ${context.branch ?? 'detached'}@${head}`;
+  });
   readonly executionContextTitle = computed(() => {
     const context = this.executionContext();
     if (!context) return 'Execution context unavailable';

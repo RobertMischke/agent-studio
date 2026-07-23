@@ -51,6 +51,13 @@ state.
   side-sheet chat dispatch. This operating mode accepts the effective model and
   reasoning choice from the live Codex catalogue, executes through the Codex
   one-shot registry, and rejects non-GPT models without a Claude fallback.
+- `backend/Features/Runner/RemoteChatWorkBroker.cs`,
+  `backend/Features/Tasks/LeaseEndpoints.cs`, and
+  `runner/RemoteProjectChatRunner.cs`: assignment-aware remote side-sheet chat
+  dispatch. The Runner claims and renews opaque chat work, prepares the
+  project's dedicated chat checkout from its normal git cache, starts Codex
+  there, and completes with the observed hostname, repository path, branch,
+  and HEAD revision.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -174,6 +181,13 @@ state.
   `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner
   consult the same record; assigned remote-capable projects are never locally
   auto-picked. Lease fencing is the hard split-brain guard below that policy.
+
+- Side-sheet project and task chat follows the same remote pickup ownership.
+  A remote-assigned project's chat work is claimable only by its assigned
+  Runner and executes inside a host checkout from the same project git cache as
+  card runs. A project without a remote assignment executes chat locally. Each
+  response projects the actual local or remote hostname, repository path,
+  branch, and HEAD; a reassignment invalidates a cached host context.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
   occupies a normal host slot and holds the same fenced lease, heartbeat,

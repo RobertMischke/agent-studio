@@ -1336,3 +1336,48 @@ path remain owned by the follow-up delivery tasks named in the canonical target.
 **Implementation pointers.** Registry models and audit: [backend/Shared/Models/RegistryModels.cs](../../../../backend/Shared/Models/RegistryModels.cs) and [backend/Features/Registry/ProjectRegistry.cs](../../../../backend/Features/Registry/ProjectRegistry.cs). Resolver and compact prompt block: [backend/Features/Registry/ComponentRoutingService.cs](../../../../backend/Features/Registry/ComponentRoutingService.cs). Task guard and delivery criteria: [backend/Features/Tasks/TaskCrudEndpoints.cs](../../../../backend/Features/Tasks/TaskCrudEndpoints.cs). Atomic re-key migration: [backend/Features/Tasks/TaskStateMachine.cs](../../../../backend/Features/Tasks/TaskStateMachine.cs). Project Hub editor and routing preview: [frontend/src/app/features/project-detail/components/ownership-mapping-panel/ownership-mapping-panel.component.ts](../../../../frontend/src/app/features/project-detail/components/ownership-mapping-panel/ownership-mapping-panel.component.ts) and [frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.html](../../../../frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.html).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0065 - Project chat follows project execution placement and exposes checkout identity (2026-07-23)
+
+**Decision.** Side-sheet project and task chat turns use the project's existing
+execution placement. When `remoteExecutionEnabled` and `executionRunner` assign
+a remote Runner, that Runner claims the chat work and starts Codex in a
+dedicated project-chat worktree from the same per-project git cache used by
+card runs. Projects without remote assignment remain local. Every chat read and
+send projects execution kind, actual hostname or `local`, repository path,
+branch, and HEAD revision in the compact chat header.
+
+**Context.** Running project chat on the Studio host gave the model a different
+checkout and potentially a different revision than the cards it was discussing.
+Execution location is decision-relevant context, not an implementation detail.
+The distributed target also assigns repository materialization and CLI
+processes to Agent Runner, while Studio remains a client and Task Server owns
+durable authority.
+
+**Non-goals.** Studio does not open SSH sessions into Runner hosts. Chat does
+not use the task store as a code transport. The compatibility broker is not a
+second durable authority and does not replace ADR-0063's Task Server permit
+target. Remote chat is read-only and does not share a mutable coding worktree.
+
+**Reasoning style.** Derive placement from the existing project assignment,
+execute where the repository is materialized, and report observed checkout
+identity rather than reconstructing or guessing it in Studio.
+
+**Implementation pointers.** Route selection and API projection:
+[`backend/Features/Runner/OrchestratorChat.cs`](../../../../backend/Features/Runner/OrchestratorChat.cs)
+and
+[`backend/Features/Runner/RunnerEndpoints.cs`](../../../../backend/Features/Runner/RunnerEndpoints.cs).
+Claim fencing:
+[`backend/Features/Runner/RemoteChatWorkBroker.cs`](../../../../backend/Features/Runner/RemoteChatWorkBroker.cs)
+and
+[`backend/Features/Tasks/LeaseEndpoints.cs`](../../../../backend/Features/Tasks/LeaseEndpoints.cs).
+Host checkout and Codex process:
+[`runner/RemoteProjectChatRunner.cs`](../../../../runner/RemoteProjectChatRunner.cs).
+Visible context:
+[`frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.html`](../../../../frontend/src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.html).
+
+**Status.** Accepted. The in-process chat-work broker is the compatibility seam
+to move into the independently hosted Task Server without changing the Runner
+pull direction or the visible execution-context contract.

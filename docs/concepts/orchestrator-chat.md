@@ -138,6 +138,40 @@ Markdown body. This is load-bearing for task microcards: they are host-hydrated
 inside rendered Markdown, so an unnecessary `safeHtml` refresh would discard
 and recreate only those enriched nodes while ordinary text appeared stable.
 
+## Execution Location and Checkout Context
+
+Side-sheet chat execution follows the same project assignment that controls
+card pickup. When `remoteExecutionEnabled` and `executionRunner` select a remote
+Runner, project and task chat turns are queued for that Runner. The host
+prepares a dedicated `project-chat` worktree from the same per-project git cache
+used by card runs, fetches the configured integration branch, and starts Codex
+with that checkout as its working directory. A project without a remote
+assignment continues to use the local project root.
+
+Studio never reaches into a Runner over SSH. The Runner pulls an opaque chat
+work item through claim, renew, and fenced completion endpoints. This
+in-process broker is a compatibility seam toward the durable Task Server work
+permit model described by ADR-0063 and the distributed target architecture.
+Repository materialization and CLI execution remain Runner responsibilities.
+
+Every side-sheet chat read and send response includes an `executionContext`
+with:
+
+- `executionKind`: `local` or `remote`;
+- `hostName`: `local` or the hostname reported by the executing Runner;
+- `repoPath`: the exact local or Runner-host checkout;
+- `branch` and `headSha`: the branch context and checked-out revision;
+- `state` and `capturedAt`: whether a remote inspection is still resolving and
+  when the values were observed.
+
+Opening a remote chat schedules a non-mutating checkout inspection, so the
+header may briefly show the assigned Runner and `resolving`. Completion of an
+inspection or chat turn replaces that projection with the exact host, path,
+branch, and HEAD used on the Runner. The header presents the values as a compact
+two-line mini indicator and retains the full revision in its tooltip. Remote
+Codex chat runs remain read-only. The context key still selects transcript and
+ORCH-1 read scope; execution placement is a project-level assignment.
+
 ## Application Read Context (ORCH-1)
 
 Both chat dispatch paths use one deterministic context builder:
