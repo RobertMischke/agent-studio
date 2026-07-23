@@ -293,6 +293,90 @@ public class RunTimelineBuilderTests
     }
 
     [Fact]
+    public void ReviewAttemptCycles_ProjectCurrentEpochAndClosedOperatorHistory()
+    {
+        var firstRun = T0;
+        var firstRequeue = T0.AddHours(2);
+        var secondRequeue = T0.AddHours(5);
+        var events = new List<TimelineEvent>
+        {
+            new()
+            {
+                Ts = firstRequeue,
+                Kind = TimelineEventKinds.OperatorRequeued,
+                Actor = "human:operator@example.com",
+                Summary = "Operator reopened the task.",
+                Details = new Dictionary<string, string>
+                {
+                    ["attemptEpoch"] = "1",
+                    ["reason"] = "Infrastructure repaired.",
+                    ["from"] = TaskStates.Escalated,
+                    ["to"] = TaskStates.AutoReview,
+                    ["rotatedArtifacts"] = "4",
+                },
+            },
+            new()
+            {
+                Ts = secondRequeue,
+                Kind = TimelineEventKinds.OperatorRequeued,
+                Actor = "human:operator@example.com",
+                Summary = "Operator reopened the task again.",
+                Details = new Dictionary<string, string>
+                {
+                    ["attemptEpoch"] = "2",
+                    ["reason"] = "Reassess after runner recovery.",
+                    ["from"] = TaskStates.HumanReview,
+                    ["to"] = TaskStates.AutoReview,
+                    ["rotatedArtifacts"] = "2",
+                },
+            },
+        };
+
+        var cycles = ReviewAttemptTimelineBuilder.Build(2, events, firstRun);
+
+        Assert.Collection(
+            cycles,
+            current =>
+            {
+                Assert.Equal(2, current.Epoch);
+                Assert.True(current.IsCurrent);
+                Assert.Equal(secondRequeue, current.StartedAt);
+                Assert.Null(current.EndedAt);
+                Assert.Equal("Reassess after runner recovery.", current.Reason);
+                Assert.Equal(2, current.RotatedArtifacts);
+            },
+            previous =>
+            {
+                Assert.Equal(1, previous.Epoch);
+                Assert.False(previous.IsCurrent);
+                Assert.Equal(firstRequeue, previous.StartedAt);
+                Assert.Equal(secondRequeue, previous.EndedAt);
+                Assert.Equal(TaskStates.Escalated, previous.FromState);
+                Assert.Equal(TaskStates.AutoReview, previous.ToState);
+            },
+            initial =>
+            {
+                Assert.Equal(0, initial.Epoch);
+                Assert.Equal(firstRun, initial.StartedAt);
+                Assert.Equal(firstRequeue, initial.EndedAt);
+                Assert.Equal("Initial review cycle.", initial.Reason);
+            });
+    }
+
+    [Fact]
+    public void ReviewAttemptCycles_KeepDurableCurrentEpochVisibleWhenTimelineWriteIsMissing()
+    {
+        var cycles = ReviewAttemptTimelineBuilder.Build(1, events: [], initialStartedAt: T0);
+
+        Assert.Equal(2, cycles.Count);
+        Assert.Equal(1, cycles[0].Epoch);
+        Assert.True(cycles[0].IsCurrent);
+        Assert.Null(cycles[0].StartedAt);
+        Assert.Equal(0, cycles[1].Epoch);
+        Assert.Equal(T0, cycles[1].StartedAt);
+    }
+
+    [Fact]
     public void ExitMarkerAfterNextEvent_IsNotMisattributed()
     {
         // Defensive: even though the product is sequential per project,

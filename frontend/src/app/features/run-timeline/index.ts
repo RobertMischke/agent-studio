@@ -3,6 +3,7 @@ export type {
   RunRecord,
   RunPromptContextSnapshot,
   RunPromptEntry,
+  ReviewAttemptCycle,
   RunTimeline,
   RunCommitInfo,
   RunCommitsResponse,

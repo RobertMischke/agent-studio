@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import type { CliType, TaskInfo, TaskPromptHistoryEntry } from '../../../../../models/task.model';
-import type { RunCommitInfo, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
+import type { ReviewAttemptCycle, RunCommitInfo, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
 import { TaskService } from '../../../../../services/task.service';
 import { cliTypeIcon, cliTypeLabel, formatTime as formatTimeValue, formatTokens } from '../../../../../services/format.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ExecutionLocationBadgeComponent } from '../../../../../components/execution-location-badge/execution-location-badge.component';
 import { RunExecutionContextComponent } from './run-execution-context/run-execution-context.component';
+import { ReviewAttemptHistoryComponent } from './review-attempt-history/review-attempt-history.component';
 /**
  * Run timeline panel rendered above the activity log in the protocol
  * pane. Each card represents one CLI invocation between user inputs
@@ -32,7 +33,7 @@ import { RunExecutionContextComponent } from './run-execution-context/run-execut
 @Component({
   selector: 'app-run-timeline',
   standalone: true,
-  imports: [TooltipDirective, ExecutionLocationBadgeComponent, RunExecutionContextComponent],
+  imports: [TooltipDirective, ExecutionLocationBadgeComponent, RunExecutionContextComponent, ReviewAttemptHistoryComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-timeline.component.html',
   styleUrl: './run-timeline.component.scss'
@@ -43,6 +44,8 @@ export class RunTimelineComponent {
   readonly promptEntries = input<RunPromptEntry[]>([]);
   readonly promptMarkdown = input<string | null>(null);
   readonly promptHistory = input<TaskPromptHistoryEntry[]>([]);
+  readonly reviewAttemptEpoch = input(0);
+  readonly reviewAttemptCycles = input<ReviewAttemptCycle[]>([]);
 
   /** Emits when the user clicks "Filter activity log to this run". */
   readonly runFilter = output<RunRecord>();

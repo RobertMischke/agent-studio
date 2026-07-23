@@ -188,7 +188,10 @@ excluding it from decisions in the new epoch.
 Before fresh Post Processing starts, active verdict residue is moved under
 `results/history/review-epoch-NNNN/operator-requeue-<timestamp>/`. These files
 remain available for audit but are not active deliverables and are excluded from
-review prompt inventories.
+review prompt inventories. `GET /api/tasks/{id}/runs` projects the authoritative
+current epoch plus the operator-requeue timeline boundaries as
+`reviewAttemptEpoch` and newest-first `reviewAttemptCycles`; the Task Detail Runs
+modal renders that projection beside the CLI run history.
 
 ### post-processing-outcomes.jsonl (optional)
 

@@ -71,6 +71,9 @@ groups, and a failed domain reports an error without hiding successful domains.
   Escalated tasks render a borderless, collapsible decision section that
   reconciles delivery and decision state in one sentence, lists reissue
   timestamps and triggers from the timeline, and shows open gate evidence.
+  The Runs modal also shows the current operator-owned review-attempt epoch and
+  the closed cycle history, including requeue reason, lane crossing, and rotated
+  artifact count.
   Timeline and steering text is ANSI-sanitised before rendering. Code Review
   keeps the last available grade visible with its date when it belongs to an
   older delivery. The task-detail Docs tab presents rendered result documents

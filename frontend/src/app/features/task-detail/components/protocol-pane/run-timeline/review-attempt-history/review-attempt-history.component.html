@@ -1,0 +1,45 @@
+<section class="review-attempts" data-testid="review-attempt-history" aria-label="Review cycle history">
+  <header class="review-attempts__head">
+    <div>
+      <span class="review-attempts__eyebrow">Review cycle</span>
+      <strong class="review-attempts__current" data-testid="review-attempt-current">
+        Epoch {{ currentEpoch() }}
+      </strong>
+    </div>
+    <span class="review-attempts__count">
+      {{ visibleCycles().length }} cycle{{ visibleCycles().length === 1 ? '' : 's' }}
+    </span>
+  </header>
+
+  <ol class="review-attempts__list">
+    @for (cycle of visibleCycles(); track cycle.epoch) {
+      <li class="review-attempts__cycle"
+          [class.review-attempts__cycle--current]="cycle.isCurrent"
+          [attr.data-testid]="'review-attempt-cycle-' + cycle.epoch">
+        <span class="review-attempts__dot" aria-hidden="true"></span>
+        <div class="review-attempts__body">
+          <div class="review-attempts__cycle-head">
+            <strong>Epoch {{ cycle.epoch }}</strong>
+            <span class="review-attempts__state">{{ cycleLabel(cycle) }}</span>
+            <time [attr.datetime]="cycle.startedAt">{{ formatWhen(cycle.startedAt) }}</time>
+          </div>
+          <p>{{ cycle.reason || 'Operator reason was not recorded.' }}</p>
+          <div class="review-attempts__meta">
+            @if (laneTransition(cycle); as transition) {
+              <span>{{ transition }}</span>
+            }
+            @if (cycle.rotatedArtifacts > 0) {
+              <span>{{ cycle.rotatedArtifacts }} artifact{{ cycle.rotatedArtifacts === 1 ? '' : 's' }} archived</span>
+            }
+            @if (cycle.actor) {
+              <span>{{ cycle.actor }}</span>
+            }
+            @if (cycle.endedAt) {
+              <span>Closed {{ formatWhen(cycle.endedAt) }}</span>
+            }
+          </div>
+        </div>
+      </li>
+    }
+  </ol>
+</section>
