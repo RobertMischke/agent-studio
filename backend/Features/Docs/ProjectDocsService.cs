@@ -1281,7 +1281,11 @@ public class ProjectDocsService
     private static bool IsWikiConfigFile(string relPath) =>
         IsWikiAppPath(relPath)
         || relPath.Equals(WikiHomeRel, StringComparison.OrdinalIgnoreCase)
-        || relPath.Equals(WikiFolderOrderRel, StringComparison.OrdinalIgnoreCase);
+        || relPath.Equals(WikiFolderOrderRel, StringComparison.OrdinalIgnoreCase)
+        // Per-folder workbench registrations are machinery (read by the
+        // workbench catalogue), not reading documents - keep them out of the
+        // tree like the meta companions.
+        || Path.GetFileName(relPath).Equals("workbench.json", StringComparison.OrdinalIgnoreCase);
 
     // ---- Wiki page classification (consolidation-analysis metadata) ----
 
@@ -1888,8 +1892,11 @@ public class ProjectDocsService
         return null;
     }
 
+    // Entities must decode after tag-stripping: a heading like
+    // "Probleme &amp; Maßnahmen" otherwise shows its raw entity in the tree.
     private static string StripHtml(string text) =>
-        Regex.Replace(text, "<.*?>", "", RegexOptions.Singleline).Trim();
+        System.Net.WebUtility.HtmlDecode(
+            Regex.Replace(text, "<.*?>", "", RegexOptions.Singleline)).Trim();
 
     // -------- Wiki folder view (one directory level for the folder overview) --------
 
