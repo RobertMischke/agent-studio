@@ -5,6 +5,18 @@
       "title": "Gate haengt nach Lock-Erwerb ohne Watchdog - 2.5h Vollblockade",
       "linkedAt": "2026-07-23T11:53:12.5524622Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2259",
+      "title": "Pipeline-Gesundheitssensorik: Lock-Halte-Alarm, Fingerprint-Wiederholung, Drain-Rate",
+      "linkedAt": "2026-07-23T12:04:46.5671747Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2260",
+      "title": "Operator-Requeue hat Autoritaet: Attempt-Epoche statt Wieder-Eskalation aus Altlasten",
+      "linkedAt": "2026-07-23T12:06:50.4990917Z",
+      "source": "auto"
     }
   ]
 }
