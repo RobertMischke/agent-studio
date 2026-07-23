@@ -364,7 +364,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     // RemoteGateSlots verify runs in parallel - independent of the local
     // machine lock, which remote gates never touch.
 
-    private const int RemoteGateSlots = 2;
+    private const int RemoteGateSlots = 4;
     private static readonly SemaphoreSlim RemoteGate = new(RemoteGateSlots, RemoteGateSlots);
 
     private sealed record RemoteGateOutcome(
