@@ -15,7 +15,12 @@ import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { WatchPathEntry } from '../../../../models/task.model';
 import { TaskState } from '../../../../models/task.model';
-import type { ComposerLocationContext, OrchestratorChatTurn, OrchestratorContextSession } from '../../../../features/orchestrator';
+import type {
+  ChatExecutionContext,
+  ComposerLocationContext,
+  OrchestratorChatTurn,
+  OrchestratorContextSession,
+} from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
 import { ChatComponent } from 'coding-agent-chat/composer';
 import { ConversationViewComponent } from 'coding-agent-chat/conversation';
@@ -249,6 +254,30 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly sending = signal(false);
   readonly errorMsg = signal<string | null>(null);
+  readonly executionContext = signal<ChatExecutionContext | null>(null);
+  readonly executionHostLabel = computed(() => {
+    const context = this.executionContext();
+    if (!context) return 'Execution context unavailable';
+    return context.executionKind === 'local' ? 'Local' : context.hostName;
+  });
+  readonly executionRefLabel = computed(() => {
+    const context = this.executionContext();
+    if (!context) return '';
+    if (context.state !== 'ready' || !context.repoPath)
+      return `Resolving ${context.branch ?? 'project'} checkout`;
+    const head = context.headSha ? context.headSha.slice(0, 8) : 'unknown';
+    return `${context.repoPath} · ${context.branch ?? 'detached'}@${head}`;
+  });
+  readonly executionContextTitle = computed(() => {
+    const context = this.executionContext();
+    if (!context) return 'Execution context unavailable';
+    return [
+      `Execution: ${this.executionHostLabel()}`,
+      `Repository: ${context.repoPath ?? 'resolving'}`,
+      `Branch: ${context.branch ?? 'unknown'}`,
+      `HEAD: ${context.headSha ?? 'unknown'}`,
+    ].join('\n');
+  });
 
   /**
    * F14 navigation-context send caching. The menu toggle dedupes sends
@@ -581,6 +610,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.readChat(proj).subscribe({
       next: (resp) => {
         this.turns.set(resp.turns ?? []);
+        this.executionContext.set(resp.executionContext ?? null);
         this.errorMsg.set(null);
         if (!silent) this.loading.set(false);
       },
@@ -706,7 +736,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       ? this.jobService.sendOrchestratorChatByContext(contextKey, sendBody)
       : this.jobService.sendOrchestratorChat(proj, sendBody);
     send$.subscribe({
-      next: () => {
+      next: (response) => {
+        if (response.executionContext) this.executionContext.set(response.executionContext);
         if (shouldShipContext) {
           this.lastSentContextSignature.set(contextSignature);
         }

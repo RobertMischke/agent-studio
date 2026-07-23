@@ -9,7 +9,7 @@ namespace AgentRunner;
 /// </summary>
 public sealed class GitWorkspace
 {
-    private static readonly SemaphoreSlim GitMetadataGate = new(1, 1);
+    internal static readonly SemaphoreSlim GitMetadataGate = new(1, 1);
     private readonly RunnerOptions _options;
     private readonly Action<string> _log;
     private readonly string _safeTaskKey;

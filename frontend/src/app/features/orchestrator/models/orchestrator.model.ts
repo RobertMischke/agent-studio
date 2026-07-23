@@ -151,6 +151,17 @@ export interface OrchestratorChatAttachment {
 export interface OrchestratorChatResponse {
   project: string;
   turns: OrchestratorChatTurn[];
+  executionContext?: ChatExecutionContext | null;
+}
+
+export interface ChatExecutionContext {
+  executionKind: 'local' | 'remote';
+  hostName: string;
+  repoPath?: string | null;
+  branch?: string | null;
+  headSha?: string | null;
+  state: 'ready' | 'resolving' | string;
+  capturedAt: string;
 }
 
 /**

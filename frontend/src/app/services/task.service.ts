@@ -2261,7 +2261,11 @@ export class TaskService {
       selectionSource?: 'explicit' | 'inherited';
     },
   ) {
-    return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
+    return this.http.post<{
+      project: string;
+      reply: OrchestratorChatTurn;
+      executionContext?: import('../features/orchestrator').ChatExecutionContext | null;
+    }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`,
       body,
     );
@@ -2291,7 +2295,11 @@ export class TaskService {
       selectionSource?: 'explicit' | 'inherited';
     },
   ) {
-    return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
+    return this.http.post<{
+      project: string;
+      reply: OrchestratorChatTurn;
+      executionContext?: import('../features/orchestrator').ChatExecutionContext | null;
+    }>(
       `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
       body,
     );
