@@ -491,6 +491,10 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         // S11: a holder (e.g. a leftover capture server) keeping the orphan dir
         // busy must yield a precise reject, NOT a confusing 'already exists'
         // collision and NOT a throw — so the runner defers to the next tick.
+        // The "busy" semantics are Windows-specific: POSIX happily removes a
+        // directory whose files are open, so the reject this test asserts can
+        // never occur there (surfaced by the remote ssh-gate on Linux).
+        if (!OperatingSystem.IsWindows()) return;
         var (repo, life) = SeedWithDevelop("por-busy");
         var wtRoot = WorktreeRoot();
         var taskId = "task-busy";
