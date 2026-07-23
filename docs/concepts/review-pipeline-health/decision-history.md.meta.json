@@ -5,6 +5,12 @@
       "title": "Operator-Requeue hat Autoritaet: Attempt-Epoche statt Wieder-Eskalation aus Altlasten",
       "linkedAt": "2026-07-23T12:06:50.4990917Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2258",
+      "title": "Gate testet Subject auf aktuellem develop (Stale-Branch-Falle schliessen)",
+      "linkedAt": "2026-07-23T13:23:59.4340374Z",
+      "source": "auto"
     }
   ]
 }

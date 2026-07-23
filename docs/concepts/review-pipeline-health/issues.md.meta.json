@@ -23,6 +23,12 @@
       "title": "Build-profile validation launches bash on Windows and always fails",
       "linkedAt": "2026-07-23T12:29:47.1572491Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2258",
+      "title": "Gate testet Subject auf aktuellem develop (Stale-Branch-Falle schliessen)",
+      "linkedAt": "2026-07-23T13:23:59.4340374Z",
+      "source": "auto"
     }
   ]
 }
