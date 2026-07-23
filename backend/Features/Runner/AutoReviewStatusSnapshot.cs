@@ -5,9 +5,10 @@ namespace AgentStudio.Runner;
 /// Surfaced in compact board indicators so the user sees that the
 /// orchestrator is alive and forming opinions, not silently waving jobs
 /// through. The snapshot is intentionally tiny: last tick time, last
-/// tick's per-outcome counts, and the job slug that the current tick is
-/// mid-way through (if any). Consumers poll it via a small REST endpoint;
-/// nothing pushes.
+/// tick's per-outcome counts, plus live per-card steps owned by the parallel
+/// workers. Tick boundaries reset rollups but do not erase worker activity;
+/// each card remains present until its owner calls <see cref="ClearCurrent"/>.
+/// Consumers poll it via a small REST endpoint; nothing pushes.
 /// </summary>
 public sealed class AutoReviewStatusSnapshot
 {
@@ -78,7 +79,6 @@ public sealed class AutoReviewStatusSnapshot
             _pending = 0;
             _currentJob = null;
             _currentProject = null;
-            _activeJobs.Clear();
         }
     }
 
@@ -89,7 +89,6 @@ public sealed class AutoReviewStatusSnapshot
             _lastTickAt = DateTime.UtcNow;
             _currentJob = null;
             _currentProject = null;
-            _activeJobs.Clear();
         }
     }
 

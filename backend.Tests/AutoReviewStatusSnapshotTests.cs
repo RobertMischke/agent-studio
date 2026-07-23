@@ -45,4 +45,19 @@ public sealed class AutoReviewStatusSnapshotTests
         var activity = Assert.Single(snapshot.Read().ActiveJobs);
         Assert.Equal("task-b", activity.JobId);
     }
+
+    [Fact]
+    public void TickBoundary_PreservesActivityOwnedByParallelWorker()
+    {
+        var snapshot = new AutoReviewStatusSnapshot();
+        snapshot.SetCurrent("project-a", "task-a");
+        snapshot.SetCurrentStep("project-a", "task-a", AutoReviewActivitySteps.Aspects);
+
+        snapshot.BeginTick();
+        snapshot.EndTick();
+
+        var activity = Assert.Single(snapshot.Read().ActiveJobs);
+        Assert.Equal("task-a", activity.JobId);
+        Assert.Equal(AutoReviewActivitySteps.Aspects, activity.Step);
+    }
 }

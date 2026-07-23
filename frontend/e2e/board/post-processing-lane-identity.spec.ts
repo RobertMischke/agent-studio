@@ -423,9 +423,8 @@ test.describe('Post Processing lane identity', () => {
     mkdirSync(SHOTS, { recursive: true });
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);
-      await page.screenshot({
+      await lane.screenshot({
         path: `${SHOTS}/mixed-activity-${theme}--mocked.png`,
-        fullPage: false,
       });
     }
 
