@@ -225,6 +225,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
     internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
     internal const string BuildTestGateInfrastructureReasonPrefix = "build-test-gate review infrastructure: ";
+    internal const string OperatorRequeueFreshAssessmentReason = "operator-requeue-fresh-assessment";
 
     /// <summary>
     /// Stable prefix on the <c>Reason</c> field of the <see cref="ReviewDecisionKind.Escalate"/>
@@ -1754,7 +1755,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             entry.Name, pending.Job.Id, AutoReviewActivitySteps.Gate);
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var (taskBody, recentLog) = LoadTaskContext(pending);
-        var statusSummary = LoadStatusSummary(current.FolderPath);
+        // An operator-owned epoch reassesses the current subject, not the old
+        // escalation narrative. Rotation normally removes status.md, but the
+        // freshness boundary must remain true even if that best-effort file move
+        // failed. A later status written by a fresh core run is admitted again.
+        var statusPath = Path.Combine(current.FolderPath, "status.md");
+        var statusSummary = OperatorReviewRequeueService.IsArtifactFresh(
+            current.FolderPath,
+            statusPath)
+                ? LoadStatusSummary(current.FolderPath)
+                : string.Empty;
         var diffSummary = LoadDiffSummary(entry, current);
         var resultsInventory = ResultsInventory.Render(current.FolderPath);
         var cardMode = ReviewCardMode.Describe(current.Mode);
@@ -6052,12 +6062,28 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var promptPath = Path.Combine(folder, "prompt.md");
         var task = File.Exists(promptPath) ? File.ReadAllText(promptPath) : string.Empty;
         var logPath = TaskPaths.CliOutputLog(folder);
-        var recent = File.Exists(logPath) ? TailLines(File.ReadAllText(logPath), 200) : string.Empty;
+        var recent = ReadActiveEpochLogTail(folder, logPath);
         // The terminal sentinel, final verification summary, and CLI exit are
         // at the end of the log. Head-truncating a verbose 200-line tail kept
         // early pre-restore failures while discarding their later successful
         // restore/re-run, which made the completion gate reissue clean tasks.
         return (Truncate(task, 4_000), TruncateTail(recent, 6_000));
+    }
+
+    private static string ReadActiveEpochLogTail(string folder, string logPath)
+    {
+        if (!File.Exists(logPath)) return string.Empty;
+        var lines = File.ReadAllLines(logPath);
+        var boundary = OperatorReviewRequeueService.ReadCliLogLineBoundary(folder);
+        if (boundary is >= 0)
+        {
+            // A shorter file was replaced/truncated after the boundary, so all
+            // of its current content is fresh. Otherwise skip the consumed
+            // prefix retained by the append-only log.
+            var skip = boundary.Value <= lines.Length ? boundary.Value : 0;
+            lines = lines.Skip(skip).ToArray();
+        }
+        return TailLines(string.Join('\n', lines), 200);
     }
 
     /// <summary>
@@ -6079,17 +6105,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             && !string.IsNullOrWhiteSpace(r.HeadShaAfter));
 
     private static bool HasResultsArtifacts(string jobFolderPath)
-    {
-        try
-        {
-            var results = Path.Combine(jobFolderPath, "results");
-            return Directory.Exists(results) && Directory.EnumerateFiles(results, "*", SearchOption.AllDirectories).Any();
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        => ResultsInventory.HasActiveArtifacts(jobFolderPath);
 
     private static string LoadRoadmap(string rootPath)
     {
@@ -6185,7 +6201,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     info,
                     ReviewSignalKind.Done,
                     LineNumber: -1,
-                    Reason: "operator-requeue-fresh-assessment",
+                    Reason: OperatorRequeueFreshAssessmentReason,
                     NeedsInput: null);
                 continue;
             }

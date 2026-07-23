@@ -113,6 +113,27 @@ public static class ResultsInventory
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// True when <c>results/</c> contains current deliverables. Rotated review
+    /// history is deliberately excluded because it predates the active
+    /// operator-owned assessment epoch.
+    /// </summary>
+    public static bool HasActiveArtifacts(string jobFolderPath)
+    {
+        if (string.IsNullOrWhiteSpace(jobFolderPath)) return false;
+        try
+        {
+            var resultsDir = Path.Combine(jobFolderPath, "results");
+            return Directory.Exists(resultsDir)
+                && Directory.EnumerateFiles(resultsDir, "*", SearchOption.AllDirectories)
+                    .Any(path => !IsHistoryPath(resultsDir, path));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static string RelativePath(string root, string file)
     {
         var rel = Path.GetRelativePath(root, file);

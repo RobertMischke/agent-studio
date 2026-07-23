@@ -483,7 +483,8 @@
             <code>OperatorRequeue</code> decision plus <code>operator_requeued</code> timeline event with the reason, and
             rotates stale verdict evidence into <code>results/history/</code>. Every anti-churn guard reads only the active
             epoch. Automatic moves retain the epoch. A direct requeue into <span class="lane">4-auto-review</span> recreates
-            Post Processing state and queues the complete gate/aspect path before another escalation is possible.
+            Post Processing state and queues the complete gate/aspect path. The fresh pass excludes the pre-requeue status
+            and CLI-log tail from decision evidence, so another escalation requires a new gate or aspect event.
           </td>
         </tr>
         <tr>

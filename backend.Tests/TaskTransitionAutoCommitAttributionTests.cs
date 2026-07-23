@@ -353,6 +353,7 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         var moved = Assert.IsType<TaskInfo>(deps.Scanner.FindJob(slug, _watchPath));
         Assert.Equal(TaskStates.AutoReview, moved.State);
         Assert.Equal(1, OperatorReviewRequeueService.ReadEpoch(moved.FolderPath));
+        Assert.True(OperatorReviewRequeueService.ReadCliLogLineBoundary(moved.FolderPath) >= 0);
 
         var decisions = ReviewDecisionLog.ReadAll(_watchPath, ProjectName)
             .Where(r => r.JobId == slug)

@@ -1818,6 +1818,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         const string slug = "operator-fresh-assessment";
         SeedResolvedReviewCardPastGrace(slug);
+        // This failure text belongs to the consumed pre-requeue run. Without a
+        // log freshness boundary the completion gate reissues immediately and
+        // no aspect runs, reproducing the overnight ping-pong shape.
+        File.AppendAllText(
+            Path.Combine(_watchPath, TaskStates.AutoReview, slug, "logs", "cli-output.log"),
+            $"[12:00:40.000] [stdout] Build FAILED before operator recovery.{Environment.NewLine}");
         for (var i = 0; i < 2; i++)
         {
             ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(

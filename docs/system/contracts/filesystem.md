@@ -177,11 +177,14 @@ work/review lane opens a new review-attempt epoch:
   "actor": "human:operator@example.com",
   "reason": "Infrastructure repaired; reassess from fresh evidence.",
   "fromState": "5e-escalated",
-  "toState": "4-auto-review"
+  "toState": "4-auto-review",
+  "cliLogLineBoundary": 842
 }
 ```
 
 Legacy tasks without this file are in epoch 0. Automatic moves never change it.
+The CLI-log boundary keeps the append-only historical prefix readable while
+excluding it from decisions in the new epoch.
 Before fresh Post Processing starts, active verdict residue is moved under
 `results/history/review-epoch-NNNN/operator-requeue-<timestamp>/`. These files
 remain available for audit but are not active deliverables and are excluded from

@@ -155,7 +155,10 @@ post-step outputs, and the old follow-up) into
 `results/history/review-epoch-NNNN/`. That history is audit evidence and is
 excluded from the active `ResultsInventory`. A requeue directly into
 `4-auto-review` then enters Post Processing and queues the full gate plus aspect
-path before another escalation can be emitted.
+path. Assessments in the new epoch do not supply the pre-requeue `status.md` or
+the consumed prefix of the append-only CLI log as decision evidence;
+deterministic gates and aspects must create the first decision-capable evidence
+in the new epoch before another escalation can be emitted.
 
 **Escalation categories.** The system-initiated escalation funnel
 (`HumanReviewEscalationCategories`) records WHY a card was parked. AGT-1944 adds

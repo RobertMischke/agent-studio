@@ -88,6 +88,17 @@ public class ReviewEvidenceContextTests : IDisposable
         Assert.Contains("current-report.md", inventory);
         Assert.DoesNotContain("stale BLOCK", inventory);
         Assert.DoesNotContain("Result: Escalated", inventory);
+        Assert.True(ResultsInventory.HasActiveArtifacts(_jobFolder));
+    }
+
+    [Fact]
+    public void ResultsInventory_HistoryAloneIsNotActiveCompletionEvidence()
+    {
+        var history = Path.Combine(_jobFolder, "results", "history", "review-epoch-0001", "operator-requeue");
+        Directory.CreateDirectory(history);
+        File.WriteAllText(Path.Combine(history, "status.md"), "Result: Escalated");
+
+        Assert.False(ResultsInventory.HasActiveArtifacts(_jobFolder));
     }
 
     [Fact]

@@ -81,6 +81,7 @@ public sealed class OperatorReviewRequeueService
         var normalizedReason = string.IsNullOrWhiteSpace(reason)
             ? "Operator explicitly reopened the task for a fresh assessment."
             : reason.Trim();
+        var cliLogLineBoundary = CountCliLogLines(folderPath);
 
         WriteEpoch(folderPath, new ReviewAttemptEpoch(
             Epoch: epoch,
@@ -88,7 +89,8 @@ public sealed class OperatorReviewRequeueService
             Actor: actor,
             Reason: normalizedReason,
             FromState: fromState,
-            ToState: toState));
+            ToState: toState,
+            CliLogLineBoundary: cliLogLineBoundary));
 
         if (!string.IsNullOrWhiteSpace(_workspaceRoot)
             && !string.IsNullOrWhiteSpace(project))
@@ -149,18 +151,49 @@ public sealed class OperatorReviewRequeueService
     }
 
     public static int ReadEpoch(string? folderPath)
+        => ReadEpochState(folderPath)?.Epoch ?? 0;
+
+    /// <summary>
+    /// Number of append-only CLI log lines that predate the current operator
+    /// epoch. Null means no durable operator boundary is available.
+    /// </summary>
+    public static int? ReadCliLogLineBoundary(string? folderPath)
+        => ReadEpochState(folderPath)?.CliLogLineBoundary;
+
+    /// <summary>
+    /// Whether an active-root artefact was written after the current operator
+    /// boundary. Epoch-zero and legacy tasks retain their existing behaviour.
+    /// </summary>
+    public static bool IsArtifactFresh(string? folderPath, string artifactPath)
     {
-        if (string.IsNullOrWhiteSpace(folderPath)) return 0;
-        var path = EpochPath(folderPath);
-        if (!File.Exists(path)) return 0;
+        if (!File.Exists(artifactPath)) return false;
+        var epoch = ReadEpochState(folderPath);
+        if (epoch is null || epoch.Epoch <= 0 || epoch.StartedAt == default) return true;
         try
         {
-            var value = JsonSerializer.Deserialize<ReviewAttemptEpoch>(File.ReadAllText(path), Json);
-            return Math.Max(0, value?.Epoch ?? 0);
+            return File.GetLastWriteTimeUtc(artifactPath) >= epoch.StartedAt;
         }
         catch
         {
-            return 0;
+            return false;
+        }
+    }
+
+    private static ReviewAttemptEpoch? ReadEpochState(string? folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath)) return null;
+        var path = EpochPath(folderPath);
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var value = JsonSerializer.Deserialize<ReviewAttemptEpoch>(File.ReadAllText(path), Json);
+            return value is null
+                ? null
+                : value with { Epoch = Math.Max(0, value.Epoch) };
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -299,6 +332,14 @@ public sealed class OperatorReviewRequeueService
         if (File.Exists(path)) paths.Add(path);
     }
 
+    private static int? CountCliLogLines(string folderPath)
+    {
+        var path = TaskPaths.CliOutputLog(folderPath);
+        if (!File.Exists(path)) return 0;
+        try { return File.ReadLines(path).Count(); }
+        catch { return null; }
+    }
+
     private static string UniqueDestination(string directory, string name)
     {
         var candidate = Path.Combine(directory, name);
@@ -322,7 +363,8 @@ public sealed class OperatorReviewRequeueService
         string Actor,
         string Reason,
         string FromState,
-        string ToState);
+        string ToState,
+        int? CliLogLineBoundary);
 }
 
 public sealed record OperatorReviewRequeueResult(
