@@ -1,0 +1,10 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2260",
+      "title": "Operator-Requeue hat Autoritaet: Attempt-Epoche statt Wieder-Eskalation aus Altlasten",
+      "linkedAt": "2026-07-23T12:06:50.4990917Z",
+      "source": "auto"
+    }
+  ]
+}
