@@ -90,8 +90,20 @@ async function installRoutes(page: Page, runs: object[]): Promise<void> {
   const detail = makeDetail('3-progress');
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -272,7 +284,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
   }
 }
 
@@ -292,7 +304,7 @@ test.describe('Activity-pane: compact N Runs chip + modal', () => {
         );
         localStorage.setItem('taskboard.activeInspectorTab', '"activity"');
       } catch {
-        /* private mode */
+        return;
       }
     });
   });
