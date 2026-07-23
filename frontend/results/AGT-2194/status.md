@@ -48,3 +48,8 @@ Recovered and integrated after the Tranche 1 gate:
   across backend, Task Server, and Runner test projects.
 - Light and dark screenshots cover healthy, degraded, maintenance, migration,
   credential rotation, and failed backup states in this directory.
+
+The final re-cut verification on 2026-07-23 repeated the same solution and
+frontend gates from the assigned worktree. Task Server ESLint and Stylelint
+passed. The repository-wide frontend lint remains blocked by unrelated
+`origin/develop` baseline violations outside the AGT-2194 diff.
