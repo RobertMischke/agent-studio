@@ -44,6 +44,16 @@ public static class CompletionGate
         @"^(?:\[[^\]]*\]\s*)*\s*\d{1,6}[:\t]\s*\S.*[(){};]",
         RegexOptions.Compiled);
 
+    // apply_patch streams added diff lines to stderr with a literal "+ "
+    // after the structured CLI prefixes. Those lines are source/docs being
+    // written, not the run's own close-out. Scanning them reissues a completed
+    // fix when its patch happens to contain completion-gate vocabulary
+    // (AGT-2209). Require the stderr prefix so a real Markdown "+ [ ]" item in
+    // status.md remains actionable.
+    private static readonly Regex PatchAdditionEchoRegex = new(
+        @"^(?:\[[^\]]*\]\s*)*\[stderr\]\s*\+\s+\S",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // An echoed line from the durable pipeline history, usually produced by
     // rg/Get-Content while investigating a prior completion-gate verdict. The
     // JSON can contain the gate's own old "Build FAILED" finding; treating that
@@ -507,6 +517,10 @@ public static class CompletionGate
             // are identifiers/comments in printed source, not the run's own
             // close-out claims. See ToolSourceEchoRegex.
             if (ToolSourceEchoRegex.IsMatch(line)) continue;
+            // Drop apply_patch addition echoes. They can contain examples of
+            // unfinished-work vocabulary from the fix itself, but are not
+            // current completion evidence.
+            if (PatchAdditionEchoRegex.IsMatch(line)) continue;
             // Drop items the run explicitly disclaimed as pre-existing /
             // out-of-scope: they are not unfinished work this change owns
             // (AGT-1986). See PreExistingOutOfScopeRegex.

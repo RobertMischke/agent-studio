@@ -486,6 +486,33 @@ public class CompletionGateTests
         Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
     }
 
+    [Fact]
+    public void Evaluate_PipelinePendingFixPatchEcho_Passes()
+    {
+        // AGT-2209 final operator-sweep regression: apply_patch printed the
+        // successful fix as diff additions. The gate treated those source and
+        // incident-log echoes as fresh close-out prose and reissued the task.
+        var log = string.Join('\n',
+            "[16:24:51.347] [stderr] + // example \"PENDING-ladder\". Do not generalise this to an uppercase",
+            "[16:24:51.347] [stderr] + // token on its own, which can still be genuine unfinished-work prose.",
+            "[16:24:51.347] [stderr] + return match.Value.Equals(\"PENDING\", StringComparison.Ordinal) &&",
+            "[16:24:51.347] [stderr] + <td><code>AGT-2209</code><br><span class=\"small\">Pipeline Pending-label completion-gate loop</span></td>",
+            "[16:24:51.347] [stderr] + The reported findings quoted only the stale <code>PENDING</code> Pipeline label that the change removed.",
+            "[16:24:51.347] [stderr] + The completion gate treated every occurrence of the word <code>pending</code> as unfinished work, including quoted",
+            "[16:24:51.347] [stderr] + they are the line's complete set of unfinished-work matches. Genuine prose such as \"verification is still pending\"",
+            "[16:24:52.000] [stdout] [[TASK_DONE]]");
+
+        var findings = CompletionGate.ExtractFindings(statusMarkdown: null, log);
+        var decision = CompletionGate.Evaluate(
+            statusMarkdown: null,
+            log,
+            priorReissues: MaxReissues,
+            maxReissues: MaxReissues);
+
+        Assert.Empty(findings);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
+    }
+
     [Theory]
     [InlineData("Pipeline verification is still pending.")]
     [InlineData("VERIFICATION PENDING")]
