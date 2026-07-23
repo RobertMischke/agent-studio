@@ -185,6 +185,41 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
         Assert.Equal(2, companion.RootElement.GetProperty("agentReads").GetProperty("total").GetInt32());
     }
 
+    [Fact]
+    public void BackfillThenLiveRead_PreservesTheHistoricalBaselineAndAddsContinuousEvidence()
+    {
+        WriteTask("reader", "AGT-2244");
+        var taskDir = Path.Combine(_tasks, TaskStates.Progress, "reader");
+        File.WriteAllText(
+            Path.Combine(taskDir, "logs", "cli-output.log"),
+            "[10:00:00.000] [stdout] ● Read docs/concepts/overview.md\n");
+        var service = BuildService(out _);
+
+        var baseline = service.EnsureBackfilled();
+        var liveAt = new DateTime(2026, 7, 23, 12, 0, 0, DateTimeKind.Utc);
+        var applied = service.ProcessOutput("AGT-2244",
+        [
+            new CliOutputLine
+            {
+                Timestamp = liveAt,
+                Stream = "stdout",
+                Text = "● Read docs/concepts/overview.md",
+            },
+        ]);
+
+        Assert.Equal(1, baseline.ReadsApplied);
+        Assert.Equal(1, applied);
+        using var companion = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(_repo, "docs", "concepts", "overview.md.meta.json")));
+        var reads = companion.RootElement.GetProperty("agentReads");
+        Assert.Equal(2, reads.GetProperty("total").GetInt32());
+        Assert.Equal(liveAt, reads.GetProperty("lastReadAt").GetDateTime().ToUniversalTime());
+        Assert.Equal(2, reads.GetProperty("recent").GetArrayLength());
+        Assert.All(
+            reads.GetProperty("recent").EnumerateArray(),
+            item => Assert.Equal("AGT-2244", item.GetProperty("taskKey").GetString()));
+    }
+
     private void WriteTask(string id, string key)
     {
         var taskDir = Path.Combine(_tasks, TaskStates.Progress, id);
