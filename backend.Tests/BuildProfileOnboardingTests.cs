@@ -176,6 +176,91 @@ public sealed class BuildProfileValidationServiceTests : IDisposable
         Assert.Null(settings.Get("runbook").BuildProfile);
     }
 
+    [Fact]
+    public void DotnetValidationCommand_OnWindows_UsesCmdWithoutBash()
+    {
+        var psi = ProcessBuildCommandRunner.CreateStartInfo(
+            _workspace,
+            "dotnet build AgentStudio.sln",
+            isWindows: true);
+
+        Assert.Equal("cmd.exe", psi.FileName);
+        Assert.Equal(["/c", "dotnet build AgentStudio.sln"], psi.ArgumentList.ToArray());
+        Assert.DoesNotContain("bash", psi.FileName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidationEndpoint_OnWindows_UsesProjectWorkingDirectoryNotTaskStorage()
+    {
+        var entry = new WatchPathEntry
+        {
+            Path = @"C:\Projects\agent-taskboard-workspace\projects\agent-taskboard",
+            RootPath = @"C:\Projects\agent-taskboard-devspace\agent-taskboard-dev",
+            RepositoryPath = @"C:\Projects\agent-taskboard-devspace\agent-taskboard",
+        };
+
+        var workingDirectory = ProjectSettingsEndpoints.ResolveBuildProfileWorkingDirectory(entry);
+
+        Assert.Equal(entry.RootPath, workingDirectory);
+        Assert.NotEqual(entry.Path, workingDirectory);
+    }
+
+    [Fact]
+    public void ValidationEndpoint_FallsBackToRepositoryPathWhenRootPathIsMissing()
+    {
+        var entry = new WatchPathEntry
+        {
+            Path = @"C:\Projects\agent-taskboard-workspace\projects\agent-taskboard",
+            RepositoryPath = @"C:\Projects\agent-taskboard-devspace\agent-taskboard",
+        };
+
+        var workingDirectory = ProjectSettingsEndpoints.ResolveBuildProfileWorkingDirectory(entry);
+
+        Assert.Equal(entry.RepositoryPath, workingDirectory);
+    }
+
+    [Fact]
+    public void ValidationEndpoint_DoesNotUseTaskStorageAsWorkingDirectory()
+    {
+        var entry = new WatchPathEntry
+        {
+            Path = @"C:\Projects\agent-taskboard-workspace\projects\agent-taskboard",
+        };
+
+        var workingDirectory = ProjectSettingsEndpoints.ResolveBuildProfileWorkingDirectory(entry);
+
+        Assert.Null(workingDirectory);
+    }
+
+    [Fact]
+    public async Task DotnetProfile_UsesHostShell_ValidatesGreenAndAllowsPickup()
+    {
+        File.WriteAllText(Path.Combine(_workspace, "Validation.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+              </PropertyGroup>
+            </Project>
+            """);
+        var settings = BuildSettings();
+        settings.SetBuildProfile("runbook", new BuildProfile
+        {
+            Stack = "dotnet",
+            BuildCmds = ["dotnet build Validation.csproj --nologo -p:NuGetAudit=false"],
+        });
+        var svc = BuildValidator(settings, new ProcessBuildCommandRunner());
+
+        var result = await svc.ValidateAsync("runbook", _workspace, CancellationToken.None);
+
+        Assert.True(result.Green, result.Summary);
+        Assert.Equal(BuildProfileStatuses.PipelineReady, settings.Get("runbook").BuildProfile!.Status);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(settings.Get("runbook").BuildProfile));
+
+        var reloadedProfile = BuildSettings().Get("runbook").BuildProfile;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, reloadedProfile!.Status);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(reloadedProfile));
+    }
+
     private ProjectSettingsService BuildSettings()
     {
         var config = new ConfigurationBuilder()

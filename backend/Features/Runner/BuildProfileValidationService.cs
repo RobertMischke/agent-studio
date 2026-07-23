@@ -20,9 +20,10 @@ public interface IBuildCommandRunner
 }
 
 /// <summary>
-/// Default <see cref="IBuildCommandRunner"/>: runs the command through git-bash
-/// (<c>bash -lc</c>) in the given working directory, matching the repo's shell
-/// policy (sh, not PowerShell). Captures combined stdout+stderr (tail-bounded).
+/// Default <see cref="IBuildCommandRunner"/>: runs the command through the same
+/// platform shell selection as the build/test gate. Windows uses
+/// <c>cmd.exe /c</c>; Unix-like hosts use <c>/bin/sh -c</c>. Captures combined
+/// stdout+stderr (tail-bounded).
 /// </summary>
 public sealed class ProcessBuildCommandRunner : IBuildCommandRunner
 {
@@ -30,17 +31,7 @@ public sealed class ProcessBuildCommandRunner : IBuildCommandRunner
 
     public async Task<BuildCommandResult> RunAsync(string workingDir, string command, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "bash",
-            WorkingDirectory = workingDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        psi.ArgumentList.Add("-lc");
-        psi.ArgumentList.Add(command);
+        var psi = CreateStartInfo(workingDir, command);
 
         using var proc = new Process { StartInfo = psi };
         var sb = new System.Text.StringBuilder();
@@ -64,6 +55,12 @@ public sealed class ProcessBuildCommandRunner : IBuildCommandRunner
             output = output[^MaxCapturedChars..];
         return new BuildCommandResult(proc.ExitCode, output);
     }
+
+    internal static ProcessStartInfo CreateStartInfo(
+        string workingDir,
+        string command,
+        bool? isWindows = null) =>
+        PlatformShellCommand.CreateStartInfo(workingDir, command, isWindows);
 }
 
 /// <summary>Outcome of a full validation dry-run.</summary>

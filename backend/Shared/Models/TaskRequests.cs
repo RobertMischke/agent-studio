@@ -465,10 +465,11 @@ public record SetAutoCommitRequest
 
 /// <summary>
 /// Body for <c>PUT /api/projects/{name}/build-profile</c> (Slice P / ASS-1663).
-/// Declares (or re-declares) the project's build profile. Setting a profile
-/// always resets onboarding to <see cref="BuildProfileStatuses.Declared"/> -
-/// changing how the project builds invalidates any prior green dry-run, so the
-/// project must re-validate before the runner picks it up again.
+/// Declares (or re-declares) the project's build profile. Changing
+/// <see cref="InstallCmd"/> or <see cref="BuildCmds"/> resets onboarding to
+/// <see cref="BuildProfileStatuses.Declared"/>. Changes to fields outside the
+/// install/build dry-run, such as <see cref="TestCmds"/>, retain the prior
+/// validation result.
 /// </summary>
 public record SetBuildProfileRequest
 {

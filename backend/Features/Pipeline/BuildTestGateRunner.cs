@@ -1279,10 +1279,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         RingOutput output,
         CancellationToken ct)
     {
-        var (fileName, args) = OperatingSystem.IsWindows()
-            ? ("cmd.exe", (IReadOnlyList<string>)["/c", command])
-            : ("/bin/sh", (IReadOnlyList<string>)["-c", command]);
-        return RunProcessAsync(workingDirectory, command, fileName, args, timeout, output, ct);
+        var startInfo = PlatformShellCommand.CreateStartInfo(workingDirectory, command);
+        return RunProcessAsync(
+            workingDirectory,
+            command,
+            startInfo.FileName,
+            startInfo.ArgumentList.ToArray(),
+            timeout,
+            output,
+            ct);
     }
 
     private async Task<BuildTestGateProcessEvidence> RunProcessAsync(

@@ -315,11 +315,11 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Slice P (ASS-1663): declares (or re-declares) the project's build profile.
-    /// Normalizes blank command/path entries away and always resets onboarding to
-    /// <see cref="BuildProfileStatuses.Declared"/> - changing how the project
-    /// builds invalidates any prior green dry-run, so the project must re-validate
-    /// before the runner picks it up. Pass a null <paramref name="profile"/> to
-    /// clear the profile entirely (revert to legacy "no gate" behaviour).
+    /// Normalizes blank command/path entries away. A prior validation result is
+    /// retained when the install and build command identity is unchanged; fields
+    /// that the dry-run does not execute, such as test filters, do not invalidate
+    /// a green profile. Pass a null <paramref name="profile"/> to clear the profile
+    /// entirely (revert to legacy "no gate" behaviour).
     /// </summary>
     public void SetBuildProfile(string projectName, BuildProfile? profile)
     {
@@ -328,7 +328,19 @@ public class ProjectSettingsService
         {
             var key = ResolveAliasLocked(projectName);
             var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
-            _cache[key] = current with { BuildProfile = NormalizeProfile(profile) };
+            var normalized = NormalizeProfile(profile);
+            if (current.BuildProfile is not null
+                && normalized is not null
+                && HasSameValidationCommands(current.BuildProfile, normalized))
+            {
+                normalized = normalized with
+                {
+                    Status = BuildProfileStatuses.Normalize(current.BuildProfile.Status),
+                    LastValidatedAt = current.BuildProfile.LastValidatedAt,
+                    LastValidationError = current.BuildProfile.LastValidationError,
+                };
+            }
+            _cache[key] = current with { BuildProfile = normalized };
             Persist();
         }
         _logger.LogInformation(
@@ -414,6 +426,11 @@ public class ProjectSettingsService
             LastValidationError = null,
         };
     }
+
+    private static bool HasSameValidationCommands(BuildProfile current, BuildProfile next) =>
+        string.Equals(current.InstallCmd, next.InstallCmd, StringComparison.Ordinal)
+        && (current.BuildCmds ?? Array.Empty<string>())
+            .SequenceEqual(next.BuildCmds ?? Array.Empty<string>(), StringComparer.Ordinal);
 
     /// <summary>
     /// Persists the runner mode for a project so the auto-pickup toggle survives

@@ -1,0 +1,32 @@
+name: Build profile validation (Windows)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'backend.Tests/**'
+      - '.github/workflows/build-profile-validation-windows.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'backend.Tests/**'
+      - '.github/workflows/build-profile-validation-windows.yml'
+
+jobs:
+  build-profile-validation:
+    name: Host-native dotnet profile
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Validate host-native shell and retained pickup state
+        run: >-
+          dotnet test backend.Tests/OrchestratorApi.Tests.csproj
+          --filter "FullyQualifiedName=AgentStudio.Tests.BuildProfileValidationServiceTests.DotnetProfile_UsesHostShell_ValidatesGreenAndAllowsPickup|FullyQualifiedName=AgentStudio.Tests.ProjectSettingsServiceTests.ChangingOnlyTestFilter_PreservesPipelineReadyValidation"
+          --logger "console;verbosity=normal"

@@ -619,6 +619,37 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void ChangingOnlyTestFilter_PreservesPipelineReadyValidation()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile
+        {
+            InstallCmd = "dotnet restore",
+            BuildCmds = ["dotnet build"],
+            TestCmds = ["dotnet test --filter Category=Fast"],
+        });
+        svc.MarkBuildProfileValidated("runbook");
+        var validatedAt = svc.Get("runbook").BuildProfile!.LastValidatedAt;
+
+        svc.SetBuildProfile("runbook", new BuildProfile
+        {
+            InstallCmd = "dotnet restore",
+            BuildCmds = ["dotnet build"],
+            TestCmds = ["dotnet test --filter Category=Windows"],
+        });
+
+        var profile = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, profile.Status);
+        Assert.Equal(validatedAt, profile.LastValidatedAt);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(profile));
+
+        var reloaded = Build().Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, reloaded.Status);
+        Assert.Equal(validatedAt, reloaded.LastValidatedAt);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(reloaded));
+    }
+
+    [Fact]
     public void SetBuildProfileNull_ClearsProfile()
     {
         var svc = Build();
