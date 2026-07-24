@@ -18,7 +18,8 @@ interface DetailTrace {
 
 interface DetailNetworkProof {
   staleLaneReference: DetailTrace;
-  resolvedProjectReference: DetailTrace;
+  boardReference: DetailTrace;
+  searchReference: DetailTrace;
 }
 
 async function firstWatchPath(): Promise<WatchPath> {
@@ -70,7 +71,7 @@ async function persistScreenshot(page: Page, fileName: string): Promise<void> {
 }
 
 test.describe('Search result task detail loading', () => {
-  test('resolves a moved task by task id and project handle instead of its stale lane reference', async ({ page, devBackend }, testInfo) => {
+  test('resolves board and stale search references through the same lane-independent request', async ({ page, context, devBackend }, testInfo) => {
     void devBackend;
     const watch = await firstWatchPath();
     const jobId = uniqueId('moved');
@@ -83,10 +84,10 @@ test.describe('Search result task detail loading', () => {
       fixture: false,
     });
 
-    const trace: DetailTrace[] = [];
+    const searchTrace: DetailTrace[] = [];
     page.on('response', response => {
       if (isTaskDetailResponse(response, jobId)) {
-        trace.push({
+        searchTrace.push({
           method: response.request().method(),
           url: response.url(),
           status: response.status(),
@@ -130,20 +131,54 @@ test.describe('Search result task detail loading', () => {
       };
       expect(staleLaneReference.status).toBe(404);
 
+      const boardPage = await context.newPage();
+      const boardTrace: DetailTrace[] = [];
+      boardPage.on('response', response => {
+        if (isTaskDetailResponse(response, jobId)) {
+          boardTrace.push({
+            method: response.request().method(),
+            url: response.url(),
+            status: response.status(),
+            statusText: response.statusText(),
+          });
+        }
+      });
+      await boardPage.goto('/');
+      await dismissCrashRecovery(boardPage);
+      const boardCard = boardPage
+        .locator('[data-testid="task-card"], [data-testid="job-card"]')
+        .filter({ hasText: jobId })
+        .first();
+      await expect(boardCard).toBeVisible({ timeout: 15_000 });
+      await boardCard.click();
+      await expect(boardPage.getByTestId('studio-task')).toContainText(title);
+      await expect(boardPage.getByText('Loading task details…')).toHaveCount(0);
+      await persistScreenshot(boardPage, 'board-move-task-detail.png');
+      expect(boardTrace).toHaveLength(1);
+      await boardPage.close();
+
       await page.getByTestId('global-search-group-tasks').getByRole('option', { name: new RegExp(jobId) }).click();
 
       await expect(page.getByTestId('studio-task')).toContainText(title);
       await expect(page.getByText('Loading task details…')).toHaveCount(0);
       await persistScreenshot(page, 'search-move-task-detail.png');
 
-      expect(trace).toHaveLength(1);
-      const requestUrl = new URL(trace[0].url);
-      expect(trace[0].status).toBe(200);
-      expect(requestUrl.searchParams.get('project')).toBeTruthy();
-      expect(requestUrl.searchParams.has('watchPath')).toBe(false);
+      expect(searchTrace).toHaveLength(1);
+      const boardRequestUrl = new URL(boardTrace[0].url);
+      const searchRequestUrl = new URL(searchTrace[0].url);
+      expect(boardTrace[0].status).toBe(200);
+      expect(searchTrace[0].status).toBe(200);
+      expect(boardRequestUrl.pathname).toBe(searchRequestUrl.pathname);
+      expect(boardRequestUrl.searchParams.get('project')).toBeTruthy();
+      expect(searchRequestUrl.searchParams.get('project')).toBe(
+        boardRequestUrl.searchParams.get('project'),
+      );
+      expect(boardRequestUrl.searchParams.has('watchPath')).toBe(false);
+      expect(searchRequestUrl.searchParams.has('watchPath')).toBe(false);
       const networkProof: DetailNetworkProof = {
         staleLaneReference,
-        resolvedProjectReference: trace[0],
+        boardReference: boardTrace[0],
+        searchReference: searchTrace[0],
       };
       await testInfo.attach('detail-network-trace', {
         body: Buffer.from(JSON.stringify(networkProof, null, 2)),
