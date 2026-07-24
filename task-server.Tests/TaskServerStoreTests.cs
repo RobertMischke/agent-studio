@@ -22,9 +22,9 @@ public sealed class TaskServerStoreTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT count(*) FROM schema_migrations WHERE version = 1;";
+            command.CommandText = $"SELECT count(*) FROM schema_migrations WHERE version = {TaskServerStore.CurrentSchemaVersion};";
             Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
-            command.CommandText = "UPDATE meta SET value = '2' WHERE key = 'schema_version';";
+            command.CommandText = $"UPDATE meta SET value = '{TaskServerStore.CurrentSchemaVersion + 1}' WHERE key = 'schema_version';";
             await command.ExecuteNonQueryAsync();
         }
 

@@ -17,9 +17,11 @@
 
 - Batch remote and local coding-agent work with task management in one place.
 - Reduces cognitive load: task state, progress and evidence are visible instead of remembered.
-- A management layer over autonomous agent runs — assign, gate, review, account.
+- A management layer over autonomous agent runs: assign, gate, review, account.
 - Works with your existing CLI subscriptions, or bring your own API keys.
-- Runs fully local or distributed — your choice per project.
+- Runs fully local or distributed, your choice per project.
+- Keeps the Task Server as the durable control plane while separately fenced
+  Remote Review Executors inspect immutable result revisions.
 
 ## Running locally
 

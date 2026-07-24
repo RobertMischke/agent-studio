@@ -103,13 +103,30 @@ public sealed class TaskServerClient : IDisposable
         {
             var options = _options ?? throw new InvalidOperationException("Runner options are unavailable for v1 registration.");
             var runnerId = options.RunnerId;
+            var capabilities = options.Role == "review"
+                ? new[]
+                {
+                    Contract.ReviewCapabilities.ReviewExecutor,
+                    Contract.ReviewCapabilities.GitMaterialization,
+                    Contract.ReviewCapabilities.SourceBundleMaterialization,
+                    Contract.ReviewCapabilities.SemanticReview,
+                    Contract.ReviewCapabilities.VisionReview,
+                }
+                : new[]
+                {
+                    Contract.ReviewCapabilities.CodingExecutor,
+                    "claim",
+                    "events",
+                    "artifacts",
+                    "fenced-completion",
+                };
             var request = new Contract.RegisterRunnerRequest(
                 displayName,
                 options.Hostname,
                 RunnerInstanceId,
                 typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
                 RunnerOptions.ProtocolVersion,
-                ["claim", "events", "artifacts", "fenced-completion"]);
+                capabilities);
             _ = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
                 HttpMethod.Put,
                 $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}",
@@ -184,7 +201,7 @@ public sealed class TaskServerClient : IDisposable
     /// <summary>The client id this runner presents as X-Client-Id (server-assigned after registration).</summary>
     public string ClientId { get; private set; } = string.Empty;
 
-    private string RunnerInstanceId => $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
+    internal string RunnerInstanceId => $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
 
     /// <summary>How long the liveness probe waits before it calls the server unreachable.</summary>
     private const int HealthProbeTimeoutSeconds = 10;
@@ -274,6 +291,64 @@ public sealed class TaskServerClient : IDisposable
             ProjectName: claim.Task.ProjectId,
             Lease: legacyLease,
             ProjectId: claim.Task.ProjectId);
+    }
+
+    public async Task<Contract.ReviewClaimResponse> ClaimReviewAsync(
+        Contract.ReviewClaimRequest request,
+        CancellationToken ct)
+    {
+        if (!_useV1)
+            throw new TaskServerException(409, "Remote review execution requires the versioned Task Server.");
+        return await PostJsonAsync<Contract.ReviewClaimRequest, Contract.ReviewClaimResponse>(
+                   $"/api/v1/runners/{Uri.EscapeDataString(request.ExecutorId)}/review-claims",
+                   request,
+                   ct)
+               ?? new Contract.ReviewClaimResponse("empty", Message: "Empty review claim response.");
+    }
+
+    public async Task<Contract.ReviewLeaseDto> RenewReviewLeaseAsync(
+        string attemptId,
+        Contract.ReviewLeaseRenewRequest request,
+        CancellationToken ct)
+        => await PostJsonAsync<Contract.ReviewLeaseRenewRequest, Contract.ReviewLeaseDto>(
+               $"/api/v1/reviews/attempts/{Uri.EscapeDataString(attemptId)}/lease/renew",
+               request,
+               ct)
+           ?? throw new TaskServerException(500, "Empty review lease renewal response.");
+
+    public async Task<Contract.ReviewReportDto> ReportReviewAsync(
+        string attemptId,
+        Contract.ReviewReportRequest request,
+        CancellationToken ct)
+        => await PostJsonAsync<Contract.ReviewReportRequest, Contract.ReviewReportDto>(
+               $"/api/v1/reviews/attempts/{Uri.EscapeDataString(attemptId)}/report",
+               request,
+               ct)
+           ?? throw new TaskServerException(500, "Empty review report response.");
+
+    public async Task<Contract.ReviewCleanupResponse> CleanupReviewAsync(
+        string attemptId,
+        Contract.ReviewCleanupRequest request,
+        CancellationToken ct)
+        => await PostJsonAsync<Contract.ReviewCleanupRequest, Contract.ReviewCleanupResponse>(
+               $"/api/v1/reviews/attempts/{Uri.EscapeDataString(attemptId)}/cleanup",
+               request,
+               ct)
+           ?? throw new TaskServerException(500, "Empty review cleanup response.");
+
+    public async Task<Contract.ArtifactContentDto?> GetArtifactContentAsync(
+        string runId,
+        string artifactId,
+        CancellationToken ct)
+    {
+        using var response = await _http.GetAsync(
+            $"/api/v1/runs/{Uri.EscapeDataString(runId)}/artifacts/{Uri.EscapeDataString(artifactId)}/content",
+            ct);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        var detail = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new TaskServerException((int)response.StatusCode, $"Artifact fetch failed: {Trim(detail)}");
+        return JsonSerializer.Deserialize<Contract.ArtifactContentDto>(detail, Json);
     }
 
     public async Task ReportGitCapabilityAsync(string clientId, RunnerGitCapabilityRequest request, CancellationToken ct)
@@ -390,7 +465,17 @@ public sealed class TaskServerClient : IDisposable
         var authority = V1Authority(req.TaskKey);
         _ = await PostJsonAsync<Contract.CompleteRunRequest, Contract.RunDto>(
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
-            new Contract.CompleteRunRequest(req.RunnerId, RunnerInstanceId, req.LeaseId, req.FencingToken, req.Outcome, req.Reason),
+            new Contract.CompleteRunRequest(
+                req.RunnerId,
+                RunnerInstanceId,
+                req.LeaseId,
+                req.FencingToken,
+                req.Outcome,
+                req.Reason,
+                req.ResultSha,
+                RepositoryIdentity(req.Repository),
+                req.Repository,
+                req.SalvageBranch is null ? null : $"refs/heads/{req.SalvageBranch}"),
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
         _v1TaskBodies.TryRemove(req.TaskKey, out _);
@@ -480,6 +565,14 @@ public sealed class TaskServerClient : IDisposable
         ".md" or ".txt" or ".log" => "text/plain",
         _ => "application/octet-stream",
     };
+
+    internal static string? RepositoryIdentity(string? repositoryUrl)
+    {
+        if (string.IsNullOrWhiteSpace(repositoryUrl)) return null;
+        var canonical = repositoryUrl.Trim().TrimEnd('/').ToLowerInvariant();
+        return "repo_" + Convert.ToHexString(
+            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
+    }
 
     private static string Trim(string s) => s.Length <= 300 ? s : s[..300] + "...";
 

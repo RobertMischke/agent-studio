@@ -147,20 +147,20 @@
     "type": "html",
     "fingerprint": {
       "algorithm": "sha256",
-      "hash": "91dabbb2a5ddb2817e8a01534a42a2113b358a2b65d0ed9c4bedaec2e96c8823",
-      "sizeBytes": 112322,
-      "lineCount": 1525,
-      "capturedAt": "2026-07-18T18:45:50.382Z"
+      "hash": "42cc321e0590e27dfc8c4855caf4e28f61d7d242f9db4a90f49a7952ef6c4294",
+      "sizeBytes": 114474,
+      "lineCount": 1530,
+      "capturedAt": "2026-07-24T17:15:29.000Z"
     }
   },
   "classification": {
     "owner": "concepts",
     "documentMode": "documentation",
     "temporalState": "unknown",
-    "implementationState": "unknown",
+    "implementationState": "partial",
     "status": "aktuell",
     "supersededBy": null,
     "type": "konzept",
-    "analyzedAt": "2026-07-18"
+    "analyzedAt": "2026-07-24"
   }
 }

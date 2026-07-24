@@ -15,7 +15,7 @@ if (help)
 void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] [runner] {message}");
 
 var daemonMode = taskKey is null || !once;
-Log($"agent-runner starting: server={options.ServerUrl} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
+Log($"agent-runner starting: server={options.ServerUrl} role={options.Role} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -47,6 +47,14 @@ if (options.HealthCheckOnly)
 try
 {
     await client.EnsureCompatibleAsync(shutdown.Token);
+    if (options.Role == "review")
+    {
+        if (!daemonMode)
+            throw new ArgumentException("Remote Review Executor runs as a polling service and does not accept coding task keys.");
+        await new RemoteReviewDaemon(options, client, Log).RunAsync(shutdown.Token);
+        Log("review daemon stopped");
+        return 0;
+    }
     if (daemonMode)
     {
         await new RemoteRunnerDaemon(options, client, Log).RunAsync(shutdown.Token);
@@ -98,12 +106,14 @@ static void PrintUsage()
           --server <url>          Task Server base URL       (RUNNER_SERVER_URL)
           --runner-id <id>        Stable runner identity     (RUNNER_ID)
           --runner-name <name>    Board-facing runner name   (RUNNER_NAME)
+          --role <coding|review>  Separate service role      (RUNNER_ROLE)
           --client-id <id>        Attribution label only     (RUNNER_CLIENT_ID)
           --git-remote <url>      Origin the code arrives on  (RUNNER_GIT_REMOTE)
           --git-push-remote <url> Write-only origin pushurl   (RUNNER_GIT_PUSH_REMOTE)
           --branch <name>         Branch to check out         (RUNNER_BRANCH)
           --base-branch <name>    Fallback branch             (RUNNER_BASE_BRANCH)
           --workdir <path>        Checkout + results dir      (RUNNER_WORKDIR)
+          --review-workdir <path> Disposable review root      (RUNNER_REVIEW_WORKDIR)
           --cli <bin>             Agent CLI binary            (RUNNER_CLI_BIN)
           --cli-args "<args>"     Headless CLI args           (RUNNER_CLI_ARGS)
           --auth-token-file <p>   Protected credential file  (RUNNER_AUTH_TOKEN_FILE)
