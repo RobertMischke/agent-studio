@@ -600,19 +600,17 @@ public class TaskMutationService
 
         if (entry == null) return null;
 
-        // Backlog is the default landing lane: a job created with no explicit
-        // targetState lands in 0-backlog (triage staging) instead of 1-preparation.
-        // Callers that want the legacy "create-and-prep" or "create-and-ready"
-        // behavior pass an explicit targetState. This is the load-bearing
-        // semantics from the backlog-lane spec: preparation is for *active*
-        // prep, not raw intake.
-        var targetState = req.TargetState switch
-        {
-            TaskStates.Backlog => TaskStates.Backlog,
-            TaskStates.Preparation => TaskStates.Preparation,
-            TaskStates.Ready => TaskStates.Ready,
-            _ => TaskStates.Backlog
-        };
+        // Backlog is the default landing lane when the caller supplies no
+        // targetState. An explicit valid lane is authoritative. In particular,
+        // operator and automation callers may intentionally create a card in a
+        // review lane; silently clamping those requests to Backlog loses the
+        // caller's routing decision and lets later guards misclassify the card.
+        var targetState = string.IsNullOrWhiteSpace(req.TargetState)
+            ? TaskStates.Backlog
+            : TaskStates.All.Contains(req.TargetState, StringComparer.Ordinal)
+                ? req.TargetState
+                : null;
+        if (targetState == null) return null;
 
         // Sanitize ID: transliterate umlauts, lowercase, replace spaces with dashes, only allow safe chars
         var baseSlug = string.IsNullOrWhiteSpace(req.Id)

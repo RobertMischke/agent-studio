@@ -73,6 +73,26 @@ public class CreateTaskByProjectHandleTests : IDisposable
     }
 
     [Fact]
+    public void CreateTask_HonorsExplicitTargetStateBeyondIntakeLanes()
+    {
+        var (machine, scanner, mutations, registry) = Build();
+        machine.EnsureStateFoldersAndMigrate();
+        var record = registry.EnsureProjectForStorage(_watchPath, "Demo Project", "default");
+
+        var id = mutations.CreateJob(new CreateTaskRequest
+        {
+            Title = "Operator Review Task",
+            Project = record.Id,
+            TargetState = TaskStates.HumanReview,
+        });
+
+        Assert.Equal("operator-review-task", id);
+        var info = scanner.FindJob(id!, _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal(TaskStates.HumanReview, info!.State);
+    }
+
+    [Fact]
     public void CreateTask_ProjectHandle_TakesPrecedenceOverWatchPath()
     {
         var (machine, scanner, mutations, registry) = Build();
