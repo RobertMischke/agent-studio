@@ -223,7 +223,8 @@ has the same restriction: it may add candidate ids, but it cannot remove the
 diff/history selection or supply shell text.
 
 Every card's build/test pipeline reason states the effective level and whether
-the full suite ran. Detailed reproducibility evidence is stored under the task
+the full suite ran; the passed status icon exposes this reason on hover.
+Detailed reproducibility evidence is stored under the task
 as `post-steps/build-test-gate-*.log`: diff input, history input, candidates,
 chosen ids and commands, model, and rationale. A failing baseline command that
 is outside the selected work package produces

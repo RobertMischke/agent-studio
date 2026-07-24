@@ -152,6 +152,8 @@ pipeline view.
   required `full` level can never be bypassed by the no-code-diff optimization.
 - The build/test step reason always states the effective level, selected count,
   whether the full suite ran, and how many full-suite commands were omitted.
+  The task Overview exposes that reason from the passed status icon as well, so
+  a green work-package subset cannot be mistaken for a full-suite pass.
   Its `post-steps/build-test-gate-*.log` contains the exact diff input, history
   rows, candidate inventory, chosen ids/commands, selector/model, and reasons.
   `FullSuiteRan` is execution evidence, not a planning claim: it becomes true
