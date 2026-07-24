@@ -8,10 +8,20 @@ export interface PromptCatalogItem {
   description: string;
   group: string;
   hasDefault: boolean;
+  /** True when the application-wide user-data override exists. */
+  hasGlobalOverride?: boolean;
   hasOverride: boolean;
+  /** Global override drift only; project drift is carried per origin below. */
+  globalDefaultChangedSinceOverride?: boolean;
   defaultChangedSinceOverride: boolean;
   slots: string[];
   usageCount: number;
+  /** Project pipeline overrides bound to this runtime template. */
+  projectOverrides?: PromptProjectOverride[];
+  /** AGT-2286 telemetry. Optional during rolling frontend/backend upgrades. */
+  lastChangedAt?: string | null;
+  lastChangedSha?: string | null;
+  lastReviewedAt?: string | null;
 }
 
 export interface PromptCatalogResponse {
@@ -43,6 +53,25 @@ export interface PromptDetail {
   overrideUpdatedAt: string | null;
   slots: string[];
   usages: PromptUsageRef[];
+  projectOverrides?: PromptProjectOverride[];
+}
+
+/**
+ * One project-settings pipelineSteps[step].prompt override and its shipped
+ * baseline. The baseline fields let the catalogue show the same stale state
+ * as the detail warning without opening every prompt.
+ */
+export interface PromptProjectOverride {
+  projectName: string;
+  stepId: string;
+  promptName: string | null;
+  content: string;
+  orphaned: boolean;
+  matchesDefault: boolean;
+  addedLines: number;
+  removedLines: number;
+  baseDefaultSha?: string | null;
+  defaultChangedSinceOverride?: boolean;
 }
 
 /** Result of a non-persisting "Probelauf" render against supplied slot values. */

@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace AgentStudio.Prompts;
@@ -245,6 +247,14 @@ public sealed partial class RuntimePromptService
             if (known.Add(key)) seen.Add(key);
         }
         return seen;
+    }
+
+    /// <summary>Stable normalized SHA used by every prompt override layer.</summary>
+    public static string ContentSha(string content)
+    {
+        var bytes = SHA256.HashData(
+            Encoding.UTF8.GetBytes(content.Replace("\r\n", "\n")));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     [GeneratedRegex(@"\{\{\s*(?<key>[A-Za-z0-9_]+)\s*\}\}", RegexOptions.Compiled)]

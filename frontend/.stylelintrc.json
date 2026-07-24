@@ -190,6 +190,7 @@
         "src/app/components/tooltip/tooltip.scss",
         "src/app/features/board/components/create-task-dialog/create-task-dialog.component.scss",
         "src/app/features/board/components/task-column/task-column.scss",
+        "src/app/features/orchestrator/components/prompt-catalogue-nav/prompt-catalogue-nav.component.scss",
         "src/app/features/project-detail/components/execution-assignment-card/execution-assignment-card.scss",
         "src/app/features/project-detail/components/project-basics-card/project-basics-card.component.scss",
         "src/app/features/project-detail/components/deployment-definition-editor/deployment-definition-editor.scss",

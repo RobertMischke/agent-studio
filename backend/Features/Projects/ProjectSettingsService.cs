@@ -589,6 +589,12 @@ public class ProjectSettingsService
                     Model = normalizedModel,
                     ThinkingLevel = normalizedThinkingLevel,
                     Prompt = normalizedPrompt,
+                    PromptBaseDefaultSha = normalizedPrompt is null
+                        ? null
+                        : setting.PromptBaseDefaultSha,
+                    PromptBaseDefaultContent = normalizedPrompt is null
+                        ? null
+                        : setting.PromptBaseDefaultContent,
                     Condition = normalizedCondition,
                 };
             }

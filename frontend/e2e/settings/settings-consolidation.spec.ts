@@ -76,7 +76,9 @@ test.describe('Settings consolidation (AGT-2035)', () => {
     // Summary is gone.
     await expect(page.getByTestId('workspace-settings-rail-summary')).toHaveCount(0);
     // Rail groups read General / Global / Workspace.
-    await expect(page.locator('.ws-settings__rail-group')).toHaveText(['General', 'Global', 'Workspace']);
+    await expect(page.getByTestId('workspace-settings-group-general')).toContainText('General');
+    await expect(page.getByTestId('workspace-settings-group-global')).toContainText('Global');
+    await expect(page.getByTestId('workspace-settings-group-workspace')).toContainText('Workspace');
     // The legacy studio-shell sidebar Settings panel no longer exists.
     await expect(page.getByTestId('studio-settings')).toHaveCount(0);
     await expect(page.getByTestId('studio-chat-rail')).toHaveCount(0);

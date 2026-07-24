@@ -4,26 +4,19 @@ import {
   OnInit,
   computed,
   inject,
+  input,
   signal,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
-import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
-import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PromptNavSplitterDirective } from './prompt-nav-splitter.directive';
+import { PromptCatalogueNavComponent } from '../prompt-catalogue-nav/prompt-catalogue-nav.component';
 import {
   PromptAdminService,
-  PromptCatalogItem,
   PromptDetail,
   PromptPreviewResult,
+  PromptProjectOverride,
 } from '../../../../services/prompt-admin.service';
-
-interface PromptGroup {
-  name: string;
-  items: PromptCatalogItem[];
-}
 
 interface PromptDiffLine {
   kind: 'same' | 'added' | 'removed';
@@ -42,13 +35,15 @@ interface PromptDiffLine {
 @Component({
   selector: 'app-prompt-admin-panel',
   standalone: true,
-  imports: [FormsModule, DatePipe, SectionHeaderComponent, StudioIconComponent, TreeRowComponent, TooltipDirective, PromptNavSplitterDirective],
+  imports: [FormsModule, DatePipe, PromptCatalogueNavComponent, PromptNavSplitterDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './prompt-admin-panel.component.html',
   styleUrl: './prompt-admin-panel.component.scss',
 })
 export class PromptAdminPanelComponent implements OnInit {
   private readonly api = inject(PromptAdminService);
+  /** Project scope for the shared catalogue; null renders every origin. */
+  readonly projectName = input<string | null>(null);
   readonly catalog = this.api.catalog;
   readonly coverage = this.api.coverage;
   readonly loadError = this.api.loadError;
@@ -58,8 +53,6 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly draft = signal<string>('');
   readonly busy = signal(false);
   readonly actionError = signal<string | null>(null);
-  readonly collapsedGroups = signal<ReadonlySet<string>>(new Set());
-  readonly onlyOverrides = signal(false);
   /** Toggles the read-only "shipped default" comparison block. */
   readonly showDefault = signal(false);
 
@@ -67,37 +60,6 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly slotValues = signal<Record<string, string>>({});
   readonly previewResult = signal<PromptPreviewResult | null>(null);
   readonly previewBusy = signal(false);
-
-  readonly groups = computed<PromptGroup[]>(() => {
-    const cat = this.catalog();
-    if (!cat) return [];
-    const buckets = new Map<string, PromptCatalogItem[]>();
-    for (const item of cat.items) {
-      const list = buckets.get(item.group) ?? [];
-      list.push(item);
-      buckets.set(item.group, list);
-    }
-    // Backend already returns items in group + title order; preserve it.
-    const seen: string[] = [];
-    for (const item of cat.items) if (!seen.includes(item.group)) seen.push(item.group);
-    return seen.map((name) => ({ name, items: buckets.get(name)! }));
-  });
-
-  readonly visibleGroups = computed<PromptGroup[]>(() => {
-    const groups = this.groups();
-    if (!this.onlyOverrides()) return groups;
-    return groups
-      .map((group) => ({ ...group, items: group.items.filter((item) => item.hasOverride) }))
-      .filter((group) => group.items.length > 0);
-  });
-
-  readonly overrideCount = computed(() =>
-    this.catalog()?.items.filter((item) => item.hasOverride).length ?? 0
-  );
-
-  readonly inheritedCount = computed(() =>
-    (this.catalog()?.items.length ?? 0) - this.overrideCount()
-  );
 
   readonly dirty = computed(() => {
     const d = this.detail();
@@ -137,21 +99,6 @@ export class PromptAdminPanelComponent implements OnInit {
     } finally {
       this.busy.set(false);
     }
-  }
-
-  isGroupCollapsed(name: string): boolean {
-    return this.collapsedGroups().has(name);
-  }
-
-  setGroupCollapsed(name: string, collapsed: boolean): void {
-    const next = new Set(this.collapsedGroups());
-    if (collapsed) next.add(name);
-    else next.delete(name);
-    this.collapsedGroups.set(next);
-  }
-
-  overrideTooltip(item: PromptCatalogItem): string {
-    return item.defaultChangedSinceOverride ? 'Local override active. The shipped default changed since this override was created.' : 'Local override active.';
   }
 
   setSlotValue(slot: string, value: string): void {
@@ -233,6 +180,36 @@ export class PromptAdminPanelComponent implements OnInit {
 
   shortSha(sha: string | null): string {
     return sha ? sha.slice(0, 8) : '-';
+  }
+
+  detailProjectOverrides(detail: PromptDetail): PromptProjectOverride[] {
+    const all = Array.isArray(detail.projectOverrides) ? detail.projectOverrides : [];
+    const project = this.projectName();
+    return project
+      ? all.filter(origin => origin.projectName.localeCompare(
+          project,
+          undefined,
+          { sensitivity: 'accent' },
+        ) === 0)
+      : all;
+  }
+
+  hasAnyDetailOverride(detail: PromptDetail): boolean {
+    return detail.hasOverride || this.detailProjectOverrides(detail).length > 0;
+  }
+
+  detailOverrideLabel(detail: PromptDetail): string {
+    const origins: string[] = [];
+    if (detail.hasOverride) origins.push('global');
+    for (const project of this.detailProjectOverrides(detail).map(origin => origin.projectName)) {
+      if (!origins.includes(project)) origins.push(project);
+    }
+    return `overridden - ${origins.join(', ')}`;
+  }
+
+  staleProjectOverrides(detail: PromptDetail): PromptProjectOverride[] {
+    return this.detailProjectOverrides(detail)
+      .filter(origin => origin.defaultChangedSinceOverride === true);
   }
 
   private buildMergeDraft(d: PromptDetail): string {
@@ -335,6 +312,7 @@ export class PromptAdminPanelComponent implements OnInit {
       ...detail,
       slots: Array.isArray(detail.slots) ? detail.slots : [],
       usages: Array.isArray(detail.usages) ? detail.usages : [],
+      projectOverrides: Array.isArray(detail.projectOverrides) ? detail.projectOverrides : [],
     };
   }
 

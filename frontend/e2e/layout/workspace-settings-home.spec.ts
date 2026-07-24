@@ -25,6 +25,7 @@ import { dismissDevErrorDialog, setTheme, type Theme } from '../helpers/theme';
  */
 
 const SHOT_DIR = process.env.OVERLAY_SHOT_DIR ?? 'test-results';
+const SETTINGS_SHOT_PHASE = process.env.SETTINGS_SHOT_PHASE ?? 'after';
 
 function settingsHome(page: Page) {
   return page.locator(
@@ -36,6 +37,10 @@ async function stubBackgroundApis(page: Page) {
   const json = (body: unknown) => async (route: import('@playwright/test').Route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
+  await page.route('**/api/auth/status', json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  }));
+  await page.route('**/api/crash-recovery/pending', json({ pending: [] }));
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/tasks/grouped', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
   await page.route('**/api/watch-paths', json([]));
@@ -179,6 +184,32 @@ test.describe('Workspace settings home (Dach)', () => {
     await expect(page.getByTestId('workspace-settings-rail-caps')).toContainText('CLI Management');
 
     await page.screenshot({ path: join(SHOT_DIR, 'workspace-settings-overview--mocked.png'), fullPage: false });
+  });
+
+  test('visual settings rail evidence in both themes', async ({ page }) => {
+    await page.getByTestId('status-bar-settings').click();
+    await expect(settingsHome(page)).toBeVisible();
+    if (SETTINGS_SHOT_PHASE === 'after') {
+      const rail = page.getByTestId('workspace-settings-rail');
+      const rows = rail.locator('[data-testid^="workspace-settings-rail-"]');
+      await expect(page.getByTestId('workspace-settings-group-general')).toBeVisible();
+      await expect(page.getByTestId('workspace-settings-group-global')).toBeVisible();
+      await expect(page.getByTestId('workspace-settings-group-workspace')).toBeVisible();
+      await expect(rows).toHaveCount(14);
+      for (const row of await rows.all()) {
+        await expect(row.locator('app-studio-icon')).toHaveCount(1);
+        await expect(row.locator('svg')).toHaveAttribute('stroke', 'currentColor');
+      }
+      const railText = await rail.innerText();
+      expect(railText).not.toMatch(/\p{Extended_Pictographic}/u);
+    }
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await settingsHome(page).screenshot({
+        path: join(SHOT_DIR, `workspace-settings-${SETTINGS_SHOT_PHASE}-${theme}.png`),
+      });
+    }
   });
 
   test('rail navigates between sections, each keeping its legacy hook', async ({ page }) => {

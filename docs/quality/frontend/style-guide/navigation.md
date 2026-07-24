@@ -51,12 +51,35 @@ The rail itself owns only containment: width, scroll, border, sidebar surface,
 and vertical padding. Row geometry, active state, hover, chevron spacing,
 glyph spacing, and count alignment stay inside the shared components.
 
+## Deck-style Settings Variant
+
+The `deck-pages-unification` Settings variant uses the same recipe as the Deck
+project rail:
+
+- group global destinations with collapsible `<app-section-header>` rows;
+- render every destination through `<app-tree-row>`;
+- use only monochrome `StudioIcon` glyphs, or reserve no glyph at all;
+- keep the rail on `--studio-bg-sidebar` and the content pane on
+  `--studio-bg-editor`; and
+- let the shared tree row own hover, focus, and active-state geometry.
+
+Workspace Settings is the reference consumer. It groups General, Global, and
+Workspace destinations without emoji or per-destination colors. The
+StyleGuide-Workbench should present this recipe as its `Settings` variant, not
+as a separate navigation family.
+
 Secondary rails mounted inside a panel should abut their detail pane. Remove
 the host panel padding for that rail, set the inner layout gap to `0`, and put
 reading padding on the detail pane instead. If the secondary rail width must be
 operator-controlled, use a visible `role="separator"` splitter between the rail
 and detail pane. The rail column stays `auto`; the splitter updates the rail's
 bounded pixel width.
+
+The prompt catalogue is the metadata-bearing secondary-rail variant. Both
+Workspace Settings and project Prompts must mount the same
+`<app-prompt-catalogue-nav>` instance. That component owns grouping, filtering,
+override origin labels, stale-default warnings, and the optional change/review
+columns. Hosts supply scope and selection only, so pane padding cannot fork.
 
 ## Active State
 
@@ -70,8 +93,10 @@ shared active state already flips across light and dark themes through
 Projected trailing content is allowed when the row needs compact exceptional
 status such as a local override icon with a tooltip. Do not show default or
 shipped states in navigation rows; quiet rows are the default. Keep trailing
-status to a small icon or a single count. If the row needs multi-line metadata,
-it is a content list, not a rail.
+status to a small icon or a single count. The prompt catalogue variant may show
+one labelled origin badge plus a stale-warning glyph because project provenance
+is required before opening a prompt. If the row needs multi-line metadata, it
+is a content list, not a rail.
 
 ## Do Not
 
