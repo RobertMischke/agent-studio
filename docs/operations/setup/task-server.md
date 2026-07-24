@@ -15,7 +15,7 @@ an SSH-only private tunnel until AGT-2193 supplies authentication and TLS.
 | `contracts/TaskServer.Contracts` | Versioned resource, runner, event, artifact, management, and compatibility DTOs | None |
 | `task-server` | Stable identities, tasks, runs, events, artifacts, audit, migrations, backup/restore, leases, fences, and management API | Its configured data directory only |
 | `studio-bff` | Optional stateless same-origin proxy for Agent Studio | None |
-| `runner` | Host probes, Git worktrees, CLI processes, bounded execution, and delivery through protocol v1 | Host worktrees and bounded delivery state only |
+| `runner` | Host probes, Git worktrees, CLI processes, bounded execution, and durable result delivery through protocol 2 | Host worktrees, fsynced outboxes, and bounded transfer state only |
 
 The Task Server project references shared contracts and SQLite persistence. It
 does not reference Angular, the legacy Studio backend, Agent Runner, coding

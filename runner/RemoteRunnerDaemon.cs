@@ -84,6 +84,8 @@ public sealed class RemoteRunnerDaemon
             () => _client.RegisterAsync(_options.RunnerName, "service", shutdown),
             shutdown);
         _log($"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; slots={_options.HostMaxParallelism}");
+        var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
+        await handoffRecovery.RecoverAllAsync(shutdown);
 
         var gitCapability = await GitPushProbe.RunAsync(_options, _log, shutdown);
         await WithServerRetryAsync<object?>(
@@ -124,6 +126,7 @@ public sealed class RemoteRunnerDaemon
 
             try
             {
+                await handoffRecovery.RecoverAllAsync(shutdown);
                 var claimedAny = false;
                 if (active.Count >= _options.HostMaxParallelism)
                 {

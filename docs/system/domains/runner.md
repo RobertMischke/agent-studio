@@ -250,13 +250,28 @@ state.
   a failed auto-commit leaves the branch tip at develop, which reads as "merged"
   and would force-remove the deliverable. Genuine auto-commit failures at
   integration are surfaced as a High `integration-error`, never silent.
-- Remote teardown is also fail-closed. `runner/GitWorkspace` checks status on
-  every normal, exceptional, shutdown, and crash-debris teardown. It commits a
-  dirty checkout as `wip(runner): salvage before teardown - outcome <X>` and
-  pushes run-produced commits to `runner/<runner-id>/<task-key>`. The remote ref
-  is verified before removal. A failed check or push keeps the worktree and
-  records a `worktree-blocked` gate item with host and path. Successful salvage
-  branches are linked from the card's `results/deliverables.md`.
+- Remote teardown is also fail-closed. Protocol 2 coding runs journal logs,
+  status, artifacts, Git facts, terminal facts, the immutable result envelope,
+  and server acknowledgements under
+  `$RUNNER_WORKDIR/outbox/<run-attempt-id>/`. `runner/GitWorkspace` first commits
+  dirty work, preserves the moving salvage ref without force push, and publishes
+  the exact result to
+  `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>`. Cleanup then requires
+  the Task Server acknowledgement for the matching canonical envelope digest.
+  A process restart replays the original outbox before new claims and never
+  starts the coding CLI. Transfer failure stays `transfer-recovery`, retains the
+  worktree, and consumes no coding or completion budget.
+- The Task Server stores one result envelope per RunAttempt with repository ID,
+  base and result SHA, immutable ref or source-bundle digest, artifact-manifest
+  digest, and applicable submodule and LFS identities. Handoff and completion
+  have idempotency keys plus monotonic host sequence numbers. A response lost
+  after commit therefore returns the original acknowledgement and cannot repeat
+  a lane transition. Protocol 1 cannot call the protocol 2 handoff or completion
+  path.
+- Result refs and manifests have an earliest deletion time of 30 days by
+  default. Reaching Completed or Archive extends that time to at least 30 days
+  after the terminal transition. The current store performs no automatic
+  deletion, so retention cannot end early.
 - Retained remote-runner worktree pickup reconciles the local and canonical
   salvage tips by ancestry before reuse. Equal and remote-ahead tips keep the
   canonical remote ref, and local-ahead tips advance it with a normal

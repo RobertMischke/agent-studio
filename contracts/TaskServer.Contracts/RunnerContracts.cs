@@ -65,4 +65,7 @@ public sealed record CompleteRunRequest(
     string LeaseId,
     long Fence,
     string Outcome,
-    string? Summary = null);
+    string? Summary = null,
+    string? ResultEnvelopeDigest = null,
+    string? IdempotencyKey = null,
+    long? Sequence = null);

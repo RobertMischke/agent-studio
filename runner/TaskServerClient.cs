@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using AgentStudio.TaskServer.Contracts;
 using Contract = AgentStudio.TaskServer.Contracts;
 
 namespace AgentRunner;
@@ -51,7 +52,12 @@ public sealed class TaskServerClient : IDisposable
     /// live server endpoints without a socket. Not for production use; the production
     /// path is the <see cref="RunnerOptions"/> constructor above.
     /// </summary>
-    internal TaskServerClient(HttpClient http, string runnerId, string? configuredClientId = null, string? authToken = null)
+    internal TaskServerClient(
+        HttpClient http,
+        string runnerId,
+        string? configuredClientId = null,
+        string? authToken = null,
+        bool usesDurableTaskServer = false)
     {
         _http = http;
         _configuredClientId = configuredClientId;
@@ -59,6 +65,7 @@ public sealed class TaskServerClient : IDisposable
         if (_usesServiceCredential)
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
         SetClientId(configuredClientId ?? runnerId);
+        _useV1 = usesDurableTaskServer;
     }
 
     /// <summary>
@@ -109,7 +116,14 @@ public sealed class TaskServerClient : IDisposable
                 RunnerInstanceId,
                 typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0",
                 RunnerOptions.ProtocolVersion,
-                ["claim", "events", "artifacts", "fenced-completion"]);
+                [
+                    "claim",
+                    "events",
+                    "artifacts",
+                    "fenced-completion",
+                    "durable-result-handoff",
+                    "host-outbox-replay",
+                ]);
             _ = await SendJsonAsync<Contract.RegisterRunnerRequest, Contract.RunnerDto>(
                 HttpMethod.Put,
                 $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}",
@@ -184,7 +198,20 @@ public sealed class TaskServerClient : IDisposable
     /// <summary>The client id this runner presents as X-Client-Id (server-assigned after registration).</summary>
     public string ClientId { get; private set; } = string.Empty;
 
-    private string RunnerInstanceId => $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
+    public bool UsesDurableTaskServer => _useV1;
+    internal string RunnerInstanceId => $"{_options?.Hostname ?? Environment.MachineName}:{Environment.ProcessId}";
+
+    internal RunOutboxAuthority OutboxAuthority(string taskKey)
+    {
+        var authority = V1Authority(taskKey);
+        return new RunOutboxAuthority(
+            authority.RunId,
+            taskKey,
+            authority.Lease.RunnerId,
+            RunnerInstanceId,
+            authority.Lease.LeaseId,
+            authority.Lease.FencingToken);
+    }
 
     /// <summary>How long the liveness probe waits before it calls the server unreachable.</summary>
     private const int HealthProbeTimeoutSeconds = 10;
@@ -397,6 +424,130 @@ public sealed class TaskServerClient : IDisposable
         return new RemoteRunCompletionResponse(req.TaskKey, req.Outcome, "4-auto-review");
     }
 
+    public async Task<ResultHandoffAck> AcknowledgeResultHandoffAsync(
+        RunOutboxAuthority authority,
+        RunOutboxItem item,
+        ImmutableResultEnvelope envelope,
+        CancellationToken ct)
+    {
+        var digest = ResultEnvelopeDigest.Compute(envelope);
+        return await SendJsonAsync<ResultHandoffRequest, ResultHandoffAck>(
+                   HttpMethod.Put,
+                   $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/result-handoff",
+                   new ResultHandoffRequest(
+                       authority.RunnerId,
+                       authority.InstanceId,
+                       authority.LeaseId,
+                       authority.Fence,
+                       item.Sequence,
+                       item.IdempotencyKey,
+                       digest,
+                       envelope),
+                   ct)
+               ?? throw new TaskServerException(502, "Task Server returned an empty result handoff acknowledgement.");
+    }
+
+    public async Task SendOutboxItemAsync(
+        RunOutboxAuthority authority,
+        RunOutboxItem item,
+        CancellationToken ct)
+    {
+        switch (item.Kind)
+        {
+            case "artifact":
+            {
+                var payload = JsonSerializer.Deserialize<DurableArtifactPayload>(item.PayloadJson, Json)
+                              ?? throw new InvalidDataException("Durable artifact payload is empty.");
+                await SendJsonAsync<Contract.ArtifactIngestRequest, Contract.ArtifactDto>(
+                    HttpMethod.Post,
+                    $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/artifacts",
+                    new Contract.ArtifactIngestRequest(
+                        $"art_{HashId(item.IdempotencyKey)}",
+                        payload.Name,
+                        payload.MediaType,
+                        payload.ContentBase64,
+                        payload.Sha256,
+                        item.IdempotencyKey,
+                        authority.Fence,
+                        authority.RunnerId,
+                        authority.InstanceId,
+                        authority.LeaseId,
+                        item.Sequence),
+                    ct);
+                return;
+            }
+            case "final-result":
+            {
+                var envelope = JsonSerializer.Deserialize<ImmutableResultEnvelope>(item.PayloadJson, Json)
+                               ?? throw new InvalidDataException("Durable result envelope payload is empty.");
+                _ = await AcknowledgeResultHandoffAsync(authority, item, envelope, ct);
+                return;
+            }
+            case "completion":
+            {
+                var payload = JsonSerializer.Deserialize<DurableCompletionPayload>(item.PayloadJson, Json)
+                              ?? throw new InvalidDataException("Durable completion payload is empty.");
+                await SendJsonAsync<Contract.CompleteRunRequest, Contract.RunDto>(
+                    HttpMethod.Post,
+                    $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
+                    new Contract.CompleteRunRequest(
+                        authority.RunnerId,
+                        authority.InstanceId,
+                        authority.LeaseId,
+                        authority.Fence,
+                        payload.Outcome,
+                        payload.Summary,
+                        payload.ResultEnvelopeDigest,
+                        item.IdempotencyKey,
+                        item.Sequence),
+                    ct);
+                _v1Leases.TryRemove(authority.TaskKey, out _);
+                _v1TaskBodies.TryRemove(authority.TaskKey, out _);
+                return;
+            }
+            default:
+                await SendJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
+                    HttpMethod.Post,
+                    $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
+                    new Contract.EventIngestRequest(
+                        $"evt_{HashId(item.IdempotencyKey)}",
+                        $"runner.{item.Kind}",
+                        item.PayloadJson,
+                        item.IdempotencyKey,
+                        authority.Fence,
+                        item.CreatedAt,
+                        authority.RunnerId,
+                        authority.InstanceId,
+                        authority.LeaseId,
+                        item.Sequence),
+                    ct);
+                return;
+        }
+    }
+
+    public async Task ReportOutboxAsync(
+        string runnerId,
+        string instanceId,
+        DurableRunOutbox outbox,
+        CancellationToken ct)
+    {
+        var snapshot = outbox.Snapshot;
+        _ = await SendJsonAsync<RunnerOutboxStatusRequest, RunnerOutboxStatusDto>(
+            HttpMethod.Put,
+            $"/api/v1/runners/{Uri.EscapeDataString(runnerId)}/outbox-status",
+            new RunnerOutboxStatusRequest(
+                instanceId,
+                snapshot.LastSequence,
+                snapshot.LastAcknowledgedSequence,
+                snapshot.BacklogCount,
+                snapshot.OldestUnacknowledgedSequence,
+                snapshot.FinalHandoffState,
+                outbox.Authority.RunId,
+                snapshot.EnvelopeDigest,
+                DateTime.UtcNow),
+            ct);
+    }
+
     public async Task<RemoteEpicPlanningPromptResponse?> GetEpicPlanningPromptAsync(
         RemoteEpicPlanningPromptRequest req, CancellationToken ct)
         => await PostJsonAsync<RemoteEpicPlanningPromptRequest, RemoteEpicPlanningPromptResponse>(
@@ -480,6 +631,12 @@ public sealed class TaskServerClient : IDisposable
         ".md" or ".txt" or ".log" => "text/plain",
         _ => "application/octet-stream",
     };
+
+    internal static string MediaTypeForPath(string path) => MediaType(path);
+
+    private static string HashId(string value)
+        => Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)))
+            .ToLowerInvariant()[..32];
 
     private static string Trim(string s) => s.Length <= 300 ? s : s[..300] + "...";
 

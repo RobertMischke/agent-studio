@@ -16,7 +16,10 @@ public sealed record TaskServerStatusDto(
     bool AuthorityReady,
     string DataDirectory,
     ProtocolRangeDto Protocol,
-    DateTime StartedAt);
+    DateTime StartedAt,
+    int OutboxBacklog = 0,
+    long? OldestUnacknowledgedSequence = null,
+    IReadOnlyDictionary<string, int>? FinalHandoffStates = null);
 
 public sealed record ChangeModeRequest(TaskServerMode Mode, string Reason);
 public sealed record PrepareShutdownRequest(string Reason);
