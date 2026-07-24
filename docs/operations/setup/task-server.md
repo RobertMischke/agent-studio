@@ -107,8 +107,8 @@ subject, attempt, fence, and delivery tables.
 ## Fully remote review authority
 
 `POST /api/v1/reviews/subjects` records one immutable subject after a fenced
-coding completion has persisted the same repository identity, full Result-SHA,
-and immutable ref or source-bundle digest. The review policy is a command plan:
+coding completion has persisted the same repository identity and URL, full
+Result-SHA, and immutable ref or source-bundle digest. The review policy is a command plan:
 completion interpretation, build and tests, requirements, code quality,
 documentation, evidence, artifacts, and optional vision remain the existing
 review steps, but their processes run only on a claimed Remote Review Executor.

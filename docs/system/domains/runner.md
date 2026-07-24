@@ -287,9 +287,9 @@ state.
   A process restart replays the original outbox before new claims and never
   starts the coding CLI. Transfer failure stays `transfer-recovery`, retains the
   worktree, and consumes no coding or completion budget.
-- The Task Server stores one result envelope per RunAttempt with repository ID,
-  base and result SHA, immutable ref or source-bundle digest, artifact-manifest
-  digest, and applicable submodule and LFS identities. Handoff and completion
+- The Task Server stores one result envelope per RunAttempt with repository ID
+  and URL, base and result SHA, immutable ref or source-bundle digest,
+  artifact-manifest digest, and applicable submodule and LFS identities. Handoff and completion
   have idempotency keys plus monotonic host sequence numbers. A response lost
   after commit therefore returns the original acknowledgement and cannot repeat
   a lane transition. Protocol 1 cannot call the protocol 2 handoff or completion

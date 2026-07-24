@@ -164,7 +164,8 @@ public sealed class RemoteTaskRunner
                     null,
                     artifactManifest.Digest,
                     dependencyIdentities.Submodules,
-                    dependencyIdentities.LfsObjects);
+                    dependencyIdentities.LfsObjects,
+                    workspace.RepositoryUrl);
                 envelopeDigest = ResultEnvelopeDigest.Compute(envelope);
                 outbox.Enqueue("git-facts", JsonSerializer.Serialize(
                     new DurableGitFactsPayload(

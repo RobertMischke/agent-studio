@@ -510,13 +510,13 @@ public sealed partial class TaskServerStore
             await ExecuteAsync(connection, """
                 INSERT INTO result_handoffs(
                     run_id, task_id, runner_id, instance_id, lease_id, fence,
-                    repository_id, source_run_attempt_id,
+                    repository_id, repository_url, source_run_attempt_id,
                     base_sha, result_sha, immutable_remote_ref, source_bundle_digest,
                     artifact_manifest_digest, submodules_json, lfs_objects_json,
                     envelope_digest, sequence, idempotency_key, acknowledged_at, retain_until)
                 VALUES (
                     $run, $task, $runner, $instance, $lease, $fence,
-                    $repository, $source_run, $base_sha, $result_sha,
+                    $repository, $repository_url, $source_run, $base_sha, $result_sha,
                     $remote_ref, $bundle_digest, $manifest_digest, $submodules,
                     $lfs, $envelope_digest, $sequence, $key, $acknowledged, $retain_until);
                 """, ct, transaction,
@@ -527,6 +527,7 @@ public sealed partial class TaskServerStore
                 ("$lease", request.LeaseId),
                 ("$fence", request.Fence),
                 ("$repository", request.Envelope.RepositoryId),
+                ("$repository_url", request.Envelope.RepositoryUrl),
                 ("$source_run", request.Envelope.SourceRunAttemptId),
                 ("$base_sha", request.Envelope.BaseSha.ToLowerInvariant()),
                 ("$result_sha", request.Envelope.ResultSha.ToLowerInvariant()),
@@ -579,7 +580,8 @@ public sealed partial class TaskServerStore
             SELECT run_id, repository_id, source_run_attempt_id, base_sha,
                    result_sha, immutable_remote_ref, source_bundle_digest,
                    artifact_manifest_digest, submodules_json, lfs_objects_json,
-                   envelope_digest, sequence, acknowledged_at, retain_until
+                   envelope_digest, sequence, acknowledged_at, retain_until,
+                   repository_url
               FROM result_handoffs
              WHERE run_id = $run;
             """, ("$run", runId));
@@ -594,7 +596,8 @@ public sealed partial class TaskServerStore
             reader.IsDBNull(6) ? null : reader.GetString(6),
             reader.GetString(7),
             JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(8)),
-            JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(9)));
+            JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(9)),
+            reader.IsDBNull(14) ? null : reader.GetString(14));
         return new ResultHandoffDto(
             reader.GetString(0),
             envelope,
@@ -629,16 +632,17 @@ public sealed partial class TaskServerStore
                 request.InstanceId,
                 request.LeaseId,
                 ct);
+            StoredResultHandoff? resultHandoff = null;
             if (RequiresResultEnvelope(request.Outcome))
             {
                 if (string.IsNullOrWhiteSpace(request.ResultEnvelopeDigest))
                     throw new TaskServerConflictException(
                         "result-handoff-required",
                         "Successful coding completion requires an acknowledged immutable result envelope.");
-                var handoff = await ReadResultHandoffAsync(connection, transaction, runId, ct);
-                if (handoff is null
+                resultHandoff = await ReadResultHandoffAsync(connection, transaction, runId, ct);
+                if (resultHandoff is null
                     || !string.Equals(
-                        handoff.Acknowledgement.EnvelopeDigest,
+                        resultHandoff.Acknowledgement.EnvelopeDigest,
                         request.ResultEnvelopeDigest,
                         StringComparison.OrdinalIgnoreCase))
                 {
@@ -660,7 +664,16 @@ public sealed partial class TaskServerStore
             var now = UtcNow;
             await ExecuteAsync(connection, """
                 UPDATE leases SET status = 'completed' WHERE run_id = $run;
-                UPDATE runs SET status = $outcome, finished_at = $now WHERE id = $run;
+                UPDATE runs
+                   SET status = $outcome,
+                       finished_at = $now,
+                       result_sha = $resultSha,
+                       repository_id = $repositoryId,
+                       repository_url = $repositoryUrl,
+                       result_ref = $resultRef,
+                       source_bundle_artifact_id = NULL,
+                       source_bundle_sha256 = $bundleSha
+                 WHERE id = $run;
                 UPDATE tasks SET state = '4-auto-review', version = version + 1, updated_at = $now WHERE id = $task;
                 INSERT INTO run_completions(
                     run_id, outcome, summary, envelope_digest, sequence,
@@ -676,7 +689,12 @@ public sealed partial class TaskServerStore
                 ("$sequence", request.Sequence),
                 ("$key", request.IdempotencyKey),
                 ("$now", Iso(now)),
-                ("$task", lease.TaskId));
+                ("$task", lease.TaskId),
+                ("$resultSha", resultHandoff?.Envelope.ResultSha),
+                ("$repositoryId", resultHandoff?.Envelope.RepositoryId),
+                ("$repositoryUrl", resultHandoff?.Envelope.RepositoryUrl),
+                ("$resultRef", resultHandoff?.Envelope.ImmutableRemoteRef),
+                ("$bundleSha", resultHandoff?.Envelope.SourceBundleDigest));
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,
                 JsonSerializer.Serialize(new
                 {
@@ -687,7 +705,17 @@ public sealed partial class TaskServerStore
                     request.Sequence,
                     request.IdempotencyKey,
                 }), ct);
-            completed = new RunDto(runId, lease.TaskId, request.Outcome, request.RunnerId, request.Fence, lease.AcquiredAt, lease.AcquiredAt, now);
+            completed = new RunDto(
+                runId,
+                lease.TaskId,
+                request.Outcome,
+                request.RunnerId,
+                request.Fence,
+                lease.AcquiredAt,
+                lease.AcquiredAt,
+                now,
+                resultHandoff?.Envelope.ResultSha,
+                resultHandoff?.Envelope.RepositoryId);
         }, ct);
         return completed!;
     }
@@ -1409,6 +1437,7 @@ public sealed partial class TaskServerStore
                 lease_id TEXT NOT NULL,
                 fence INTEGER NOT NULL,
                 repository_id TEXT NOT NULL,
+                repository_url TEXT,
                 source_run_attempt_id TEXT NOT NULL UNIQUE,
                 base_sha TEXT NOT NULL,
                 result_sha TEXT NOT NULL,
@@ -1731,7 +1760,10 @@ public sealed partial class TaskServerStore
         await using var command = Command(connection, """
             SELECT run_id, sequence, envelope_digest, idempotency_key,
                    acknowledged_at, retain_until, runner_id, instance_id,
-                   lease_id, fence
+                   lease_id, fence, repository_id, source_run_attempt_id,
+                   base_sha, result_sha, immutable_remote_ref,
+                   source_bundle_digest, artifact_manifest_digest,
+                   submodules_json, lfs_objects_json, repository_url
               FROM result_handoffs
              WHERE run_id = $run;
             """, transaction, ("$run", runId));
@@ -1750,7 +1782,10 @@ public sealed partial class TaskServerStore
         await using var command = Command(connection, """
             SELECT run_id, sequence, envelope_digest, idempotency_key,
                    acknowledged_at, retain_until, runner_id, instance_id,
-                   lease_id, fence
+                   lease_id, fence, repository_id, source_run_attempt_id,
+                   base_sha, result_sha, immutable_remote_ref,
+                   source_bundle_digest, artifact_manifest_digest,
+                   submodules_json, lfs_objects_json, repository_url
               FROM result_handoffs
              WHERE idempotency_key = $key;
             """, transaction, ("$key", idempotencyKey));
@@ -1774,7 +1809,18 @@ public sealed partial class TaskServerStore
             reader.GetString(6),
             reader.GetString(7),
             reader.GetString(8),
-            reader.GetInt64(9));
+            reader.GetInt64(9),
+            new ImmutableResultEnvelope(
+                reader.GetString(10),
+                reader.GetString(11),
+                reader.GetString(12),
+                reader.GetString(13),
+                reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.GetString(16),
+                JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(17)),
+                JsonSerializer.Deserialize<List<ResultDependencyIdentity>>(reader.GetString(18)),
+                reader.IsDBNull(19) ? null : reader.GetString(19)));
 
     private static async Task<StoredRunCompletion?> ReadRunCompletionAsync(
         SqliteConnection connection,
@@ -1881,7 +1927,8 @@ public sealed partial class TaskServerStore
         string RunnerId,
         string InstanceId,
         string LeaseId,
-        long Fence);
+        long Fence,
+        ImmutableResultEnvelope Envelope);
 
     private sealed record StoredRunCompletion(
         RunDto Run,

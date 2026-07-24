@@ -13,6 +13,7 @@ public sealed partial class TaskServerStore
 
     internal async Task ApplyReviewMigrationAsync(SqliteConnection connection, CancellationToken ct)
     {
+        await AddColumnIfMissingAsync(connection, "result_handoffs", "repository_url", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "runs", "result_sha", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "runs", "repository_id", "TEXT", ct);
         await AddColumnIfMissingAsync(connection, "runs", "repository_url", "TEXT", ct);

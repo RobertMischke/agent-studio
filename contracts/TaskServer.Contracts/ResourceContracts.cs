@@ -114,7 +114,8 @@ public sealed record ImmutableResultEnvelope(
     string? SourceBundleDigest,
     string ArtifactManifestDigest,
     IReadOnlyList<ResultDependencyIdentity>? Submodules = null,
-    IReadOnlyList<ResultDependencyIdentity>? LfsObjects = null);
+    IReadOnlyList<ResultDependencyIdentity>? LfsObjects = null,
+    string? RepositoryUrl = null);
 
 public sealed record ResultHandoffRequest(
     string RunnerId,
