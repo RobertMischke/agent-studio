@@ -53,3 +53,15 @@ The final re-cut verification on 2026-07-23 repeated the same solution and
 frontend gates from the assigned worktree. Task Server ESLint and Stylelint
 passed. The repository-wide frontend lint remains blocked by unrelated
 `origin/develop` baseline violations outside the AGT-2194 diff.
+
+The assigned worktree verification was repeated again on 2026-07-24:
+
+- `dotnet test --filter "Category!=MachineBound"`: 4,343 passed, 12 skipped.
+- Task Server Angular tests: 22 passed.
+- Task Server Playwright spec: 6 passed.
+- Task Server ESLint and strict Stylelint: passed.
+- All 12 required state/theme screenshots were regenerated from this branch.
+
+The first full solution run shared the host with the frontend build and exposed
+two unrelated load-sensitive test failures. Both passed in an immediate
+isolated rerun, and the uncontended full solution rerun passed completely.
