@@ -148,8 +148,9 @@ test.beforeEach(async ({ page }) => {
 test('branch source is visible and read-only in both themes', async ({ page }) => {
   await page.goto('/#/projects/demo/wiki', { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('project-wiki-section')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByTestId('project-wiki-source')).toContainText('origin/develop @ abcdef12');
-  await expect(page.getByTestId('project-wiki-source')).toHaveClass(/source--readonly/);
+  const indicator = page.getByTestId('project-wiki-source');
+  await expect(indicator).toContainText('origin/develop @ abcdef12');
+  await expect(indicator).toHaveClass(/source--readonly/);
   await expect(page.getByTestId('project-wiki-new-page')).toBeDisabled();
   await expect(page.getByTestId('project-wiki-new-folder')).toBeDisabled();
   await expect(page.getByText('Unexpected application error')).toHaveCount(0);
@@ -157,6 +158,43 @@ test('branch source is visible and read-only in both themes', async ({ page }) =
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+    await page.mouse.move(0, 0);
+    const tokenColours = await indicator.evaluate((element) => {
+      const actual = getComputedStyle(element);
+      const colours = {
+        actual: {
+          background: actual.backgroundColor,
+          border: actual.borderTopColor,
+          foreground: actual.color,
+        },
+        expected: { background: '', border: '', foreground: '' },
+      };
+
+      const originalStyle = element.getAttribute('style');
+      element.style.background = 'var(--studio-commit-bg)';
+      element.style.borderColor = 'var(--studio-commit-border)';
+      element.style.color = 'var(--studio-commit-fg)';
+      const expected = getComputedStyle(element);
+      colours.expected = {
+        background: expected.backgroundColor,
+        border: expected.borderTopColor,
+        foreground: expected.color,
+      };
+      if (originalStyle === null) {
+        element.removeAttribute('style');
+      } else {
+        element.setAttribute('style', originalStyle);
+      }
+      return colours;
+    });
+    expect(tokenColours.actual, `${theme} Wiki source Studio token mapping`)
+      .toEqual(tokenColours.expected);
+
+    const colours = await sampleColours(page, '[data-testid="project-wiki-source"]');
+    expect(
+      contrastRatio(colours.color, colours.bg),
+      `${theme} Wiki source indicator contrast`,
+    ).toBeGreaterThanOrEqual(4.5);
     await page.getByTestId('project-wiki-header').screenshot({
       path: path.join(RESULTS_DIR, `wiki-branch-source--${theme}--real-app.png`),
     });
