@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hosting the Agent Studio Wiki: options and recommendation</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-soft: #f6f6f7;
+  --bg-elevated: #ffffff;
+  --ink: #3c3c43;
+  --ink-2: #67676c;
+  --ink-3: #929295;
+  --line: #e2e2e3;
+  --border: #c2c2c4;
+  --blue: #3b82f6;
+  --blue-ink: #2f6fd6;
+  --blue-soft: #e7f0fe;
+  --blue-border: rgba(59, 130, 246, .42);
+  --teal: #14a37f;
+  --teal-ink: #0f8e6e;
+  --teal-soft: #e6f6f1;
+  --teal-border: rgba(20, 163, 127, .42);
+  --amber: #b7791f;
+  --amber-soft: #fff8e6;
+  --amber-border: rgba(183, 121, 31, .35);
+  --coral: #e5484d;
+  --shadow: 0 3px 14px rgba(0, 0, 0, .09);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1b1b1f;
+  --bg-soft: #202127;
+  --bg-elevated: #202127;
+  --ink: #dfdfd6;
+  --ink-2: #98989f;
+  --ink-3: #6a6a71;
+  --line: #2e2e32;
+  --border: #3c3f44;
+  --blue: #4c8dff;
+  --blue-ink: #a8b1ff;
+  --blue-soft: #1c2740;
+  --blue-border: rgba(90, 150, 255, .50);
+  --teal: #34d3a6;
+  --teal-ink: #4fe0b6;
+  --teal-soft: #16302a;
+  --teal-border: rgba(52, 211, 166, .48);
+  --amber: #f0b45a;
+  --amber-soft: #332a18;
+  --amber-border: rgba(240, 180, 90, .38);
+  --coral: #f06a6f;
+  --shadow: 0 3px 16px rgba(0, 0, 0, .38);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1b1b1f;
+    --bg-soft: #202127;
+    --bg-elevated: #202127;
+    --ink: #dfdfd6;
+    --ink-2: #98989f;
+    --ink-3: #6a6a71;
+    --line: #2e2e32;
+    --border: #3c3f44;
+    --blue: #4c8dff;
+    --blue-ink: #a8b1ff;
+    --blue-soft: #1c2740;
+    --blue-border: rgba(90, 150, 255, .50);
+    --teal: #34d3a6;
+    --teal-ink: #4fe0b6;
+    --teal-soft: #16302a;
+    --teal-border: rgba(52, 211, 166, .48);
+    --amber: #f0b45a;
+    --amber-soft: #332a18;
+    --amber-border: rgba(240, 180, 90, .38);
+    --coral: #f06a6f;
+    --shadow: 0 3px 16px rgba(0, 0, 0, .38);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 0 80px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.65 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+header {
+  padding: 52px 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.kicker,
+.section-label,
+.chip,
+.score,
+code,
+.mono {
+  font-family: var(--font-mono);
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 7px 13px;
+  border: 1px solid var(--blue-border);
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue-ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.kicker::before,
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+  content: "";
+  flex: none;
+}
+
+h1 {
+  max-width: 920px;
+  margin: 0 0 14px;
+  font-size: clamp(32px, 5vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -.025em;
+}
+
+.lede {
+  max-width: 78ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 19px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 20px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.meta strong { color: var(--ink-2); }
+
+.theme-toggle {
+  position: fixed;
+  z-index: 10;
+  top: 14px;
+  right: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--ink-2);
+  cursor: pointer;
+  font: 700 11px/1 var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+section { margin-top: 64px; }
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.section-label::before {
+  width: 14px;
+  height: 2px;
+  background: var(--coral);
+  content: "";
+}
+
+h2 {
+  margin: 6px 0 12px;
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: -.015em;
+}
+
+h3 {
+  margin: 0 0 7px;
+  font-size: 17px;
+}
+
+p { max-width: 82ch; }
+
+a { color: var(--blue-ink); }
+
+code {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg-soft);
+  font-size: 12.5px;
+}
+
+.decision {
+  display: grid;
+  grid-template-columns: 1.65fr 1fr;
+  gap: 18px;
+  margin-top: 26px;
+}
+
+.panel,
+.option,
+.followup,
+.risk,
+.assumption {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--bg-soft);
+  padding: 20px 22px;
+}
+
+.panel.recommended {
+  border-color: var(--blue-border);
+  background: var(--blue-soft);
+}
+
+.panel p:last-child,
+.option p:last-child,
+.followup p:last-child,
+.risk p:last-child,
+.assumption p:last-child { margin-bottom: 0; }
+
+.panel ul,
+.option ul,
+.followup ul,
+.risk ul {
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
+.panel li,
+.option li,
+.followup li,
+.risk li { margin: 5px 0; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--blue-border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--blue-ink);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.chip.teal {
+  border-color: var(--teal-border);
+  color: var(--teal-ink);
+}
+
+.chip.amber {
+  border-color: var(--amber-border);
+  color: var(--amber);
+}
+
+.assumptions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.assumption {
+  padding: 17px 18px;
+  background: var(--bg-elevated);
+}
+
+.assumption strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.assumption span {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.architecture {
+  position: relative;
+  min-width: 820px;
+  min-height: 550px;
+}
+
+.architecture-wrap {
+  overflow-x: auto;
+  margin-top: 24px;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--bg), var(--bg-soft));
+}
+
+.wires {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.rail {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 2;
+}
+
+.flow-blue,
+.flow-teal {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 7 11;
+  animation: flow 4s linear infinite;
+}
+
+.flow-blue { stroke: var(--blue); }
+.flow-teal { stroke: var(--teal); }
+
+@keyframes flow { to { stroke-dashoffset: -36; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-blue,
+  .flow-teal { animation: none; }
+}
+
+.node {
+  position: absolute;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+
+.node .node-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.node .node-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 750;
+}
+
+.node .node-sub {
+  display: block;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.node .location {
+  color: var(--ink-3);
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.browser {
+  top: 2%;
+  left: 50%;
+  width: 330px;
+  transform: translateX(-50%);
+  border-color: var(--blue-border);
+}
+
+.browser .dot,
+.caddy .dot,
+.studio .dot,
+.server .dot { background: var(--blue); }
+
+.vm {
+  top: 23%;
+  left: 50%;
+  width: 620px;
+  min-height: 250px;
+  transform: translateX(-50%);
+  border-color: var(--blue-border);
+  background: var(--blue-soft);
+  box-shadow: 0 0 34px rgba(59, 130, 246, .13);
+}
+
+.vm-label {
+  color: var(--blue-ink);
+  font: 750 12px/1 var(--font-mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.caddy {
+  top: 18%;
+  left: 50%;
+  width: 190px;
+  transform: translateX(-50%);
+  border-color: var(--blue-border);
+}
+
+.studio {
+  top: 48%;
+  left: 5%;
+  width: 245px;
+  border-color: var(--blue-border);
+}
+
+.server {
+  top: 48%;
+  right: 5%;
+  width: 245px;
+  border-color: var(--blue-border);
+}
+
+.repo {
+  top: 72%;
+  left: 50%;
+  width: 280px;
+  transform: translateX(-50%);
+  border-style: dashed;
+}
+
+.runner {
+  bottom: 0;
+  left: 50%;
+  width: 350px;
+  transform: translateX(-50%);
+  border-color: var(--teal-border);
+  background: var(--teal-soft);
+}
+
+.runner .dot { background: var(--teal); }
+
+.edge-label {
+  position: absolute;
+  z-index: 2;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink-3);
+  font: 700 10px/1.3 var(--font-mono);
+  white-space: nowrap;
+}
+
+.edge-label.https { top: 16%; left: 53%; color: var(--blue-ink); }
+.edge-label.same-origin { top: 40%; left: 43%; color: var(--blue-ink); }
+.edge-label.docs { top: 68%; left: 52%; }
+.edge-label.outbound { top: 85%; left: 63%; color: var(--teal-ink); }
+
+figcaption {
+  margin-top: 14px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.option {
+  position: relative;
+  padding-top: 52px;
+}
+
+.option .option-head {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.option.a {
+  border-color: var(--blue-border);
+  background: var(--blue-soft);
+}
+
+.option p,
+.option li {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.score {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 24px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+}
+
+table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  background: var(--bg-elevated);
+  font-size: 13.5px;
+}
+
+th,
+td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--bg-soft);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+tr:last-child td { border-bottom: 0; }
+
+td.numeric,
+th.numeric { text-align: center; }
+
+tr.winner td { background: var(--blue-soft); }
+
+.matrix-note {
+  margin-top: 12px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.rationales,
+.risks,
+.followups {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.rationale {
+  padding: 0 4px 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rationale p {
+  margin: 5px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.risk,
+.followup { background: var(--bg-elevated); }
+
+.followup .key {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--blue-ink);
+  font: 750 13px/1 var(--font-mono);
+}
+
+.followup p,
+.followup li,
+.risk p,
+.risk li {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.sequence {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.sequence-step {
+  position: relative;
+  min-height: 140px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-soft);
+}
+
+.sequence-step:not(:last-child)::after {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: -14px;
+  color: var(--teal-ink);
+  content: "→";
+  font: 800 18px/1 var(--font-mono);
+}
+
+.sequence-step .number {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--teal-ink);
+  font: 750 12px/1 var(--font-mono);
+}
+
+.sequence-step p {
+  margin: 5px 0 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.deferred {
+  margin-top: 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--amber-border);
+  border-radius: 12px;
+  background: var(--amber-soft);
+}
+
+.deferred strong { color: var(--amber); }
+
+.references {
+  columns: 2;
+  padding-left: 20px;
+}
+
+.references li {
+  margin: 6px 0;
+  break-inside: avoid;
+}
+
+.knowledge-log {
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.knowledge-log time {
+  color: var(--ink-3);
+  font: 700 12px/1 var(--font-mono);
+}
+
+@media (max-width: 900px) {
+  .decision,
+  .options,
+  .assumptions,
+  .rationales,
+  .risks,
+  .followups {
+    grid-template-columns: 1fr;
+  }
+
+  .sequence { grid-template-columns: 1fr 1fr; }
+  .sequence-step:nth-child(2)::after { display: none; }
+}
+
+@media (max-width: 620px) {
+  main { width: min(100% - 28px, 1180px); }
+  header { padding-top: 68px; }
+  .sequence { grid-template-columns: 1fr; }
+  .sequence-step::after { display: none; }
+  .references { columns: 1; }
+  .architecture-wrap { padding: 14px; overflow: visible; }
+  .architecture {
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    gap: 10px;
+  }
+  .architecture .wires,
+  .architecture .edge-label,
+  .architecture .vm { display: none; }
+  .architecture .node {
+    position: relative;
+    inset: auto;
+    width: auto;
+    transform: none;
+  }
+}
+</style>
+</head>
+<body>
+<button class="theme-toggle" type="button" id="themeToggle" aria-label="Toggle color theme">Theme</button>
+<main>
+  <header>
+    <div class="kicker">Decision memo · AGT-2276</div>
+    <h1>Hosting the Agent Studio Wiki</h1>
+    <p class="lede">
+      Host the complete networked Studio control plane on the existing public Hetzner VM.
+      The Wiki then stays a live Studio capability instead of becoming a second product,
+      while <code>agent-runner-01</code> remains an independently supervised execution host.
+    </p>
+    <div class="meta">
+      <span><strong>Status:</strong> recommended</span>
+      <span><strong>Date:</strong> 2026-07-23</span>
+      <span><strong>Decision owner:</strong> Robert</span>
+      <span><strong>First visibility:</strong> authenticated viewer access</span>
+      <span><strong>Implementation:</strong> excluded from this planning run</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="decision-title">
+    <div class="section-label">01 · Decision</div>
+    <h2 id="decision-title">Choose the full networked Studio, with separate control and execution hosts</h2>
+    <div class="decision">
+      <article class="panel recommended">
+        <span class="chip">Recommended · Option A</span>
+        <h3>Hetzner control-plane VM</h3>
+        <p>
+          Run Caddy, the production Angular Studio, the Studio API/BFF with the existing
+          Wiki routes, and the Task Server on the existing public VM. Serve all browser
+          traffic from one HTTPS origin and use the shipped <code>networked</code> security
+          profile. Keep the Runner daemon on <code>agent-runner-01</code>, connected outbound
+          with its own scoped service identity.
+        </p>
+        <ul>
+          <li>The Wiki remains live, searchable, history-aware, and part of Studio.</li>
+          <li>Authentication, authorization, TLS, audit, backup, and recovery have one owner.</li>
+          <li>No temporary Wiki-only backend or export pipeline has to be retired later.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <span class="chip teal">Placement rule</span>
+        <h3>Do not put the control plane on the Runner by default</h3>
+        <p>
+          Co-locating everything on <code>agent-runner-01</code> would work technically, but it
+          couples the public control plane to build load, Runner maintenance, and host loss.
+          The existing public VM is the better first control-plane home. The Runner stays a
+          replaceable execution client.
+        </p>
+      </article>
+    </div>
+
+    <div class="assumptions" aria-label="Decision assumptions">
+      <div class="assumption">
+        <strong>Primary need</strong>
+        <span>A live, remotely reachable project Wiki, not an anonymous documentation portal.</span>
+      </div>
+      <div class="assumption">
+        <strong>Visibility at first release</strong>
+        <span>Owner, operator, and viewer accounts. Anonymous access is not a hidden exception.</span>
+      </div>
+      <div class="assumption">
+        <strong>Published revision</strong>
+        <span>The accepted integration or release revision, never whichever task branch happens to be active.</span>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="architecture-title">
+    <div class="section-label">02 · Architecture sketch</div>
+    <h2 id="architecture-title">One HTTPS origin, one control plane, separate execution</h2>
+    <p>
+      The sketch uses the calm box-and-rail visual language of Agent Host Protocol diagrams.
+      Blue is control-plane authority; teal is execution. The Wiki is a projection over one
+      published repository revision, reached through the same authenticated Studio API as the
+      rest of the product.
+    </p>
+
+    <figure>
+      <div class="architecture-wrap">
+        <div class="architecture" role="img" aria-label="Authenticated browser connects through Caddy to Studio and Task Server on the Hetzner control-plane VM. Studio Wiki routes read an atomic repository checkout. Agent Runner connects outbound to Task Server from a separate host.">
+          <svg class="wires" viewBox="0 0 820 550" preserveAspectRatio="none" aria-hidden="true">
+            <path class="rail" d="M410 68 C410 100 410 100 410 133"></path>
+            <path class="flow-blue" d="M410 68 C410 100 410 100 410 133"></path>
+            <path class="rail" d="M410 210 C330 230 260 245 210 280"></path>
+            <path class="flow-blue" d="M410 210 C330 230 260 245 210 280"></path>
+            <path class="rail" d="M410 210 C490 230 560 245 610 280"></path>
+            <path class="flow-blue" d="M410 210 C490 230 560 245 610 280"></path>
+            <path class="rail" d="M210 350 C275 375 330 390 410 410"></path>
+            <path class="flow-blue" d="M210 350 C275 375 330 390 410 410"></path>
+            <path class="rail" d="M410 475 C455 492 500 505 545 520"></path>
+            <path class="flow-teal" d="M410 475 C455 492 500 505 545 520"></path>
+            <path class="rail" d="M610 350 C560 405 520 455 470 515"></path>
+            <path class="flow-teal" d="M610 350 C560 405 520 455 470 515"></path>
+          </svg>
+
+          <div class="node browser">
+            <div class="node-head">
+              <span class="node-title"><span class="dot"></span>Agent Studio client</span>
+              <span class="location">browser · N clients</span>
+            </div>
+            <span class="node-sub">Owner · operator · viewer session<br>Wiki, board, review, administration</span>
+          </div>
+
+          <div class="node vm" aria-hidden="true">
+            <span class="vm-label">Hetzner control-plane VM · systemd supervised</span>
+          </div>
+
+          <div class="node caddy">
+            <div class="node-head">
+              <span class="node-title"><span class="dot"></span>Caddy</span>
+              <span class="location">80 · 443</span>
+            </div>
+            <span class="node-sub">TLS · HSTS · limits · same origin</span>
+          </div>
+
+          <div class="node studio">
+            <div class="node-head">
+              <span class="node-title"><span class="dot"></span>Studio + API/BFF</span>
+              <span class="location">private listener</span>
+            </div>
+            <span class="node-sub">Angular SPA · Wiki routes · sessions · CSRF<br>tree · files · assets · search · Pulse · history</span>
+          </div>
+
+          <div class="node server">
+            <div class="node-head">
+              <span class="node-title"><span class="dot"></span>Task Server</span>
+              <span class="location">private listener</span>
+            </div>
+            <span class="node-sub">Tasks · projects · identities · leases<br>events · artifacts · audit · management</span>
+          </div>
+
+          <div class="node repo">
+            <div class="node-head">
+              <span class="node-title">Published repository checkout</span>
+              <span class="location">atomic revision</span>
+            </div>
+            <span class="node-sub"><code>docs/</code> + image assets + metadata + Git history<br>accepted branch or release SHA</span>
+          </div>
+
+          <div class="node runner">
+            <div class="node-head">
+              <span class="node-title"><span class="dot"></span>Agent Runner</span>
+              <span class="location">agent-runner-01</span>
+            </div>
+            <span class="node-sub">CLI processes · worktrees · host tools · local spool<br>outbound authenticated claim, lease, events, artifacts</span>
+          </div>
+
+          <span class="edge-label https">HTTPS · secure session</span>
+          <span class="edge-label same-origin">/ · /api · /hubs</span>
+          <span class="edge-label docs">read one published SHA</span>
+          <span class="edge-label outbound">outbound only</span>
+        </div>
+      </div>
+      <figcaption>
+        <strong>Authority boundary:</strong> browsers never mutate a Runner directly. Caddy is
+        the only public listener. Studio shutdown does not stop the Task Server or Runner, and
+        the Wiki checkout is a publication input rather than a second task store.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="options-title">
+    <div class="section-label">03 · Options</div>
+    <h2 id="options-title">What each option buys, and what it leaves behind</h2>
+    <div class="options">
+      <article class="option a">
+        <div class="option-head">
+          <span class="chip">A · Full Studio</span>
+          <span class="score">87 / 100</span>
+        </div>
+        <h3>Networked Studio on the control-plane VM</h3>
+        <p>
+          The Wiki arrives as part of the real product surface. It keeps live APIs,
+          navigation, search, history, Pulse, and future dynamic features.
+        </p>
+        <ul>
+          <li><strong>Strength:</strong> directly advances the declared remote target.</li>
+          <li><strong>Cost:</strong> larger first deployment and operational blast radius.</li>
+          <li><strong>Visibility:</strong> authenticated by default; viewer role is read-only.</li>
+        </ul>
+      </article>
+
+      <article class="option">
+        <div class="option-head">
+          <span class="chip teal">B · Wiki service</span>
+          <span class="score">55 / 100</span>
+        </div>
+        <h3>Read-only API slice plus Wiki frontend</h3>
+        <p>
+          A smaller public service can remain live, but it creates a second deployable,
+          a second authorization boundary, and a second release path around a subset of Studio.
+        </p>
+        <ul>
+          <li><strong>Strength:</strong> live data and an intentionally narrow public surface.</li>
+          <li><strong>Cost:</strong> route extraction, separate hardening, versioning, and UI packaging.</li>
+          <li><strong>Residue:</strong> likely retired or folded back once full Studio is hosted.</li>
+        </ul>
+      </article>
+
+      <article class="option">
+        <div class="option-head">
+          <span class="chip amber">C · Static export</span>
+          <span class="score">67 / 100</span>
+        </div>
+        <h3>Rendered Wiki snapshot on the existing VM</h3>
+        <p>
+          Static files are the fastest and safest anonymous publication boundary, but they are
+          a publication product, not the live Studio Wiki.
+        </p>
+        <ul>
+          <li><strong>Strength:</strong> lowest runtime risk and simplest Caddy operation.</li>
+          <li><strong>Cost:</strong> snapshot lag and a new renderer/export pipeline.</li>
+          <li><strong>Loss:</strong> no live history, Pulse, read counters, ratings, or server search.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="matrix-title">
+    <div class="section-label">04 · Weighted decision</div>
+    <h2 id="matrix-title">The target architecture outweighs the smallest first deploy</h2>
+    <p>
+      Scores use a five-point scale where five is best. Weights express the current decision:
+      host a live internal Wiki while moving toward a completely remote Studio. If anonymous
+      public publication becomes a hard requirement, the decision objective changes and must
+      be scored again.
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Option</th>
+            <th class="numeric">Target fit<br>30%</th>
+            <th class="numeric">Operations<br>20%</th>
+            <th class="numeric">Freshness<br>20%</th>
+            <th class="numeric">Auth / visibility<br>15%</th>
+            <th class="numeric">Time to usable<br>15%</th>
+            <th class="numeric">Weighted total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="winner">
+            <td><strong>A · Full networked Studio</strong></td>
+            <td class="numeric">5</td>
+            <td class="numeric">4</td>
+            <td class="numeric">5</td>
+            <td class="numeric">4</td>
+            <td class="numeric">3</td>
+            <td class="numeric"><strong>4.35 / 5 · 87%</strong></td>
+          </tr>
+          <tr>
+            <td><strong>B · Read-only Wiki service</strong></td>
+            <td class="numeric">2</td>
+            <td class="numeric">2</td>
+            <td class="numeric">5</td>
+            <td class="numeric">3</td>
+            <td class="numeric">2</td>
+            <td class="numeric"><strong>2.75 / 5 · 55%</strong></td>
+          </tr>
+          <tr>
+            <td><strong>C · Static export</strong></td>
+            <td class="numeric">2</td>
+            <td class="numeric">5</td>
+            <td class="numeric">2</td>
+            <td class="numeric">4</td>
+            <td class="numeric">5</td>
+            <td class="numeric"><strong>3.35 / 5 · 67%</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="matrix-note">
+      Formula: sum of <code>criterion weight × score</code>, divided by the maximum score of five.
+      Static export ranks second because it is operationally cheap, not because it satisfies the
+      live-Wiki target.
+    </p>
+
+    <div class="rationales">
+      <article class="rationale">
+        <h3>Target compatibility · 30%</h3>
+        <p>
+          Option A is the only path that directly completes the "everything remotely reachable"
+          target without a disposable service. B duplicates a subset of Studio. C is a durable
+          publishing mechanism only if a separate public-docs product is actually wanted.
+        </p>
+      </article>
+      <article class="rationale">
+        <h3>Operational effort · 20%</h3>
+        <p>
+          The VM, Caddy pattern, systemd units, networked profile, TLS runbook, and Task Server
+          service boundary already exist. A still has the largest data, backup, and cutover surface.
+          B looks small but creates another independently secured application. C is simplest.
+        </p>
+      </article>
+      <article class="rationale">
+        <h3>Freshness · 20%</h3>
+        <p>
+          A and B can render the current published repository revision. A must still add a controlled
+          revision-sync path; merely copying the backend does not make its checkout current. C is
+          intentionally a snapshot and inherits build or deployment lag.
+        </p>
+      </article>
+      <article class="rationale">
+        <h3>Authentication and visibility · 15%</h3>
+        <p>
+          A reuses owner, operator, viewer, secure sessions, CSRF, project membership, and audit.
+          B needs a new anonymous route allowlist and must prove that no write or private project data
+          leaks through search, assets, history, or HTML. C has the cleanest anonymous boundary.
+        </p>
+      </article>
+      <article class="rationale">
+        <h3>Time to usable · 15%</h3>
+        <p>
+          C wins if "usable" means a public snapshot. For the requested live Wiki, A can reuse shipped
+          deployment contracts but still needs a real hosted cutover. B requires extraction work before
+          it has anything safe to expose, so it is not the shortcut its process count suggests.
+        </p>
+      </article>
+      <article class="rationale">
+        <h3>Reversibility</h3>
+        <p>
+          A can be rolled back by leaving the current local Studio intact until the hosted acceptance
+          gate passes. Its data and published checkout need explicit rollback. B is reversible in
+          isolation but leaves code to delete. C is trivially reversible but does not advance the
+          product runtime.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="freshness-title">
+    <div class="section-label">05 · Live revision contract</div>
+    <h2 id="freshness-title">“Live” means accepted changes appear without copying files by hand</h2>
+    <p>
+      The current Wiki API reads the physical <code>docs/</code> tree and Git metadata from a repository
+      checkout. A hosted backend therefore needs one explicit publication contract. The recommended SLO
+      is that an accepted documentation revision becomes visible within five minutes.
+    </p>
+    <div class="sequence" aria-label="Wiki publication sequence">
+      <div class="sequence-step">
+        <span class="number">01 · ACCEPT</span>
+        <h3>Choose the source revision</h3>
+        <p>Use the accepted integration branch or a release SHA. Never publish an active task branch implicitly.</p>
+      </div>
+      <div class="sequence-step">
+        <span class="number">02 · VERIFY</span>
+        <h3>Fetch and validate</h3>
+        <p>Resolve the exact commit, validate the docs tree and assets, and keep credentials out of logs.</p>
+      </div>
+      <div class="sequence-step">
+        <span class="number">03 · PROMOTE</span>
+        <h3>Switch atomically</h3>
+        <p>Promote a complete checkout so readers never see a mixed or half-updated documentation tree.</p>
+      </div>
+      <div class="sequence-step">
+        <span class="number">04 · OBSERVE</span>
+        <h3>Refresh and record</h3>
+        <p>Refresh Wiki caches, expose the published SHA, retain the previous revision, and emit deployment evidence.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="risk-title">
+    <div class="section-label">06 · Risks and guardrails</div>
+    <h2 id="risk-title">The recommended path is larger, so its boundaries must stay explicit</h2>
+    <div class="risks">
+      <article class="risk">
+        <h3>Correlated host failure</h3>
+        <p>
+          Putting Studio, Task Server, and Runner on <code>agent-runner-01</code> would turn Runner
+          maintenance or build pressure into control-plane downtime.
+        </p>
+        <p><strong>Guardrail:</strong> use the existing public VM for the control plane and keep the Runner separate.</p>
+      </article>
+      <article class="risk">
+        <h3>Deployment checkout becomes a writer</h3>
+        <p>
+          The current Wiki includes commit-backed editing routes. A production publication checkout
+          must not accept an accidental edit that bypasses branch review.
+        </p>
+        <p><strong>Guardrail:</strong> first release is read-only for viewers; operator editing follows the explicit Wiki branch policy.</p>
+      </article>
+      <article class="risk">
+        <h3>“Live” checkout silently goes stale</h3>
+        <p>
+          A running API can remain healthy while its repository checkout is weeks behind.
+        </p>
+        <p><strong>Guardrail:</strong> record and expose the published SHA, enforce the five-minute SLO, and alert on failed promotion.</p>
+      </article>
+      <article class="risk">
+        <h3>Anonymous access leaks more than pages</h3>
+        <p>
+          Search, history, assets, HTML, Pulse, project names, and future dynamic data widen a public
+          read surface far beyond one Markdown file.
+        </p>
+        <p><strong>Guardrail:</strong> no anonymous exception in phase one. Reopen the decision if public access is a hard requirement.</p>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="followup-title">
+    <div class="section-label">07 · Follow-up cards</div>
+    <h2 id="followup-title">Two implementation slices, with the existing lifecycle gate reused</h2>
+    <p>
+      These cards were created in <code>0-backlog</code> by this planning run. They remain parked until
+      their dependencies are accepted and an operator chooses to schedule them.
+    </p>
+    <div class="followups">
+      <article class="followup">
+        <span class="key">AGT-2277</span>
+        <h3>Host the networked Agent Studio control plane on the Hetzner VM</h3>
+        <p>
+          Deploy Caddy, Angular Studio, Studio API/BFF with Wiki routes, and Task Server under one
+          HTTPS origin. Prove authentication, viewer read-only behavior, restart independence,
+          backup/restore, rollback, and outbound Runner connectivity.
+        </p>
+        <ul>
+          <li><strong>Waits on:</strong> AGT-2229 and AGT-2230.</li>
+          <li><strong>Reuses:</strong> completed AGT-2192/2193 contracts and AGT-2196 acceptance scope.</li>
+          <li><strong>Excludes:</strong> anonymous Wiki access and a Wiki-only service.</li>
+        </ul>
+      </article>
+      <article class="followup">
+        <span class="key">AGT-2278</span>
+        <h3>Hosted Wiki: publish the accepted revision without manual file copies</h3>
+        <p>
+          Add the rollback-safe repository publication path that makes the hosted Wiki genuinely
+          current. Preserve the complete docs tree, assets, metadata, Git history, search, Pulse,
+          and revision preview against one published commit.
+        </p>
+        <ul>
+          <li><strong>Waits on:</strong> AGT-2277.</li>
+          <li><strong>Freshness target:</strong> accepted docs visible within five minutes.</li>
+          <li><strong>Failure behavior:</strong> keep the previous revision online and emit typed evidence.</li>
+        </ul>
+      </article>
+    </div>
+
+    <div class="deferred">
+      <strong>Conditional follow-up, deliberately not created:</strong>
+      if anonymous public reading becomes a product requirement, cut a separate
+      “Public Wiki publication boundary” card. Re-evaluate static export against an allowlisted
+      read-only projection using a public-only content classification. Do not weaken the networked
+      Studio profile with an ad hoc anonymous bypass.
+    </div>
+  </section>
+
+  <section aria-labelledby="references-title">
+    <div class="section-label">08 · Evidence</div>
+    <h2 id="references-title">Existing contracts used by this decision</h2>
+    <ul class="references">
+      <li><a href="distributed-agent-studio-target-architecture.md">Distributed Agent Studio target architecture</a></li>
+      <li><a href="../operations/setup/networked-task-server.md">Networked Task Server deployment</a></li>
+      <li><a href="../operations/setup/task-server.md">Task Server deployment and recovery</a></li>
+      <li><a href="../operations/security/overview.md">Security overview and networked threat model</a></li>
+      <li><a href="../system/contracts/wiki-tree.md">Wiki tree, rendering, and history contract</a></li>
+      <li><a href="../start/wiki-editing-and-branch-flow.md">Wiki editing and branch flow</a></li>
+      <li>AGT-2192: independently deployable Task Server</li>
+      <li>AGT-2193: human and Runner identity, authorization, and HTTPS</li>
+      <li>AGT-2196: client-off three-process lifecycle release gate</li>
+      <li>AGT-2229: remote-host Orchestrator instance</li>
+      <li>AGT-2230: Task Server as central configuration authority</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="knowledge-title">
+    <div class="section-label">09 · Living knowledge log</div>
+    <h2 id="knowledge-title">Living knowledge log</h2>
+    <div class="knowledge-log">
+      <time datetime="2026-07-23">2026-07-23</time>
+      <p>
+        Initial decision recorded from AGT-2276. Option A is recommended with the control plane on
+        the existing public Hetzner VM and the Runner kept on a separate host. AGT-2277 and AGT-2278
+        were created in Backlog. Anonymous publication remains an explicit future decision.
+      </p>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const button = document.getElementById('themeToggle');
+  let stored = null;
+  try {
+    stored = localStorage.getItem('wiki-hosting-theme');
+  } catch {
+    // The Wiki renders HTML in an opaque-origin sandbox where storage is unavailable.
+  }
+  if (stored === 'light' || stored === 'dark') root.dataset.theme = stored;
+
+  button.addEventListener('click', () => {
+    const current = root.dataset.theme;
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const next = current === 'dark' || (!current && systemDark) ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try {
+      localStorage.setItem('wiki-hosting-theme', next);
+    } catch {
+      // Theme still changes for this view; only persistence is unavailable.
+    }
+  });
+})();
+</script>
+</body>
+</html>
