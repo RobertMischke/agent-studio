@@ -15,6 +15,8 @@ export class ExplorerWorkbenchListComponent {
   readonly projectName = input.required<string>();
   readonly active = input(false);
   readonly openWorkbench = output<WorkbenchListItem>();
+  /** Jump to the project wiki (the workbench pages live there). */
+  readonly openWiki = output<void>();
   private readonly docs = inject(ProjectDocsService);
   readonly expanded = signal(false);
   readonly loading = signal(false);
