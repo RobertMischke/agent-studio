@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "haertung-verteilte-ausfuehrung",
-  "title": "Härtung der verteilten Ausführung",
+  "title": "Verteilte Ausführung",
   "summary": "Ergebniszuordnung zwischen Runner- und Task-Branches, Vorfälle vom 08. bis 24.07., Result-SHA-Vertrag, Fencing und hermetische Gates mit kanonischer Historie.",
   "entrypoint": "index.html",
   "status": "active",
