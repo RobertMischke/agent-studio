@@ -22,7 +22,24 @@ public sealed class RemoteReviewDaemon
         var active = new List<Task<int>>();
         while (!shutdown.IsCancellationRequested)
         {
-            active.RemoveAll(task => task.IsCompleted);
+            for (var index = active.Count - 1; index >= 0; index--)
+            {
+                if (!active[index].IsCompleted) continue;
+                try
+                {
+                    var exitCode = await active[index];
+                    _log($"remote review slot finished exit={exitCode}");
+                }
+                catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+                {
+                    _log("remote review slot stopped during shutdown");
+                }
+                catch (Exception exception)
+                {
+                    _log($"remote review slot failed after cleanup: {exception.Message}");
+                }
+                active.RemoveAt(index);
+            }
             var claimedAny = false;
             while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
             {

@@ -99,6 +99,10 @@ product changes. The old executor's renew, report, and cleanup deliveries are
 then rejected as stale. An infrastructure-only report creates a new
 ReviewAttempt for the same immutable subject and leaves the task in Auto Review.
 It never creates a coding run or returns the task to Ready.
+Draining rejects new review claims while allowing an already fenced attempt to
+renew, report, and clean up. Safe-shutdown and restore checks count unresolved
+coding and review authority, and the integrity digest inventories the review
+subject, attempt, fence, and delivery tables.
 
 ## Fully remote review authority
 
@@ -117,13 +121,17 @@ Review lifecycle routes:
 - `POST /api/v1/reviews/attempts/{id}/cleanup`
 
 The fenced report binds repository identity, expected and actual HEAD, tree
-hash, dirty-before and dirty-after facts, environment, toolchain, exact command
-arguments, exit or signal, output digests, artifacts, and typed aspect verdicts.
+hash, dirty-before and dirty-after facts, environment, executable-digest
+toolchain identity, exact command arguments, exit or signal, output digests,
+artifacts, and typed aspect verdicts.
 The Task Server validates containment and subject identity but starts no Git,
 build, test, provider CLI, semantic, or vision process. Product and pass
 outcomes advance to Human Review, which remains the final decision surface.
 `ReviewInfra` stays in Auto Review and schedules another ReviewAttempt on the
-same subject.
+same subject. Coding and review capabilities require distinct registered
+identities, and a registered identity cannot be switched between those roles.
+A stale report is rejected if a newer task lifecycle or result has replaced its
+immutable review subject.
 
 After draining, `POST /api/v1/management/prepare-shutdown` verifies that no
 `active` or `process-unknown` attempt authority remains, records the operator

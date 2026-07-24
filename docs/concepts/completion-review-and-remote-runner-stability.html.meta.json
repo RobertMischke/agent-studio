@@ -153,10 +153,10 @@
     "type": "html",
     "fingerprint": {
       "algorithm": "sha256",
-      "hash": "42cc321e0590e27dfc8c4855caf4e28f61d7d242f9db4a90f49a7952ef6c4294",
-      "sizeBytes": 114474,
+      "hash": "a50fa7da24924ab90b84895f889cd0708612d27e2f5c9f30a7d5c4c6f00ae0e3",
+      "sizeBytes": 115226,
       "lineCount": 1530,
-      "capturedAt": "2026-07-24T17:15:29.000Z"
+      "capturedAt": "2026-07-24T17:29:50.000Z"
     }
   },
   "classification": {

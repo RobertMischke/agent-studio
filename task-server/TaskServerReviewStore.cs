@@ -266,7 +266,7 @@ public sealed partial class TaskServerStore
                 HostId = executor.HostId,
                 Fence = fence,
             };
-            var resourceNamespace = ResourceNamespace(attempt.AttemptId);
+            var resourceNamespace = ResourceNamespace(attempt.AttemptId, fence);
             var lease = new ReviewLeaseDto(
                 leaseId, attempt.AttemptId, subject.SubjectId, request.ExecutorId,
                 request.InstanceId, executor.HostId, fence, acquired, expires, "active",
@@ -293,7 +293,9 @@ public sealed partial class TaskServerStore
         string actorId,
         CancellationToken ct)
     {
-        RequireAdmission();
+        // Draining stops new claims, but an already fenced review must retain
+        // authority long enough to finish, report, and clean up.
+        RequireWritable();
         ReviewLeaseDto? result = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
@@ -345,6 +347,7 @@ public sealed partial class TaskServerStore
                 throw new TaskServerConflictException("review-lease-expired", "Review lease expired and its report is fenced off.");
             var subject = await ReadReviewSubjectAsync(connection, transaction, attempt.SubjectId, ct)
                 ?? throw new KeyNotFoundException("Review subject was not found.");
+            await EnsureReviewSubjectCurrentAsync(connection, transaction, subject, ct);
             var classified = ClassifyReviewReport(subject, request, attempt);
             var received = UtcNow;
             var reportId = $"rrpt_{Guid.NewGuid():N}";
@@ -500,6 +503,10 @@ public sealed partial class TaskServerStore
         if (string.IsNullOrWhiteSpace(request.RepositoryUrl)
             && string.IsNullOrWhiteSpace(request.SourceBundleArtifactId))
             throw new ArgumentException("An immutable repository source or source bundle is required.");
+        if (string.IsNullOrWhiteSpace(request.RepositoryUrl)
+            && (string.IsNullOrWhiteSpace(request.SourceBundleArtifactId)
+                || !ValidDigest(request.SourceBundleSha256, 64)))
+            throw new ArgumentException("A source bundle review subject requires its SHA-256 content digest.");
         if (request.Plan.Commands.Count == 0 || request.Plan.RequiredAspects.Count == 0)
             throw new ArgumentException("Review plan commands and required aspects are required.");
         var commandIds = request.Plan.Commands.Select(command => command.StepId).ToHashSet(StringComparer.Ordinal);
@@ -515,19 +522,36 @@ public sealed partial class TaskServerStore
         ReviewReportRequest request,
         ReviewAuthorityRow attempt)
     {
-        if (!string.Equals(request.Workspace.ResourceNamespace, ResourceNamespace(attempt.AttemptId), StringComparison.Ordinal)
+        var resourceNamespace = ResourceNamespace(attempt.AttemptId, attempt.Fence);
+        if (!string.Equals(request.Workspace.ResourceNamespace, resourceNamespace, StringComparison.Ordinal)
             || !string.Equals(request.Environment.ExecutorId, attempt.ExecutorId, StringComparison.Ordinal)
             || !string.Equals(request.Environment.InstanceId, attempt.InstanceId, StringComparison.Ordinal)
             || !string.Equals(request.Environment.HostId, attempt.HostId, StringComparison.Ordinal)
+            || !request.Environment.Isolation.TryGetValue("workspace", out var workspace)
+            || !WorkspaceMatchesNamespace(workspace, resourceNamespace)
+            || !string.Equals(Hash(workspace), request.Workspace.WorkspaceIdentity, StringComparison.Ordinal)
+            || !request.Environment.Isolation.TryGetValue("cache", out var cache)
+            || !IsContainedPath(workspace, cache)
+            || !request.Environment.Isolation.TryGetValue("temp", out var temp)
+            || !IsContainedPath(workspace, temp)
+            || string.Equals(cache, temp, StringComparison.Ordinal)
             || !request.Environment.Isolation.TryGetValue("containers", out var containers)
-            || !string.Equals(containers, ResourceNamespace(attempt.AttemptId), StringComparison.Ordinal)
+            || !string.Equals(containers, resourceNamespace, StringComparison.Ordinal)
             || !request.Environment.Isolation.TryGetValue("databases", out var databases)
-            || !string.Equals(databases, ResourceNamespace(attempt.AttemptId), StringComparison.Ordinal)
+            || !string.Equals(databases, resourceNamespace, StringComparison.Ordinal)
             || !request.Environment.Isolation.TryGetValue("ports", out var ports)
-            || !ports.Contains(attempt.PortBase.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            || !string.Equals(
+                ports,
+                $"{attempt.PortBase}-{attempt.PortBase + 7}",
+                StringComparison.Ordinal)
             || !request.Environment.Isolation.TryGetValue("credentials", out var credentials)
             || !string.Equals(credentials, "review-read-only", StringComparison.Ordinal))
             return ("ReviewInfra", "ContainmentMismatch");
+        if (!request.Environment.Toolchain.ContainsKey("runtime")
+            || !request.Environment.Toolchain.ContainsKey("git")
+            || subject.Plan.Commands.Any(command =>
+                !request.Environment.Toolchain.ContainsKey($"command:{command.StepId}")))
+            return ("ReviewInfra", "ToolchainIdentityMissing");
         if (string.Equals(request.Outcome, "ReviewInfra", StringComparison.Ordinal)
             && request.FailureClassification is "SnapshotUnavailable" or "SourceBundleDigestMismatch")
             return ("ReviewInfra", request.FailureClassification);
@@ -540,9 +564,13 @@ public sealed partial class TaskServerStore
         if (request.Workspace.DirtyAfter) return ("ReviewInfra", "MutatedAfter");
         if (string.IsNullOrWhiteSpace(request.Workspace.TreeHash))
             return ("ReviewInfra", "TreeHashMissing");
+        if (string.Equals(request.Outcome, "ReviewInfra", StringComparison.Ordinal)
+            && request.FailureClassification is "ToolUnavailable")
+            return ("ReviewInfra", request.FailureClassification);
         if (request.Commands.Any(command =>
                 !string.Equals(command.ExpectedResultSha, subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(command.HeadBefore, subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase)))
+                || !string.Equals(command.HeadBefore, subject.ExpectedResultSha, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(command.TreeBefore, request.Workspace.TreeHash, StringComparison.OrdinalIgnoreCase)))
             return ("ReviewInfra", "CommandSubjectMismatch");
         var verdictAspects = request.Verdicts.Select(verdict => verdict.Aspect).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (subject.Plan.RequiredAspects.Any(aspect => !verdictAspects.Contains(aspect)))
@@ -564,6 +592,18 @@ public sealed partial class TaskServerStore
         }
         if (request.Artifacts.Any(artifact => !ValidDigest(artifact.Sha256, 64) || artifact.SizeBytes < 0))
             return ("ReviewInfra", "ArtifactEvidenceInvalid");
+        if (request.Commands.Any(command =>
+                command.FinishedAt < command.StartedAt
+                || !ValidDigest(command.StdoutSha256, 64)
+                || !ValidDigest(command.StderrSha256, 64)))
+            return ("ReviewInfra", "CommandEvidenceInvalid");
+        var artifactDigests = request.Artifacts
+            .Select(artifact => artifact.Sha256)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (request.Commands.Any(command =>
+                !artifactDigests.Contains(command.StdoutSha256)
+                || !artifactDigests.Contains(command.StderrSha256)))
+            return ("ReviewInfra", "ArtifactEvidenceIncomplete");
         if (request.Commands.Any(command => command.Signal is not null || command.ExitCode is null or < 0))
             return ("ReviewInfra", "CommandTerminated");
         if (request.Verdicts.Any(verdict =>
@@ -602,6 +642,37 @@ public sealed partial class TaskServerStore
             """, ct, transaction,
             ("$id", $"rat_{Guid.NewGuid():N}"), ("$subject", attempt.SubjectId),
             ("$task", attempt.TaskId), ("$number", attempt.AttemptNumber + 1), ("$now", Iso(now)));
+    }
+
+    private static async Task EnsureReviewSubjectCurrentAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        ReviewSubjectDto subject,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT t.state,
+                   (
+                       SELECT r.id
+                         FROM runs r
+                        WHERE r.task_id = t.id
+                          AND r.result_sha IS NOT NULL
+                        ORDER BY coalesce(r.finished_at, r.created_at) DESC, r.rowid DESC
+                        LIMIT 1
+                   )
+              FROM tasks t
+             WHERE t.id = $task;
+            """, transaction, ("$task", subject.TaskId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            throw new KeyNotFoundException("Review task was not found.");
+        var state = reader.GetString(0);
+        var latestResultRun = reader.IsDBNull(1) ? null : reader.GetString(1);
+        if (!string.Equals(state, "4-auto-review", StringComparison.Ordinal)
+            || !string.Equals(latestResultRun, subject.SourceRunId, StringComparison.Ordinal))
+            throw new TaskServerConflictException(
+                "review-subject-not-current",
+                "Review evidence is bound to a result that no longer owns the task's Auto Review lifecycle.");
     }
 
     private static async Task AddColumnIfMissingAsync(
@@ -715,6 +786,10 @@ public sealed partial class TaskServerStore
         var capabilities = JsonSerializer.Deserialize<string[]>(reader.GetString(2), ReviewJson) ?? [];
         if (!capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
             throw new TaskServerConflictException("review-capability-required", "Runner did not advertise the Remote Review Executor capability.");
+        if (capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal))
+            throw new TaskServerConflictException(
+                "review-capability-required",
+                "A coding service identity cannot claim separately fenced review work.");
         return new ReviewExecutorRow(
             reader.GetString(0),
             capabilities.ToHashSet(StringComparer.Ordinal));
@@ -777,7 +852,7 @@ public sealed partial class TaskServerStore
         => new(
             row.LeaseId!, row.AttemptId, row.SubjectId, row.ExecutorId!, row.InstanceId!,
             row.HostId!, row.Fence, row.AcquiredAt!.Value, row.ExpiresAt!.Value,
-            row.Status == "leased" ? "active" : row.Status, ResourceNamespace(row.AttemptId),
+            row.Status == "leased" ? "active" : row.Status, ResourceNamespace(row.AttemptId, row.Fence),
             row.PortBase);
 
     private static ReviewReportDto ToReviewReport(ReviewAuthorityRow row)
@@ -852,9 +927,39 @@ public sealed partial class TaskServerStore
     private static string Hash(string value)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
-    private static string ResourceNamespace(string attemptId)
+    private static bool IsContainedPath(string root, string path)
+    {
+        var normalizedRoot = NormalizeReportedPath(root);
+        var normalizedPath = NormalizeReportedPath(path);
+        return normalizedRoot is not null
+               && normalizedPath is not null
+               && normalizedPath.StartsWith(normalizedRoot + "/", StringComparison.Ordinal);
+    }
+
+    private static bool WorkspaceMatchesNamespace(string workspace, string resourceNamespace)
+    {
+        var normalized = NormalizeReportedPath(workspace);
+        return normalized is not null
+               && string.Equals(
+                   normalized.Split('/')[^1],
+                   resourceNamespace,
+                   StringComparison.Ordinal);
+    }
+
+    private static string? NormalizeReportedPath(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Contains('\0')) return null;
+        var segments = value.Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0 || segments.Any(segment => segment is "." or ".."))
+            return null;
+        return string.Join('/', segments);
+    }
+
+    private static string ResourceNamespace(string attemptId, long fence)
         => "review-" + new string(attemptId.ToLowerInvariant()
-            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray())
+           + "-f" + fence.ToString(CultureInfo.InvariantCulture);
 
     private static bool SupportsSubject(ReviewExecutorRow executor, ReviewSubjectDto subject)
     {

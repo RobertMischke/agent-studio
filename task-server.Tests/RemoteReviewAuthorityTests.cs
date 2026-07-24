@@ -2,6 +2,8 @@ using AgentStudio.TaskServer;
 using AgentStudio.TaskServer.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 using Xunit;
 
 namespace TaskServer.Tests;
@@ -167,6 +169,7 @@ public sealed class RemoteReviewAuthorityTests
 
         Assert.Equal(first.Attempt!.AttemptId, takeover.Attempt!.AttemptId);
         Assert.True(takeover.Lease!.Fence > first.Lease!.Fence);
+        Assert.NotEqual(first.Lease.ResourceNamespace, takeover.Lease.ResourceNamespace);
         var stale = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
             restarted.ReportReviewAsync(first.Attempt.AttemptId, PassingReport(first), "review-a", default));
         Assert.Equal("stale-review-fence", stale.Code);
@@ -174,6 +177,169 @@ public sealed class RemoteReviewAuthorityTests
         var accepted = await restarted.ReportReviewAsync(
             takeover.Attempt.AttemptId, PassingReport(takeover), "review-b", default);
         Assert.Equal("Pass", accepted.Outcome);
+    }
+
+    [Fact]
+    public async Task Coding_and_review_capabilities_require_separate_registered_identities()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+
+        var conflict = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.RegisterRunnerAsync(
+                "mixed-executor",
+                new RegisterRunnerRequest(
+                    "mixed-executor", "host-a", "instance-a", "1.0.0",
+                    TaskServerProtocol.Current,
+                    [ReviewCapabilities.CodingExecutor, ReviewCapabilities.ReviewExecutor]),
+                "test",
+                default));
+
+        Assert.Equal("runner-role-conflict", conflict.Code);
+
+        await store.RegisterRunnerAsync(
+            "coding-only",
+            new RegisterRunnerRequest(
+                "coding-only", "host-a", "coding-instance", "1.0.0",
+                TaskServerProtocol.Current,
+                [ReviewCapabilities.CodingExecutor]),
+            "test",
+            default);
+        var roleSwap = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.RegisterRunnerAsync(
+                "coding-only",
+                new RegisterRunnerRequest(
+                    "coding-only", "host-a", "review-instance", "1.0.0",
+                    TaskServerProtocol.Current,
+                    [ReviewCapabilities.ReviewExecutor]),
+                "test",
+                default));
+        Assert.Equal("runner-role-conflict", roleSwap.Code);
+    }
+
+    [Fact]
+    public async Task Tool_unavailable_is_retained_as_a_typed_infrastructure_outcome()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var subject = await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var unavailable = PassingReport(claim) with
+        {
+            Outcome = "ReviewInfra",
+            FailureClassification = "ToolUnavailable",
+            Summary = "The declared review tool could not be started.",
+            Commands = [],
+            Artifacts = [],
+            Verdicts = [],
+        };
+
+        var report = await store.ReportReviewAsync(
+            claim.Attempt!.AttemptId, unavailable, "review-a", default);
+
+        Assert.Equal("ReviewInfra", report.Outcome);
+        Assert.Equal("ToolUnavailable", report.FailureClassification);
+        Assert.True(report.RetryScheduled);
+        Assert.Equal("4-auto-review", (await TaskAsync(store, subject.TaskId)).State);
+    }
+
+    [Fact]
+    public async Task Report_with_shared_cache_or_unbound_command_tree_is_rejected_as_review_infrastructure()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var first = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var sharedCache = PassingReport(first);
+        sharedCache = sharedCache with
+        {
+            Environment = sharedCache.Environment with
+            {
+                Isolation = new Dictionary<string, string>(sharedCache.Environment.Isolation)
+                {
+                    ["cache"] = $"{sharedCache.Environment.Isolation["workspace"]}/../shared-cache",
+                },
+            },
+        };
+
+        var containment = await store.ReportReviewAsync(
+            first.Attempt!.AttemptId, sharedCache, "review-a", default);
+        Assert.Equal("ReviewInfra", containment.Outcome);
+        Assert.Equal("ContainmentMismatch", containment.FailureClassification);
+
+        var retry = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var wrongTree = PassingReport(retry);
+        wrongTree = wrongTree with
+        {
+            Commands = wrongTree.Commands
+                .Select(command => command with { TreeBefore = new string('d', 40) })
+                .ToArray(),
+        };
+
+        var subjectMismatch = await store.ReportReviewAsync(
+            retry.Attempt!.AttemptId, wrongTree, "review-a", default);
+        Assert.Equal("ReviewInfra", subjectMismatch.Outcome);
+        Assert.Equal("CommandSubjectMismatch", subjectMismatch.FailureClassification);
+    }
+
+    [Fact]
+    public async Task Stale_review_subject_cannot_overwrite_a_newer_task_lifecycle()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var subject = await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        var task = await TaskAsync(store, subject.TaskId);
+        await store.UpdateTaskAsync(
+            task.ProjectId,
+            task.TaskId,
+            new UpdateTaskRequest(null, null, "2-ready", task.Version),
+            "operator",
+            default);
+
+        var stale = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.ReportReviewAsync(
+                claim.Attempt!.AttemptId, PassingReport(claim), "review-a", default));
+
+        Assert.Equal("review-subject-not-current", stale.Code);
+        Assert.Equal("2-ready", (await TaskAsync(store, subject.TaskId)).State);
+    }
+
+    [Fact]
+    public async Task Source_bundle_subject_requires_its_content_digest()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var subject = await SeedReviewSubjectAsync(store);
+
+        var invalid = new CreateReviewSubjectRequest(
+            subject.TaskId,
+            subject.SourceRunId,
+            subject.RepositoryId,
+            null,
+            subject.ExpectedResultSha,
+            null,
+            "artifact-without-digest",
+            null,
+            subject.CodingHostId,
+            subject.ReviewPolicyHash,
+            subject.Plan,
+            "bundle-without-digest");
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CreateReviewSubjectAsync(invalid, "test", default));
     }
 
     [Fact]
@@ -294,6 +460,95 @@ public sealed class RemoteReviewAuthorityTests
                       && record.DetailJson.Contains("2-ready", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Draining_allows_review_renew_report_and_cleanup_but_blocks_shutdown_while_authority_is_active()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var claim = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+
+        await store.ChangeModeAsync(
+            new ChangeModeRequest(TaskServerMode.Draining, "review drain test"),
+            "operator",
+            default);
+
+        var renewed = await store.RenewReviewLeaseAsync(
+            claim.Attempt!.AttemptId,
+            new ReviewLeaseRenewRequest(
+                "review-a", "instance-a", claim.Lease!.LeaseId, claim.Lease.Fence,
+                "renew-during-drain"),
+            "review-a",
+            default);
+        Assert.True(renewed.ExpiresAt >= claim.Lease.ExpiresAt);
+
+        var admission = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.ClaimReviewAsync(
+                new ReviewClaimRequest("review-a", "instance-a"), "review-a", default));
+        Assert.Equal("admission-closed", admission.Code);
+
+        var deferred = await store.PrepareShutdownAsync(
+            new PrepareShutdownRequest("review drain test"), "operator", default);
+        Assert.False(deferred.SafeToStop);
+        Assert.Equal(1, deferred.UnresolvedAttempts);
+
+        await store.ReportReviewAsync(
+            claim.Attempt.AttemptId, PassingReport(claim), "review-a", default);
+        await store.CleanupReviewAsync(
+            claim.Attempt.AttemptId,
+            new ReviewCleanupRequest(
+                "review-a", "instance-a", claim.Lease.LeaseId, claim.Lease.Fence,
+                "cleanup-during-drain", true),
+            "review-a",
+            default);
+
+        var prepared = await store.PrepareShutdownAsync(
+            new PrepareShutdownRequest("review drain test"), "operator", default);
+        Assert.True(prepared.SafeToStop);
+        Assert.Equal(TaskServerMode.Maintenance, prepared.Mode);
+    }
+
+    [Fact]
+    public async Task Restore_is_blocked_while_review_attempt_authority_is_active()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var backup = await store.CreateBackupAsync(new BackupRequest("before-review-claim"), "operator", default);
+        _ = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+        await store.ChangeModeAsync(
+            new ChangeModeRequest(TaskServerMode.Maintenance, "restore review authority test"),
+            "operator",
+            default);
+
+        var conflict = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.RestoreBackupAsync(new RestoreRequest(backup.BackupId), "operator", default));
+
+        Assert.Equal("attempt-authority-unresolved", conflict.Code);
+    }
+
+    [Fact]
+    public async Task Integrity_digest_includes_review_attempt_and_fence_state()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReviewSubjectAsync(store);
+        await RegisterReviewerAsync(store, "review-a", "instance-a", "host-a");
+        var beforeClaim = await store.ComputeIntegrityDigestAsync(default);
+
+        _ = await store.ClaimReviewAsync(
+            new ReviewClaimRequest("review-a", "instance-a"), "review-a", default);
+
+        Assert.NotEqual(beforeClaim, await store.ComputeIntegrityDigestAsync(default));
+    }
+
     private static TaskServerStore Store(string dataDirectory)
         => new(Options.Create(new TaskServerOptions { DataDirectory = dataDirectory }), TimeProvider.System);
 
@@ -382,6 +637,7 @@ public sealed class RemoteReviewAuthorityTests
     {
         var subject = claim.Subject!;
         var lease = claim.Lease!;
+        var workspacePath = $"/review/{lease.ResourceNamespace}";
         var commands = subject.Plan.Commands.Select(command => new ReviewCommandEvidenceDto(
             command.StepId, command.Aspect, command.FileName, command.Arguments,
             ResultSha, ResultSha, TreeSha,
@@ -389,28 +645,46 @@ public sealed class RemoteReviewAuthorityTests
             new string('a', 64), new string('b', 64))).ToArray();
         var verdicts = subject.Plan.RequiredAspects.Select(aspect =>
             new ReviewVerdictDto(aspect, "pass", "Verified", $"{aspect} passed")).ToArray();
+        var toolchain = new Dictionary<string, string>
+        {
+            ["runtime"] = ".NET 10",
+            ["git"] = "git;sha256=" + new string('d', 64),
+        };
+        foreach (var command in subject.Plan.Commands)
+            toolchain[$"command:{command.StepId}"] = command.FileName + ";sha256=" + new string('e', 64);
+        var artifacts = commands.SelectMany(command => new[]
+        {
+            new ReviewArtifactEvidenceDto(
+                $"{command.StepId}.stdout.log", "text/plain", command.StdoutSha256, 1),
+            new ReviewArtifactEvidenceDto(
+                $"{command.StepId}.stderr.log", "text/plain", command.StderrSha256, 1),
+        }).ToArray();
         return new ReviewReportRequest(
             lease.ExecutorId, lease.InstanceId, lease.LeaseId, lease.Fence,
             $"report-{claim.Attempt!.AttemptId}", "Pass", null, "all review aspects passed",
             new ReviewWorkspaceProofDto(
                 RepositoryId, ResultSha, ResultSha, TreeSha, false, false,
-                $"workspace-{claim.Attempt.AttemptId}", lease.ResourceNamespace),
+                Hash(workspacePath), lease.ResourceNamespace),
             new ReviewEnvironmentDto(
                 lease.HostId, lease.ExecutorId, lease.InstanceId, "linux", "x64", "10.0",
-                new Dictionary<string, string> { ["git"] = "2.x" },
+                toolchain,
                 new Dictionary<string, string>
                 {
-                    ["workspace"] = $"workspace-{claim.Attempt.AttemptId}",
-                    ["cache"] = lease.ResourceNamespace,
+                    ["workspace"] = workspacePath,
+                    ["cache"] = $"{workspacePath}/cache",
+                    ["temp"] = $"{workspacePath}/tmp",
                     ["ports"] = $"{lease.PortBase}-{lease.PortBase + 7}",
                     ["containers"] = lease.ResourceNamespace,
                     ["databases"] = lease.ResourceNamespace,
                     ["credentials"] = "review-read-only",
                 }),
             commands,
-            [new ReviewArtifactEvidenceDto("review.json", "application/json", new string('c', 64), 42)],
+            artifacts,
             verdicts);
     }
+
+    private static string Hash(string value)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
     private static async Task<TaskDto> TaskAsync(TaskServerStore store, string taskId)
     {

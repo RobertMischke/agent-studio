@@ -30,7 +30,7 @@ public sealed class RemoteReviewWorkspace
         _lease = lease;
         _log = log;
         var root = Path.GetFullPath(options.ReviewWorkDir);
-        AttemptRoot = Path.Combine(root, SafeSegment(lease.AttemptId));
+        AttemptRoot = Path.Combine(root, SafeSegment(lease.ResourceNamespace));
         RepositoryPath = Path.Combine(AttemptRoot, "repository");
         ArtifactPath = Path.Combine(AttemptRoot, "artifacts");
         CachePath = Path.Combine(AttemptRoot, "cache");
@@ -210,18 +210,22 @@ public sealed class RemoteReviewWorkspace
     }
 
     public ReviewEnvironmentDto EnvironmentEvidence()
-        => new(
+    {
+        var toolchain = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["runtime"] = RuntimeInformation.FrameworkDescription,
+            ["git"] = ExecutableIdentity("git"),
+        };
+        foreach (var command in _subject.Plan.Commands)
+            toolchain[$"command:{command.StepId}"] = ExecutableIdentity(command.FileName);
+        return new ReviewEnvironmentDto(
             _lease.HostId,
             _lease.ExecutorId,
             _lease.InstanceId,
             RuntimeInformation.OSDescription,
             RuntimeInformation.ProcessArchitecture.ToString(),
             RuntimeInformation.FrameworkDescription,
-            new Dictionary<string, string>
-            {
-                ["runtime"] = RuntimeInformation.FrameworkDescription,
-                ["git"] = "captured-by-materialization",
-            },
+            toolchain,
             new Dictionary<string, string>
             {
                 ["serviceRole"] = "remote-review-executor",
@@ -233,6 +237,7 @@ public sealed class RemoteReviewWorkspace
                 ["databases"] = _lease.ResourceNamespace,
                 ["credentials"] = "review-read-only",
             });
+    }
 
     public Task<bool> CleanupAsync()
     {
@@ -381,6 +386,46 @@ public sealed class RemoteReviewWorkspace
 
     private static string HashText(string value)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private string ExecutableIdentity(string fileName)
+    {
+        var path = ResolveExecutable(fileName);
+        if (path is null)
+            return $"unresolved:{fileName}";
+        using var stream = File.OpenRead(path);
+        var digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        return $"{Path.GetFullPath(path)};sha256={digest};size={stream.Length}";
+    }
+
+    private string? ResolveExecutable(string fileName)
+    {
+        if (Path.IsPathFullyQualified(fileName))
+            return File.Exists(fileName) ? fileName : null;
+        if (fileName.Contains(Path.DirectorySeparatorChar)
+            || fileName.Contains(Path.AltDirectorySeparatorChar))
+        {
+            var repositoryRelative = Path.GetFullPath(Path.Combine(RepositoryPath, fileName));
+            return File.Exists(repositoryRelative) ? repositoryRelative : null;
+        }
+
+        var pathValue = ProcessEnvironment().TryGetValue("PATH", out var configuredPath)
+            ? configuredPath
+            : null;
+        foreach (var directory in (pathValue ?? string.Empty)
+                     .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = Path.Combine(directory, fileName);
+            if (File.Exists(candidate)) return candidate;
+            if (!OperatingSystem.IsWindows()) continue;
+            foreach (var extension in (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT")
+                         .Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                candidate = Path.Combine(directory, fileName + extension);
+                if (File.Exists(candidate)) return candidate;
+            }
+        }
+        return null;
+    }
 
     private static bool SafeEnvironmentName(string name)
         => name.Length is > 0 and <= 128
