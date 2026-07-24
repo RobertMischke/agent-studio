@@ -28,7 +28,10 @@ export class JobArtifactReporter implements Reporter {
     if (!this.jobResultsDir) return;
 
     const specFile = path.relative(process.cwd(), test.location.file).replaceAll('\\', '/');
-    const specName = path.basename(specFile).replace(/\.(?:spec|test)\.[^.]+$/i, '') || 'unknown';
+    const specName =
+      path.basename(specFile).replace(/\.(?:spec|test)\.[^.]+$/i, '') ||
+      test.titlePath().find(part => part.trim().length > 0) ||
+      'unknown';
     const testName = test.title;
     const status =
       result.status === 'passed'

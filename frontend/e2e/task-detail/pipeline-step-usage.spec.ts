@@ -390,7 +390,7 @@ test('post-step lifecycle shows backend activation, history, and the exact setti
   await expect.poll(() => activationBody).toMatchObject({ stepId: 'post-wiki-learnings', enabled: true });
 });
 
-test('retro grading stays available on an existing card and is captured in both themes', async ({ page }) => {
+test('council reaction links the targeted follow-up round and renders in both themes', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
     catch { /* ignore */ }
@@ -435,12 +435,15 @@ test('retro grading stays available on an existing card and is captured in both 
   await expect(reaction).toContainText('Orchestrator reaction');
   await expect(reaction).toContainText('Dark-theme colors are incorrect');
   await expect(reaction).toContainText('Upload rejection lacks focused test evidence');
+  await expect(reaction).toHaveAttribute('data-disposition', 'reissue');
   await expect(page.getByTestId('code-review-council-round-link')).toHaveAttribute('href', /task=AGT-2253/);
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
+    const fileName = `council-review-reaction-${theme}.png`;
     const path = RESULTS_DIR
-      ? join(RESULTS_DIR, `retro-grading-${theme}--mocked.png`)
-      : `test-results/retro-grading-${theme}--mocked.png`;
+      ? join(RESULTS_DIR, fileName)
+      : join('test-results', fileName);
     await page.getByTestId('code-review-panel').screenshot({ path });
+    await testInfo.attach(fileName, { path, contentType: 'image/png' });
   }
 });
