@@ -64,6 +64,13 @@ public static class TaskServerEndpoints
             CancellationToken ct)
             => await InvokeAsync(() => store.ReportRunnerOutboxAsync(
                 runnerId, request, Actor(context), ct)));
+        runners.MapPost("/{runnerId}/review-claims", async (
+            HttpContext context, string runnerId, ReviewClaimRequest request, TaskServerStore store, CancellationToken ct) =>
+        {
+            if (!string.Equals(runnerId, request.ExecutorId, StringComparison.Ordinal))
+                return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and request review executor ids differ."));
+            return await InvokeAsync(() => store.ClaimReviewAsync(request, Actor(context), ct));
+        });
 
         var runs = api.MapGroup("/runs");
         runs.MapPost("/{runId}/lease/renew", async (
@@ -114,6 +121,27 @@ public static class TaskServerEndpoints
             => await InvokeAsync(() => store.IngestArtifactAsync(runId, request, Actor(context), ct), StatusCodes.Status201Created));
         runs.MapGet("/{runId}/artifacts", async (string runId, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ListArtifactsAsync(runId, ct)));
+        runs.MapGet("/{runId}/artifacts/{artifactId}/content", async (
+            string runId, string artifactId, TaskServerStore store, CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetArtifactContentAsync(runId, artifactId, ct)));
+
+        var reviews = api.MapGroup("/reviews");
+        reviews.MapPost("/subjects", async (
+            HttpContext context, CreateReviewSubjectRequest request, TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.CreateReviewSubjectAsync(request, Actor(context), ct), StatusCodes.Status201Created));
+        reviews.MapGet("/subjects/{subjectId}", async (string subjectId, TaskServerStore store, CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetReviewSubjectAsync(subjectId, ct)));
+        reviews.MapGet("/attempts/{attemptId}", async (string attemptId, TaskServerStore store, CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetReviewAttemptAsync(attemptId, ct)));
+        reviews.MapPost("/attempts/{attemptId}/lease/renew", async (
+            HttpContext context, string attemptId, ReviewLeaseRenewRequest request, TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.RenewReviewLeaseAsync(attemptId, request, Actor(context), ct)));
+        reviews.MapPost("/attempts/{attemptId}/report", async (
+            HttpContext context, string attemptId, ReviewReportRequest request, TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.ReportReviewAsync(attemptId, request, Actor(context), ct)));
+        reviews.MapPost("/attempts/{attemptId}/cleanup", async (
+            HttpContext context, string attemptId, ReviewCleanupRequest request, TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.CleanupReviewAsync(attemptId, request, Actor(context), ct)));
 
         var management = api.MapGroup("/management");
         management.MapGet("/status", (TaskServerStore store) => Results.Ok(store.Status()));
