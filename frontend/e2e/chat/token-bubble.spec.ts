@@ -49,16 +49,18 @@ interface JobInfoStub {
     cacheReadTokens: number;
     cacheCreationTokens: number;
     totalTokens: number;
+    estimatedApiCostUsd?: number;
+    allModelsPriced?: boolean;
     lastModel: string | null;
     lastUpdate: string | null;
-    entries: Array<{
+    entries: {
       ts: string;
       model: string | null;
       inputTokens: number;
       outputTokens: number;
       cacheReadTokens: number;
       cacheCreationTokens: number;
-    }>;
+    }[];
   };
 }
 
@@ -112,6 +114,58 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
+    if (p === '/api/auth/status') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null }),
+      });
+    }
+    if (p === '/api/tasks/archive') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [], total: 0, offset: 0, limit: 50, hasMore: false }),
+      });
+    }
+    if (p === '/api/crash-recovery/pending') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ pending: [] }),
+      });
+    }
+    if (p === '/api/orchestrator/sessions') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sessions: [] }),
+      });
+    }
+    if (/^\/api\/cli\/[^/]+\/models$/.test(p)) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ models: [], source: 'fixture', fetchedAt: '2026-05-05T08:00:00Z' }),
+      });
+    }
+    if (p === '/api/clients/local-default/defaults') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ clientId: 'local-default', defaultCliType: null, defaultModel: null }),
+      });
+    }
+    if (p === '/api/environment') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ isDev: false, devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false } }),
+      });
+    }
+    if (p === '/api/projects/settings') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    }
     if (p === '/api/tasks/grouped') {
       const body = {
         backlog: [],
@@ -160,6 +214,16 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
 }
 
 test.describe('Token bubble on job cards', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+        v: 1,
+        tabs: [{ kind: 'board', projectName: '__all__' }],
+        activeKey: 'board:__all__',
+      }));
+    });
+  });
+
   test('cards without token activity render no bubble', async ({ page }) => {
     const quietJob = jobStub({ id: 'quiet-card', title: 'Quiet card no tokens', tokenSummary: null });
     await stubGroupedJobs(page, [quietJob]);
@@ -183,6 +247,8 @@ test.describe('Token bubble on job cards', () => {
         cacheReadTokens: 250_000,
         cacheCreationTokens: 12_000,
         totalTokens: 400_000,
+        estimatedApiCostUsd: 1.25,
+        allModelsPriced: true,
         lastModel: 'GPT-5 Codex',
         lastUpdate: '2026-05-05T08:30:00Z',
         entries: [
@@ -222,6 +288,8 @@ test.describe('Token bubble on job cards', () => {
     await expect(popover.getByTestId('token-row-cache-write')).toContainText('12k');
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
     await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
+    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated cost: $1.25');
+    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated - historical list prices');
     await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
 

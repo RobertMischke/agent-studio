@@ -167,6 +167,28 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void SummarizePerJob_PricesEachCallAtItsRecordedTimestamp()
+    {
+        var transition = TokenPricing.Catalog["claude-sonnet-5"].History.Max(price => price.ValidFrom);
+        var entries = new[]
+        {
+            JobEntry("claude-sonnet-5", 1_000_000, 0, transition.AddTicks(-1)),
+            JobEntry("claude-sonnet-5", 1_000_000, 0, transition),
+        };
+
+        var summary = TokenSummaryService.SummarizePerJob(entries)["job-a"];
+
+        Assert.True(summary.AllModelsPriced);
+        Assert.Equal(2, summary.Entries.Count);
+        Assert.NotEqual(
+            summary.Entries[0].EstimatedApiCostUsd,
+            summary.Entries[1].EstimatedApiCostUsd);
+        Assert.Equal(
+            summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
+            summary.EstimatedApiCostUsd);
+    }
+
+    [Fact]
     public void SummarizePerJob_BlankLaterAgentModelDoesNotClearRecordedRunModel()
     {
         var t = new DateTime(2026, 6, 9, 8, 0, 0, DateTimeKind.Utc);
