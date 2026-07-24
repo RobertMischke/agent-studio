@@ -484,7 +484,9 @@
             rotates stale verdict evidence into <code>results/history/</code>. Every anti-churn guard reads only the active
             epoch. Automatic moves retain the epoch. A direct requeue into <span class="lane">4-auto-review</span> recreates
             Post Processing state and queues the complete gate/aspect path. The fresh pass excludes the pre-requeue status
-            and CLI-log tail from decision evidence, so another escalation requires a new gate or aspect event.
+            and CLI-log tail from decision evidence, so another escalation requires a new gate or aspect event. The epoch
+            sidecar is authoritative: if the best-effort journal boundary cannot be written, an older-epoch verdict still
+            forces the same fresh assessment instead of reviving the stale escalation.
           </td>
         </tr>
         <tr>

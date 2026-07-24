@@ -5417,16 +5417,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         try
         {
-            // Operator authority (AGT-2260): verdicts recorded BEFORE the card's
-            // current review-cycle epoch belong to a closed cycle (the operator
-            // requeued the card afterwards). They do not count as "this cycle
-            // has a verdict" - otherwise a requeued card would sit inert forever:
-            // its old sentinel is resolved, its old verdict is ignored by the
-            // stale-with-verdict guard, and nothing would ever drive it again.
-            var epoch = CurrentReviewCycleEpoch(info);
+            var currentEpoch = OperatorReviewRequeueService.ReadEpoch(info.FolderPath);
             return !ReviewDecisionLog.ReadAll(workspace, project).Any(r =>
                 r.JobId == info.Id
-                && (epoch is null || r.CreatedAt >= epoch));
+                && IsInAttemptEpoch(r, currentEpoch));
         }
         catch
         {
@@ -5497,9 +5491,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         catch { return null; }
 
         ReviewDecisionRecord? latest = null;
+        var currentEpoch = OperatorReviewRequeueService.ReadEpoch(info.FolderPath);
         for (var i = records.Count - 1; i >= 0; i--)
         {
-            if (records[i].JobId == info.Id) { latest = records[i]; break; }
+            if (records[i].JobId == info.Id
+                && IsInAttemptEpoch(records[i], currentEpoch))
+            {
+                latest = records[i];
+                break;
+            }
         }
         if (latest == null) return null;
 
@@ -6317,8 +6317,23 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal static bool IsPendingOperatorRequeueAssessment(
         ReviewDecisionRecord? latest,
         int epoch)
-        => latest?.Kind == ReviewDecisionKind.OperatorRequeue
-            && IsInAttemptEpoch(latest, epoch);
+    {
+        epoch = Math.Max(0, epoch);
+        if (epoch == 0)
+        {
+            return latest?.Kind == ReviewDecisionKind.OperatorRequeue
+                && IsInAttemptEpoch(latest, epoch);
+        }
+
+        // The epoch sidecar is authoritative. If the best-effort journal
+        // boundary failed after the lane move, the latest row still belongs to
+        // an older epoch and must not resurrect its verdict. Keep forcing the
+        // full gate/aspect path until a decision from this epoch is durable.
+        if (latest is null || !IsInAttemptEpoch(latest, epoch))
+            return true;
+
+        return latest.Kind == ReviewDecisionKind.OperatorRequeue;
+    }
 
     private static string TailLines(string text, int n)
     {

@@ -142,6 +142,21 @@ public class ReviewDecisionChainBudgetTests
         Assert.False(ReviewDecisionOrchestrator.IsPendingOperatorRequeueAssessment(
             assessed, 1));
     }
+
+    [Fact]
+    public void EpochSidecar_ForcesAssessmentWhenBoundaryJournalWriteIsMissing()
+    {
+        var staleEscalation = Rec(ReviewDecisionKind.Escalate, epoch: 0);
+
+        Assert.True(ReviewDecisionOrchestrator.IsPendingOperatorRequeueAssessment(
+            staleEscalation, 1));
+        Assert.True(ReviewDecisionOrchestrator.IsPendingOperatorRequeueAssessment(
+            latest: null, epoch: 1));
+
+        var freshVerdict = Rec(ReviewDecisionKind.AcceptAsDone, epoch: 1);
+        Assert.False(ReviewDecisionOrchestrator.IsPendingOperatorRequeueAssessment(
+            freshVerdict, 1));
+    }
 }
 
 /// <summary>

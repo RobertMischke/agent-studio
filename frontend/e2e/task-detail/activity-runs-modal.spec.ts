@@ -371,6 +371,28 @@ test.describe('Activity-pane: compact N Runs chip + modal', () => {
     }
   });
 
+  test('review epoch history remains legible in dark theme', async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('atp.studio.theme', 'dark');
+      } catch {
+        return;
+      }
+    });
+    await installRoutes(page, RUNS);
+    await openDetail(page);
+
+    await page.getByTestId('activity-runs-open').click();
+
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+    await expect(page.getByTestId('review-attempt-cycle-1')).toBeVisible();
+    await expect(page.getByTestId('review-attempt-cycle-0')).toContainText('Closed');
+
+    if (RESULTS_DIR) {
+      await page.screenshot({ path: path.join(RESULTS_DIR, 'activity-runs-review-epochs-dark.png') });
+    }
+  });
+
   test('the close button, backdrop, and Escape all dismiss the modal', async ({ page }) => {
     await installRoutes(page, RUNS);
     await openDetail(page);
