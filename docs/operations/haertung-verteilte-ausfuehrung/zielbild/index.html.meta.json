@@ -1,0 +1,8 @@
+{
+  "classification": "concept",
+  "status": "decision-ready",
+  "language": "en",
+  "supersedes": ["docs/concepts/distributed-agent-studio-target-architecture.md (leading view)", "quality-layer and decoupled-lifecycles workbench pages (consolidated here)"],
+  "relatedTasks": ["AGT-2182", "AGT-2194", "AGT-2183", "AGT-2184", "AGT-2229", "AGT-2264"],
+  "entryPoint": "docs/operations/haertung-verteilte-ausfuehrung/index.html"
+}
