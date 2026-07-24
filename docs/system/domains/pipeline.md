@@ -269,6 +269,11 @@ operator changes cause the step to fail before its writer runs.
   commit) is documented. `AspectRunInputs` / `CodeReviewStepRequest` carry the
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
+- A fenced remote completion persists `review-subject.json` with its exact
+  `ResultSha`. Both `post-build-test-gate` and `post-code-review-grade` use that
+  SHA as their authoritative subject. The grade must not fall back to the
+  canonical task-branch HEAD when the runner delivered a different commit,
+  because that would test one revision and review another.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.

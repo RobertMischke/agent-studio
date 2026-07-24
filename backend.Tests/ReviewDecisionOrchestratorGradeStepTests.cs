@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -125,6 +127,54 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         // The per-deployment override is honored over the Codex flagship default, so a
         // deployment can dial the grade model without code changes.
         Assert.Equal("claude-opus-4-7", gradeModel);
+    }
+
+    [Fact]
+    public async Task GradeStep_RemoteCompletion_GradesFencedResultShaInsteadOfCanonicalTaskHead()
+    {
+        var (canonicalHead, remoteResultSha) = InitializeRepositoryWithRemoteResultCommit();
+        SeedReviewJobWithDone(
+            "grade-remote-subject",
+            CleanStatus,
+            taskType: TaskTypes.Chore,
+            withScreenshot: true);
+        var taskFolder = Path.Combine(
+            _watchPath, TaskStates.AutoReview, "grade-remote-subject");
+        ReviewSubjectStore.Write(taskFolder, new ReviewSubjectRecord
+        {
+            TaskKey = "grade-remote-subject",
+            Project = Project,
+            Repository = _watchPath,
+            ResultSha = remoteResultSha,
+            AttemptChainId = "remote-attempt-1",
+            Executor = "remote-test",
+            LeaseId = "remote-attempt-1",
+            FencingToken = 1,
+            ResultRef = "runner/remote-test/grade-remote-subject",
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        string? gradePrompt = null;
+        var orchestrator = BuildOrchestrator(
+            aspectStub: (_, _) => PassVerdict,
+            gradeCli: _ => "[[CODE_REVIEW_GRADE: grade=A; summary=ok]]\n[[TASK_DONE]]",
+            maxReissues: 3,
+            gradePromptObserver: prompt => gradePrompt = prompt,
+            wireGit: true);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(canonicalHead, RunGit("rev-parse", "HEAD"));
+        Assert.NotNull(gradePrompt);
+        Assert.Contains("REMOTE_COUNCIL_IMPLEMENTATION", gradePrompt);
+        Assert.DoesNotContain("CANONICAL_UNRELATED_CHANGE", gradePrompt);
+
+        var folder = Path.Combine(
+            _watchPath, TaskStates.HumanReview, "grade-remote-subject");
+        var review = File.ReadAllText(Assert.Single(
+            Directory.GetFiles(folder, "code-review-grade-*.md")));
+        Assert.Contains(remoteResultSha[..8], review);
+        Assert.DoesNotContain(canonicalHead[..8] + " (HEAD)", review);
     }
 
     [Fact]
@@ -469,7 +519,9 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         int maxReissues,
         IDictionary<string, string?>? extraConfig = null,
         IBuildTestGateRunner? buildTestGate = null,
-        bool wireGradeService = true)
+        bool wireGradeService = true,
+        Action<string>? gradePromptObserver = null,
+        bool wireGit = false)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -520,7 +572,11 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
             codeReviewStep = new CodeReviewStepService(
                 prompts,
                 NullLogger<CodeReviewStepService>.Instance);
-            codeReviewStep.CliRunner = (_, model, _, _, _) => Task.FromResult(gradeCli(model));
+            codeReviewStep.CliRunner = (_, model, prompt, _, _) =>
+            {
+                gradePromptObserver?.Invoke(prompt);
+                return Task.FromResult(gradeCli(model));
+            };
         }
 
         return new ReviewDecisionOrchestrator(
@@ -530,12 +586,60 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
             usage: null,
             oneShotRegistry: null,
             sessions: null,
-            git: null,
+            git: wireGit ? git : null,
             pipelineLog: pipelineLog,
             lintScssRunner: null,
             codeReviewStep: codeReviewStep,
             projectSettings: settings,
             buildTestGateRunner: buildTestGate);
+    }
+
+    private (string CanonicalHead, string RemoteResultSha) InitializeRepositoryWithRemoteResultCommit()
+    {
+        RunGit("init", "-q", "-b", "main");
+        RunGit("config", "user.email", "test@example.invalid");
+        RunGit("config", "user.name", "Council Grade Test");
+        File.WriteAllText(
+            Path.Combine(_watchPath, "canonical.txt"),
+            "CANONICAL_UNRELATED_CHANGE\n");
+        RunGit("add", "canonical.txt");
+        RunGit("commit", "-q", "-m", "canonical unrelated change");
+        var canonicalHead = RunGit("rev-parse", "HEAD");
+
+        File.WriteAllText(
+            Path.Combine(_watchPath, "council-implementation.txt"),
+            "REMOTE_COUNCIL_IMPLEMENTATION\n");
+        RunGit("add", "council-implementation.txt");
+        RunGit("commit", "-q", "-m", "remote council implementation");
+        var remoteResultSha = RunGit("rev-parse", "HEAD");
+        RunGit("reset", "--hard", "-q", canonicalHead);
+
+        return (canonicalHead, remoteResultSha);
+    }
+
+    private string RunGit(params string[] args)
+    {
+        var start = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = _watchPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in args)
+        {
+            start.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(start);
+        Assert.NotNull(process);
+        var output = process!.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(
+            process.ExitCode == 0,
+            $"git {string.Join(' ', args)} failed: {error}");
+        return output.Trim();
     }
 
     private static PipelineStepExecution ReadPipelineStep(string folder, string stepId)

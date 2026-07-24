@@ -3915,13 +3915,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     /// <summary>
-    /// Build the diff text the quality-grade pass reviews: the aggregate diff
-    /// of every commit the task owns (the same per-task scoping the
-    /// user-triggered code-review endpoint and the protocol-pane change set
-    /// use), with a human-readable commit label. Falls back to HEAD, then the
-    /// live working-tree diff, so the grade never reviews nothing. Best-effort:
-    /// returns an empty diff with a "(no diff resolved)" label when git is not
-    /// wired or resolution throws.
+    /// Build the diff text the quality-grade pass reviews. A fenced remote
+    /// completion's persisted result SHA is authoritative, matching the
+    /// build/test gate subject. Local runs use the aggregate diff of every
+    /// commit the task owns, then fall back to HEAD and the live working tree.
+    /// Best-effort: returns an empty diff with a "(no diff resolved)" label
+    /// when git is not wired or resolution throws.
     /// </summary>
     private (string Diff, string? CommitLabel) BuildGradeDiff(WatchPathEntry entry, TaskInfo job)
     {
@@ -3945,8 +3944,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     .ToList();
             }
 
+            var reviewSubject = ResolveBuildTestGateSubject(job, watchPath);
             var scope = AgentStudio.Review.CodeReviewScopeResolver.Resolve(
-                overrideCommit: null, taskShas, _git.GetHeadSha(job.Id, watchPath));
+                overrideCommit: reviewSubject.IsRemote ? reviewSubject.Sha : null,
+                taskShas,
+                _git.GetHeadSha(job.Id, watchPath));
 
             var diff = scope.Mode switch
             {

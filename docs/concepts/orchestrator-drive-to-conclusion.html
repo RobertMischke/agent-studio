@@ -873,6 +873,26 @@
             expose the complete review &rarr; reaction &rarr; round chain.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2253</code><br><span class="small">remote grade reviewed the wrong revision</span></td>
+          <td>
+            The remote build/test gate verified the fenced runner result, but the subsequent quality grade reviewed the
+            canonical task-branch HEAD. It therefore reported that the Council implementation and tests were absent even
+            though they existed on the delivered runner commit.
+          </td>
+          <td>
+            <code>BuildGradeDiff</code> derived its scope from local session attribution and HEAD only. It did not read the
+            existing <code>review-subject.json</code> that already made the remote <code>ResultSha</code> authoritative for
+            the build/test gate.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the quality-grade diff now uses the same fenced remote
+            <code>ResultSha</code> as the build/test gate. A regression keeps the canonical HEAD on an unrelated commit and
+            proves the grade prompt contains only the delivered remote Council diff. The attempt therefore terminates on
+            the actual review findings instead of revision-scope drift.
+          </td>
+        </tr>
       </tbody>
     </table>
 
