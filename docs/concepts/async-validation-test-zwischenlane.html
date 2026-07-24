@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Async-Validierung & die Test-Zwischenlane — Workbench-Plan</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --accent: #2a78d6;       /* LLM / Core */
+    --ok: #1a7d3a;           /* Gewinn / grün */
+    --warn-c: #b5651d;       /* Test-Gate / CPU */
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+    --runner-soft: #fbeee1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --accent: #3987e5;
+      --ok: #4eae4e;
+      --warn-c: #d98a4f;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+      --runner-soft: #362a1f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 68ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 19px; margin: 34px 0 6px; scroll-margin-top: 20px; }
+  h4 { font-size: 15.5px; margin: 22px 0 4px; }
+  p  { max-width: 80ch; }
+  p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code, .mono { font: 12.5px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; word-break: break-word; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--accent); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 80ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+
+  /* ---- Kennzahl-Kacheln ---- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 22px 0; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 14px 16px; }
+  .stat .v { font-size: 27px; font-weight: 700; line-height: 1.1; letter-spacing: -.01em; }
+  .stat .l { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+  .stat.warn .v { color: var(--warn-c); }
+  .stat.accent .v { color: var(--accent); }
+  .stat.bad .v { color: var(--bad); }
+  .stat.ok .v { color: var(--ok); }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ---- Balken ---- */
+  figure { margin: 26px 0; }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 90ch; }
+  figcaption b { color: var(--ink-1); }
+  .chart { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1); padding: 22px; }
+  .bar-row { display: grid; grid-template-columns: 200px 1fr 118px; align-items: center; gap: 12px; margin: 9px 0; }
+  .bar-row .cap { font-size: 13px; color: var(--ink-2); }
+  .bar-track { background: var(--surface-3); border-radius: 6px; height: 26px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px 6px 6px 6px; display: flex; align-items: center; }
+  .bar-fill.core { background: var(--accent); }
+  .bar-fill.test { background: var(--warn-c); }
+  .bar-fill.review { background: color-mix(in srgb, var(--accent) 55%, var(--surface-1)); }
+  .bar-fill.other { background: var(--ink-3); }
+  .bar-fill.retry { background: var(--bad); }
+  .bar-fill.first { background: var(--ok); }
+  .bar-val { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .bar-val b { color: var(--ink-1); }
+  @media (max-width: 640px) { .bar-row { grid-template-columns: 120px 1fr 84px; } }
+
+  /* ---- Lane-Diagramm ---- */
+  .lanes { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1); padding: 24px; overflow-x: auto; }
+  .lane-flow { display: grid; grid-template-columns: 1fr 44px 1fr 44px 1fr 44px 1fr; align-items: stretch; gap: 4px; min-width: 820px; }
+  .lane { border: 1.5px solid var(--line); border-radius: 10px; padding: 13px 15px; background: var(--surface-2); }
+  .lane h5 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+  .lane h5 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--ink-3)); flex: none; }
+  .lane p { margin: 0; font-size: 12px; color: var(--ink-2); max-width: none; }
+  .lane.ready  { --c: var(--accent); }
+  .lane.gate   { --c: var(--warn-c); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn-c) 40%, var(--line)); }
+  .lane.buffer { --c: var(--ok); background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+  .lane.merged { --c: var(--ok); }
+  .lane-arrow { display: flex; align-items: center; justify-content: center; color: var(--ink-3); font-size: 22px; }
+  .branchline { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 14px; font-size: 12.5px; color: var(--ink-2); min-width: 820px; }
+  .branchline code { font-size: 11.5px; }
+
+  .verdict { border-left: 4px solid var(--accent); }
+  .verdict.go { border-left-color: var(--ok); }
+  .verdict.stop { border-left-color: var(--bad); }
+  .verdict.maybe { border-left-color: var(--warn); }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 5px; }
+  .tag.go { background: var(--ok-soft); color: var(--ok); }
+  .tag.stop { background: var(--bad-soft); color: var(--bad); }
+  .tag.maybe { background: var(--warn-soft); color: var(--warn); }
+  hr.sep { border: none; border-top: 1px solid var(--line); margin: 48px 0 0; }
+  .footnote { font-size: 12.5px; color: var(--ink-3); margin-top: 40px; }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Workbench-Plan · Pipeline · Datengestützt</p>
+  <h1>Async-Validierung & die Test-Zwischenlane</h1>
+  <p class="lede">Sollen Test-Suiten nicht mehr für jede Karte einzeln laufen, sondern gebündelt auf
+  einem eigenen Test-Integrationsbranch, mit einer Zwischen-Lane für „fertig, noch nicht integriert"?
+  Die Idee ist plausibel — aber die AGT-Daten sagen etwas Unbequemes: In <b>Geld</b> lohnt sie sich
+  fast nicht. Wo sie sich lohnt, ist <b>Durchsatz</b>. Dieser Plan trennt die beiden Fragen sauber und
+  leitet daraus ab, was gebaut werden sollte und was nicht.</p>
+  <div class="meta">
+    <span><b>Stand:</b> 25.07.2026</span>
+    <span><b>Datenbasis:</b> 847 AGT-Tasks mit <code>pipeline-execution.json</code>, 2.396 Pipeline-Versuche</span>
+    <span><b>Verwandt:</b> <a href="parallel-task-execution.md">parallel-task-execution.md</a> · <a href="../system/domains/pipeline.md">pipeline.md</a> · QS-28 (skip-if-fresh)</span>
+    <span><b>Status:</b> <span class="pill new">Konzept — noch nicht getaktet</span></span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#tldr">TL;DR — das Urteil vorweg</a></li>
+    <li><a href="#idee">§1 Die Idee in drei Bausteinen</a></li>
+    <li><a href="#daten">§2 Was die AGT-Daten sagen</a></li>
+    <li><a href="#oekonomie">§3 Der ökonomische Realitätscheck: Tokens ≫ CPU</a></li>
+    <li><a href="#hebel">§4 Wo der echte Hebel liegt: die Retry-Serialisierung</a></li>
+    <li><a href="#design">§5 Design-Skizze: Zwischen-Lane + Test-Branch</a></li>
+    <li><a href="#develop">§6 Die offene Frage: Integration Richtung <code>develop</code></a></li>
+    <li><a href="#empfehlung">§7 Empfehlung & Slicing</a></li>
+    <li><a href="#offen">§8 Offene Fragen</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>TL;DR — das Urteil vorweg</h4>
+  <p>Test-Gates fressen <b>16,6 % der Pipeline-Schrittzeit</b> (82 CPU-Stunden über den Korpus), aber
+  <b>0 Tokens</b>. Verglichen mit dem Token-Spend derselben Tasks (grob <b>~$8.400</b>) kostet diese
+  CPU-Zeit <b>~$4</b> in der Cloud und praktisch <b>$0</b> auf eigener Hardware — <b>rund 0,05 %</b>.
+  Als <b>Sparmaßnahme</b> lohnt sich das Konzept damit fast nicht: du würdest die billigste Ressource
+  optimieren. Der eigentliche Befund liegt woanders: <b>84,3 % der Test-Zeit sind Retries</b>, und der
+  maschinenweite Gate-Lock (<code>BuildTestGateRunner.MachineGateLockPath</code>) <b>serialisiert</b>
+  sie. Der Gewinn ist also <b>Durchsatz auf dem geteilten Runner</b>, nicht Kosten. Konsequenz:
+  <b>keine LLM-gestützte Test-Auswahl</b> (die verbrennt die teure Ressource, um die billige zu
+  sparen), sondern deterministisches Scoping + Bündelung, die das Retry-Vielfache killt.</p>
+</section>
+
+<h2 id="idee"><span class="no">§1</span>Die Idee in drei Bausteinen</h2>
+<p>Der Vorschlag besteht aus drei separierbaren Teilen. Sie werden oft zusammen gedacht, haben aber
+sehr unterschiedliche Kosten/Nutzen-Profile — deshalb hier getrennt:</p>
+
+<h3>1a — Test-Scoping: nur laufen lassen, was betroffen ist</h3>
+<p>Statt bei jeder Karte die volle Suite zu fahren, nur <b>neue Tests</b> und <b>Tests, die das
+geänderte Modul betreffen</b>. Der Haken, den du selbst benannt hast: „schlau entscheiden" heißt
+schnell <b>LLM-Tokens</b> — und die sind teuer. Kernfrage dieses Plans: Lässt sich das Scoping
+<b>deterministisch</b> (ohne Modell) machen?</p>
+
+<h3>1b — Zwischen-Lane: „fertig, noch nicht integriert"</h3>
+<p>Eine neue Lane sammelt Tasks, deren Coding+Review durch ist. Sie werden <b>gebündelt</b>
+weitergeschoben, sobald alle Änderungen zusammen die Test-Gates bestehen — statt jede Karte einzeln
+und synchron durch das Gate zu zwingen.</p>
+
+<h3>1c — Test-Integrationsbranch</h3>
+<p>Ein eigener Branch, auf dem der Bündel-Testlauf passiert — entkoppelt vom Coding-Worktree.
+Deine offene Frage: Von dort weiter nach <code>develop</code> mergen, oder gleich direkt nach
+<code>develop</code> integrieren und den Test-Branch sparen? (→ §6)</p>
+
+<h2 id="daten"><span class="no">§2</span>Was die AGT-Daten sagen</h2>
+<p class="dim">Quelle: alle <code>pipeline-execution.json</code> unter <code>projects/agent-taskboard/tasks/**</code>.
+Gemessen wird der Schritt <code>post-build-test-gate</code> (das eigentliche Suite-Fahren) gegen die
+übrigen Pipeline-Schritte, über <b>alle</b> Versuche inkl. Retries.</p>
+
+<div class="stats">
+  <div class="stat warn"><div class="v">82,2 h</div><div class="l">Test-Gate-CPU gesamt (4.931 min)</div></div>
+  <div class="stat accent"><div class="v">16,6 %</div><div class="l">Anteil an aller Schrittzeit</div></div>
+  <div class="stat"><div class="v">3,65×</div><div class="l">Gate-Läufe je Task (1.954 / 535)</div></div>
+  <div class="stat bad"><div class="v">84,3 %</div><div class="l">der Test-Zeit sind Retries</div></div>
+</div>
+
+<figure>
+  <figcaption style="margin-top:0;margin-bottom:12px"><b>Wohin die Pipeline-Zeit geht</b> — Summe der Schrittdauern über alle 847 Tasks (29.786 min total).</figcaption>
+  <div class="chart">
+    <div class="bar-row"><span class="cap">core-agent-run (LLM-Coding)</span><div class="bar-track"><div class="bar-fill core" style="width:66.8%"></div></div><span class="bar-val"><b>19.911 min</b> · 66,8%</span></div>
+    <div class="bar-row"><span class="cap">post-build-test-gate</span><div class="bar-track"><div class="bar-fill test" style="width:16.6%"></div></div><span class="bar-val"><b>4.931 min</b> · 16,6%</span></div>
+    <div class="bar-row"><span class="cap">Review (Aspekte + Grade)</span><div class="bar-track"><div class="bar-fill review" style="width:8.2%"></div></div><span class="bar-val"><b>2.447 min</b> · 8,2%</span></div>
+    <div class="bar-row"><span class="cap">Rest (Lint, Git, Drift…)</span><div class="bar-track"><div class="bar-fill other" style="width:8.4%"></div></div><span class="bar-val"><b>2.497 min</b> · 8,4%</span></div>
+  </div>
+  <figcaption>Das Test-Gate ist der <b>zweitgrößte</b> Zeitblock — aber weit hinter dem LLM-Coding-Schritt,
+  der zwei Drittel der Zeit (und praktisch die gesamten Tokens) trägt.</figcaption>
+</figure>
+
+<figure>
+  <figcaption style="margin-top:0;margin-bottom:12px"><b>Erstlauf vs. Retry</b> — dieselbe Test-Gate-Zeit, aufgeteilt nach Versuch.</figcaption>
+  <div class="chart">
+    <div class="bar-row"><span class="cap">Erstlauf (535 Läufe)</span><div class="bar-track"><div class="bar-fill first" style="width:15.7%"></div></div><span class="bar-val"><b>777 min</b> · 15,7%</span></div>
+    <div class="bar-row"><span class="cap">Retries (1.419 Läufe)</span><div class="bar-track"><div class="bar-fill retry" style="width:84.3%"></div></div><span class="bar-val"><b>4.161 min</b> · 84,3%</span></div>
+  </div>
+  <figcaption>Der Schwanz ist alles: die volle Suite lief im Schnitt <b>3,65× pro Task</b>, weil jede
+  Reissue (Review-Reopen, Abbruch-Rerun) das Gate erneut komplett fährt. Genau <b>hier</b> sitzt das
+  einsparbare Volumen — nicht im ersten, notwendigen Lauf.</figcaption>
+</figure>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Kennzahl</th><th class="num">Wert</th><th>Lesart</th></tr></thead>
+  <tbody>
+    <tr><td>Median Test-Gate je Task</td><td class="num">35,9 s</td><td>Der typische Task ist billig zu testen.</td></tr>
+    <tr><td>p90 Test-Gate je Task</td><td class="num">27,8 min</td><td>Das obere Zehntel ist ~46× teurer als der Median.</td></tr>
+    <tr><td>Max Test-Gate je Task</td><td class="num">178 min</td><td>AGT-2135, 11 Versuche — ein einzelner Task blockt den Runner fast 3 h.</td></tr>
+    <tr><td>Ø Versuche je Task</td><td class="num">2,83</td><td>Retries sind die Norm, nicht die Ausnahme.</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Die Verteilung ist <b>extrem schief</b>: Der Medianfall braucht keine Optimierung. Das Problem sind
+die wenigen retry-schweren Tasks — und dort ist die Ursache nicht „Tests langsam", sondern „Task
+scheitert wiederholt und fährt jedes Mal die volle Suite".</p>
+
+<h2 id="oekonomie"><span class="no">§3</span>Der ökonomische Realitätscheck: Tokens ≫ CPU</h2>
+<p>Du hast es selbst vermutet — die Daten bestätigen es deutlich. Über denselben Korpus:</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Ressource</th><th class="num">Menge</th><th class="num">Grobe Kosten*</th><th>Anmerkung</th></tr></thead>
+  <tbody>
+    <tr><td><b>LLM-Tokens</b> (in+out)</td><td class="num">1,93 Mrd.</td><td class="num">~$8.400</td><td>+ 5,49 Mrd. Cache-Read, 143 M Cache-Create</td></tr>
+    <tr><td><b>Test-CPU</b> (Cloud-vCPU)</td><td class="num">82,2 h</td><td class="num">~$4</td><td>@ $0,05/h vCPU</td></tr>
+    <tr><td><b>Test-CPU</b> (eigene HW)</td><td class="num">82,2 h</td><td class="num">~$0</td><td>marginale Kosten praktisch null</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="footnote" style="margin-top:-6px">* Illustrative Größenordnung, keine Abrechnung: Token-Preis grob blended
+(in $3/M, cacheRead $0,30/M, cacheCreate $3,75/M, out $15/M). Zweck ist der <b>Faktor</b>, nicht der Absolutwert.</p>
+
+<div class="box bad">
+  <h4>Der Faktor ist ~2000×</h4>
+  <p>Test-CPU kostet in Geld rund <b>0,05 %</b> dessen, was dieselben Tasks an Tokens verbrennen. Jede
+  Optimierung, die auch nur <b>ein bisschen</b> Extra-Tokens kostet, um Test-CPU zu sparen, ist ein
+  <b>Nettoverlust</b>. Das disqualifiziert Baustein <b>1a in seiner LLM-Variante</b>: Ein Modell zu
+  fragen „welche Tests sind relevant?" tauscht die teure Ressource gegen die billigste ein.</p>
+</div>
+
+<h2 id="hebel"><span class="no">§4</span>Wo der echte Hebel liegt: die Retry-Serialisierung</h2>
+<p>Wenn Geld nicht das Argument ist, was dann? <b>Durchsatz und Latenz auf dem geteilten Runner.</b>
+Zwei strukturelle Fakten:</p>
+<ul>
+  <li><b>Der Gate-Lock serialisiert maschinenweit.</b> <code>BuildTestGateRunner</code> nimmt
+  <code>%TEMP%\agentstudio-build-test-gate.lock</code>. Solange ein Task testet, wartet jeder andere.
+  82 CPU-Stunden serialisiert sind 82 Stunden, in denen der Runner <em>nicht</em> für andere Tasks frei ist.</li>
+  <li><b>84 % dieser Zeit ist redundant.</b> Die Retries fahren dieselbe Suite gegen kaum veränderten
+  Code. Ein Bündel-Lauf, der N fertige Tasks <em>einmal</em> gemeinsam testet, ersetzt N×(1+Retries) Einzelläufe.</li>
+</ul>
+<div class="box ok">
+  <h4>Die eigentliche Wette</h4>
+  <p>Nicht „Tests sind teuer" (sind sie nicht), sondern: <b>Der geteilte Runner verbringt zu viel
+  Wandzeit im serialisierten Gate, das meiste davon in Wiederholungen.</b> Die Zwischen-Lane +
+  der Bündel-Testlauf zielen genau darauf — sie senken die <b>Zahl der Gate-Durchläufe</b>, nicht die
+  Dauer eines einzelnen.</p>
+</div>
+
+<h2 id="design"><span class="no">§5</span>Design-Skizze: Zwischen-Lane + Test-Branch</h2>
+<figure>
+  <div class="lanes">
+    <div class="lane-flow">
+      <div class="lane ready"><h5><span class="dot"></span>Coding + Review</h5><p>Task läuft im eigenen Worktree, Aspekte + Grade bestehen. <b>Kein</b> Test-Gate hier.</p></div>
+      <div class="lane-arrow">→</div>
+      <div class="lane buffer"><h5><span class="dot"></span>Zwischen-Lane<br>„validation-pending"</h5><p>Fertige Tasks sammeln sich. Ihre Änderungen liegen als Commits auf <code>task/&lt;id&gt;</code> bereit.</p></div>
+      <div class="lane-arrow">→</div>
+      <div class="lane gate"><h5><span class="dot"></span>Bündel-Gate<br>auf <code>integration/test</code></h5><p>Batch-Merge der wartenden Tasks, <b>ein</b> Suite-Lauf (deterministisch gescoped) für alle zusammen.</p></div>
+      <div class="lane-arrow">→</div>
+      <div class="lane merged"><h5><span class="dot"></span>develop</h5><p>Bündel grün → Fast-Forward nach <code>develop</code>. Bündel rot → §6-Bisektion.</p></div>
+    </div>
+    <div class="branchline">
+      <b>Branch-Modell:</b> Coding bleibt auf <code>task/&lt;id&gt;</code> (heute schon, ADR-0052).
+      Neu ist <code>integration/test</code> als Sammelpunkt: die Zwischen-Lane merged wartende Task-Branches
+      dorthin, das Gate läuft dort <em>einmal</em>, und nur der grüne Stand geht weiter nach <code>develop</code>.
+    </div>
+  </div>
+  <figcaption><b>Kern der Änderung:</b> Das Test-Gate wandert aus dem Pro-Task-Post-Step heraus in einen
+  Bündel-Step, der die Zwischen-Lane leert. Das ist dasselbe „nicht auf der Request-Bahn"-Muster wie
+  <code>IntegrationPushQueue</code>/<code>IntegrationPushWorker</code> (AGT-1999) — nur für Tests statt Push.</figcaption>
+</figure>
+
+<h3>Deterministisches Scoping statt LLM (Baustein 1a, gerettet)</h3>
+<p>Das Scoping muss ohne Tokens auskommen. Machbar über statische Signale, die schon vorliegen:</p>
+<ul>
+  <li><b>Geänderte Dateien → betroffene Test-Projekte</b> über eine gepflegte Projekt-/Ordner-Zuordnung
+  (z. B. Änderung in <code>backend/Features/Pipeline/**</code> ⇒ <code>backend.Tests</code>-Filter auf
+  <code>Pipeline*</code>). Reiner Git-Diff + Mapping, 0 Tokens.</li>
+  <li><b>Neue Testdateien</b> laufen immer (A/-Status im Diff).</li>
+  <li><b>Fallback volle Suite</b>, wenn der Batch quer über Module geht — beim Bündel ohnehin oft der Fall,
+  was das Scoping im Bündel-Modus weniger kritisch macht als beim Einzel-Task.</li>
+</ul>
+<p class="dim">Hinweis: Das Muster existiert schon halb — QS-28 („skip-if-fresh") überspringt unveränderte
+Review-Einheiten deterministisch über Hashes. Dieselbe Idee, auf Tests angewandt.</p>
+
+<h2 id="develop"><span class="no">§6</span>Die offene Frage: Integration Richtung <code>develop</code></h2>
+<p>Dein Fragezeichen. Zwei Wege, mit klarem Trade-off:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Option</th><th>Vorteil</th><th>Preis</th></tr></thead>
+  <tbody>
+    <tr><td><b>A — sofort nach <code>develop</code></b><br>(kein Test-Branch)</td>
+        <td>Einfach, kein neuer Branch, <code>develop</code> ist immer der Wahrheitsstand.</td>
+        <td>Gate bleibt <b>pro Task</b> — der 84%-Retry-Hebel wird <b>nicht</b> gehoben. Praktisch der Status quo.</td></tr>
+    <tr><td><b>B — Bündel auf <code>integration/test</code></b>, dann FF nach <code>develop</code></td>
+        <td>Ein Suite-Lauf pro Batch → hebt den Durchsatz-Hebel. Rote Bündel halten <code>develop</code> sauber.</td>
+        <td><b>Schuldzuweisung bei rotem Bündel:</b> welcher der N Tasks war's? Braucht Bisektion oder Einzel-Fallback.</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="box warn">
+  <h4>Die versteckte Kosten von Option B</h4>
+  <p>Genau der Bisektions-Fall frisst den Gewinn wieder: Wird ein 5er-Bündel rot, brauchst du im
+  schlimmsten Fall bis zu 5 weitere Einzelläufe, um den Schuldigen zu finden — dann warst du langsamer
+  als sofortiges Pro-Task-Testen. Der Nettogewinn von B hängt <b>direkt an der Grün-Rate der Bündel</b>.
+  Bei hoher Grün-Rate (Tasks sind einzeln schon review-grün) gewinnt B deutlich; bei vielen roten
+  Bündeln verliert es. <b>Das ist die eine Zahl, die vor dem Bau gemessen werden muss.</b></p>
+</div>
+
+<h2 id="empfehlung"><span class="no">§7</span>Empfehlung & Slicing</h2>
+
+<div class="box verdict stop">
+  <p><span class="tag stop">Verwerfen</span> &nbsp;<b>LLM-gestützte Test-Auswahl (1a in Modell-Variante).</b>
+  Anti-ökonomisch: teure Tokens für billige CPU. Nur die deterministische Diff→Projekt-Zuordnung weiterverfolgen.</p>
+</div>
+<div class="box verdict maybe">
+  <p><span class="tag maybe">Erst messen</span> &nbsp;<b>Zwischen-Lane + Test-Branch (1b/1c, Option B).</b>
+  Lohnt sich nur, wenn die Bündel-Grün-Rate hoch ist. Vor dem Bau: aus den vorhandenen Daten die
+  hypothetische Bündel-Grün-Rate schätzen (wie oft wären N review-grüne Tasks zusammen test-grün gewesen?).</p>
+</div>
+<div class="box verdict go">
+  <p><span class="tag go">Lohnt sich unabhängig</span> &nbsp;<b>Retries nicht voll wiederholen lassen.</b>
+  Der 84%-Block ist der größte Einzelhebel und braucht keine neue Lane: Gate-Ergebnis pro Commit-SHA
+  cachen; unveränderte Test-Scopes bei Reissue überspringen. Kleiner Eingriff, größter Effekt.</p>
+</div>
+
+<h4>Vorgeschlagene Reihenfolge</h4>
+<ol>
+  <li><b>Messen (Research-Task):</b> Aus den Pipeline-Daten die Bündel-Grün-Rate & die Retry-Redundanz
+  (gleicher SHA, erneut getestet) quantifizieren. Entscheidet, ob Option B gebaut wird. <span class="pill queued">1 Karte</span></li>
+  <li><b>SHA-Gate-Cache:</b> Test-Gate-Ergebnis an den getesteten Tree-SHA binden; identischer SHA ⇒ Skip.
+  Hebt den größten Teil des 84%-Blocks, ohne Architekturumbau. <span class="pill queued">1 Karte</span></li>
+  <li><b>Deterministisches Scoping:</b> Diff→Test-Projekt-Mapping als Gate-Filter, 0 Tokens. <span class="pill queued">1 Karte</span></li>
+  <li><b>Zwischen-Lane + <code>integration/test</code>:</b> nur wenn Schritt 1 grünes Licht gibt. <span class="pill new">bedingt</span></li>
+</ol>
+
+<h2 id="offen"><span class="no">§8</span>Offene Fragen</h2>
+<ul>
+  <li><b>Bündel-Grün-Rate:</b> Wie oft sind N einzeln review-grüne Tasks zusammen test-grün? (Blocker für Option B.)</li>
+  <li><b>SHA-Stabilität:</b> Wie oft wird beim Reissue exakt derselbe Tree getestet? Das ist die reale Obergrenze für den Cache-Gewinn — Schätzung: hoch, gegeben 3,65 Läufe/Task.</li>
+  <li><b>Scope-Mapping-Pflege:</b> Wer hält die Datei/Ordner→Test-Projekt-Zuordnung aktuell? Veraltetes Mapping = falsch-grüne Gates. Ggf. an <code>PipelineSteps</code>-Config hängen.</li>
+  <li><b>Cross-Modul-Bündel:</b> Batches gehen oft quer über Module → Scoping greift dann kaum. Ist der Bündel-Gewinn ohne Scoping schon groß genug?</li>
+  <li><b>Lock-Granularität:</b> Bleibt der maschinenweite Lock, oder wird er pro <code>integration/test</code>-Branch feiner? Feiner = mehr echte Parallelität, aber mehr Ressourcendruck.</li>
+</ul>
+
+<hr class="sep">
+<p class="footnote">Datengrundlage reproduzierbar über die Aggregation der <code>durationMs</code>/Token-Felder
+in <code>pipeline-execution.json</code> (Feld <code>steps[].stepId == "post-build-test-gate"</code>) über
+alle Versuche inkl. <code>previousAttempts</code>. 847 Tasks mit Pipeline-Daten von 1.314 gescannten
+Task-Ordnern; 535 hatten mindestens einen Gate-Lauf. Zahlen sind Momentaufnahme 25.07.2026 und
+verschieben sich mit weiteren Läufen — der <b>Faktor</b> (Tokens ≫ CPU) ist robust, die Absolutwerte nicht.</p>
+
+</main>
+</body>
+</html>
