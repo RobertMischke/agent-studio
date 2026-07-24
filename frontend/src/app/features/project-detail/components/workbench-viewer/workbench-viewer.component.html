@@ -13,6 +13,14 @@
       <span class="workbench-viewer__status" [attr.data-status]="doc.workbench.status">
         <i aria-hidden="true"></i>{{ statusLabel() }}
       </span>
+      @if (pageContext(); as pageContext) {
+        <app-page-action-bar
+          class="workbench-viewer__actions"
+          [context]="pageContext"
+          [archived]="archived()"
+          [archivePending]="archiveBusy()"
+          (archiveRequest)="archivePage()" />
+      }
     </header>
     <div class="workbench-viewer__provenance" data-testid="workbench-viewer-provenance">
       <app-studio-icon name="branch" [size]="12" />

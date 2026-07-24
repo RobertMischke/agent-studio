@@ -54,6 +54,12 @@ for the historical record.)
 The display title for a document is its first H1 when present; otherwise it is
 the file name without extension and without the optional order prefix.
 
+Every page also receives one canonical interaction type: `doc`, `concept`,
+`workbench`, `incident`, or `report`. Companion classification is the primary
+source. A registered `workbench.json` entry page is always a Workbench. Agreed
+path families fill remaining gaps, with `doc` as the default. The tree and page
+head use the same type-to-icon mapping.
+
 ## Pulse drift groups and the `human-action` convention
 
 The wiki Pulse drift bar grades the **real top-level `docs/` folders**: every
@@ -227,6 +233,25 @@ appears in the Wiki once it contains at least one visible page.
 Moves or renames a real file or folder through `git mv` and commits the change.
 This is how Wiki organization changes are made: move the actual path.
 
+### `PUT /wiki/classification/{relPath}`
+
+Updates page lifecycle metadata in the adjacent companion and commits that
+sidecar. `status: archived` retains the source file at its current path as quiet
+history. `status: aktuell` restores the current classification. This endpoint
+does not move or delete the source page.
+
+### `GET /wiki/home`
+
+Reads curated Wiki Overview sections from `docs/app/config/home.json`. These
+links are shared repository navigation, not operator-local favorites.
+
+### `PUT /wiki/home/pins/{relPath}`
+
+Adds, moves, updates, or removes one shared Overview entry and commits
+`docs/app/config/home.json`. A pin request carries `pinned: true`,
+`sectionTitle`, `label`, and optional `note`; `pinned: false` removes the page
+from every section. The page itself remains unchanged.
+
 ### `DELETE /wiki/files/{relPath}`
 
 Deletes a real file or folder through `git rm` and commits the change.
@@ -251,6 +276,16 @@ The Wiki behaves like an app inside the app:
 - right-click on files and folders opens a text-only context menu,
 - the context rail shows file path, metadata, history, linked-doc information,
   and drift actions.
+- an open page has the shared page-head action bar for task creation, archive,
+  project chat, and shared Home curation; type-specific actions follow the
+  standards.
+- stars are the operator's personal shortlist and feed only the Starred panel;
+  Home pins are shared Git-backed navigation and never enter that panel.
+
+Page chat stays in the existing project `OrchestratorContextKey`. The current
+page is embedded in `navigationContext` as `pageRef`, `pageTitle`, `pageType`,
+and a bounded `pageExcerpt`. See
+[Wiki as a Cognitive Interface](../../concepts/wiki-as-cognitive-interface.md).
 
 ## File organization rule
 

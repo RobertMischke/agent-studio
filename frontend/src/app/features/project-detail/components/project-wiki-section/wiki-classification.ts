@@ -99,6 +99,8 @@ export function classificationMeta(
       tone: 'superseded',
       supersededBy: classification.supersededBy?.trim() || null,
     };
+  } else if (rawStatus?.toLowerCase() === 'archived') {
+    status = { label: 'Archived', tone: 'muted', supersededBy: null };
   } else if (rawStatus) {
     status = { label: rawStatus, tone: 'muted', supersededBy: null };
   }
@@ -147,6 +149,13 @@ export function classificationBadges(
       tooltip: successor
         ? `Überholt durch ${successor}.${analyzedSuffix(classification)}`
         : `Überholt.${analyzedSuffix(classification)}`,
+    });
+  } else if (status === 'archived') {
+    badges.push({
+      key: 'status',
+      label: 'archived',
+      tone: 'muted',
+      tooltip: `Archived page retained as history.${analyzedSuffix(classification)}`,
     });
   }
 

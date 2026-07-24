@@ -211,14 +211,9 @@
                      [attr.data-testid]="'project-wiki-file-' + row.node.relPath">
                   <span class="pwiki__file-type"
                         [attr.aria-label]="fileTypeLabel(row.node)"
-                        [attr.data-file-type]="row.node.type">
-                    @if (row.node.type === 'html') {
-                      <app-studio-icon name="code" [size]="13"></app-studio-icon>
-                    } @else if (row.node.type === 'json') {
-                      <app-studio-icon name="code" [size]="13"></app-studio-icon>
-                    } @else {
-                      <app-studio-icon name="file" [size]="13"></app-studio-icon>
-                    }
+                        [attr.data-file-type]="row.node.type"
+                        [attr.data-page-type]="pageType(row.node)">
+                    <app-studio-icon [name]="pageIcon(row.node)" [size]="13"></app-studio-icon>
                   </span>
                   <span class="pwiki__label-copy">
                     <span class="pwiki__label-text">{{ row.node.title }}</span>
@@ -347,7 +342,8 @@
                     data-testid="project-wiki-star-toggle"
                     [class.pwiki__star-toggle--active]="openedStarred()"
                     [attr.aria-pressed]="openedStarred()"
-                    [cacTooltip]="openedStarred() ? 'Stern entfernen' : 'Starren'"
+                    cacTooltip="Your personal shortlist"
+                    [attr.aria-label]="openedStarred() ? 'Remove from your personal shortlist' : 'Add to your personal shortlist'"
                     (click)="toggleOpenedStar($event)">
               <app-studio-icon [name]="openedStarred() ? 'starFilled' : 'star'" [size]="13"></app-studio-icon>
             </button>
@@ -368,6 +364,14 @@
                   <h2 class="pwiki__doc-title">{{ openedTitle() }}</h2>
                 </div>
                 <code class="pwiki__path" data-testid="project-wiki-viewer-path">{{ rel }}</code>
+                @if (openedPageContext(); as pageContext) {
+                  <app-page-action-bar
+                    class="pwiki__page-actions"
+                    [context]="pageContext"
+                    [archived]="openedArchived()"
+                    [archivePending]="archiveBusy()"
+                    (archiveRequest)="archiveOpenedPage()" />
+                }
               </header>
 
               @if (revisionSha(); as sha) {

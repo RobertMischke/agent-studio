@@ -392,7 +392,11 @@ public sealed record ChatNavigationContext(
     string? CurrentLaneFilter = null,
     string? ViewportTimestamp = null,
     string? ObservedSurface = null,
-    string? AffectedComponent = null);
+    string? AffectedComponent = null,
+    string? PageRef = null,
+    string? PageTitle = null,
+    string? PageType = null,
+    string? PageExcerpt = null);
 
 /// <summary>
 /// Service that turns a user message into an orchestrator reply with the
@@ -842,7 +846,11 @@ public class OrchestratorChatService
                 && string.IsNullOrWhiteSpace(nav.CurrentLaneFilter)
                 && string.IsNullOrWhiteSpace(nav.ViewportTimestamp)
                 && string.IsNullOrWhiteSpace(nav.ObservedSurface)
-                && string.IsNullOrWhiteSpace(nav.AffectedComponent)))
+                && string.IsNullOrWhiteSpace(nav.AffectedComponent)
+                && string.IsNullOrWhiteSpace(nav.PageRef)
+                && string.IsNullOrWhiteSpace(nav.PageTitle)
+                && string.IsNullOrWhiteSpace(nav.PageType)
+                && string.IsNullOrWhiteSpace(nav.PageExcerpt)))
         {
             sb.AppendLine("No navigation context was sent with this message.");
             sb.AppendLine("If the user asks a context-dependent question (\"what is the current task?\", \"explain this\"), say no specific task is in scope and ask which task they mean. Do NOT invent a task or hallucinate a context.");
@@ -859,8 +867,12 @@ public class OrchestratorChatService
         if (!string.IsNullOrWhiteSpace(nav.ViewportTimestamp)) sb.AppendLine($"  viewportTimestamp: {nav.ViewportTimestamp}");
         if (!string.IsNullOrWhiteSpace(nav.ObservedSurface)) sb.AppendLine($"  observedSurface: {nav.ObservedSurface}");
         if (!string.IsNullOrWhiteSpace(nav.AffectedComponent)) sb.AppendLine($"  affectedComponent: {nav.AffectedComponent}");
+        if (!string.IsNullOrWhiteSpace(nav.PageRef)) sb.AppendLine($"  pageRef: {nav.PageRef}");
+        if (!string.IsNullOrWhiteSpace(nav.PageTitle)) sb.AppendLine($"  pageTitle: {nav.PageTitle}");
+        if (!string.IsNullOrWhiteSpace(nav.PageType)) sb.AppendLine($"  pageType: {nav.PageType}");
+        if (!string.IsNullOrWhiteSpace(nav.PageExcerpt)) sb.AppendLine($"  pageExcerpt: {nav.PageExcerpt}");
         sb.AppendLine();
-        sb.AppendLine("Use this when interpreting context-dependent questions. When currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by id. When currentTaskId is null, do NOT invent one; say no task is in scope and ask which task they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
+        sb.AppendLine("Use this when interpreting context-dependent questions. When pageRef is set, the operator is asking from THAT repository page; use its title, type, path, and excerpt. When currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by id. When neither pageRef nor currentTaskId is set, do NOT invent one; say no specific page or task is in scope and ask what they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
         sb.AppendLine();
     }
 

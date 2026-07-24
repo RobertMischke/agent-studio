@@ -73,6 +73,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](../concepts/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](../concepts/orchestrator-in-app.md) |
 | Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](../concepts/wiki-pulse-dashboard.md) |
+| Wiki as a cognitive interface (AIP-4 page backchannel, page context, archive semantics) | [concept](../concepts/wiki-as-cognitive-interface.md) · [Visual StyleGuide Workbench](../quality/visual-styleguide-workbench-wiki/index.html) |
 | Wiki grading run (global LLM grade per page; trigger + critical pages; GRADE-1) | [concepts/wiki-grading-run.md](../concepts/wiki-grading-run.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](../concepts/result-view-and-case-templates.md) |
