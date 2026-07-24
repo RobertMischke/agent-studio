@@ -74,23 +74,7 @@ public sealed class AttemptAuthorityService
             var deliveryKey = DeliveryKey("acquire", idempotencyKey);
             var duplicate = FindIdempotentRun(taskKey, deliveryKey);
             if (duplicate is not null)
-            {
-                var replayedAt = _utcNow();
-                if (!IsCurrentRun(duplicate) || duplicate.State == AttemptLifecycleState.Superseded)
-                    return new AttemptWriteResult(AttemptWriteStatus.Superseded, duplicate.AttemptId, RunAttempt: ToDto(duplicate));
-                if (duplicate.AuthorityEpoch != _state.AuthorityEpoch)
-                    return new AttemptWriteResult(AttemptWriteStatus.AuthorityEpochMismatch, duplicate.AttemptId, RunAttempt: ToDto(duplicate));
-                if (duplicate.State != AttemptLifecycleState.Leased)
-                    return new AttemptWriteResult(AttemptWriteStatus.InvalidState, duplicate.AttemptId,
-                        $"RunAttempt is {duplicate.State} and cannot be reacquired by replaying an old delivery.",
-                        RunAttempt: ToDto(duplicate));
-                if (duplicate.Lease is null || duplicate.Lease.ExpiresAt <= replayedAt)
-                    return new AttemptWriteResult(AttemptWriteStatus.LeaseExpired, duplicate.AttemptId, RunAttempt: ToDto(duplicate));
-                if (!Same(duplicate.Lease.ExecutorId, executorId))
-                    return new AttemptWriteResult(AttemptWriteStatus.StaleFence, duplicate.AttemptId,
-                        "The acquire delivery belongs to another executor.", RunAttempt: ToDto(duplicate));
-                return new AttemptWriteResult(AttemptWriteStatus.Duplicate, duplicate.AttemptId, RunAttempt: ToDto(duplicate));
-            }
+                return ClassifyRunAcquireReplay(duplicate, executorId);
 
             var now = _utcNow();
             var current = CurrentRun(taskKey);
@@ -134,6 +118,34 @@ public sealed class AttemptAuthorityService
             _state.CurrentRunByTask[Normalize(taskKey)] = attempt.AttemptId;
             PersistLocked();
             return new AttemptWriteResult(AttemptWriteStatus.Accepted, attempt.AttemptId, RunAttempt: ToDto(attempt));
+        }
+    }
+
+    /// <summary>
+    /// Looks up a previously successful acquire delivery without requiring the
+    /// caller to know which task the server selected. Daemon claim replay uses
+    /// this before scanning Ready tasks, because the original card is already
+    /// in Progress by then. This is read-only and can never mint authority.
+    /// </summary>
+    public AttemptWriteResult ReplayRunAcquire(string executorId, string idempotencyKey)
+    {
+        if (Blank(executorId) || Blank(idempotencyKey))
+            return InvalidRun("ExecutorId and IdempotencyKey are required.");
+
+        lock (_gate)
+        {
+            var deliveryKey = DeliveryKey("acquire", idempotencyKey);
+            var matches = _state.RunAttempts
+                .Where(run => run.IdempotencyKeys.Contains(deliveryKey)
+                              && Same(run.Lease?.ExecutorId, executorId))
+                .Take(2)
+                .ToList();
+            if (matches.Count == 0)
+                return new AttemptWriteResult(AttemptWriteStatus.NotFound, string.Empty);
+            if (matches.Count > 1)
+                return InvalidRun("The acquire idempotency key is ambiguous for this executor.");
+
+            return ClassifyRunAcquireReplay(matches[0], executorId);
         }
     }
 
@@ -227,9 +239,11 @@ public sealed class AttemptAuthorityService
 
     /// <summary>
     /// Validates one fenced delivery and performs its Task Server side effect
-    /// inside the same authority critical section. The idempotency key is only
-    /// persisted after the side effect succeeds, so an I/O failure can retry
-    /// the same delivery instead of being mistaken for a completed duplicate.
+    /// inside the same authority critical section. The idempotency key is
+    /// persisted after the side effect succeeds. Side effects that can become
+    /// durable independently of the authority store must therefore deduplicate
+    /// on this delivery identity as well; log ingestion embeds such a receipt
+    /// in the same durable append.
     /// </summary>
     public AttemptWriteResult ExecuteRunWrite(
         AttemptWriteReference write,
@@ -677,6 +691,36 @@ public sealed class AttemptAuthorityService
             || (!Blank(leaseId) && !Same(run.Lease.LeaseId, leaseId)))
             return new AttemptWriteResult(AttemptWriteStatus.StaleFence, run.AttemptId, RunAttempt: ToDto(run));
         return new AttemptWriteResult(AttemptWriteStatus.Duplicate, run.AttemptId, RunAttempt: ToDto(run));
+    }
+
+    private AttemptWriteResult ClassifyRunAcquireReplay(
+        RunAttemptRecord run,
+        string executorId)
+    {
+        var replayedAt = _utcNow();
+        if (!IsCurrentRun(run) || run.State == AttemptLifecycleState.Superseded)
+            return new AttemptWriteResult(
+                AttemptWriteStatus.Superseded, run.AttemptId, RunAttempt: ToDto(run));
+        if (run.AuthorityEpoch != _state.AuthorityEpoch)
+            return new AttemptWriteResult(
+                AttemptWriteStatus.AuthorityEpochMismatch, run.AttemptId, RunAttempt: ToDto(run));
+        if (run.State != AttemptLifecycleState.Leased)
+            return new AttemptWriteResult(
+                AttemptWriteStatus.InvalidState,
+                run.AttemptId,
+                $"RunAttempt is {run.State} and cannot be reacquired by replaying an old delivery.",
+                RunAttempt: ToDto(run));
+        if (run.Lease is null || run.Lease.ExpiresAt <= replayedAt)
+            return new AttemptWriteResult(
+                AttemptWriteStatus.LeaseExpired, run.AttemptId, RunAttempt: ToDto(run));
+        if (!Same(run.Lease.ExecutorId, executorId))
+            return new AttemptWriteResult(
+                AttemptWriteStatus.StaleFence,
+                run.AttemptId,
+                "The acquire delivery belongs to another executor.",
+                RunAttempt: ToDto(run));
+        return new AttemptWriteResult(
+            AttemptWriteStatus.Duplicate, run.AttemptId, RunAttempt: ToDto(run));
     }
 
     private AttemptWriteResult ClassifyReviewLeaseReplay(

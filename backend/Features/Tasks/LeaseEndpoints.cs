@@ -141,6 +141,57 @@ public static class LeaseEndpoints
             await ClaimGate.WaitAsync(ct);
             try
             {
+                // A successful claim has already moved its selected card to
+                // Progress, so replay must consult durable acquire authority
+                // before Ready-task selection. Any known delivery, including a
+                // stale or superseded one, is terminal for this request and
+                // must never fall through to claim unrelated work.
+                var requestedClaimKey = req.IdempotencyKey?.Trim();
+                if (!string.IsNullOrWhiteSpace(requestedClaimKey))
+                {
+                    var replay = leases.TryReplayAcquire(
+                        req.RunnerId.Trim(), requestedClaimKey);
+                    if (replay is not null)
+                    {
+                        if (!replay.Granted || replay.Lease is null)
+                        {
+                            return Results.Ok(new RunnerClaimResponse(
+                                RunnerClaimStatus.Empty,
+                                Message: replay.Message ?? replay.Outcome));
+                        }
+
+                        var replayedTask = FindTask(scanner, replay.Lease.TaskKey);
+                        if (replayedTask is null)
+                        {
+                            return Results.Ok(new RunnerClaimResponse(
+                                RunnerClaimStatus.Empty,
+                                Message: "The original claim task is no longer available."));
+                        }
+                        var replayedProject = projects.FindByStorageLocation(replayedTask.WatchPath)
+                                              ?? projects.FindByIdOrDisplayName(replayedTask.ProjectName);
+                        var replayedRepository = RemoteProjectRepositoryResolver.Resolve(
+                            replayedProject,
+                            settings.Get(replayedTask.ProjectName).IntegrationBranch);
+                        if (replayedRepository is null)
+                        {
+                            return Results.Ok(new RunnerClaimResponse(
+                                RunnerClaimStatus.Empty,
+                                Message: "The original claim repository is no longer configured."));
+                        }
+
+                        return Results.Ok(new RunnerClaimResponse(
+                            RunnerClaimStatus.Claimed,
+                            replay.Lease.TaskKey,
+                            replayedTask.Id,
+                            replayedTask.ProjectName,
+                            replay.Lease,
+                            ProjectId: replayedRepository.ProjectId,
+                            RepositoryUrl: replayedRepository.RepositoryUrl,
+                            DefaultBranch: replayedRepository.DefaultBranch,
+                            TaskKind: replayedTask.Kind));
+                    }
+                }
+
                 var allWithArchive = scanner.ScanAllJobsWithArchive();
                 var waitsOn = TaskReferenceIndex.Build(allWithArchive);
                 var recoveredSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

@@ -57,6 +57,26 @@ public sealed class RunLeaseService
         };
     }
 
+    /// <summary>
+    /// Replays a daemon acquire delivery before the server selects a Ready
+    /// task. A null result means the delivery has never acquired a task; any
+    /// non-null result is authoritative and must not fall through to selection.
+    /// </summary>
+    public RunLeaseResponse? TryReplayAcquire(string runnerId, string idempotencyKey)
+    {
+        var result = _authority.ReplayRunAcquire(runnerId, idempotencyKey);
+        if (result.Status == AttemptWriteStatus.NotFound) return null;
+        return result.Status switch
+        {
+            AttemptWriteStatus.Duplicate when result.RunAttempt?.Lease is not null
+                => new RunLeaseResponse("AlreadyOwn", true, ToLease(result.RunAttempt)),
+            AttemptWriteStatus.Invalid
+                => new RunLeaseResponse("Invalid", false, null, result.Message),
+            _ => new RunLeaseResponse(
+                result.Status.ToString(), false, ToLease(result.RunAttempt), result.Message),
+        };
+    }
+
     public RunLeaseResponse Renew(RunLeaseHeartbeatRequest request)
     {
         var reference = ResolveReference(

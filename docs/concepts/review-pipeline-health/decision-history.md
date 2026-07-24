@@ -2,7 +2,7 @@
 
 Newest first. Every entry: date · decision · reasoning · card/commit reference.
 
-## 2026-07-23: Persisted attempts are the distributed write authority
+## 2026-07-24: Persisted attempts are the distributed write authority
 Run leases, review work, and lane-affecting Remote completion previously used
 overlapping task, lease, session, and local-checkout identities. Decision: the
 Task Server persists separate `RunAttempt` and `ReviewAttempt` records, with one
@@ -13,7 +13,12 @@ while stale, superseded, wrong-epoch, duplicate, and SHA-mismatched deliveries
 receive typed outcomes. Infrastructure-only review retry creates a new
 ReviewAttempt for the same subject and leaves the card in Auto Review. The
 Task Server does not materialize or test the product repository for canonical
-Remote review, and legacy tasks without attempts remain compatible. → AGT-2182.
+Remote review, and legacy tasks without attempts remain compatible. Daemon
+claim replay resolves its successful acquire delivery before Ready-task
+selection and returns the original lease after the card is in Progress.
+Canonical log batches persist a hashed delivery receipt in the same durable
+append, so an authority-store failure after append cannot duplicate the log on
+retry. → AGT-2182.
 
 ## 2026-07-23 — Operator requeue opens a fresh review cycle (epoch semantics)
 The stale-verdict guards anchored on the card's whole decision history; an

@@ -8,7 +8,9 @@ using System.Diagnostics;
 
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
@@ -425,6 +427,56 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Log_delivery_retry_after_authority_persist_failure_does_not_append_twice()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote log crash window", "Prompt.");
+        var writer = new ControllableAtomicJsonFileWriter();
+
+        using var factory = BuildFactory(writer);
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+
+        var failNextAuthorityPersist = true;
+        writer.ShouldFail = (path, _) =>
+        {
+            if (!path.EndsWith(AttemptAuthorityService.RelativePath, StringComparison.Ordinal)
+                || !failNextAuthorityPersist)
+            {
+                return false;
+            }
+            failNextAuthorityPersist = false;
+            return true;
+        };
+        var delivery = new RLogIngest(TaskKey,
+        [
+            new RCliLine(DateTime.UtcNow, "stdout", "crash-window-line"),
+        ],
+            RunnerId: lease.Lease!.RunnerId,
+            LeaseId: lease.Lease.LeaseId,
+            FencingToken: lease.Lease.FencingToken,
+            AttemptId: lease.Lease.AttemptId,
+            Fence: lease.Lease.FencingToken,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "log-crash-window-1");
+
+        var failed = await http.PostAsJsonAsync("/api/runner/logs", delivery, ct);
+        Assert.Equal(System.Net.HttpStatusCode.InternalServerError, failed.StatusCode);
+
+        var retry = await http.PostAsJsonAsync("/api/runner/logs", delivery, ct);
+        retry.EnsureSuccessStatusCode();
+
+        var logPath = Assert.Single(Directory.GetFiles(
+            _watchPath, "cli-output.log", SearchOption.AllDirectories));
+        var occurrences = File.ReadLines(logPath).Count(line => line.Contains("crash-window-line", StringComparison.Ordinal));
+        Assert.Equal(1, occurrences);
+    }
+
+    [Fact]
     public async Task Fenced_worktree_cleanup_failure_routes_to_human_review_with_durable_gate_evidence()
     {
         SeedTask(TaskStates.Progress, TaskKey, "Remote cleanup failure", "Prompt.");
@@ -565,11 +617,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(RClaimStatus.Empty, wrongRunner.Status);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
 
-        var claim = await client.ClaimAsync(new RClaim(
+        var request = new RClaim(
             RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner", Telemetry: new RTelemetry(
                 DateTime.UtcNow, 54, 6.4, 6, 5, 34_000_000_000, 64_000_000_000,
                 0, 0, 6.2, 2.1, 12, 6),
-            IdempotencyKey: "daemon-claim-1"), CancellationToken.None);
+            IdempotencyKey: "daemon-claim-1");
+        var claim = await client.ClaimAsync(request, CancellationToken.None);
 
         Assert.Equal(RClaimStatus.Claimed, claim.Status);
         Assert.False(string.IsNullOrWhiteSpace(claim.TaskKey));
@@ -589,6 +642,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Contains($"\"fence\":\"{claim.Lease.FencingToken}\"", laneTimeline, StringComparison.Ordinal);
         Assert.Contains($"\"authorityEpoch\":\"{claim.Lease.AuthorityEpoch}\"", laneTimeline, StringComparison.Ordinal);
         Assert.Contains("\"idempotencyKey\":\"lane-claim:daemon-claim-1\"", laneTimeline, StringComparison.Ordinal);
+
+        var replay = await client.ClaimAsync(request, CancellationToken.None);
+        Assert.Equal(RClaimStatus.Claimed, replay.Status);
+        Assert.Equal(claim.TaskKey, replay.TaskKey);
+        Assert.Equal(claim.Lease.LeaseId, replay.Lease!.LeaseId);
+        Assert.Equal(claim.Lease.AttemptId, replay.Lease.AttemptId);
+        Assert.Equal(claim.Lease.FencingToken, replay.Lease.FencingToken);
+
         var telemetry = await http.GetFromJsonAsync<HostTelemetryResponse>(
             $"/api/clients/{Uri.EscapeDataString(client.ClientId)}/telemetry?window=1h");
         Assert.NotNull(telemetry);
@@ -848,7 +909,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
     }
 
-    private WebApplicationFactory<Program> BuildFactory() =>
+    private WebApplicationFactory<Program> BuildFactory(
+        IAtomicJsonFileWriter? writer = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -865,6 +927,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                         ["ReviewDecisionOrchestrator:Enabled"] = "false",
                     });
                 });
+                if (writer is not null)
+                {
+                    b.ConfigureTestServices(services =>
+                        services.AddSingleton<IAtomicJsonFileWriter>(writer));
+                }
             });
 
     private static JsonSerializerOptions CreateApiJson()

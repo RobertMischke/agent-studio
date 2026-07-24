@@ -42,14 +42,26 @@ public static class LogIngestionEndpoints
 
             var rendered = string.Join(Environment.NewLine,
                 req.Lines.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {CredentialRedactor.Redact(AnsiText.Strip(l.Text))}"));
+            var deliveryReceipt = DeliveryReceipt(req);
 
             try
             {
                 void Append()
                 {
                     Directory.CreateDirectory(logsDir);
+                    if (deliveryReceipt is not null
+                        && ContainsDeliveryReceipt(logPath, deliveryReceipt))
+                    {
+                        return;
+                    }
                     var hasContent = File.Exists(logPath) && new FileInfo(logPath).Length > 0;
-                    var payload = (hasContent ? Environment.NewLine : string.Empty) + rendered;
+                    var receiptLine = deliveryReceipt is null
+                        ? string.Empty
+                        : Environment.NewLine
+                          + $"[{req.Lines[^1].Timestamp:HH:mm:ss.fff}] [system] {deliveryReceipt}";
+                    var payload = (hasContent ? Environment.NewLine : string.Empty)
+                                  + rendered
+                                  + receiptLine;
                     // FileShare.ReadWrite: the durable log is read concurrently by the
                     // projection + activity-log endpoint; an exclusive open would 500 them.
                     using var fs = new FileStream(
@@ -101,6 +113,33 @@ public static class LogIngestionEndpoints
             "log",
             req.TaskKey,
             append);
+    }
+
+    private static string? DeliveryReceipt(LogIngestRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.AttemptId)
+            || string.IsNullOrWhiteSpace(req.IdempotencyKey))
+        {
+            return null;
+        }
+
+        var digest = AttemptAuthorityService.Hash(
+            $"log\n{req.AttemptId.Trim()}\n{req.IdempotencyKey.Trim()}");
+        return $"[runner-log-delivery:{digest}]";
+    }
+
+    private static bool ContainsDeliveryReceipt(string logPath, string receipt)
+    {
+        if (!File.Exists(logPath)) return false;
+        using var stream = new FileStream(
+            logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        while (reader.ReadLine() is { } line)
+        {
+            if (line.EndsWith($"[system] {receipt}", StringComparison.Ordinal))
+                return true;
+        }
+        return false;
     }
 
     private static string? ResolveFolder(ITaskScanner scanner, string taskKey)
