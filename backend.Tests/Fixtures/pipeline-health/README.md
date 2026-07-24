@@ -1,7 +1,9 @@
 # Pipeline health night replay fixture
 
-`night-2026-07-22-23.normalized.jsonl` is the reduced, normalized replay slice
-for the operator incident of 22/23 July 2026.
+`night-2026-07-22-23.normalized.jsonl` is the reduced, normalized runtime-event
+replay slice for the operator incident of 22/23 July 2026. Every row follows
+the `ProductRuntimeEvent` envelope, while the incident-specific dimensions
+live under `payload`.
 
 The gate identity and 06:37:37 CEST acquisition time come directly from the
 backend log archaeology. The cross-card failure rows and lane inventory retain

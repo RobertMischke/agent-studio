@@ -17,6 +17,10 @@ public sealed class PipelineHealthNightReplayTests
     {
         Assert.True(File.Exists(FixturePath), $"Missing night replay fixture: {FixturePath}");
 
+        var runtimeEvents = new RuntimeEventReader().Read(FixturePath);
+        Assert.Empty(runtimeEvents.Warnings);
+        Assert.Equal(7, runtimeEvents.Events.Count);
+
         var detector = new PipelineHealthDetector();
         PipelineHealthAlert? fingerprintAlert = null;
         PipelineLaneDrainHealth? stalledLane = null;
@@ -32,45 +36,46 @@ public sealed class PipelineHealthNightReplayTests
             var row = document.RootElement;
             var at = row.GetProperty("timestamp").GetDateTime().ToUniversalTime();
             var eventName = row.GetProperty("event").GetString();
+            var payload = row.GetProperty("payload");
 
             switch (eventName)
             {
-                case "build_test_gate_completed":
-                    var completedGateRunId = row.GetProperty("gateRunId").GetString()!;
+                case "pipeline.build-test-gate.completed":
+                    var completedGateRunId = payload.GetProperty("gateRunId").GetString()!;
                     if (string.Equals(completedGateRunId, acquiredGateRunId, StringComparison.Ordinal))
                         gateCompleted = true;
                     firstFingerprintAt ??= at;
                     fingerprintAlert = detector.GateCompleted(new PipelineGateCompletion(
                         completedGateRunId,
                         row.GetProperty("project").GetString()!,
-                        row.GetProperty("watchPath").GetString()!,
+                        payload.GetProperty("watchPath").GetString()!,
                         row.GetProperty("jobId").GetString()!,
                         at,
-                        row.GetProperty("failureFingerprint").GetString()));
+                        payload.GetProperty("failureFingerprint").GetString()));
                     break;
 
-                case "build_test_gate_acquired":
+                case "pipeline.build-test-gate.acquired":
                     gateAcquiredAt = at;
-                    acquiredGateRunId = row.GetProperty("gateRunId").GetString()!;
+                    acquiredGateRunId = payload.GetProperty("gateRunId").GetString()!;
                     detector.GateAcquired(new PipelineGateContext(
                         acquiredGateRunId,
                         row.GetProperty("project").GetString()!,
-                        row.GetProperty("watchPath").GetString()!,
+                        payload.GetProperty("watchPath").GetString()!,
                         row.GetProperty("jobId").GetString()!,
                         at));
                     break;
 
-                case "lane_inventory":
-                    var queueCount = row.GetProperty("queueCount").GetInt32();
-                    var oldestQueuedAtUtc = row.GetProperty("oldestQueuedAtUtc").GetDateTime();
+                case "pipeline.lane-inventory":
+                    var queueCount = payload.GetProperty("queueCount").GetInt32();
+                    var oldestQueuedAtUtc = payload.GetProperty("oldestQueuedAtUtc").GetDateTime();
                     stalledLane = PipelineHealthDetector.MeasureLane(
-                        row.GetProperty("lane").GetString()!,
+                        payload.GetProperty("lane").GetString()!,
                         Enumerable.Repeat(oldestQueuedAtUtc, queueCount).ToArray(),
-                        row.GetProperty("completedInPriorHour").GetInt32(),
+                        payload.GetProperty("completedInPriorHour").GetInt32(),
                         at);
                     break;
 
-                case "replay_end":
+                case "pipeline.replay-ended":
                     replayEndedAt = at;
                     break;
             }
@@ -171,6 +176,66 @@ public sealed class PipelineHealthNightReplayTests
         }
     }
 
+    [Fact]
+    public async Task Hanging_gate_and_zero_drain_alarms_are_appended_to_the_orchestrator_feed()
+    {
+        var watchPath = Path.Combine(
+            Path.GetTempPath(),
+            "pipeline-health-feed-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(watchPath);
+        try
+        {
+            var now = new DateTime(2026, 7, 23, 5, 7, 37, DateTimeKind.Utc);
+            CreateQueuedTask(watchPath, "review-one", now - TimeSpan.FromMinutes(20));
+            CreateQueuedTask(watchPath, "review-two", now - TimeSpan.FromMinutes(18));
+
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["WatchPaths:0:Name"] = "Project",
+                    ["WatchPaths:0:Path"] = watchPath,
+                    ["WatchPaths:0:RootPath"] = watchPath,
+                })
+                .Build();
+            var scanner = new TaskScannerService(
+                configuration,
+                NullLogger<TaskScannerService>.Instance,
+                new SummaryGenerationService(
+                    NullLogger<SummaryGenerationService>.Instance,
+                    configuration));
+            var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
+            var service = new PipelineHealthService(
+                new PipelineHealthDetector(),
+                scanner,
+                new TimelineLog(NullLogger<TimelineLog>.Instance),
+                orchestratorLog,
+                NullLogger<PipelineHealthService>.Instance);
+
+            service.GateAcquired(new PipelineGateContext(
+                "night-gate",
+                "Project",
+                watchPath,
+                "night-card",
+                now - PipelineHealthConventions.GateCompletionBudget));
+
+            await service.EvaluateAsync(now);
+
+            var entries = orchestratorLog.Read(watchPath);
+            Assert.Equal(2, entries.Count);
+            Assert.All(entries, entry =>
+            {
+                Assert.Equal(OrchestratorLogKinds.Alert, entry.Kind);
+                Assert.Equal(OrchestratorLogTopics.PipelineHealth, entry.Topic);
+            });
+            Assert.Contains(entries, entry => entry.Summary.Contains("hanging", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(entries, entry => entry.Summary.Contains("drain rate is 0/h", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(watchPath, recursive: true);
+        }
+    }
+
     private static PipelineGateCompletion Completion(string id, string? fingerprint) =>
         new(
             $"{id}-{Guid.NewGuid():N}",
@@ -188,4 +253,20 @@ public sealed class PipelineHealthNightReplayTests
             id,
             new DateTime(2026, 7, 23, 4, 0, 0, DateTimeKind.Utc),
             "same");
+
+    private static void CreateQueuedTask(string watchPath, string id, DateTime enteredLaneAt)
+    {
+        var taskFolder = Path.Combine(watchPath, TaskStates.AutoReview, id);
+        Directory.CreateDirectory(taskFolder);
+        File.WriteAllText(
+            Path.Combine(taskFolder, "task.json"),
+            JsonSerializer.Serialize(new
+            {
+                id,
+                title = id,
+                state = TaskStates.AutoReview,
+                createdAt = enteredLaneAt.AddHours(-1),
+                enteredLaneAt,
+            }));
+    }
 }
