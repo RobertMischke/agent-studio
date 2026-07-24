@@ -4,13 +4,20 @@ using System.Text.Json;
 using AgentRunner;
 
 using Xunit;
+using Xunit.Abstractions;
 
 namespace AgentRunner.Tests;
 
 public sealed class RemoteProjectChatRunnerTests : IDisposable
 {
+    private readonly ITestOutputHelper _output;
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "remote-project-chat-" + Guid.NewGuid().ToString("N"));
+
+    public RemoteProjectChatRunnerTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
 
     public void Dispose()
     {
@@ -31,7 +38,7 @@ public sealed class RemoteProjectChatRunnerTests : IDisposable
         var handler = new CompletionHandler();
         using var http = new HttpClient(handler) { BaseAddress = new Uri("http://task-server") };
         using var client = new TaskServerClient(http, options.RunnerId);
-        var runner = new RemoteProjectChatRunner(options, client, _ => { });
+        var runner = new RemoteProjectChatRunner(options, client, _output.WriteLine);
         var work = new RemoteChatWorkItem(
             "work-1",
             "claim-1",
@@ -69,6 +76,7 @@ public sealed class RemoteProjectChatRunnerTests : IDisposable
         // the host checkout, not merely that metadata named such a path.
         var reply = root.GetProperty("replyText").GetString();
         Assert.Contains($"tool-output cwd={repoPath}", reply);
+        _output.WriteLine(reply);
     }
 
     private RunnerOptions Options(string codex) => new()
