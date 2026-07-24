@@ -51,7 +51,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskStatusPopoverDirective } from '../../../../components/task-status-card';
 import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
-import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
+import { ModelLevelIndicatorComponent } from '../../../../components/model-level-indicator/model-level-indicator.component';
 import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
 import { IntegrationStatusBadgeComponent } from '../../../../components/integration-status-badge/integration-status-badge.component';
 import { TokenPopoverDirective } from './token-popover.directive';
@@ -73,7 +73,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ThinkingLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -370,9 +370,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return t ? cliTypeIcon(t) : '🤖';
   });
 
-  readonly effectiveModelChip = computed(() =>
-    buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId))
-  );
+  readonly effectiveModelChip = computed(() => buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId)));
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 

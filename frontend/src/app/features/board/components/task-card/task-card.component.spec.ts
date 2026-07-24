@@ -1180,6 +1180,17 @@ describe('TaskCardComponent (smoke)', () => {
     const fixture = await renderCard(makeJob({ state: '2-ready', execution: null, executionLocation: null }));
     expect(fixture.nativeElement.querySelector('[data-testid="execution-location-badge"]')).toBeNull();
   });
+
+  it('renders a compact family code and named thinking level without model text', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '2-ready', cliType: 'claude', model: 'claude-opus-4-8', thinkingLevel: 'xhigh',
+    }));
+    const indicator = fixture.nativeElement.querySelector('[data-testid="task-card-effective-model"]') as HTMLElement;
+    expect(indicator.textContent?.trim()).toBe('OP4.8xh');
+    expect(indicator.dataset['modelFamily']).toBe('opus');
+    expect(indicator.dataset['modelId']).toBe('claude-opus-4-8');
+    expect(indicator.dataset['cli']).toBe('claude');
+  });
 });
 
 describe('buildEffectiveModelChip', () => {

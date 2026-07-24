@@ -65,7 +65,13 @@ describe('DetailHeaderComponent (smoke)', () => {
     expect(level.textContent?.trim()).toBe('m');
     expect(level.dataset['thinkingLevel']).toBe('medium');
     expect(level.dataset['thinkingLevelOverride']).toBe('true');
-    expect(fixture.nativeElement.querySelector('[data-testid="detail-model-chip"]')?.textContent).toContain('gpt-5.6-sol');
+    const model = fixture.nativeElement.querySelector('[data-testid="detail-model-chip"]') as HTMLElement;
+    expect(model.textContent?.trim()).toBe('SOLm');
+    expect(model.dataset['modelId']).toBe('gpt-5.6-sol');
+    expect(model.dataset['modelFamily']).toBe('sol');
+    expect(fixture.componentInstance.headerModelTooltip()).toContain('Model ID: gpt-5.6-sol');
+    expect(fixture.componentInstance.headerModelTooltip()).toContain('Thinking level: medium');
+    expect(fixture.componentInstance.headerModelTooltip()).toContain('CLI: Codex');
   });
 
   it('compiles + instantiates without throwing', async () => {

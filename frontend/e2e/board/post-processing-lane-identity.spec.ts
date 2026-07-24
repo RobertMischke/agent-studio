@@ -312,7 +312,7 @@ test.describe('Post Processing lane identity', () => {
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card.getByTestId('task-card-state')).toHaveCount(0);
     await expect(card.getByTestId('task-card-phase')).toContainText('Post processing');
-    await expect(card.getByTestId('task-card-effective-model')).toContainText('Codex');
+    await expect(card.getByTestId('task-card-effective-model')).toHaveAttribute('data-cli', 'codex');
 
     const bubble = card.getByTestId('task-card-token-bubble');
     await expect(bubble).toBeVisible();

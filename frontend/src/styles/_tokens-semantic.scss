@@ -122,6 +122,19 @@
   // Mocha teal; the light block darkens it so teal-on-tint clears WCAG-AA.
   --studio-accent-teal:           var(--color-mocha-teal);
 
+  // Model-family pigments shared by board/detail model-level capsules and the
+  // coding-agent-chat sibling. Consumers combine these with their own surface
+  // through color-mix; the token itself is always the readable foreground.
+  --studio-model-sol:     var(--color-mocha-blue);
+  --studio-model-ter:     var(--color-mocha-teal);
+  --studio-model-opus:    var(--color-mocha-mauve);
+  --studio-model-sonnet:  var(--color-mocha-peach);
+  --studio-model-haiku:   var(--color-mocha-yellow);
+  --studio-model-gemini:  var(--color-mocha-pink);
+  --studio-model-openai:  var(--color-mocha-sky);
+  --studio-model-human:   var(--color-slate-300);
+  --studio-model-unknown: var(--color-slate-400);
+
   // F39: "Running" state on a job-card / pill is a recurring visual that
   // needs to flip with the theme. The tint is built once here so consumers
   // (.task-card--running, future board surfaces) read a single token instead
@@ -611,6 +624,17 @@
 
   // Teal status pigment — darker teal so teal-on-tint stays legible on white.
   --studio-accent-teal:           var(--color-teal-700);
+
+  // Darker pigments preserve the same model-family hues on white surfaces.
+  --studio-model-sol:     var(--color-blue-700);
+  --studio-model-ter:     var(--color-teal-700);
+  --studio-model-opus:    var(--color-violet-700);
+  --studio-model-sonnet:  var(--color-orange-700);
+  --studio-model-haiku:   var(--color-yellow-700);
+  --studio-model-gemini:  var(--color-red-800);
+  --studio-model-openai:  var(--color-sky-800);
+  --studio-model-human:   var(--color-grey-800);
+  --studio-model-unknown: var(--color-grey-700);
 
   // F39: running tint is softer on the white shell (10% vs 14% on dark) so
   // the card surface stays paper-toned, not bluish-grey. Shadow ring drops

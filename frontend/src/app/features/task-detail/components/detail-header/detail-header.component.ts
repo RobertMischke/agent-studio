@@ -4,6 +4,7 @@ import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
   stateLabel as fmtStateLabel,
+  cliTypeLabel,
   taskModeIcon,
   taskModeLabel,
 } from '../../../../services/format.util';
@@ -26,8 +27,7 @@ import {
 } from '../../state/triage-actions.model';
 import type { LandedState } from '../../../git';
 import { buildThinkingLevelIndicator } from '../../../../services/thinking-level.util';
-import { shortModelName } from '../../../../services/format.util';
-import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
+import { ModelLevelIndicatorComponent } from '../../../../components/model-level-indicator/model-level-indicator.component';
 import { PendingButtonDirective } from '../../../../components/async-feedback';
 import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
 /** Top header of the job-detail view: back button, editable title, state pill,
@@ -41,7 +41,7 @@ import { ExecutionLocationBadgeComponent } from '../../../../components/executio
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ThinkingLevelIndicatorComponent, PendingButtonDirective, ExecutionLocationBadgeComponent],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ModelLevelIndicatorComponent, PendingButtonDirective, ExecutionLocationBadgeComponent],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })
@@ -52,15 +52,13 @@ export class DetailHeaderComponent {
     const info = this.info();
     return info.execution?.model ?? info.model ?? null;
   });
-  readonly headerModelLabel = computed(() => shortModelName(this.headerModel()));
-  readonly thinkingLevelIndicator = computed(() =>
-    buildThinkingLevelIndicator(
-      this.info().execution,
-      this.info().thinkingLevel,
-      this.defaultThinkingLevel(),
-      this.headerModel(),
-    )
-  );
+  readonly thinkingLevelIndicator = computed(() => buildThinkingLevelIndicator(
+    this.info().execution, this.info().thinkingLevel, this.defaultThinkingLevel(), this.headerModel(),
+  ));
+  readonly headerModelTooltip = computed(() => [
+    `Model ID: ${this.headerModel() ?? 'Not set'}`, `Thinking level: ${this.thinkingLevelIndicator()?.effective ?? 'CLI default'}`,
+    `CLI: ${this.info().cliType ? cliTypeLabel(this.info().cliType!) : 'Not set'}`,
+  ].join('\n'));
   readonly editingTitle = input(false);
   readonly titleDraft = input<string>('');
   readonly savingTitle = input(false);
