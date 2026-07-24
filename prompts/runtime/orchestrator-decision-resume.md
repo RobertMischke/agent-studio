@@ -1,5 +1,7 @@
 NEEDS_INPUT decision request for task "{{task_title}}" (id: {{task_id}}).{{attachments_block}}
 
+Consult `docs/system/domains/model-routing-policy.md` as the authoritative source whenever you select, recommend, override, or explain a model and thinking level. Never let quota or cost cross its correctness-risk floors.
+
 The agent's last message you need to answer:
 {{last_agent_text}}
 

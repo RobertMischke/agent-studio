@@ -27,6 +27,8 @@ CLI execution tests.
 
 ## Key Code
 
+- [Model Routing Policy](./model-routing-policy.md) is the canonical selection
+  policy above the live model catalog and quota fallback machinery.
 - `backend/Services/Cli/`: CLI drivers and shared execution base.
 - `backend/Services/Cli/CliRouter.cs`: `cliType` routing.
 - `backend/Services/Quota/*QuotaProbe.cs`: per-CLI quota probes.

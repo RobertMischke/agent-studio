@@ -71,6 +71,7 @@ apply only under `frontend/`.
 |---|---|---|
 | Runner | [docs/system/domains/runner.md](./docs/system/domains/runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops, and the standalone remote runner (`runner/`, [runbook](./docs/operations/setup/linux-runner-host.md)). |
 | Pipeline | [docs/system/domains/pipeline.md](./docs/system/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts, and the review/aspect evidence contract (branch diff + `results/` inventory + card mode; when "deliverables missing" is legitimate). |
+| Model routing | [docs/system/domains/model-routing-policy.md](./docs/system/domains/model-routing-policy.md) | Canonical model and thinking-level tiers, weighted selection, correctness floors, benchmark evidence, and quota handling. |
 | Tasks | [docs/system/domains/tasks.md](./docs/system/domains/tasks.md) | Job folders, lane states, API mutations, task access, Epic lifecycle and archive-inclusive history, and the project onboarding and central-store contract. |
 | Frontend | [docs/system/domains/frontend.md](./docs/system/domains/frontend.md) | Angular surfaces, design system, Playwright proof. |
 | Style guides | [docs/quality/README.md](./docs/quality/README.md) | Technology-aware Angular and .NET guidance selected into coding prompts; incorporates the hard design baseline. |

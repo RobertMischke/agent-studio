@@ -9,5 +9,6 @@ Current system-of-record maps for the major runtime domains.
 | [tasks.md](tasks.md) | Job folders, lanes, API mutations, task access, review evidence, and attribution. |
 | [frontend.md](frontend.md) | Angular surfaces, design system, polling, optimistic mutation, and Playwright proof. |
 | [cli.md](cli.md) | CLI adapters, stream parsing, prompt handoff, quota probes, and models. |
+| [model-routing-policy.md](model-routing-policy.md) | Canonical model and thinking-level tiers, weighted selection, correctness floors, benchmark evidence, and quota handling. |
 | [tokens.md](tokens.md) | Token aggregation domain contract and bus-backed shims. |
 | [token-pricing.md](token-pricing.md) | Single per-model price table and cost derivation. |
