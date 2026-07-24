@@ -766,6 +766,26 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
+    public void ForTask_SelectsByCardTypeAndKeepsPlanningReadOnly()
+    {
+        Assert.Same(
+            PipelineCatalogue.Standard,
+            PipelineCatalogue.ForTask(TaskTypes.Bug, TaskModes.Coding));
+        Assert.Same(
+            PipelineCatalogue.Standard,
+            PipelineCatalogue.ForTask(TaskTypes.Feature, TaskModes.Coding));
+        Assert.Same(
+            PipelineCatalogue.ReadOnly,
+            PipelineCatalogue.ForTask(TaskTypes.Feature, TaskModes.Planning));
+        Assert.Same(
+            PipelineCatalogue.ReadOnly,
+            PipelineCatalogue.ForTask(TaskTypes.Bug, TaskModes.Research));
+        Assert.Same(
+            PipelineCatalogue.Concept,
+            PipelineCatalogue.ForTask(TaskTypes.Feature, TaskModes.Concept));
+    }
+
+    [Fact]
     public void ConceptPipeline_IsDocumentReviewThenSightGateThenPromotion()
     {
         var concept = PipelineCatalogue.Concept;

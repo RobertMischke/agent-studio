@@ -49,9 +49,10 @@ public static class TaskPipelineEndpoints
             var tokensByModel = PipelineCostCalculator.SummarizeByModel(record);
             var execution = AspectConcernReader.Enrich(record, info.FolderPath);
 
-            var settings = string.IsNullOrWhiteSpace(info.ProjectName)
+            var rawSettings = string.IsNullOrWhiteSpace(info.ProjectName)
                 ? null
                 : projectSettings.Get(info.ProjectName);
+            var settings = PipelineTypeSettings.ForTask(rawSettings, info);
             var pipeline = ProjectPipelineOrder.Apply(UiTaskPipelineRouter.Select(info, settings), settings);
             var resultFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var step in pipeline.AllSteps)

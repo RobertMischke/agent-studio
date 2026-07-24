@@ -1267,7 +1267,9 @@ public class ProjectRunner
         RecordWorktreeContainment(info, PipelineStepStatus.Passed, "contained",
             $"Worktree run stayed contained in `{run.WorktreePath}`.");
 
-        var settings = _projectSettings.Get(ProjectName);
+        var settings = AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+            _projectSettings.Get(ProjectName),
+            info)!;
         var workBranch = _git.ResolveIntegrationBranch(repositoryRoot, settings.IntegrationBranch);
         var strategy = string.IsNullOrWhiteSpace(settings.IntegrationStrategy) ? IntegrationStrategies.DirectMerge : settings.IntegrationStrategy!;
         try
@@ -1722,7 +1724,9 @@ public class ProjectRunner
         IntegrationLeaseGrant? integrationLease = null)
     {
         var started = DateTime.UtcNow;
-        var settings = _projectSettings.Get(ProjectName);
+        var settings = AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+            _projectSettings.Get(ProjectName),
+            info)!;
         var step = AgentStudio.Pipeline.PipelineCatalogue.Standard.AllSteps.First(s =>
             string.Equals(s.Id, AgentStudio.Pipeline.PipelineCatalogue.ConflictResolutionStepId, StringComparison.OrdinalIgnoreCase));
         var resolverCliType = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveCliType(settings, step)
@@ -2285,7 +2289,9 @@ public class ProjectRunner
                 acquiredPickupLockFolder = jobFolder;
             }
 
-            var uiProjectSettings = _projectSettings.Get(ProjectName);
+            var uiProjectSettings = AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+                _projectSettings.Get(ProjectName),
+                info);
             var isUiIterationPipeline = string.Equals(
                 UiTaskPipelineRouter.Select(info, uiProjectSettings).Id,
                 AgentStudio.Pipeline.PipelineCatalogue.UiPipelineId,
@@ -4285,11 +4291,14 @@ public class ProjectRunner
 
             if (_pipelineLog != null)
             {
+                var settings = AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+                    _projectSettings.Get(ProjectName),
+                    info);
                 var pipelineRecord = _pipelineLog.EnsureAgentRunStart(
                     info.FolderPath,
                     AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                        UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
-                        _projectSettings.Get(ProjectName)),
+                        UiTaskPipelineRouter.Select(info, settings),
+                        settings),
                     ProjectName,
                     info.Id);
                 using var pipelineAttempt = _pipelineLog.EnterAttempt(
@@ -4379,7 +4388,9 @@ public class ProjectRunner
         if (_pipelineLog == null) return;
         try
         {
-            var settings = _projectSettings.Get(ProjectName);
+            var settings = AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+                _projectSettings.Get(ProjectName),
+                info);
             var record = _pipelineLog.EnsureAgentRunStart(
                 info.FolderPath,
                 AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
@@ -4481,9 +4492,12 @@ public class ProjectRunner
             // be a re-issued attempt even when it was short-circuited before
             // Complete() stamped it, as long as it already crossed core/post.
             var prior = _pipelineLog?.Read(info.FolderPath);
+            var settings = AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+                _projectSettings.Get(ProjectName),
+                info);
             var pipeline = AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
-                _projectSettings.Get(ProjectName));
+                UiTaskPipelineRouter.Select(info, settings),
+                settings);
             var priorRunExists = prior != null
                 && (prior.IsComplete
                     || AgentStudio.Pipeline.PipelineExecutionLog.HasReachedAgentRunBoundary(prior, pipeline));
@@ -4793,11 +4807,14 @@ public class ProjectRunner
             // Resume the record opened at spawn. EnsureRun only re-creates the
             // file in the rare case the start write was lost, so the finished
             // step still lands and the row is never left blank.
+            var settings = AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+                _projectSettings.Get(ProjectName),
+                info!);
             var record = _pipelineLog.EnsureRun(
                 folder,
                 AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                    UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
-                    _projectSettings.Get(ProjectName)),
+                    UiTaskPipelineRouter.Select(info, settings),
+                    settings),
                 ProjectName,
                 jobId);
             using var pipelineAttempt = _pipelineLog.EnterAttempt(folder, record.Attempt);
@@ -5705,7 +5722,9 @@ public class ProjectRunner
                     && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.AuthRefreshFailed or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
-                        _projectSettings.Get(ProjectName),
+                        AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+                            _projectSettings.Get(ProjectName),
+                            activeInfo),
                         AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
                         abortConditionContext))
                 {
@@ -6588,7 +6607,9 @@ public class ProjectRunner
         var review = _postAbortReview;
         if (review == null) return false;
 
-        var settings = _projectSettings.Get(ProjectName);
+        var settings = AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
+            _projectSettings.Get(ProjectName),
+            activeInfo)!;
         var used = _abortReviewRerunsUsed.TryGetValue(jobId, out var u) ? u : 0;
         var budgetRemaining = Math.Max(0, PostAbortReviewDecider.DefaultRerunBudget - used);
         var model = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveModel(

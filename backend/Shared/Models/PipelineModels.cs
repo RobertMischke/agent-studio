@@ -63,6 +63,12 @@ public sealed record PipelineStep
     /// </summary>
     public string? PromptTemplate { get; init; }
     public string? CliType { get; init; }
+    /// <summary>
+    /// Optional technology marker for a framework-specific step. Null means the
+    /// step is stack-neutral. The settings UI renders this as metadata, never as
+    /// an activation rule.
+    /// </summary>
+    public string? Framework { get; init; }
     public int? TimeoutMs { get; init; }
     /// <summary>
     /// When true, the step is safe to re-run after a partial failure.

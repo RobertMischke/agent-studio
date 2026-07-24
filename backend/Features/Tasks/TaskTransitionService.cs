@@ -225,7 +225,9 @@ public sealed class TaskTransitionService
             // affect the lane transition that already completed above.
             if (attributed != null && _driftRunner != null)
             {
-                TriggerDriftPostSteps(attributed, settings);
+                TriggerDriftPostSteps(
+                    attributed,
+                    AgentStudio.Pipeline.PipelineTypeSettings.ForTask(settings, attributed)!);
             }
 
             if (attributed != null)
@@ -622,7 +624,8 @@ public sealed class TaskTransitionService
                 moved.WatchPath,
                 settings.IntegrationBranch,
                 ct,
-                settings.IntegrationStrategy).ConfigureAwait(false);
+                settings.IntegrationStrategy,
+                PipelineTypes.Resolve(moved)).ConfigureAwait(false);
 
             // ASS-1752: persist the develop-merge fact so the board card can show
             // the landed state (`develop @sha`) instead of a dead worktree path,

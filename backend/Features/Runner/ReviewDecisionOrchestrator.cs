@@ -1243,7 +1243,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 stored.RepoRelativeDirectory);
         }
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         _pipelineLog?.EnsureRun(
             current.FolderPath,
             ProjectPipelineOrder.Apply(PipelineCatalogue.Concept, settings),
@@ -1975,10 +1975,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // forever while the aspect rows below it completed. EnsureRun
         // resumes the in-flight record so CORE survives, and only begins a
         // fresh one when no run record exists yet (legacy / hand-moved job).
-        var projectSettings = _projectSettings?.Get(entry.Name);
+        var projectSettings = PipelineTypeSettings.ForTask(
+            _projectSettings?.Get(entry.Name),
+            current);
         var pipelineRecord = _pipelineLog?.EnsureRun(
             current.FolderPath,
-            ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(current.Mode), projectSettings),
+            ProjectPipelineOrder.Apply(PipelineCatalogue.ForTask(current), projectSettings),
             entry.Name,
             current.Id);
         using var pipelineAttempt = pipelineRecord == null
@@ -2042,7 +2044,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // route each remaining aspect's CLI call to its configured model
         // (falling back to the run-wide aspectModel). The resolver keys on
         // the catalogue step id (aspect-{id}); see PipelineStepConfigResolver.
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var conditionContext = new PipelineStepConditionContext
         {
             Aborted = false,
@@ -3095,7 +3097,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_lintScssRunner == null) return null;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var lintStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.LintScssStepId, StringComparison.OrdinalIgnoreCase));
         if (lintStep is not null
@@ -3263,7 +3265,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_buildTestGateRunner == null) return null;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.BuildTestGateStepId, StringComparison.OrdinalIgnoreCase));
         if (step is not null
@@ -3775,7 +3777,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return null;
         }
 
-        var projectSettings = _projectSettings?.Get(entry.Name);
+        var projectSettings = PipelineTypeSettings.ForTask(
+            _projectSettings?.Get(entry.Name),
+            job);
         var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
         if (catalogueStep is not null
@@ -3977,7 +3981,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (_taskSpawner == null) return;
 
         var stepId = PipelineCatalogue.TaskSpawnerStepId;
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
         var conditionCtx = new PipelineStepConditionContext
@@ -4442,7 +4446,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 : (Func<string, string?, RegressionRadarResult>?)null);
         if (analyze == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var radarStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.RegressionRadarStepId, StringComparison.OrdinalIgnoreCase));
         var shouldRun = radarStep is null
@@ -4522,7 +4526,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_wikiMaintenance == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var wikiStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.WikiMaintenanceStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext
@@ -4610,7 +4614,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_wikiLearnings == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.WikiLearningsStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext
@@ -4795,7 +4799,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_agentsWikiSync == null) return;
 
-        var settings = _projectSettings?.Get(entry.Name);
+        var settings = PipelineTypeSettings.ForTask(_projectSettings?.Get(entry.Name), current);
         var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, PipelineCatalogue.AgentsWikiSyncStepId, StringComparison.OrdinalIgnoreCase));
         var ctx = new PipelineStepConditionContext

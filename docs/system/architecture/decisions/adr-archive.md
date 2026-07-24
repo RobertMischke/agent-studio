@@ -1063,6 +1063,28 @@ Polling, bounded buffers, and visibility-aware timers are already enforced by [`
 
 Implementation pointers: [src/AgentTaskboard.Shared/Models/TaskModes.cs](../../../src/AgentTaskboard.Shared/Models/TaskModes.cs) (`IsReadOnly`), [backend/Services/Pipeline/PipelineCatalogue.cs](../../../backend/Services/Pipeline/PipelineCatalogue.cs) (`ForMode` / `GitStepIds` / `BuildReadOnlyPipeline`), [backend/Services/Runner/ParallelSlotPolicy.cs](../../../backend/Services/Runner/ParallelSlotPolicy.cs) (`ReadOnlyTask` + the short-circuit), [backend/Services/Tasks/TaskTransitionService.cs](../../../backend/Services/Tasks/TaskTransitionService.cs) (`isReadOnly` git-side-effect gate), [backend/Services/Runner/ProjectRunner.cs](../../../backend/Services/Runner/ProjectRunner.cs) (`ReportReadOnlyContainmentIfDirty`), and `read_only_containment_violation` in [src/AgentTaskboard.Shared/Models/TimelineEvent.cs](../../../src/AgentTaskboard.Shared/Models/TimelineEvent.cs). Tests: `PipelineCatalogueTests` (read-only omits git steps, `ForMode` selection), `ParallelSlotPolicyTests` (read-only short-circuit, still quota- and exclusive-bounded), `TaskTransitionAutoCommitAttributionTests.MoveProgressToAutoReview_ReadOnlyMode_SkipsAutoCommit_LeavesTreeDirty`, `TimelineLogTests.Append_ReadOnlyContainmentViolation_RoundTrips`. Still pending from the research note: the create-modal kind selector + web-access toggle, per-kind prompt scaffolds, and promote-planning-result-to-coding-task.
 
+**Amendment (2026-07-24) - pipeline configuration is task-type-aware.** The
+project pipeline is no longer one flat override map selected only by card mode.
+`ProjectSettings.PipelineStepsByType` and `PipelineStepOrderByType` isolate the
+extensible `task`, `bug`, `feature`, and `planning` chains. Existing flat
+settings migrate into `task`, `bug`, and `feature`, preserving every coding
+card's behavior, but are not copied into `planning`. `PipelineTypes.Resolve`
+maps chores and generic work to `task`, preserves `bug` / `feature`, and maps
+the report-only modes (`planning` / `research`) to the lightweight `planning`
+chain. Concept retains its dedicated document-first catalogue.
+`PipelineTypeSettings.ForTask` is the runtime projection used before
+enablement, order, model, prompt, condition, or gate resolution. Project Hub ->
+Pipeline exposes the type first, writes overrides with the selected type, keeps
+On/Off in each step row, and marks framework-specific catalogue entries.
+Implementation: `backend/Shared/Models/PipelineTypes.cs`,
+`backend/Features/Pipeline/PipelineTypeSettings.cs`,
+`backend/Features/Pipeline/PipelineCatalogue.cs`,
+`backend/Features/Projects/ProjectSettingsService.cs`, and
+`frontend/src/app/features/project-detail/components/project-pipeline-panel/`.
+Coverage: `PipelineTypeSettingsTests`, `ProjectSettingsServiceTests`,
+`PipelineCatalogueTests`, the pipeline panel component spec, and
+`frontend/e2e/project/pipeline-step-config.spec.ts`.
+
 **Amendment (2026-07-11) - unknown coding scope is optimistic under worktree isolation.** Slot admission serializes only when both the candidate and a running task declare overlapping scopes. An unknown scope on either side is admitted while a slot is free. This is safe because ADR-0057 requires every coding run to use its own worktree; an unexpected overlap cannot corrupt a shared checkout and is resolved or surfaced by the serialized integration path. The rule lives entirely in `ParallelSlotPolicy`, so candidate/running order cannot change the result or hide a later declared conflict.
 
 ---

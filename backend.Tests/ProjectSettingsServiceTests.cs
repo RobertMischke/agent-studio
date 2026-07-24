@@ -495,7 +495,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         var reloaded = Build();
 
         Assert.Equal(["post-lint-scss", "aspect-code-quality"],
-            reloaded.Get("runbook").PipelineStepOrder);
+            reloaded.Get("runbook").PipelineStepOrderByType![PipelineTypes.Task]);
     }
 
     [Fact]
@@ -507,6 +507,75 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         svc.SetPipelineStepOrder("runbook", []);
 
         Assert.Null(svc.Get("runbook").PipelineStepOrder);
+    }
+
+    [Fact]
+    public void TypedPipelineWrites_StayIsolatedAcrossTaskTypes()
+    {
+        var svc = Build();
+
+        svc.SetPipelineStep(
+            "runbook",
+            PipelineTypes.Bug,
+            PipelineCatalogue.LintScssStepId,
+            new PipelineStepSetting { Enabled = false });
+        svc.SetPipelineStepOrder(
+            "runbook",
+            PipelineTypes.Feature,
+            [PipelineCatalogue.BuildTestGateStepId]);
+
+        var reloaded = Build().Get("runbook");
+        Assert.False(reloaded.PipelineStepsByType![PipelineTypes.Bug]
+            [PipelineCatalogue.LintScssStepId].Enabled);
+        Assert.Null(PipelineTypeSettings.ForType(reloaded, PipelineTypes.Task)!.PipelineSteps);
+        Assert.Equal(
+            PipelineCatalogue.BuildTestGateStepId,
+            reloaded.PipelineStepOrderByType![PipelineTypes.Feature].Single());
+    }
+
+    [Fact]
+    public void Get_MigratesLegacyFlatPipelineConfigToThreeCodingTypesOnly()
+    {
+        File.WriteAllText(StorePath(), """
+        {
+          "runbook": {
+            "pipelineSteps": {
+              "post-lint-scss": { "enabled": false },
+              "post-build-test-gate": { "enabled": false }
+            },
+            "pipelineStepOrder": [ "post-lint-scss" ],
+            "pipelineStepsByType": {
+              "bug": {
+                "post-build-test-gate": { "enabled": true }
+              }
+            }
+          }
+        }
+        """);
+
+        var settings = Build().Get("runbook");
+
+        foreach (var type in PipelineTypes.LegacyCodingTypes)
+        {
+            Assert.False(settings.PipelineStepsByType![type]
+                [PipelineCatalogue.LintScssStepId].Enabled);
+            Assert.Equal(
+                type == PipelineTypes.Bug,
+                settings.PipelineStepsByType[type]
+                    [PipelineCatalogue.BuildTestGateStepId].Enabled);
+            Assert.Equal(
+                PipelineCatalogue.LintScssStepId,
+                settings.PipelineStepOrderByType![type].Single());
+        }
+        Assert.False(settings.PipelineStepsByType!.ContainsKey(PipelineTypes.Planning));
+        Assert.False(settings.PipelineStepOrderByType!.ContainsKey(PipelineTypes.Planning));
+        Assert.Null(settings.PipelineSteps);
+        Assert.Null(settings.PipelineStepOrder);
+
+        var persisted = File.ReadAllText(StorePath());
+        Assert.Contains("\"PipelineStepsByType\"", persisted);
+        Assert.DoesNotContain("\"PipelineSteps\":", persisted);
+        Assert.DoesNotContain("\"PipelineStepOrder\":", persisted);
     }
 
     [Fact]

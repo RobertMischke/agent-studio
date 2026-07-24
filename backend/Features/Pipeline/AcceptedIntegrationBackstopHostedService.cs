@@ -93,7 +93,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 job.FolderPath,
                 job.WatchPath,
                 settings.IntegrationBranch,
-                settings.IntegrationStrategy);
+                settings.IntegrationStrategy,
+                PipelineTypes.Resolve(job));
             if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
             {
                 ClearPendingTag(job);

@@ -1917,6 +1917,8 @@ export class TaskService {
           laneSortStrategies?: Record<string, string>;
           pipelineSteps?: Record<string, PipelineStepSetting>;
           pipelineStepOrder?: string[];
+          pipelineStepsByType?: Record<string, Record<string, PipelineStepSetting>>;
+          pipelineStepOrderByType?: Record<string, string[]>;
           // Per-CLI effective permission mode (YOLO default), one entry per CLI.
           cliModes?: Record<string, { mode: string; source: string; args: string[] }>;
         }
@@ -2009,11 +2011,13 @@ export class TaskService {
    * flags). The Settings panel renders one control row per step from this,
    * so the step list is never hardcoded on the frontend.
    */
-  getPipelineCatalogue(projectName?: string | null) {
-    const params = projectName ? new HttpParams().set('projectName', projectName) : undefined;
+  getPipelineCatalogue(projectName?: string | null, pipelineType?: string | null) {
+    let params = new HttpParams();
+    if (projectName) params = params.set('projectName', projectName);
+    if (pipelineType) params = params.set('pipelineType', pipelineType);
     return this.http.get<PipelineCatalogue>(
       `${this.baseUrl}/projects/pipeline-catalogue`,
-      params ? { params } : {},
+      { params },
     );
   }
 
@@ -2039,6 +2043,7 @@ export class TaskService {
   setProjectPipelineStep(
     projectName: string,
     step: {
+      pipelineType?: string;
       stepId: string;
       enabled?: boolean | null;
       economyModel?: boolean | null;
@@ -2051,17 +2056,26 @@ export class TaskService {
       condition?: PipelineStepCondition | null;
     },
   ) {
-    return this.http.put<{ stepId: string; pipelineSteps: Record<string, PipelineStepSetting> }>(
+    return this.http.put<{
+      stepId: string;
+      pipelineType: string;
+      pipelineSteps: Record<string, PipelineStepSetting>;
+      pipelineStepsByType: Record<string, Record<string, PipelineStepSetting>>;
+    }>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-step`,
       step,
     );
   }
 
   /** Persist the project-specific order for configurable pipeline steps. */
-  setProjectPipelineStepOrder(projectName: string, stepIds: readonly string[]) {
-    return this.http.put<{ pipelineStepOrder: string[] }>(
+  setProjectPipelineStepOrder(projectName: string, pipelineType: string, stepIds: readonly string[]) {
+    return this.http.put<{
+      pipelineType: string;
+      pipelineStepOrder: string[];
+      pipelineStepOrderByType: Record<string, string[]>;
+    }>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-step-order`,
-      { stepIds },
+      { pipelineType, stepIds },
     );
   }
 
