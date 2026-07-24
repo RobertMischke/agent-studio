@@ -176,15 +176,6 @@ public sealed record ArtifactContentDto(
     string ContentBase64,
     long SizeBytes);
 
-public sealed record ArtifactContentDto(
-    string ArtifactId,
-    string RunId,
-    string Name,
-    string MediaType,
-    string Sha256,
-    string ContentBase64,
-    long SizeBytes);
-
 public sealed record AuditRecordDto(
     long Sequence,
     DateTime OccurredAt,
