@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Async Validation & the Test Staging Lane | Concept Workbench</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --accent: #2a78d6; --ok: #1a7d3a; --warn-c: #b5651d; --bad: #c93736; --warn: #9a6b00;
+    --develop: #2a78d6; --taskbr: #4a3aa7;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --accent: #3987e5; --ok: #4eae4e; --warn-c: #d98a4f; --bad: #e66767; --warn: #d9a63f;
+      --develop: #3987e5; --taskbr: #9085e9;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 33px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 64ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 23px; margin: 54px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 32px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  a { color: var(--accent); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code { font: 12.5px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; word-break: break-word; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  .rec { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 8px; border-radius: 5px; white-space: nowrap; }
+  .rec.go   { background: var(--ok-soft);   color: var(--ok); }
+  .rec.stop { background: var(--bad-soft);  color: var(--bad); }
+  .rec.wait { background: var(--warn-soft); color: var(--warn); }
+  .svg-b { font: 600 13px system-ui, sans-serif; }
+  .svg-s { font: 11.5px system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Concept Workbench · Agent Studio</p>
+  <h1>Async Validation &amp; the Test Staging Lane</h1>
+  <p class="lede">A design proposal for a plausible-sounding intuition: tests are slow and run for every
+  card, so move validation off the critical path. The evidence says the payoff is throughput, not cost — and
+  that reshapes what is worth building. This workbench states the design, the trade-offs, and a concrete
+  decision.</p>
+  <div class="meta">
+    <span><b>As of:</b> 2026-07-25</span>
+    <span><b>Rests on:</b> <a href="../../quality/pipeline-time-economy/">pipeline-time-economy</a> (evidence)</span>
+    <span><b>Adjacent:</b> <a href="../haertung-verteilte-ausfuehrung/">verteilte Ausführung</a> §5 (gate serialization)</span>
+    <span><b>Status:</b> decision-ready</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#decision">Decision in one paragraph</a></li>
+    <li><a href="#idea">§1 The idea in three building blocks</a></li>
+    <li><a href="#rests">§2 What it rests on</a></li>
+    <li><a href="#lever">§3 The real lever: retry serialization</a></li>
+    <li><a href="#design">§4 Design: staging lane and test branch</a></li>
+    <li><a href="#scoping">§5 Deterministic scoping, not an LLM</a></li>
+    <li><a href="#develop">§6 Integrating toward <code>develop</code></a></li>
+    <li><a href="#recommendation">§7 Recommendation and slicing</a></li>
+    <li><a href="#open">§8 Open questions</a></li>
+  </ul>
+</nav>
+
+<section id="decision" class="box accent">
+  <h4>Decision in one paragraph</h4>
+  <p>Do not build LLM-based test selection: it spends the expensive resource (tokens) to save the cheapest
+  one (CPU). Do build a per-SHA gate cache that skips re-testing an unchanged tree — it removes most of the
+  redundant validation with no new architecture and pays off regardless. Treat the staging lane and
+  test-integration branch as <em>measure-first</em>: they only pay off if batches are usually green, and a
+  red batch forces a bisection that can erase the gain. The whole exercise buys throughput on the shared
+  runner, not money.</p>
+</section>
+
+<h2 id="idea"><span class="no">§1</span>The idea in three building blocks</h2>
+<p>The proposal is usually stated as one thing, but it separates into three parts with very different
+cost/benefit profiles. Keeping them apart is what lets us accept one and reject another.</p>
+<h3>1a — Deterministic test scoping</h3>
+<p>Run only new tests and tests that touch the changed module, instead of the full suite per card. The catch
+is the word "smart": deciding relevance with a model spends tokens, the one resource worth saving. The whole
+building block survives only if the decision stays deterministic (§5).</p>
+<h3>1b — A staging lane</h3>
+<p>A lane that collects cards whose coding and review are finished but which are not yet integrated. They
+move on <em>batched</em>, once their combined changes pass the gate together, rather than each card forcing a
+synchronous full gate run of its own.</p>
+<h3>1c — A test-integration branch</h3>
+<p>A dedicated branch where the batched validation happens, decoupled from the coding worktree. The open
+question is what happens after green: fast-forward to <code>develop</code>, or integrate straight into
+<code>develop</code> and skip the branch entirely (§6).</p>
+
+<h2 id="rests"><span class="no">§2</span>What it rests on</h2>
+<p>The numbers behind every claim here live in the <a href="../../quality/pipeline-time-economy/">Pipeline
+Time Economy</a> workbench and are not re-derived. Three of its findings drive this proposal:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Finding</th><th>Consequence for this proposal</th></tr></thead>
+  <tbody>
+    <tr><td>Test gate = 16.6% of compute, <b>0 tokens</b>; token spend ~2000× the test-CPU cost.</td><td>This is a throughput problem, not a cost problem. Do not justify it as saving money.</td></tr>
+    <tr><td><b>84%</b> of test-gate time is retries; the gate ran ~3.65× per task.</td><td>The reducible volume is re-testing, concentrated in re-runs of barely-changed trees. Cache by SHA.</td></tr>
+    <tr><td>Most re-runs are the intended quality loop, not waste.</td><td>Do not try to remove retries; remove only the <em>redundant re-validation</em> inside them.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="lever"><span class="no">§3</span>The real lever: retry serialization</h2>
+<p>If cost is not the argument, throughput is. Two structural facts make the gate a throughput bottleneck on
+the shared runner:</p>
+<ul>
+  <li>The gate takes a <b>machine-wide lock</b> (<code>BuildTestGateRunner.MachineGateLockPath</code>). While
+  one task tests, every other waits. This is the same serialization documented in
+  <a href="../haertung-verteilte-ausfuehrung/">verteilte Ausführung</a> §5.</li>
+  <li><b>Most of that serialized time is redundant.</b> A batched run that validates N finished cards once
+  replaces N×(1+retries) individual runs of overlapping code.</li>
+</ul>
+<p>So the mechanism to copy is the one Agent Studio already uses for integration pushes:
+<code>IntegrationPushQueue</code>/<code>IntegrationPushWorker</code> move the push off the request path. The
+proposal is the same move, applied to validation instead of push.</p>
+
+<h2 id="design"><span class="no">§4</span>Design: staging lane and test branch</h2>
+<figure>
+  <svg viewBox="0 0 1000 210" role="img" aria-label="Staging lane and test-integration flow">
+    <!-- boxes -->
+    <rect x="10"  y="40" width="210" height="86" rx="10" fill="var(--surface-2)" stroke="var(--line)"/>
+    <rect x="270" y="40" width="210" height="86" rx="10" fill="var(--ok-soft)" stroke="color-mix(in srgb,var(--ok) 40%,var(--line))"/>
+    <rect x="530" y="40" width="210" height="86" rx="10" fill="var(--warn-soft)" stroke="color-mix(in srgb,var(--warn-c) 40%,var(--line))"/>
+    <rect x="790" y="40" width="200" height="86" rx="10" fill="var(--surface-2)" stroke="var(--line)"/>
+    <!-- titles -->
+    <text x="115" y="70" text-anchor="middle" class="svg-b" fill="var(--ink-1)">Coding + Review</text>
+    <text x="375" y="66" text-anchor="middle" class="svg-b" fill="var(--ink-1)">Staging lane</text>
+    <text x="635" y="66" text-anchor="middle" class="svg-b" fill="var(--ink-1)">Batch gate</text>
+    <text x="890" y="70" text-anchor="middle" class="svg-b" fill="var(--ink-1)">develop</text>
+    <!-- subtitles -->
+    <text x="115" y="92" text-anchor="middle" class="svg-s" fill="var(--ink-2)">own worktree, no gate</text>
+    <text x="375" y="86" text-anchor="middle" class="svg-s" fill="var(--ink-2)">validation-pending</text>
+    <text x="375" y="104" text-anchor="middle" class="svg-s" fill="var(--ink-2)">cards accumulate</text>
+    <text x="635" y="86" text-anchor="middle" class="svg-s" fill="var(--ink-2)">on integration/test</text>
+    <text x="635" y="104" text-anchor="middle" class="svg-s" fill="var(--ink-2)">one scoped suite run</text>
+    <text x="890" y="92" text-anchor="middle" class="svg-s" fill="var(--ink-2)">FF only when green</text>
+    <!-- arrows -->
+    <g stroke="var(--ink-3)" stroke-width="2" fill="none" marker-end="url(#ar)">
+      <line x1="220" y1="83" x2="266" y2="83"/>
+      <line x1="480" y1="83" x2="526" y2="83"/>
+      <line x1="740" y1="83" x2="786" y2="83"/>
+    </g>
+    <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="var(--ink-3)"/></marker></defs>
+    <!-- branch note -->
+    <text x="500" y="170" text-anchor="middle" class="svg-s" fill="var(--ink-2)">Coding stays on task/&lt;id&gt; (ADR-0052). New: integration/test as the batch collection point;</text>
+    <text x="500" y="188" text-anchor="middle" class="svg-s" fill="var(--ink-2)">the gate runs once there, and only the green state fast-forwards to develop.</text>
+  </svg>
+  <figcaption><b>Fig. 1: The staging-lane flow.</b> The change is structural: the test gate moves out of the
+  per-task post-step into a batch step that drains the lane — the same "off the request path" pattern as the
+  integration-push queue, applied to validation.</figcaption>
+</figure>
+
+<h2 id="scoping"><span class="no">§5</span>Deterministic scoping, not an LLM</h2>
+<p>Building block 1a is worth keeping only without tokens. It is feasible from static signals that already
+exist at gate time:</p>
+<ul>
+  <li><b>Changed files → affected test projects</b> via a maintained folder/project mapping (a change under
+  <code>backend/Features/Pipeline/**</code> selects <code>backend.Tests</code> filtered to
+  <code>Pipeline*</code>). Pure git diff plus a lookup table, zero tokens.</li>
+  <li><b>New test files always run</b> (A-status in the diff).</li>
+  <li><b>Full-suite fallback</b> when the change set spans modules — often the case in a batch, which makes
+  scoping less critical in batch mode than for a single card.</li>
+</ul>
+<p>The pattern is not new: QS-28 ("skip-if-fresh") already skips unchanged review units deterministically via
+hashes. This is the same idea applied to tests.</p>
+
+<h2 id="develop"><span class="no">§6</span>Integrating toward <code>develop</code></h2>
+<p>The open branch question, with a clear trade-off:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Option</th><th>Upside</th><th>Price</th></tr></thead>
+  <tbody>
+    <tr><td><b>A — straight to <code>develop</code></b> (no test branch)</td><td>Simple; <code>develop</code> is always the source of truth.</td><td>The gate stays per-card, so the 84% retry lever is not pulled. Effectively the status quo.</td></tr>
+    <tr><td><b>B — batch on <code>integration/test</code></b>, then FF</td><td>One suite run per batch pulls the throughput lever; red batches keep <code>develop</code> clean.</td><td>Blame assignment on a red batch: which of N cards failed? Needs bisection or single-card fallback.</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="box warn">
+  <h4>The number that decides option B</h4>
+  <p>The bisection case can eat the gain: if a five-card batch goes red, in the worst case you need up to five
+  further individual runs to find the culprit — slower than per-card testing would have been. B's net benefit
+  hinges directly on the <b>batch green rate</b>. High green rate (cards already individually review-green) →
+  B wins clearly; frequent red batches → it loses. This is the one quantity to estimate from existing data
+  before committing to B.</p>
+</div>
+
+<h2 id="recommendation"><span class="no">§7</span>Recommendation and slicing</h2>
+<p><span class="rec stop">Reject</span> &nbsp;<b>LLM-based test selection.</b> Anti-economical — expensive
+tokens to save cheap CPU. Keep only the deterministic diff→project mapping.</p>
+<p><span class="rec go">Build</span> &nbsp;<b>Per-SHA gate cache.</b> Bind the gate result to the tested tree
+SHA; an identical SHA skips the run. Removes most of the redundant re-testing with no architectural change —
+the largest lever for the smallest effort.</p>
+<p><span class="rec wait">Measure first</span> &nbsp;<b>Staging lane + test-integration branch.</b> Build only
+after estimating the batch green rate from existing data.</p>
+<h3>Proposed order</h3>
+<ol>
+  <li><b>Measure.</b> From pipeline data, estimate the batch green rate and the same-SHA re-test rate. Decides whether option B gets built.</li>
+  <li><b>Per-SHA gate cache.</b> Skip re-testing an unchanged tree.</li>
+  <li><b>Deterministic scoping.</b> diff→test-project mapping as a gate filter, zero tokens.</li>
+  <li><b>Staging lane + <code>integration/test</code>.</b> Only on a green light from step 1.</li>
+</ol>
+
+<h2 id="open"><span class="no">§8</span>Open questions</h2>
+<ul>
+  <li><b>Batch green rate</b> — how often are N individually review-green cards test-green together? Blocker for option B.</li>
+  <li><b>Same-SHA re-test rate</b> — how often is exactly the same tree re-validated on a reissue? The ceiling on the cache's benefit; expected high given ~3.65 gate runs per task.</li>
+  <li><b>Scope-mapping upkeep</b> — who keeps the folder→test-project map current? A stale map yields falsely-green gates; consider hanging it on the <code>PipelineSteps</code> config.</li>
+  <li><b>Lock granularity</b> — does the machine-wide lock stay, or become per-<code>integration/test</code>? Finer means more real parallelism but more resource pressure.</li>
+</ul>
+
+<section class="box">
+  <h4>Closing decision <span class="rec wait" style="vertical-align:2px">decision-ready</span></h4>
+  <p>This workbench recommends spawning two feature cards now — the per-SHA gate cache and the deterministic
+  test scoping — and one research card to estimate the batch green rate, which gates whether the staging lane
+  and test-integration branch are built at all. LLM-based test selection is recorded as explicitly rejected.
+  No card is created until an operator confirms through the normal task mutation path.</p>
+</section>
+
+<hr style="border:none;border-top:1px solid var(--line);margin:48px 0 0">
+<p class="dim" style="font-size:12.5px;color:var(--ink-3);margin-top:36px">Evidence and reproduction live in
+the <a href="../../quality/pipeline-time-economy/">Pipeline Time Economy</a> workbench. Snapshot 2026-07-25.</p>
+
+</main>
+</body>
+</html>
