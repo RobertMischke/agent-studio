@@ -1,3 +1,16 @@
+---
+lifecycleSchema: wiki-page-lifecycle/v1
+pageKind: concept
+lifecycleState: in-progress
+editedBy: "Codex / AGT-2137"
+editedAt: 2026-07-21T05:46:33Z
+lifecycleHistory:
+  - state: in-progress
+    editedBy: "Codex / AGT-2137"
+    editedAt: 2026-07-21T05:46:33Z
+    note: "Initial classification: the initial workflow exists; broader progress and compiler refinements remain open."
+---
+
 # Deployment as a first-class citizen
 
 Status: concept and initial workflow implemented, 2026-07-11. The shared

@@ -6,6 +6,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  grid-column: 1 / -1;
 }
 
 .wbinbox {
@@ -22,6 +23,26 @@
   @include m.knowledge-card-icon;
 }
 
+.wbinbox__title {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  flex-wrap: wrap;
+}
+
+.wbinbox__title h4 {
+  margin: 0;
+}
+
+.wbinbox__title > span {
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.66rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .wbinbox__head strong {
   margin-left: auto;
   padding: 0 var(--studio-spacing-2);
@@ -32,6 +53,53 @@
   font-variant-numeric: tabular-nums;
   line-height: 18px;
 }
+
+.wbinbox__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--studio-spacing-3);
+  align-items: start;
+}
+
+.wbinbox__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+}
+
+.wbinbox__group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-height: 22px;
+}
+
+.wbinbox__group-head h5 {
+  margin: 0;
+  color: var(--pwiki-paper-fg, var(--studio-fg));
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.wbinbox__group-head > span:last-child {
+  margin-left: auto;
+  color: var(--pwiki-paper-muted, var(--studio-fg-muted));
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.wbinbox__state-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--pwiki-paper-muted, var(--studio-fg-muted));
+}
+
+.wbinbox__state-dot[data-tone='review'] { background: var(--studio-warn); }
+.wbinbox__state-dot[data-tone='repair'] { background: var(--studio-danger, var(--severity-high)); }
+.wbinbox__state-dot[data-tone='active'] { background: var(--studio-accent-3); }
 
 .wbinbox ul {
   display: flex;
@@ -62,6 +130,18 @@
   background: var(--pwiki-paper-soft, var(--studio-bg-hover));
 }
 
+.wbinbox button[data-tone='review'] {
+  background: color-mix(in srgb, var(--studio-warn) 8%, transparent);
+}
+
+.wbinbox button[data-tone='repair'] {
+  background: color-mix(in srgb, var(--studio-danger, var(--severity-high)) 8%, transparent);
+}
+
+.wbinbox button[data-tone='active'] {
+  background: color-mix(in srgb, var(--studio-accent-3) 8%, transparent);
+}
+
 .wbinbox button:focus-visible {
   outline: 2px solid var(--studio-accent-4-strong);
   outline-offset: 1px;
@@ -81,15 +161,17 @@
   font-size: 0.64rem;
 }
 
-.wbinbox__meta i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--studio-accent-3);
+.wbinbox__kind {
+  padding: 0 var(--studio-spacing-2);
+  border-radius: 4px;
+  background: var(--pwiki-paper-soft, var(--studio-bg-hover));
+  color: var(--pwiki-paper-fg, var(--studio-fg));
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 16px;
+  text-transform: uppercase;
 }
-
-.wbinbox__meta i[data-status='invalid'],
-.wbinbox__meta i[data-status='decision-pending'] { background: var(--studio-warn); }
 
 .wbinbox time { margin-left: auto; }
 
@@ -101,8 +183,11 @@
 }
 
 .wbinbox small {
+  overflow: hidden;
   color: var(--pwiki-paper-muted, var(--studio-fg-muted));
   font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wbinbox p {

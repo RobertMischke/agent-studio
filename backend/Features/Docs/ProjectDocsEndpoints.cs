@@ -133,9 +133,16 @@ public static class ProjectDocsEndpoints
         app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, WorkbenchCatalogueService workbenches, int? feedLimit) =>
         {
             var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
+            // Pulse is the lifecycle overview, so it deliberately includes
+            // settled Workbenches. Explorer keeps its current-only default.
+            var catalogue = workbenches.List(projectName, includeHistory: true);
             return pulse == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(pulse with { Workbenches = workbenches.List(projectName) });
+                : Results.Ok(pulse with
+                {
+                    Workbenches = catalogue,
+                    Lifecycle = ProjectDocsService.MergeWorkbenchLifecycle(pulse.Lifecycle, catalogue),
+                });
         });
 
         // One directory level of the wiki for the folder-overview surface:

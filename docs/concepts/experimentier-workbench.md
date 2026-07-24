@@ -1,3 +1,16 @@
+---
+lifecycleSchema: wiki-page-lifecycle/v1
+pageKind: concept
+lifecycleState: in-progress
+editedBy: "Codex / AGT-2137"
+editedAt: 2026-07-21T05:46:33Z
+lifecycleHistory:
+  - state: in-progress
+    editedBy: "Codex / AGT-2137"
+    editedAt: 2026-07-21T05:46:33Z
+    note: "Initial classification: the read-only slice exists; chat and decision mutations remain open."
+---
+
 # Experiment workbenches
 
 Status: concept and mockup complete, 2026-07-11. The first read-only production
@@ -63,21 +76,32 @@ bounded semantic source without making it scrape arbitrary HTML.
 `workbench.json` is the small query and lifecycle contract. HTML frontmatter is
 not used: YAML before the doctype makes the file invalid HTML, comments are a
 fragile query format, and the existing Wiki companion schema has a different
-purpose. The descriptor is repository content, reviewed and versioned beside
-the experiment.
+purpose. Schema version 2 uses the same `pageKind`, `lifecycleState`,
+`editedBy`, `editedAt`, and `lifecycleHistory` fields as lifecycle-aware
+Markdown pages. The descriptor is the only Workbench lifecycle source and is
+reviewed and versioned beside the experiment.
 
 Example:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "project-state-at-a-glance",
   "title": "Project state at a glance",
   "summary": "Compare compact Explorer signals before choosing one.",
   "entrypoint": "index.html",
-  "status": "active",
+  "pageKind": "workbench",
+  "lifecycleState": "in-progress",
   "phase": "testing",
-  "updatedAt": "2026-07-11T10:30:00Z",
+  "editedBy": "Robert",
+  "editedAt": "2026-07-11T10:30:00Z",
+  "lifecycleHistory": [
+    {
+      "state": "in-progress",
+      "editedBy": "Robert",
+      "editedAt": "2026-07-11T10:30:00Z"
+    }
+  ],
   "sourceTaskKeys": ["AGT-2083"],
   "relatedTaskKeys": ["AGT-2050"],
   "projectUrlIds": ["dev-preview"],
@@ -86,12 +110,12 @@ Example:
 ```
 
 The minimum required fields are `schemaVersion`, stable `id`, `title`,
-`summary`, relative `entrypoint`, `status`, and `updatedAt`. The allowed
+`summary`, relative `entrypoint`, and the shared lifecycle fields. The allowed
 lifecycle values are:
 
 | Field | Values | Meaning |
 |---|---|---|
-| `status` | `active`, `decision-pending`, `decided`, `archived` | The durable lifecycle state. Pending remains current until repaired or completed. |
+| `lifecycleState` | `in-progress`, `review-requested`, `decided`, `done` | The durable state shared with lifecycle-aware Wiki pages. |
 | `phase` | `shaping`, `testing`, `decision-ready` | Optional progress within `active`. |
 | `decision.outcome` | `feature-spawn`, `archive` | The explicit terminal decision. |
 | `decision.state` | `pending`, `failed`, `succeeded` | Recoverable mutation state for a feature decision. |

@@ -1,21 +1,44 @@
-@if (catalogue(); as list) {
-  <article class="wbinbox" data-testid="project-wiki-pulse-workbenches">
+@if (lifecycle(); as lifecycleSet) {
+  <article class="wbinbox" data-testid="project-wiki-pulse-lifecycle">
     <header class="wbinbox__head">
       <span class="wbinbox__icon" aria-hidden="true"><app-studio-icon name="eye" [size]="13" /></span>
-      <h4>Workbenches</h4>
-      <strong>{{ list.count }}</strong>
+      <div class="wbinbox__title">
+        <h4>Concept lifecycle</h4>
+        <span>Designs, concepts, explorations, and Workbenches</span>
+      </div>
+      <strong>{{ lifecycleSet.count }}</strong>
     </header>
-    @if (list.items.length > 0) {
-      <ul>
-        @for (workbench of list.items; track workbench.id) {
-          <li><button type="button" [disabled]="!workbench.valid"
-              [attr.data-testid]="'project-wiki-pulse-workbench-' + workbench.id"
-              (click)="openWorkbench.emit(workbench)">
-            <span class="wbinbox__meta"><i [attr.data-status]="workbench.status"></i>{{ workbench.phase || workbench.status }}<time>{{ relativeTime(workbench.updatedAtUtc) }}</time></span>
-            <b>{{ workbench.title }}</b><small>{{ workbench.error || workbench.summary }}</small>
-          </button></li>
+    @if (lifecycleSet.available && groups().length > 0) {
+      <div class="wbinbox__groups">
+        @for (group of groups(); track group.state) {
+          <section class="wbinbox__group" [attr.data-state]="group.state"
+                   [attr.data-testid]="'project-wiki-lifecycle-group-' + group.state">
+            <div class="wbinbox__group-head">
+              <span class="wbinbox__state-dot" [attr.data-tone]="stateTone(group.state)" aria-hidden="true"></span>
+              <h5>{{ group.label }}</h5>
+              <span>{{ group.items.length }}</span>
+            </div>
+            <ul>
+              @for (item of group.items; track item.pageKind + ':' + item.relPath) {
+                <li><button type="button" [disabled]="!item.valid"
+                    [attr.data-tone]="stateTone(group.state)"
+                    [attr.data-testid]="'project-wiki-lifecycle-open-' + item.relPath"
+                    (click)="open(item)">
+                  <span class="wbinbox__meta">
+                    <span class="wbinbox__kind">{{ item.pageKind }}</span>
+                    @if (item.editedBy) { <span>{{ item.editedBy }}</span> }
+                    @if (item.editedAtUtc) { <time>{{ relativeTime(item.editedAtUtc) }}</time> }
+                  </span>
+                  <b>{{ item.title }}</b>
+                  <small>{{ item.error || item.relPath }}</small>
+                </button></li>
+              }
+            </ul>
+          </section>
         }
-      </ul>
-    } @else { <p><app-studio-icon name="check" [size]="16" /> No open Workbench topics.</p> }
+      </div>
+    } @else {
+      <p><app-studio-icon name="check" [size]="16" />{{ lifecycleSet.reason || 'No lifecycle-aware pages yet.' }}</p>
+    }
   </article>
 }
