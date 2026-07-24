@@ -1,0 +1,47 @@
+@if (health(); as h) {
+  <section class="ph"
+           [class.ph--alarm]="h.status === 'alarm'"
+           [attr.data-status]="h.status"
+           data-testid="pipeline-health">
+    <header class="ph__head">
+      <span class="ph__title"><i aria-hidden="true"></i>Pipeline health</span>
+      <span class="ph__state">{{ h.status === 'alarm' ? 'Attention needed' : (h.status === 'running' ? 'Gate running' : 'Healthy') }}</span>
+    </header>
+    <div class="ph__grid">
+      <section class="ph__metric" data-testid="pipeline-health-gate">
+        <span class="ph__label">Machine gate</span>
+        @if (h.activeGate; as gate) {
+          <strong>{{ gate.isHanging ? 'Gate hanging since ' : 'Running for ' }}{{ gate.elapsedMinutes }} min</strong>
+          <small>{{ gate.jobId }} · budget {{ gate.budgetMinutes }} min</small>
+        } @else {
+          <strong>Idle</strong>
+          <small>No acquired gate without completion</small>
+        }
+      </section>
+      <section class="ph__metric" data-testid="pipeline-health-fingerprint">
+        <span class="ph__label">Failure fingerprint</span>
+        @if (h.fingerprint; as fp) {
+          <strong>{{ fp.consecutiveFailures }} / {{ fp.threshold }} consecutive</strong>
+          <small>{{ fp.isSystemic ? 'Systemic gate problem' : fp.fingerprint }}</small>
+        } @else {
+          <strong>No repeating failure</strong>
+          <small>Sequence resets after a passing gate</small>
+        }
+      </section>
+      <section class="ph__metric ph__metric--lanes" data-testid="pipeline-health-drain">
+        <span class="ph__label">Lane drain · completed/hour</span>
+        <div class="ph__drain-list">
+          @for (lane of h.lanes; track lane.lane) {
+            <span class="ph__drain"
+                  [class.ph__drain--alarm]="lane.isStalled"
+                  [attr.data-lane]="lane.lane">
+              <span>{{ laneLabel(lane.lane) }}</span>
+              <strong>{{ drainRate(lane) }}</strong>
+              <small>{{ lane.queueCount }} queued</small>
+            </span>
+          }
+        </div>
+      </section>
+    </div>
+  </section>
+}

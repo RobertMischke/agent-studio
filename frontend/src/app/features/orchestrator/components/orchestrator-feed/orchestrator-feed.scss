@@ -217,6 +217,10 @@
   background: var(--studio-bg-selected);
   border-color: var(--studio-border-strong);
 }
+.orch-feed__entry--alert {
+  background: color-mix(in srgb, var(--severity-high) 11%, transparent);
+  border-color: color-mix(in srgb, var(--severity-high) 28%, var(--studio-border));
+}
 .orch-feed__entry--decision {
   background: color-mix(in srgb, var(--severity-pending) 7%, transparent);
 }

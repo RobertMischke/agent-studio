@@ -2958,6 +2958,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             AttemptChainId = subject.AttemptChainId,
             SubjectRef = subject.SubjectRef,
             Project = entry.Name,
+            WatchPath = entry.Path,
             JobId = current.Id,
             Lane = current.State,
             TestExecution = settings?.TestExecution,

@@ -18,7 +18,7 @@ export interface OrchestratorLogEntry {
   project?: string;
   watchPath?: string;
   ts: string;
-  kind: 'decision' | 'action' | 'observation' | 'intervention';
+  kind: 'alert' | 'decision' | 'action' | 'observation' | 'intervention';
   topic: string;
   summary: string;
   reasoning?: string | null;

@@ -36,10 +36,11 @@ public sealed record BuildTestGateRequest(
     bool RequireExactSubject = true)
 {
     public string GateId { get; init; } = PipelineCatalogue.BuildTestGateStepId;
+    public string? Project { get; init; }
+    public string? WatchPath { get; init; }
+    public string? JobId { get; init; }
     public string? AttemptChainId { get; init; }
     public string? SubjectRef { get; init; }
-    public string? Project { get; init; }
-    public string? JobId { get; init; }
     public string Lane { get; init; } = TaskStates.AutoReview;
     public string? RequiredTestLevel { get; init; }
     public TestExecutionPolicy? TestExecution { get; init; }
@@ -178,15 +179,18 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     private readonly ILogger<BuildTestGateRunner> _logger;
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly ITestSelectionAdvisor? _testSelectionAdvisor;
+    private readonly IPipelineHealthSensor? _health;
 
     public BuildTestGateRunner(
         ILogger<BuildTestGateRunner> logger,
         ILoadThrottleGate? loadThrottle = null,
-        ITestSelectionAdvisor? testSelectionAdvisor = null)
+        ITestSelectionAdvisor? testSelectionAdvisor = null,
+        IPipelineHealthSensor? health = null)
     {
         _logger = logger;
         _loadThrottle = loadThrottle;
         _testSelectionAdvisor = testSelectionAdvisor;
+        _health = health;
     }
 
     public async Task<BuildTestGateResult> RunAsync(
@@ -228,6 +232,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         string? testedSha = null;
         long fallbackQueueWaitMs = 0;
         var fallbackCollision = false;
+        DateTime? acquiredAtUtc = null;
         try
         {
             // ssh-gate bridge (AGT-2222 tranche 2): try the remote host first.
@@ -278,12 +283,21 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 else
                 {
                     machineLease = acquisition.Lease;
+                    acquiredAtUtc = DateTime.UtcNow;
                     _logger.LogInformation(
                         "build_test_gate_acquired gate_run_id={GateRunId} repository={Repository} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
                         gateRunId, repositoryPath, machineLease.CollisionDetected, machineLease.QueueWaitMs);
+                    if (HasHealthContext(request))
+                    {
+                        ReportGateAcquired(new PipelineGateContext(
+                            gateRunId,
+                            request.Project!,
+                            request.WatchPath!,
+                            request.JobId!,
+                            acquiredAtUtc.Value));
+                    }
                 }
             }
-
             if (completed is null && request.RequireExactSubject)
             {
                 var prepared = await PrepareExactWorkspaceAsync(
@@ -404,6 +418,17 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 completed?.FailureFingerprint ?? "none",
                 machineLease?.CollisionDetected ?? false, machineLease?.QueueWaitMs ?? 0);
             machineLease?.Dispose();
+            machineLease = null;
+            if (acquiredAtUtc.HasValue && HasHealthContext(request))
+            {
+                ReportGateCompleted(new PipelineGateCompletion(
+                    gateRunId,
+                    request.Project!,
+                    request.WatchPath!,
+                    request.JobId!,
+                    completedAt.UtcDateTime,
+                    completed?.FailureFingerprint));
+            }
         }
     }
 
@@ -612,6 +637,45 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     }
 
     // =============== end ssh-gate bridge (AGT-2222 tranche 2) ===============
+
+    private static bool HasHealthContext(BuildTestGateRequest request)
+        => !string.IsNullOrWhiteSpace(request.Project)
+           && !string.IsNullOrWhiteSpace(request.WatchPath)
+           && !string.IsNullOrWhiteSpace(request.JobId);
+
+    private void ReportGateAcquired(PipelineGateContext gate)
+    {
+        try
+        {
+            _health?.GateAcquired(gate);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "build_test_gate_health_observer_failed phase=acquired gate_run_id={GateRunId} project={Project} job_id={JobId}",
+                gate.GateRunId,
+                gate.Project,
+                gate.JobId);
+        }
+    }
+
+    private void ReportGateCompleted(PipelineGateCompletion completion)
+    {
+        try
+        {
+            _health?.GateCompleted(completion);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "build_test_gate_health_observer_failed phase=completed gate_run_id={GateRunId} project={Project} job_id={JobId}",
+                completion.GateRunId,
+                completion.Project,
+                completion.JobId);
+        }
+    }
 
     private async Task<BuildTestGateResult> RunCommandsAsync(
         string repositoryPath,
