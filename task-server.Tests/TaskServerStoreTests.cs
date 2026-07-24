@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using AgentStudio.TaskServer;
 using AgentStudio.TaskServer.Contracts;
 using Microsoft.Extensions.Options;
@@ -46,6 +47,8 @@ public sealed class TaskServerStoreTests
 
         Assert.Equal("claimed", claim.Status);
         Assert.NotNull(claim.Lease);
+        var run = claim.Run!;
+        var lease = claim.Lease!;
 
         var restarted = Store(temp.Path);
         await restarted.InitializeAsync();
@@ -57,20 +60,38 @@ public sealed class TaskServerStoreTests
         Assert.Equal("empty", contender.Status);
 
         var stale = await Assert.ThrowsAsync<TaskServerConflictException>(() => restarted.IngestEventAsync(
-            claim.Run!.RunId,
-            new EventIngestRequest("evt-stale", "test", "{}", "stale-1", claim.Lease!.Fence),
+            run.RunId,
+            new EventIngestRequest("evt-stale", "test", "{}", "stale-1", lease.Fence),
             "runner-a",
             default));
         Assert.Equal("lease-not-active", stale.Code);
 
+        var staleDecision = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
+            run.RunId,
+            ExecutionAttemptKind.Coding,
+            ExitCode: -1,
+            StdErr: "provider process terminated during Task Server restart"));
+        var staleCompletion = await Assert.ThrowsAsync<TaskServerConflictException>(() => restarted.CompleteRunAsync(
+            run.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                "instance-a",
+                lease.LeaseId,
+                lease.Fence,
+                staleDecision.Outcome.ToString(),
+                OutcomeDecision: staleDecision),
+            "runner-a",
+            default));
+        Assert.Equal("lease-not-active", staleCompletion.Code);
+
         await restarted.ResolveUnknownAttemptAsync(
-            claim.Run!.RunId,
+            run.RunId,
             new ResolveUnknownAttemptRequest("systemd unit is inactive and the cgroup is empty"),
             "operator",
             default);
         var replacement = await restarted.ClaimAsync(new ClaimRequest("runner-b", "instance-b"), "test", default);
         Assert.Equal("claimed", replacement.Status);
-        Assert.True(replacement.Lease!.Fence > claim.Lease.Fence);
+        Assert.True(replacement.Lease!.Fence > lease.Fence);
         Assert.Equal(task.TaskId, replacement.Task!.TaskId);
     }
 
@@ -263,6 +284,100 @@ public sealed class TaskServerStoreTests
         var audit = await store.ListAuditAsync(0, default);
         Assert.Single(audit, record => record.Action == "event.ingested");
         Assert.Single(audit, record => record.Action == "artifact.ingested");
+    }
+
+    [Fact]
+    public async Task Typed_outcome_completion_is_fenced_idempotent_and_survives_restart_with_raw_facts()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+        var run = claim.Run!;
+        var lease = claim.Lease!;
+
+        var wrongIdentity = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
+            "run-other",
+            ExecutionAttemptKind.Coding,
+            StdErr: "HTTP 401 Missing bearer authentication",
+            ExitCode: 1,
+            DurableOutputState: DurableOutputState.Published,
+            DurableOutputReference: "refs/heads/runner/test"));
+        var identityConflict = await Assert.ThrowsAsync<TaskServerConflictException>(() => store.CompleteRunAsync(
+            run.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                "instance-a",
+                lease.LeaseId,
+                lease.Fence,
+                ExecutionOutcomeKind.AuthenticationFailure.ToString(),
+                OutcomeDecision: wrongIdentity),
+            "runner-a",
+            default));
+        Assert.Equal("attempt-identity-mismatch", identityConflict.Code);
+
+        var decision = ExecutionOutcomeAdapter.Classify(wrongIdentity.RawFacts with { AttemptId = run.RunId });
+        var outcomeConflict = await Assert.ThrowsAsync<TaskServerConflictException>(() => store.CompleteRunAsync(
+            run.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                "instance-a",
+                lease.LeaseId,
+                lease.Fence,
+                ExecutionOutcomeKind.SuccessfulCompletion.ToString(),
+                OutcomeDecision: decision),
+            "runner-a",
+            default));
+        Assert.Equal("outcome-decision-mismatch", outcomeConflict.Code);
+
+        var request = new CompleteRunRequest(
+            "runner-a",
+            "instance-a",
+            lease.LeaseId,
+            lease.Fence,
+            decision.Outcome.ToString(),
+            "provider capability is unavailable",
+            decision);
+
+        var completed = await store.CompleteRunAsync(run.RunId, request, "runner-a", default);
+        var replay = await store.CompleteRunAsync(run.RunId, request, "runner-a", default);
+        var conflictingReplay = await Assert.ThrowsAsync<TaskServerConflictException>(() => store.CompleteRunAsync(
+            run.RunId,
+            request with
+            {
+                OutcomeDecision = ExecutionOutcomeAdapter.Classify(
+                    decision.RawFacts with { StdErr = "HTTP 401 different replay facts" }),
+            },
+            "runner-a",
+            default));
+
+        Assert.Equal(ExecutionOutcomeKind.AuthenticationFailure.ToString(), completed.Status);
+        Assert.Equal(completed, replay);
+        Assert.Equal("completion-conflict", conflictingReplay.Code);
+        var firstEvents = await store.ListEventsAsync(run.RunId, 0, default);
+        var classified = Assert.Single(firstEvents, item => item.Kind == "execution.outcome.classified");
+        using (var payload = JsonDocument.Parse(classified.PayloadJson))
+        {
+            Assert.Equal(ExecutionOutcomeAdapter.Version, payload.RootElement.GetProperty("classifierVersion").GetString());
+            Assert.Equal("authenticationFailure", payload.RootElement.GetProperty("outcome").GetString());
+            Assert.Equal("waitForCapabilityRecovery", payload.RootElement.GetProperty("recoveryAction").GetString());
+            Assert.Equal("high", payload.RootElement.GetProperty("confidence").GetString());
+            Assert.Equal(
+                "HTTP 401 Missing bearer authentication",
+                payload.RootElement.GetProperty("rawFacts").GetProperty("stdErr").GetString());
+        }
+
+        var restarted = Store(temp.Path);
+        await restarted.InitializeAsync();
+        var replayedEvents = await restarted.ListEventsAsync(run.RunId, 0, default);
+        Assert.Equal(classified, Assert.Single(replayedEvents, item => item.Kind == "execution.outcome.classified"));
+        var timeline = Assert.Single(await restarted.ListAttemptsAsync(project.ProjectId, task.TaskKey, default));
+        Assert.Equal(run.RunId, timeline.Run.RunId);
+        Assert.Equal(ExecutionOutcomeKind.AuthenticationFailure, timeline.OutcomeDecision!.Outcome);
+        Assert.Equal(ExecutionRecoveryAction.WaitForCapabilityRecovery, timeline.OutcomeDecision.RecoveryAction);
+        Assert.Equal("HTTP 401 Missing bearer authentication", timeline.OutcomeDecision.RawFacts.StdErr);
     }
 
     [Fact]

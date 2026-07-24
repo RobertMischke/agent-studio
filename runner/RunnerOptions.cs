@@ -72,6 +72,13 @@ public sealed class RunnerOptions
     /// <summary>Extra CLI arguments inserted before the prompt is streamed on stdin (space-split, shell-unaware).</summary>
     public required string CliArgs { get; init; }
 
+    /// <summary>
+    /// Optional provider-specific arguments for resuming a captured session.
+    /// The value must contain <c>{sessionId}</c>. When absent, the provider is
+    /// treated as not supporting same-session recovery on this host.
+    /// </summary>
+    public string? CliResumeArgs { get; init; }
+
     /// <summary>Lease TTL requested on acquire/renew; the server clamps to its own bounds.</summary>
     public int TtlSeconds { get; init; }
 
@@ -167,6 +174,9 @@ public sealed class RunnerOptions
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),
             CliArgs = Val("cli-args", "RUNNER_CLI_ARGS", "-p"),
+            CliResumeArgs = Val("cli-resume-args", "RUNNER_CLI_RESUME_ARGS").Trim() is { Length: > 0 } resumeArgs
+                ? resumeArgs
+                : null,
             TtlSeconds = overrides.TryGetValue("ttl", out var ttl) && int.TryParse(ttl, out var ttlV) ? ttlV : EnvInt("RUNNER_TTL_SECONDS", 120),
             HeartbeatSeconds = EnvInt("RUNNER_HEARTBEAT_SECONDS", 30),
             RunTimeoutSeconds = EnvInt("RUNNER_RUN_TIMEOUT_SECONDS", 3600),
@@ -190,6 +200,9 @@ public sealed class RunnerOptions
                 Path.GetFullPath(options.ReviewWorkDir),
                 StringComparison.Ordinal))
             throw new ArgumentException("Review and coding workspace roots must be different.");
+        if (options.CliResumeArgs is not null
+            && !options.CliResumeArgs.Contains("{sessionId}", StringComparison.Ordinal))
+            throw new ArgumentException("RUNNER_CLI_RESUME_ARGS must contain the {sessionId} placeholder.");
 
         var taskKey = positional ?? (overrides.TryGetValue("task", out var tk) ? tk : null);
         return (options, string.IsNullOrWhiteSpace(taskKey) ? null : taskKey.Trim(), once, help);

@@ -303,7 +303,8 @@ public sealed class TaskServerClient : IDisposable
             claim.Lease.LeaseId,
             claim.Lease.Fence,
             claim.Lease.AcquiredAt,
-            claim.Lease.ExpiresAt);
+            claim.Lease.ExpiresAt,
+            claim.Run.RunId);
         _v1Leases[claim.Task.TaskKey] = (claim.Run.RunId, legacyLease);
         if (!string.IsNullOrWhiteSpace(claim.Task.Body)) _v1TaskBodies[claim.Task.TaskKey] = claim.Task.Body;
         return new RunnerClaimResponse(
@@ -485,6 +486,7 @@ public sealed class TaskServerClient : IDisposable
     {
         if (!_useV1) return await PostJsonAsync<RemoteRunCompletionRequest, RemoteRunCompletionResponse>("/api/runner/completion", req, ct);
         var authority = V1Authority(req.TaskKey);
+        var typedOutcome = req.OutcomeDecision?.Outcome.ToString() ?? req.Outcome;
         _ = await PostJsonAsync<Contract.CompleteRunRequest, Contract.RunDto>(
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/completion",
             new Contract.CompleteRunRequest(
@@ -492,12 +494,13 @@ public sealed class TaskServerClient : IDisposable
                 RunnerInstanceId,
                 req.LeaseId,
                 req.FencingToken,
-                req.Outcome,
-                req.Reason),
+                typedOutcome,
+                req.Reason,
+                OutcomeDecision: req.OutcomeDecision),
             ct);
         _v1Leases.TryRemove(req.TaskKey, out _);
         _v1TaskBodies.TryRemove(req.TaskKey, out _);
-        return new RemoteRunCompletionResponse(req.TaskKey, req.Outcome, "4-auto-review");
+        return new RemoteRunCompletionResponse(req.TaskKey, typedOutcome, "4-auto-review");
     }
 
     public async Task<ResultHandoffAck> AcknowledgeResultHandoffAsync(
@@ -575,7 +578,8 @@ public sealed class TaskServerClient : IDisposable
                         payload.Summary,
                         payload.ResultEnvelopeDigest,
                         item.IdempotencyKey,
-                        item.Sequence),
+                        item.Sequence,
+                        payload.OutcomeDecision),
                     ct);
                 _v1Leases.TryRemove(authority.TaskKey, out _);
                 _v1TaskBodies.TryRemove(authority.TaskKey, out _);

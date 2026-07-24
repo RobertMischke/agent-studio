@@ -181,7 +181,8 @@ public sealed record RemoteRunCompletionRequest(
     string? AttemptId = null,
     long? AuthorityEpoch = null,
     string? IdempotencyKey = null,
-    IReadOnlyList<string>? GateItems = null);
+    IReadOnlyList<string>? GateItems = null,
+    AgentStudio.TaskServer.Contracts.ExecutionOutcomeDecision? OutcomeDecision = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

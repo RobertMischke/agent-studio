@@ -50,6 +50,17 @@ public class RunnerOptionsTests
     }
 
     [Fact]
+    public void Provider_specific_resume_args_require_and_preserve_session_placeholder()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse(
+            ["--cli-resume-args", "exec resume {sessionId} --json"]);
+
+        Assert.Equal("exec resume {sessionId} --json", options.CliResumeArgs);
+        Assert.Throws<ArgumentException>(() => RunnerOptions.Parse(
+            ["--cli-resume-args", "exec resume fixed-session --json"]));
+    }
+
+    [Fact]
     public void Existing_client_identity_can_be_pinned_from_the_cli()
     {
         var (options, _, _, _) = RunnerOptions.Parse(["--client-id", "  agent-runner-01  "]);

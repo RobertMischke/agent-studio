@@ -2,6 +2,52 @@
 
 The runner classifies a completed CLI invocation once, then every consumer reads that same classification.
 
+## Remote execution outcome adapter
+
+Remote coding and Remote review use the shared
+`TaskServer.Contracts.ExecutionOutcomeAdapter` (`execution-outcome/v1`). Its
+input is the complete immutable fact envelope: attempt kind and id, provider
+terminal event, raw final assistant output, bounded stdout and stderr, exit code
+or signal, timeout, OOM, cancellation, host shutdown, lease state, transport
+state, provider session state, and durable output state. A terminal sentinel and
+an exit code are evidence, not independent routing authorities.
+
+The adapter emits a typed outcome, confidence or ambiguity, and one recovery
+action. Authentication, quota, invalid model/configuration, launch failure, CLI
+crash, timeout, OOM, transport loss, host shutdown, lease loss, invalid session,
+explicit blocker, successful completion, and protocol-inconclusive are distinct.
+`ProtocolInconclusive` remains visible and never aliases a product defect.
+
+Review infrastructure recovery is constrained by an immutable
+`RepositoryIdentity + ResultSha|ArtifactDigest` subject and can only select
+`RetryReviewAttemptOnSameSubject`. It never invokes the coding model. Coding can
+select one same-session resume when the runner has provider-specific resume
+arguments and a captured session id. A rejected session can select one fresh
+attempt from durable salvage; exhausted chains terminate visibly. Infrastructure
+outcomes set every product-defect, completion, and coding-rework budget flag to
+false.
+
+Provider terminal frames are normalized before classification. In particular, a
+Claude-style `type=result` frame with `is_error=true`, an `error_*` subtype, or
+an error status is failure evidence, never provider completion. When several
+terminal frames are present, the last terminal state wins. A session rejected
+by the provider cannot select `ResumeSameSession` again.
+
+Fresh-attempt recovery requires a published salvage reference whose
+durable state is `Published` or `Acknowledged`. A host-local worktree path is
+diagnostic evidence only and cannot authorize cross-attempt recovery. The Task
+Server rejects a completion whose legacy outcome string contradicts the typed
+decision, so event replay, run status, and routing cannot split.
+
+Protocol v1 persists the whole decision as an idempotent, fenced
+`execution.outcome.classified` event before completing the run. The event is the
+Task Server API and timeline source for raw process facts, classifier version,
+confidence/ambiguity, recovery action, and RunAttempt or ReviewAttempt identity.
+Completion retries replay the same event and outcome; a mismatched attempt id,
+payload, or fence fails closed. Task detail consumers read the ordered projection
+from `GET /api/v1/projects/{projectId}/tasks/{taskIdentity}/attempts`; direct
+event replay remains available from `GET /api/v1/runs/{runId}/events`.
+
 ## Contract
 
 `TerminalRunOutcomeClassifier` maps the deterministic agent outcome plus process status to:

@@ -68,4 +68,5 @@ public sealed record CompleteRunRequest(
     string? Summary = null,
     string? ResultEnvelopeDigest = null,
     string? IdempotencyKey = null,
-    long? Sequence = null);
+    long? Sequence = null,
+    ExecutionOutcomeDecision? OutcomeDecision = null);

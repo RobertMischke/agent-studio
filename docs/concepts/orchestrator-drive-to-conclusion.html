@@ -914,6 +914,29 @@
             commits and proves that both, but not an unrelated canonical HEAD, reach the grade prompt.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2185</code><br><span class="small">generic Remote Unknown and exit-only recovery<br>(replays AGT-2070 and AGT-2148)</span></td>
+          <td>
+            Remote coding collapsed provider failures, missing sentinels, timeout, shutdown, and successful zero exits into
+            the same sentinel-only <code>Unknown</code>. Review retry precedent used a separate exit/empty-output rule, so
+            neither path exposed one recovery contract or immutable attempt identity.
+          </td>
+          <td>
+            <code>RemoteTaskRunner</code> scanned stdout only after process exit. Provider events, raw final output, stderr,
+            signal, timeout/OOM, cancellation, host, lease, transport, session, and durable-output facts were not classified
+            together, and the Task Server completion stored no classifier decision.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> shared classifier <code>execution-outcome/v1</code> now emits typed outcome,
+            confidence/ambiguity, and a bounded recovery action for Coding or ReviewAttempt. A supported coding session resumes
+            at most once; invalid-session salvage fallback is also bounded once. Review infrastructure retry stays on the same
+            repository plus result SHA/digest and cannot invoke coding. Protocol v1 persists the raw decision as an idempotent
+            fenced <code>execution.outcome.classified</code> event; inconclusive remains explicit. Provider error-result frames
+            cannot masquerade as completion, an invalid provider session cannot be resumed again, and only published or
+            acknowledged salvage can authorize a fresh attempt.
+          </td>
+        </tr>
       </tbody>
     </table>
 
