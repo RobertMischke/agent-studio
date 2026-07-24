@@ -2,7 +2,7 @@
   "relatedTasks": [
     {
       "key": "AGT-2182",
-      "title": "Remote attempt authority: run and review fencing (reconstruction in flight)",
+      "title": "P0 Remote attempt authority: persisted RunAttempt and ReviewAttempt with restart-safe fencing",
       "linkedAt": "2026-07-23T18:11:52.809Z",
       "source": "manual"
     },
@@ -40,6 +40,18 @@
       "key": "AGT-2229",
       "title": "Host orchestrator instance: claimable remote steps",
       "linkedAt": "2026-07-23T18:11:52.809Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2222",
+      "title": "Post-Processing parallel, remote-fähig, zeitnah (T1+T2 delivered)",
+      "linkedAt": "2026-07-24T00:00:00.000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2260",
+      "title": "Operator requeue authority and review epoch",
+      "linkedAt": "2026-07-24T00:00:00.000Z",
       "source": "manual"
     }
   ]

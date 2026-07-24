@@ -62,8 +62,8 @@
 
 <header class="page">
   <p class="kicker">Härtung der verteilten Ausführung · Unterseite</p>
-  <h1>Historie: Probleme &amp; Maßnahmen</h1>
-  <p class="lede">Die kanonische Chronik aller Vorfälle, ihrer Wurzeln und der Gegenmaßnahmen —
+  <h1>Historie der Probleme und Maßnahmen</h1>
+  <p class="lede">Die kanonische Chronik der Vorfälle, Ursachen und Maßnahmen
   von AGT-1917 bis heute. Hauptseite: <code>index.html</code>.</p>
 </header>
 
@@ -82,11 +82,11 @@
     <tr><td><b>Arbeitsverlust</b></td><td>Phantom-Welle, Teardown-Vernichtung</td>
         <td><span class="pill done">geschlossen</span> verified-push-before-completion, Worktree bleibt bei Fehler</td></tr>
     <tr><td><b>Falscher Review-Scope</b></td><td>Grade D auf leeren Diffs; divergente Runner-Lineage (AGT-2177, 15× Grade D)</td>
-        <td><span class="pill part">teilweise</span> Reconciliation erledigt; strukturell erst mit Result-SHA-Vertrag (Phase 1) — Review muss gegen Task-Branch-Tip diffen</td></tr>
+        <td><span class="pill part">teilweise</span> Reconciliation und Epochen-Fix aktiv; strukturell offen bis AGT-2183/2184 den Review an <code>baseSha</code>/<code>resultSha</code> binden</td></tr>
     <tr><td><b>Lost-Update / Races</b></td><td>DeleteJob vs. Move; Salvage-Kontamination</td>
-        <td><span class="pill part">teilweise</span> DeleteJob-Fix gemergt; Attempt-Fencing (AGT-2182) ausstehend</td></tr>
+        <td><span class="pill part">teilweise</span> DeleteJob-Fix und Attempt-Fencing (AGT-2182) geliefert; Acquire-to-Lane-Crash-Fenster offen</td></tr>
     <tr><td><b>Unhermetische Gates</b></td><td>Watcher-/Timing-Flakes, Logger-Freeze</td>
-        <td><span class="pill part">teilweise</span> 7 Blocker gefixt; Hermetik-Umbau (Phase 2) ausstehend</td></tr>
+        <td><span class="pill part">teilweise</span> SSH-Gate-Brücke mit exakter Subjekt-SHA live; AGT-2229 und Testdisziplin offen</td></tr>
     <tr><td><b>Unbewachte Baseline</b></td><td>7 rote Tests unbemerkt, Konfliktmarker committet</td>
         <td><span class="pill open">offen</span> Nightly + Guards (Phase 3/4) noch nicht eingerichtet</td></tr>
     <tr><td><b>Stumme Staus</b></td><td>Eskalations-Berg, Steer 4 Tage, Phase-Wedge</td>
@@ -94,7 +94,7 @@
     <tr><td><b>Unvalidierte Registry-Writes</b></td><td>PROJ-017-Korruption</td>
         <td><span class="pill open">offen</span> Validierung + Bereinigung ausstehend</td></tr>
     <tr><td><b>Zombie-Worktrees / External-Completion-Loop</b></td><td>AGT-2155: gestrandeter Host-Worktree blockiert Salvage, Requeue wiederholt den Zyklus; Zombie-Leases nach Daemon-Neustart (AGT-2182/2194/2198): Lease-Adoption ohne Prozess-Verifikation, 8h Stillstand trotz „gesundem“ Heartbeat</td>
-        <td><span class="pill part">teilweise</span> Einzelfall gesichert + rekonstruiert (2177-Muster); kein automatischer Zombie-Worktree-Check; Lease-Adoption verifiziert Prozess-Existenz nicht (Fix ausstehend, verwandt AGT-2182-Fencing)</td></tr>
+        <td><span class="pill part">teilweise</span> Einzelfall rekonstruiert; Fleet-Pacer bricht prozesslose Leases; AGT-2182-Fencing geliefert; automatischer Zombie-Worktree-Check und Crash-Sichtbarkeit offen</td></tr>
     <tr><td><b>Fehlende Datensicherung</b></td><td>snap.sh deckte neues Per-Projekt-Worktree-Layout nicht ab; Platte 91 % voll</td>
         <td><span class="pill done">geschlossen</span> snap.sh deckt beide Layouts + Retention (20.07.); 374 GB → 1,1 GB, Platte 6 %</td></tr>
   </tbody>
@@ -102,8 +102,8 @@
 
 <h2>Chronik</h2>
 
-<div class="entry">
-  <header><h3>AGT-1917: Die Out-of-band-„Leiche“</h3><span class="date">07.–08.07.2026</span></header>
+<div class="entry" id="incident-external-completion">
+  <header><h3>AGT-1917: Externe Lieferung ohne Abschlusszustand</h3><span class="date">07.–08.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd>Arbeit wurde außerhalb des Runners erledigt und committet, aber die Karte blieb
       im Zustand „escalated / no summary“, <code>lifecycle.json</code> hing in
@@ -118,7 +118,7 @@
   </dl>
 </div>
 
-<div class="entry">
+<div class="entry" id="incident-api-identity">
   <header><h3>Pflicht-Identität für API-Mutationen</h3><span class="date">10.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd>Board-Mutationen ohne Absender-Identität — nicht zuordenbar, nicht verweigerbar.</dd>
@@ -128,8 +128,8 @@
   </dl>
 </div>
 
-<div class="entry">
-  <header><h3>Die Phantom-Welle</h3><span class="date">11.07.2026, abends</span></header>
+<div class="entry" id="incident-phantom-wave">
+  <header><h3>Fehlende Remote-Commits</h3><span class="date">11.07.2026, abends</span></header>
   <dl>
     <dt>Problem</dt><dd>~29 Karten der Abendwelle als „done“ gemeldet, aber auf origin kam kein einziger
       Commit an. xhigh-Compute-Arbeit unwiederbringlich zerstört (kein dangling commit auffindbar).</dd>
@@ -153,8 +153,8 @@
   </dl>
 </div>
 
-<div class="entry">
-  <header><h3>Gate-Test-Stufe wird Falsch-Eskalations-Fabrik</h3><span class="date">12.07.2026</span></header>
+<div class="entry" id="incident-gate-timeout">
+  <header><h3>Gate-Timeouts und maschinenabhängige Tests</h3><span class="date">12.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd>Mit dem Nacht-Deploy bekamen Karten-Gates eine Test-Stufe — und vier latente
       Rot-Quellen (Namespace-Guard, monatslatente Fixture, Label-Drift, Live-Checkout-/Perf-Polizei)
@@ -171,8 +171,8 @@
   </dl>
 </div>
 
-<div class="entry">
-  <header><h3>Rescue der Phantom-Charge · QS-15-Wedge · Steer ohne Timeout</h3><span class="date">13.07.2026</span></header>
+<div class="entry" id="incident-run-wedge">
+  <header><h3>Rescue, QS-15-Phasenstau und Steer ohne Timeout</h3><span class="date">13.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd>Die 13.07.-Charge musste manuell gerettet werden; QS-15 blieb mit
       <code>missing-terminal-sentinel</code> vier Tage in <code>post-processing-running</code> hängen;
@@ -199,8 +199,8 @@
   </dl>
 </div>
 
-<div class="entry">
-  <header><h3>Die Grade-D-Welle: Salvage nie integriert</h3><span class="date">17.07.2026, 20:03–21:52</span></header>
+<div class="entry" id="incident-grade-d">
+  <header><h3>Grade-D-Eskalationen durch fehlende Salvage-Integration</h3><span class="date">17.07.2026, 20:03–21:52</span></header>
   <dl>
     <dt>Problem</dt><dd>Auto-Review eskalierte 17 Karten mit Grade D — „the claimed implementation
       exists only on an external salvage branch“. Die Reviews waren korrekt: die Arbeit lag auf
@@ -219,7 +219,7 @@
   </dl>
 </div>
 
-<div class="entry">
+<div class="entry" id="incident-gate-blockers">
   <header><h3>Sieben Gate-Blocker auf develop</h3><span class="date">17.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd>Die Testsuite auf develop war siebenfach rot bzw. flaky — jede Karte fiel
@@ -239,7 +239,7 @@
   </dl>
 </div>
 
-<div class="entry">
+<div class="entry" id="incident-registry">
   <header><h3>Korrupte Registry-Registrierung PROJ-017</h3><span class="date">entdeckt 17.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd>Doppelte „Quality Studio“-Registrierung PROJ-017 (QS2) mit Pfad
@@ -253,7 +253,7 @@
   </dl>
 </div>
 
-<div class="entry">
+<div class="entry" id="incident-cross-contamination">
   <header><h3>Kreuzkontaminierte Salvage-Branches</h3><span class="date">entdeckt 17.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd><code>runner/…/AGT-2191</code> enthielt nahezu das komplette Werk von AGT-2108 —
@@ -263,7 +263,8 @@
       einer autoritativen Basis.</dd>
     <dt>Maßnahme</dt><dd>AGT-2177: Pickup materialisiert eine explizit gefetchte Basis-SHA
       (<code>worktree add … &lt;sha&gt;</code>); Divergenz → deterministische Collision-Refs, nie Force-Push.</dd>
-    <dt>Status</dt><dd><span class="pill queued">AGT-2177 reconciled + requeued</span></dd>
+    <dt>Status</dt><dd><span class="pill done">gelöst</span>: Seit 11.07. wurde keine neue
+      Kreuzkontamination beobachtet; alte Salvage-Branches werden beim Re-Cut bereinigt.</dd>
   </dl>
 </div>
 
@@ -297,8 +298,9 @@
   <dl>
     <dt>Inhalt</dt><dd>Dieses Konzept: Result-SHA-Vertrag, gefencte Schreiber (inkl. Agenten-Quarantäne),
       hermetische Gates, bewachte Baseline, Gesundheits-SLOs. Programm und Phasen: Hauptseite §7.
-      Harte Bedingung: Remote-Reaktivierung erst nach Phase 1.</dd>
-    <dt>Status</dt><dd><span class="pill done">dokumentiert</span> — Umsetzung läuft über die P0-Karten.</dd>
+      Remote-Ausführung setzt verifizierten Push, Fencing und eindeutigen Gate-Scope voraus.</dd>
+    <dt>Status</dt><dd><span class="pill part">teilweise umgesetzt</span>: Remote-Ausführung und
+      Remote-Gates sind aktiv; AGT-2183/2184 und AGT-2229 bleiben offen.</dd>
   </dl>
 </div>
 
@@ -424,9 +426,8 @@
       fehlerhafte Review-Basis auch die eigene Karte bewertet.</dd>
     <dt>Maßnahme</dt><dd>Branch als Einzel-Commit auf develop-Tip rekonstruiert (<code>1228d87e</code>);
       Host-Lineage-Angleich nach Rundenende.</dd>
-    <dt>Status</dt><dd><span class="pill part">Einzelfall entstuckt</span>
-      <span class="pill open">strukturell offen</span> — Review muss gegen den Task-Branch-Tip diffen,
-      nicht gegen abgeleitete Commit-Listen.</dd>
+    <dt>Status</dt><dd><span class="pill done">Requeue-Loop gelöst</span> durch Operator-Epochen
+      (AGT-2260-Kern, 23.07.). <span class="pill open">Result-Scope offen</span> bis AGT-2183/2184.</dd>
     <dt>Referenzen</dt><dd>AGT-2177 · Bezug „Kreuzkontaminierte Salvage-Branches“ (17.07.),
       Result-SHA-Vertrag (Phase 1)</dd>
   </dl>
@@ -465,8 +466,8 @@
   </dl>
 </div>
 
-<div class="entry">
-  <header><h3>Zombie-Leases nach Daemon-Neustart („8-Stunden-Stillstand“)</h3><span class="date">20.–21.07.2026</span></header>
+<div class="entry" id="incident-zombie-leases">
+  <header><h3>Prozesslose Leases nach Daemon-Neustart</h3><span class="date">20.–21.07.2026</span></header>
   <dl>
     <dt>Problem</dt><dd>Zwei schnelle Daemon-Neustarts (22:57/22:58, Deploy des neuen Binaries mit
       AGT-2177-Reconciliation) killten die Sekunden zuvor geclaimten Runs (AGT-2182/2194/2198). Der neue
@@ -490,10 +491,56 @@
       Host-Worktree-Prozesse via <code>/proc</code>-Scan → Lease-Break auf 2-ready, Kappe 3/Karte). Neu
       offen: Daemon-Speicherprofil untersuchen; Crash-Sichtbarkeit (systemd-Restart maskiert OOM).</dd>
     <dt>Status</dt><dd><span class="pill part">Einzelfall behoben</span>
-      <span class="pill open">strukturell offen</span> — Prozess-Verifikation bei Lease-Adoption jetzt
-      automatisiert (Fleet-Pacer); neu offen: Daemon-Speicherprofil, Crash-Sichtbarkeit.</dd>
+      <span class="pill part">strukturell entschärft</span>: Prozess-Verifikation bei Lease-Adoption
+      ist im Fleet-Pacer automatisiert; AGT-2182 liefert persistente Attempt-Authority. Offen bleiben
+      Daemon-Speicherprofil, Crash-Sichtbarkeit und das Acquire-to-Lane-Crash-Fenster.</dd>
     <dt>Referenzen</dt><dd>AGT-2182/2194/2198 · Bezug AGT-2177 (Deploy-Auslöser), AGT-2182-Fencing-Scope
       (Attempt-Fencing)</dd>
+  </dl>
+</div>
+
+<div class="entry" id="incident-remote-gates">
+  <header><h3>Remote-Gates nach Gate-Stau</h3><span class="date">22.–23.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Lokale Gates konkurrierten mit Agentenläufen um Maschinenkapazität. Lange
+      Queue-Wartezeiten, Lastfehler und zwei aufeinanderfolgende rote Läufe erzeugten falsche
+      Karteneskalationen.</dd>
+    <dt>Maßnahme</dt><dd>AGT-2222 führte eine SSH-Gate-Brücke zum Remote-Host ein. Das Gate
+      materialisiert die exakte Subjekt-SHA in einem Wegwerf-Worktree. Vier getrennte Gate-Slots
+      erhöhten den gemessenen Durchsatz auf etwa 20 Karten pro Stunde; die vollständige Suite lief
+      im beobachteten Beispiel in 2 Minuten 11 Sekunden.</dd>
+    <dt>Status</dt><dd><span class="pill done">Brücke live</span>
+      <span class="pill part">Zielpfad offen</span>: AGT-2229 ersetzt die Brücke durch claimbare
+      Remote-Schritte; eine Folgekarte entfernt anschließend den SSH-Sonderpfad.</dd>
+    <dt>Referenzen</dt><dd>AGT-2222, AGT-2229, <code>review-pipeline-health/incident-2026-07-22-gate-churn.md</code></dd>
+  </dl>
+</div>
+
+<div class="entry" id="incident-review-epochs">
+  <header><h3>Operator-Epochen für Review-Verdikte</h3><span class="date">23.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Ein Verdikt aus einem älteren Review-Zyklus konnte nach einem bewussten
+      Operator-Requeue erneut wirken und damit die aktuelle Operator-Entscheidung überholen.</dd>
+    <dt>Maßnahme</dt><dd>Der Kern von AGT-2260 bindet Review-Verdikte an den letzten
+      Operator-Übergang nach <code>4-auto-review</code>. Nur Verdikte der aktuellen Epoche dürfen
+      Folgezustand oder Loop-Guard beeinflussen.</dd>
+    <dt>Status</dt><dd><span class="pill done">Kern aktiv seit 23.07.</span>
+      UI-Projektion und Artefaktrotation bleiben Folgescope.</dd>
+    <dt>Referenzen</dt><dd>AGT-2260, AGT-2177</dd>
+  </dl>
+</div>
+
+<div class="entry" id="incident-attempt-authority">
+  <header><h3>Persistente Attempt-Authority und Fencing</h3><span class="date">24.07.2026</span></header>
+  <dl>
+    <dt>Problem</dt><dd>Run- und Review-Versuche hatten keine gemeinsame restart-feste Autorität.
+      Veraltete oder fremde Writer konnten deshalb nicht an jeder Mutation eindeutig abgewiesen werden.</dd>
+    <dt>Maßnahme</dt><dd>AGT-2182 führte persistente RunAttempt- und ReviewAttempt-Autorität mit
+      Fencing ein. Mutationen werden dem autoritativen Versuch zugeordnet; ältere Versuche verlieren
+      ihre Schreibberechtigung.</dd>
+    <dt>Status</dt><dd><span class="pill done">geliefert, Grade B</span>
+      Ein benanntes Acquire-to-Lane-Crash-Fenster bleibt als Folgearbeit offen.</dd>
+    <dt>Referenzen</dt><dd>AGT-2182</dd>
   </dl>
 </div>
 
