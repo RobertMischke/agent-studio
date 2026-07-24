@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal } from '@angular/core';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { TaskService } from '../../../../../services/task.service';
 import { MarkdownRichEditorComponent } from '../../../../../components/markdown-rich-editor/markdown-rich-editor';
@@ -6,22 +6,27 @@ import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.model';
-import { generatedFileProvenance } from '../../generated-file-provenance.util';
-import { NowTickService } from '../../../../../services/now-tick.service';
-import { formatRelativeTime } from '../../../../../services/format.util';
 import { AspectJsonCardComponent } from './aspect-json-card/aspect-json-card.component';
 import { parseAspectDocument, type AspectDocument } from './aspect-document.model';
+import { cleanStepResultMarkdown } from '../pipeline-step-result/pipeline-step-result.util';
+import {
+  compareDocuments,
+  documentAnchor,
+  isResultDocument,
+  presentDocument,
+  type DocumentPresentation,
+} from './document-presentation.util';
+import { DocumentDetailsMenuComponent } from './document-details-menu/document-details-menu.component';
 
 /**
- * Files tab body. Renders supported documents directly in the job folder
+ * Docs tab body. Renders supported documents directly in the job folder
  * (prompt + aspect verdicts + operator notes + HTML explorations) as a list of
- * cards. The first card is always `prompt.md`; the rest follow the Files-tab
- * sort order produced by the backend.
+ * cards. Outcome documents lead; prompts and raw artifacts remain available
+ * afterwards.
  *
  * Expand / collapse rules (F48):
- *   - Every card starts in preview mode (first ~12 lines) until the user
- *     expands it. Click anywhere on the header (or the "Show full" link)
- *     to expand to the full markdown.
+ *   - Result documents start expanded so their rendered conclusions are
+ *     immediately visible; prompts and raw artifacts start as previews.
  *   - Polling may replace the artifact objects or add files without changing
  *     expansion state. State resets only when a different task is opened.
  *
@@ -39,14 +44,14 @@ import { parseAspectDocument, type AspectDocument } from './aspect-document.mode
   selector: 'app-files-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FileSourceHistoryComponent, MarkdownRichEditorComponent, MarkdownViewComponent, TooltipDirective, AspectJsonCardComponent],
+  imports: [FileSourceHistoryComponent, MarkdownRichEditorComponent, MarkdownViewComponent, TooltipDirective, AspectJsonCardComponent, DocumentDetailsMenuComponent],
   templateUrl: './files-pane.component.html',
   styleUrl: './files-pane.component.scss',
 })
 export class FilesPaneComponent {
   private readonly jobs = inject(TaskService);
-  private readonly nowTick = inject(NowTickService);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly artifacts = input<TaskArtifact[]>([]);
   /** Prefilled body for `prompt.md` so we don't re-fetch what `TaskDetail` already loaded. */
@@ -54,6 +59,7 @@ export class FilesPaneComponent {
   readonly jobId = input<string | null>(null);
   readonly watchPath = input<string | null>(null);
   readonly isRunning = input(false);
+  readonly focusRequest = input<{ kind: TaskArtifactKind; requestId: number } | null>(null);
 
   readonly save = output<string>();
 
@@ -62,9 +68,12 @@ export class FilesPaneComponent {
   /** Cached file bodies. `null` marks a load error so the view can render a tidy fallback. */
   private readonly content = signal<Map<string, string | null>>(new Map());
   private readonly loading = signal<Set<string>>(new Set());
+  private readonly rawVisible = signal<Set<string>>(new Set());
+  private readonly historyVisible = signal<Set<string>>(new Set());
   private readonly editingPrompt = signal(false);
   /** Tracks which file names we have already kicked off a fetch for, to avoid duplicate calls. */
   private readonly fetched = new Set<string>();
+  private readonly initialized = new Set<string>();
   /**
    * Memoised parse of structured `aspect-*.json` bodies, keyed by file name.
    * Re-parsed only when the cached raw body changes, so the OnPush template
@@ -73,6 +82,9 @@ export class FilesPaneComponent {
    */
   private readonly aspectDocCache = new Map<string, { raw: string; doc: AspectDocument | null }>();
   private readonly htmlDocCache = new Map<string, { raw: string; doc: SafeHtml }>();
+  private readonly presentationCache = new Map<string, { raw: string; value: DocumentPresentation }>();
+
+  readonly orderedArtifacts = computed(() => [...this.artifacts()].sort(compareDocuments));
 
   readonly onlyPrompt = computed(() => {
     const list = this.artifacts();
@@ -88,9 +100,29 @@ export class FilesPaneComponent {
       this.editingPrompt.set(false);
       this.content.set(new Map());
       this.loading.set(new Set());
+      this.rawVisible.set(new Set());
+      this.historyVisible.set(new Set());
       this.fetched.clear();
+      this.initialized.clear();
       this.aspectDocCache.clear();
       this.htmlDocCache.clear();
+      this.presentationCache.clear();
+    }, { allowSignalWrites: true });
+
+    // Outcome documents open on arrival. Polling may add more, but a document
+    // the operator deliberately collapsed stays collapsed.
+    effect(() => {
+      const nextExpanded = new Set(this.expanded());
+      let changed = false;
+      for (const file of this.orderedArtifacts()) {
+        if (this.initialized.has(file.name)) continue;
+        this.initialized.add(file.name);
+        if (isResultDocument(file)) {
+          nextExpanded.add(file.name);
+          changed = true;
+        }
+      }
+      if (changed) this.expanded.set(nextExpanded);
     }, { allowSignalWrites: true });
 
     // Prefetch content for every non-prompt artifact so previews / expansions
@@ -117,6 +149,13 @@ export class FilesPaneComponent {
         });
       }
     });
+
+    effect(() => {
+      const request = this.focusRequest();
+      if (!request) return;
+      const target = this.orderedArtifacts().find((file) => file.kind === request.kind);
+      if (target) this.focusDocument(target);
+    }, { allowSignalWrites: true });
   }
 
   isExpanded(name: string): boolean {
@@ -134,14 +173,77 @@ export class FilesPaneComponent {
     this.expanded.set(next);
   }
 
+  toggleFromHeader(file: TaskArtifact, event: Event): void {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, summary, app-document-details-menu')) return;
+    if (event instanceof KeyboardEvent && event.key === ' ') event.preventDefault();
+    this.toggleExpanded(file.name);
+  }
+
   /** Resolves the body for a file. Prompt comes from the input; others come from the cache. */
   bodyFor(file: TaskArtifact): string | null | undefined {
     if (file.kind === 'prompt') return this.promptContent();
     return this.content().get(file.name);
   }
 
+  presentationFor(file: TaskArtifact): DocumentPresentation {
+    const raw = this.bodyFor(file) || '';
+    const cached = this.presentationCache.get(file.name);
+    if (cached?.raw === raw) return cached.value;
+    const value = presentDocument(file, raw, this.aspectDoc(file));
+    this.presentationCache.set(file.name, { raw, value });
+    return value;
+  }
+
+  anchorFor(file: TaskArtifact): string {
+    return documentAnchor(file);
+  }
+
+  focusDocument(file: TaskArtifact): void {
+    if (!this.isExpanded(file.name)) {
+      const next = new Set(this.expanded());
+      next.add(file.name);
+      this.expanded.set(next);
+    }
+    setTimeout(() => {
+      const target = this.host.nativeElement.querySelector<HTMLElement>(`#${documentAnchor(file)}`);
+      target?.scrollIntoView({ block: 'start' });
+      target?.focus({ preventScroll: true });
+    });
+  }
+
   isLoading(name: string): boolean {
     return this.loading().has(name);
+  }
+
+  isRawVisible(name: string): boolean {
+    return this.rawVisible().has(name);
+  }
+
+  isHistoryVisible(name: string): boolean {
+    return this.historyVisible().has(name);
+  }
+
+  toggleRaw(file: TaskArtifact): void {
+    const next = new Set(this.rawVisible());
+    if (next.has(file.name)) next.delete(file.name);
+    else next.add(file.name);
+    this.rawVisible.set(next);
+    const nextHistory = new Set(this.historyVisible());
+    nextHistory.delete(file.name);
+    this.historyVisible.set(nextHistory);
+    if (!this.isExpanded(file.name)) this.focusDocument(file);
+  }
+
+  toggleHistory(file: TaskArtifact): void {
+    const next = new Set(this.historyVisible());
+    if (next.has(file.name)) next.delete(file.name);
+    else next.add(file.name);
+    this.historyVisible.set(next);
+    const nextRaw = new Set(this.rawVisible());
+    nextRaw.delete(file.name);
+    this.rawVisible.set(nextRaw);
+    if (!this.isExpanded(file.name)) this.focusDocument(file);
   }
 
   /** True for a structured `aspect-*.json` artefact (rendered as a card). */
@@ -190,7 +292,7 @@ export class FilesPaneComponent {
 
   /** Renders the first ~12 lines of a file's content for the preview block. */
   preview(file: TaskArtifact): string | null {
-    const body = this.bodyFor(file);
+    const body = this.presentationFor(file).body;
     if (body == null) return null;
     return this.generatePreview(body);
   }
@@ -212,19 +314,7 @@ export class FilesPaneComponent {
     }
   }
 
-  provenanceFor(file: TaskArtifact) {
-    return generatedFileProvenance(file.generation);
-  }
-
-  formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${Math.round(n / 102.4) / 10} KB`;
-    return `${Math.round(n / (1024 * 102.4)) / 10} MB`;
-  }
-
-  formatRelative(iso: string): string {
-    return formatRelativeTime(iso, this.nowTick.now());
-  }
+  readonly documentBodyTransform = cleanStepResultMarkdown;
 
   isPromptFile(name: string): boolean {
     return name === 'prompt.md';

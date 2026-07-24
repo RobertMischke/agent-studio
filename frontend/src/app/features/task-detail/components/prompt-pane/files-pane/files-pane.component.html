@@ -1,142 +1,163 @@
 <div class="files-pane" data-testid="files-pane">
-  @for (file of artifacts(); track file.name) {
-    <article class="file-card"
-             [class.file-card--prompt]="file.kind === 'prompt'"
-             [class.file-card--aspect]="file.kind === 'aspect'"
-             [class.file-card--code-review]="file.kind === 'codeReview'"
-             [class.file-card--note]="file.kind === 'note'"
-             [class.file-card--collapsed]="!isExpanded(file.name)"
-             [class.file-card--expanded]="isExpanded(file.name)"
-             [attr.data-testid]="'file-card-' + file.name">
-      <header class="file-card__head"
-              role="button"
-              tabindex="0"
-              [attr.aria-expanded]="isExpanded(file.name)"
-              (click)="toggleExpanded(file.name)"
-              (keydown.enter)="toggleExpanded(file.name)"
-              (keydown.space)="toggleExpanded(file.name); $event.preventDefault()">
-        <span class="file-card__caret" aria-hidden="true">{{ isExpanded(file.name) ? '▾' : '▸' }}</span>
-        <span class="file-card__icon" aria-hidden="true">{{ fileIcon(file.kind) }}</span>
-        <span class="file-card__name">{{ file.name }}</span>
-        @if (file.kind === 'aspect') {
-          <span class="file-card__chip file-card__chip--aspect">{{ file.aspectName }}</span>
-        } @else if (file.kind === 'codeReview') {
-          <span class="file-card__chip file-card__chip--code-review">code review</span>
-        } @else if (file.kind === 'note') {
-          <span class="file-card__chip file-card__chip--note">note</span>
-        }
-        @if (isHtmlFile(file)) {
-          <span class="file-card__chip file-card__chip--html"
-                data-testid="file-card-html-isolation-chip">interactive, isolated</span>
-        }
-        @if (provenanceFor(file); as generation) {
-          <span class="file-card__provenance"
-                data-testid="file-card-provenance"
-                [cacTooltip]="generation.tooltip">
-            {{ generation.label }}
-          </span>
-        }
-        <span class="file-card__meta">{{ formatBytes(file.sizeBytes) }} · {{ formatRelative(file.mtime) }}</span>
-
-        @if (isPromptFile(file.name) && isExpanded(file.name) && !isEditing()) {
+  @if (orderedArtifacts().length > 0) {
+    <nav class="docs-index" aria-label="Documents in this task" data-testid="docs-index">
+      <span class="docs-index__label">On this page</span>
+      <div class="docs-index__links">
+        @for (file of orderedArtifacts(); track file.name) {
           <button type="button"
-                  class="file-card__action"
-                  data-testid="file-card-prompt-edit"
-                  [disabled]="isRunning()"
-                  [cacTooltip]="isRunning() ? 'Stop the CLI first to edit prompt.md' : 'Edit prompt.md'"
-                  (click)="beginEditPrompt($event)">Edit</button>
+                  class="docs-index__link"
+                  [attr.data-testid]="'docs-anchor-' + file.name"
+                  (click)="focusDocument(file)">
+            {{ presentationFor(file).title }}
+          </button>
         }
-        @if (isPromptFile(file.name) && isExpanded(file.name) && isEditing()) {
-          <button type="button"
-                  class="file-card__action file-card__action--ghost"
-                  data-testid="file-card-prompt-cancel"
-                  (click)="cancelEditPrompt($event)">Done</button>
-        }
-      </header>
+      </div>
+    </nav>
+  }
 
-      @if (isExpanded(file.name)) {
-        <div class="file-card__body">
-          @if (isPromptFile(file.name)) {
-            @if (isEditing()) {
+  @for (file of orderedArtifacts(); track file.name) {
+    @if (presentationFor(file); as doc) {
+      <article class="file-card"
+               tabindex="-1"
+               [id]="anchorFor(file)"
+               [attr.data-doc-kind]="file.kind"
+               [attr.data-verdict-tone]="doc.verdictTone"
+               [class.file-card--prompt]="file.kind === 'prompt'"
+               [class.file-card--aspect]="file.kind === 'aspect'"
+               [class.file-card--code-review]="file.kind === 'codeReview'"
+               [class.file-card--note]="file.kind === 'note'"
+               [class.file-card--collapsed]="!isExpanded(file.name)"
+               [class.file-card--expanded]="isExpanded(file.name)"
+               [attr.data-testid]="'file-card-' + file.name">
+        <header class="file-card__head"
+                role="button"
+                tabindex="0"
+                [attr.aria-label]="'Toggle document ' + doc.title"
+                [attr.aria-expanded]="isExpanded(file.name)"
+                (click)="toggleFromHeader(file, $event)"
+                (keydown.enter)="toggleFromHeader(file, $event)"
+                (keydown.space)="toggleFromHeader(file, $event)">
+          <span class="file-card__caret" aria-hidden="true">{{ isExpanded(file.name) ? '▾' : '▸' }}</span>
+          <span class="file-card__icon" aria-hidden="true">{{ fileIcon(file.kind) }}</span>
+          <span class="file-card__topic" data-testid="file-card-topic">{{ doc.title }}</span>
+          @if (doc.verdict) {
+            <span class="file-card__verdict"
+                  [attr.data-tone]="doc.verdictTone"
+                  data-testid="file-card-verdict">{{ doc.verdict }}</span>
+          }
+          @if (doc.model) {
+            <span class="file-card__model" data-testid="file-card-model">{{ doc.model }}</span>
+          }
+          @if (isHtmlFile(file)) {
+            <span class="file-card__chip file-card__chip--html"
+                  data-testid="file-card-html-isolation-chip">interactive, isolated</span>
+          }
+
+          <span class="file-card__spacer"></span>
+          @if (isPromptFile(file.name) && isExpanded(file.name) && !isEditing()) {
+            <button type="button"
+                    class="file-card__action"
+                    data-testid="file-card-prompt-edit"
+                    [disabled]="isRunning()"
+                    [cacTooltip]="isRunning() ? 'Stop the CLI first to edit prompt.md' : 'Edit prompt.md'"
+                    (click)="beginEditPrompt($event)">Edit</button>
+          }
+          @if (isPromptFile(file.name) && isExpanded(file.name) && isEditing()) {
+            <button type="button"
+                    class="file-card__action file-card__action--ghost"
+                    data-testid="file-card-prompt-cancel"
+                    (click)="cancelEditPrompt($event)">Done</button>
+          }
+
+          <app-document-details-menu
+            [file]="file"
+            [title]="doc.title"
+            [sourceVisible]="isRawVisible(file.name)"
+            [historyVisible]="isHistoryVisible(file.name)"
+            (toggleSource)="toggleRaw(file)"
+            (toggleHistory)="toggleHistory(file)" />
+        </header>
+
+        @if (isExpanded(file.name)) {
+          <div class="file-card__body">
+            @if (isPromptFile(file.name) && isEditing()) {
               <app-markdown-rich-editor [value]="promptContent()"
                                         [readOnly]="isRunning()"
-                                        [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
+                                        [readOnlyReason]="isRunning() ? 'Editing disabled - the CLI is running for this task. Stop it first.' : null"
                                         [jobId]="jobId()"
                                         [watchPath]="watchPath()"
                                         (save)="onPromptSave($event)" />
-            } @else {
-              <app-file-source-history class="file-card__markdown"
+            } @else if (isHistoryVisible(file.name)) {
+              <app-file-source-history class="file-card__history"
                                        [jobId]="jobId()"
                                        [watchPath]="watchPath()"
                                        [path]="file.name"
-                                       [content]="promptContent()"
-                                       [dense]="true" />
+                                       [content]="bodyFor(file)"
+                                       [dense]="true"
+                                       [initialMode]="'history'"
+                                       [contentTransform]="documentBodyTransform" />
+            } @else if (isRawVisible(file.name)) {
+              <pre class="file-card__raw" data-testid="file-card-raw-source">{{ bodyFor(file) }}</pre>
+            } @else if (isPromptFile(file.name)) {
+              <cac-markdown class="file-card__markdown"
+                            [source]="promptContent()"
+                            [dense]="true" />
+            } @else if (isHtmlFile(file) && trustedHtmlFor(file); as html) {
+              <iframe class="file-card__html-frame"
+                      data-testid="file-card-html-frame"
+                      [attr.title]="'Interactive isolated HTML preview: ' + file.name"
+                      sandbox="allow-scripts"
+                      [srcdoc]="html"></iframe>
+            } @else if (isAspectJson(file) && aspectDoc(file); as aspect) {
+              <app-aspect-json-card class="file-card__aspect-json" [doc]="aspect" />
+            } @else {
+              @if (isLoading(file.name)) {
+                <div class="file-card__loading">Loading...</div>
+              } @else if (doc.body) {
+                <cac-markdown class="file-card__markdown"
+                              [source]="doc.body"
+                              [dense]="true" />
+              } @else {
+                <div class="file-card__error">Could not load this file.</div>
+              }
             }
-          } @else if (isHtmlFile(file) && trustedHtmlFor(file); as html) {
-            <iframe class="file-card__html-frame"
-                    data-testid="file-card-html-frame"
-                    [attr.title]="'Interactive isolated HTML preview: ' + file.name"
-                    sandbox="allow-scripts"
-                    [srcdoc]="html"></iframe>
-          } @else if (isAspectJson(file) && aspectDoc(file); as doc) {
-            <app-aspect-json-card class="file-card__aspect-json" [doc]="doc" />
-          } @else {
+          </div>
+        } @else {
+          <div class="file-card__preview">
             @if (isLoading(file.name)) {
-              <div class="file-card__loading">Loading…</div>
-            } @else if (bodyFor(file); as content) {
-              <app-file-source-history class="file-card__markdown"
-                                       [jobId]="jobId()"
-                                       [watchPath]="watchPath()"
-                                       [path]="file.name"
-                                       [content]="content"
-                                       [dense]="true" />
+              <div class="file-card__loading">Loading preview...</div>
+            } @else if (isHtmlFile(file)) {
+              <div class="file-card__preview-empty">Interactive HTML. Open it in an isolated sandbox.</div>
+              <button type="button" class="file-card__expand-link"
+                      [attr.data-testid]="'file-card-expand-' + file.name"
+                      (click)="toggleExpanded(file.name)">Open interactive preview</button>
+            } @else if (isAspectJson(file) && aspectDoc(file); as aspect) {
+              <app-aspect-json-card class="file-card__aspect-json" [doc]="aspect" [compact]="true" />
+              <button type="button" class="file-card__expand-link"
+                      [attr.data-testid]="'file-card-expand-' + file.name"
+                      (click)="toggleExpanded(file.name)">Show details</button>
+            } @else if (preview(file); as text) {
+              <div class="file-card__preview-rendered">
+                <cac-markdown [source]="text" [dense]="true" />
+              </div>
+              <button type="button" class="file-card__expand-link"
+                      [attr.data-testid]="'file-card-expand-' + file.name"
+                      (click)="toggleExpanded(file.name)">Open document</button>
             } @else {
-              <div class="file-card__error">Could not load this file.</div>
+              <div class="file-card__preview-empty">No preview available.</div>
             }
-          }
-        </div>
-      } @else {
-        <div class="file-card__preview">
-          @if (isLoading(file.name)) {
-            <div class="file-card__loading">Loading preview…</div>
-          } @else if (isHtmlFile(file)) {
-            <div class="file-card__preview-empty">Interactive HTML - expand to run in an isolated sandbox.</div>
-            <button type="button" class="file-card__expand-link"
-                    [attr.data-testid]="'file-card-expand-' + file.name"
-                    (click)="toggleExpanded(file.name)">
-              Open interactive preview
-            </button>
-          } @else if (isAspectJson(file) && aspectDoc(file); as doc) {
-            <app-aspect-json-card class="file-card__aspect-json" [doc]="doc" [compact]="true" />
-            <button type="button" class="file-card__expand-link"
-                    [attr.data-testid]="'file-card-expand-' + file.name"
-                    (click)="toggleExpanded(file.name)">
-              Show details
-            </button>
-          } @else if (preview(file); as text) {
-            <div class="file-card__preview-rendered">
-              <cac-markdown [source]="text" [dense]="true" />
-            </div>
-            <button type="button" class="file-card__expand-link"
-                    [attr.data-testid]="'file-card-expand-' + file.name"
-                    (click)="toggleExpanded(file.name)">
-              Show full ({{ formatBytes(file.sizeBytes) }})
-            </button>
-          } @else {
-            <div class="file-card__preview-empty">No preview available.</div>
-          }
-        </div>
-      }
-    </article>
+          </div>
+        }
+      </article>
+    }
   }
 
   @if (onlyPrompt()) {
     <aside class="files-pane__hint" data-testid="files-pane-hint">
       <span class="files-pane__hint-icon" aria-hidden="true">💡</span>
       <span>
-        Only the prompt is here. Agents can drop additional <code>.md</code>, <code>.html</code>, or
-        <code>.htm</code> files into this task's folder (aspect verdicts, review notes, follow-up plans,
-        interactive explorations) and they will appear here automatically.
+        Only the task brief is here. Agent reports, review notes, aspect verdicts, and interactive
+        explorations will appear in Docs automatically.
       </span>
     </aside>
   }

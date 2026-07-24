@@ -1,0 +1,30 @@
+<details class="doc-details">
+  <summary class="doc-details__trigger"
+           [attr.aria-label]="'Details for ' + title()"
+           [attr.data-testid]="'file-card-details-' + file().name">⋯</summary>
+  <div class="doc-details__menu" data-testid="file-card-details-menu">
+    <dl class="doc-details__list">
+      <div><dt>File</dt><dd class="mono">{{ file().name }}</dd></div>
+      <div><dt>Size</dt><dd>{{ formattedSize() }}</dd></div>
+      <div><dt>Updated</dt><dd>{{ formattedAge() }}</dd></div>
+      <div><dt>Tokens</dt><dd>{{ formattedTokens() }}</dd></div>
+      @if (provenance(); as generation) {
+        <div><dt>Producer</dt><dd [cacTooltip]="generation.tooltip">{{ generation.producer }}</dd></div>
+      }
+    </dl>
+    @if (file().kind !== 'prompt') {
+      <button type="button"
+              class="doc-details__source"
+              [attr.data-testid]="'file-card-source-' + file().name"
+              (click)="toggleSource.emit()">
+        {{ sourceVisible() ? 'Show rendered document' : 'View source file' }}
+      </button>
+    }
+    <button type="button"
+            class="doc-details__source"
+            [attr.data-testid]="'file-card-history-' + file().name"
+            (click)="toggleHistory.emit()">
+      {{ historyVisible() ? 'Show rendered document' : 'View document history' }}
+    </button>
+  </div>
+</details>

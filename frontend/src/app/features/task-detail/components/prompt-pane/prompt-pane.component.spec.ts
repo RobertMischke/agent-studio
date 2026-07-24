@@ -20,9 +20,10 @@ describe('PromptPane tab state', () => {
 });
 
 describe('PromptPane tab badges', () => {
-  it('shows Files count and Visual Evidence count in the tab definitions', () => {
+  it('shows Docs count and Visual Evidence count in the tab definitions', () => {
     const tabs = buildPromptTabs(3, 2);
     expect(tabs.find(t => t.id === 'description')?.badge).toBe(3);
+    expect(tabs.find(t => t.id === 'description')?.label).toBe('Docs');
     expect(tabs.find(t => t.id === 'evidence')?.badge).toBe(2);
   });
 
@@ -31,7 +32,7 @@ describe('PromptPane tab badges', () => {
     expect(tabs.find(t => t.id === 'evidence')?.badge).toBeNull();
   });
 
-  it('does not show a Files badge for a single file', () => {
+  it('does not show a Docs badge for a single document', () => {
     const tabs = buildPromptTabs(1, 0);
     expect(tabs.find(t => t.id === 'description')?.badge).toBeNull();
   });
