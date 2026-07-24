@@ -29,6 +29,7 @@ import { groupReviewJobs } from '../review-grouping.util';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
 import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
 import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
+import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 
 /** ASS-1727: page size for the Archive lane's lazy-load / "load more". */
 const ARCHIVE_PAGE_SIZE = 50;
@@ -80,6 +81,10 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
    * change detection is OnPush-friendly.
    */
   readonly nowMs = input<number>(0);
+
+  readonly stalledCount = computed(() => this.state() === TaskState.Progress
+    ? this.jobs().filter((job) => deriveStalledTaskState(job, this.nowMs() || Date.now()) !== null).length
+    : 0);
 
   readonly jobClick = output<TaskInfo>();
   // `targetIndex` is the 0-based insertion slot in this column the user

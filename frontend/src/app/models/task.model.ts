@@ -194,6 +194,8 @@ export interface TaskInfo {
   projectName: string;
   folderPath: string;
   lastActivity: string;
+  /** UTC instant when the task entered its current lane. */
+  enteredLaneAt?: string | null;
   sessionName: string | null;
   /**
    * Per-job orchestrator token rollup. The kanban card renders a small

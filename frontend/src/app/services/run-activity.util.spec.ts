@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRunActivityBadge } from './run-activity.util';
+import { buildRunActivityBadge, deriveStalledTaskState, STALLED_IDLE_THRESHOLD_MS } from './run-activity.util';
 import { TaskState } from '../models/task.model';
 import type { TaskInfo, TaskRunActivity } from '../models/task.model';
 
@@ -128,5 +128,63 @@ describe('buildRunActivityBadge — 3-progress run states (ASS-1751)', () => {
       const badge = buildRunActivityBadge(makeJob({ kind: 'no-active-run', attempt: 0 }), NOW);
       expect(badge!.tooltip.body).not.toContain('Versuch:');
     });
+  });
+});
+
+describe('deriveStalledTaskState', () => {
+  it('keeps a freshly started Progress card healthy during the idle grace period', () => {
+    const job = makeJob(
+      { kind: 'no-active-run', attempt: 0 },
+      { enteredLaneAt: new Date(NOW - STALLED_IDLE_THRESHOLD_MS).toISOString() },
+    );
+
+    expect(deriveStalledTaskState(job, NOW)).toBeNull();
+  });
+
+  it('marks a no-active-run card stalled only after the idle threshold', () => {
+    const job = makeJob(
+      { kind: 'no-active-run', attempt: 0 },
+      { enteredLaneAt: new Date(NOW - STALLED_IDLE_THRESHOLD_MS - 1).toISOString(), lastActivity: '' },
+    );
+
+    expect(deriveStalledTaskState(job, NOW)).toMatchObject({ reason: 'idle', label: 'Stalled' });
+  });
+
+  it('marks an explicitly failed idle run stalled immediately', () => {
+    const job = makeJob(
+      { kind: 'failed-idle', attempt: 1, lastError: 'agent did not produce a reply' },
+      { enteredLaneAt: new Date(NOW - 1_000).toISOString() },
+    );
+
+    expect(deriveStalledTaskState(job, NOW)).toMatchObject({ reason: 'failed', label: 'Stalled' });
+  });
+
+  it('uses an acute outcome issue when the runner registry only reports no-active-run', () => {
+    const job = makeJob(
+      { kind: 'no-active-run', attempt: 0 },
+      {
+        enteredLaneAt: new Date(NOW - 1_000).toISOString(),
+        outcomeIssue: {
+          kind: 'classifier-unknown',
+          label: 'Unclear',
+          severity: 'Warn',
+          summary: 'Tool router reported an execution error',
+          lastSeenAt: new Date(NOW - 2_000).toISOString(),
+        },
+      },
+    );
+
+    expect(deriveStalledTaskState(job, NOW)).toMatchObject({ reason: 'failed' });
+  });
+
+  it('does not flag live or scheduled-retry cards', () => {
+    expect(deriveStalledTaskState(
+      makeJob({ kind: 'active', processId: 42, attempt: 0 }),
+      NOW,
+    )).toBeNull();
+    expect(deriveStalledTaskState(
+      makeJob({ kind: 'failed-backoff', attempt: 1, backoffUntil: new Date(NOW + 60_000).toISOString() }),
+      NOW,
+    )).toBeNull();
   });
 });

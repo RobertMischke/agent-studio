@@ -58,6 +58,7 @@ import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { stateLabel } from '../../../../services/format.util';
+import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
 import { TaskSelectionService } from '../../../task-detail';
@@ -425,13 +426,10 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   readonly isRunning = computed(() => this.job().state === TaskState.Progress
     && (this.job().execution?.status === 'running' || this.job().runner != null));
-
+  readonly stalledState = computed(() => deriveStalledTaskState(this.job(), nowTick()));
   /**
-   * DtC step 6 CooldownRetry banner. Non-null only while a 3-progress card is
-   * holding out its infra-crash re-pickup backoff (`runActivity.failed-backoff`);
-   * renders distinctly from the "Running live" chip. Reads the shared `nowTick`
-   * so the "in Ns" countdown refreshes with every relative-time tick / poll.
-   * See {@link buildCooldownRetryBanner}.
+   * DtC CooldownRetry banner for a Progress card in rapid-crash backoff. The
+   * shared clock keeps its countdown live without another data source.
    */
   readonly cooldownBanner = computed(() => buildCooldownRetryBanner(this.job(), nowTick()));
 
