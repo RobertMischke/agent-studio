@@ -360,12 +360,13 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `task-progress-tracking-mockup.spec.ts` | task-progress-tracking mockup |
 | `vscode-layout-mockup.spec.ts` | @mockup vscode-layout |
 
-### `orchestrator/` - 14 specs
+### `orchestrator/` - 16 specs
 
 | Spec | Summary |
 |------|---------|
 | `f14-context-chip-and-caching.spec.ts` | F14: context badge, menu and send caching |
 | `orchestrator-chat-content-visible.spec.ts` | orchestrator chat - content stays visible after load |
+| `orchestrator-chat-scroll-stability.spec.ts` | mixed-height streamed rows stay mounted without scrollbar correction |
 | `orchestrator-config-panel.spec.ts` | Orchestrator logic config (consolidated Settings, Admin/System entry) |
 | `orchestrator-context-header.spec.ts` | Orchestrator context header · where am I |
 | `orchestrator-feed-overlay.spec.ts` | global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes |

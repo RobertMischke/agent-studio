@@ -48,7 +48,7 @@ export class TaskReferenceNavigationService {
       }
     }
     return references;
-  });
+  }, { equal: sameMarkdownTaskReferences });
 
   openTaskKey(taskKey: string | null | undefined): boolean {
     if (!taskKey) return false;
@@ -71,4 +71,15 @@ function folderName(path: string | null | undefined): string | null {
   if (!trimmed) return null;
   const parts = trimmed.split(/[\\/]+/);
   return parts[parts.length - 1] || null;
+}
+
+function sameMarkdownTaskReferences(
+  previous: readonly MarkdownTaskReference[],
+  current: readonly MarkdownTaskReference[],
+): boolean {
+  if (previous === current) return true;
+  if (previous.length !== current.length) return false;
+  return previous.every((reference, index) =>
+    reference.label === current[index].label
+    && reference.taskKey === current[index].taskKey);
 }
