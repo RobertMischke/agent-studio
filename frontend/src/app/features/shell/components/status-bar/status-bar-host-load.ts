@@ -12,15 +12,18 @@ export interface StatusBarHostLoad {
   correlation: StatusBarLoadCorrelation;
 }
 
+const MAX_TELEMETRY_AGE_MS = 5 * 60_000;
+
 /**
  * Fold fresh remote-runner telemetry into the tiny status-bar signal.
- * `stats` is deliberately part of the freshness gate: RemoteHostsService
- * clears it when the last telemetry point is stale, even though the historical
- * series remains available to the settings chart.
+ * `stats` and the point timestamp both guard freshness: the service clears
+ * stats for stale points when hydrating, while the timestamp keeps a
+ * long-lived status bar from presenting an old sample as current.
  */
 export function summarizeStatusBarHostLoad(
   hosts: readonly RemoteHost[],
   runningCount: number,
+  nowMs = Date.now(),
 ): StatusBarHostLoad | null {
   const points = hosts
     .filter(host =>
@@ -30,7 +33,11 @@ export function summarizeStatusBarHostLoad(
       && host.status !== 'retired')
     .map(host => host.telemetry?.points.at(-1) ?? null)
     .filter((point): point is HostTelemetryPoint =>
-      point !== null && point.load1 !== null && point.cpuCores > 0);
+      point !== null
+      && point.load1 !== null
+      && point.cpuCores > 0
+      && Number.isFinite(Date.parse(point.timestamp))
+      && nowMs - Date.parse(point.timestamp) <= MAX_TELEMETRY_AGE_MS);
 
   if (points.length === 0) return null;
 
@@ -41,7 +48,7 @@ export function summarizeStatusBarHostLoad(
   const correlation: StatusBarLoadCorrelation =
     runningCount === 0 && ratio >= 0.5
       ? 'load-without-runs'
-      : runningCount > 0 && ratio <= 0.1
+      : runningCount >= 2 && ratio <= 0.1
         ? 'runs-without-load'
         : 'consistent';
   const tone: StatusBarLoadTone = correlation !== 'consistent'

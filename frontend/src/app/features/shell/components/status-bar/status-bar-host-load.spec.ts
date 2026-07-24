@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { HostTelemetryPoint, RemoteHost } from '../../../remote-hosts';
 import { summarizeStatusBarHostLoad } from './status-bar-host-load';
 
-function remoteHost(load1: number, cpuCores = 12, activeSlots = 0): RemoteHost {
+function remoteHost(
+  load1: number,
+  cpuCores = 12,
+  activeSlots = 0,
+  timestamp = new Date().toISOString(),
+): RemoteHost {
   const point: HostTelemetryPoint = {
-    timestamp: new Date().toISOString(),
+    timestamp,
     cpuPercent: 40,
     load1,
     load5: load1,
@@ -66,8 +71,16 @@ describe('summarizeStatusBarHostLoad', () => {
     });
   });
 
-  it('does not surface stale historical telemetry', () => {
-    const stale = { ...remoteHost(9), stats: null };
-    expect(summarizeStatusBarHostLoad([stale], 0)).toBeNull();
+  it('keeps a single quiet run from becoming a false mismatch', () => {
+    expect(summarizeStatusBarHostLoad([remoteHost(0.2)], 1)).toMatchObject({
+      tone: 'calm',
+      correlation: 'consistent',
+    });
+  });
+
+  it('does not surface stale historical telemetry even while stats remain populated', () => {
+    const now = Date.parse('2026-07-24T20:10:00.000Z');
+    const stale = remoteHost(9, 12, 0, '2026-07-24T20:00:00.000Z');
+    expect(summarizeStatusBarHostLoad([stale], 0, now)).toBeNull();
   });
 });

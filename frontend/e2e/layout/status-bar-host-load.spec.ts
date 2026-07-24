@@ -101,4 +101,18 @@ test.describe('Status bar remote-host load companion signal', () => {
       fullPage: false,
     });
   });
+
+  test('several reported runs with almost no load become the inverse quiet hint', async ({ page }) => {
+    await stubHostLoad(page, 3, 0.3);
+    await page.goto('/');
+
+    const running = page.getByTestId('status-bar-running');
+    await expect(running).toContainText('3 running');
+    await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
+    await expect(running).toHaveAttribute('data-signal-correlation', 'runs-without-load');
+    await running.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText(
+      'Quiet consistency hint: reported runs and host load may not correspond.',
+    );
+  });
 });

@@ -41,6 +41,15 @@ describe('RemoteHostsService', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  it('refreshes an already loaded registry without replacing its visible entries', () => {
+    svc.ensureLoaded();
+    svc.addProvisionedHost('Runner Berlin 02', 'ssh://runner@berlin.example');
+
+    svc.refresh();
+
+    expect(svc.hosts().some((host) => host.id === 'runner-berlin-02')).toBe(true);
+  });
+
   it('adds a wizard-completed host as an idle remote runner', () => {
     svc.ensureLoaded();
     svc.addProvisionedHost('Runner Berlin 02', 'ssh://runner@berlin.example');

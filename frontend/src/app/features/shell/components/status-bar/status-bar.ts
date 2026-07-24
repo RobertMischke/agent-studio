@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  OnDestroy,
   OnInit,
   ViewEncapsulation,
   computed,
@@ -23,6 +24,7 @@ import { summarizeStatusBarHostLoad } from './status-bar-host-load';
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
+const HOST_LOAD_REFRESH_MS = 30_000;
 
 @Component({
   selector: 'app-status-bar',
@@ -33,10 +35,11 @@ const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
   templateUrl: './status-bar.html',
   styleUrl: './status-bar.scss',
 })
-export class StatusBarComponent implements OnInit {
+export class StatusBarComponent implements OnInit, OnDestroy {
   private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
+  private hostLoadRefreshHandle: ReturnType<typeof setInterval> | null = null;
 
   readonly projectNames = input<string[]>([]);
 
@@ -97,12 +100,20 @@ export class StatusBarComponent implements OnInit {
 
   ngOnInit(): void {
     this.remoteHosts.ensureLoaded();
+    this.hostLoadRefreshHandle = setInterval(
+      () => this.remoteHosts.refresh(),
+      HOST_LOAD_REFRESH_MS,
+    );
     void this.clientDefaults.hydrate().then(() => {
       const cli = this.readDefaultCli();
       this.defaultCli.set(cli);
       this.defaultModel.set(this.readDefaultModel(cli));
       this.defaultThinkingLevel.set(this.readDefaultThinkingLevel(cli));
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.hostLoadRefreshHandle) clearInterval(this.hostLoadRefreshHandle);
   }
 
   runningTooltip(): string {

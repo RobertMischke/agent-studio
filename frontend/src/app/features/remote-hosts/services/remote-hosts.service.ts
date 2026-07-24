@@ -32,6 +32,15 @@ export class RemoteHostsService {
     this.reload();
   }
 
+  /** Refresh live client and telemetry data without replacing the visible registry seed. */
+  refresh(): void {
+    if (!this.loaded) {
+      this.reload();
+      return;
+    }
+    this.hydrateClientRegistry();
+  }
+
   reload(): void {
     this.loading.set(true);
     this.error.set(null);

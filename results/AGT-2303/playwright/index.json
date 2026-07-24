@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-24T21:21:46.365Z",
+  "specs": {
+    "status-bar-host-load": {
+      "status": "✓",
+      "specFile": "e2e/layout/status-bar-host-load.spec.ts",
+      "tests": [
+        "corresponding run count and load share the existing pulse point",
+        "high load without runs becomes a quiet hint in both themes",
+        "several reported runs with almost no load become the inverse quiet hint"
+      ],
+      "files": []
+    }
+  }
+}
