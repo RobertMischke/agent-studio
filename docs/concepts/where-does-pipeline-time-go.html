@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where Does Pipeline Time Go? — Time Analysis & Mockup Ideas</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --accent: #2a78d6; --ok: #1a7d3a; --warn-c: #b5651d; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd; --runner-soft: #fbeee1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --accent: #3987e5; --ok: #4eae4e; --warn-c: #d98a4f; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e; --runner-soft: #362a1f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 68ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 19px; margin: 34px 0 6px; scroll-margin-top: 20px; }
+  h4 { font-size: 15.5px; margin: 22px 0 4px; }
+  p  { max-width: 80ch; }
+  p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code, .mono { font: 12.5px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; word-break: break-word; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--accent); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 80ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 22px 0; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 14px 16px; }
+  .stat .v { font-size: 27px; font-weight: 700; line-height: 1.1; letter-spacing: -.01em; }
+  .stat .l { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+  .stat.warn .v { color: var(--warn-c); } .stat.accent .v { color: var(--accent); }
+  .stat.bad .v { color: var(--bad); } .stat.ok .v { color: var(--ok); }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  figure { margin: 26px 0; }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 90ch; }
+  figcaption b { color: var(--ink-1); }
+  .chart { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1); padding: 22px; }
+  .bar-row { display: grid; grid-template-columns: 210px 1fr 128px; align-items: center; gap: 12px; margin: 9px 0; }
+  .bar-row .cap { font-size: 13px; color: var(--ink-2); }
+  .bar-track { background: var(--surface-3); border-radius: 6px; height: 26px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; }
+  .bar-fill.core { background: var(--accent); }
+  .bar-fill.test { background: var(--warn-c); }
+  .bar-fill.abort { background: var(--bad); }
+  .bar-fill.review { background: color-mix(in srgb, var(--accent) 55%, var(--surface-1)); }
+  .bar-fill.other { background: var(--ink-3); }
+  .bar-fill.quality { background: var(--ok); }
+  .bar-val { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .bar-val b { color: var(--ink-1); }
+  @media (max-width: 640px) { .bar-row { grid-template-columns: 130px 1fr 92px; } }
+
+  .waterfall { display: flex; height: 46px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); margin: 8px 0 4px; }
+  .wf-seg { display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600; color: #fff; white-space: nowrap; }
+  .wf-seg.wait { background: var(--ink-3); }
+  .wf-seg.retry { background: var(--bad); }
+  .wf-seg.first { background: var(--ok); }
+  .wf-legend { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin-top: 10px; }
+  .wf-legend span::before { content: ""; display: inline-block; width: 20px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+
+  .mock { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1); overflow: hidden; margin: 18px 0; }
+  .mock-bar { display: flex; align-items: center; gap: 8px; padding: 9px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--ink-3); }
+  .mock-bar .dotrow { display: flex; gap: 6px; }
+  .mock-bar .dotrow i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: inline-block; }
+  .mock-body { padding: 18px; }
+  .mock-title { font-size: 13px; font-weight: 700; color: var(--ink-2); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 12px; }
+  .steps { display: grid; gap: 6px; }
+  .step { display: grid; grid-template-columns: 190px 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
+  .step .sname { color: var(--ink-2); }
+  .step .strack { background: var(--surface-3); border-radius: 5px; height: 20px; overflow: hidden; }
+  .step .sfill { height: 100%; border-radius: 5px; }
+  .step .smeta { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rbadge { font-size: 11px; font-weight: 700; border-radius: 5px; padding: 1px 6px; background: var(--bad-soft); color: var(--bad); margin-left: 6px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; background: var(--surface-2); }
+  .tile .tv { font-size: 21px; font-weight: 700; } .tile .tl { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
+  .tile .tv.bad { color: var(--bad); } .tile .tv.warn { color: var(--warn-c); } .tile .tv.ok { color: var(--ok); }
+  @media (max-width: 640px){ .tiles{grid-template-columns:repeat(2,1fr);} .step{grid-template-columns:120px 1fr;} .step .smeta{grid-column:1/-1;text-align:left;} }
+
+  .idea { border-left: 4px solid var(--accent); }
+  hr.sep { border: none; border-top: 1px solid var(--line); margin: 48px 0 0; }
+  .footnote { font-size: 12.5px; color: var(--ink-3); margin-top: 40px; }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Analysis & Mockups · Pipeline · Data-driven</p>
+  <h1>Where Does Pipeline Time Go?</h1>
+  <p class="lede">Companion to <a href="async-validation-and-test-staging-lane.html">Async Validation &amp;
+  the Test Staging Lane</a>. That one was about tests; this one is about the whole pipeline: <b>where does
+  the time actually go?</b> The AGT data gives an uncomfortable split — and raises a second question:
+  <b>does this belong in the tool at all?</b> At the end: a collection of mockup ideas, in case it does.</p>
+  <div class="meta">
+    <span><b>As of:</b> 2026-07-25</span>
+    <span><b>Data:</b> 847 AGT tasks, 2,396 pipeline attempts</span>
+    <span><b>Status:</b> <span class="pill new">Analysis — tool question open</span></span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#tldr">TL;DR — 100 minutes of wall time</a></li>
+    <li><a href="#waterfall">§1 Waiting vs. redoing vs. first work</a></li>
+    <li><a href="#steps">§2 The per-step time breakdown</a></li>
+    <li><a href="#retry">§3 The retry tax — and what a "retry" is</a></li>
+    <li><a href="#causes">§4 Why tasks re-run: the cause taxonomy</a></li>
+    <li><a href="#tokens">§5 Time ≠ money: where the tokens sit</a></li>
+    <li><a href="#anomaly">§6 Anomaly: post-abort-review</a></li>
+    <li><a href="#tool">§7 Does this belong in the tool?</a></li>
+    <li><a href="#mockups">§8 Mockup ideas</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>TL;DR — what 100 minutes of wall time really are</h4>
+  <p>Across 798 hours of wall time (847 tasks), time splits like this: <b>~38% waiting</b> (queue, lease,
+  restart orphaning, human reviews — no compute at all), <b>~41% redoing</b> (retries), <b>~21% genuine
+  first work</b>. Put differently: <b>four of every five minutes</b> are either idle or redo. The largest
+  compute block by far is the <b>LLM coding step</b> (66.8% of compute, <b>98% of all tokens</b>) — tests
+  are the second-largest by time but token-free. But "redo" is not "waste": most retries are the
+  <em>intended</em> orchestrator quality loop, each carrying a tailored prompt (§4). So the highest-leverage
+  optimization is neither "tests" nor "waiting", but: <b>fewer, cheaper re-runs</b> of the parts that did not
+  change.</p>
+</section>
+
+<h2 id="waterfall"><span class="no">§1</span>Waiting vs. redoing vs. first work</h2>
+<p>Wall time (<code>completedAt − startedAt</code>) minus the sum of step durations gives the share where the
+pipeline was <em>alive but not computing</em>. The compute itself splits into first run and retry:</p>
+
+<figure>
+  <div class="chart">
+    <div class="waterfall">
+      <div class="wf-seg wait" style="width:37.8%">Waiting · 37.8%</div>
+      <div class="wf-seg retry" style="width:41.5%">Redoing · 41.5%</div>
+      <div class="wf-seg first" style="width:20.7%">First work · 20.7%</div>
+    </div>
+    <div class="wf-legend">
+      <span style="--c:var(--ink-3)"><b>Waiting</b> — 18,087 min queue/idle</span>
+      <span style="--c:var(--bad)"><b>Redoing</b> — 19,871 min retry compute</span>
+      <span style="--c:var(--ok)"><b>First work</b> — 9,940 min first-run compute</span>
+    </div>
+  </div>
+  <figcaption>47,895 min of wall time total. Only about a fifth is productive first work. The other four
+  fifths are the real optimization field — and <b>waiting</b> (38%) is just as large a chunk as all retries
+  combined.</figcaption>
+</figure>
+
+<div class="stats">
+  <div class="stat"><div class="v">798 h</div><div class="l">Total wall time</div></div>
+  <div class="stat warn"><div class="v">37.8%</div><div class="l">Waiting (no compute)</div></div>
+  <div class="stat bad"><div class="v">66.7%</div><div class="l">of compute is retry</div></div>
+  <div class="stat"><div class="v">58.9%</div><div class="l">of tasks needed &gt;1 attempt</div></div>
+</div>
+
+<h2 id="steps"><span class="no">§2</span>The per-step time breakdown</h2>
+<p class="dim">Sum of <code>durationMs</code> per <code>stepId</code> across all attempts. Share is relative to
+pure compute (29,808 min), not wall time.</p>
+
+<figure>
+  <div class="chart">
+    <div class="bar-row"><span class="cap">core-agent-run (LLM coding)</span><div class="bar-track"><div class="bar-fill core" style="width:66.8%"></div></div><span class="bar-val"><b>19,911 min</b> · 66.8%</span></div>
+    <div class="bar-row"><span class="cap">post-build-test-gate</span><div class="bar-track"><div class="bar-fill test" style="width:16.6%"></div></div><span class="bar-val"><b>4,949 min</b> · 16.6%</span></div>
+    <div class="bar-row"><span class="cap">post-abort-review (LLM)</span><div class="bar-track"><div class="bar-fill abort" style="width:7.6%"></div></div><span class="bar-val"><b>2,258 min</b> · 7.6%</span></div>
+    <div class="bar-row"><span class="cap">aspects + code-review-grade</span><div class="bar-track"><div class="bar-fill review" style="width:8.3%"></div></div><span class="bar-val"><b>2,450 min</b> · 8.3%</span></div>
+    <div class="bar-row"><span class="cap">Rest (lint, merge, radar, drift…)</span><div class="bar-track"><div class="bar-fill other" style="width:0.9%"></div></div><span class="bar-val"><b>240 min</b> · 0.8%</span></div>
+  </div>
+  <figcaption>The actual work (coding) is <b>4×</b> as expensive as tests. Everything below the aspects is
+  negligible in time — git steps, lint and radar together under 1%.</figcaption>
+</figure>
+
+<h2 id="retry"><span class="no">§3</span>The retry tax — and what a "retry" is</h2>
+<div class="box accent">
+  <h4>Definition — an attempt is a full pipeline re-run, not a steering</h4>
+  <p>An <b>attempt</b> is one full pipeline execution recorded in <code>pipeline-execution.json</code>; a
+  <b>retry</b> is any attempt after the first (archived in <code>previousAttempts</code>). A new attempt opens
+  only when the runner re-picks-up the card after a prior run already crossed the core/post boundary
+  (<code>EnsureAgentRunStart</code> → <code>HasReachedAgentRunBoundary</code>). An in-run <b>steering /
+  continue</b> — a message injected into the running CLI — stays inside the same <code>core-agent-run</code>
+  step and does <b>not</b> increment the counter. The cause breakdown of the retries themselves is §4.</p>
+</div>
+<p>Retries are not one line item — they are a <b>multiplier on everything</b>. Each reissue runs the full
+post-step chain again:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Step</th><th class="num">Runs</th><th class="num">Retry share of time</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td>core-agent-run</td><td class="num">2,396</td><td class="num">60%</td><td>The most expensive step runs nearly twice on average.</td></tr>
+    <tr><td>post-build-test-gate</td><td class="num">1,954</td><td class="num">84%</td><td>Full suite, mostly against barely-changed code.</td></tr>
+    <tr><td>post-abort-review</td><td class="num">57</td><td class="num">100%</td><td>Exists only on the retry path (non-clean end).</td></tr>
+    <tr><td>aspects (×4)</td><td class="num">2,396 each</td><td class="num">~50%</td><td>Every reissue = a full review fan-out again.</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="box bad">
+  <h4>One task = 2.83 full pipeline runs on average</h4>
+  <p>If every task ran exactly <b>once</b>, <b>19,871 min</b> of compute (66.7%) would vanish. That is by far
+  the largest lever — bigger than tests, waiting, or token optimization. But before treating it as pure
+  waste, read §4: most of it is the quality loop doing its job.</p>
+</div>
+
+<h2 id="causes"><span class="no">§4</span>Why tasks re-run: the cause taxonomy</h2>
+<p>The crucial question a raw retry count hides: <b>why</b> did the task re-run? The data attributes it
+cleanly, because every orchestrator reissue writes an adapted prompt to disk and every post-step records an
+outcome.</p>
+
+<div class="stats">
+  <div class="stat ok"><div class="v">978</div><div class="l">adapted reissue prompts (437 tasks)</div></div>
+  <div class="stat"><div class="v">78%</div><div class="l">of outcomes: findings-added</div></div>
+  <div class="stat bad"><div class="v">560</div><div class="l">test-gate technical failures</div></div>
+  <div class="stat"><div class="v">2.24</div><div class="l">avg reissues per reissued task</div></div>
+</div>
+
+<figure>
+  <figcaption style="margin-top:0;margin-bottom:12px"><b>Post-processing outcomes</b> — 6,320 recorded events across the corpus (<code>post-processing-outcomes.jsonl</code>).</figcaption>
+  <div class="chart">
+    <div class="bar-row"><span class="cap">findings-added (quality loop)</span><div class="bar-track"><div class="bar-fill quality" style="width:77.8%"></div></div><span class="bar-val"><b>4,915</b> · 77.8%</span></div>
+    <div class="bar-row"><span class="cap">failed-post-processing (~all test-gate)</span><div class="bar-track"><div class="bar-fill abort" style="width:8.9%"></div></div><span class="bar-val"><b>562</b> · 8.9%</span></div>
+    <div class="bar-row"><span class="cap">needs-follow-up-task</span><div class="bar-track"><div class="bar-fill review" style="width:6.4%"></div></div><span class="bar-val"><b>407</b> · 6.4%</span></div>
+    <div class="bar-row"><span class="cap">pass-to-human-review</span><div class="bar-track"><div class="bar-fill other" style="width:5.1%"></div></div><span class="bar-val"><b>325</b> · 5.1%</span></div>
+    <div class="bar-row"><span class="cap">needs-human-input</span><div class="bar-track"><div class="bar-fill other" style="width:1.8%"></div></div><span class="bar-val"><b>111</b> · 1.8%</span></div>
+  </div>
+</figure>
+
+<div class="box accent">
+  <h4>The dominant re-run cause is quality steering — with a tailored prompt</h4>
+  <p>When the orchestrator judges a result not good enough, it does not simply re-run the same prompt. It
+  emits a <code>Steer</code>/<code>SoftIntervention</code> message and writes a <b>fresh adapted prompt</b> to
+  <code>orchestrator-follow-up-history/&lt;timestamp&gt;-reissue.md</code> — the corpus holds <b>978</b> of
+  these (avg 2.24 per reissued task, up to 16). Combined with <b>78% findings-added</b> outcomes, this says
+  the bulk of re-runs are the <em>intended</em> quality loop, not dumb repeats. The clearly-technical cause is
+  a distinct, smaller bucket: <b>560</b> <code>failed-post-processing</code> events, almost all test-gate
+  timeouts.</p>
+</div>
+
+<div class="box warn">
+  <h4>Worth its own evaluation — the adapted prompts are a corpus</h4>
+  <p>Those 978 reissue prompts are a rich, un-mined dataset: <b>what does the orchestrator actually ask for on
+  a quality reissue?</b> Are the instructions specific and actionable, or generic? Does prompt quality predict
+  whether the next attempt passes? This directly touches whether the quality loop converges efficiently or
+  spins — a task with up to 16 reissues is either a genuinely hard card or a loop that never sharpened its
+  ask. <b>Recommended follow-up:</b> a research task that samples and grades the reissue prompts, correlating
+  prompt specificity with attempts-to-green. Potentially the highest-value insight in this whole analysis.</p>
+</div>
+
+<h2 id="tokens"><span class="no">§5</span>Time ≠ money: where the tokens sit</h2>
+<p>Important separation for any prioritization: <b>time and money barely correlate here</b>. The tokens — the
+expensive resource — concentrate almost entirely on a single step:</p>
+<div class="stats">
+  <div class="stat accent"><div class="v">98.1%</div><div class="l">of all tokens in core-agent-run</div></div>
+  <div class="stat"><div class="v">1.89 B</div><div class="l">tokens, coding step</div></div>
+  <div class="stat"><div class="v">~36 M</div><div class="l">tokens, review aspects total</div></div>
+  <div class="stat ok"><div class="v">0</div><div class="l">tokens in test-gate &amp; git steps</div></div>
+</div>
+<p>Consequence for optimizations: <b>saving time ≠ saving money.</b> Cutting test-gate or wait time buys
+throughput but almost no budget. Cutting tokens means touching the coding step — i.e. <b>fewer/shorter coding
+re-runs</b> (see §3/§4), not the periphery.</p>
+
+<h2 id="anomaly"><span class="no">§6</span>Anomaly: <code>post-abort-review</code></h2>
+<div class="box warn">
+  <p><b>2,258 min over just 57 runs</b> = ~40 min per run, at <b>0 recorded tokens</b>. For an LLM evaluation
+  step (ADR-0054, "intelligent abort assessment") that duration at zero tokens is implausible — the duration
+  likely includes waiting on a downstream rerun, or a measurement error in step demarcation. <b>Worth its own
+  probe:</b> either real lost time hides here, or this step's <code>durationMs</code> attribution is wrong —
+  either way you want to know before trusting the numbers for steering inside the tool.</p>
+</div>
+
+<h2 id="tool"><span class="no">§7</span>Does this belong in the tool?</h2>
+<p>Your open question. Arguments sorted:</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>For</th><th>Against / caution</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>The data is already structured (<code>pipeline-execution.json</code>) — it is a read/aggregate view,
+      no new capture effort.</td>
+      <td>It measures our own machinery, not the user's product. Risk of building a dashboard only the three of
+      us look at.</td>
+    </tr>
+    <tr>
+      <td>"Retry tax" and "waiting" are <b>control variables</b>: they show where tasks stall, which cards are
+      expensive, whether a runner is blocked.</td>
+      <td>The most valuable finding (66% retry) is a <b>process</b> insight, not a live widget — you read it
+      once, not daily.</td>
+    </tr>
+    <tr>
+      <td>It docks onto existing surfaces: <code>pipeline-step-usage</code>, the token ledger, the workspace
+      token timeline.</td>
+      <td>Absolute values drift with every run; a live board needs upkeep so it does not lie.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<div class="box accent">
+  <h4>Recommendation on the tool question</h4>
+  <p><b>Yes, but narrow and diagnostic, not a vanity dashboard.</b> The one in-app value worth it: <b>make what
+  costs time visible per task — including retries and waiting</b>, so expensive/stalled cards jump out. A
+  project-wide aggregate is a nice-to-have and can live as a periodically generated report (like this page)
+  rather than a live board. Concrete forms in §8.</p>
+</div>
+
+<h2 id="mockups"><span class="no">§8</span>Mockup ideas</h2>
+
+<h3>Idea A — "Time budget" strip in the task detail <span class="pill queued">highest value</span></h3>
+<p>Extends the existing <code>pipeline-step-usage</code> view with duration, retry count and the wait share.
+Answers at a glance: "where did this task stall, and how often did it run?"</p>
+<div class="mock">
+  <div class="mock-bar"><span class="dotrow"><i></i><i></i><i></i></span><span>Task detail · AGT-2137 · Overview → Time budget</span></div>
+  <div class="mock-body">
+    <div class="tiles" style="margin-bottom:16px">
+      <div class="tile"><div class="tv">96 min</div><div class="tl">Wall time</div></div>
+      <div class="tile"><div class="tv warn">31 min</div><div class="tl">of which waiting</div></div>
+      <div class="tile"><div class="tv bad">11×</div><div class="tl">Attempts</div></div>
+      <div class="tile"><div class="tv">74 k</div><div class="tl">Tokens</div></div>
+    </div>
+    <p class="mock-title">Time per step (cumulative across all attempts)</p>
+    <div class="steps">
+      <div class="step"><span class="sname">core-agent-run</span><div class="strack"><div class="sfill" style="width:52%;background:var(--accent)"></div></div><span class="smeta">42 min <span class="rbadge">×11</span></span></div>
+      <div class="step"><span class="sname">post-build-test-gate</span><div class="strack"><div class="sfill" style="width:100%;background:var(--warn-c)"></div></div><span class="smeta">96 min <span class="rbadge">×11</span></span></div>
+      <div class="step"><span class="sname">aspects (×4)</span><div class="strack"><div class="sfill" style="width:14%;background:color-mix(in srgb,var(--accent) 55%,var(--surface-1))"></div></div><span class="smeta">12 min <span class="rbadge">×11</span></span></div>
+      <div class="step"><span class="sname">Waiting / queue</span><div class="strack"><div class="sfill" style="width:33%;background:var(--ink-3)"></div></div><span class="smeta">31 min</span></div>
+    </div>
+  </div>
+</div>
+<p class="dim">The red <code>×N</code> badge is the real aha moment: it makes the retry tax visible per card
+without reading logs.</p>
+
+<h3>Idea B — "Retry tax" chip on the board card <span class="pill queued">cheap</span></h3>
+<p>A small counter on the kanban card once attempts &gt; 1. Green/amber/red by threshold. Surfaces
+retry-heavy tasks in the board before they run 11×.</p>
+<div class="mock">
+  <div class="mock-bar"><span class="dotrow"><i></i><i></i><i></i></span><span>Board · Lane "In progress"</span></div>
+  <div class="mock-body">
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div class="tile" style="min-width:200px"><div style="font-size:13px;font-weight:600">AGT-2000 · Overview tab</div><div style="margin-top:8px"><span class="pill done">2 attempts</span></div></div>
+      <div class="tile" style="min-width:200px"><div style="font-size:13px;font-weight:600">AGT-2137 · Wiki lifecycle</div><div style="margin-top:8px"><span class="pill new">6 reissues</span> <span class="pill" style="background:var(--bad-soft);color:var(--bad)">↻ 11× total</span></div></div>
+    </div>
+  </div>
+</div>
+
+<h3>Idea C — Project report "Where the time goes" <span class="pill new">report, not live</span></h3>
+<p>Exactly the waterfall + step bars of this page, but per project and generated periodically (e.g. a wiki
+page a post-step refreshes). No live poll, no upkeep burden — a snapshot that keeps the process insights
+(retry rate, wait share) visible.</p>
+
+<h3>Idea D — "Where is it stuck" signal <span class="pill new">diagnostic</span></h3>
+<p>Instead of numbers: a traffic-light hint when a step stands out — e.g. wait share &gt; 50%, attempts &gt;
+threshold, or a 0-token step with high duration (the <code>post-abort-review</code> anomaly from §6). Leads
+from symptom straight to cause.</p>
+
+<h3>Idea E — Reissue-prompt inspector <span class="pill new">ties to §4</span></h3>
+<p>Surface the adapted reissue prompts (<code>*-reissue.md</code>) on the task timeline, each pinned to the
+attempt it triggered. Lets an operator see <em>why</em> the orchestrator sent the task back — and is the UI
+side of the reissue-prompt evaluation recommended in §4.</p>
+
+<div class="box ok">
+  <h4>If only one thing gets built</h4>
+  <p><b>Idea A (time-budget strip) + the <code>×N</code> retry badge.</b> Smallest change, docks onto
+  <code>pipeline-step-usage</code>, and surfaces exactly the variable that explains 66% of compute. Everything
+  else is optional and can live as a generated report.</p>
+</div>
+
+<hr class="sep">
+<p class="footnote">Reproducible by aggregating <code>steps[].durationMs</code> per <code>stepId</code> in
+<code>pipeline-execution.json</code> across all attempts including <code>previousAttempts</code>; wait share =
+wall time (<code>completedAt−startedAt</code>) minus step sum. Cause taxonomy from counting
+<code>orchestrator-follow-up-history/*-reissue.md</code> files and tallying <code>outcome</code> in
+<code>post-processing-outcomes.jsonl</code> (6,320 events, 496 tasks). 847 tasks with pipeline data. Snapshot
+of 2026-07-25; absolute values drift, the ratios (¾ waiting+retry, 98% tokens in the coding step, quality-loop
+dominates re-runs) are stable. Mockup values are illustrative (AGT-2137 a real retry-heavy case, rounded).</p>
+
+</main>
+</body>
+</html>
