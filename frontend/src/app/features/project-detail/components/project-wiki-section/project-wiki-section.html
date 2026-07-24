@@ -513,158 +513,156 @@
                 }
               </button>
               <div class="pwiki__meta-body" id="project-wiki-meta-body" [hidden]="contextCollapsed()">
-              <section class="pwiki__panel" data-testid="project-wiki-meta-panel">
-                <div class="pwiki__panel-head">
-                  <span>Page info</span>
-                </div>
-                <dl class="pwiki__info-list">
-                  <div>
-                    <dt>Category</dt>
-                    <dd>{{ openedFolder() }}</dd>
-                  </div>
-                  <div>
-                    <dt>Words</dt>
-                    <dd>{{ wordCount() }}</dd>
-                  </div>
-                  @if (!revisionSha() && lastCommit(); as last) {
-                    <div data-testid="project-wiki-last-modified">
-                      <dt>Last modified</dt>
-                      <dd>
-                        <span data-testid="project-wiki-last-modified-when">{{ formatTimestamp(last.authorDateUtc) }}</span>
-                        <span data-testid="project-wiki-last-modified-author">{{ last.author }}</span>
-                        <span class="pwiki__meta-subject" data-testid="project-wiki-last-modified-subject">{{ last.subject }}</span>
-                      </dd>
-                    </div>
-                  }
-                </dl>
-                <div class="pwiki__panel-actions">
-                  <button class="pwiki__panel-action"
-                          type="button"
-                          data-testid="project-wiki-drift-open-doc"
-                          cacTooltip="Open the drift analysis modal for this page"
-                          (click)="openDriftModal()">
-                    <app-studio-icon name="diff" [size]="12"></app-studio-icon>
-                    <span>Analyze drift</span>
-                  </button>
-                </div>
-              </section>
-
-              @if (openedClassification(); as cls) {
-                <section class="pwiki__panel" data-testid="project-wiki-classification-panel">
-                  <div class="pwiki__panel-head">
-                    <span>Klassifikation</span>
-                  </div>
+              <app-wiki-meta-section class="pwiki__panel" data-testid="project-wiki-meta-panel"
+                  sectionId="pageInfo" title="Page info"
+                  toggleTestId="project-wiki-section-toggle-page-info"
+                  bodyId="project-wiki-section-page-info">
                   <dl class="pwiki__info-list">
-                    @if (cls.status; as status) {
-                      <div data-testid="project-wiki-classification-status">
-                        <dt>Status</dt>
-                        <dd class="pwiki__class-status">
-                          <span class="pwiki__class-chip"
-                                [attr.data-tone]="status.tone"
-                                data-testid="project-wiki-classification-status-chip">{{ status.label }}</span>
-                          @if (status.supersededBy; as successor) {
-                            <button class="pwiki__class-successor"
-                                    type="button"
-                                    data-testid="project-wiki-classification-superseded-link"
-                                    [cacTooltip]="'Nachfolger-Seite öffnen: ' + successor"
-                                    (click)="openSupersededBy(successor)">{{ successor }}</button>
-                          }
+                    <div>
+                      <dt>Category</dt>
+                      <dd>{{ openedFolder() }}</dd>
+                    </div>
+                    <div>
+                      <dt>Words</dt>
+                      <dd>{{ wordCount() }}</dd>
+                    </div>
+                    @if (!revisionSha() && lastCommit(); as last) {
+                      <div data-testid="project-wiki-last-modified">
+                        <dt>Last modified</dt>
+                        <dd>
+                          <span data-testid="project-wiki-last-modified-when">{{ formatTimestamp(last.authorDateUtc) }}</span>
+                          <span data-testid="project-wiki-last-modified-author">{{ last.author }}</span>
+                          <span class="pwiki__meta-subject" data-testid="project-wiki-last-modified-subject">{{ last.subject }}</span>
                         </dd>
                       </div>
                     }
-                    @if (cls.typeLabel; as typeLabel) {
-                      <div data-testid="project-wiki-classification-type">
-                        <dt>Typ</dt>
-                        <dd>{{ typeLabel }}</dd>
-                      </div>
-                    }
-                    @if (cls.analyzedAt; as analyzedAt) {
-                      <div data-testid="project-wiki-classification-analyzed">
-                        <dt>Analyse</dt>
-                        <dd>{{ analyzedAt }}</dd>
-                      </div>
-                    }
                   </dl>
-                </section>
+                  <div class="pwiki__panel-actions">
+                    <button class="pwiki__panel-action"
+                            type="button"
+                            data-testid="project-wiki-drift-open-doc"
+                            cacTooltip="Open the drift analysis modal for this page"
+                            (click)="openDriftModal()">
+                      <app-studio-icon name="diff" [size]="12"></app-studio-icon>
+                      <span>Analyze drift</span>
+                    </button>
+                  </div>
+              </app-wiki-meta-section>
+
+              @if (openedClassification(); as cls) {
+                <app-wiki-meta-section class="pwiki__panel" data-testid="project-wiki-classification-panel"
+                    sectionId="classification" title="Klassifikation"
+                    toggleTestId="project-wiki-section-toggle-classification"
+                    bodyId="project-wiki-section-classification">
+                    <dl class="pwiki__info-list">
+                      @if (cls.status; as status) {
+                        <div data-testid="project-wiki-classification-status">
+                          <dt>Status</dt>
+                          <dd class="pwiki__class-status">
+                            <span class="pwiki__class-chip"
+                                  [attr.data-tone]="status.tone"
+                                  data-testid="project-wiki-classification-status-chip">{{ status.label }}</span>
+                            @if (status.supersededBy; as successor) {
+                              <button class="pwiki__class-successor"
+                                      type="button"
+                                      data-testid="project-wiki-classification-superseded-link"
+                                      [cacTooltip]="'Nachfolger-Seite öffnen: ' + successor"
+                                      (click)="openSupersededBy(successor)">{{ successor }}</button>
+                            }
+                          </dd>
+                        </div>
+                      }
+                      @if (cls.typeLabel; as typeLabel) {
+                        <div data-testid="project-wiki-classification-type">
+                          <dt>Typ</dt>
+                          <dd>{{ typeLabel }}</dd>
+                        </div>
+                      }
+                      @if (cls.analyzedAt; as analyzedAt) {
+                        <div data-testid="project-wiki-classification-analyzed">
+                          <dt>Analyse</dt>
+                          <dd>{{ analyzedAt }}</dd>
+                        </div>
+                      }
+                    </dl>
+                </app-wiki-meta-section>
               }
 
-              <section class="pwiki__panel pwiki__panel--history" data-testid="project-wiki-history-panel">
-                <div class="pwiki__panel-head">
-                  <span>History</span>
+              <app-wiki-meta-section class="pwiki__panel" data-testid="project-wiki-linked-elements"
+                  sectionId="linkedElements" title="Linked elements"
+                  toggleTestId="project-wiki-section-toggle-linked-elements"
+                  bodyId="project-wiki-section-linked-elements">
+                  <span meta-section-count>{{ linkedElementCount() }}</span>
+                  @if (linkedTaskReferences().length > 0) {
+                    <app-wiki-related-tasks [related]="linkedTaskReferences()" />
+                  }
+                  @if (docLinks().length > 0) {
+                    <ul class="pwiki__links">
+                      @for (link of docLinks(); track link.target + link.label) {
+                        <li>
+                          <a class="pwiki__linked-element"
+                             data-testid="project-wiki-linked-element"
+                             [href]="linkedElementHref(link)"
+                             [attr.title]="linkedElementTitle(link)"
+                             [attr.target]="link.kind === 'external' ? '_blank' : null"
+                             [attr.rel]="link.kind === 'external' ? 'noopener noreferrer' : null"
+                             (click)="openLinkedElement($event, link)">
+                            <span class="pwiki__link-kind">{{ linkKindLabel(link.kind) }}</span>
+                            <span class="pwiki__link-label">{{ link.label }}</span>
+                            <code>{{ link.target }}</code>
+                          </a>
+                        </li>
+                      }
+                    </ul>
+                  } @else if (linkedTaskReferences().length === 0) {
+                    <p class="pwiki__panel-empty">No page or task links detected.</p>
+                  }
+              </app-wiki-meta-section>
+
+              <app-wiki-meta-section class="pwiki__panel pwiki__panel--history"
+                  data-testid="project-wiki-history-panel" sectionId="history" title="History"
+                  toggleTestId="project-wiki-section-toggle-history"
+                  bodyId="project-wiki-section-history">
                   @if (history(); as h) {
-                    <span>{{ h.commits.length }}</span>
+                    <span meta-section-count>{{ h.commits.length }}</span>
                   }
-                </div>
-                <app-wiki-doc-history class="pwiki__history"
-                                      data-testid="project-wiki-history"
-                                      [history]="history()"
-                                      [loading]="loadingHistory()"
-                                      (viewRevision)="onViewRevision($event)" />
-              </section>
+                  <app-wiki-doc-history class="pwiki__history"
+                                        data-testid="project-wiki-history"
+                                        [history]="history()"
+                                        [loading]="loadingHistory()"
+                                        (viewRevision)="onViewRevision($event)" />
+              </app-wiki-meta-section>
 
-              <section class="pwiki__panel" data-testid="project-wiki-drift-meta-panel">
-                <div class="pwiki__panel-head">
-                  <span>Drift metadata</span>
+              <app-wiki-meta-section class="pwiki__panel" data-testid="project-wiki-drift-meta-panel"
+                  sectionId="driftMetadata" title="Drift metadata"
+                  toggleTestId="project-wiki-section-toggle-drift-metadata"
+                  bodyId="project-wiki-section-drift-metadata">
                   @if (latestDriftReport(); as report) {
-                    <span>{{ report.scoreBand }}</span>
+                    <span meta-section-count>{{ report.scoreBand }}</span>
                   }
-                </div>
-                @if (latestDriftReport(); as report) {
-                  <dl class="pwiki__info-list">
-                    <div>
-                      <dt>Last report</dt>
-                      <dd>{{ formatTimestamp(report.createdAt) }}</dd>
-                    </div>
-                    <div>
-                      <dt>Report id</dt>
-                      <dd><code>{{ report.reportId }}</code></dd>
-                    </div>
-                    @if (report.markdownPath) {
+                  @if (latestDriftReport(); as report) {
+                    <dl class="pwiki__info-list">
                       <div>
-                        <dt>Artifact</dt>
-                        <dd><code>{{ report.markdownPath }}</code></dd>
+                        <dt>Last report</dt>
+                        <dd>{{ formatTimestamp(report.createdAt) }}</dd>
                       </div>
-                    }
-                  </dl>
-                } @else {
-                  <p class="pwiki__panel-empty">
-                    No drift metadata loaded for this page yet. Open Drift to prepare the first report or CLI task.
-                  </p>
-                }
-              </section>
-
-              <section class="pwiki__panel" data-testid="project-wiki-linked-elements">
-                <div class="pwiki__panel-head">
-                  <span>Linked elements</span>
-                  <span>{{ docLinks().length }}</span>
-                </div>
-                @if (history()?.metadata; as meta) {
-                  <div class="pwiki__chips">
-                    @if (meta.taskKey) {
-                      <span class="pwiki__chip">Task {{ meta.taskKey }}</span>
-                    }
-                    @if (meta.status) {
-                      <span class="pwiki__chip">{{ meta.status }}</span>
-                    }
-                    @if (history()?.model) {
-                      <span class="pwiki__chip">{{ history()!.model }}</span>
-                    }
-                  </div>
-                }
-                @if (docLinks().length > 0) {
-                  <ul class="pwiki__links">
-                    @for (link of docLinks(); track link.target + link.label) {
-                      <li>
-                        <span class="pwiki__link-kind">{{ linkKindLabel(link.kind) }}</span>
-                        <span class="pwiki__link-label">{{ link.label }}</span>
-                        <code>{{ link.target }}</code>
-                      </li>
-                    }
-                  </ul>
-                } @else {
-                  <p class="pwiki__panel-empty">No page links detected.</p>
-                }
-              </section>
+                      <div>
+                        <dt>Report id</dt>
+                        <dd><code>{{ report.reportId }}</code></dd>
+                      </div>
+                      @if (report.markdownPath) {
+                        <div>
+                          <dt>Artifact</dt>
+                          <dd><code>{{ report.markdownPath }}</code></dd>
+                        </div>
+                      }
+                    </dl>
+                  } @else {
+                    <p class="pwiki__panel-empty">
+                      No drift metadata loaded for this page yet. Open Drift to prepare the first report or CLI task.
+                    </p>
+                  }
+              </app-wiki-meta-section>
               </div>
             </aside>
           </div>
@@ -756,43 +754,43 @@
                 <span class="pwiki__meta-toggle-spacer"></span>
               </button>
               <div class="pwiki__meta-body" id="project-wiki-meta-body" [hidden]="contextCollapsed()">
-                <section class="pwiki__panel" data-testid="project-wiki-workspace-meta">
-                  <div class="pwiki__panel-head">
-                    <span>Root folder</span>
-                    <span>{{ docCount() }}</span>
-                  </div>
-                  <dl class="pwiki__info-list">
-                    <div>
-                      <dt>Path</dt>
-                      <dd><code>{{ tree()!.baseDir }}</code></dd>
-                    </div>
-                    <div>
-                      <dt>Supported pages</dt>
-                      <dd>Markdown and sandboxed HTML</dd>
-                    </div>
-                    <div>
-                      <dt>Navigation</dt>
-                      <dd>Categories, search, drag move &amp; reorder, context actions</dd>
-                    </div>
-                  </dl>
-                </section>
+                <app-wiki-meta-section class="pwiki__panel" data-testid="project-wiki-workspace-meta"
+                    sectionId="rootFolder" title="Root folder"
+                    toggleTestId="project-wiki-section-toggle-root-folder"
+                    bodyId="project-wiki-section-root-folder">
+                    <span meta-section-count>{{ docCount() }}</span>
+                    <dl class="pwiki__info-list">
+                      <div>
+                        <dt>Path</dt>
+                        <dd><code>{{ tree()!.baseDir }}</code></dd>
+                      </div>
+                      <div>
+                        <dt>Supported pages</dt>
+                        <dd>Markdown and sandboxed HTML</dd>
+                      </div>
+                      <div>
+                        <dt>Navigation</dt>
+                        <dd>Categories, search, drag move &amp; reorder, context actions</dd>
+                      </div>
+                    </dl>
+                </app-wiki-meta-section>
 
-                <section class="pwiki__panel" data-testid="project-wiki-drift-default-panel">
-                  <div class="pwiki__panel-head">
-                    <span>Drift control</span>
-                  </div>
-                  <p class="pwiki__panel-empty">
-                    Use the Drift action to prepare an architecture comparison prompt, create a durable report,
-                    or start a CLI task with an explicit model.
-                  </p>
-                  <div class="pwiki__panel-actions">
-                    <button class="pwiki__panel-action" type="button"
-                            (click)="openDriftModal()">
-                      <app-studio-icon name="diff" [size]="12"></app-studio-icon>
-                      <span>Open drift modal</span>
-                    </button>
-                  </div>
-              </section>
+                <app-wiki-meta-section class="pwiki__panel" data-testid="project-wiki-drift-default-panel"
+                    sectionId="driftControl" title="Drift control"
+                    toggleTestId="project-wiki-section-toggle-drift-control"
+                    bodyId="project-wiki-section-drift-control">
+                    <p class="pwiki__panel-empty">
+                      Use the Drift action to prepare an architecture comparison prompt, create a durable report,
+                      or start a CLI task with an explicit model.
+                    </p>
+                    <div class="pwiki__panel-actions">
+                      <button class="pwiki__panel-action" type="button"
+                              (click)="openDriftModal()">
+                        <app-studio-icon name="diff" [size]="12"></app-studio-icon>
+                        <span>Open drift modal</span>
+                      </button>
+                    </div>
+                </app-wiki-meta-section>
               </div>
             </aside>
           </div>
