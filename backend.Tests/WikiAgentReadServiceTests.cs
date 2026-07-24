@@ -190,9 +190,11 @@ public sealed class WikiAgentReadBackfillTests : IDisposable
     {
         WriteTask("reader", "AGT-2244");
         var taskDir = Path.Combine(_tasks, TaskStates.Progress, "reader");
+        var logPath = Path.Combine(taskDir, "logs", "cli-output.log");
         File.WriteAllText(
-            Path.Combine(taskDir, "logs", "cli-output.log"),
+            logPath,
             "[10:00:00.000] [stdout] ● Read docs/concepts/overview.md\n");
+        File.SetLastWriteTimeUtc(logPath, new DateTime(2026, 7, 22, 10, 0, 0, DateTimeKind.Utc));
         var service = BuildService(out _);
 
         var baseline = service.EnsureBackfilled();
