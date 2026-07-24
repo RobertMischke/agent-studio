@@ -152,7 +152,7 @@ test('pipeline page: reworked panel shows health, steps, models, prompt bindings
   // (every phase group, each with its per-step token chips) in one shot.
   await page.setViewportSize({ width: 1440, height: 2400 });
 
-  await page.goto(`/#/projects/${projectSlug}/pipeline`);
+  await page.goto(`/#/projects/${projectSlug}/pipeline`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 15_000 });
 
   const section = page.getByTestId('project-detail-pipeline');
