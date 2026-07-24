@@ -14,9 +14,11 @@ import { ClientDefaultsService } from '../../../../services/client-defaults.serv
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import { UsageHoverPanelComponent } from '../../../tokens';
+import { RemoteHostsService } from '../../../remote-hosts';
 
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
+import { summarizeStatusBarHostLoad } from './status-bar-host-load';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -34,6 +36,7 @@ const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 export class StatusBarComponent implements OnInit {
   private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
+  private readonly remoteHosts = inject(RemoteHostsService);
 
   readonly projectNames = input<string[]>([]);
 
@@ -73,6 +76,9 @@ export class StatusBarComponent implements OnInit {
     return Object.values(status.projects).filter(p => !!p.activeJobId).length;
   });
 
+  readonly hostLoad = computed(() =>
+    summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningCount()));
+
   readonly autoCount = computed(() => {
     const status = this.jobService.runnerStatus();
     return Object.values(status.projects).filter(
@@ -90,6 +96,7 @@ export class StatusBarComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.remoteHosts.ensureLoaded();
     void this.clientDefaults.hydrate().then(() => {
       const cli = this.readDefaultCli();
       this.defaultCli.set(cli);
@@ -100,8 +107,22 @@ export class StatusBarComponent implements OnInit {
 
   runningTooltip(): string {
     const n = this.runningCount();
-    if (n === 0) return 'No tasks currently running.';
-    return `${n} task(s) currently executing across all projects.`;
+    const execution = n === 0
+      ? 'No tasks currently running.'
+      : `${n} ${n === 1 ? 'task is' : 'tasks are'} currently executing across all projects.`;
+    const load = this.hostLoad();
+    if (!load) return `${execution} Remote host load is unavailable.`;
+
+    const loadDetail = `Remote host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
+      + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active remote `
+      + `${load.activeSlots === 1 ? 'slot' : 'slots'}.`;
+    if (load.correlation === 'load-without-runs') {
+      return `${execution} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
+    }
+    if (load.correlation === 'runs-without-load') {
+      return `${execution} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
+    }
+    return `${execution} ${loadDetail}`;
   }
 
   autoTooltip(): string {

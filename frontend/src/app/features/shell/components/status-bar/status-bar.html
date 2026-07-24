@@ -4,8 +4,11 @@
       [button]="false"
       bullet="●"
       [pulsing]="runningCount() > 0"
+      [signalTone]="hostLoad()?.tone ?? 'unknown'"
+      [signalCorrelation]="hostLoad()?.correlation ?? 'unknown'"
       [label]="runningCount() + ' running'"
-      [tooltip]="runningTooltip()" />
+      [tooltip]="runningTooltip()"
+      testid="status-bar-running" />
     <app-statusbar-item
       [button]="false"
       icon="refresh"
