@@ -75,14 +75,16 @@ public sealed class TaskServerStoreTests
             run.RunId,
             new CompleteRunRequest(
                 "runner-a",
-                "instance-a",
+                "instance-stale",
                 lease.LeaseId,
                 lease.Fence,
                 staleDecision.Outcome.ToString(),
+                IdempotencyKey: $"completion:{run.RunId}:stale",
+                Sequence: 1,
                 OutcomeDecision: staleDecision),
             "runner-a",
             default));
-        Assert.Equal("lease-not-active", staleCompletion.Code);
+        Assert.Equal("stale-fence", staleCompletion.Code);
 
         await restarted.ResolveUnknownAttemptAsync(
             run.RunId,
@@ -313,6 +315,8 @@ public sealed class TaskServerStoreTests
                 lease.LeaseId,
                 lease.Fence,
                 ExecutionOutcomeKind.AuthenticationFailure.ToString(),
+                IdempotencyKey: $"completion:{run.RunId}:wrong-attempt",
+                Sequence: 1,
                 OutcomeDecision: wrongIdentity),
             "runner-a",
             default));
@@ -327,6 +331,8 @@ public sealed class TaskServerStoreTests
                 lease.LeaseId,
                 lease.Fence,
                 ExecutionOutcomeKind.SuccessfulCompletion.ToString(),
+                IdempotencyKey: $"completion:{run.RunId}:outcome-mismatch",
+                Sequence: 1,
                 OutcomeDecision: decision),
             "runner-a",
             default));
@@ -339,7 +345,9 @@ public sealed class TaskServerStoreTests
             lease.Fence,
             decision.Outcome.ToString(),
             "provider capability is unavailable",
-            decision);
+            IdempotencyKey: $"completion:{run.RunId}:typed-outcome",
+            Sequence: 1,
+            OutcomeDecision: decision);
 
         var completed = await store.CompleteRunAsync(run.RunId, request, "runner-a", default);
         var replay = await store.CompleteRunAsync(run.RunId, request, "runner-a", default);

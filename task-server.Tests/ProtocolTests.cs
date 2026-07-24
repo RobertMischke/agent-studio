@@ -110,6 +110,8 @@ public sealed class ProtocolTests
                 claim.Lease!.LeaseId,
                 claim.Lease.Fence,
                 decision.Outcome.ToString(),
+                IdempotencyKey: $"completion:{claim.Run.RunId}:typed-outcome",
+                Sequence: 1,
                 OutcomeDecision: decision));
         completion.EnsureSuccessStatusCode();
 
