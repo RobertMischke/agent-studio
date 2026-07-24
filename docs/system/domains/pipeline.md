@@ -29,6 +29,9 @@ pipeline view.
 
 ## Key Code
 
+- [Model Routing Policy](./model-routing-policy.md) is the canonical model and
+  thinking-level selection policy, including weighted criteria, correctness
+  floors, benchmark confidence, quota handling, and reissue promotion.
 - `backend/Features/Pipeline/ModelQualificationService.cs`: zero-token PRE-step
   that classifies the task in project context and maps it onto the selected
   CLI's live model/reasoning ladders. `IModelEconomyAdvisor` is the stable
