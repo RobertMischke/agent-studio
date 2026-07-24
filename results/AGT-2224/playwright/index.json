@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-07-24T09:26:48.952Z",
+  "specs": {
+    "pipeline-step-explanations": {
+      "status": "✓",
+      "specFile": "e2e/task-detail/pipeline-step-explanations.spec.ts",
+      "tests": [
+        "every step name opens an explanation tooltip with the step label as title"
+      ],
+      "files": [
+        "pipeline-subset-coverage-tooltip--dark-4a069e2e0327a595a472e09fe431b0e417697087.png",
+        "pipeline-subset-coverage-tooltip--light-65828247699ddb39c4faaad1cb6c9331c6b21715.png"
+      ]
+    }
+  }
+}

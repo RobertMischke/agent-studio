@@ -255,7 +255,8 @@ public sealed class TaskTransitionService
             if (targetState == TaskStates.Completed && !isReadOnly && _mergeRunner != null)
             {
                 var mergeJob = _scanner.FindJob(jobId, watchPath);
-                if (mergeJob != null) TriggerMergeIntoDevelop(mergeJob, settings);
+                if (mergeJob != null)
+                    await TriggerMergeIntoDevelopAsync(mergeJob, settings, ct);
             }
 
             // AGT-2202: accept-without-merge visibility. After the deferred merge
@@ -519,13 +520,22 @@ public sealed class TaskTransitionService
     /// pipeline view; it self-guards and never throws, so a conflict is made
     /// visible without affecting the lane move that already completed.
     /// </summary>
-    private void TriggerMergeIntoDevelop(TaskInfo moved, ProjectSettings settings)
+    private async Task TriggerMergeIntoDevelopAsync(
+        TaskInfo moved,
+        ProjectSettings settings,
+        CancellationToken ct)
     {
         var runner = _mergeRunner;
         if (runner == null) return;
         try
         {
-            var result = runner.Run(moved.ProjectName, moved.Id, moved.FolderPath, moved.WatchPath, settings.IntegrationBranch);
+            var result = await runner.RunAsync(
+                moved.ProjectName,
+                moved.Id,
+                moved.FolderPath,
+                moved.WatchPath,
+                settings.IntegrationBranch,
+                ct).ConfigureAwait(false);
 
             // ASS-1752: persist the develop-merge fact so the board card can show
             // the landed state (`develop @sha`) instead of a dead worktree path,

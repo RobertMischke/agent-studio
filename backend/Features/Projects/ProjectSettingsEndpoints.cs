@@ -99,6 +99,7 @@ public static class ProjectSettingsEndpoints
                     // Only the steps the operator has touched appear here;
                     // an absent step is on its built-in default.
                     pipelineSteps = kv.Value.PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
+                    testExecution = kv.Value.TestExecution,
                     pipelineStepOrder = kv.Value.PipelineStepOrder ?? Array.Empty<string>(),
                     // Resolved per-CLI permission mode + source for all four CLIs
                     // (project override → detected global config → YOLO default).
@@ -555,6 +556,24 @@ public static class ProjectSettingsEndpoints
             });
             var profile = settings.Get(projectName).BuildProfile;
             return Results.Ok(new { profile, pickupAllowed = BuildProfileGate.AllowsAutoPickup(profile) });
+        });
+
+        app.MapPut("/api/projects/{projectName}/test-execution", (string projectName, TestExecutionPolicy req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(entry =>
+                string.Equals(entry.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            settings.SetTestExecution(projectName, req);
+            return Results.Ok(settings.Get(projectName).TestExecution);
+        });
+
+        app.MapDelete("/api/projects/{projectName}/test-execution", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(entry =>
+                string.Equals(entry.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            settings.SetTestExecution(projectName, null);
+            return Results.Ok(new { cleared = true });
         });
 
         // DELETE clears the build profile entirely, reverting the project to the

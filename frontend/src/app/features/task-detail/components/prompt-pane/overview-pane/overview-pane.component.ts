@@ -92,10 +92,7 @@ interface PipelineRowVm {
   config: PipelineStepConfig | null;
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
-  /**
-   * Recorded failure / skip detail shown from the status icon. Null for
-   * successful or not-yet-reached steps, and for legacy rows with no reason.
-   */
+  /** Failure/skip detail, plus honest coverage scope for a passed staged test gate. */
   statusTooltip: StructuredTooltip | null;
   model: string | null;
   thinkingLevel: string | null;
@@ -295,19 +292,18 @@ function buildConcernTooltip(
   return { title: `${label} · ${kind}`, body: text };
 }
 
-/** Show the recorded cause behind an executed Failed / Skipped status. */
+/** Show failures, skips, and the honest coverage scope behind a passed test gate. */
 function buildStepStatusTooltip(
   label: string,
   status: PipelineRowVm['status'],
   detail: string | null,
 ): StructuredTooltip | null {
-  if (status !== 'failed' && status !== 'skipped') return null;
   const body = detail?.trim();
   if (!body) return null;
-  return {
-    title: `${label}: ${status === 'failed' ? 'Failed' : 'Skipped'}`,
-    body,
-  };
+  const passedTestCoverage = status === 'passed' && /(?:^|;\s*)test-level=/i.test(body);
+  if (status !== 'failed' && status !== 'skipped' && !passedTestCoverage) return null;
+  const title = status === 'failed' ? 'Failed' : status === 'skipped' ? 'Skipped' : 'Passed';
+  return { title: `${label}: ${title}`, body };
 }
 
 /** Map a steering tone to the tooltip accent colour. */

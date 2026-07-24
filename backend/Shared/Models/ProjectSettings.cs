@@ -189,6 +189,14 @@ public record ProjectSettings
     public BuildProfile? BuildProfile { get; init; }
 
     /// <summary>
+    /// Staged test policy. Unlike the pipeline step's global warn/fail switch,
+    /// this selects the amount of test coverage per lane. The default for
+    /// post-processing is <c>work-package</c>; a pre-main caller always overrides
+    /// the lane policy with <c>full</c>.
+    /// </summary>
+    public TestExecutionPolicy? TestExecution { get; init; }
+
+    /// <summary>
     /// Per-CLI permission / sandbox mode override. Map of <see cref="CliTypes"/>
     /// id (<c>claude</c> / <c>codex</c> / <c>gemini</c> / <c>copilot</c>) to a
     /// mode id from <see cref="CliPermissionModes"/>. A missing CLI key means
@@ -817,4 +825,51 @@ public record BuildProfile
 
     /// <summary>Short reason from the last failed validation dry-run, or null.</summary>
     public string? LastValidationError { get; init; }
+}
+
+/// <summary>Stable test levels used in settings, evidence, and gate logs.</summary>
+public static class TestExecutionLevels
+{
+    public const string Continuous = "continuous";
+    public const string WorkPackage = "work-package";
+    public const string Full = "full";
+
+    public static string Normalize(string? value, string fallback = WorkPackage)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            Continuous => Continuous,
+            WorkPackage => WorkPackage,
+            Full => Full,
+            _ => fallback,
+        };
+}
+
+/// <summary>
+/// Per-project staged testing configuration. Commands in
+/// <see cref="ContinuousCommands"/> form the small fixed baseline and are
+/// reporting-only during a work-package run. The impacted suite is selected
+/// from the diff, explicit impact rules, Test Hub history, and optionally an
+/// LLM adviser. <see cref="LaneLevels"/> makes the policy lane-specific.
+/// </summary>
+public sealed record TestExecutionPolicy
+{
+    public Dictionary<string, string>? LaneLevels { get; init; }
+    public IReadOnlyList<string>? ContinuousCommands { get; init; }
+    public IReadOnlyList<TestImpactRule>? ImpactRules { get; init; }
+    public string? TestHubHistoryPath { get; init; }
+    public bool LlmSelectionEnabled { get; init; }
+    public string? LlmCliType { get; init; }
+    public string? LlmModel { get; init; }
+    public string? LlmThinkingLevel { get; init; }
+}
+
+/// <summary>
+/// Explicit project-specific impact mapping used when repository conventions
+/// cannot infer a test project or component command.
+/// </summary>
+public sealed record TestImpactRule
+{
+    public IReadOnlyList<string> PathPrefixes { get; init; } = [];
+    public IReadOnlyList<string> TestCommands { get; init; } = [];
+    public string? Reason { get; init; }
 }

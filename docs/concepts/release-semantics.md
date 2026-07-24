@@ -85,6 +85,15 @@ product never changes task lanes merely to make the dialog green.
 4. The release record stores the manifest, not only counts, so later review can
    reconstruct the decision.
 5. A failed push or merge creates no successful release record.
+6. The exact release subject must pass `PreMainTestGate` before the write to
+   `main`. This forces every declared test command at the `full` level in hard
+   fail mode. Lane settings, a small diff, Test Hub history, and model advice
+   cannot reduce this suite, and there is no release override for a red or
+   incomplete full-suite result. The existing deferred integration merge
+   enforces this when a project's configured integration target is `main`: it
+   tests the exact source, rechecks both refs, and permits only a fast-forward
+   to that tested SHA. This safety boundary does not replace the REL-1 manifest
+   and confirmation surface.
 
 ## Main is released; a stable tag is frozen
 

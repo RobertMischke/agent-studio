@@ -480,8 +480,11 @@ builder.Services.AddSingleton<AgentStudio.GeneratedFiles.FileGenerationIndex>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ProjectPipelineCostService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ILintScssRunner,
     AgentStudio.Pipeline.LintScssRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ITestSelectionAdvisor,
+    AgentStudio.Pipeline.LlmTestSelectionAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.PreMainTestGate>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
 // Opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782): keeps the

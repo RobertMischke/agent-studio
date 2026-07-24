@@ -1065,7 +1065,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.stepStatusLabel('running')).toBe('Running');
   });
 
-  it('pipeline block: failed and skipped status tooltips expose their recorded reasons', async () => {
+  it('pipeline block: subset passes plus failed and skipped statuses expose their recorded reasons', async () => {
     const fixture = await build(baseJob({ state: '5-human-review' }));
     const pipe: TaskPipelineResponse = {
       pipeline: {
@@ -1073,6 +1073,7 @@ describe('OverviewPaneComponent (smoke)', () => {
         pre: [], core: [], post: [],
         allSteps: [
           { id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+          { id: 'post-subset-build-test-gate', displayName: 'Subset build/test gate', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
           { id: 'post-wiki-maintenance', displayName: 'Wiki maintenance', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
         ],
       },
@@ -1085,6 +1086,13 @@ describe('OverviewPaneComponent (smoke)', () => {
             startedAt: '2026-07-12T04:47:20Z', completedAt: '2026-07-12T05:00:18Z', durationMs: 778_000,
             inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
             verdict: 'fail', reason: '`dotnet test --filter Category!=MachineBound --nologo` exit 1',
+          },
+          {
+            stepId: 'post-subset-build-test-gate', kind: 'tool', model: null, status: 'passed',
+            startedAt: '2026-07-12T04:47:20Z', completedAt: '2026-07-12T04:48:18Z', durationMs: 58_000,
+            inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+            verdict: 'ok',
+            reason: 'verify gate passed; test-level=work-package; selected=2; full-suite=not-run; omitted=11',
           },
           {
             stepId: 'post-wiki-maintenance', kind: 'tool', model: null, status: 'skipped',
@@ -1104,6 +1112,10 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(rows.find(row => row.id === 'post-build-test-gate')?.statusTooltip).toEqual({
       title: 'Build/test gate: Failed',
       body: '`dotnet test --filter Category!=MachineBound --nologo` exit 1',
+    });
+    expect(rows.find(row => row.id === 'post-subset-build-test-gate')?.statusTooltip).toEqual({
+      title: 'Subset build/test gate: Passed',
+      body: 'verify gate passed; test-level=work-package; selected=2; full-suite=not-run; omitted=11',
     });
     expect(rows.find(row => row.id === 'post-wiki-maintenance')?.statusTooltip).toEqual({
       title: 'Wiki maintenance: Skipped',

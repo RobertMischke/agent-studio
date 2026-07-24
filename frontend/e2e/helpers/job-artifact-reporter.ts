@@ -15,13 +15,19 @@ import { Reporter, TestCase, TestResult } from '@playwright/test';
  */
 export class JobArtifactReporter implements Reporter {
   private readonly jobResultsDir = process.env.JOB_RESULTS_DIR;
-  private readonly testResultsDir = 'frontend/e2e/test-results';
-  private readonly artifacts = new Map<string, { status: string; files: string[] }>();
+  private readonly testResultsDir = 'test-results';
+  private readonly artifacts = new Map<string, {
+    status: string;
+    specFile: string;
+    tests: string[];
+    files: string[];
+  }>();
 
   onTestEnd(test: TestCase, result: TestResult): void {
     if (!this.jobResultsDir) return;
 
-    const specName = test.titlePath()[0] || 'unknown';
+    const specFile = path.relative(process.cwd(), test.location.file).replaceAll('\\', '/');
+    const specName = path.basename(specFile).replace(/\.(?:spec|test)\.[^.]+$/i, '') || 'unknown';
     const testName = test.title;
     const status =
       result.status === 'passed'
@@ -33,10 +39,13 @@ export class JobArtifactReporter implements Reporter {
             : '?';
 
     if (!this.artifacts.has(specName)) {
-      this.artifacts.set(specName, { status, files: [] });
+      this.artifacts.set(specName, { status, specFile, tests: [], files: [] });
     }
 
     const specArtifacts = this.artifacts.get(specName)!;
+    if (!specArtifacts.tests.includes(testName)) {
+      specArtifacts.tests.push(testName);
+    }
 
     // Copy artifacts from test-results/<spec>/ subfolder to results/playwright/<spec>/
     const testResultsSpecDir = path.join(this.testResultsDir, specName.replace(/\s+/g, '-').toLowerCase());

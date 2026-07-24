@@ -33,7 +33,21 @@ public sealed record VerifyCommand(
     VerifyEcosystem Ecosystem,
     VerifyCommandKind Kind,
     string WorkingSubdir,
-    string Command);
+    string Command)
+{
+    /// <summary>Coverage scope stamped by the staged test selector.</summary>
+    public string TestScope { get; init; } = "not-test";
+
+    /// <summary>
+    /// False only for continuous baseline tests during a work-package run. A
+    /// red baseline is recorded as a separate finding and does not charge the
+    /// current card for unrelated project debt.
+    /// </summary>
+    public bool BlocksWorkPackage { get; init; } = true;
+
+    /// <summary>Human-readable selection provenance persisted with the gate.</summary>
+    public string? SelectionReason { get; init; }
+}
 
 /// <summary>The derived verify plan plus where it came from (for logs / the verdict).</summary>
 public sealed record VerifyPlan(IReadOnlyList<VerifyCommand> Commands, string Source)

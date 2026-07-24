@@ -2416,6 +2416,92 @@ public class GitService
     }
 
     /// <summary>
+    /// Advances an explicit target branch to an exact, already-tested source
+    /// revision using a fast-forward only. The expected SHAs close the gap
+    /// between a pre-main test run and the ref mutation: if either branch moved
+    /// while the suite was running, no merge is attempted.
+    /// </summary>
+    public MergeIntoIntegrationResult MergeBranchFastForward(
+        string repoRoot,
+        string sourceBranch,
+        string targetBranch,
+        string expectedSourceSha,
+        string expectedTargetSha)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error, error: "Repo root does not exist.");
+        if (!IsLikelyBranchName(sourceBranch) || !IsLikelyBranchName(targetBranch))
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error, error: "Invalid source or target branch.");
+
+        var sourceSha = GetBranchTip(repoRoot, sourceBranch);
+        var targetSha = GetBranchTip(repoRoot, targetBranch);
+        if (!string.Equals(sourceSha, expectedSourceSha, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(targetSha, expectedTargetSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: "Source or target branch moved after the pre-main test run; release merge was not attempted.");
+        }
+
+        if (IsAncestor(repoRoot, sourceBranch, targetBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.AlreadyMerged);
+        if (!IsAncestor(repoRoot, targetBranch, sourceBranch))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Release source '{sourceBranch}' is not a fast-forward of '{targetBranch}'.");
+        }
+        if (RepoHasUncommittedChanges(repoRoot))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: "Integration working tree has uncommitted changes; refusing to merge.");
+        }
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, targetBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(repoRoot, "checkout", targetBranch);
+            if (checkoutCode != 0)
+            {
+                return MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.Error,
+                    error: $"Could not check out '{targetBranch}': {checkoutError.Trim()}");
+            }
+        }
+
+        // Merge the immutable revision that passed the suite, not the movable
+        // branch name. The branch-tip checks above reject movement already
+        // observed after the gate; this also closes the smaller race between
+        // those checks and the ref mutation itself.
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot, "merge", "--ff-only", expectedSourceSha);
+        if (mergeCode != 0)
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Fast-forward release merge failed: {mergeError.Trim()}");
+        }
+
+        var mergedSha = ReadHeadShaAt(repoRoot);
+        if (!string.Equals(mergedSha, expectedSourceSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: "Fast-forward release merge did not land on the tested source SHA.");
+        }
+
+        _logger.LogInformation(
+            "Fast-forwarded release target {TargetBranch} to tested source {SourceBranch} at {Sha}",
+            targetBranch, sourceBranch, mergedSha);
+        return MergeIntoIntegrationResult.Of(
+            MergeIntoIntegrationOutcome.Merged, mergedSha: mergedSha);
+    }
+
+    /// <summary>
     /// Deletes the local branch <paramref name="branch"/> from
     /// <paramref name="repoRoot"/>. ADR-0052 worktree teardown: after a task
     /// branch has been folded back into the integration branch its ref is dead
