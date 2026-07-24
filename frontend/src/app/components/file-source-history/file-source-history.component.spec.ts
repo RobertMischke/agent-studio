@@ -27,12 +27,14 @@ describe('FileSourceHistoryComponent', () => {
     return fixture;
   }
 
-  it('loads timeline, selected version, and run-to-run diff when history is opened', async () => {
+  it('keeps the current file quiet and loads a selected version only inside history', async () => {
     const fixture = await setup();
     const http = TestBed.inject(HttpTestingController);
     const root = fixture.nativeElement as HTMLElement;
 
     expect(root.querySelector('[data-testid="file-source-history"]')?.textContent).toContain('Current');
+    expect(root.querySelector('[data-testid="file-source-version-select"]')).toBeNull();
+    expect(root.querySelector('[data-testid="file-source-diff-panel"]')).toBeNull();
 
     root.querySelector<HTMLButtonElement>('[data-testid="file-source-history-toggle"]')?.click();
     fixture.detectChanges();
@@ -65,19 +67,24 @@ describe('FileSourceHistoryComponent', () => {
       r.url === '/api/tasks/demo-job/files/aspect-code-quality.md' &&
       r.params.get('at') === '2222222')
       .flush(utf8Buffer('# Version 2\n\nPass.'));
-    http.expectOne((r) =>
-      r.url === '/api/tasks/demo-job/files/aspect-code-quality.md/diff' &&
-      r.params.get('from') === '1111111' &&
-      r.params.get('to') === '2222222')
-      .flush(utf8Buffer('@@ -1 +1 @@\n-concerns\n+pass\n'));
     fixture.detectChanges();
 
     expect(root.querySelector('[data-testid="file-source-history-timeline"]')?.textContent).toContain('Run #2');
     expect(root.querySelector('[data-testid="file-source-history-timeline"]')?.textContent).toContain('pass');
     expect(root.querySelector('[data-testid="file-source-version"]')?.textContent).toContain('Version 2');
-    const diff = root.querySelector('[data-testid="file-source-diff"]');
-    expect(diff?.textContent).toContain('-concerns');
-    expect(diff?.textContent).toContain('+pass');
+    expect(root.querySelector('[data-testid="file-source-version-select"]')).toBeNull();
+    expect(root.querySelector('[data-testid="file-source-diff-panel"]')).toBeNull();
+    http.expectNone((r) => r.url.endsWith('/diff'));
+
+    root.querySelector<HTMLButtonElement>('[data-testid="file-source-history-run-1"]')?.click();
+    fixture.detectChanges();
+    http.expectOne((r) =>
+      r.url === '/api/tasks/demo-job/files/aspect-code-quality.md' &&
+      r.params.get('at') === '1111111')
+      .flush(utf8Buffer('# Version 1\n\nConcerns.'));
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="file-source-version"]')?.textContent).toContain('Version 1');
     http.verify();
   });
 

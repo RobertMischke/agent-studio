@@ -1,4 +1,11 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { setTheme } from '../helpers/theme';
+
+const EVIDENCE_DIR = process.env.JOB_RESULTS_DIR
+  ? join(process.env.JOB_RESULTS_DIR, 'review-file-history')
+  : resolve('test-results/review-file-history');
 
 const PROJECT = 'fixture';
 const WATCH_PATH = 'C:/fixtures/file-source-history';
@@ -59,6 +66,9 @@ async function installRoutes(page: Page): Promise<void> {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   await page.route('**/api/**', (route) => json(route, []));
+  await page.route('**/api/auth/status', (route) => json(route, {
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  }));
   await page.route('**/api/tasks', (route) => json(route, []));
   await page.route('**/api/tasks/grouped**', (route) => json(route, {
     backlog: [],
@@ -128,10 +138,12 @@ async function installRoutes(page: Page): Promise<void> {
       provenance: { source: 'workspace', path: 'prompt.md' },
     },
   ]));
-  await page.route(new RegExp(`/api/tasks/${idEsc}/files/prompt\\.md/diff(\\?|$)`), (route) =>
-    text(route, '@@ -1 +1 @@\n-Old prompt\n+Current prompt\n'));
-  await page.route(new RegExp(`/api/tasks/${idEsc}/files/prompt\\.md(\\?|$)`), (route) =>
-    text(route, '# Historical prompt\n\nRun two prompt body.'));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/files/prompt\\.md(\\?|$)`), (route) => {
+    const at = new URL(route.request().url()).searchParams.get('at');
+    return text(route, at === '1111111'
+      ? '# Historical prompt\n\nRun one prompt body.'
+      : '# Historical prompt\n\nRun two prompt body.');
+  });
   await page.route(new RegExp(`/api/tasks/${idEsc}/pipeline(\\?|$)`), (route) => json(route, {
     pipeline: { id: 'p', displayName: 'Pipeline', version: 1, pre: [], core: [], post: [], allSteps: [] },
     execution: null,
@@ -192,16 +204,18 @@ async function installStatusRoutes(page: Page): Promise<void> {
       provenance: { source: 'workspace', path: 'status.md' },
     },
   ]));
-  await page.route(new RegExp(`/api/tasks/${idEsc}/files/status\\.md/diff(\\?|$)`), (route) =>
-    text(route, '@@ -1 +1 @@\n-Run one status\n+Run two status\n'));
-  await page.route(new RegExp(`/api/tasks/${idEsc}/files/status\\.md(\\?|$)`), (route) =>
-    text(route, '# Status\n\nResult: pass\n\n## Summary\n\nHistorical status body for run two.'));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/files/status\\.md(\\?|$)`), (route) => {
+    const at = new URL(route.request().url()).searchParams.get('at');
+    return text(route, at === '3333333'
+      ? '# Status\n\nResult: concerns\n\n## Summary\n\nHistorical status body for run one.'
+      : '# Status\n\nResult: pass\n\n## Summary\n\nHistorical status body for run two.');
+  });
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     json(route, detail('# Status\n\nResult: pass\n\nThe current protocol summary.')));
 }
 
 test.describe('File source history viewer', () => {
-  test('Files tab shows run history, selected version, and run-to-run diff', async ({ page }) => {
+  test('Files tab defaults to the current result and keeps version choice in History', async ({ page }) => {
     await installRoutes(page);
 
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
@@ -210,13 +224,34 @@ test.describe('File source history viewer', () => {
 
     const promptCard = page.getByTestId('file-card-prompt.md');
     await expect(promptCard).toBeVisible();
+    await promptCard.getByTestId('file-card-expand-prompt.md').click();
+    await expect(promptCard.getByTestId('file-source-history-toggle')).toBeVisible();
+    await expect(promptCard).toContainText('The current task prompt.');
+    await expect(promptCard.getByTestId('file-source-history-timeline')).toHaveCount(0);
+    await expect(promptCard.getByTestId('file-source-version-select')).toHaveCount(0);
+    await expect(promptCard.getByTestId('file-source-diff-panel')).toHaveCount(0);
+
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await promptCard.screenshot({ path: join(EVIDENCE_DIR, `after-default-current-${theme}--mocked.png`) });
+    }
+    await setTheme(page, 'light');
     await promptCard.getByTestId('file-source-history-toggle').click();
 
     await expect(promptCard.getByTestId('file-source-history-timeline')).toContainText('Run #2');
     await expect(promptCard.getByTestId('file-source-history-timeline')).toContainText('pass');
     await expect(promptCard.getByTestId('file-source-version')).toContainText('Historical prompt');
-    await expect(promptCard.getByTestId('file-source-diff')).toContainText('-Old prompt');
-    await expect(promptCard.getByTestId('file-source-diff')).toContainText('+Current prompt');
+    await expect(promptCard.getByTestId('file-source-version-select')).toHaveCount(0);
+    await expect(promptCard.getByTestId('file-source-diff-panel')).toHaveCount(0);
+
+    await promptCard.getByTestId('file-source-history-run-1').click();
+    await expect(promptCard.getByTestId('file-source-version')).toContainText('Run one prompt body.');
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await promptCard.screenshot({ path: join(EVIDENCE_DIR, `after-history-list-${theme}--mocked.png`) });
+    }
   });
 
   test('Protocol "View version history" exposes the status.md run timeline', async ({ page }) => {
@@ -238,6 +273,10 @@ test.describe('File source history viewer', () => {
     await expect(history.getByTestId('file-source-history-timeline')).toContainText('Run #2');
     await expect(history.getByTestId('file-source-history-timeline')).toContainText('pass');
     await expect(history.getByTestId('file-source-version')).toContainText('Historical status body');
-    await expect(history.getByTestId('file-source-diff')).toContainText('+Run two status');
+    await expect(history.getByTestId('file-source-version-select')).toHaveCount(0);
+    await expect(history.getByTestId('file-source-diff-panel')).toHaveCount(0);
+
+    await history.getByTestId('file-source-history-run-1').click();
+    await expect(history.getByTestId('file-source-version')).toContainText('Historical status body for run one');
   });
 });

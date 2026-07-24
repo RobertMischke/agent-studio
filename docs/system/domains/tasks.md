@@ -100,7 +100,12 @@ This prevents the AGT-2166 archived-orphan/lost-task failure mode.
 `GET /api/tasks/{id}/artifacts` projects supported top-level task documents into
 the Files tab: Markdown, self-contained `.html` / `.htm`, and structured
 `aspect-*.json`. `status.md` remains owned by Result, and subfolders remain out
-of scope. HTML content is fetched through the existing task-file endpoint and
+of scope. A file opens on its current content without historical controls. Its
+History tab lists prior snapshots compactly by run, date, and grade; choosing a
+row loads that snapshot. Arbitrary From/To comparison between review snapshots
+is intentionally absent because it did not support an operator workflow. The
+history list remains the basis if a concrete comparison need emerges. HTML
+content is fetched through the existing task-file endpoint and
 rendered through `srcdoc` with `sandbox="allow-scripts"`. The deliberate omission
 of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
 read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin

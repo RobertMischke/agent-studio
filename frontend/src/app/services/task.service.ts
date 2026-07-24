@@ -1084,21 +1084,6 @@ export class TaskService {
     );
   }
 
-  /** Unified diff for one task file between two commit SHAs. */
-  diffTaskFileVersions(
-    jobId: string,
-    path: string,
-    from: string,
-    to: string,
-    watchPath?: string,
-    scope: TaskFileSourceScope = 'auto',
-  ) {
-    return this.getUtf8Text(
-      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${this.encodeTaskFilePath(path)}/diff`,
-      this.withFileSourceParams(watchPath, scope, { from, to }),
-    );
-  }
-
   reorderJobs(jobs: TaskOrderItem[]) {
     return this.http.post(`${this.baseUrl}/tasks/reorder`, { jobs });
   }

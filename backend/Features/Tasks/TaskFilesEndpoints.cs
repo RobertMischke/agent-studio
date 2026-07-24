@@ -26,8 +26,6 @@ public static class TaskFilesEndpoints
             [FromQuery] string? watchPath,
             [FromQuery] string? at,
             [FromQuery] string? scope,
-            [FromQuery(Name = "from")] string? fromSha,
-            [FromQuery(Name = "to")] string? toSha,
             TaskFileHistoryService files,
             AgentStudio.Registry.ProjectRegistry projects) =>
         {
@@ -36,12 +34,6 @@ public static class TaskFilesEndpoints
             {
                 var history = files.GetHistory(jobId, watchPath, historyPath, scope);
                 return HistoryResult(history);
-            }
-
-            if (TryStripOperationSuffix(path, "diff", out var diffPath))
-            {
-                var diff = files.GetDiff(jobId, watchPath, diffPath, fromSha, toSha, scope);
-                return DiffResult(diff);
             }
 
             var content = files.ReadFile(jobId, watchPath, path, at, scope);
@@ -182,15 +174,6 @@ public static class TaskFilesEndpoints
         if (!result.Success) return ErrorResult(result);
         var content = result.Value!;
         return Results.Text(content.Content, content.ContentType, Encoding.UTF8);
-    }
-
-    private static IResult DiffResult(TaskFileLookupResult<TaskFileDiff> result)
-    {
-        if (!result.Success) return ErrorResult(result);
-        var diff = result.Value?.Diff ?? "";
-        return string.IsNullOrWhiteSpace(diff)
-            ? Results.NoContent()
-            : Results.Text(diff, "text/plain", Encoding.UTF8);
     }
 
     private static IResult ErrorResult<T>(TaskFileLookupResult<T> result)
