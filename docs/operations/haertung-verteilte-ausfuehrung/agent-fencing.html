@@ -280,25 +280,25 @@ footer { margin-top: 58px; padding-top: 20px; border-top: 1px solid var(--line);
       <article class="case">
         <div class="case-head"><h3>AIP-7</h3><span>agent-git-violation · gpt-5.6-sol</span></div>
         <dl>
-          <dt>What happened</dt><dd>A worker-created history change was associated with the run. Review then found that the committed diff belonged to the unrelated sidecar-metadata pattern, not the requested process-actor pattern.</dd>
-          <dt>What caught it</dt><dd>The Git-violation path stopped clean acceptance, and exact-diff code review exposed the attribution mismatch. Recovery retained the host-local worktree and overwrote no remote ref.</dd>
+          <dt>What happened</dt><dd>The worker advanced HEAD by one commit before the platform-owned commit step. Review then found that the committed diff belonged to the unrelated sidecar-metadata pattern, not the requested process-actor pattern.</dd>
+          <dt>What caught it</dt><dd>The runner’s before/after HEAD check raised <code>agent-git-violation</code>. Exact-diff code review then exposed the attribution mismatch and prevented clean acceptance.</dd>
           <dt>What we learned</dt><dd>Topical research is not proof that the recorded commit belongs to the task. Writer identity and exact diff provenance must both be checked.</dd>
         </dl>
       </article>
       <article class="case">
         <div class="case-head"><h3>AIP-10</h3><span>agent-git-violation · gpt-5.6-terra</span></div>
         <dl>
-          <dt>What happened</dt><dd>The initial worker run created a commit despite an explicit no-commit/no-push instruction. Its reviewed diff also carried unrelated sidecar-metadata work.</dd>
-          <dt>What caught it</dt><dd>The platform recovery and review path quarantined the result. The retained worktree was preserved when branch publication could not be verified, with no remote ref overwritten.</dd>
+          <dt>What happened</dt><dd>The worker advanced HEAD by one commit before the platform-owned commit step. Its reviewed diff contained the unrelated sidecar-metadata pattern rather than the requested prompt-management entry.</dd>
+          <dt>What caught it</dt><dd>The same before/after HEAD check raised <code>agent-git-violation</code>. Exact-diff review classified the change set as incoherent and kept it out of the normal acceptance path.</dd>
           <dt>What we learned</dt><dd>A prompt rule is useful but insufficient. A command guard, HEAD-delta detection, exact-diff review, and fail-closed recovery are all required.</dd>
         </dl>
       </article>
       <article class="case">
         <div class="case-head"><h3>Token Economy shared-checkout collision</h3><span>TE-13 · remediation AGT-2300</span></div>
         <dl>
-          <dt>What happened</dt><dd>Task work shared one checkout, so one run could observe or inherit another run’s HEAD and diff. Task identity and repository state stopped being the same thing.</dd>
-          <dt>What caught it</dt><dd>Branch and diff attribution disagreed with the task, and review surfaced the collision instead of accepting the visible HEAD as proof.</dd>
-          <dt>What we learned</dt><dd>A shared checkout cannot provide reliable per-run provenance. Each run needs isolation, while commit and push remain platform-owned.</dd>
+          <dt>What happened</dt><dd>For local-folder projects, a non-Git task-storage <code>RootPath</code> could disable worktree provisioning even when <code>RepositoryPath</code> named the real repository. Two admitted runs could then share one in-place checkout and observe each other’s HEAD and diff.</dd>
+          <dt>What caught it</dt><dd>Task identity, branch state, and the reviewed diff disagreed. That provenance mismatch exposed the collision instead of treating the visible HEAD as task evidence.</dd>
+          <dt>What we learned</dt><dd>Isolation must be resolved from the authoritative repository, not from task storage or slot count. Every coding run needs its own worktree, while commit and push remain platform-owned.</dd>
         </dl>
       </article>
     </div>

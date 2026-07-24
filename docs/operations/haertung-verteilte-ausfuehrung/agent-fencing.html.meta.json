@@ -7,10 +7,10 @@
     "type": "html",
     "fingerprint": {
       "algorithm": "sha256",
-      "hash": "80aca9cc2d6e4955223e14e5b71f044ca1e39c837bf663970c87f57739ddb5ab",
-      "sizeBytes": 14653,
+      "hash": "f1253dcf9990f8f073a93d301d7e67cab96a96bcec7ca625dedea2c47fd6baa7",
+      "sizeBytes": 14895,
       "lineCount": 332,
-      "capturedAt": "2026-07-24T21:34:31.000Z"
+      "capturedAt": "2026-07-24T23:01:30.000Z"
     }
   },
   "classification": {
