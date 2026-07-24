@@ -100,6 +100,13 @@ public record GitCommitInfo(
     int Added,
     int Removed);
 
+/// <summary>
+/// A curated <c>merge(KEY)</c> / <c>merge-recut(KEY)</c> integration commit.
+/// The committer timestamp lets evidence consumers reject a merge that predates
+/// the card's current attributed commit.
+/// </summary>
+public record GitIntegrationMerge(string Sha, DateTime CommittedAtUtc);
+
 public record GenerateMessageResult(string? Message, string? Error);
 
 /// <summary>
@@ -4626,21 +4633,20 @@ public class GitService
 
     /// <summary>
     /// All curated integration commits reachable from the supplied test-run
-    /// revisions, grouped by task key. Unlike
-    /// <see cref="GetIntegrationMergeShaByKey"/>, this keeps older integrations
-    /// for a key because an earlier test run may predate its newest re-cut.
-    /// Consumers still verify ancestry against each individual run revision.
+    /// revisions, grouped by task key. The committer timestamp is part of the
+    /// result because a key alone is not revision identity: consumers must
+    /// reject integrations older than the card's current attributed commit.
     /// </summary>
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> GetIntegrationMergeShasByKey(
+    public IReadOnlyDictionary<string, IReadOnlyList<GitIntegrationMerge>> GetIntegrationMergesByKey(
         string repoRoot,
         IReadOnlyCollection<string> tipRefs)
     {
-        var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, List<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return
-            new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
         var refs = tipRefs.Where(IsLikelyBranchName).Distinct(StringComparer.Ordinal).ToArray();
         if (refs.Length == 0) return
-            new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
 
         var args = new List<string>
         {
@@ -4648,32 +4654,42 @@ public class GitService
             "--no-color",
             "-E",
             "--grep=^merge(-recut)?\\(",
-            "--format=%H%x1f%s",
+            "--format=%H%x1f%cI%x1f%s",
         };
         args.AddRange(refs);
         var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return
-            new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            var separator = line.IndexOf('\x1f');
-            if (separator <= 0) continue;
-            var sha = line[..separator].Trim();
-            var key = ParseIntegrationMergeKey(line[(separator + 1)..]);
-            if (sha.Length == 0 || key is null) continue;
+            var parts = line.Split('\x1f', 3);
+            if (parts.Length != 3) continue;
+            var sha = parts[0].Trim();
+            if (sha.Length == 0
+                || !DateTime.TryParse(
+                    parts[1],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                        | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var committedAtUtc)
+                || ParseIntegrationMergeKey(parts[2]) is not { } key)
+            {
+                continue;
+            }
             if (!map.TryGetValue(key, out var commits))
             {
                 commits = [];
                 map[key] = commits;
             }
-            if (!commits.Contains(sha, StringComparer.OrdinalIgnoreCase)) commits.Add(sha);
+            if (!commits.Any(commit => string.Equals(commit.Sha, sha, StringComparison.OrdinalIgnoreCase)))
+                commits.Add(new GitIntegrationMerge(sha, committedAtUtc));
         }
 
         return map.ToDictionary(
             pair => pair.Key,
-            pair => (IReadOnlyList<string>)pair.Value,
+            pair => (IReadOnlyList<GitIntegrationMerge>)pair.Value,
             StringComparer.OrdinalIgnoreCase);
     }
 

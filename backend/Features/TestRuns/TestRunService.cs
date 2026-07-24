@@ -170,7 +170,7 @@ public sealed class TestRunService
                         .ToArray();
                     var graph = _git.GetCommitParentGraph(repo, refs);
                     var distances = refs.ToDictionary(reference => reference, reference => AncestorDistances(graph, reference), StringComparer.OrdinalIgnoreCase);
-                    var integrationMerges = _git.GetIntegrationMergeShasByKey(
+                    var integrationMerges = _git.GetIntegrationMergesByKey(
                         repo,
                         runs.Select(run => run.Commit).ToArray());
                     value = groupedJobs.ToDictionary(
@@ -215,13 +215,17 @@ public sealed class TestRunService
         TaskInfo job,
         IReadOnlyList<TestRunRecord> runs,
         IReadOnlyDictionary<string, Dictionary<string, int>> distances,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> integrationMerges)
+        IReadOnlyDictionary<string, IReadOnlyList<GitIntegrationMerge>> integrationMerges)
     {
         var anchor = BoardMergeStatusService.AnchorFor(job);
         if (string.IsNullOrWhiteSpace(anchor)) return None(job, "No test run assigned: card has no commit");
-        var integratedAnchors = string.IsNullOrWhiteSpace(job.Key)
+        var anchorCommittedAt = CurrentCommitAt(job);
+        var integratedAnchors = string.IsNullOrWhiteSpace(job.Key) || anchorCommittedAt is null
             ? []
-            : integrationMerges.GetValueOrDefault(job.Key) ?? [];
+            : (integrationMerges.GetValueOrDefault(job.Key) ?? [])
+                .Where(merge => merge.CommittedAtUtc > anchorCommittedAt.Value)
+                .Select(merge => merge.Sha)
+                .ToArray();
 
         var candidates = new List<(TestRunRecord Run, string Quality, string Direction, int Distance, bool Contains)>();
         foreach (var run in runs)
@@ -332,8 +336,16 @@ public sealed class TestRunService
     }
 
     private static string Signature(IReadOnlyCollection<TaskInfo> jobs, IReadOnlyCollection<TestRunRecord> runs)
-        => string.Join('|', jobs.OrderBy(job => job.TaskKey).Select(job => $"{job.TaskKey}:{job.State}:{BoardMergeStatusService.AnchorFor(job)}"))
+        => string.Join('|', jobs.OrderBy(job => job.TaskKey).Select(job =>
+            $"{job.TaskKey}:{job.State}:{BoardMergeStatusService.AnchorFor(job)}:{CurrentCommitAt(job):O}"))
            + "||" + string.Join('|', runs.OrderBy(run => run.Id).Select(run => $"{run.Id}:{run.Commit}:{run.State}:{run.Result}"));
+
+    private static DateTime? CurrentCommitAt(TaskInfo job)
+    {
+        var value = job.Commits.Count > 0 ? job.Commits[^1].At : job.Commit?.At;
+        if (value is null || value == default) return null;
+        return value.Value.Kind == DateTimeKind.Utc ? value : value.Value.ToUniversalTime();
+    }
 
     private static IReadOnlyList<TestRunRecord> Ordered(IEnumerable<TestRunRecord> runs) => runs
         .OrderBy(run => run.State == TestRunStates.Planned ? 0 : run.State == TestRunStates.Running ? 1 : 2)

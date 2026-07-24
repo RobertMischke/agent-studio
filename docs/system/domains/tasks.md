@@ -213,9 +213,11 @@ cannot erase an operator decision.
 - Test evidence is never persisted on a task. A successful run proves a card
   only when its commit equals the card commit or contains its change. Direct
   ancestry proves ordinary commits; a reachable curated `merge(KEY)` or
-  `merge-recut(KEY)` integration anchor proves rewritten task commits. Planned
-  and running matches are pending evidence; an older green run remains visible
-  as `diff not included` and never turns the card green.
+  `merge-recut(KEY)` integration anchor proves rewritten task commits only when
+  that integration postdates the card's current attributed commit.
+  Missing commit timestamps disable this fallback rather than reusing historical
+  key-only evidence. Planned and running matches are pending evidence; an older
+  green run remains visible as `diff not included` and never turns the card green.
 
 ## Execution location on task reads
 

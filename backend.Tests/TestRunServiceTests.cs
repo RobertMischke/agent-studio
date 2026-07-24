@@ -184,7 +184,7 @@ public sealed class TestRunServiceTests : IDisposable
         Commit(stack.Repo, "later.txt", "later", "Later test revision");
         var runCommit = RevParse(stack.Repo, "HEAD");
         var containingRun = stack.Service.Create("Demo", Request(runCommit, "completed", "passed"))!;
-        var job = Task("rewritten", stack.Storage, taskCommit);
+        var job = Task("rewritten", stack.Storage, taskCommit, DateTime.UnixEpoch);
 
         var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
 
@@ -193,6 +193,28 @@ public sealed class TestRunServiceTests : IDisposable
         Assert.Equal("proven", evidence.EvidenceState);
         Assert.Equal(1, evidence.Distance);
         Assert.True(evidence.DiffContained);
+    }
+
+    [Fact]
+    public void CardEvidence_DoesNotReuseGreenRecutThatPredatesCurrentCardCommit()
+    {
+        var stack = BuildStack();
+        Commit(stack.Repo, "integrated-v1.txt", "v1", "merge-recut(DEM-9): integrate first revision");
+        var oldRunCommit = RevParse(stack.Repo, "HEAD");
+        stack.Service.Create("Demo", Request(oldRunCommit, "completed", "passed"));
+
+        Git(stack.Repo, "checkout", "-q", "-b", "task/current-revision");
+        Commit(stack.Repo, "current-v2.txt", "v2", "Current card revision");
+        var currentCardCommit = RevParse(stack.Repo, "HEAD");
+        var job = Task("rewritten", stack.Storage, currentCardCommit, DateTime.UtcNow.AddMinutes(1));
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.NotNull(evidence.RunId);
+        Assert.Equal("does-not-contain-diff", evidence.MatchQuality);
+        Assert.Equal("not-proven", evidence.EvidenceState);
+        Assert.False(evidence.DiffContained);
+        Assert.Contains("before, diff not included", evidence.Summary);
     }
 
     [Fact]
@@ -254,7 +276,7 @@ public sealed class TestRunServiceTests : IDisposable
         Host = state == "planned" ? null : "runner-01",
     };
 
-    private static TaskInfo Task(string id, string storage, string commit) => new()
+    private static TaskInfo Task(string id, string storage, string commit, DateTime? committedAt = null) => new()
     {
         Id = id,
         TaskKey = "PROJ-001::" + id,
@@ -263,8 +285,8 @@ public sealed class TestRunServiceTests : IDisposable
         State = TaskStates.HumanReview,
         WatchPath = storage,
         ProjectName = "Demo",
-        Commit = new TaskCommitInfo { Sha = commit, ShortSha = commit[..7], Message = id },
-        Commits = [new TaskCommitInfo { Sha = commit, ShortSha = commit[..7], Message = id }],
+        Commit = new TaskCommitInfo { Sha = commit, ShortSha = commit[..7], Message = id, At = committedAt ?? default },
+        Commits = [new TaskCommitInfo { Sha = commit, ShortSha = commit[..7], Message = id, At = committedAt ?? default }],
     };
 
     private static void Commit(string repo, string file, string content, string message)
