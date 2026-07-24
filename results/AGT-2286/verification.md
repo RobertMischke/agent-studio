@@ -7,8 +7,8 @@ Verified on 2026-07-24 from branch
 
 The newest task grade reviewed only the earlier empty salvage commit and could
 not attribute the feature commit or its documentation. The task branch now
-contains the complete implementation commit `1de147bb` on top of
-`origin/develop`.
+contains the complete implementation commit `c041986c` and evidence commit
+`20c2e108`, rebased directly onto `origin/develop` at `9d522996`.
 
 The load-bearing prompt contracts are now explicit in
 `docs/system/contracts/runtime-prompts.md`, linked from the contracts index,
@@ -27,16 +27,16 @@ version history, dead-prompt semantics, and historical cost boundaries.
 - Task-attributed TypeScript files passed ESLint.
 - `npm --prefix frontend run lint:scss` passed.
 - `npm --prefix frontend run lint:structure` passed.
-- The full frontend lint command is not green on the current
-  `origin/develop` baseline because
-  `studio-shell.component.spec.ts` contains two pre-existing empty `toJSON`
-  methods rejected by `@typescript-eslint/no-empty-function`. That file is not
-  part of this task's diff.
+- `npm --prefix frontend run lint:components` reports 13 existing component
+  budget violations in files outside this task's diff. The task's new prompt
+  components are not among them.
 
 ## Live acceptance proof
 
 `frontend/e2e/project/prompt-registry-observability.spec.ts` passed in Chromium
-against an isolated backend started by the Playwright dev-backend fixture.
+against an isolated dynamic-port worktree stack through the Playwright
+dev-backend fixture. The existing backend for another task on port 5030 was not
+stopped or reused.
 
 The test proves:
 
