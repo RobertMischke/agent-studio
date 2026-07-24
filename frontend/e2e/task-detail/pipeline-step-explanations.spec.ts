@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Job-Details pipeline: every step name carries a "what happens here"
@@ -344,14 +345,34 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('off by default');
 
     if (RESULTS_DIR) {
-      // Keep the subset-coverage proof open for the capture.
-      await page.locator('[data-step-id="post-build-test-gate"]')
-        .getByTestId('overview-pipeline-step-status').hover();
-      await expect(tooltip).toBeVisible();
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-subset-coverage-tooltip.png'),
-        fullPage: true,
-      });
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        // Keep the subset-coverage proof open for each themed capture.
+        await page.locator('[data-step-id="post-build-test-gate"]')
+          .getByTestId('overview-pipeline-step-status').hover();
+        await expect(tooltip).toBeVisible();
+        const pipelineBox = await pipeline.boundingBox();
+        const tooltipBox = await tooltip.boundingBox();
+        expect(pipelineBox).not.toBeNull();
+        expect(tooltipBox).not.toBeNull();
+        const x = Math.max(0, Math.min(pipelineBox!.x, tooltipBox!.x) - 16);
+        const y = Math.max(0, Math.min(pipelineBox!.y, tooltipBox!.y) - 16);
+        const right = Math.max(
+          pipelineBox!.x + pipelineBox!.width,
+          tooltipBox!.x + tooltipBox!.width,
+        ) + 16;
+        const bottom = Math.max(
+          pipelineBox!.y + pipelineBox!.height,
+          tooltipBox!.y + tooltipBox!.height,
+        ) + 16;
+        await page.screenshot({
+          path: path.join(
+            RESULTS_DIR,
+            `pipeline-subset-coverage-tooltip--${theme}.png`,
+          ),
+          clip: { x, y, width: right - x, height: bottom - y },
+        });
+      }
     }
   });
 });

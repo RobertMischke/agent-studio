@@ -1,11 +1,12 @@
 namespace AgentStudio.Pipeline;
 
 /// <summary>
-/// Hard release boundary for a future/connected merge-to-main workflow. This
+/// Hard release boundary for every connected merge-to-main workflow. This
 /// wrapper overwrites both lane configuration and caller input with
 /// <c>full</c>; no diff, Test Hub signal, or LLM answer can reduce the suite.
-/// The current product has no write path that merges develop into main, so this
-/// contract is the required entry point for that operation when connected.
+/// The configured integration merge invokes this boundary whenever its target
+/// resolves to <c>main</c>; future release workflows must use the same entry
+/// point.
 /// </summary>
 public sealed class PreMainTestGate
 {

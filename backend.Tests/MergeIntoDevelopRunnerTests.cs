@@ -64,6 +64,179 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_MainTarget_RunsFullSuiteOnExactSourceBeforeFastForward()
+    {
+        var repo = SeedRepo("runner-main-full-suite");
+        RunGit(repo, "checkout -q -b task/50");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "release work");
+        Commit(repo, "feat: release work");
+        var taskSha = RunGit(repo, "rev-parse task/50").Out.Trim();
+        var mainBefore = RunGit(repo, "rev-parse main").Out.Trim();
+        RunGit(repo, "checkout -q main");
+
+        var marker = Path.Combine(_tempDir, "pre-main-full-suite-ran.txt");
+        var markerCommand = OperatingSystem.IsWindows()
+            ? $"type nul > \"{marker}\""
+            : $"touch \"{marker}\"";
+        var (git, log, settings) = BuildWithSettings(repo);
+        settings.SetBuildProfile("Fixture", new BuildProfile
+        {
+            TestCmds = [markerCommand],
+        });
+        var gateRunner = new BuildTestGateRunner(
+            NullLogger<BuildTestGateRunner>.Instance);
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner),
+            preMainTimeout: TimeSpan.FromSeconds(30));
+        var jobFolder = BeginRun(log, repo, jobId: "50");
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "50",
+            jobFolder,
+            repo,
+            "main",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.Equal(taskSha, outcome.MergedSha);
+        Assert.NotEqual(mainBefore, taskSha);
+        Assert.Equal(taskSha, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.True(File.Exists(marker), "the declared full-suite test command must run before main advances");
+
+        var evidencePath = Assert.Single(
+            Directory.GetFiles(Path.Combine(jobFolder, "post-steps"), "pre-main-test-gate-*.log"));
+        var evidence = File.ReadAllText(evidencePath);
+        Assert.Contains($"expectedSha={taskSha}", evidence);
+        Assert.Contains($"testedSha={taskSha}", evidence);
+        Assert.Contains("\"Level\": \"full\"", evidence);
+        Assert.Contains("\"FullSuiteRequired\": true", evidence);
+        Assert.Contains("\"FullSuiteRan\": true", evidence);
+
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Passed, step!.Status);
+        Assert.Contains("mandatory full suite passed", step.Reason);
+        Assert.Contains("full-suite=required-and-run", step.VerdictSummary);
+    }
+
+    [Fact]
+    public async Task RunAsync_MainTarget_RedFullSuiteLeavesMainUnchanged()
+    {
+        var repo = SeedRepo("runner-main-red");
+        RunGit(repo, "checkout -q -b task/51");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "blocked release work");
+        Commit(repo, "feat: blocked release work");
+        var mainBefore = RunGit(repo, "rev-parse main").Out.Trim();
+        RunGit(repo, "checkout -q main");
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail,
+            1,
+            20,
+            "release regression",
+            "full-suite test failed",
+            true,
+            false)
+        {
+            TestSelection = new TestSelectionAudit
+            {
+                Level = TestExecutionLevels.Full,
+                FullSuiteRequired = true,
+                FullSuiteRan = true,
+            },
+        });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner));
+        var jobFolder = BeginRun(log, repo, jobId: "51");
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "51",
+            jobFolder,
+            repo,
+            "main",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        Assert.Contains("Pre-main full suite blocked", outcome.Error);
+        Assert.Equal(mainBefore, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.Equal(1, gateRunner.Invocations);
+        Assert.Equal(TestExecutionLevels.Full, gateRunner.Request!.RequiredTestLevel);
+        Assert.True(gateRunner.Request.RequireExactSubject);
+
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Failed, step!.Status);
+        Assert.Contains("full-suite test failed", step.Reason);
+    }
+
+    [Fact]
+    public async Task RunAsync_MainTarget_SourceMovesDuringSuiteLeavesMainUnchanged()
+    {
+        var repo = SeedRepo("runner-main-source-moved");
+        RunGit(repo, "checkout -q -b task/52");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "tested release work");
+        Commit(repo, "feat: tested release work");
+        var testedSha = RunGit(repo, "rev-parse task/52").Out.Trim();
+        File.WriteAllText(Path.Combine(repo, "late.txt"), "late untested work");
+        Commit(repo, "feat: late untested work");
+        RunGit(repo, "branch task/52-next");
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, $"branch -f task/52 {testedSha}");
+        var mainBefore = RunGit(repo, "rev-parse main").Out.Trim();
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(
+            new BuildTestGateResult(
+                BuildTestGateVerdict.Ok,
+                0,
+                20,
+                "",
+                "full suite passed",
+                true,
+                false)
+            {
+                TestSelection = new TestSelectionAudit
+                {
+                    Level = TestExecutionLevels.Full,
+                    FullSuiteRequired = true,
+                    FullSuiteRan = true,
+                },
+            },
+            () => RunGit(repo, "branch -f task/52 task/52-next"));
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner));
+        var jobFolder = BeginRun(log, repo, jobId: "52");
+
+        var outcome = await runner.RunAsync(
+            "Fixture",
+            "52",
+            jobFolder,
+            repo,
+            "main",
+            CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        Assert.Contains("moved after the pre-main test run", outcome.Error);
+        Assert.Equal(mainBefore, RunGit(repo, "rev-parse main").Out.Trim());
+        Assert.Equal(testedSha, gateRunner.Request!.ExpectedSha);
+    }
+
+    [Fact]
     public void Run_NoTaskBranch_RecordsStepSkipped()
     {
         var repo = SeedRepo("runner-skip");
@@ -371,6 +544,41 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var log = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
         return (git, log);
+    }
+
+    private sealed class CapturingBuildTestGateRunner : IBuildTestGateRunner
+    {
+        private readonly BuildTestGateResult _result;
+        private readonly Action? _duringRun;
+
+        public CapturingBuildTestGateRunner(
+            BuildTestGateResult result,
+            Action? duringRun = null)
+        {
+            _result = result;
+            _duringRun = duringRun;
+        }
+
+        public int Invocations { get; private set; }
+        public BuildTestGateRequest? Request { get; private set; }
+
+        public Task<BuildTestGateResult> RunAsync(
+            BuildTestGateRequest request,
+            IReadOnlyList<string>? changedFiles,
+            BuildProfile? profile,
+            PostStepMode mode,
+            TimeSpan timeout,
+            CancellationToken ct)
+        {
+            Invocations++;
+            Request = request;
+            _duringRun?.Invoke();
+            return Task.FromResult(_result with
+            {
+                ExpectedSha = request.ExpectedSha,
+                TestedSha = request.ExpectedSha,
+            });
+        }
     }
 
     private string SeedRepo(string name)

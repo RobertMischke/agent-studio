@@ -90,8 +90,8 @@ pipeline view.
   adviser. It can add only stable candidate ids from the deterministic safe
   inventory and cannot emit an executable command.
 - `backend/Features/Pipeline/PreMainTestGate.cs`: fail-closed release boundary
-  that forces the full test level before any future `develop -> main`
-  promotion, irrespective of lane settings, diff input, history, or adviser
+  that forces the full test level before a configured merge can advance
+  `main`, irrespective of lane settings, diff input, history, or adviser
   output.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
   condition evaluation.
@@ -172,9 +172,13 @@ pipeline view.
   `PreMainTestGate` converts a nominally green runner result without that
   evidence into a failure, so callers cannot accidentally accept an incomplete
   release check. It also forces exact-subject execution even if the caller
-  supplied a weaker request.
-  The current product has no automated `develop -> main` write path; the
-  boundary exists for the release workflow that will introduce it.
+  supplied a weaker request. The existing deferred integration merge is an
+  enforced caller when its configured target resolves to `main`: it runs the
+  full suite once on the exact source SHA, records
+  `post-steps/pre-main-test-gate-*.log`, rechecks both branch tips after the
+  suite, and only then fast-forwards `main`. A red or incomplete result leaves
+  `main` unchanged. The future manifest-based release workflow must use the
+  same boundary.
 
 - `pre-model-qualification` runs before CORE and never performs quota fallback
   routing. It recommends from the live CLI catalogue without hardcoded model
