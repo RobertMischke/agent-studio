@@ -1,5 +1,8 @@
 # The control plane as a distributable
 
+**Elaborated concept page:** `distributable.html` — packages, binaries, install/run,
+target VM picture, and the four sign-off decisions D1–D4.
+
 **Open question (raised by Robert, 2026-07-24, on AGT-2277):** should the control
 plane be extracted into its own distributable *before* it is hosted on the
 public Hetzner VM? Leaning: yes — sharpen this picture first, then deploy.
