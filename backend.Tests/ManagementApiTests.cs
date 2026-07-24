@@ -6,13 +6,14 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace AgentStudio.Tests;
 
 public sealed class ManagementApiTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "task-server-management-non-development-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = CreateServerDataDirectory();
     private readonly string _backups;
 
     public ManagementApiTests()
@@ -54,8 +55,15 @@ public sealed class ManagementApiTests : IDisposable
     [Fact]
     public async Task BackupCreate_VerifiesRealArchive_OutsideDataDirectory()
     {
-        await using var factory = BuildFactory();
+        await using var factory = BuildFactory(Environments.Production);
         using var client = factory.CreateClient();
+        var environment = factory.Services.GetRequiredService<IWebHostEnvironment>();
+        Assert.Equal(Environments.Production, environment.EnvironmentName);
+        Assert.False(environment.IsDevelopment());
+        if (OperatingSystem.IsLinux())
+            Assert.StartsWith(
+                Path.Combine(Path.DirectorySeparatorChar.ToString(), "var", "tmp", "agent-studio-server-data", "AGT-2194"),
+                _root);
         client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
         await EnterMaintenance(client, "backup-maintenance-key");
         var response = await client.PostAsJsonAsync("/api/v1/management/commands", new
@@ -157,6 +165,26 @@ public sealed class ManagementApiTests : IDisposable
     }
 
     [Fact]
+    public async Task WhitespacePaddedOwnerCommand_IsRejectedForOperatorBeforeAudit()
+    {
+        await using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+
+        var response = await client.PostAsJsonAsync("/api/v1/management/commands", new
+        {
+            kind = " runner-credential-rotate ",
+            dryRun = true,
+            idempotencyKey = "padded-owner-command-key",
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("owner-required", body.GetProperty("error").GetString());
+        Assert.False(File.Exists(Path.Combine(_root, ".audit", "management.jsonl")));
+    }
+
+    [Fact]
     public async Task ReusedIdempotencyKey_WithDifferentPayload_IsRejected()
     {
         await using var factory = BuildFactory();
@@ -208,9 +236,10 @@ public sealed class ManagementApiTests : IDisposable
         Assert.Contains("/api/v1/management/status", html);
     }
 
-    private WebApplicationFactory<Program> BuildFactory() => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+    private WebApplicationFactory<Program> BuildFactory(string environment = "Test") =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
-        builder.UseEnvironment("Test");
+        builder.UseEnvironment(environment);
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["TaskRepository"] = _root,
@@ -221,6 +250,16 @@ public sealed class ManagementApiTests : IDisposable
             ["Supervisor:StuckResumeWindowMinutes"] = "0",
         }));
     });
+
+    private static string CreateServerDataDirectory()
+    {
+        var baseDirectory = OperatingSystem.IsLinux()
+            ? Path.Combine(Path.DirectorySeparatorChar.ToString(), "var", "tmp")
+            : Path.GetTempPath();
+        var root = Path.Combine(baseDirectory, "agent-studio-server-data", "AGT-2194",
+            "server-" + Guid.NewGuid().ToString("N"));
+        return Path.GetFullPath(root);
+    }
 
     private static async Task EnterMaintenance(HttpClient client, string key)
     {

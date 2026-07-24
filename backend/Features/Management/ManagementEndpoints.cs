@@ -2,14 +2,6 @@ namespace AgentStudio.Management;
 
 public static class ManagementEndpoints
 {
-    private static readonly HashSet<string> OwnerCommands = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "runner-enrollment-create",
-        "runner-credential-rotate",
-        "runner-credential-revoke",
-        "runner-revoke",
-    };
-
     public static void MapManagementEndpoints(this WebApplication app)
     {
         app.MapGet("/recovery", () => Results.Content(RecoveryConsole.Html, "text/html"));
@@ -30,11 +22,11 @@ public static class ManagementEndpoints
         {
             context.Response.Headers.CacheControl = "no-store";
             if (!TryAuthorize(context, mutation: true, out var denied, out var actor, out var role)) return denied!;
-            if (OwnerCommands.Contains(request.Kind ?? "") && role != StudioRoles.Owner)
-                return Results.Json(new { error = "owner-required" }, statusCode: StatusCodes.Status403Forbidden);
             try
             {
-                return Results.Ok(service.Execute(request, actor!, context.Request.Headers["Idempotency-Key"].FirstOrDefault() ?? ""));
+                return Results.Ok(service.Execute(
+                    request, actor!, role!,
+                    context.Request.Headers["Idempotency-Key"].FirstOrDefault() ?? ""));
             }
             catch (ManagementException ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.StatusCode); }
         });

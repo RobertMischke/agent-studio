@@ -13,6 +13,14 @@ namespace AgentStudio.Management;
 /// </summary>
 public sealed class ManagementService
 {
+    private static readonly HashSet<string> OwnerCommands = new(StringComparer.Ordinal)
+    {
+        "runner-enrollment-create",
+        "runner-credential-rotate",
+        "runner-credential-revoke",
+        "runner-revoke",
+    };
+
     private static readonly DateTime StartedAt = DateTime.UtcNow;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly IConfiguration _configuration;
@@ -128,9 +136,12 @@ public sealed class ManagementService
             "systemd/container/service manager owns process start and restart");
     }
 
-    public ManagementCommandResult Execute(ManagementCommandRequest request, string actor, string headerKey)
+    public ManagementCommandResult Execute(
+        ManagementCommandRequest request, string actor, string role, string headerKey)
     {
         var kind = (request.Kind ?? "").Trim().ToLowerInvariant();
+        if (OwnerCommands.Contains(kind) && role != StudioRoles.Owner)
+            throw new ManagementException(403, "owner-required");
         var bodyKey = request.IdempotencyKey?.Trim();
         headerKey = headerKey.Trim();
         if (!string.IsNullOrWhiteSpace(bodyKey) && !string.IsNullOrWhiteSpace(headerKey)

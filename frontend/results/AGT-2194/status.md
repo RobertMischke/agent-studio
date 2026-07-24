@@ -41,10 +41,10 @@ Recovered and integrated after the Tranche 1 gate:
 
 ## Verification and evidence
 
-- Focused management/security backend tests: 31 passed.
+- Focused management/security backend tests: 32 passed.
 - Task Server frontend tests: 22 passed.
 - Task Server Playwright spec: 6 passed.
-- Full non-machine-bound solution gate: 4,343 passed and 12 skipped
+- Full non-machine-bound solution gate: 4,344 passed and 12 skipped
   across backend, Task Server, and Runner test projects.
 - Light and dark screenshots cover healthy, degraded, maintenance, migration,
   credential rotation, and failed backup states in this directory.
@@ -56,12 +56,29 @@ passed. The repository-wide frontend lint remains blocked by unrelated
 
 The assigned worktree verification was repeated again on 2026-07-24:
 
-- `dotnet test --filter "Category!=MachineBound"`: 4,343 passed, 12 skipped.
+- `dotnet test --filter "Category!=MachineBound"`: 4,344 passed, 12 skipped.
 - Task Server Angular tests: 22 passed.
 - Task Server Playwright spec: 6 passed.
 - Task Server ESLint and strict Stylelint: passed.
 - All 12 required state/theme screenshots were regenerated from this branch.
+- A privileged-command normalization regression was added and the focused
+  management/security gate passed all 32 tests.
 
 The first full solution run shared the host with the frontend build and exposed
 two unrelated load-sensitive test failures. Both passed in an immediate
 isolated rerun, and the uncontended full solution rerun passed completely.
+
+## Night-Ops fix round, 2026-07-24
+
+- Closed the owner-command authorization bypass by normalizing command kind
+  once in `ManagementService.Execute`, then using that exact value for the
+  owner check, dispatch, fingerprint, and audit.
+- Added a regression proving that an operator cannot execute whitespace-padded
+  `runner-credential-rotate`; the request returns 403 before audit.
+- Replaced the mislabeled Test/temp backup proof with a Production-hosted
+  verification against an isolated server data directory under
+  `/var/tmp/agent-studio-server-data/AGT-2194`.
+- Verified backup creation outside the server data directory, checksum
+  manifest publication, restore verification, and staging cleanup through the
+  management API.
+- Detailed evidence is in `management-fix-round-verification.md`.
