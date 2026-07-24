@@ -99,9 +99,9 @@ export class ProjectPipelinePanelComponent {
     const overrides = this.overrides();
     const drafts = this.conditionDraft();
     const catalogue = orderedPipelineCatalogue(this.catalogue(), this.order());
-    const tokenByStep = new Map<string, { tokens: number; unknown: boolean }>();
+    const tokenByStep = new Map<string, { tokens: number; costUsd: number; unknown: boolean }>();
     for (const s of this.pipelineCost()?.steps ?? []) {
-      tokenByStep.set(s.stepId, { tokens: s.totalTokens, unknown: s.anyModelUnknown });
+      tokenByStep.set(s.stepId, { tokens: s.totalTokens, costUsd: s.totalCostUsd, unknown: s.anyModelUnknown });
     }
     return catalogue.map((step, index) => {
       const ov = overrides[step.id];
@@ -144,6 +144,7 @@ export class ProjectPipelinePanelComponent {
         canMoveDown: canMovePipelineStep(catalogue, index, 1),
         tokenSum: tok?.tokens ?? null,
         tokenUnknown: tok?.unknown ?? false,
+        tokenCostUsd: tok?.costUsd ?? null,
       };
     });
   });

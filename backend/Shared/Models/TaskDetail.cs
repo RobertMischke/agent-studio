@@ -224,6 +224,8 @@ public record FileGenerationMeta
     public string? Cli { get; init; }
     public long TokensIn { get; init; }
     public long TokensOut { get; init; }
+    public long CacheReadTokens { get; init; }
+    public long CacheCreationTokens { get; init; }
     public long TokensTotal { get; init; }
     public DateTime? StartedAt { get; init; }
     public DateTime? EndedAt { get; init; }

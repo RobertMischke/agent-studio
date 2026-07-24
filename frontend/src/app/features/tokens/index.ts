@@ -12,6 +12,12 @@ export { CostBreakdownDialogComponent } from './components/cost-breakdown-dialog
 export { CostBreakdownTriggerDirective } from './components/cost-breakdown-trigger.directive';
 export { CostBreakdownService } from './services/cost-breakdown.service';
 export type { CostBreakdownRequestItem } from './services/cost-breakdown.service';
+export {
+  TOKEN_COST_ESTIMATE_NOTICE,
+  buildTokenCostTooltip,
+  formatTokenCostUsd,
+} from './token-cost-tooltip.util';
+export type { TokenCostTooltipOptions } from './token-cost-tooltip.util';
 export type {
   TaskTokenCall,
   TaskTokenSummary,

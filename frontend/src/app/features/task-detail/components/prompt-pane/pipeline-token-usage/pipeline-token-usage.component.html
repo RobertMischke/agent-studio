@@ -13,7 +13,7 @@
               class="ptu__head ptu__head--sum"
               data-testid="pipeline-token-usage-total-toggle"
               [attr.aria-expanded]="summaryOpen()"
-              [cacTooltip]="'The whole task: every model summed over every run. Expand to see the per-model split. API cost is theoretical - runs go through CLI subscription plans, so the real bill is $0.'"
+              [cacTooltip]="totalTooltip(taskTotal().totalTokens, taskTotal().costUsd, taskTotal().anyModelUnknown, 'The whole task across every model and run')"
               (click)="toggleSummary()">
         <span class="ptu__disclosure" aria-hidden="true">{{ summaryOpen() ? '▾' : '▸' }}</span>
         <span class="ptu__head-label">
@@ -78,6 +78,7 @@
                 class="ptu__head ptu__head--run"
                 data-testid="pipeline-token-usage-run-toggle"
                 [attr.aria-expanded]="isRunOpen(run.attempt)"
+                [cacTooltip]="totalTooltip(run.totalTokens, run.totalCostUsd, run.anyModelUnknown, 'Run #' + run.attempt)"
                 (click)="toggleRun(run.attempt)">
           <span class="ptu__disclosure" aria-hidden="true">{{ isRunOpen(run.attempt) ? '▾' : '▸' }}</span>
           <span class="ptu__head-label">

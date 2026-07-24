@@ -193,6 +193,8 @@ public sealed class CodeReviewStepService
                 Cli = request.CliType,
                 TokensIn = callUsage?.InputTokens ?? 0,
                 TokensOut = callUsage?.OutputTokens ?? 0,
+                CacheReadTokens = callUsage?.CacheReadTokens ?? 0,
+                CacheCreationTokens = callUsage?.CacheCreationTokens ?? 0,
                 TokensTotal = (callUsage?.InputTokens ?? 0)
                     + (callUsage?.OutputTokens ?? 0)
                     + (callUsage?.CacheReadTokens ?? 0)

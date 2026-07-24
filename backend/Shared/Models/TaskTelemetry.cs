@@ -24,6 +24,10 @@ public record TaskTokenSummary
     public long CacheCreationTokens { get; init; }
     /// <summary>Sum of all four token counts. Drives the bubble label.</summary>
     public long TotalTokens { get; init; }
+    /// <summary>Historical list-price estimate, summed per call at each call's timestamp.</summary>
+    public decimal EstimatedApiCostUsd { get; init; }
+    /// <summary>False when at least one attributed call has no catalog price for its timestamp.</summary>
+    public bool AllModelsPriced { get; init; }
     /// <summary>Most recent coding-agent model when present, otherwise the most recent recorded model. Null when no model was recorded.</summary>
     public string? LastModel { get; init; }
     /// <summary>Timestamp of the most recent attributed token usage entry. Null when never updated.</summary>
@@ -46,6 +50,10 @@ public record TaskTokenCall
     public long OutputTokens { get; init; }
     public long CacheReadTokens { get; init; }
     public long CacheCreationTokens { get; init; }
+    /// <summary>Historical list-price estimate at <see cref="Ts"/>.</summary>
+    public decimal EstimatedApiCostUsd { get; init; }
+    /// <summary>Whether the price catalog resolved the model at <see cref="Ts"/>.</summary>
+    public bool ModelPriced { get; init; }
 }
 
 /// <summary>

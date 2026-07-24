@@ -16,6 +16,8 @@ export interface TaskTokenCall {
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
+  estimatedApiCostUsd?: number;
+  modelPriced?: boolean;
 }
 
 export interface TaskTokenSummary {
@@ -25,6 +27,8 @@ export interface TaskTokenSummary {
   cacheReadTokens: number;
   cacheCreationTokens: number;
   totalTokens: number;
+  estimatedApiCostUsd?: number;
+  allModelsPriced?: boolean;
   lastModel: string | null;
   lastUpdate: string | null;
   entries: TaskTokenCall[];

@@ -115,6 +115,13 @@ describe('CodeReviewPanelComponent', () => {
           cliType: 'claude',
           commit: '0aa4c5d',
           runAt: '2026-05-14T12:00:00Z',
+          inputTokens: 100,
+          outputTokens: 25,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          totalTokens: 125,
+          estimatedApiCostUsd: 0.0042,
+          priceKnown: true,
           generation: {
             file: 'code-review-2026-05-14T12-00-00Z.md',
             kind: 'code-review',
@@ -151,6 +158,12 @@ describe('CodeReviewPanelComponent', () => {
     const provenance = root.querySelector('[data-testid="code-review-provenance"]');
     expect(provenance?.textContent).toContain('claude / claude-haiku-4-5');
     expect(provenance?.textContent).toContain('125 tokens');
+    const usage = root.querySelector('[data-testid="code-review-token-usage"]');
+    expect(usage?.textContent).toContain('100 in / 25 out (125) tokens');
+    const entry = fixture.componentInstance.entries()[0];
+    expect(fixture.componentInstance.tokenTooltip(entry)).toContain('Estimated cost: $0.0042');
+    expect(fixture.componentInstance.tokenTooltip(entry)).toContain('historical list prices');
+    expect(fixture.componentInstance.tokenTooltip(entry)).toContain('0 cache read + 0 cache write');
     httpCtrl.verify();
   });
 

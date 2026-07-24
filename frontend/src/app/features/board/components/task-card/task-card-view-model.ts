@@ -8,6 +8,7 @@ import { cliTypeIcon, cliTypeLabel, shortModelName, taskModeIcon, taskModeLabel 
 import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
 import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
+import { buildTokenCostTooltip } from '../../../tokens';
 
 export interface TaskTypeChip {
   kind: string;
@@ -23,6 +24,7 @@ export interface TaskTokenBubble {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  costTooltip: string;
   model: string | null;
   lastUpdate: string | null;
   tier: 'neutral' | 'blue' | 'mauve' | 'peach';
@@ -248,6 +250,7 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     output,
     cacheRead,
     cacheWrite,
+    costTooltip: buildTokenCostTooltip({ costUsd: tokenSummary.estimatedApiCostUsd, priceKnown: tokenSummary.allModelsPriced === true }),
     model: tokenSummary.lastModel ?? null,
     lastUpdate: tokenSummary.lastUpdate ? formatShortTime(tokenSummary.lastUpdate) : null,
     tier,

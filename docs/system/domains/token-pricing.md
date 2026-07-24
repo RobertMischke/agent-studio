@@ -30,10 +30,13 @@ silent `$0.00`.
 The shared adapter feeds:
 
 - task-detail pipeline step, run, model, and total costs;
+- code-review and quality-grade rows from their generated-file usage
+  provenance;
 - project pipeline cost columns and time series;
 - project expensive-jobs, heatmap, and drill-down aggregates;
 - workspace token timeline and Token Summary;
 - CLI Usage modal and detail table, including "Cost per model";
+- board task and project token badges;
 - ad-hoc/supporting usage summaries.
 
 These surfaces may aggregate resolved costs, but an aggregate containing an
@@ -54,6 +57,12 @@ The dialog is mounted once at app level and opened through
 `CostBreakdownService` / `CostBreakdownTriggerDirective`. New theoretical-cost
 surfaces must use that shared path instead of adding a local modal or a price
 table.
+
+Compact token displays use `buildTokenCostTooltip` from the frontend tokens
+feature. The helper owns USD formatting, the mandatory estimate caveat, partial
+aggregate wording, and the explicit `no price data` fallback. Review rows,
+task-detail pipeline totals, project Pipeline `Tokens / 90d`, and board badges
+must use this helper instead of composing local tooltip strings.
 
 ## Verification
 

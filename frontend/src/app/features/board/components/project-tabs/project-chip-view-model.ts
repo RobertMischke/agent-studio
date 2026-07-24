@@ -4,6 +4,7 @@ import type {
   ProjectRunnerIndicator,
   ProjectTokenChipInfo,
 } from './project-tabs.component';
+import { buildTokenCostTooltip } from '../../../tokens';
 
 export function buildProjectTokenChip(
   jobs: readonly TaskInfo[],
@@ -15,6 +16,8 @@ export function buildProjectTokenChip(
   let cacheReadTokens = 0;
   let cacheCreationTokens = 0;
   let jobsWithTokens = 0;
+  let estimatedApiCostUsd = 0;
+  let allModelsPriced = true;
   const modelLastSeen = new Map<string, number>();
 
   for (const job of jobs) {
@@ -28,6 +31,8 @@ export function buildProjectTokenChip(
     outputTokens += summary.outputTokens;
     cacheReadTokens += summary.cacheReadTokens;
     cacheCreationTokens += summary.cacheCreationTokens;
+    estimatedApiCostUsd += summary.estimatedApiCostUsd ?? 0;
+    allModelsPriced = allModelsPriced && summary.allModelsPriced === true;
 
     for (const entry of summary.entries ?? []) {
       trackModel(modelLastSeen, entry.model, entry.ts);
@@ -40,13 +45,15 @@ export function buildProjectTokenChip(
   const models = [...modelLastSeen.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([model]) => model);
-  const tooltipParts: string[] = [
-    `Input ${formatTokensCompact(inputTokens)} - Output ${formatTokensCompact(outputTokens)}`,
-  ];
+  const tooltipParts: string[] = [`Input ${formatTokensCompact(inputTokens)} - Output ${formatTokensCompact(outputTokens)}`];
   if (cacheReadTokens > 0) tooltipParts.push(`Cache read ${formatTokensCompact(cacheReadTokens)}`);
   if (cacheCreationTokens > 0) tooltipParts.push(`Cache write ${formatTokensCompact(cacheCreationTokens)}`);
   tooltipParts.push(`${jobsWithTokens} ${jobsWithTokens === 1 ? 'task' : 'tasks'} with AI activity`);
   if (models.length > 0) tooltipParts.push(`Models: ${models.join(', ')}`);
+  tooltipParts.push(buildTokenCostTooltip({
+    costUsd: allModelsPriced || estimatedApiCostUsd > 0 ? estimatedApiCostUsd : null,
+    priceKnown: allModelsPriced,
+  }));
 
   return {
     totalTokens,
@@ -54,6 +61,8 @@ export function buildProjectTokenChip(
     outputTokens,
     cacheReadTokens,
     cacheCreationTokens,
+    estimatedApiCostUsd,
+    allModelsPriced,
     jobsWithTokens,
     models,
     label: formatTokensCompact(totalTokens),

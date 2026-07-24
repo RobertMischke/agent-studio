@@ -103,6 +103,13 @@ export interface CodeReviewListEntry {
   thinkingLevel?: string | null;
   commit?: string | null;
   runAt: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  totalTokens?: number;
+  estimatedApiCostUsd?: number;
+  priceKnown?: boolean;
   generation?: FileGenerationMeta | null;
 }
 
