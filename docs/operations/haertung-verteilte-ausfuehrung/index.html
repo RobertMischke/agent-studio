@@ -646,6 +646,10 @@ Acquire-to-Lane-Crash-Fenster bleibt offen. Schreibverstöße von Agenten führe
 <p class="evidence-link"><b>Beleg:</b> <a href="#incident-attempt-authority">Attempt-Authority,
 24.07.</a> Karte: AGT-2182.</p>
 <p class="dim">Die Tabelle trennt Schreiber, mutierten Zustand und wirksame Schutzmechanismen.</p>
+<p class="box accent"><b>Dedicated explainer:</b> <a href="agent-fencing.html">Agent fencing: the platform owns Git history</a> states the worker/platform boundary, the trust-graded supervision strategy, the July 2026 learning opportunities, and the open per-model violation-rate proof point. Its AHP-style visual is kept in a separate companion page.</p>
+<p class="dim">Zur Einordnung der Frage „die Schreiber sind Post- und Pre-Steps in der Pipeline, aber nicht
+Agenten — was passiert, wenn Agenten trotzdem schreiben?“: Erst die Landkarte aller Schreiber, dann
+genau dieser Fall.</p>
 
 <table>
   <thead><tr><th>Schreiber</th><th>Mutierter Zustand</th><th>Aktuelle Kontrolle</th><th>Offene Kontrolle</th></tr></thead>
@@ -660,8 +664,8 @@ Acquire-to-Lane-Crash-Fenster bleibt offen. Schreibverstöße von Agenten führe
         <td>Push-Probe, verified-push, read-only-Admission</td>
         <td>Outbox als einziger Schreibkanal (AGT-2183); Ref-Namespace-Policy: Runner-Identität darf <i>nur</i> <code>runner/&lt;id&gt;/*</code> pushen</td></tr>
     <tr><td><b>CLI-Agenten (codex, claude, …)</b></td><td>Quellcode im Worktree, results/, potenziell <i>alles</i></td>
-        <td>⚠ Konvention, kein Fence: Worktree-Isolation + Prompt-Regeln</td>
-        <td>Contract + Detect + Quarantine; siehe unten</td></tr>
+        <td>Runtime contract + Git command guard; the HEAD comparison emits <code>agent-git-violation</code> and quarantines the run</td>
+        <td>Trust-graded sampling and signal review; commit and push remain platform-only regardless of trust level</td></tr>
     <tr><td><b>Operator / UI</b></td><td>Lanes, Registry, Settings, Steer-Antworten</td>
         <td><code>X-Client-Id</code>; Registry-Writes teils unvalidiert (→ PROJ-017)</td>
         <td>Validierung an jeder Registry-Schreibstelle (Pfad absolut + existent); Steer mit Timeout + definierter Konsequenz</td></tr>
