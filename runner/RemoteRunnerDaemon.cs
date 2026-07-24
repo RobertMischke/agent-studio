@@ -167,6 +167,16 @@ public sealed class RemoteRunnerDaemon
                 shutdown);
         }
 
+        if (_client.UsesHostOrchestrator)
+        {
+            await RunHostOrchestratorAsync(
+                gitCapability,
+                active,
+                state,
+                inventory,
+                shutdown);
+            return;
+        }
         var telemetry = new HostTelemetrySampler();
         var loadGate = new RunnerLoadGate(
             _options.ClaimMaxLoadPerCore,
@@ -490,4 +500,174 @@ public sealed class RemoteRunnerDaemon
     }
 
     private sealed record ActiveSlot(string? TaskKey, Task<int> Execution);
+
+    private async Task RunHostOrchestratorAsync(
+        GitPushProbeResult gitCapability,
+        IReadOnlyList<ActiveSlot> recoveredSlots,
+        RunnerStateStore state,
+        RunnerProcessInventoryTracker inventory,
+        CancellationToken shutdown)
+    {
+        var journal = new HostOrchestratorJournal(Path.Combine(
+            _options.WorkDir,
+            "host-orchestrator",
+            "journal.json"));
+        var acceptedWork = journal.RecoverAcceptedWork();
+        foreach (var accepted in acceptedWork)
+            _client.AdoptAcceptance(accepted);
+
+        var active = recoveredSlots.Select(slot =>
+        {
+            var acceptance = acceptedWork.SingleOrDefault(item =>
+                string.Equals(item.Task.TaskKey, slot.TaskKey, StringComparison.OrdinalIgnoreCase));
+            if (acceptance is null)
+            {
+                throw new InvalidOperationException(
+                    $"Recovered task '{slot.TaskKey}' has no host-orchestrator authority in the durable journal.");
+            }
+            return new HostActiveRun(
+                acceptance.Task.TaskId,
+                acceptance.Task.TaskKey,
+                slot.Execution);
+        }).ToList();
+        var capabilities = new List<AgentStudio.TaskServer.Contracts.HostCapabilityDto>
+        {
+            new(
+                "git-push",
+                gitCapability.CanPush ? "ready" : "read-only",
+                Reason: gitCapability.Detail,
+                ObservedAt: DateTime.UtcNow),
+            new(
+                "host-post-processing",
+                "ready",
+                Scope: "post-run-host-evidence",
+                ObservedAt: DateTime.UtcNow),
+            new(
+                "process-containment",
+                "ready",
+                ObservedAt: DateTime.UtcNow),
+        };
+        var consecutiveFaults = 0;
+
+        while (!shutdown.IsCancellationRequested)
+        {
+            for (var index = active.Count - 1; index >= 0; index--)
+            {
+                if (!active[index].Execution.IsCompleted) continue;
+                try
+                {
+                    _log($"host-orchestrator completed {active[index].TaskKey} with exit code {await active[index].Execution}");
+                }
+                catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+                catch (Exception exception)
+                {
+                    _log($"host-orchestrator slot failed for {active[index].TaskKey}: {exception}");
+                }
+                journal.Complete(active[index].TaskId);
+                active.RemoveAt(index);
+            }
+
+            try
+            {
+                var report = journal.PrepareReport(
+                    _options.RunnerId,
+                    _options.Hostname,
+                    _client.HostInstanceId,
+                    _options.HostMaxParallelism,
+                    capabilities);
+                var acknowledgement = await _client.ReportHostStateAsync(report, shutdown);
+                journal.AcknowledgeReport(acknowledgement.AcceptedSequence);
+                _log(
+                    $"host-report sequence={acknowledgement.AcceptedSequence} " +
+                    $"status={acknowledgement.Status} active={journal.ActiveCount} " +
+                    $"queued={journal.QueuedCount} permits={acknowledgement.AvailableWork.Count}");
+
+                var localAcceptanceLimit = Math.Max(
+                    _options.HostMaxParallelism,
+                    _options.HostMaxParallelism * 2);
+                foreach (var permit in acknowledgement.AvailableWork)
+                {
+                    if (active.Count + journal.QueuedCount >= localAcceptanceLimit)
+                        break;
+                    var admission = HostAdmissionPolicy.Decide(permit, _options, gitCapability);
+                    if (!admission.Admitted)
+                    {
+                        _log(
+                            $"local admission rejected permit {permit.PermitId} for {permit.Task.TaskKey}: " +
+                            admission.Reason);
+                        continue;
+                    }
+                    var acceptance = await _client.AcceptWorkPermitAsync(
+                        permit,
+                        acknowledgement.AcceptedSequence,
+                        shutdown);
+                    journal.Enqueue(acceptance);
+                    _log(
+                        $"accepted permit {permit.PermitId} for {permit.Task.ProjectId}/{permit.Task.TaskKey}; " +
+                        $"local queue depth={journal.QueuedCount}");
+                }
+
+                while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
+                {
+                    var acceptance = journal.TryStartNext();
+                    if (acceptance is null) break;
+                    var lease = ToRunnerLease(acceptance);
+                    var taskRunner = new RemoteTaskRunner(
+                        _options,
+                        _client,
+                        _log,
+                        state,
+                        inventory);
+                    active.Add(new HostActiveRun(
+                        acceptance.Task.TaskId,
+                        acceptance.Task.TaskKey,
+                        taskRunner.RunClaimedAsync(
+                            acceptance.Task.TaskKey,
+                            lease,
+                            shutdown,
+                            acceptance.Task.ProjectId)));
+                    _log(
+                        $"local admission started {acceptance.Task.TaskKey} in slot " +
+                        $"{active.Count}/{_options.HostMaxParallelism}");
+                }
+
+                consecutiveFaults = 0;
+                await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
+            }
+            catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+            {
+                // Clean shutdown drains below.
+            }
+            catch (Exception exception) when (IsTransientServerFault(exception))
+            {
+                var delay = BackoffFor(++consecutiveFaults);
+                _log(
+                    $"task server unreachable during host orchestration ({exception.Message}); " +
+                    $"{active.Count} local process(es) continue; retry {consecutiveFaults} in {delay.TotalSeconds:0}s");
+                await DelayThroughShutdown(delay, shutdown);
+            }
+        }
+
+        if (active.Count > 0)
+        {
+            try { await Task.WhenAll(active.Select(item => item.Execution)); }
+            catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+        }
+    }
+
+    private RunLeaseInfoDto ToRunnerLease(
+        AgentStudio.TaskServer.Contracts.WorkPermitAcceptanceDto acceptance)
+        => new(
+            acceptance.Task.TaskKey,
+            acceptance.Lease.RunnerId,
+            _options.RunnerName,
+            _options.Hostname,
+            Environment.ProcessId,
+            _options.BackendName,
+            acceptance.Lease.LeaseId,
+            acceptance.Lease.Fence,
+            acceptance.Lease.AcquiredAt,
+            acceptance.Lease.ExpiresAt);
+
+    private sealed record HostActiveRun(string TaskId, string TaskKey, Task<int> Execution);
 }

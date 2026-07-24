@@ -93,14 +93,18 @@ state.
   intervention primitives.
 - `runner/*`: the standalone `agent-host` daemon. A dependency-free console
   process that runs as either a separately registered `coding` or `review`
-  service. Coding continuously claims server-assigned projects with bounded
-  host slots (default 2), fenced leases + heartbeat, per-task linked git
-  worktrees, log/artifact upload, and fenced normal completion into auto-review.
-  Review claims one immutable ReviewSubject, creates a fresh disposable
+  service. A coding service carries the Host Orchestrator and execution plane:
+  against the separated Task Server it reports sequenced host facts, admits and
+  orders permitted work in a durable local journal, accepts fenced authority,
+  runs bounded host slots, and executes the attempt's host post-step before
+  fenced completion into auto-review. The legacy central claim path remains
+  available for servers that have not enabled the new contract. A review
+  service claims one immutable ReviewSubject, creates a fresh disposable
   exact-SHA workspace, runs the server-supplied existing aspect command plan,
-  and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
-  one-shot remains for diagnostics. It owns no task state. Its only git write to
-  origin is the mandatory teardown salvage branch described below.
+  and sends one fenced evidence report plus cleanup proof. The original
+  `--task <key>` one-shot remains for diagnostics. It owns no task, card, or
+  lane truth. Its only git write to origin is the mandatory teardown salvage
+  branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
 - `scripts/remote-runner-onboard.sh` and
@@ -207,6 +211,25 @@ state.
   reports must bind the active coding or review claim and fence; stale and
   duplicate deliveries fail closed or replay idempotently.
 
+- `host-orchestrator/v1` is negotiated separately from the Task API version.
+  A host outside the supported range is rejected with HTTP 426 before permit
+  acceptance. Reports are monotonic and idempotent by host instance, sequence,
+  and payload digest. Capacity arithmetic is validated centrally, but the
+  configured/effective/active/queued/free values originate on the host.
+- The host journal owns only accepted authority envelopes, local queue order,
+  execution phase, and the pending report acknowledgement. Task Server remains
+  the durable authority for cards, lanes, policy, leases, and fences. No task,
+  queue, clone, or worktree files are shared between the services.
+- Local admission fails closed when the repository is unavailable, push
+  capability is unproven, the selected CLI is missing, or task input is absent.
+  An accepted permit is queued locally before a process starts.
+- A Task Server restart does not mint replacement authority. The same host
+  instance reconciles the recorded run, lease, fence, and report sequence
+  within the original offline deadline. Another runner cannot accept or
+  complete that attempt.
+- Post-processing assigned to a host is fenced to the same runner and attempt.
+  Central completion is rejected until every required host post-step has one
+  accepted completion.
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps
   no execution seat; a continuation must pass admission again and remains

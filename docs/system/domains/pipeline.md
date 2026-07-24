@@ -541,6 +541,15 @@ operator changes cause the step to fail before its writer runs.
   index). A missing concept page is surfaced as a visible dead-pointer finding in
   the generated index's "Pointer health" section and the step reason, never
   silently dropped.
+- The separated Task Server can bind required post-processing units to the Host
+  Orchestrator that executed the attempt. The current
+  `post-run-host-evidence` unit is returned in the immutable permit acceptance
+  plan, claimed and completed with the same runner, instance, lease, and fence,
+  and audited centrally. Task completion fails while a required host unit is
+  incomplete. Claim and completion are idempotent, so central restart and
+  replay cannot execute the unit twice. This is the claimable host-step
+  contract; additional existing post-steps migrate onto it only through their
+  own compatibility gates.
 - Pipeline history is per run. Re-opened tasks append a new attempt and keep
   earlier attempts addressable.
 - Raw step-call prompts are captured once, at central dispatch, into

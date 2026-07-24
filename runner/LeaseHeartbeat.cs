@@ -51,15 +51,15 @@ public sealed class LeaseHeartbeat
             while (!stopRun.IsCancellationRequested && !shutdown.IsCancellationRequested)
             {
                 RunLeaseResponse resp;
+                var inventory = _inventory?.Snapshot();
+                var request = new RunLeaseHeartbeatRequest(
+                    _lease.TaskKey, _lease.LeaseId, _lease.FencingToken, _options.RunnerId, _options.TtlSeconds,
+                    _lease.AttemptId, _lease.AuthorityEpoch,
+                    $"heartbeat:{_lease.AttemptId}:{Guid.NewGuid():N}",
+                    inventory);
                 try
                 {
-                    var inventory = _inventory?.Snapshot();
-                    var req = new RunLeaseHeartbeatRequest(
-                        _lease.TaskKey, _lease.LeaseId, _lease.FencingToken, _options.RunnerId, _options.TtlSeconds,
-                        _lease.AttemptId, _lease.AuthorityEpoch,
-                        $"heartbeat:{_lease.AttemptId}:{Guid.NewGuid():N}",
-                        inventory);
-                    resp = await _client.RenewLeaseAsync(req, shutdown);
+                    resp = await _client.RenewLeaseAsync(request, shutdown);
                     if (_client.UsesDurableTaskServer && inventory is not null)
                         _inventory!.AcknowledgeReports(inventory);
                 }
@@ -69,6 +69,26 @@ public sealed class LeaseHeartbeat
                         stopRun,
                         $"Task Server rejected lease renewal with HTTP {ex.StatusCode}: {ex.Message}");
                     return;
+                }
+                catch (TaskServerException ex) when (
+                    ex.StatusCode == 409
+                    && _client.UsesHostOrchestrator
+                    && !shutdown.IsCancellationRequested)
+                {
+                    // A Task Server restart preserves the fence but deliberately
+                    // marks the process unknown. The matching host instance may
+                    // reconcile the same authority; it must never acquire a new
+                    // lease or start a duplicate process.
+                    try
+                    {
+                        resp = await _client.ReconcileLeaseAsync(request, shutdown);
+                        _log($"lease reconciled after task server restart: {resp.Outcome}");
+                    }
+                    catch (Exception reconcileError)
+                    {
+                        _log($"lease reconciliation failed (will retry within offline authority): {reconcileError.Message}");
+                        continue;
+                    }
                 }
                 catch (Exception ex)
                 {

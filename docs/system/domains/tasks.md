@@ -269,6 +269,17 @@ failure cards map the issue `kind` to a complete human sentence; they never use
 `summary` or `technicalDetails` as primary copy. Unknown kinds use a generic
 failure sentence while retaining the full diagnostic under the disclosure.
 
+## Host fact projection
+
+The separated Task Server also exposes
+`GET /api/v1/management/hosts`. Its rows are projections of the last accepted
+`host-orchestrator/v1` report and include the host instance, report sequence,
+observed time, received time, capacity, capabilities, queue, active work,
+post-processing, and faults. The projection never substitutes lane membership
+or a configured runner flag for a missing report. A disappeared host therefore
+remains attributable with an explicit report age instead of becoming an
+unowned card.
+
 ## Verification
 
 - API and mutation changes need endpoint tests plus task-access or service tests

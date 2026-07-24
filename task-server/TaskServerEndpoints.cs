@@ -60,6 +60,8 @@ public static class TaskServerEndpoints
             => await InvokeNullableAsync(() => store.UpdateTaskAsync(projectId, taskIdentity, request, Actor(context), ct)));
 
         var runners = api.MapGroup("/runners");
+        runners.MapGet("", async (TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.ListHostProjectionsAsync(ct)));
         runners.MapPut("/{runnerId}", async (
             HttpContext context, string runnerId, RegisterRunnerRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.RegisterRunnerAsync(runnerId, request, Actor(context), ct)));
@@ -85,6 +87,9 @@ public static class TaskServerEndpoints
                 return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and capability runner ids differ."));
             return await InvokeAsync(() => store.ReportCapabilityFailureAsync(request, Actor(context), ct));
         });
+        runners.MapPost("/{runnerId}/reports", async (
+            HttpContext context, string runnerId, HostReportRequest request, TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.AcceptHostReportAsync(runnerId, request, Actor(context), ct)));
         runners.MapPost("/{runnerId}/claims", async (
             HttpContext context, string runnerId, ClaimRequest request, TaskServerStore store, CancellationToken ct) =>
         {
@@ -108,7 +113,33 @@ public static class TaskServerEndpoints
             return await InvokeAsync(() => store.ClaimReviewAsync(request, Actor(context), ct));
         });
 
+        var permits = api.MapGroup("/work-permits");
+        permits.MapPost("/{permitId}/accept", async (
+            HttpContext context, string permitId, WorkPermitAcceptRequest request, TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.AcceptWorkPermitAsync(permitId, request, Actor(context), ct)));
+
         var runs = api.MapGroup("/runs");
+        runs.MapPost("/{runId}/reconcile", async (
+            HttpContext context, string runId, RunReconcileRequest request, TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.ReconcileRunAsync(runId, request, Actor(context), ct)));
+        runs.MapPost("/{runId}/post-steps/{stepExecutionId}/claim", async (
+            HttpContext context,
+            string runId,
+            string stepExecutionId,
+            PostStepClaimRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ClaimPostStepAsync(
+                runId, stepExecutionId, request, Actor(context), ct)));
+        runs.MapPost("/{runId}/post-steps/{stepExecutionId}/complete", async (
+            HttpContext context,
+            string runId,
+            string stepExecutionId,
+            PostStepCompleteRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.CompletePostStepAsync(
+                runId, stepExecutionId, request, Actor(context), ct)));
         runs.MapPost("/{runId}/lease/renew", async (
             HttpContext context, string runId, LeaseRenewRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.RenewLeaseAsync(runId, request, Actor(context), ct)));
@@ -248,6 +279,8 @@ public static class TaskServerEndpoints
         management.MapGet("/status", (TaskServerStore store) => Results.Ok(store.Status()));
         management.MapGet("/outboxes", async (TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ListRunnerOutboxesAsync(ct)));
+        management.MapGet("/hosts", async (TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.ListHostProjectionsAsync(ct)));
         management.MapPut("/mode", async (
             HttpContext context, ChangeModeRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ChangeModeAsync(request, Actor(context), ct)));
@@ -333,6 +366,16 @@ public static class TaskServerEndpoints
 
     private static IResult MapError(Exception exception) => exception switch
     {
+        HostOrchestratorContractException contract => Results.Json(
+            new ApiError(
+                "host-orchestrator-contract-unsupported",
+                contract.Message,
+                new
+                {
+                    minimum = HostOrchestratorContract.MinimumSupported,
+                    maximum = HostOrchestratorContract.MaximumSupported,
+                }),
+            statusCode: StatusCodes.Status426UpgradeRequired),
         TaskServerProtocolException protocol => Results.Json(
             new ApiError("protocol-unsupported", protocol.Message), statusCode: StatusCodes.Status426UpgradeRequired),
         TaskServerConflictException conflict => Results.Conflict(new ApiError(conflict.Code, conflict.Message)),

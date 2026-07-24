@@ -6,7 +6,9 @@ public sealed record RegisterRunnerRequest(
     string InstanceId,
     string RunnerVersion,
     int ProtocolVersion,
-    IReadOnlyList<string>? Capabilities = null);
+    IReadOnlyList<string>? Capabilities = null,
+    string? HostOrchestratorMinimum = null,
+    string? HostOrchestratorMaximum = null);
 
 public sealed record RunnerDto(
     string RunnerId,

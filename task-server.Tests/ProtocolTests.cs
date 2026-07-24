@@ -192,6 +192,32 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public async Task Unsupported_host_orchestrator_contract_is_rejected_before_registration_or_work()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TaskServerProtocol.HeaderName, "1");
+
+        var response = await client.PutAsJsonAsync(
+            "/api/v1/runners/old-host",
+            new RegisterRunnerRequest(
+                "old",
+                "host",
+                "instance",
+                "0.8.0",
+                1,
+                ["claim"],
+                "host-orchestrator/v0",
+                "host-orchestrator/v0"));
+
+        Assert.Equal(HttpStatusCode.UpgradeRequired, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiError>();
+        Assert.Equal("host-orchestrator-contract-unsupported", error!.Code);
+        Assert.Contains(HostOrchestratorContract.Current, error.Message);
+    }
+
+    [Fact]
     public async Task Published_contract_fixtures_pin_supported_and_unsupported_mixed_versions()
     {
         var root = RepositoryRoot();
