@@ -221,6 +221,9 @@ boundary, route map, and visual ownership diagram are in
   remain explicitly unpriced. Review actions check the static usage catalogue,
   repository references, and project pipeline overrides, then persist
   `prompts/runtime/<name>.md.meta.json`.
+  The durable source, precedence, companion, telemetry, and cost rules are
+  defined by the
+  [runtime prompt registry contract](../contracts/runtime-prompts.md).
   Result-quality benchmarking by prompt version is deliberately vNext. The
   versioned call ledger is its data foundation, but this surface does not claim
   that call volume or cost measures outcome quality.
