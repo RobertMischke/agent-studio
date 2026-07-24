@@ -167,14 +167,15 @@ public sealed class RemoteTaskRunner
                     dependencyIdentities.LfsObjects);
                 envelopeDigest = ResultEnvelopeDigest.Compute(envelope);
                 outbox.Enqueue("git-facts", JsonSerializer.Serialize(
-                    new
-                    {
+                    new DurableGitFactsPayload(
                         repositoryId,
-                        baseSha = workspace.BaseSha,
-                        resultSha = teardown.ResultSha,
-                        immutableRef = teardown.ImmutableResultRef,
-                        salvageResolution = teardown.Reconciliation?.Kind,
-                    },
+                        envelope.BaseSha,
+                        envelope.ResultSha,
+                        teardown.ImmutableResultRef,
+                        teardown.Reconciliation,
+                        teardown.Reconciliation?.Kind == "divergent"
+                            ? "inspect-preserved-divergent-tips"
+                            : null),
                     new JsonSerializerOptions(JsonSerializerDefaults.Web)));
                 var finalItem = outbox.Enqueue(
                     "final-result",

@@ -103,14 +103,17 @@ public sealed class DurableHandoffRecovery
             outbox.Enqueue(
                 "git-facts",
                 JsonSerializer.Serialize(
-                    new
-                    {
+                    new DurableGitFactsPayload(
                         context.RepositoryId,
                         context.BaseSha,
-                        secured.ResultSha,
+                        secured.ResultSha
+                        ?? throw new InvalidOperationException(
+                            "Recovered transfer has no result SHA."),
                         secured.ImmutableResultRef,
-                        recoveryAction = "retry-transfer-without-coding",
-                    },
+                        secured.Reconciliation,
+                        secured.Reconciliation?.Kind == "divergent"
+                            ? "inspect-preserved-divergent-tips"
+                            : "retry-transfer-without-coding"),
                     Json));
             finalItem = outbox.Enqueue(
                 "final-result",

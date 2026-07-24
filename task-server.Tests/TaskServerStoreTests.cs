@@ -343,6 +343,49 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Restart_completes_from_a_locally_durable_handoff_ack_without_replaying_handoff()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(first);
+        await first.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await first.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+        var run = claim.Run!;
+        var lease = claim.Lease!;
+        var acknowledgement = await first.AcknowledgeResultHandoffAsync(
+            run.RunId,
+            Handoff(run.RunId, lease, sequence: 4),
+            "runner-a",
+            default);
+
+        // The runner persisted the acknowledgement before both processes
+        // restarted. Recovery must continue directly with the journaled
+        // completion instead of requiring a duplicate handoff request merely
+        // to reactivate the process-unknown lease.
+        var restarted = Store(temp.Path);
+        await restarted.InitializeAsync();
+        var completion = new CompleteRunRequest(
+            lease.RunnerId,
+            lease.InstanceId,
+            lease.LeaseId,
+            lease.Fence,
+            "success",
+            ResultEnvelopeDigest: acknowledgement.EnvelopeDigest,
+            IdempotencyKey: $"completion:{run.RunId}",
+            Sequence: 5);
+
+        await restarted.CompleteRunAsync(run.RunId, completion, "runner-a", default);
+        await restarted.CompleteRunAsync(run.RunId, completion, "runner-a", default);
+
+        var recovered = await restarted.GetTaskAsync(project.ProjectId, task.TaskKey, default);
+        Assert.Equal("4-auto-review", recovered!.State);
+        var audit = await restarted.ListAuditAsync(0, default);
+        Assert.Single(audit, record => record.Action == "result-handoff.acknowledged");
+        Assert.Single(audit, record => record.Action == "run.completed");
+    }
+
+    [Fact]
     public async Task Restart_accepts_unacknowledged_handoff_from_the_exact_process_unknown_authority()
     {
         using var temp = new TempDirectory();

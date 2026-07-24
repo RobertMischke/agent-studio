@@ -264,6 +264,15 @@ public sealed class GitWorkspace
                 throw new InvalidOperationException(
                     $"Worktree HEAD changed after handoff: expected '{secured.ResultSha}', found '{head}'.");
             }
+            var status = (await Git(
+                ["status", "--porcelain=v1", "--untracked-files=all"],
+                RepoPath,
+                ct)).StdOut;
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                throw new InvalidOperationException(
+                    "Worktree changed after handoff acknowledgement; cleanup is blocked so the unjournaled work remains recoverable.");
+            }
             await RemoveSecuredWorktreeAsync(secured.SecuredWork, ct);
         }
         finally

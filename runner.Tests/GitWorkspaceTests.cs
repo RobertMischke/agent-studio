@@ -136,6 +136,44 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Durable_handoff_refuses_cleanup_when_worktree_changes_after_envelope_publication()
+    {
+        await SeedOriginAsync();
+        var workspace = CreateWorkspace();
+        await workspace.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(workspace.RepoPath, "result.txt", "durable", "durable result");
+        const string runId = "run_post_handoff_change";
+        var secured = await workspace.SecureForHandoffAsync(
+            "Done", runId, CancellationToken.None);
+        var digest = new string('a', 64);
+        var acknowledgement = new ResultHandoffAck(
+            runId,
+            5,
+            digest,
+            "acknowledged",
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(30),
+            false);
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace.RepoPath, "late-work.txt"),
+            "must not be discarded");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            workspace.TeardownAfterHandoffAsync(
+                secured,
+                acknowledgement,
+                runId,
+                digest,
+                CancellationToken.None));
+
+        Assert.Contains("changed after handoff", error.Message);
+        Assert.True(Directory.Exists(workspace.RepoPath));
+        Assert.Equal(
+            "must not be discarded",
+            await File.ReadAllTextAsync(Path.Combine(workspace.RepoPath, "late-work.txt")));
+    }
+
+    [Fact]
     public async Task Requeue_resumes_and_relinks_the_existing_salvage_branch()
     {
         await SeedOriginAsync();

@@ -17,6 +17,14 @@ public sealed record DurableRunContextPayload(
     string? DefaultBranch,
     string BaseSha);
 
+public sealed record DurableGitFactsPayload(
+    string RepositoryId,
+    string BaseSha,
+    string ResultSha,
+    string? ImmutableResultRef,
+    SalvageReconciliationResult? SalvageReconciliation,
+    string? RecoveryAction);
+
 public sealed record DurableTerminalPayload(
     string Outcome,
     string? Reason);

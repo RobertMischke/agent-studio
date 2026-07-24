@@ -590,7 +590,14 @@ public sealed class TaskServerStore
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                 ?? throw new KeyNotFoundException("Run lease was not found.");
             ValidateLeaseReference(lease, request.RunnerId, request.InstanceId, request.LeaseId, request.Fence);
-            await EnsureLeaseCurrentAsync(connection, transaction, lease, ct);
+            await EnsureOutboxLeaseCurrentAsync(
+                connection,
+                transaction,
+                lease,
+                request.RunnerId,
+                request.InstanceId,
+                request.LeaseId,
+                ct);
             if (RequiresResultEnvelope(request.Outcome))
             {
                 if (string.IsNullOrWhiteSpace(request.ResultEnvelopeDigest))
