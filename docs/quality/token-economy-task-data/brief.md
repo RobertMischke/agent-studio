@@ -28,6 +28,8 @@ The reproducible extractor in `extract-evidence.mjs` queried the stable Task
 Server API on 2026-07-24. It deliberately selected the 60 most recently active,
 non-archived Agent Studio cards carrying a code-review grade tag. This is a
 technical coverage sample, not a representative performance cohort.
+`extract-evidence.test.mjs` verifies the selection and aggregation contract
+against an isolated mock Task Server.
 
 Observed in the latest pipeline attempt per selected card:
 
