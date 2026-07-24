@@ -33,6 +33,12 @@ public sealed class RunnerOptions
     /// <summary>Free-form label describing which backend/topology this runner serves.</summary>
     public required string BackendName { get; init; }
 
+    /// <summary>
+    /// Service role. Coding and review use different registered identities,
+    /// daemon loops, workspace roots, credentials, and server-side claims.
+    /// </summary>
+    public string Role { get; init; } = "coding";
+
     /// <summary>Runner service credential sent as Authorization on every networked-profile request.</summary>
     public string? AuthToken { get; init; }
 
@@ -44,6 +50,15 @@ public sealed class RunnerOptions
 
     /// <summary>Directory the runner checks the repo out into on the runner host.</summary>
     public required string WorkDir { get; init; }
+
+    /// <summary>Disposable workspace root used only by the Remote Review Executor.</summary>
+    public string ReviewWorkDir { get; init; } = Path.Combine(Path.GetTempPath(), "agent-review-work");
+
+    /// <summary>
+    /// Comma-separated environment variable names admitted into review child
+    /// processes. The review service account must provision them as read-only.
+    /// </summary>
+    public IReadOnlyList<string> ReviewCredentialEnvironment { get; init; } = [];
 
     /// <summary>Branch to check out for the run. When empty, the runner stays on <see cref="BaseBranch"/>.</summary>
     public string? Branch { get; init; }
@@ -135,10 +150,19 @@ public sealed class RunnerOptions
             ClientId = Val("client-id", "RUNNER_CLIENT_ID").Trim() is { Length: > 0 } clientId ? clientId : null,
             Hostname = Val("hostname", "RUNNER_HOSTNAME", Environment.MachineName),
             BackendName = Val("backend-name", "RUNNER_BACKEND_NAME", "remote-runner"),
+            Role = Val("role", "RUNNER_ROLE", "coding").Trim().ToLowerInvariant(),
             AuthToken = authToken.Length > 0 ? authToken : null,
             GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE").Trim() is { Length: > 0 } gitRemote ? gitRemote : null,
             GitPushRemote = Val("git-push-remote", "RUNNER_GIT_PUSH_REMOTE").Trim() is { Length: > 0 } gitPushRemote ? gitPushRemote : null,
             WorkDir = Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")),
+            ReviewWorkDir = Val(
+                "review-workdir",
+                "RUNNER_REVIEW_WORKDIR",
+                Path.Combine(Path.GetTempPath(), "agent-review-work")),
+            ReviewCredentialEnvironment = Val(
+                    "review-credential-env",
+                    "RUNNER_REVIEW_CREDENTIAL_ENV")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),
@@ -158,6 +182,14 @@ public sealed class RunnerOptions
             throw new ArgumentException("RUNNER_SERVER_URL must use HTTPS unless it is a loopback address.");
         if (!serverUri.IsLoopback && string.IsNullOrWhiteSpace(options.AuthToken))
             throw new ArgumentException("RUNNER_AUTH_TOKEN is required for a non-loopback Task Server.");
+        if (options.Role is not ("coding" or "review"))
+            throw new ArgumentException("RUNNER_ROLE must be 'coding' or 'review'.");
+        if (options.Role == "review"
+            && string.Equals(
+                Path.GetFullPath(options.WorkDir),
+                Path.GetFullPath(options.ReviewWorkDir),
+                StringComparison.Ordinal))
+            throw new ArgumentException("Review and coding workspace roots must be different.");
 
         var taskKey = positional ?? (overrides.TryGetValue("task", out var tk) ? tk : null);
         return (options, string.IsNullOrWhiteSpace(taskKey) ? null : taskKey.Trim(), once, help);

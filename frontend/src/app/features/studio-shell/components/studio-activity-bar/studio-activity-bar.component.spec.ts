@@ -48,10 +48,10 @@ describe('StudioActivityBarComponent (smoke)', () => {
 });
 
 /**
- * T5a nav-rebuild step 1: the activity bar gains a bottom-pinned Admin
- * destination (Zielbild §F2 workspace group: CLI & Modelle + System).
+ * Bottom-pinned workspace destination: the Settings gear. (The former Admin
+ * shield was removed — its destinations live in the CLI/Activity panels.)
  */
-describe('StudioActivityBarComponent admin destination', () => {
+describe('StudioActivityBarComponent settings destination', () => {
   function mount(activeKey: string | null = 'explorer') {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -70,24 +70,23 @@ describe('StudioActivityBarComponent admin destination', () => {
     return fixture;
   }
 
-  it('renders an Admin button that emits the admin panel key', () => {
+  it('renders no Admin button (removed destination)', () => {
     const fixture = mount();
     const host = fixture.nativeElement as HTMLElement;
-    const btn = host.querySelector<HTMLElement>('[data-testid="studio-ab-admin"]');
+    expect(host.querySelector('[data-testid="studio-ab-admin"]')).toBeNull();
+  });
+
+  it('renders a Settings button that emits the settings panel key', () => {
+    const fixture = mount();
+    const host = fixture.nativeElement as HTMLElement;
+    const btn = host.querySelector<HTMLElement>('[data-testid="studio-ab-settings"]');
     expect(btn).toBeTruthy();
 
     const emitted: string[] = [];
     fixture.componentInstance.panelToggle.subscribe(k => emitted.push(k));
     btn!.click();
 
-    expect(emitted).toEqual(['admin']);
-  });
-
-  it('highlights the Admin button only while it is the active key', () => {
-    const fixture = mount('admin');
-    const host = fixture.nativeElement as HTMLElement;
-    const btn = host.querySelector<HTMLElement>('[data-testid="studio-ab-admin"]')!;
-    expect(btn.classList.contains('studio-ab__btn--active')).toBe(true);
+    expect(emitted).toEqual(['settings']);
   });
 
   it('keeps the Settings button active while the Workspace settings tab is active', () => {
@@ -103,7 +102,7 @@ describe('StudioActivityBarComponent admin destination', () => {
    * that two items can never light up together — assert it on the DOM.
    */
   it('marks at most one button active for any active key', () => {
-    for (const key of ['explorer', 'filters', 'epics', 'admin', 'settings', null]) {
+    for (const key of ['explorer', 'filters', 'epics', 'settings', null]) {
       const fixture = mount(key);
       fixture.componentRef.setInput('hasEpics', true);
       fixture.detectChanges();

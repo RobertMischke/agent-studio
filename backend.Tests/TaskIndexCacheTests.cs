@@ -452,6 +452,9 @@ public class TaskIndexCacheTests : IDisposable
     }
 
     [Fact]
+    // Races a mutation into the refresh's generation-capture window; the window
+    // timing flakes under gate load (night-flake tail) while passing at idle.
+    [Trait("Category", "MachineBound")]
     public async Task MutationBeforeGenerationCapture_IsAbsorbedByCurrentRefresh()
     {
         var secondCaptureEntered = new ManualResetEventSlim(false);

@@ -82,6 +82,13 @@ export class WikiPulseComponent {
   readonly attentionCount = computed(() =>
     (this.warnings()?.count ?? 0) + (this.inbox()?.count ?? 0));
 
+  openWarning(warning: { relPath: string | null }): void {
+    // Repo-level warnings (e.g. a missing docs folder) carry no document path;
+    // there is nothing to open then.
+    if (!warning.relPath) return;
+    this.openPage.emit({ relPath: warning.relPath, type: this.typeForRel(warning.relPath) });
+  }
+
   openFeed(item: WikiPulseFeedItem): void {
     this.openPage.emit({ relPath: item.relPath, type: this.typeForRel(item.relPath) });
   }

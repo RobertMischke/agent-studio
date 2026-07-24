@@ -6,6 +6,9 @@ using Xunit;
 
 namespace TaskServer.Tests;
 
+// MachineBound 22.07.: startet drei echte Dienste (task-server, studio-bff, runner) als
+// Prozesse und bindet freie Ports - per Definition maschinengebunden, darf nicht im Gate laufen.
+[Trait("Category", "MachineBound")]
 public sealed class TopologyTests
 {
     [Fact(Timeout = 60000)]

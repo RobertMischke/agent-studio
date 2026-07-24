@@ -1,34 +1,46 @@
 {
   "relatedTasks": [
     {
-      "key": "AGT-2177",
-      "title": "Remote runner must reconcile divergent salvage branches without requeue loops",
-      "linkedAt": "2026-07-20T02:54:59.9528137Z",
-      "source": "auto"
-    },
-    {
-      "key": "AGT-2190",
-      "title": "BUG: Quelltext-Detailansicht - Splitter b\u00FCndig und gut greifbar machen, Pfad-Artefakte entfernen",
-      "linkedAt": "2026-07-20T03:00:30.8754729Z",
-      "source": "auto"
-    },
-    {
-      "key": "AGT-2155",
-      "title": "AGT-2155: KRITISCH Verify-/Build-Gates kollidieren bei Parallelbetrieb - serialisieren oder im Worktree bauen (2080-Wirksamkeit widerlegt, 10\u002B Falsch-Eskalationen 11./12.07.)",
-      "linkedAt": "2026-07-20T13:52:25.0679626Z",
-      "source": "auto"
-    },
-    {
       "key": "AGT-2182",
-      "title": "P0 Remote attempt authority: persisted RunAttempt and ReviewAttempt with restart-safe fencing",
-      "linkedAt": "2026-07-22T09:15:41.6668987Z",
-      "source": "auto"
+      "title": "Remote attempt authority: run and review fencing (reconstruction in flight)",
+      "linkedAt": "2026-07-23T18:11:52.809Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2183",
+      "title": "P0 Remote runner outbox: immutable result-SHA handoff",
+      "linkedAt": "2026-07-23T18:11:52.809Z",
+      "source": "manual"
     },
     {
       "key": "AGT-2184",
-      "title": "P0 Remote Review Executor: exact-SHA materialization and all review aspects in isolation",
-      "linkedAt": "2026-07-24T17:36:26.6555046Z",
-      "source": "auto"
+      "title": "P0 Remote review executor: exact-SHA materialization",
+      "linkedAt": "2026-07-23T18:11:52.809Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2189",
+      "title": "P0 Remote project admission: enforce maxParallelism",
+      "linkedAt": "2026-07-23T18:11:52.809Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2255",
+      "title": "Lane move false-success, source folder survives",
+      "linkedAt": "2026-07-23T18:11:52.809Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2257",
+      "title": "Gate watchdog after lock acquisition",
+      "linkedAt": "2026-07-23T18:11:52.809Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2229",
+      "title": "Host orchestrator instance: claimable remote steps",
+      "linkedAt": "2026-07-23T18:11:52.809Z",
+      "source": "manual"
     }
   ]
 }

@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -78,6 +81,147 @@ public sealed class AutoReviewPostProcessingWorkerTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "disabled-task")));
         var followUp = Path.Combine(_watchPath, TaskStates.AutoReview, "disabled-task", "orchestrator-follow-up.md");
         Assert.False(File.Exists(followUp));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProcessesCardsConcurrently_UpToMaxParallelism()
+    {
+        // Three cards enqueued, MaxParallelism=2: at most two are post-processed at
+        // once, the third parks on the slot until one frees.
+        var deps = BuildDeps();
+        var worker = BuildWorker(deps, maxParallelism: 2);
+
+        var active = 0;
+        var maxObserved = 0;
+        var processed = new ConcurrentBag<string>();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        worker.ProcessOverride = async (req, ct) =>
+        {
+            var now = Interlocked.Increment(ref active);
+            UpdateMax(ref maxObserved, now);
+            processed.Add(req.JobId);
+            await release.Task;
+            Interlocked.Decrement(ref active);
+        };
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            deps.Queue.Enqueue(Request("card-a"));
+            deps.Queue.Enqueue(Request("card-b"));
+            deps.Queue.Enqueue(Request("card-c"));
+
+            // Two slots fill; the third cannot start until one frees.
+            await WaitUntil(() => Volatile.Read(ref active) == 2);
+            // Give the third request a chance to (wrongly) slip through, then confirm
+            // the cap held.
+            await Task.Delay(100);
+            Assert.Equal(2, Volatile.Read(ref active));
+            Assert.Equal(2, Volatile.Read(ref maxObserved));
+
+            release.SetResult();
+            await WaitUntil(() => processed.Count == 3);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        Assert.True(Volatile.Read(ref maxObserved) <= 2, "concurrency exceeded MaxParallelism");
+        Assert.Equal(new[] { "card-a", "card-b", "card-c" }, processed.OrderBy(x => x).ToArray());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SameCardEnqueuedTwiceWhileInFlight_IsProcessedOnce()
+    {
+        // A duplicate enqueue for a card already in flight is dropped: the same card
+        // is never post-processed twice concurrently.
+        var deps = BuildDeps();
+        var worker = BuildWorker(deps, maxParallelism: 3);
+
+        var processed = new ConcurrentBag<string>();
+        var active = 0;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        worker.ProcessOverride = async (req, ct) =>
+        {
+            Interlocked.Increment(ref active);
+            processed.Add(req.JobId);
+            await release.Task;
+            Interlocked.Decrement(ref active);
+        };
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            deps.Queue.Enqueue(Request("dupe"));
+            deps.Queue.Enqueue(Request("dupe")); // duplicate, must be dropped
+            deps.Queue.Enqueue(Request("other"));
+
+            // "dupe" (held) + "other" run; the second "dupe" is deduped away.
+            await WaitUntil(() => Volatile.Read(ref active) == 2);
+            await Task.Delay(100);
+
+            Assert.Equal(2, Volatile.Read(ref active));
+            Assert.Equal(1, processed.Count(x => x == "dupe"));
+
+            release.SetResult();
+            await WaitUntil(() => processed.Count == 2);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(1, processed.Count(x => x == "dupe"));
+        Assert.Equal(1, processed.Count(x => x == "other"));
+    }
+
+    private AutoReviewPostProcessingRequest Request(string jobId) => new(
+        ProjectName: Project,
+        JobId: jobId,
+        WatchPath: _watchPath,
+        EnqueuedAtUtc: DateTime.UtcNow,
+        Source: "test");
+
+    private AutoReviewPostProcessingWorker BuildWorker(Deps deps, int maxParallelism)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+                ["PostProcessing:MaxParallelism"] = maxParallelism.ToString(),
+                ["ReviewDecisionOrchestrator:Enabled"] = "true",
+            })
+            .Build();
+        return new AutoReviewPostProcessingWorker(
+            deps.Queue,
+            deps.Orchestrator,
+            deps.Scanner,
+            deps.Mutations,
+            config,
+            NullLogger<AutoReviewPostProcessingWorker>.Instance);
+    }
+
+    private static async Task WaitUntil(Func<bool> condition, int timeoutMs = 5000)
+    {
+        var sw = Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (sw.ElapsedMilliseconds > timeoutMs)
+                throw new TimeoutException("Condition not met within timeout.");
+            await Task.Delay(15);
+        }
+    }
+
+    private static void UpdateMax(ref int max, int candidate)
+    {
+        int prev;
+        do
+        {
+            prev = Volatile.Read(ref max);
+            if (candidate <= prev) return;
+        }
+        while (Interlocked.CompareExchange(ref max, candidate, prev) != prev);
     }
 
     private Deps BuildDeps(bool reviewDecisionEnabled = true)

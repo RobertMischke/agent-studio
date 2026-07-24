@@ -1,10 +1,14 @@
-/* Rendered as a direct pane of the flex-column .pwiki__viewer: fill + scroll. */
+/* Rendered as a direct pane of the flex-column .pwiki__viewer: fill + scroll.
+   Also a container-query root: the table collapses its Datei column once the
+   panel itself (not the viewport) gets narrow - see `@container wfolder` below. */
 :host {
   display: block;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  container-type: inline-size;
+  container-name: wfolder;
 }
 
 .wfolder {
@@ -92,9 +96,16 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
 }
 .wfolder__state--error { color: var(--studio-error); }
 
-/* ---- table ---- */
+/* ---- table ----
+   table-layout: fixed is the actual fix for the squeeze bug: under the
+   default `auto` layout the browser sizes columns from content, so a long
+   Titel starves the Datei column down to a sliver and (with word-break)
+   wraps the filename one character per line. Fixed layout hands each
+   column the width declared below regardless of content length; Titel is
+   the one column left unset, so it alone absorbs whatever space remains. */
 .wfolder__table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.78rem;
   color: var(--studio-fg);
@@ -109,7 +120,16 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border-bottom: 1px solid color-mix(in srgb, var(--studio-fg) 14%, transparent);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* Titel is intentionally unlisted: it is the only auto-width column, so it
+   receives all space the fixed columns below don't claim. */
+.wfolder__th-file { width: 16ch; }
+.wfolder__th-type { width: 3.6rem; }
+.wfolder__th-class { width: 6.5rem; }
+.wfolder__th-when { width: 5.5rem; }
+.wfolder__th-size { width: 4.5rem; }
 .wfolder__table td {
   padding: var(--studio-spacing-2);
   border-bottom: 1px solid color-mix(in srgb, var(--studio-fg) 7%, transparent);
@@ -172,11 +192,30 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   white-space: nowrap;
   max-width: 48ch;
 }
+.wfolder__cell-file {
+  overflow: hidden;
+}
 .wfolder__cell-file code {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-family: var(--font-mono, monospace);
   font-size: 0.7rem;
   color: var(--studio-fg-muted);
-  word-break: break-all;
+}
+/* Narrow-panel fallback (see `@container wfolder` below): filename as a
+   second line under the title instead of its own column. Hidden by default. */
+.wfolder__file-inline {
+  display: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-top: var(--studio-spacing-1);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  color: var(--studio-fg-muted);
 }
 .wfolder__cell-type {
   white-space: nowrap;
@@ -225,3 +264,18 @@ button.wfolder__crumb-copy:hover { color: var(--studio-fg); text-decoration: non
   font-variant-numeric: tabular-nums;
 }
 .wfolder__table th:last-child { text-align: right; }
+
+/* ---- narrow-panel fallback ----
+   Below this container width the fixed column budget above no longer leaves
+   Titel a readable share, so the Datei column is dropped and its filename
+   reappears as a second line inside the Titel cell instead (see the
+   `.wfolder__file-inline` element in the template). */
+@container wfolder (max-width: 620px) {
+  .wfolder__th-file,
+  .wfolder__cell-file {
+    display: none;
+  }
+  .wfolder__file-inline {
+    display: block;
+  }
+}

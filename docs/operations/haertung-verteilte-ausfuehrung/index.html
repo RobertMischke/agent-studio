@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Härtung der verteilten Ausführung — Konzept-Workbench</title>
+<title>Verteilte Ausführung — Konzept-Workbench</title>
 <style>
   :root {
     color-scheme: light;
@@ -119,6 +119,10 @@
   .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
   .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
   @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:#0f8a5f55; background:#0f8a5f10; color:#0c6b4a; }
+  .stx-part { border-color:#b5850055; background:#b5850010; color:#8a6600; }
+  .stx-open { border-color:#eb683455; background:#eb683410; color:#b44a1f; }
 </style>
 </head>
 <body>
@@ -126,7 +130,7 @@
 
 <header class="page">
   <p class="kicker">Konzept-Workbench · Agent Studio</p>
-  <h1>Härtung der verteilten Ausführung</h1>
+  <h1>Verteilte Ausführung</h1>
   <p class="lede">Warum Arbeit verloren ging, warum Reviews leere Diffs sahen, und wie das System so
   umgebaut wird, dass beides strukturell unmöglich wird: Ergebnis als Vertrag, gefencte Schreiber,
   hermetische Verifikation.</p>
@@ -140,13 +144,17 @@
 <nav class="box" aria-label="Inhalt">
   <h4>Inhalt</h4>
   <ul class="toc">
+    <!-- Kein relativer Link: der Workbench-Viewer rendert mit base=about:blank,
+         relative Navigation schwärzt das iframe. Zielbild über den Wiki-Baum:
+         docs/operations/haertung-verteilte-ausfuehrung/target-architecture/ -->
+    <li><b>→ Zielbild (konsolidiert):</b> five actors, three contracts, quality as a contract — <code>target-architecture/</code> im Wiki-Baum</li>
     <li><a href="#tldr">TL;DR — die fünf Kernaussagen</a></li>
     <li><a href="#system">§1 Systembild: wer schreibt, wer urteilt</a></li>
     <li><a href="#git">§2 Das Git-Problem, visuell</a></li>
     <li><a href="#zeit">§3 Zeitachsen: Vorfall &amp; Run-Lebenslauf</a></li>
     <li><a href="#schreiber">§4 Schreibmodell &amp; Fencing (und: was, wenn Agenten trotzdem schreiben)</a></li>
     <li><a href="#hermetik">§5 Hermetische Verifikation, ausgebaut</a></li>
-    <li><a href="#grade">§6 Der Grade-Step bleibt — und wird ehrlich gefüttert</a></li>
+    <li><a href="#grade">§6 Grade-Step</a></li>
     <li><a href="#programm">§7 Härtungsprogramm &amp; Roadmap</a></li>
     <li><a href="#historie">§8 Historie: Summary-Block</a></li>
   </ul>
@@ -245,6 +253,7 @@ und „urteilen“ einen Vertrag ein: den Attempt-Record (§2.5).</figcaption>
 <h2 id="git"><span class="no">§2</span>Das Git-Problem, visuell</h2>
 
 <h3>§2.1 Zwei Branch-Welten — warum der Review nichts sah</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Entschärft — der Review bewertet die attributierte Commit-Kette; Lücken werden operativ nachgeführt. Strukturell endgültig erst mit dem Result-SHA-Vertrag (AGT-2183/2184, in Umsetzung).</p>
 <p>Der Remote-Runner arbeitet und pusht <i>ausschließlich</i> auf
 <code>runner/&lt;runnerId&gt;/&lt;taskKey&gt;</code>. Die Review-Diffs entstehen aber gegen
 <code>task/&lt;slug&gt;</code> bzw. <code>develop</code>. Zwischen beiden Welten gibt es keinen
@@ -310,6 +319,7 @@ dieses Muster; die Reconciliation hat sie per Squash auf frische develop-basiert
 </figure>
 
 <h3>§2.2 Wie der Review seinen Diff heute findet — die Rate-Kaskade</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Entschärft — Scope-Hygiene etabliert (nur unintegrierte Zyklus-Commits; integrierte Altzyklen erzeugen Replay-Scheinkonflikte). Die Kaskade fällt erst mit AGT-2183/2184.</p>
 <figure>
 <svg viewBox="0 0 1040 250" role="img" aria-label="Flussdiagramm der Diff-Scope-Auflösung">
   <rect class="s-node" x="20" y="30" width="230" height="64" rx="10"/>
@@ -344,6 +354,7 @@ bleibt unangetastet (§6).</figcaption>
 </figure>
 
 <h3>§2.3 Kreuzkontamination: Salvage baut auf Salvage</h3>
+<p class="stx stx-ok"><b>Stand 24.07.:</b> GELÖST seit 11.07. (AGT-2147/2148/2149): Jeder Pickup startet im frischen Worktree von der autoritativen Basis (origin/develop), nicht vom Umgebungszustand. Seither empirisch keine neue Kreuzkontamination; Altlasten auf alten Salvage-Branches werden beim Re-Cut bereinigt (Beispiel 23./24.07.: AGT-2137/2139/2194 sauber neu aufgesetzt und mit Grade A/B geliefert).</p>
 <p>Weil Pickups zeitweise vom Umgebungszustand statt von einer autoritativen Basis starteten, tragen
 spätere Salvage-Branches die Arbeit früherer Tasks mit. Realer Fall: der Salvage von AGT-2191
 (Wiki-Dark-Theme) enthielt nahezu das komplette Werk von AGT-2108 (WikiSourceBranch):</p>
@@ -374,6 +385,7 @@ Gegenmittel: Pickup materialisiert immer eine <b>explizit gefetchte, autoritativ
 </figure>
 
 <h3>§2.4 Divergenz ohne Requeue-Loop: die vier Ancestry-Fälle (AGT-2177)</h3>
+<p class="stx stx-ok"><b>Stand 24.07.:</b> GELÖST 23.07.: Review-Epochen ankern auf dem letzten Operator-Übergang nach 4-auto-review (AGT-2260-Kern) — veraltete Verdikte können Operator-Requeues nicht mehr überschreiben; der AGT-2177-Loop-Typ tritt nicht mehr auf.</p>
 <p>Wenn ein zurückgehaltener lokaler Stand und der kanonische Remote-Ref auseinanderlaufen, darf weder
 force-gepusht noch endlos requeued werden. AGT-2177 klassifiziert per
 <code>git merge-base --is-ancestor</code>:</p>
@@ -415,6 +427,7 @@ sowohl der Requeue-Loop als auch die Kontaminationsquelle.</figcaption>
 </figure>
 
 <h3>§2.5 Zielbild: der Result-SHA-Vertrag</h3>
+<p class="stx stx-open"><b>Stand 24.07.:</b> IN UMSETZUNG: AGT-2183/2184 (exakte SHA-Übergabe Runner→Review) sind zugeschnitten und in der Pipeline; bis dahin gilt der Operator-Workaround (manuelle Attribution je Zyklus).</p>
 <p>Der strukturelle Fix: Jeder Versuch (lokal wie remote) endet in einem <b>unveränderlichen
 Attempt-Record</b>. Er ist die einzige Quelle, aus der Urteiler und Konsumenten lesen — niemand
 rät mehr, wo Arbeit liegen könnte.</p>
@@ -572,6 +585,7 @@ Stand. Die dritte schließt die verbliebene Lücke: die Brücke von <code>runner
 
 <!-- ============================================================ -->
 <h2 id="schreiber"><span class="no">§4</span>Schreibmodell &amp; Fencing</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> WEITGEHEND UMGESETZT 24.07.: Persistente Attempt-Authority mit Fencing/Epochen geliefert (AGT-2182, Grade B) — ein benanntes Acquire-to-Lane-Crash-Fenster offen (Folgekarte). Agenten-Schreibverstöße werden erkannt und quarantänisiert (agent-git-violation-Eskalation).</p>
 <p class="dim">Zur Einordnung der Frage „die Schreiber sind Post- und Pre-Steps in der Pipeline, aber nicht
 Agenten — was passiert, wenn Agenten trotzdem schreiben?“: Erst die Landkarte aller Schreiber, dann
 genau dieser Fall.</p>
@@ -656,6 +670,7 @@ scheitert am Fence, nicht an seiner Disziplin.</figcaption>
 
 <!-- ============================================================ -->
 <h2 id="hermetik"><span class="no">§5</span>Hermetische Verifikation, ausgebaut</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> BRÜCKE LIVE seit 23.07.: Gates testen den exakten Subjekt-SHA im Wegwerf-Worktree auf dem Remote-Host (SSH-Gate, 4 Slots), Evidenz identisch zum lokalen Pfad. Saubere Lösung (eigene Remote-Instanz statt Brücke) läuft als AGT-2229; Brücken-Rückbau ist als Aufräumkarte verankert.</p>
 
 <h3>§5.1 Warum Gates heute lügen können</h3>
 <p>Das Build-Test-Gate baut und testet den <b>geteilten Checkout</b>, während daneben Agenten,
@@ -746,7 +761,7 @@ Träger; der Rest sind Testdisziplin-Bausteine (§5.3).</figcaption>
 </table>
 
 <!-- ============================================================ -->
-<h2 id="grade"><span class="no">§6</span>Der Grade-Step bleibt — und wird ehrlich gefüttert</h2>
+<h2 id="grade"><span class="no">§6</span>Grade-Step</h2>
 <div class="box ok">
   <h4>Festlegung</h4>
   <p>Der Code-Review-Grade ist die <b>Nutzer-Wahrheitsanzeige</b>: „War der Code da, und taugt er?“

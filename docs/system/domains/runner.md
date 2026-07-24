@@ -81,9 +81,13 @@ state.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
 - `runner/*`: the standalone remote runner daemon. A dependency-free console
-  process that continuously claims server-assigned projects with bounded host
-  slots (default 2), fenced leases + heartbeat, per-task linked git worktrees,
-  log/artifact upload, and fenced normal completion into auto-review. The original `--task <key>`
+  process that runs as either a separately registered `coding` or `review`
+  service. Coding continuously claims server-assigned projects with bounded
+  host slots (default 2), fenced leases + heartbeat, per-task linked git
+  worktrees, log/artifact upload, and fenced normal completion into auto-review.
+  Review claims one immutable ReviewSubject, creates a fresh disposable
+  exact-SHA workspace, runs the server-supplied existing aspect command plan,
+  and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
   one-shot remains for diagnostics. It owns no task state. Its only git write to
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
@@ -96,6 +100,28 @@ state.
   disk pickup-lock and holds none, which is exactly the lokal-vs-remote signal.
 
 ## Invariants
+
+- Coding and review service identities are not interchangeable. A
+  `review-executor` capability cannot claim coding work, mixed capabilities are
+  rejected, and a registered identity cannot switch executor roles. Review
+  claim, renew, report, and cleanup use a separate lease and monotonically increasing fence.
+  Same-host placement is allowed only with the distinct service identity,
+  instance, workspace root, cache, port block, container/database namespace,
+  read-only credentials, and quota. A ReviewPlan may require a different host
+  failure domain.
+- Every review command records the expected Result-SHA and the actual HEAD
+  immediately before process start. The Task Server accepts evidence only when
+  the repository identity, expected SHA, tested SHA, tree, executable-digest
+  toolchain, output-artifact, and containment facts match the immutable subject.
+  Missing source is `ReviewInfra` /
+  `SnapshotUnavailable`; wrong repository, wrong SHA, dirty-before, and
+  mutated-after are typed infrastructure outcomes. They stay in Auto Review and
+  consume no coding attempt.
+- Draining closes review admission but not active renew, report, or cleanup.
+  Safe shutdown and restore include unresolved ReviewAttempt authority, and
+  restart takeover changes both the durable fence and the containment namespace.
+  A report is also rejected when its immutable subject no longer owns the task's
+  Auto Review lifecycle.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, or post-processing keeps

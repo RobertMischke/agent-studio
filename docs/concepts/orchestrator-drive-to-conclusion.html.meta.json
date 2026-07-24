@@ -17,11 +17,17 @@
       "title": "Completion-Gate: Doku-only- und Verifikations-Laeufe ohne neue Commits korrekt einordnen (statt falsch eskalieren)",
       "linkedAt": "2026-07-11T00:28:28.6565887Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2108",
+      "title": "Wiki-Quelle konfigurierbar: gesamtes Projekt-Wiki auf waehlbaren Branch umstellen (statt implizit Checkout-Stand)",
+      "linkedAt": "2026-07-23T09:14:46.6436186Z",
+      "source": "auto"
     }
   ],
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
   "schemaVersion": "wiki-document-companion/v1",
-  "title": "Orchestrator Drive-to-Conclusion &amp; CLI-Crash Resilience",
+  "title": "Orchestrator Drive-to-Conclusion \u0026amp; CLI-Crash Resilience",
   "source": {
     "path": "docs/concepts/orchestrator-drive-to-conclusion.html",
     "type": "html",

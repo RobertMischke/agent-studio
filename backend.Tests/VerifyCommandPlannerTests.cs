@@ -298,6 +298,11 @@ public sealed class VerifyCommandPlannerTests : IDisposable
 /// end-to-end command loop driven through the build-profile override (trivial
 /// shell commands so the test needs no real toolchain).
 /// </summary>
+// MachineBound 22.07.: instanziiert einen echten BuildTestGateRunner und nimmt den
+// maschinenweiten Lock %TEMP%\agentstudio-build-test-gate.lock - laeuft die Suite IM
+// Gate, haelt das Gate den Lock bereits -> 15s-SLA -> Timeout/Collision -> Gate-Fail
+// (Selbstblockade). Klassenweit, weil jede Methode denselben Runner/Lock beruehrt.
+[Trait("Category", "MachineBound")]
 public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
 {
     private readonly string _root;

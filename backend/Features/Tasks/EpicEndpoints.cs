@@ -21,16 +21,20 @@ public static class EpicEndpoints
 
         // List every epic with a live sub-task rollup. includeFixtures mirrors
         // the tasks list so test fixtures don't leak into the normal view.
-        group.MapGet("/", (bool? includeFixtures, string? status, string? project, TaskScannerService scanner) =>
+        group.MapGet("/", (bool? includeFixtures, string? status, string? project, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             // Historical epics and their completed/archived children are part
             // of this overview contract. The normal active-lane scan omits
             // 7-archive and previously made finished epics disappear.
             var all = scanner.ScanAllJobsWithArchive();
             if (includeFixtures != true) all = all.Where(j => !j.Fixture).ToList();
+            // The path-free handle migration sends PROJ-NNN ids while task
+            // records carry display names - resolve either shape, otherwise the
+            // Epics view goes silently empty for id-based callers.
+            var projectName = projects.FindByIdOrDisplayName(project)?.DisplayName ?? project;
             var rollups = all
                 .Where(t => TaskKinds.IsEpic(t.Kind))
-                .Where(e => project is null || string.Equals(e.ProjectName, project, StringComparison.OrdinalIgnoreCase))
+                .Where(e => projectName is null || string.Equals(e.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(e => e.ProjectName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(e => e.Order)
                 .Select(e => BuildRollup(e, all))
@@ -46,13 +50,14 @@ public static class EpicEndpoints
 
         // Cheap payload for the collapsed history header. Full completed
         // rollups are requested only when the operator expands the section.
-        group.MapGet("/completed/count", (bool? includeFixtures, string? project, TaskScannerService scanner) =>
+        group.MapGet("/completed/count", (bool? includeFixtures, string? project, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             var all = scanner.ScanAllJobsWithArchive();
             if (includeFixtures != true) all = all.Where(j => !j.Fixture).ToList();
+            var projectName = projects.FindByIdOrDisplayName(project)?.DisplayName ?? project;
             var count = all
                 .Where(t => TaskKinds.IsEpic(t.Kind))
-                .Where(e => project is null || string.Equals(e.ProjectName, project, StringComparison.OrdinalIgnoreCase))
+                .Where(e => projectName is null || string.Equals(e.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
                 .Select(e => BuildRollup(e, all))
                 .Count(IsCompleted);
             return Results.Ok(new { count });
