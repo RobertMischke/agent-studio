@@ -514,6 +514,50 @@ AGT-2183 ergänzt Outbox und unveränderlichen Result-SHA-Handoff. AGT-2184 mate
 für den Review. Grade-Step und Gate behalten ihre Funktion und erhalten einen verbindlichen Scope.</figcaption>
 </figure>
 
+<h4>§2.5.1 Was der SHA eigentlich ist — und was passiert, wenn der CLI mehrfach committet</h4>
+<p>Ein Git-SHA ist nicht bloß ein Name, sondern die <b>inhaltsadressierte ID eines Commits</b>:
+Git hasht dessen gesamten Inhalt — den Tree (Schnappschuss <i>aller</i> Dateien), den/die
+Parent-SHA(s) (die ganze Vorgeschichte) und Autor/Message/Zeitstempel. Ein einziges geändertes Bit
+ergibt einen anderen SHA. Deshalb ist der SHA kein Zeiger, sondern ein <b>Beweis</b>: Er pinnt genau
+einen unveränderlichen Snapshot plus dessen komplette Ahnenkette. <code>baseSha</code> und
+<code>resultSha</code> sind zwei solcher Commit-IDs — Fork-Punkt und produzierte Spitze.</p>
+
+<p>Committet der CLI <i>zwischendurch</i>, ist das der <b>Normalfall</b>, kein Sonderfall: Jeder
+Commit schiebt <code>HEAD</code> vorwärts und bildet eine Kette. Der <code>resultSha</code> ist
+schlicht die <b>Spitze</b> (<code>git rev-parse HEAD</code>) am Ende des Versuchs — sie pinnt alle
+Zwischen-Commits transitiv fest, der Grade sieht ihre Summe. Der <code>resultSha</code> wird also
+nirgends „berechnet“: Er <i>ist</i>, was HEAD im Worktree zeigt, erfasst als <b>letzte Handlung
+nach dem Push, genau einmal</b> (AGT-2183). In dieser Reihenfolge liegt der ganze Vertrag.</p>
+
+<figure>
+<svg viewBox="0 0 1040 250" role="img" aria-label="Commit-Kette von baseSha zu resultSha mit Grade-Diff und verwaistem Nach-Capture-Commit">
+  <line x1="70" y1="80" x2="700" y2="80" class="s-flow"/>
+  <rect class="s-node" x="40" y="58" width="120" height="44" rx="10"/><text class="s-sub" x="56" y="78">baseSha</text><text class="s-tiny" x="56" y="94">Fork-Punkt</text>
+  <circle cx="290" cy="80" r="13" class="s-node"/><text class="s-tiny" x="272" y="118">c1</text>
+  <circle cx="420" cy="80" r="13" class="s-node"/><text class="s-tiny" x="402" y="118">c2</text>
+  <rect class="badge-ok" x="560" y="58" width="140" height="44" rx="10" stroke-width="1.4"/><text class="s-sub" x="576" y="78">resultSha</text><text class="s-tiny" x="576" y="94">= HEAD, gepusht</text>
+  <path class="s-flow" d="M160 80 H277" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M303 80 H407" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M433 80 H560" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="200" y="66">CLI-Commit</text><text class="s-tiny" x="470" y="66">CLI-Commit</text>
+
+  <path d="M46 120 V140 H694 V120" fill="none" stroke="var(--line)" stroke-width="1"/>
+  <text class="s-sub" x="250" y="160">Grade &amp; Merge: <tspan font-style="italic">git diff baseSha resultSha</tspan> — die ganze Kette</text>
+
+  <circle cx="850" cy="80" r="13" class="badge-bad" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <path class="s-flow" d="M700 80 C760 80 790 80 837 80" marker-end="url(#arr)" stroke-dasharray="4 4"/>
+  <text class="t-bad" x="790" y="128">✗ Commit NACH dem Capture</text>
+  <text class="s-sub" x="790" y="146">verwaist → würde geraten.</text>
+  <text class="s-sub" x="790" y="164">Genau darum: Capture zuletzt,</text>
+  <text class="s-sub" x="790" y="182">genau einmal, nach Push.</text>
+</svg>
+<figcaption><b>Abb. 6a — Die Kette und der eine gefährliche Moment.</b> Beliebig viele Zwischen-Commits
+sind unkritisch; kritisch ist nur ein Commit <i>nach</i> der Erfassung (Race), ein Commit <i>ohne</i>
+Push (<code>push-verified</code> greift) oder ein nachträgliches <code>amend</code>/<code>reset</code>
+(der Record ist immutable → Divergenz zum Reconcilen). Produziert der Versuch gar keinen Commit, gilt
+<code>resultSha == baseSha</code>: der leere Diff ist ein explizites Signal, kein Ratefall.</figcaption>
+</figure>
+
 <!-- ============================================================ -->
 <h2 id="zeit"><span class="no">§3</span>Vorfälle und Run-Ablauf</h2>
 <p class="stx stx-part"><b>Stand 24.07.:</b> Die Vorfälle vom 08. bis 18.07. sind abgeschlossen oder
