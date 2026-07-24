@@ -289,7 +289,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                         gateRunId, repositoryPath, machineLease.CollisionDetected, machineLease.QueueWaitMs);
                     if (HasHealthContext(request))
                     {
-                        _health?.GateAcquired(new PipelineGateContext(
+                        ReportGateAcquired(new PipelineGateContext(
                             gateRunId,
                             request.Project!,
                             request.WatchPath!,
@@ -417,9 +417,11 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 completed?.FailureKind.ToString() ?? BuildTestGateFailureKind.Cancellation.ToString(),
                 completed?.FailureFingerprint ?? "none",
                 machineLease?.CollisionDetected ?? false, machineLease?.QueueWaitMs ?? 0);
+            machineLease?.Dispose();
+            machineLease = null;
             if (acquiredAtUtc.HasValue && HasHealthContext(request))
             {
-                _health?.GateCompleted(new PipelineGateCompletion(
+                ReportGateCompleted(new PipelineGateCompletion(
                     gateRunId,
                     request.Project!,
                     request.WatchPath!,
@@ -427,7 +429,6 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     completedAt.UtcDateTime,
                     completed?.FailureFingerprint));
             }
-            machineLease?.Dispose();
         }
     }
 
@@ -641,6 +642,40 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         => !string.IsNullOrWhiteSpace(request.Project)
            && !string.IsNullOrWhiteSpace(request.WatchPath)
            && !string.IsNullOrWhiteSpace(request.JobId);
+
+    private void ReportGateAcquired(PipelineGateContext gate)
+    {
+        try
+        {
+            _health?.GateAcquired(gate);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "build_test_gate_health_observer_failed phase=acquired gate_run_id={GateRunId} project={Project} job_id={JobId}",
+                gate.GateRunId,
+                gate.Project,
+                gate.JobId);
+        }
+    }
+
+    private void ReportGateCompleted(PipelineGateCompletion completion)
+    {
+        try
+        {
+            _health?.GateCompleted(completion);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "build_test_gate_health_observer_failed phase=completed gate_run_id={GateRunId} project={Project} job_id={JobId}",
+                completion.GateRunId,
+                completion.Project,
+                completion.JobId);
+        }
+    }
 
     private async Task<BuildTestGateResult> RunCommandsAsync(
         string repositoryPath,
