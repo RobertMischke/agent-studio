@@ -141,6 +141,22 @@ public sealed class RemoteRunnerDaemon
                 }
                 while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
                 {
+                    var chatClaim = await _client.ClaimProjectChatWorkAsync(
+                        new RemoteChatWorkClaimRequest(
+                            _options.RunnerId, _options.RunnerName, _options.Hostname),
+                        shutdown);
+                    if (chatClaim.Status == RemoteChatWorkClaimStatuses.Claimed
+                        && chatClaim.Work is not null)
+                    {
+                        claimedAny = true;
+                        _log(
+                            $"claimed project chat {chatClaim.Work.ProjectName}/{chatClaim.Work.Kind} " +
+                            $"into slot {active.Count + 1}/{_options.HostMaxParallelism}");
+                        active.Add(new RemoteProjectChatRunner(_options, _client, _log)
+                            .RunAsync(chatClaim.Work, shutdown));
+                        continue;
+                    }
+
                     var claim = await _client.ClaimAsync(new RunnerClaimRequest(
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,

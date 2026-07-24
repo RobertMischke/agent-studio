@@ -69,6 +69,9 @@ public sealed class RunnerOptions
     /// <summary>Agent CLI binary to spawn (claude, codex, ...).</summary>
     public required string CliBin { get; init; }
 
+    /// <summary>Codex binary used by the GPT-only project chat work path.</summary>
+    public string CodexCliBin { get; init; } = "codex";
+
     /// <summary>Extra CLI arguments inserted before the prompt is streamed on stdin (space-split, shell-unaware).</summary>
     public required string CliArgs { get; init; }
 
@@ -173,6 +176,7 @@ public sealed class RunnerOptions
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),
             CliBin = Val("cli", "RUNNER_CLI_BIN", "claude"),
+            CodexCliBin = Val("codex-cli", "RUNNER_CODEX_CLI_BIN", "codex"),
             CliArgs = Val("cli-args", "RUNNER_CLI_ARGS", "-p"),
             CliResumeArgs = Val("cli-resume-args", "RUNNER_CLI_RESUME_ARGS").Trim() is { Length: > 0 } resumeArgs
                 ? resumeArgs

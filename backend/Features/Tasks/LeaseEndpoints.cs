@@ -95,6 +95,38 @@ public static class LeaseEndpoints
         group.MapGet("/{taskKey}", (string taskKey, RunLeaseService leases) =>
             Results.Ok(leases.Peek(taskKey)));
 
+        // Interactive project-chat work uses the same remote pull direction as
+        // card runs. Studio queues an opaque request for the project's assigned
+        // runner; the host claims, renews and completes it with a claim token.
+        // No central process reaches into the runner over SSH.
+        app.MapPost("/api/runner/project-chat/claim",
+            (RemoteChatWorkClaimRequest req, HttpContext context, RemoteChatWorkBroker broker) =>
+            {
+                if (!RunnerMatches(context, req.RunnerId, req.RunnerName))
+                    return Results.Unauthorized();
+                return Results.Ok(broker.TryClaim(req));
+            });
+
+        app.MapPost("/api/runner/project-chat/renew",
+            (RemoteChatWorkRenewRequest req, HttpContext context, RemoteChatWorkBroker broker) =>
+            {
+                if (!RunnerMatches(context, req.RunnerId))
+                    return Results.Unauthorized();
+                return broker.Renew(req)
+                    ? Results.Ok(new { renewed = true })
+                    : Results.Conflict(new { renewed = false, error = "stale project-chat claim" });
+            });
+
+        app.MapPost("/api/runner/project-chat/complete",
+            (RemoteChatWorkCompletionRequest req, HttpContext context, RemoteChatWorkBroker broker) =>
+            {
+                if (!RunnerMatches(context, req.RunnerId))
+                    return Results.Unauthorized();
+                return broker.Complete(req)
+                    ? Results.Ok(new { accepted = true })
+                    : Results.Conflict(new { accepted = false, error = "stale project-chat claim" });
+            });
+
         // Daemon pickup is selected server-side from the project record. The
         // gate makes scan + fenced lease + ready-to-progress move one claim
         // critical section for all remote contenders. The local runner reads

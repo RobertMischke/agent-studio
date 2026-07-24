@@ -736,6 +736,14 @@ The redesign handoff is [docs/concepts/orchestrator-chat-redesign-handoff.md](./
 
 Delivered (Multichat, Concept §4): the side sheet follows the operator's navigation and can pin a context (MC-2), per-context transcript history is served by `GET/POST /api/runner/{contextKey}/orchestrator-chat` — a `task:<PROJ>/<KEY>` context keeps its own thread while `project:<PROJ>` resolves to the canonical board thread — and the side sheet reads and sends through the context-keyed route, so a pinned task now shows its own transcript in the app while the board is byte-for-byte unchanged. See [docs/concepts/orchestrator-chat.md](./docs/concepts/orchestrator-chat.md#per-context-chat-transcript).
 
+Delivered (execution locality): side-sheet project and task chat turns follow
+the project's execution assignment. A remote-assigned project is claimed by
+its Agent Runner and Codex starts inside a runner-host checkout from the
+project's git cache; projects without a remote assignment continue locally.
+The compact chat header reports local or hostname, checkout path, branch, and
+HEAD revision from the actual execution context. See
+[docs/concepts/orchestrator-chat.md](./docs/concepts/orchestrator-chat.md#execution-location-and-checkout-context).
+
 ### In-App Orchestrator (Sight, Hands, Anchor)
 
 Move the operator inside the application. The concept ([docs/concepts/orchestrator-in-app.md](./docs/concepts/orchestrator-in-app.md), v1) is that the chat *is* the orchestrator that has the whole board (the whole application) in view and keeps it running from inside the app, not an external console watching a patient. This is the sibling direction to Persistent Orchestrator Chat: that theme makes the conversation durable; this one gives it operational eyes and, later, hands. Three pillars, gated in order:

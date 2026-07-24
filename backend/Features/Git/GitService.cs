@@ -3166,6 +3166,20 @@ public class GitService
     }
 
     /// <summary>
+    /// Reads the checked-out branch at an explicit repository or worktree
+    /// root. A detached checkout returns <c>HEAD</c>; null means the path is
+    /// not a readable git repository.
+    /// </summary>
+    public string? ReadBranchAt(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return null;
+        var (output, _, code) = RunGit(root, "rev-parse --abbrev-ref HEAD");
+        if (code != 0) return null;
+        var branch = output.Trim();
+        return string.IsNullOrWhiteSpace(branch) ? null : branch;
+    }
+
+    /// <summary>
     /// Lists commits in the SHA range <c>before..after</c> (exclusive of
     /// <paramref name="beforeSha"/>, inclusive of <paramref name="afterSha"/>).
     /// This is the *deterministic* commit-attribution path: the run

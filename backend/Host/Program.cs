@@ -276,6 +276,7 @@ builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
 builder.Services.AddSingleton<OrchestratorContextDigestService>();
+builder.Services.AddSingleton<RemoteChatWorkBroker>();
 builder.Services.AddSingleton<OrchestratorChatService>();
 builder.Services.AddSingleton<ProjectChatStore>();
 builder.Services.AddSingleton<ProjectChatIndex>();

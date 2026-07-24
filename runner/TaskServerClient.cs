@@ -374,6 +374,45 @@ public sealed class TaskServerClient : IDisposable
         return JsonSerializer.Deserialize<Contract.ArtifactContentDto>(detail, Json);
     }
 
+    public async Task<RemoteChatWorkClaimResponse> ClaimProjectChatWorkAsync(
+        RemoteChatWorkClaimRequest request,
+        CancellationToken ct)
+        => await PostJsonAsync<RemoteChatWorkClaimRequest, RemoteChatWorkClaimResponse>(
+               "/api/runner/project-chat/claim", request, ct)
+           ?? new RemoteChatWorkClaimResponse(RemoteChatWorkClaimStatuses.Empty);
+
+    public async Task<bool> RenewProjectChatWorkAsync(
+        RemoteChatWorkRenewRequest request,
+        CancellationToken ct)
+    {
+        try
+        {
+            _ = await PostJsonAsync<RemoteChatWorkRenewRequest, object>(
+                "/api/runner/project-chat/renew", request, ct);
+            return true;
+        }
+        catch (TaskServerException ex) when (ex.StatusCode == (int)HttpStatusCode.Conflict)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> CompleteProjectChatWorkAsync(
+        RemoteChatWorkCompletionRequest request,
+        CancellationToken ct)
+    {
+        try
+        {
+            _ = await PostJsonAsync<RemoteChatWorkCompletionRequest, object>(
+                "/api/runner/project-chat/complete", request, ct);
+            return true;
+        }
+        catch (TaskServerException ex) when (ex.StatusCode == (int)HttpStatusCode.Conflict)
+        {
+            return false;
+        }
+    }
+
     public async Task ReportGitCapabilityAsync(string clientId, RunnerGitCapabilityRequest request, CancellationToken ct)
     {
         if (_useV1) return;

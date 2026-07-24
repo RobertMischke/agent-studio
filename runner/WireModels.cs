@@ -139,6 +139,75 @@ public sealed record RunnerClaimResponse(
     string? DefaultBranch = null,
     string? TaskKind = null);
 
+public static class RemoteChatWorkKinds
+{
+    public const string Inspect = "project-chat-inspect";
+    public const string Turn = "project-chat-turn";
+}
+
+public static class RemoteChatWorkClaimStatuses
+{
+    public const string Claimed = "claimed";
+    public const string Empty = "empty";
+}
+
+public sealed record RemoteChatWorkClaimRequest(
+    string RunnerId,
+    string RunnerName,
+    string Hostname);
+
+public sealed record RemoteChatWorkClaimResponse(
+    string Status,
+    RemoteChatWorkItem? Work = null);
+
+public sealed record RemoteChatWorkItem(
+    string WorkId,
+    string ClaimToken,
+    string Kind,
+    string ProjectId,
+    string ProjectName,
+    string RepositoryUrl,
+    string DefaultBranch,
+    string? Prompt,
+    string? Model,
+    string? ThinkingLevel,
+    DateTime CreatedAt,
+    DateTime ClaimExpiresAt);
+
+public sealed record RemoteChatWorkRenewRequest(
+    string WorkId,
+    string ClaimToken,
+    string RunnerId);
+
+public sealed record RemoteChatWorkCompletionRequest(
+    string WorkId,
+    string ClaimToken,
+    string RunnerId,
+    bool Success,
+    string? ReplyText,
+    string? Model,
+    OrchestratorTokenUsage? TokenUsage,
+    string? ErrorMessage,
+    ChatExecutionContext? ExecutionContext);
+
+public sealed record OrchestratorTokenUsage
+{
+    public string? Model { get; init; }
+    public int InputTokens { get; init; }
+    public int OutputTokens { get; init; }
+    public int CacheReadTokens { get; init; }
+    public int CacheCreationTokens { get; init; }
+}
+
+public sealed record ChatExecutionContext(
+    string ExecutionKind,
+    string HostName,
+    string? RepoPath,
+    string? Branch,
+    string? HeadSha,
+    string State,
+    DateTime CapturedAt);
+
 public sealed record RemoteEpicPlanningPromptRequest(
     string TaskKey,
     string LeaseId,
