@@ -143,6 +143,8 @@ public static class AccessSecurityEndpoints
     private static object ToRunnerResponse(RunnerServiceIdentity runner) => new
     {
         runner.Id, runner.Name, runner.CreatedAt, runner.RevokedAt,
+        runner.DrainRequestedAt, runner.RetireRequestedAt, runner.RetiredAt,
+        runner.LastSeenAt, runner.LastClaimAt, runner.ActiveSlots, runner.AvailableSlots,
         credentials = runner.Credentials.Select(x => new { x.Id, x.Scopes, x.CreatedAt, x.ExpiresAt, x.LastUsedAt, x.RevokedAt })
     };
 

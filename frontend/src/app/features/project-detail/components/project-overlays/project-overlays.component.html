@@ -128,7 +128,7 @@
         }
         @defer (when overlays.projectShellRail() === 'prompts') {
           @if (overlays.projectShellRail() === 'prompts') {
-            <app-prompt-admin-panel />
+            <app-prompt-admin-panel [projectName]="projShell" />
           }
         }
         @defer (when overlays.projectShellRail() === 'settings') {

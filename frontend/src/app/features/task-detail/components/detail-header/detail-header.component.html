@@ -64,13 +64,15 @@
             </span>
           }
           @if (headerModel(); as model) {
-            <span class="detail__model-chip"
-                  data-testid="detail-model-chip"
-                  [cacTooltip]="model">{{ headerModelLabel() }}
-              @if (thinkingLevelIndicator(); as level) {
-                <app-thinking-level-indicator [indicator]="level" testId="detail-thinking-level" />
-              }
-            </span>
+            <app-model-level-indicator
+              [model]="model"
+              [cliType]="info().cliType"
+              [thinkingLevel]="thinkingLevelIndicator()?.effective ?? null"
+              [thinkingLevelOverride]="(thinkingLevelIndicator()?.differsFromDefault || thinkingLevelIndicator()?.differsFromConfigured) ?? false"
+              [tooltip]="headerModelTooltip()"
+              [source]="info().execution?.model ? 'run' : 'explicit'"
+              testId="detail-model-chip"
+              levelTestId="detail-thinking-level" />
           }
           <span class="detail__meta-item"
                 data-testid="detail-created-at"

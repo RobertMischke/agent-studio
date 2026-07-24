@@ -1,0 +1,22 @@
+<span class="model-level"
+      [class]="'model-level model-level--' + presentation().family"
+      [class.model-level--default]="isDefault()"
+      [class.model-level--fallback]="source() === 'fallback'"
+      [cacTooltip]="tooltip()"
+      [attr.data-testid]="testId()"
+      [attr.data-model-family]="presentation().family"
+      [attr.data-model-code]="presentation().modelCode"
+      [attr.data-model-id]="model()"
+      [attr.data-cli]="cliType()"
+      [attr.data-model-source]="source()"
+      [attr.aria-label]="accessibleLabel()">
+  <span class="model-level__model" aria-hidden="true">{{ presentation().modelCode }}</span>
+  @if (presentation().levelCode; as levelCode) {
+    <span class="model-level__thinking"
+          [class.model-level__thinking--override]="thinkingLevelOverride()"
+          [attr.data-testid]="levelTestId()"
+          [attr.data-thinking-level]="thinkingLevel()"
+          [attr.data-thinking-level-override]="thinkingLevelOverride()"
+          aria-hidden="true">{{ levelCode }}</span>
+  }
+</span>

@@ -1,0 +1,10 @@
+ClaudeCodev2.1.202
+SettingsStatusConfigUsageStats
+Session
+Totalcost:$0.0000
+Totalduration(API):0s
+Totalduration(wall):5s
+   Total code changes:    0 lines added, 0 lines removed
+   Usage:               0 input,0output,0cacheread,0cachewrite
+
+ Esc to cancel

@@ -1,0 +1,17 @@
+<div class="failure" data-testid="overview-failure-reason">
+  <span class="failure__label">Failure</span>
+  <div class="failure__value">
+    <p class="failure__primary" data-testid="overview-failure-primary">{{ presentation().primaryText }}</p>
+    <details class="failure__details" data-testid="overview-failure-details">
+      <summary>Show technical details</summary>
+      <dl class="failure__meta">
+        <div><dt>Category</dt><dd><code>{{ issue().kind }}</code></dd></div>
+        <div><dt>Severity</dt><dd>{{ issue().severity || 'Unknown' }}</dd></div>
+        @if (issue().lastSeenAt; as lastSeenAt) {
+          <div><dt>Last seen</dt><dd><time [attr.datetime]="lastSeenAt">{{ lastSeenAt }}</time></dd></div>
+        }
+      </dl>
+      <pre data-testid="overview-failure-raw">{{ presentation().rawDiagnostic }}</pre>
+    </details>
+  </div>
+</div>

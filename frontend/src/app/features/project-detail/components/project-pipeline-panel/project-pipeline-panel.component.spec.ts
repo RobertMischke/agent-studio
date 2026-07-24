@@ -165,6 +165,12 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(aspectTokens?.textContent).toContain('80.0k');
     expect(aspectTokens?.textContent).toContain('*');
     expect(host.querySelector('[data-testid="pipeline-step-tokens-core-run"]')?.textContent).toContain('300.0k');
+    expect(fixture.componentInstance.stepTokenTooltip(fixture.componentInstance.rows().find(r => r.id === 'core-run')!))
+      .toContain('Estimated cost: $0.75');
+    expect(fixture.componentInstance.stepTokenTooltip(fixture.componentInstance.rows().find(r => r.id === 'core-run')!))
+      .toContain('historical list prices');
+    expect(fixture.componentInstance.stepTokenTooltip(fixture.componentInstance.rows().find(r => r.id === 'aspect-code-quality')!))
+      .toContain('Estimated cost: no price data');
     expect(host.querySelector('[data-testid="pipeline-step-setting-tokens-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-cost"]')).toBeNull();
     expect(host.querySelector('[data-testid="pipeline-cost-total"]')).toBeNull();

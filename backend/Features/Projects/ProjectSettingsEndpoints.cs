@@ -99,6 +99,7 @@ public static class ProjectSettingsEndpoints
                     // Only the steps the operator has touched appear here;
                     // an absent step is on its built-in default.
                     pipelineSteps = kv.Value.PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
+                    testExecution = kv.Value.TestExecution,
                     pipelineStepOrder = kv.Value.PipelineStepOrder ?? Array.Empty<string>(),
                     // Resolved per-CLI permission mode + source for all four CLIs
                     // (project override → detected global config → YOLO default).
@@ -225,7 +226,7 @@ public static class ProjectSettingsEndpoints
 
         // Per-project pipeline-step override. Sets enabled / mode / model for
         // one step; an all-null body clears the override (revert to default).
-        app.MapPut("/api/projects/{projectName}/pipeline-step", (string projectName, SetPipelineStepRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/pipeline-step", (string projectName, SetPipelineStepRequest req, ProjectSettingsService settings, TaskScannerService scanner, RuntimePromptService prompts) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -258,6 +259,36 @@ public static class ProjectSettingsEndpoints
                     return Results.BadRequest(new { error = $"Condition '{when}' requires a value" });
             }
 
+            var existing = settings.Get(projectName).PipelineSteps?
+                .GetValueOrDefault(req.StepId);
+            var normalizedPrompt = string.IsNullOrWhiteSpace(req.Prompt)
+                ? null
+                : req.Prompt.Trim();
+            string? promptBaseDefaultSha = null;
+            string? promptBaseDefaultContent = null;
+            if (normalizedPrompt is not null)
+            {
+                var promptUnchanged = string.Equals(
+                    existing?.Prompt?.Trim(),
+                    normalizedPrompt,
+                    StringComparison.Ordinal);
+                if (promptUnchanged && existing?.PromptBaseDefaultSha is not null)
+                {
+                    promptBaseDefaultSha = existing.PromptBaseDefaultSha;
+                    promptBaseDefaultContent = existing.PromptBaseDefaultContent;
+                }
+                else
+                {
+                    var promptName = PromptPipelineBindings.ForStep(req.StepId);
+                    promptBaseDefaultContent = promptName is null
+                        ? null
+                        : prompts.TryReadDefault(promptName);
+                    promptBaseDefaultSha = promptBaseDefaultContent is null
+                        ? null
+                        : RuntimePromptService.ContentSha(promptBaseDefaultContent);
+                }
+            }
+
             settings.SetPipelineStep(projectName, req.StepId, new PipelineStepSetting
             {
                 Enabled = req.Enabled,
@@ -266,7 +297,9 @@ public static class ProjectSettingsEndpoints
                 CliType = req.CliType,
                 Model = req.Model,
                 ThinkingLevel = req.ThinkingLevel,
-                Prompt = req.Prompt,
+                Prompt = normalizedPrompt,
+                PromptBaseDefaultSha = promptBaseDefaultSha,
+                PromptBaseDefaultContent = promptBaseDefaultContent,
                 Condition = req.Condition,
             });
             return Results.Ok(new
@@ -555,6 +588,24 @@ public static class ProjectSettingsEndpoints
             });
             var profile = settings.Get(projectName).BuildProfile;
             return Results.Ok(new { profile, pickupAllowed = BuildProfileGate.AllowsAutoPickup(profile) });
+        });
+
+        app.MapPut("/api/projects/{projectName}/test-execution", (string projectName, TestExecutionPolicy req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(entry =>
+                string.Equals(entry.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            settings.SetTestExecution(projectName, req);
+            return Results.Ok(settings.Get(projectName).TestExecution);
+        });
+
+        app.MapDelete("/api/projects/{projectName}/test-execution", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(entry =>
+                string.Equals(entry.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            settings.SetTestExecution(projectName, null);
+            return Results.Ok(new { cleared = true });
         });
 
         // DELETE clears the build profile entirely, reverting the project to the

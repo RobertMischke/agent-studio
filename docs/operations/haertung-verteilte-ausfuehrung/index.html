@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Verteilte Ausführung — Konzept-Workbench</title>
+<title>Verteilte Ausführung | Konzept-Workbench</title>
 <style>
   :root {
     color-scheme: light;
@@ -96,6 +96,7 @@
   .pill.done { background: var(--ok-soft); color: var(--ok); }
   .pill.queued { background: var(--accent-soft); color: var(--develop); }
   .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
   .pill.open { background: var(--bad-soft); color: var(--bad); }
   ul { padding-left: 22px; }
   li { margin: 5px 0; max-width: 76ch; }
@@ -120,9 +121,17 @@
   .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
   @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
   .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
-  .stx-ok { border-color:#0f8a5f55; background:#0f8a5f10; color:#0c6b4a; }
-  .stx-part { border-color:#b5850055; background:#b5850010; color:#8a6600; }
-  .stx-open { border-color:#eb683455; background:#eb683410; color:#b44a1f; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .building-blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 20px 0; }
+  .building-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .building-block h4 { margin: 0 0 4px; font-size: 16px; }
+  .building-block figure { margin: 12px 0 0; }
+  .building-block figure svg { min-height: 170px; }
+  .building-block figcaption { margin-bottom: 0; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -131,13 +140,13 @@
 <header class="page">
   <p class="kicker">Konzept-Workbench · Agent Studio</p>
   <h1>Verteilte Ausführung</h1>
-  <p class="lede">Warum Arbeit verloren ging, warum Reviews leere Diffs sahen, und wie das System so
-  umgebaut wird, dass beides strukturell unmöglich wird: Ergebnis als Vertrag, gefencte Schreiber,
-  hermetische Verifikation.</p>
+  <p class="lede">Ursachen von Arbeitsverlust und falschen Review-Scopes sowie die zugehörigen
+  Maßnahmen: Result-SHA-Vertrag, Fencing und hermetische Verifikation.</p>
   <div class="meta">
-    <span><b>Stand:</b> 18.07.2026</span>
+    <span><b>Stand:</b> 24.07.2026</span>
     <span><b>Anlass:</b> Grade-D-Welle 17.07. (Spätfolge der Phantom-Welle 11.07.)</span>
-    <span><b>Historie:</b> <code>historie.html</code> (diese Workbench, Datei historie.html)</span>
+    <span><b>Historie:</b> <a href="#historie">Zusammenfassung und Anker</a>; Langform mit
+    identischen <code>#incident-*</code>-Ankern in <code>historie.html</code></span>
   </div>
 </header>
 
@@ -147,39 +156,48 @@
     <!-- Kein relativer Link: der Workbench-Viewer rendert mit base=about:blank,
          relative Navigation schwärzt das iframe. Zielbild über den Wiki-Baum:
          docs/operations/haertung-verteilte-ausfuehrung/target-architecture/ -->
-    <li><b>→ Zielbild (konsolidiert):</b> five actors, three contracts, quality as a contract — <code>target-architecture/</code> im Wiki-Baum</li>
-    <li><a href="#tldr">TL;DR — die fünf Kernaussagen</a></li>
-    <li><a href="#system">§1 Systembild: wer schreibt, wer urteilt</a></li>
-    <li><a href="#git">§2 Das Git-Problem, visuell</a></li>
-    <li><a href="#zeit">§3 Zeitachsen: Vorfall &amp; Run-Lebenslauf</a></li>
-    <li><a href="#schreiber">§4 Schreibmodell &amp; Fencing (und: was, wenn Agenten trotzdem schreiben)</a></li>
-    <li><a href="#hermetik">§5 Hermetische Verifikation, ausgebaut</a></li>
+    <li><b>Zielbild:</b> Akteure und Verträge unter <code>target-architecture/</code> im Wiki-Baum</li>
+    <li><a href="#tldr">Kernaussagen</a></li>
+    <li><a href="#system">§1 Systembild</a></li>
+    <li><a href="#git">§2 Git und Ergebniszuordnung</a></li>
+    <li><a href="#zeit">§3 Vorfälle und Run-Ablauf</a></li>
+    <li><a href="#schreiber">§4 Schreibmodell und Fencing</a></li>
+    <li><a href="#hermetik">§5 Hermetische Verifikation</a></li>
     <li><a href="#grade">§6 Grade-Step</a></li>
-    <li><a href="#programm">§7 Härtungsprogramm &amp; Roadmap</a></li>
-    <li><a href="#historie">§8 Historie: Summary-Block</a></li>
+    <li><a href="#programm">§7 Umsetzungsprogramm</a></li>
+    <li><a href="#historie">§8 Historienübersicht</a></li>
   </ul>
 </nav>
 
 <section id="tldr" class="box accent">
-  <h4>TL;DR — die fünf Kernaussagen</h4>
+  <h4>Kernaussagen</h4>
+  <p class="stx stx-part"><b>Stand 24.07.:</b> Drei Grundlagen sind aktiv: verifizierter Push vor
+  Completion, persistente Attempt-Authority mit Fencing (AGT-2182) und Remote-Gates auf einer exakten
+  Subjekt-SHA. Der unveränderliche Result-SHA-Handoff für alle Konsumenten bleibt mit AGT-2183/2184 offen.</p>
   <ul>
-    <li><b>Evidenz ist heute Konvention, kein Vertrag.</b> Es gibt keine einzige, unveränderliche Antwort auf
-        „Welchen Code hat dieser Run produziert?“ — Reviews raten (Run-SHAs, sonst Branch-Fallback). Ziel:
-        ein <b>Attempt-Record mit Result-SHA</b>, den Grade-Step, Gate, Merge und UI <i>ausschließlich</i> konsumieren.</li>
-    <li><b>Der Remote-Runner schreibt in eine andere Branch-Welt</b> (<code>runner/&lt;id&gt;/&lt;key&gt;</code>) als die,
-        die reviewt wird (<code>task/&lt;slug&gt;</code>). Ohne automatische Integration entstehen Phantome — Grade D war jeweils <i>korrekt</i>.</li>
-    <li><b>Mehrdeutigkeit wird fail-closed,</b> nie optimistisch: unbekanntes Ergebnis → Quarantäne mit konservierter Evidenz, niemals „vermutlich fertig“.</li>
-    <li><b>Verifikation wird hermetisch:</b> Gates laufen auf der exakten Result-SHA in einem isolierten Worktree,
-        Timing läuft auf virtueller Zeit — Testurteile hängen am Code, nicht am Maschinenzustand.</li>
-    <li><b>Der Grade-Step bleibt.</b> Er ist die Nutzer-Wahrheitsanzeige („war der Code da?“). Die Härtung ändert nur,
-        <i>welchen</i> Diff er garantiert bekommt.</li>
+    <li><b>Ergebnisevidenz ist noch nicht durchgängig ein Vertrag.</b> Das Gate erhält bereits eine exakte
+        Subjekt-SHA. Grade-Step, Merge und UI benötigen weiterhin den einheitlichen Attempt-Record mit
+        <code>baseSha</code> und <code>resultSha</code>.</li>
+    <li><b>Runner- und Task-Branches sind getrennte Namensräume.</b>
+        <code>runner/&lt;id&gt;/&lt;key&gt;</code> enthält die Remote-Arbeit; Reviews und Integration
+        verwenden <code>task/&lt;slug&gt;</code>. Der Result-SHA-Handoff ersetzt die verbleibenden
+        Zuordnungsheuristiken.</li>
+    <li><b>Unklare Zuordnung führt zur Quarantäne.</b> Fehlende oder widersprüchliche Evidenz darf kein
+        positives Ergebnis erzeugen.</li>
+    <li><b>Gates laufen isoliert.</b> Die SSH-Brücke materialisiert die Subjekt-SHA in einem
+        Wegwerf-Worktree auf dem Remote-Host. AGT-2229 ersetzt diese Brücke durch claimbare Remote-Schritte.</li>
+    <li><b>Der Grade-Step bleibt bestehen.</b> Er bewertet weiterhin die Lieferung; geändert wird sein
+        verbindlicher Diff-Scope.</li>
   </ul>
 </section>
 
 <!-- ============================================================ -->
-<h2 id="system"><span class="no">§1</span>Systembild: wer schreibt, wer urteilt</h2>
-<p class="dim">Vier Akteursgruppen mutieren Zustand; zwei Instanzen urteilen. Jede Härtungsmaßnahme
-setzt an einer der gestrichelten Grenzen an.</p>
+<h2 id="system"><span class="no">§1</span>Systembild</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Das Systembild enthält den aktuellen Remote-Runner,
+die SSH-Gate-Brücke und die persistente Attempt-Authority. Result-SHA-Handoff und claimbare
+Remote-Schritte sind noch nicht vollständig umgesetzt.</p>
+<p class="dim">Board, Pipeline und Runner ändern Zustand. Grade-Step und Gate erzeugen Verdikte.
+Die Verträge zwischen diesen Komponenten bestimmen die Zuordnung von Ergebnis und Urteil.</p>
 
 <figure>
 <svg viewBox="0 0 1040 470" role="img" aria-label="Systemdiagramm: Task-Server, Pipeline, Runner, Git, Reviews">
@@ -191,7 +209,7 @@ setzt an einer der gestrichelten Grenzen an.</p>
   <rect class="s-node2" x="40" y="114" width="260" height="30" rx="6"/>
   <text class="s-sub" x="52" y="134">TaskStateMachine + LaneMutex (Moves, Deletes)</text>
   <rect class="s-node2" x="40" y="152" width="260" height="30" rx="6"/>
-  <text class="s-sub" x="52" y="172">API-Mutationen: X-Client-Id, künftig Attempt-Fence</text>
+  <text class="s-sub" x="52" y="172">API-Mutationen: X-Client-Id + Attempt-Fence</text>
 
   <!-- Pipeline -->
   <rect class="s-node" x="370" y="30" width="300" height="180" rx="10"/>
@@ -211,7 +229,7 @@ setzt an einer der gestrichelten Grenzen an.</p>
   <rect class="s-node2" x="740" y="114" width="260" height="30" rx="6"/>
   <text class="s-sub" x="752" y="134">remote: Daemon agent-runner-01 (Lease/Claim)</text>
   <rect class="s-node2" x="740" y="152" width="260" height="30" rx="6"/>
-  <text class="s-sub" x="752" y="172">CLI-Agenten: codex · claude · … (schreiben Code!)</text>
+  <text class="s-sub" x="752" y="172">CLI-Agenten: codex · claude · … (Quellcode schreiben)</text>
 
   <!-- Git -->
   <rect class="s-node" x="200" y="270" width="640" height="90" rx="10"/>
@@ -221,15 +239,15 @@ setzt an einer der gestrichelten Grenzen an.</p>
     <tspan fill="var(--taskbr)" font-weight="600"> task/&lt;slug&gt;</tspan> ·
     <tspan fill="var(--salvage)" font-weight="600"> runner/&lt;id&gt;/&lt;key&gt;</tspan> ·
     <tspan fill="var(--rescue)" font-weight="600"> rescue/*</tspan></text>
-  <text class="s-tiny" x="220" y="344">Zwei Welten-Problem: reviewt wird task/*, geschrieben wird runner/* → §2</text>
+  <text class="s-tiny" x="220" y="344">Abweichende Namensräume: Review auf task/*, Ausführung auf runner/* → §2</text>
 
   <!-- Urteiler -->
   <rect class="s-node" x="200" y="395" width="300" height="55" rx="10"/>
   <text class="s-label" x="220" y="418">Code-Review-Grade</text>
-  <text class="s-tiny" x="220" y="438">urteilt über einen Diff — welchen? (§2.2, §6)</text>
+  <text class="s-tiny" x="220" y="438">urteilt über einen zugeordneten Diff (§2.2, §6)</text>
   <rect class="s-node" x="540" y="395" width="300" height="55" rx="10"/>
   <text class="s-label" x="560" y="418">Build-Test-Gate</text>
-  <text class="s-tiny" x="560" y="438">testet heute den geteilten Checkout (§5)</text>
+  <text class="s-tiny" x="560" y="438">testet Subjekt-SHA im Remote-Wegwerf-Worktree (§5)</text>
 
   <!-- Flüsse -->
   <path class="s-flow" d="M320 120 H370" marker-end="url(#arr)"/>
@@ -244,20 +262,28 @@ setzt an einer der gestrichelten Grenzen an.</p>
     </marker>
   </defs>
 </svg>
-<figcaption><b>Abb. 1 — Systembild.</b> Board/State-Machine, Pipeline und Runner mutieren Zustand
-(Ordner, Branches, Registry); Grade-Step und Gate urteilen. Die Härtung zieht zwischen „schreiben“
-und „urteilen“ einen Vertrag ein: den Attempt-Record (§2.5).</figcaption>
+<figcaption><b>Abb. 1: Systembild.</b> Board/State-Machine, Pipeline und Runner ändern Ordner,
+Branches und Registry. Grade-Step und Gate erzeugen Verdikte. Der Attempt-Record soll Ergebnis und
+Verdikt eindeutig verbinden (§2.5).</figcaption>
 </figure>
 
 <!-- ============================================================ -->
-<h2 id="git"><span class="no">§2</span>Das Git-Problem, visuell</h2>
+<h2 id="git"><span class="no">§2</span>Git und Ergebniszuordnung</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Basis-SHA-Pickup, Divergenzbehandlung und
+Operator-Epochen sind aktiv. Der gemeinsame Result-SHA-Vertrag für Review und Merge bleibt mit
+AGT-2183/2184 offen.</p>
 
-<h3>§2.1 Zwei Branch-Welten — warum der Review nichts sah</h3>
-<p class="stx stx-part"><b>Stand 24.07.:</b> Entschärft — der Review bewertet die attributierte Commit-Kette; Lücken werden operativ nachgeführt. Strukturell endgültig erst mit dem Result-SHA-Vertrag (AGT-2183/2184, in Umsetzung).</p>
-<p>Der Remote-Runner arbeitet und pusht <i>ausschließlich</i> auf
+<h3>§2.1 Getrennte Branch-Namensräume</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Entschärft. Der Review bewertet die attributierte
+Commit-Kette; Zuordnungslücken werden operativ nachgeführt. Der einheitliche Result-SHA-Vertrag
+bleibt mit AGT-2183/2184 in Umsetzung.</p>
+<p>Der Remote-Runner arbeitet und pusht auf
 <code>runner/&lt;runnerId&gt;/&lt;taskKey&gt;</code>. Die Review-Diffs entstehen aber gegen
-<code>task/&lt;slug&gt;</code> bzw. <code>develop</code>. Zwischen beiden Welten gibt es keinen
-automatischen Übergang — die Arbeit „existiert“, aber am falschen Ort:</p>
+<code>task/&lt;slug&gt;</code> bzw. <code>develop</code>. Zwischen den Namensräumen gibt es keinen
+allgemeinen automatischen Übergang. Dadurch kann die Arbeit vorhanden sein, ohne im Review-Scope
+zu liegen.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-grade-d">Grade-D-Eskalationen,
+17.07.</a> Karten: AGT-2190, AGT-2183, AGT-2184.</p>
 
 <figure>
 <svg viewBox="0 0 1040 360" role="img" aria-label="Commit-Graph: develop läuft weiter, Salvage-Branch trägt die Arbeit, task-Branch ist leer">
@@ -282,7 +308,7 @@ automatischen Übergang — die Arbeit „existiert“, aber am falschen Ort:</p
   </g>
   <text class="s-tiny" x="285" y="58">a70af026 (12.07.)</text>
   <text class="s-tiny" x="855" y="58">7b200ecb (17.07.)</text>
-  <text class="s-sub" x="500" y="45">+67 Commits in 5 Tagen — die Basis läuft davon</text>
+  <text class="s-sub" x="500" y="45">+67 Commits in 5 Tagen; die Basis hat sich verschoben</text>
 
   <!-- salvage -->
   <text class="s-label" x="60" y="160" fill="var(--salvage)">runner/agent-runner-01/AGT-2190</text>
@@ -294,13 +320,13 @@ automatischen Übergang — die Arbeit „existiert“, aber am falschen Ort:</p
     <circle class="s-commit" cx="560" cy="155" r="6"/>
     <circle class="s-commit" cx="620" cy="155" r="6"/>
   </g>
-  <text class="s-tiny" x="400" y="182">„wip(runner): salvage before teardown“ — die echte Arbeit (Splitter-Fix, +172/−19)</text>
+  <text class="s-tiny" x="400" y="182">„wip(runner): salvage before teardown“; Splitter-Fix, +172/−19</text>
 
   <!-- task branch -->
   <text class="s-label" x="60" y="240" fill="var(--taskbr)">task/source-detail-splitter-…</text>
   <g>
     <rect x="380" y="222" width="270" height="34" rx="8" fill="none" stroke="var(--taskbr)" stroke-dasharray="5 5" stroke-width="1.6"/>
-    <text class="s-sub" x="398" y="244">existiert nicht — oder 1 themenfremder Commit</text>
+  <text class="s-sub" x="398" y="244">fehlt oder enthält einen themenfremden Commit</text>
   </g>
 
   <!-- Review-Linse -->
@@ -308,18 +334,21 @@ automatischen Übergang — die Arbeit „existiert“, aber am falschen Ort:</p
   <text class="s-label" x="750" y="206">Code-Review-Grade (17.07.)</text>
   <text class="s-sub" x="750" y="228">Diff = task/&lt;slug&gt; vs. develop</text>
   <text class="s-sub" x="750" y="248">→ leer / themenfremd</text>
-  <text class="t-bad" x="750" y="274">✗ Grade D — „implementation exists only</text>
+  <text class="t-bad" x="750" y="274">✗ Grade D: „implementation exists only</text>
   <text class="t-bad" x="750" y="288">   on an external salvage branch“</text>
   <path class="s-flow" d="M650 240 H730" marker-end="url(#arr)"/>
 </svg>
-<figcaption><b>Abb. 2 — Die zwei Welten am realen Fall AGT-2190.</b> Die Arbeit liegt vollständig auf dem
+<figcaption><b>Abb. 2: Getrennte Namensräume bei AGT-2190.</b> Die Arbeit liegt vollständig auf dem
 Salvage-Branch (Basis: develop vom 12.07.); der Task-Branch, den der Review diffed, ist leer.
-Das D-Urteil ist <b>korrekt</b> — es zeigt exakt das Integrationsloch. 19 Karten liefen am 17.07. in genau
+Das D-Urteil war korrekt und zeigte die fehlende Integration. 19 Karten liefen am 17.07. in
 dieses Muster; die Reconciliation hat sie per Squash auf frische develop-basierte Task-Branches gehoben.</figcaption>
 </figure>
 
-<h3>§2.2 Wie der Review seinen Diff heute findet — die Rate-Kaskade</h3>
-<p class="stx stx-part"><b>Stand 24.07.:</b> Entschärft — Scope-Hygiene etabliert (nur unintegrierte Zyklus-Commits; integrierte Altzyklen erzeugen Replay-Scheinkonflikte). Die Kaskade fällt erst mit AGT-2183/2184.</p>
+<h3>§2.2 Diff-Scope-Auflösung</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Entschärft. Der Scope enthält nur unintegrierte
+Commits des aktuellen Zyklus. Die Fallback-Kaskade entfällt erst mit AGT-2183/2184.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-grade-d">Grade-D-Eskalationen,
+17.07.</a> Karten: AGT-2183, AGT-2184.</p>
 <figure>
 <svg viewBox="0 0 1040 250" role="img" aria-label="Flussdiagramm der Diff-Scope-Auflösung">
   <rect class="s-node" x="20" y="30" width="230" height="64" rx="10"/>
@@ -331,7 +360,7 @@ dieses Muster; die Reconciliation hat sie per Squash auf frische develop-basiert
   <text class="s-sub" x="330" y="78">der aufgezeichneten Commits</text>
 
   <rect class="s-node" x="590" y="30" width="200" height="64" rx="10"/>
-  <text class="s-label" x="610" y="56">leer?</text>
+  <text class="s-label" x="610" y="56">Scope leer</text>
   <text class="s-sub" x="610" y="78">Fallback-Entscheidung</text>
 
   <rect class="s-node" x="840" y="30" width="180" height="64" rx="10"/>
@@ -343,21 +372,26 @@ dieses Muster; die Reconciliation hat sie per Squash auf frische develop-basiert
   <path class="s-flow" d="M790 62 H840" marker-end="url(#arr)"/>
 
   <rect class="badge-bad" x="130" y="140" width="780" height="80" rx="10" stroke-width="1.5"/>
-  <text class="t-bad" x="150" y="168">✗ Beide Stufen können beim Phantom-Fall falsch greifen:</text>
-  <text class="s-sub" x="150" y="190">Stufe 1 liefert die themenfremden Alt-Commits (nicht leer → kein Fallback!),</text>
-  <text class="s-sub" x="150" y="208">Stufe 2 diffed einen Branch, der die Remote-Arbeit nie bekommen hat. Der Review urteilt über das falsche Universum.</text>
+  <text class="t-bad" x="150" y="168">✗ Beide Stufen können dem Versuch den falschen Scope zuordnen:</text>
+  <text class="s-sub" x="150" y="190">Stufe 1 liefert themenfremde Alt-Commits und verhindert dadurch den Fallback.</text>
+  <text class="s-sub" x="150" y="208">Stufe 2 diffed einen Branch, der die Remote-Arbeit nicht enthält.</text>
 </svg>
-<figcaption><b>Abb. 3 — Diff-Scope-Auflösung heute.</b> Eine Rate-Kaskade: plausibel im Normalfall,
-systematisch falsch, sobald Arbeit außerhalb von <code>task/&lt;slug&gt;</code> entsteht. Die Härtung ersetzt
-die Kaskade nicht durch mehr Heuristik, sondern durch einen Vertrag (§2.5) — der Grade-Step selbst
-bleibt unangetastet (§6).</figcaption>
+<figcaption><b>Abb. 3: Diff-Scope-Auflösung.</b> Die Kaskade funktioniert nur, wenn die aufgezeichneten
+Commits oder der Task-Branch die Remote-Arbeit enthalten. Der Attempt-Record ersetzt diese
+Fallbacks (§2.5); der Grade-Step bleibt bestehen (§6).</figcaption>
 </figure>
 
-<h3>§2.3 Kreuzkontamination: Salvage baut auf Salvage</h3>
-<p class="stx stx-ok"><b>Stand 24.07.:</b> GELÖST seit 11.07. (AGT-2147/2148/2149): Jeder Pickup startet im frischen Worktree von der autoritativen Basis (origin/develop), nicht vom Umgebungszustand. Seither empirisch keine neue Kreuzkontamination; Altlasten auf alten Salvage-Branches werden beim Re-Cut bereinigt (Beispiel 23./24.07.: AGT-2137/2139/2194 sauber neu aufgesetzt und mit Grade A/B geliefert).</p>
+<h3>§2.3 Kreuzkontaminierte Salvage-Branches</h3>
+<p class="stx stx-ok"><b>Stand 24.07.:</b> Gelöst seit 11.07. (AGT-2147/2148/2149). Jeder Pickup
+startet im frischen Worktree von der autoritativen Basis <code>origin/develop</code>. Seitdem wurde
+keine neue Kreuzkontamination beobachtet. Alte Salvage-Branches werden beim Re-Cut bereinigt;
+AGT-2137, AGT-2139 und AGT-2194 wurden am 23./24.07. mit Grade A/B neu geliefert.</p>
 <p>Weil Pickups zeitweise vom Umgebungszustand statt von einer autoritativen Basis starteten, tragen
 spätere Salvage-Branches die Arbeit früherer Tasks mit. Realer Fall: der Salvage von AGT-2191
-(Wiki-Dark-Theme) enthielt nahezu das komplette Werk von AGT-2108 (WikiSourceBranch):</p>
+(Wiki-Dark-Theme) enthielt nahezu die vollständige Änderung von AGT-2108 (WikiSourceBranch).
+Der Basis-SHA-Pickup verhindert neue Verkettungen dieser Art.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-cross-contamination">Kreuzkontamination,
+17.07.</a> Karten: AGT-2191, AGT-2108, AGT-2177.</p>
 
 <figure>
 <svg viewBox="0 0 1040 210" role="img" aria-label="Kreuzkontamination: Branch AGT-2191 enthält die Commits von AGT-2108">
@@ -374,18 +408,22 @@ spätere Salvage-Branches die Arbeit früherer Tasks mit. Realer Fall: der Salva
   <g stroke="var(--salvage)">
     <circle class="s-commit" cx="610" cy="115" r="6"/><circle class="s-commit" cx="680" cy="115" r="6"/><circle class="s-commit" cx="750" cy="115" r="6"/>
   </g>
-  <text class="s-tiny" x="560" y="142">Dark-Theme-Tokens — plus das komplette 2108-Werk als „Beifang“</text>
+  <text class="s-tiny" x="560" y="142">Dark-Theme-Tokens und die vollständige Änderung aus AGT-2108</text>
 
   <rect class="badge-warn" x="590" y="160" width="420" height="38" rx="10" stroke-width="1.5"/>
   <text class="t-warn" x="608" y="184">⚠ Merge-Folge: der zweite der beiden wird No-Op oder Konflikt</text>
 </svg>
-<figcaption><b>Abb. 4 — Kreuzkontamination.</b> Branch-Inhalte sind keine sauberen Per-Task-Diffs mehr.
-Gegenmittel: Pickup materialisiert immer eine <b>explizit gefetchte, autoritative Basis-SHA</b>
-(<code>worktree add … &lt;sha&gt;</code> statt <code>origin/&lt;branch&gt;</code>) — Bestandteil von AGT-2177.</figcaption>
+<figcaption><b>Abb. 4: Kreuzkontamination.</b> Branch-Inhalte sind keine sauberen Per-Task-Diffs mehr.
+Kontrolle: Pickup materialisiert eine <b>explizit gefetchte, autoritative Basis-SHA</b>
+(<code>worktree add … &lt;sha&gt;</code> statt <code>origin/&lt;branch&gt;</code>); Bestandteil von AGT-2177.</figcaption>
 </figure>
 
-<h3>§2.4 Divergenz ohne Requeue-Loop: die vier Ancestry-Fälle (AGT-2177)</h3>
-<p class="stx stx-ok"><b>Stand 24.07.:</b> GELÖST 23.07.: Review-Epochen ankern auf dem letzten Operator-Übergang nach 4-auto-review (AGT-2260-Kern) — veraltete Verdikte können Operator-Requeues nicht mehr überschreiben; der AGT-2177-Loop-Typ tritt nicht mehr auf.</p>
+<h3>§2.4 Divergenzbehandlung (AGT-2177)</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Der Kern von AGT-2260 ist seit 23.07. aktiv und bindet
+Review-Verdikte an die letzte Operator-Epoche. Ältere Verdikte können einen Operator-Requeue nicht
+mehr überschreiben. UI-Projektion und Artefaktrotation bleiben Folgescope.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-review-epochs">Operator-Epochen,
+23.07.</a> Karten: AGT-2260, AGT-2177.</p>
 <p>Wenn ein zurückgehaltener lokaler Stand und der kanonische Remote-Ref auseinanderlaufen, darf weder
 force-gepusht noch endlos requeued werden. AGT-2177 klassifiziert per
 <code>git merge-base --is-ancestor</code>:</p>
@@ -421,16 +459,18 @@ force-gepusht noch endlos requeued werden. AGT-2177 klassifiziert per
   <text class="s-sub" x="40" y="190">Lokaler Tip → deterministischer Ref <code>runner/&lt;id&gt;/&lt;task&gt;-collision-&lt;localSha&gt;-&lt;remoteSha&gt;</code>, beide SHAs verifiziert.</text>
   <text class="s-sub" x="40" y="208">Publish-Budget: 3 Versuche → danach <code>WorktreeSalvageException</code>, Worktree bleibt erhalten, Eskalation als <code>worktree-blocked</code>. Kein Loop.</text>
 </svg>
-<figcaption><b>Abb. 5 — Ancestry-Klassifikation.</b> Der kanonische Ref wird nie umgeschrieben; Divergenz
-wird sichtbar gemacht statt überschrieben. Zusammen mit dem Basis-SHA-Pickup (Abb. 4) verschwindet
-sowohl der Requeue-Loop als auch die Kontaminationsquelle.</figcaption>
+<figcaption><b>Abb. 5: Ancestry-Klassifikation.</b> Der kanonische Ref wird nicht umgeschrieben.
+Divergenz erzeugt einen Collision-Ref. Zusammen mit dem Basis-SHA-Pickup verhindert dies den
+AGT-2177-Requeue-Loop und neue Kreuzkontamination.</figcaption>
 </figure>
 
-<h3>§2.5 Zielbild: der Result-SHA-Vertrag</h3>
-<p class="stx stx-open"><b>Stand 24.07.:</b> IN UMSETZUNG: AGT-2183/2184 (exakte SHA-Übergabe Runner→Review) sind zugeschnitten und in der Pipeline; bis dahin gilt der Operator-Workaround (manuelle Attribution je Zyklus).</p>
-<p>Der strukturelle Fix: Jeder Versuch (lokal wie remote) endet in einem <b>unveränderlichen
-Attempt-Record</b>. Er ist die einzige Quelle, aus der Urteiler und Konsumenten lesen — niemand
-rät mehr, wo Arbeit liegen könnte.</p>
+<h3>§2.5 Result-SHA-Vertrag</h3>
+<p class="stx stx-open"><b>Stand 24.07.:</b> In Umsetzung. AGT-2183/2184 liefern die exakte
+SHA-Übergabe vom Runner an Review und Merge. Bis dahin erfolgt die Commit-Attribution je Zyklus.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-attempt-authority">Attempt-Authority,
+24.07.</a> Karten: AGT-2182, AGT-2183, AGT-2184.</p>
+<p>Jeder lokale oder Remote-Versuch soll mit einem unveränderlichen <b>Attempt-Record</b> enden.
+Grade-Step, Gate, Merge und UI verwenden diesen Datensatz als gemeinsame Ergebnisquelle.</p>
 
 <figure>
 <svg viewBox="0 0 1040 330" role="img" aria-label="Attempt-Record als Nabe für Grade, Gate, Merge und UI">
@@ -457,7 +497,7 @@ rät mehr, wo Arbeit liegen könnte.</p>
 
   <rect class="s-node" x="760" y="250" width="220" height="56" rx="10"/>
   <text class="s-label" x="778" y="274">Merge / Accept</text>
-  <text class="s-sub" x="778" y="294">landet genau diese SHA</text>
+  <text class="s-sub" x="778" y="294">integriert resultSha</text>
   <path class="s-flow" d="M680 200 C730 220 750 235 775 255" marker-end="url(#arr)"/>
 
   <rect class="s-node" x="770" y="30" width="240" height="56" rx="10"/>
@@ -465,20 +505,28 @@ rät mehr, wo Arbeit liegen könnte.</p>
   <text class="s-sub" x="788" y="74">zeigt Attempt-Kette + Verdikte</text>
   <path class="s-flow" d="M680 130 C730 120 750 75 770 62" marker-end="url(#arr)"/>
 
-  <text class="t-bad" x="365" y="255">✗ Record fehlt/ungültig → fail-closed:</text>
+  <text class="t-bad" x="365" y="255">✗ Record fehlt oder ist ungültig:</text>
   <text class="s-sub" x="365" y="273">Quarantäne + Human-Review,</text>
-  <text class="s-sub" x="365" y="289">niemals raten.</text>
+  <text class="s-sub" x="365" y="289">kein heuristischer Fallback.</text>
 </svg>
-<figcaption><b>Abb. 6 — Ergebnis als Vertrag.</b> Genau das bauen die gequeuten P0-Karten:
-AGT-2183 (Outbox, immutable Result-SHA-Handoff), AGT-2184 (Review materialisiert exakt diese SHA),
-AGT-2182 (Attempt-Fencing). Der Grade-Step und das Gate bleiben, was sie sind — sie bekommen nur
-endlich einen garantierten, statt eines geratenen, Inputs.</figcaption>
+<figcaption><b>Abb. 6: Ergebnisvertrag.</b> AGT-2182 liefert die Attempt-Authority und das Fencing.
+AGT-2183 ergänzt Outbox und unveränderlichen Result-SHA-Handoff. AGT-2184 materialisiert diese SHA
+für den Review. Grade-Step und Gate behalten ihre Funktion und erhalten einen verbindlichen Scope.</figcaption>
 </figure>
 
 <!-- ============================================================ -->
-<h2 id="zeit"><span class="no">§3</span>Zeitachsen</h2>
+<h2 id="zeit"><span class="no">§3</span>Vorfälle und Run-Ablauf</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Die Vorfälle vom 08. bis 18.07. sind abgeschlossen oder
+mit Folgekarten belegt. Seit 22.07. sind Remote-Gates aktiv; seit 23./24.07. sind Review-Epochen und
+persistente Attempt-Authority aktiv. Der Result-SHA-Handoff bleibt offen.</p>
 
-<h3>§3.1 Vorfalls- und Maßnahmen-Timeline (08.–18.07.)</h3>
+<h3>§3.1 Vorfälle und Maßnahmen (08.–18.07.)</h3>
+<p class="stx stx-ok"><b>Stand 24.07.:</b> Historischer Zeitraum abgeschlossen. Die Folgeereignisse
+vom 20. bis 24.07. sind in §8 und unter den identischen Ankern in <code>historie.html</code>
+dokumentiert.</p>
+<p class="evidence-link"><b>Belege:</b> <a href="#incident-phantom-wave">Phantom-Welle, 11.07.</a>,
+<a href="#incident-grade-d">Grade-D-Eskalationen, 17.07.</a> und
+<a href="#incident-remote-gates">Remote-Gates, 22./23.07.</a></p>
 <figure>
 <svg viewBox="0 0 1040 330" role="img" aria-label="Timeline der Vorfälle (oben) und Maßnahmen (unten)">
   <line x1="40" y1="165" x2="1010" y2="165" class="s-flow"/>
@@ -491,22 +539,22 @@ endlich einen garantierten, statt eines geratenen, Inputs.</figcaption>
   <text class="t-bad" x="40" y="30">Probleme</text>
   <g>
     <rect class="badge-bad" x="40" y="45" width="150" height="52" rx="8" stroke-width="1.2"/>
-    <text class="s-sub" x="50" y="65">AGT-1917:</text><text class="s-sub" x="50" y="82">Out-of-band-„Leiche“</text>
+    <text class="s-sub" x="50" y="65">AGT-1917:</text><text class="s-sub" x="50" y="82">externe Lieferung ohne Abschluss</text>
     <line x1="85" y1="97" x2="85" y2="158" stroke="var(--bad)" stroke-dasharray="3 4"/>
   </g>
   <g>
     <rect class="badge-bad" x="200" y="45" width="170" height="52" rx="8" stroke-width="1.2"/>
-    <text class="s-sub" x="210" y="65">Phantom-Welle: ~29 Karten,</text><text class="s-sub" x="210" y="82">3 Runner-Löcher, Arbeit weg</text>
+    <text class="s-sub" x="210" y="65">~29 Karten ohne Remote-Commit,</text><text class="s-sub" x="210" y="82">3 Fehler im Completion-Pfad</text>
     <line x1="265" y1="97" x2="265" y2="158" stroke="var(--bad)" stroke-dasharray="3 4"/>
   </g>
   <g>
     <rect class="badge-bad" x="530" y="45" width="180" height="52" rx="8" stroke-width="1.2"/>
-    <text class="s-sub" x="540" y="65">QS-15-Wedge · Steer wartet</text><text class="s-sub" x="540" y="82">tagelang (kein Timeout)</text>
+    <text class="s-sub" x="540" y="65">QS-15-Wedge · Steer wartet</text><text class="s-sub" x="540" y="82">vier Tage (kein Timeout)</text>
     <line x1="595" y1="97" x2="595" y2="158" stroke="var(--bad)" stroke-dasharray="3 4"/>
   </g>
   <g>
     <rect class="badge-bad" x="725" y="45" width="200" height="52" rx="8" stroke-width="1.2"/>
-    <text class="s-sub" x="735" y="65">Grade-D-Welle: 17 Karten ·</text><text class="s-sub" x="735" y="82">7 rote Gate-Blocker auf develop</text>
+    <text class="s-sub" x="735" y="65">17 Grade-D-Eskalationen;</text><text class="s-sub" x="735" y="82">7 Gate-Blocker auf develop</text>
     <line x1="775" y1="97" x2="775" y2="158" stroke="var(--bad)" stroke-dasharray="3 4"/>
   </g>
 
@@ -533,38 +581,44 @@ endlich einen garantierten, statt eines geratenen, Inputs.</figcaption>
     <line x1="820" y1="240" x2="820" y2="172" stroke="var(--ok)" stroke-dasharray="3 4"/>
   </g>
 </svg>
-<figcaption><b>Abb. 7 — Zehn Tage im Überblick.</b> Vollständige Chronik mit allen Einträgen, Ursachen
-und Ticket-Referenzen: Unterseite <code>historie.html</code> (§8).</figcaption>
+<figcaption><b>Abb. 7: Vorfälle und Maßnahmen vom 08. bis 18.07.</b> §8 enthält verlinkbare Anker zu
+den Vorfällen und Folgemaßnahmen; die ausführlichen Einträge stehen in <code>historie.html</code>.</figcaption>
 </figure>
 
-<h3>§3.2 Lebenslauf eines Remote-Runs: Ist → Heute → Ziel</h3>
+<h3>§3.2 Remote-Run-Ablauf</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Push-Verifikation, Attempt-Fencing und ein isoliertes
+Remote-Gate sind aktiv. Der gemeinsame Result-SHA-Record für Grade, Gate, Merge und UI sowie die
+claimbaren Remote-Schritte fehlen noch.</p>
+<p class="evidence-link"><b>Belege:</b> <a href="#incident-phantom-wave">Push-Verifikation,
+11./12.07.</a>, <a href="#incident-remote-gates">Remote-Gates, 22./23.07.</a> und
+<a href="#incident-attempt-authority">Attempt-Authority, 24.07.</a></p>
 <figure>
-<svg viewBox="0 0 1040 380" role="img" aria-label="Drei Varianten des Run-Lebenslaufs als Sequenz">
+<svg viewBox="0 0 1040 380" role="img" aria-label="Drei Varianten des Remote-Run-Ablaufs als Sequenz">
   <!-- Reihe 1: vor 12.07 -->
-  <text class="t-bad" x="20" y="35">Vor 12.07. (die Phantom-Mechanik)</text>
+  <text class="t-bad" x="20" y="35">Vor 12.07.</text>
   <g>
     <rect class="s-node" x="20"  y="50" width="130" height="40" rx="8"/><text class="s-sub" x="34" y="75">Claim</text>
     <rect class="s-node" x="170" y="50" width="130" height="40" rx="8"/><text class="s-sub" x="184" y="75">CLI-Run</text>
-    <rect class="badge-bad" x="320" y="50" width="200" height="40" rx="8" stroke-width="1.2"/><text class="s-sub" x="334" y="75">Complete („done“!)</text>
+    <rect class="badge-bad" x="320" y="50" width="200" height="40" rx="8" stroke-width="1.2"/><text class="s-sub" x="334" y="75">Completion: Status done</text>
     <rect class="badge-bad" x="540" y="50" width="240" height="40" rx="8" stroke-width="1.2"/><text class="s-sub" x="554" y="75">Teardown: löscht ohne Push</text>
     <path class="s-flow" d="M150 70 H170" marker-end="url(#arr)"/><path class="s-flow" d="M300 70 H320" marker-end="url(#arr)"/><path class="s-flow" d="M520 70 H540" marker-end="url(#arr)"/>
-    <text class="t-bad" x="800" y="75">✗ Arbeit vernichtet, Karte „done“</text>
+    <text class="t-bad" x="800" y="75">✗ Arbeitsverlust trotz Status „done“</text>
   </g>
 
   <!-- Reihe 2: heute -->
-  <text class="t-ok" x="20" y="140">Heute (seit den 2147/48/49-Fixes)</text>
+  <text class="t-ok" x="20" y="140">Aktiv am 24.07.</text>
   <g>
-    <rect class="s-node" x="20"  y="155" width="130" height="40" rx="8"/><text class="s-sub" x="34" y="180">Claim</text>
+    <rect class="s-node" x="20"  y="155" width="130" height="40" rx="8"/><text class="s-sub" x="34" y="180">Claim + Fence</text>
     <rect class="s-node" x="170" y="155" width="130" height="40" rx="8"/><text class="s-sub" x="184" y="180">CLI-Run</text>
     <rect class="badge-ok" x="320" y="155" width="280" height="40" rx="8" stroke-width="1.2"/><text class="s-sub" x="334" y="180">Teardown: Commit + Push + Verify</text>
-    <rect class="s-node" x="620" y="155" width="180" height="40" rx="8"/><text class="s-sub" x="634" y="180">Complete (mit SHA)</text>
+    <rect class="s-node" x="620" y="155" width="180" height="40" rx="8"/><text class="s-sub" x="634" y="180">Remote-Gate: SHA</text>
     <path class="s-flow" d="M150 175 H170" marker-end="url(#arr)"/><path class="s-flow" d="M300 175 H320" marker-end="url(#arr)"/><path class="s-flow" d="M600 175 H620" marker-end="url(#arr)"/>
-    <text class="t-warn" x="820" y="170">⚠ aber: Ziel ist runner/*,</text>
-    <text class="t-warn" x="820" y="186">Review schaut auf task/*</text>
+    <text class="t-warn" x="820" y="170">⚠ Grade/Merge verwenden noch</text>
+    <text class="t-warn" x="820" y="186">keinen gemeinsamen Result-Record</text>
   </g>
 
   <!-- Reihe 3: Ziel -->
-  <text class="s-label" x="20" y="245">Ziel (P0-Kette: 2177 + 2182–2184)</text>
+  <text class="s-label" x="20" y="245">Ziel (AGT-2183/2184 und AGT-2229)</text>
   <g>
     <rect class="s-node" x="20"  y="260" width="150" height="52" rx="8"/><text class="s-sub" x="34" y="281">Claim + Fence</text><text class="s-tiny" x="34" y="299">Attempt-Token</text>
     <rect class="s-node" x="190" y="260" width="170" height="52" rx="8"/><text class="s-sub" x="204" y="281">Worktree von</text><text class="s-tiny" x="204" y="299">autoritativer baseSha</text>
@@ -576,26 +630,29 @@ und Ticket-Referenzen: Unterseite <code>historie.html</code> (§8).</figcaption>
     <path class="s-flow" d="M510 286 H530" marker-end="url(#arr)"/><path class="s-flow" d="M720 286 H740" marker-end="url(#arr)"/>
     <path class="s-flow" d="M870 286 H890" marker-end="url(#arr)"/>
   </g>
-  <text class="s-sub" x="20" y="350">Jede Stufe konsumiert die Ausgabe der vorherigen als Vertrag; Mehrdeutigkeit auf jeder Stufe → fail-closed in Quarantäne statt „weiter mit Annahme“.</text>
+  <text class="s-sub" x="20" y="350">Jede Stufe konsumiert die vorherige Ausgabe als Vertrag; Mehrdeutigkeit führt an jeder Stufe zur Quarantäne.</text>
 </svg>
-<figcaption><b>Abb. 8 — Drei Generationen des Run-Lebenslaufs.</b> Die erste Reihe erklärt die Phantome
-(Complete <i>vor</i> und unabhängig vom Push). Die zweite ist der heutige, bereits fail-closed abgesicherte
-Stand. Die dritte schließt die verbliebene Lücke: die Brücke von <code>runner/*</code> zur reviewten Welt.</figcaption>
+<figcaption><b>Abb. 8: Entwicklungsstände des Remote-Runs.</b> Vor dem 12.07. konnte Completion vor
+einem verifizierten Push erfolgen. Am 24.07. sind Push-Verifikation, Fencing und das Remote-Gate aktiv.
+Im Zielzustand verwenden alle Konsumenten denselben Attempt-Record und claimbare Remote-Schritte.</figcaption>
 </figure>
 
 <!-- ============================================================ -->
-<h2 id="schreiber"><span class="no">§4</span>Schreibmodell &amp; Fencing</h2>
-<p class="stx stx-part"><b>Stand 24.07.:</b> WEITGEHEND UMGESETZT 24.07.: Persistente Attempt-Authority mit Fencing/Epochen geliefert (AGT-2182, Grade B) — ein benanntes Acquire-to-Lane-Crash-Fenster offen (Folgekarte). Agenten-Schreibverstöße werden erkannt und quarantänisiert (agent-git-violation-Eskalation).</p>
-<p class="dim">Zur Einordnung der Frage „die Schreiber sind Post- und Pre-Steps in der Pipeline, aber nicht
-Agenten — was passiert, wenn Agenten trotzdem schreiben?“: Erst die Landkarte aller Schreiber, dann
-genau dieser Fall.</p>
+<h2 id="schreiber"><span class="no">§4</span>Schreibmodell und Fencing</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Weitgehend umgesetzt. AGT-2182 lieferte persistente
+Attempt-Authority mit Fencing (Grade B); der Kern von AGT-2260 schützt Operator-Epochen. Ein
+Acquire-to-Lane-Crash-Fenster bleibt offen. Schreibverstöße von Agenten führen zur
+<code>agent-git-violation</code>-Eskalation.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-attempt-authority">Attempt-Authority,
+24.07.</a> Karte: AGT-2182.</p>
+<p class="dim">Die Tabelle trennt Schreiber, mutierten Zustand und wirksame Schutzmechanismen.</p>
 
 <table>
-  <thead><tr><th>Schreiber</th><th>Was er mutiert</th><th>Fence heute</th><th>Fence im Zielbild</th></tr></thead>
+  <thead><tr><th>Schreiber</th><th>Mutierter Zustand</th><th>Aktuelle Kontrolle</th><th>Offene Kontrolle</th></tr></thead>
   <tbody>
     <tr><td><b>TaskStateMachine / Board-API</b></td><td>Lanes, task.json, Ordner-Moves</td>
-        <td><code>X-Client-Id</code> (Pflicht seit 10.07.), LaneMutex, seit 17.07. Recheck nach Mutex-Wait (DeleteJob-Fix)</td>
-        <td>+ Attempt-Fence &amp; Versions-Check auf jeder Mutation (AGT-2182); Recheck-Muster auf <i>alle</i> Writer ausgerollt</td></tr>
+        <td><code>X-Client-Id</code>, LaneMutex, Recheck nach Mutex-Wait und Attempt-Fence (AGT-2182)</td>
+        <td>Acquire-to-Lane-Crash-Fenster schließen; Versionsprüfung auf verbleibende Writer ausrollen</td></tr>
     <tr><td><b>Pipeline Pre-/Post-Steps</b></td><td>Verdikte, Grade-Files, Gate-Ergebnisse, Lane-Folgen</td>
         <td>Sequenziell pro Karte; Loop-Guards (2-Strike)</td>
         <td>Lesen/schreiben ausschließlich Attempt-Records; Steps sind idempotent und tragen die Attempt-ID</td></tr>
@@ -604,31 +661,34 @@ genau dieser Fall.</p>
         <td>Outbox als einziger Schreibkanal (AGT-2183); Ref-Namespace-Policy: Runner-Identität darf <i>nur</i> <code>runner/&lt;id&gt;/*</code> pushen</td></tr>
     <tr><td><b>CLI-Agenten (codex, claude, …)</b></td><td>Quellcode im Worktree, results/, potenziell <i>alles</i></td>
         <td>⚠ Konvention, kein Fence: Worktree-Isolation + Prompt-Regeln</td>
-        <td>Contract + Detect + Quarantine — siehe unten</td></tr>
+        <td>Contract + Detect + Quarantine; siehe unten</td></tr>
     <tr><td><b>Operator / UI</b></td><td>Lanes, Registry, Settings, Steer-Antworten</td>
         <td><code>X-Client-Id</code>; Registry-Writes teils unvalidiert (→ PROJ-017)</td>
         <td>Validierung an jeder Registry-Schreibstelle (Pfad absolut + existent); Steer mit Timeout + definierter Konsequenz</td></tr>
     <tr><td><b>External-Completion</b></td><td>status.md, deliverables, Lane</td>
         <td>Atomarer Endpoint (seit AGT-1917-Nachwehen), Quell-Attribution</td>
-        <td>Erzeugt ebenfalls einen Attempt-Record (Quelle: <code>external</code>) — gleiche Evidenzklasse wie Runner-Arbeit</td></tr>
+        <td>Erzeugt ebenfalls einen Attempt-Record (Quelle: <code>external</code>); gleiche Evidenzklasse wie Runner-Arbeit</td></tr>
   </tbody>
 </table>
 
-<h3>Und wenn ein Agent trotzdem schreibt?</h3>
-<p>Die ehrliche Antwort zuerst: <b>Agenten lassen sich nicht vollständig fencen.</b> Ein CLI-Agent läuft
-mit echten Prozessrechten in einem echten Checkout — er <i>kann</i> in den Haupt-Checkout wechseln,
-Branches anlegen, die API rufen oder pushen. Härtung heißt hier nicht „unmöglich machen“, sondern
-<b>Blast-Radius klein, Abweichung sichtbar, Wirkung neutralisierbar</b> — auf vier Ebenen:</p>
+<h3>§4.1 CLI-Schreibzugriffe außerhalb des Vertrags</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Erkennung und Quarantäne sind aktiv. Prozess- und
+Credential-Isolation sowie eine serverseitige Ref-Namespace-Policy sind noch nicht vollständig umgesetzt.</p>
+<p class="evidence-link"><b>Belege:</b> <a href="#incident-phantom-wave">Completion-Fehler,
+11.07.</a> und <a href="#incident-attempt-authority">Attempt-Fencing, 24.07.</a></p>
+<p>CLI-Agenten laufen mit Prozessrechten im Checkout und lassen sich deshalb nicht vollständig durch
+Anweisungen fencen. Vier Kontrollen begrenzen den Schreibbereich, erkennen Abweichungen, erhalten
+Evidenz und verweigern veraltete API-Mutationen.</p>
 
 <figure>
 <svg viewBox="0 0 1040 300" role="img" aria-label="Vier Ebenen: Begrenzen, Erkennen, Quarantäne, API-Fence">
   <g>
     <rect class="s-node" x="20" y="30" width="240" height="120" rx="10"/>
     <text class="s-label" x="38" y="56">1 · Begrenzen</text>
-    <text class="s-sub" x="38" y="80">Eigener Worktree = Blast-Radius.</text>
-    <text class="s-sub" x="38" y="100">Keine Ambient-Push-Credentials</text>
-    <text class="s-sub" x="38" y="120">im Worktree; Ref-Namespace-</text>
-    <text class="s-sub" x="38" y="140">Policy auf origin (Identität→Refs).</text>
+    <text class="s-sub" x="38" y="80">Eigener Worktree begrenzt</text>
+    <text class="s-sub" x="38" y="100">den Schreibbereich.</text>
+    <text class="s-sub" x="38" y="120">Keine Ambient-Push-Credentials;</text>
+    <text class="s-sub" x="38" y="140">Ref-Policy bindet Identität an Refs.</text>
   </g>
   <g>
     <rect class="s-node" x="280" y="30" width="240" height="120" rx="10"/>
@@ -644,40 +704,50 @@ Branches anlegen, die API rufen oder pushen. Härtung heißt hier nicht „unmö
     <text class="s-sub" x="558" y="80">Out-of-contract-Write ⇒ Gate-Punkt</text>
     <text class="s-sub" x="558" y="100">„out-of-contract-write“ ⇒ Karte in</text>
     <text class="s-sub" x="558" y="120">Human-Review, Evidenz konserviert.</text>
-    <text class="s-sub" x="558" y="140">Nie still mergen, nie löschen.</text>
+    <text class="s-sub" x="558" y="140">Kein automatischer Merge oder Delete.</text>
   </g>
   <g>
     <rect class="s-node" x="800" y="30" width="220" height="120" rx="10"/>
     <text class="s-label" x="818" y="56">4 · API-Fence</text>
     <text class="s-sub" x="818" y="80">Board-Mutationen tragen das</text>
     <text class="s-sub" x="818" y="100">Attempt-Token; stale/fremde</text>
-    <text class="s-sub" x="818" y="120">Agenten bekommen 409/412 —</text>
+    <text class="s-sub" x="818" y="120">Agenten bekommen 409/412;</text>
     <text class="s-sub" x="818" y="140">Wirkung statt Wunsch verweigert.</text>
   </g>
   <path class="s-flow" d="M260 90 H280" marker-end="url(#arr)"/>
   <path class="s-flow" d="M520 90 H540" marker-end="url(#arr)"/>
   <path class="s-flow" d="M780 90 H800" marker-end="url(#arr)"/>
   <rect class="s-node2" x="20" y="185" width="1000" height="90" rx="10"/>
-  <text class="s-label" x="40" y="213">Leitsatz</text>
-  <text class="s-sub" x="40" y="236">Ein Agent, der außerhalb seines Vertrags schreibt, ist kein Fehlerfall, der verschwinden muss — er ist ein <tspan font-weight="600">Evidenzfall</tspan>,</text>
-  <text class="s-sub" x="40" y="256">der sichtbar werden muss. Genau deshalb ist die Erkennungs- und Quarantäne-Schiene wichtiger als jede weitere Verbotsregel im Prompt.</text>
+  <text class="s-label" x="40" y="213">Behandlung</text>
+  <text class="s-sub" x="40" y="236">Ein Schreibzugriff außerhalb des Vertrags erzeugt einen <tspan font-weight="600">Evidenzfall</tspan>.</text>
+  <text class="s-sub" x="40" y="256">Der Zustand wird erhalten, die Karte quarantänisiert und eine veraltete API-Mutation abgewiesen.</text>
 </svg>
-<figcaption><b>Abb. 9 — Umgang mit unfencbaren Schreibern.</b> Prompts und Konventionen bleiben die erste
-Verteidigungslinie, aber die Architektur verlässt sich nicht auf sie: Was ein Agent außerhalb seines
-Worktrees anrichtet, wird erkannt, konserviert und dem Menschen vorgelegt — und seine API-Wirkung
-scheitert am Fence, nicht an seiner Disziplin.</figcaption>
+<figcaption><b>Abb. 9: Kontrollen für Agenten-Schreibzugriffe.</b> Prompts und Konventionen definieren
+den zulässigen Bereich. Technische Kontrollen erkennen Abweichungen, erhalten den Zustand und
+verweigern veraltete Board-Mutationen.</figcaption>
 </figure>
 
 <!-- ============================================================ -->
-<h2 id="hermetik"><span class="no">§5</span>Hermetische Verifikation, ausgebaut</h2>
-<p class="stx stx-part"><b>Stand 24.07.:</b> BRÜCKE LIVE seit 23.07.: Gates testen den exakten Subjekt-SHA im Wegwerf-Worktree auf dem Remote-Host (SSH-Gate, 4 Slots), Evidenz identisch zum lokalen Pfad. Saubere Lösung (eigene Remote-Instanz statt Brücke) läuft als AGT-2229; Brücken-Rückbau ist als Aufräumkarte verankert.</p>
+<h2 id="hermetik"><span class="no">§5</span>Hermetische Verifikation</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Die SSH-Gate-Brücke ist seit 23.07. aktiv. Bis zu vier
+Gates testen eine exakte Subjekt-SHA in Wegwerf-Worktrees auf dem Remote-Host; der Evidenzpfad
+entspricht dem lokalen Gate. AGT-2229 ersetzt die Brücke durch claimbare Remote-Schritte. Eine
+Folgekarte entfernt die Brücke erst nach diesem Ersatz.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-remote-gates">Remote-Gates,
+22./23.07.</a> Karten: AGT-2222, AGT-2229.</p>
 
-<h3>§5.1 Warum Gates heute lügen können</h3>
-<p>Das Build-Test-Gate baut und testet den <b>geteilten Checkout</b>, während daneben Agenten,
-Builds und weitere Gates dieselbe Maschine belasten. Damit hängt das Urteil nicht nur am Code:</p>
+<h3>§5.1 Geteilter Gate-Checkout</h3>
+<p class="stx stx-ok"><b>Stand 24.07.:</b> Der geteilte Checkout wird für Karten-Gates nicht mehr
+verwendet. Die am 17.07. beobachtete Fehlerklasse ist damit für den aktiven Gate-Pfad geschlossen.
+Zeit- und Lastabhängigkeiten innerhalb der Tests bleiben als eigene Testqualitätsprobleme bestehen.</p>
+<p>Bis 22.07. baute und testete das Gate im geteilten Checkout. Parallele Agenten, Builds und Gates
+beeinflussten CPU, I/O, Watcher-Zustellung und prozessglobale Testzustände. Die Vorfälle sind in §8
+dokumentiert.</p>
+<p class="evidence-link"><b>Belege:</b> <a href="#incident-gate-blockers">Gate-Blocker,
+17.07.</a> und <a href="#incident-remote-gates">Remote-Gates, 22./23.07.</a></p>
 
 <figure>
-<svg viewBox="0 0 1040 300" role="img" aria-label="Ist-Zustand: geteilter Checkout unter Last erzeugt Flakes und falsche Eskalationen">
+<svg viewBox="0 0 1040 300" role="img" aria-label="Geteilter Gate-Checkout bis 22.07.: Last erzeugt Flakes und falsche Eskalationen">
   <rect class="s-node" x="30" y="40" width="380" height="200" rx="10"/>
   <text class="s-label" x="50" y="68">Eine Maschine, ein Checkout</text>
   <rect class="s-node2" x="50" y="85" width="160" height="34" rx="6"/><text class="s-sub" x="62" y="107">Gate: dotnet test</text>
@@ -685,7 +755,7 @@ Builds und weitere Gates dieselbe Maschine belasten. Damit hängt das Urteil nic
   <rect class="s-node2" x="50" y="130" width="160" height="34" rx="6"/><text class="s-sub" x="62" y="152">ng build / tsc</text>
   <rect class="s-node2" x="230" y="130" width="160" height="34" rx="6"/><text class="s-sub" x="242" y="152">weiteres Gate</text>
   <text class="s-tiny" x="50" y="195">geteilte Ressourcen: CPU, IO, FileSystemWatcher-</text>
-  <text class="s-tiny" x="50" y="212">Zustellung, Prozess-globale Statics (Serilog!)</text>
+  <text class="s-tiny" x="50" y="212">Zustellung, Prozess-globale Statics (Serilog)</text>
 
   <path class="s-flow" d="M410 140 H460" marker-end="url(#arr)"/>
 
@@ -695,7 +765,7 @@ Builds und weitere Gates dieselbe Maschine belasten. Damit hängt das Urteil nic
   <text class="s-sub" x="480" y="132">Quiet-Windows verpasst</text>
   <text class="s-sub" x="480" y="152">Logger-Freeze-Race paralleler Hosts</text>
   <text class="s-sub" x="480" y="172">Perf-Asserts unter Fremdlast</text>
-  <text class="s-tiny" x="480" y="200">alles am 17.07. real beobachtet</text>
+  <text class="s-tiny" x="480" y="200">am 17.07. beobachtet</text>
 
   <path class="s-flow" d="M720 140 H770" marker-end="url(#arr)"/>
 
@@ -705,12 +775,17 @@ Builds und weitere Gates dieselbe Maschine belasten. Damit hängt das Urteil nic
   <text class="t-bad" x="790" y="160">✗ Flake wird zur falschen</text>
   <text class="t-bad" x="790" y="176">   Karten-Eskalation</text>
 </svg>
-<figcaption><b>Abb. 10 — Die Falsch-Eskalations-Fabrik.</b> Das Gate ist korrekt streng — aber es misst
-in einer Umgebung, die das Ergebnis mitbestimmt. Der 2-Strike-Guard, gedacht gegen Einzel-Flakes,
-wird unter Dauerlast selbst zum Eskalationsverstärker.</figcaption>
+<figcaption><b>Abb. 10: Geteilter Gate-Checkout bis 22.07.</b> Maschinenlast und geteilter
+Prozesszustand konnten das Testergebnis beeinflussen. Zwei aufeinanderfolgende Infrastrukturfehler
+führten dadurch zu einer Karteneskalation.</figcaption>
 </figure>
 
-<h3>§5.2 Zielarchitektur: das Gate als hermetischer Executor</h3>
+<h3>§5.2 Gate-Executor</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Exakt-SHA-Materialisierung und Wegwerf-Worktree sind in
+der SSH-Brücke aktiv. Claimbare Ausführung, vollständiger Result-SHA-Record und Baseline-Überwachung
+bleiben offen.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-remote-gates">Remote-Gates,
+22./23.07.</a> Karten: AGT-2222, AGT-2184, AGT-2229.</p>
 <figure>
 <svg viewBox="0 0 1040 270" role="img" aria-label="Zielbild hermetisches Gate">
   <rect class="s-node" x="20" y="40" width="220" height="70" rx="10"/>
@@ -720,8 +795,8 @@ wird unter Dauerlast selbst zum Eskalationsverstärker.</figcaption>
   <rect class="badge-ok" x="290" y="30" width="300" height="150" rx="10" stroke-width="1.5"/>
   <text class="s-label" x="310" y="58">Gate-Executor</text>
   <text class="s-sub" x="310" y="82">frischer Worktree, exakt resultSha</text>
-  <text class="s-sub" x="310" y="102">Ressourcen-Klasse: max. 1 Gate/Maschine</text>
-  <text class="s-sub" x="310" y="122">(oder dedizierter Gate-Runner)</text>
+  <text class="s-sub" x="310" y="102">separates Gate-Budget, aktuell 4 Slots</text>
+  <text class="s-sub" x="310" y="122">claimbarer Remote-Schritt im Zielzustand</text>
   <text class="s-sub" x="310" y="142">virtuelle Zeit statt Wanduhr in Tests</text>
   <text class="s-sub" x="310" y="162">Log + Umgebung = Teil der Evidenz</text>
   <path class="s-flow" d="M590 105 H640" marker-end="url(#arr)"/>
@@ -738,119 +813,357 @@ wird unter Dauerlast selbst zum Eskalationsverstärker.</figcaption>
   <text class="s-tiny" x="888" y="124">Gate-Evidenz</text>
   <text class="s-tiny" x="888" y="140">unveränderlich</text>
   <rect class="s-node2" x="20" y="205" width="1000" height="45" rx="10"/>
-  <text class="s-sub" x="40" y="233">Baseline separat bewacht: nächtlicher Volltest auf develop + Alarm — Brüche werden am <tspan font-weight="600">Zustand</tspan> entdeckt, nicht erst am nächsten Karten-Gate.</text>
+  <text class="s-sub" x="40" y="233">Baseline separat bewacht: nächtlicher Volltest auf develop mit Alarm; Brüche werden unabhängig von Karten-Gates erkannt.</text>
 </svg>
-<figcaption><b>Abb. 11 — Hermetisches Gate.</b> Ein Urteil = eine SHA + eine kontrollierte Umgebung.
-AGT-2155 (Gate raus aus dem geteilten Checkout) und AGT-2184 (exakt-SHA-Materialisierung) sind die
-Träger; der Rest sind Testdisziplin-Bausteine (§5.3).</figcaption>
+<figcaption><b>Abb. 11: Gate-Executor.</b> Ein Gate-Verdikt bezieht sich auf eine SHA und eine
+kontrollierte Umgebung. AGT-2222 lieferte die aktive SSH-Brücke. AGT-2184 und AGT-2229 schließen
+Ergebnisvertrag und claimbare Ausführung.</figcaption>
 </figure>
 
-<h3>§5.3 Die acht Bausteine im Einzelnen</h3>
+<h3>§5.3 Acht Bausteine</h3>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Bausteine 1 und 2 sind als SSH-Brücke aktiv; Baustein 7
+ist für diesen Pfad teilweise aktiv. Die endgültige Ausführung läuft über AGT-2184/2229. Bausteine
+3 bis 6 und 8 sind Test- und Betriebsregeln mit unterschiedlichem Umsetzungsstand.</p>
+<p>Jeder Baustein nennt Eingabe, Kontrolle und Ergebnis. Die Diagramme besitzen einen zugänglichen
+Titel, eine Beschreibung und eine textliche Bildunterschrift.</p>
+<p class="evidence-link"><b>Belege:</b> <a href="#incident-gate-timeout">Gate-Timeouts,
+12.07.</a>, <a href="#incident-gate-blockers">Gate-Blocker, 17.07.</a> und
+<a href="#incident-remote-gates">Remote-Gates, 22./23.07.</a></p>
+
+<div class="building-blocks">
+  <article class="building-block">
+    <h4>1. Exakt-SHA-Worktree</h4>
+    <p class="stx stx-part"><b>Stand 24.07.:</b> AGT-2222 ist als Brücke aktiv; AGT-2184/2229
+    liefern den dauerhaften Pfad. <span class="pill done">Brücke live</span></p>
+    <p class="evidence-link"><b>Beleg:</b> <a href="#incident-remote-gates">AGT-2222,
+    22./23.07.</a></p>
+    <figure>
+      <svg viewBox="0 0 440 180" role="img" aria-labelledby="bb1-title bb1-desc">
+        <title id="bb1-title">Exakt-SHA-Worktree</title>
+        <desc id="bb1-desc">Eine Subjekt-SHA wird in einem neuen Worktree ausgecheckt. Das Gate testet
+        diesen Worktree und verwirft ihn danach.</desc>
+        <rect class="s-node" x="20" y="55" width="105" height="58" rx="8"/>
+        <text class="s-label" x="35" y="78">Subjekt-SHA</text><text class="s-tiny" x="35" y="99">unverändert</text>
+        <line class="s-flow" x1="125" y1="84" x2="165" y2="84"/>
+        <rect class="badge-ok" x="165" y="35" width="120" height="98" rx="8"/>
+        <text class="s-label" x="180" y="62">Wegwerf-</text><text class="s-label" x="180" y="80">Worktree</text>
+        <text class="s-tiny" x="180" y="104">checkout SHA</text>
+        <line class="s-flow" x1="285" y1="84" x2="325" y2="84"/>
+        <rect class="s-node" x="325" y="55" width="95" height="58" rx="8"/>
+        <text class="s-label" x="342" y="78">Gate</text><text class="s-tiny" x="342" y="99">danach löschen</text>
+      </svg>
+      <figcaption>Das Gate testet nicht den gemeinsam genutzten Checkout, sondern genau die
+      übergebene SHA in einem neuen Worktree.</figcaption>
+    </figure>
+  </article>
+
+  <article class="building-block">
+    <h4>2. Ressourcenbudgets</h4>
+    <p class="stx stx-part"><b>Stand 24.07.:</b> Vier Gate-Slots sind aktiv; Fairness und
+    Host-Orchestrator bleiben offen. <span class="pill done">4 Gate-Slots</span></p>
+    <p class="evidence-link"><b>Beleg:</b> <a href="#incident-remote-gates">AGT-2222,
+    22./23.07.</a>; Zielkarte: AGT-2229.</p>
+    <figure>
+      <svg viewBox="0 0 440 180" role="img" aria-labelledby="bb2-title bb2-desc">
+        <title id="bb2-title">Getrennte Ressourcenbudgets</title>
+        <desc id="bb2-desc">Agentenläufe und Gates besitzen getrennte Slot-Budgets. Admission lässt
+        nur Gates bis zur konfigurierten Kapazität zu.</desc>
+        <rect class="s-node" x="20" y="28" width="125" height="118" rx="8"/>
+        <text class="s-label" x="38" y="54">Agentenbudget</text>
+        <rect class="s-node2" x="38" y="70" width="40" height="28" rx="5"/><rect class="s-node2" x="86" y="70" width="40" height="28" rx="5"/>
+        <text class="s-tiny" x="38" y="122">eigene Slots</text>
+        <rect class="s-node" x="295" y="28" width="125" height="118" rx="8"/>
+        <text class="s-label" x="315" y="54">Gate-Budget</text>
+        <rect class="badge-ok" x="313" y="70" width="20" height="28" rx="4"/><rect class="badge-ok" x="337" y="70" width="20" height="28" rx="4"/>
+        <rect class="badge-ok" x="361" y="70" width="20" height="28" rx="4"/><rect class="badge-ok" x="385" y="70" width="20" height="28" rx="4"/>
+        <text class="s-tiny" x="313" y="122">aktuell 4 Slots</text>
+        <rect class="badge-warn" x="168" y="58" width="104" height="58" rx="8"/>
+        <text class="s-label" x="185" y="82">Admission</text><text class="s-tiny" x="185" y="103">begrenzt Last</text>
+      </svg>
+      <figcaption>Agenten- und Gate-Kapazität werden getrennt zugelassen. Die aktuelle Remote-Brücke
+      erlaubt vier parallele Gates; die Zahl ist eine Kapazitätsgrenze, keine allgemeine Konstante.</figcaption>
+    </figure>
+  </article>
+
+  <article class="building-block">
+    <h4>3. Virtuelle Zeit</h4>
+    <p class="stx stx-part"><b>Stand 24.07.:</b> <code>TimeProvider</code> und
+    <code>FakeTimeProvider</code> werden in einzelnen Komponenten und Tests verwendet; eine
+    durchgängige Regel fehlt. <span class="pill part">teilweise</span></p>
+    <p class="evidence-link"><b>Beleg:</b> <a href="#incident-gate-timeout">Gate-Timeouts,
+    12.07.</a></p>
+    <figure>
+      <svg viewBox="0 0 440 180" role="img" aria-labelledby="bb3-title bb3-desc">
+        <title id="bb3-title">Virtuelle Zeit für Zeitsemantik</title>
+        <desc id="bb3-desc">Ein Test steuert einen FakeTimeProvider. Debounce, Quiet-Window und TTL
+        reagieren auf kontrollierte Zeitsprünge statt auf Wanduhr und Sleep.</desc>
+        <rect class="badge-ok" x="20" y="52" width="130" height="76" rx="8"/>
+        <text class="s-label" x="36" y="78">FakeTimeProvider</text><text class="s-tiny" x="36" y="101">Advance(30 s)</text>
+        <line class="s-flow" x1="150" y1="90" x2="192" y2="90"/>
+        <rect class="s-node" x="192" y="36" width="115" height="108" rx="8"/>
+        <text class="s-label" x="209" y="62">Zeitlogik</text>
+        <text class="s-tiny" x="209" y="84">Debounce</text><text class="s-tiny" x="209" y="102">Quiet-Window</text><text class="s-tiny" x="209" y="120">TTL</text>
+        <line class="s-flow" x1="307" y1="90" x2="342" y2="90"/>
+        <rect class="s-node" x="342" y="62" width="78" height="56" rx="8"/>
+        <text class="s-label" x="358" y="86">Assert</text><text class="s-tiny" x="358" y="105">ohne Sleep</text>
+      </svg>
+      <figcaption>Tests für fachliche Zeitlogik steuern die Zeit explizit. Reale Wanduhr bleibt nur
+      dort zulässig, wo das Betriebssystemverhalten selbst Testgegenstand ist.</figcaption>
+    </figure>
+  </article>
+
+  <article class="building-block">
+    <h4>4. MachineBound-Kennzeichnung</h4>
+    <p class="stx stx-part"><b>Stand 24.07.:</b> Trait und Gate-Filter sind aktiv; der Meta-Guard
+    bleibt offen. <span class="pill part">teilweise</span></p>
+    <p class="evidence-link"><b>Beleg:</b> <a href="#incident-gate-timeout">Gate-Timeouts,
+    12.07.</a></p>
+    <figure>
+      <svg viewBox="0 0 440 180" role="img" aria-labelledby="bb4-title bb4-desc">
+        <title id="bb4-title">Kennzeichnung maschinengebundener Tests</title>
+        <desc id="bb4-desc">Ein Guard findet Sleep und SpinUntil. Tests mit echter Maschinenabhängigkeit
+        benötigen das Trait MachineBound; alle anderen Verwendungen führen zu einem Fehler.</desc>
+        <rect class="s-node" x="20" y="45" width="125" height="90" rx="8"/>
+        <text class="s-label" x="38" y="70">Testquelltext</text><text class="s-tiny" x="38" y="94">Sleep / SpinUntil</text><text class="s-tiny" x="38" y="112">oder echte I/O</text>
+        <line class="s-flow" x1="145" y1="90" x2="178" y2="90"/>
+        <rect class="badge-warn" x="178" y="52" width="105" height="76" rx="8"/>
+        <text class="s-label" x="199" y="78">Meta-Guard</text><text class="s-tiny" x="199" y="101">Trait prüfen</text>
+        <line class="s-flow" x1="283" y1="90" x2="315" y2="90"/>
+        <rect class="s-node" x="315" y="45" width="105" height="90" rx="8"/>
+        <text class="s-label" x="330" y="70">Ergebnis</text><text class="s-tiny" x="330" y="94">MachineBound</text><text class="s-tiny" x="330" y="112">oder Testfehler</text>
+      </svg>
+      <figcaption><code>[Trait("Category","MachineBound")]</code> macht echte Maschinenabhängigkeit
+      sichtbar. Ein Meta-Guard verhindert neue unmarkierte Wanduhr-Wartepfade.</figcaption>
+    </figure>
+  </article>
+
+  <article class="building-block">
+    <h4>5. Flake-Quarantäne</h4>
+    <p class="stx stx-open"><b>Stand 24.07.:</b> Befristetes Register, Owner und Ablaufbehandlung
+    sind nicht umgesetzt. <span class="pill open">offen</span></p>
+    <p class="evidence-link"><b>Beleg:</b> <a href="#incident-gate-blockers">Rest-Flakes,
+    17.07.</a></p>
+    <figure>
+      <svg viewBox="0 0 440 180" role="img" aria-labelledby="bb5-title bb5-desc">
+        <title id="bb5-title">Quarantäne für bestätigte Flakes</title>
+        <desc id="bb5-desc">Ein fehlgeschlagener Test wird anhand einer registrierten Flake-ID
+        klassifiziert. Bestätigte Flakes werden aufgezeichnet und wiederholt, zählen aber nicht als Strike.</desc>
+        <rect class="s-node" x="20" y="58" width="100" height="60" rx="8"/>
+        <text class="s-label" x="36" y="82">Test rot</text><text class="s-tiny" x="36" y="103">mit Test-ID</text>
+        <line class="s-flow" x1="120" y1="88" x2="157" y2="88"/>
+        <rect class="badge-warn" x="157" y="38" width="125" height="100" rx="8"/>
+        <text class="s-label" x="176" y="64">Flake-Register</text><text class="s-tiny" x="176" y="88">Owner + Ablaufdatum</text><text class="s-tiny" x="176" y="106">Wiederholung</text>
+        <line class="s-flow" x1="282" y1="88" x2="320" y2="88"/>
+        <rect class="s-node" x="320" y="52" width="100" height="72" rx="8"/>
+        <text class="s-label" x="336" y="76">Quarantäne</text><text class="s-tiny" x="336" y="98">kein Strike</text><text class="s-tiny" x="336" y="113">Trend bleibt</text>
+      </svg>
+      <figcaption>Nur ein bestätigter, befristeter Registereintrag verhindert einen Strike. Der Test
+      läuft weiter, behält einen Owner und bleibt in der Auswertung sichtbar.</figcaption>
+    </figure>
+  </article>
+
+  <article class="building-block">
+    <h4>6. Zwei Strikes aus gültigen Gate-Läufen</h4>
+    <p class="stx stx-part"><b>Stand 24.07.:</b> Die Zwei-Strike-Regel ist aktiv; die vollständige
+    Trennung von Karten-, Infrastruktur- und Flake-Verdikten bleibt offen.
+    <span class="pill part">teilweise</span></p>
+    <p class="evidence-link"><b>Beleg:</b> <a href="#incident-remote-gates">Falsche Eskalationen,
+    22./23.07.</a></p>
+    <figure>
+      <svg viewBox="0 0 440 180" role="img" aria-labelledby="bb6-title bb6-desc">
+        <title id="bb6-title">Zwei-Strike-Regel</title>
+        <desc id="bb6-desc">Nur zwei fehlgeschlagene Läufe auf derselben SHA in gültigen isolierten
+        Umgebungen lösen eine Karteneskalation aus. Infrastruktur- und Quarantäneergebnisse zählen nicht.</desc>
+        <rect class="badge-bad" x="20" y="50" width="100" height="76" rx="8"/>
+        <text class="s-label" x="38" y="76">Lauf 1 rot</text><text class="s-tiny" x="38" y="98">SHA X</text><text class="s-tiny" x="38" y="114">Umgebung gültig</text>
+        <text class="s-label" x="132" y="94">+</text>
+        <rect class="badge-bad" x="155" y="50" width="100" height="76" rx="8"/>
+        <text class="s-label" x="173" y="76">Lauf 2 rot</text><text class="s-tiny" x="173" y="98">SHA X</text><text class="s-tiny" x="173" y="114">Umgebung gültig</text>
+        <line class="s-flow" x1="255" y1="88" x2="300" y2="88"/>
+        <rect class="s-node" x="300" y="50" width="120" height="76" rx="8"/>
+        <text class="s-label" x="319" y="77">Eskalation</text><text class="s-tiny" x="319" y="99">Infra/Flake zählt</text><text class="s-tiny" x="319" y="115">nicht</text>
+      </svg>
+      <figcaption>Zwei Strikes müssen dieselbe Subjekt-SHA unter gültigen isolierten Bedingungen
+      betreffen. Infrastrukturabbrüche und registrierte Flakes bilden eigene Verdikte.</figcaption>
+    </figure>
+  </article>
+
+  <article class="building-block">
+    <h4>7. Gate-Evidenz</h4>
+    <p class="stx stx-part"><b>Stand 24.07.:</b> Die SSH-Brücke erfasst Gate-Evidenz; der
+    unveränderliche Attempt-Record bleibt offen. <span class="pill part">teilweise</span></p>
+    <p class="evidence-link"><b>Belege:</b> <a href="#incident-remote-gates">AGT-2222,
+    22./23.07.</a> und <a href="#incident-attempt-authority">AGT-2182, 24.07.</a></p>
+    <figure>
+      <svg viewBox="0 0 440 180" role="img" aria-labelledby="bb7-title bb7-desc">
+        <title id="bb7-title">Evidenz eines Gate-Laufs</title>
+        <desc id="bb7-desc">Das Gate sammelt SHA, Befehle, Filter, Dauer, Host, Last und Logs. Diese
+        Daten werden mit dem Verdikt am Attempt gespeichert.</desc>
+        <rect class="s-node" x="20" y="30" width="135" height="120" rx="8"/>
+        <text class="s-label" x="38" y="54">Gate-Lauf</text>
+        <text class="s-tiny" x="38" y="76">SHA + Befehle</text><text class="s-tiny" x="38" y="94">Filter + Dauer</text><text class="s-tiny" x="38" y="112">Host + Last</text><text class="s-tiny" x="38" y="130">stdout/stderr</text>
+        <line class="s-flow" x1="155" y1="90" x2="202" y2="90"/>
+        <rect class="badge-ok" x="202" y="48" width="100" height="84" rx="8"/>
+        <text class="s-label" x="219" y="74">Evidenz</text><text class="s-tiny" x="219" y="96">unverändert</text><text class="s-tiny" x="219" y="112">zuordenbar</text>
+        <line class="s-flow" x1="302" y1="90" x2="340" y2="90"/>
+        <rect class="s-node" x="340" y="58" width="80" height="64" rx="8"/>
+        <text class="s-label" x="356" y="83">Verdikt</text><text class="s-tiny" x="356" y="104">am Attempt</text>
+      </svg>
+      <figcaption>Ein Gate-Verdikt speichert die getestete SHA, Ausführungskonfiguration, Dauer,
+      Hostdaten und Logs. Der vollständige unveränderliche Attempt-Handoff bleibt Teil von AGT-2183/2184.</figcaption>
+    </figure>
+  </article>
+
+  <article class="building-block">
+    <h4>8. Überwachte Baseline</h4>
+    <p class="stx stx-open"><b>Stand 24.07.:</b> Zeitgesteuerter Volltest, Alarmweg und die
+    vorgesehenen Guards sind nicht vollständig eingerichtet. <span class="pill open">offen</span></p>
+    <p class="evidence-link"><b>Beleg:</b> <a href="#incident-gate-blockers">Baseline-Defekte,
+    17.07.</a></p>
+    <figure>
+      <svg viewBox="0 0 440 180" role="img" aria-labelledby="bb8-title bb8-desc">
+        <title id="bb8-title">Unabhängige Überwachung der develop-Baseline</title>
+        <desc id="bb8-desc">Ein zeitgesteuerter Volltest prüft develop unabhängig von Karten.
+        Ein Fehler erzeugt einen Alarm und blockiert die Zuordnung zu einer einzelnen Karte.</desc>
+        <rect class="s-node" x="20" y="55" width="100" height="70" rx="8"/>
+        <text class="s-label" x="36" y="80">develop</text><text class="s-tiny" x="36" y="102">feste SHA</text>
+        <line class="s-flow" x1="120" y1="90" x2="165" y2="90"/>
+        <rect class="s-node" x="165" y="42" width="115" height="96" rx="8"/>
+        <text class="s-label" x="183" y="68">Volltest</text><text class="s-tiny" x="183" y="92">zeitgesteuert</text><text class="s-tiny" x="183" y="110">+ Guard-Tests</text>
+        <line class="s-flow" x1="280" y1="90" x2="322" y2="90"/>
+        <rect class="badge-warn" x="322" y="55" width="98" height="70" rx="8"/>
+        <text class="s-label" x="340" y="80">Alarm</text><text class="s-tiny" x="340" y="102">Baseline rot</text>
+      </svg>
+      <figcaption>Ein Volltest auf einer festen develop-SHA erkennt Baseline-Defekte unabhängig von
+      Karten. Konfliktmarker- und EOL-Guards verhindern bekannte Ursachen bereits beim Commit.</figcaption>
+    </figure>
+  </article>
+</div>
+
+<h3>§5.4 Entscheidungskriterien</h3>
+<p class="stx stx-open"><b>Stand 24.07.:</b> Die Kriterien gelten für die noch offenen Bausteine.
+Zusätzliche Infrastruktur setzt eine belegte Fehlerklasse oder einen messbaren Betriebsnutzen
+voraus.</p>
+<p class="evidence-link"><b>Belege:</b> <a href="#incident-gate-blockers">Gate-Blocker,
+17.07.</a> und <a href="#incident-remote-gates">SSH-Brücke, 22./23.07.</a> Zielkarte: AGT-2229.</p>
 <table>
-  <thead><tr><th>#</th><th>Baustein</th><th>Inhalt</th><th>Träger</th></tr></thead>
+  <thead><tr><th>Frage</th><th>Weiterführen</th><th>Vereinfachen oder nicht bauen</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><b>Exakt-SHA-Worktree</b></td><td>Gate checkt nie „den Checkout“, sondern die Result-SHA des Attempts in einem frischen, danach verworfenen Worktree.</td><td>AGT-2155 + AGT-2184 <span class="pill queued">gequeued</span></td></tr>
-    <tr><td>2</td><td><b>Ressourcen-Klassen</b></td><td>Pro Maschine läuft höchstens ein Gate; Agenten-Slots und Gate-Slots sind getrennte Budgets. Alternativ: dedizierter Gate-Runner.</td><td>Admission/Slots (AGT-2189-Familie) <span class="pill queued">gequeued</span></td></tr>
-    <tr><td>3</td><td><b>Virtuelle Zeit</b></td><td>Timing-Semantik (Debounce, Quiet-Windows, TTLs) testet gegen <code>FakeTimeProvider</code> — im Codebase etabliert, aber nicht flächendeckend.</td><td>Testkonvention <span class="pill new">neu</span></td></tr>
-    <tr><td>4</td><td><b>MachineBound-Taxonomie + Meta-Guard</b></td><td>Wanduhr-Tests tragen <code>[Trait("Category","MachineBound")]</code>. Ein Architektur-Guard-Test macht <code>SpinUntil</code>/<code>Sleep</code> ohne Trait zum Testfehler — die Klasse kann nicht nachwachsen.</td><td>Guard-Test <span class="pill new">neu</span></td></tr>
-    <tr><td>5</td><td><b>Flake-Quarantäne</b></td><td>Bekannte Flakes laufen weiter, zählen aber nicht als Strike; wöchentliche Analyse statt Ad-hoc-Ausschluss. (Aktuelle Kandidaten: 4 Stück, siehe Historie.)</td><td>Gate-Policy <span class="pill new">neu</span></td></tr>
-    <tr><td>6</td><td><b>2-Strike nur hermetisch</b></td><td>Der Loop-Guard bleibt — aber Strikes zählen ausschließlich auf hermetischen Läufen. Ein Strike aus einem Last-Kontext ist kein Signal.</td><td>Gate-Policy <span class="pill new">neu</span></td></tr>
-    <tr><td>7</td><td><b>Gate-Evidenz</b></td><td>Jeder Gate-Lauf archiviert Log, Filter, Dauer, Maschinenlast am Attempt — „warum rot?“ ist nachlesbar statt rekonstruierbar.</td><td>Attempt-Record (§2.5)</td></tr>
-    <tr><td>8</td><td><b>Bewachte Baseline</b></td><td>Nightly-Volltest auf develop mit Alarm; Guard gegen committete Konfliktmarker; <code>.gitattributes</code>-EOL-Normalisierung (CRLF-Churn kostete am 17.07. real Arbeitszeit).</td><td>Routine + Guards <span class="pill new">neu</span></td></tr>
+    <tr><td>Gibt es einen belegten Vorfall oder eine reproduzierbare Fehlerklasse?</td>
+        <td>Vorfall, Test und Owner sind benannt.</td><td>Nur eine allgemeine Befürchtung ist dokumentiert.</td></tr>
+    <tr><td>Entfernt der Baustein eine Ursache?</td>
+        <td>Er trennt SHA, Umgebung oder Zuständigkeit eindeutig.</td><td>Er ergänzt nur einen weiteren Retry oder Fallback.</td></tr>
+    <tr><td>Ist der Betrieb messbar?</td>
+        <td>Kapazität, Laufzeit, Fehlerrate und Alarmweg sind beobachtbar.</td><td>Neue Queue oder neuer Dienst ohne SLO und Owner.</td></tr>
+    <tr><td>Kann bestehende Infrastruktur den Zweck erfüllen?</td>
+        <td>Nein; die Lücke ist im bestehenden Pfad belegt.</td><td>Ja; Konfiguration, Guard-Test oder bestehender Runner reicht aus.</td></tr>
+    <tr><td>Hat die Übergangslösung ein Ende?</td>
+        <td>Ersatzkarte und Rückbaukarte sind benannt.</td><td>Brücke und Zielsystem würden dauerhaft parallel bleiben.</td></tr>
   </tbody>
 </table>
+<p>Auf den aktuellen Stand angewandt: Die SSH-Brücke bleibt bis AGT-2229 produktiv, erhält aber keine
+zweite dauerhafte Steuerungsebene. Virtuelle Zeit und Meta-Guards werden nur für konkret gefundene
+Zeitpfade ausgerollt. Flake-Quarantäne benötigt Register, Owner und Ablaufdatum; eine pauschale
+Ignore-Liste ist nicht zulässig.</p>
 
 <!-- ============================================================ -->
 <h2 id="grade"><span class="no">§6</span>Grade-Step</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Der Grade-Step bleibt aktiv und bewertet die attributierte
+Commit-Kette. AGT-2183/2184 ersetzen die verbleibende Scope-Kaskade durch <code>baseSha</code> und
+<code>resultSha</code> aus dem Attempt-Record.</p>
+<p class="evidence-link"><b>Beleg:</b> <a href="#incident-grade-d">Grade-D-Eskalationen,
+17.07.</a> Karten: AGT-2190, AGT-2183, AGT-2184.</p>
 <div class="box ok">
-  <h4>Festlegung</h4>
-  <p>Der Code-Review-Grade ist die <b>Nutzer-Wahrheitsanzeige</b>: „War der Code da, und taugt er?“
-  Er wird <b>nicht</b> abgeschafft und nicht abgeschwächt. Die Grade-D-Urteile der Phantom-Phase waren
-  fachlich richtig — sie haben das Integrationsloch überhaupt erst sichtbar gemacht.</p>
+  <h4>Funktion</h4>
+  <p>Der Code-Review-Grade beantwortet zwei Fragen: Ist die Lieferung im bewerteten Scope enthalten,
+  und erfüllt sie die fachlichen Anforderungen? Die Grade-D-Urteile vom 17.07. waren für den
+  bewerteten Scope korrekt und belegten die fehlende Integration.</p>
 </div>
-<p>Was sich ändert, ist ausschließlich seine <b>Eingabe</b>:</p>
+<p>Geändert wird die Eingabe:</p>
 <ul>
-  <li><b>Heute:</b> Rate-Kaskade (Abb. 3) — Run-SHAs, sonst Branch-Fallback. Im Normalfall richtig, im
-      Sonderfall systematisch falsch, und das Urteil kann nicht zwischen „Code fehlt“ und „ich habe auf
-      das falsche Universum geschaut“ unterscheiden.</li>
+  <li><b>Aktuell:</b> Attributierte Run-SHAs, anschließend Branch-Fallback. Bei fehlender Zuordnung kann
+      dieser Pfad nicht zwischen fehlender Lieferung und falschem Scope unterscheiden.</li>
   <li><b>Ziel:</b> Der Grade-Step diffed <code>resultSha</code> gegen <code>baseSha</code> aus dem
-      Attempt-Record — garantiert das, was der Versuch wirklich produziert hat. Ein D heißt dann
-      beweisbar: <i>die Arbeit fehlt wirklich.</i></li>
-  <li><b>Neues drittes Verdikt:</b> Ist kein gültiger Attempt-Record da, sagt der Step das explizit
-      („Scope unauflösbar — kein Attempt-Record“) statt zu raten. Auch das ist Nutzer-Information:
-      es unterscheidet „schlechte Lieferung“ von „kaputte Evidenzkette“ — zwei völlig verschiedene
-      Handlungsanweisungen.</li>
+      Attempt-Record. Damit bezieht sich das Verdikt auf das Ergebnis des konkreten Versuchs.</li>
+  <li><b>Fehlende Evidenz:</b> Ohne gültigen Attempt-Record lautet das Ergebnis
+      <code>scope-unresolved</code>. Dieser Zustand ist kein Qualitätsgrad und verlangt eine Reparatur
+      der Evidenzkette.</li>
 </ul>
 
 <!-- ============================================================ -->
-<h2 id="programm"><span class="no">§7</span>Härtungsprogramm &amp; Roadmap</h2>
-<p class="dim">Die Hälfte des Programms liegt bereits als Karten auf dem Board — Härtung ist hier vor
-allem Priorisierung. Die harte Regel zuerst:</p>
+<h2 id="programm"><span class="no">§7</span>Umsetzungsprogramm</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Phase 0 ist abgeschlossen. In Phase 1 sind AGT-2177 und
+AGT-2182 geliefert; AGT-2183/2184 bleiben offen. Die Gate-Isolation aus Phase 2 ist als SSH-Brücke
+produktiv. AGT-2229 und die Testdisziplin-Bausteine schließen den Zielzustand.</p>
+<p class="evidence-link"><b>Belege:</b> <a href="#incident-attempt-authority">AGT-2182,
+24.07.</a>, <a href="#incident-review-epochs">Epochen-Fix, 23.07.</a> und
+<a href="#incident-remote-gates">Remote-Gates, 22./23.07.</a></p>
+<p class="dim">Die Phasen ordnen gelieferte Grundlagen, offene Strukturarbeit und Betriebsregeln.</p>
 <div class="box warn">
-  <h4>Harte Bedingung</h4>
-  <p><b>Remote-Execution bleibt deaktiviert, bis Phase 1 gemergt und deployed ist.</b> Das verlängert die
-  bestehende Regel („Reaktivierung erst nach 2147/48/49 + Push-Probe“) um die zweite Hälfte: den
-  Result-SHA-Vertrag.</p>
+  <h4>Betriebsbedingung</h4>
+  <p>Remote-Ausführung ist aktiv, weil Push-Probe, verifizierter Push vor Completion, Attempt-Fencing
+  und Remote-Gates aktiv sind. Ein Ergebnis darf weiterhin nur integriert werden, wenn Commit-Scope
+  und getestete Subjekt-SHA eindeutig zugeordnet sind. Unklare Zuordnung führt zur Human-Review.</p>
 </div>
 
 <table>
   <thead><tr><th>Phase</th><th>Inhalt</th><th>Träger</th><th>Status</th></tr></thead>
   <tbody>
     <tr><td><b>0 · erledigt</b></td>
-        <td>Phantom-Ursachen (Auth/Sentinel/Teardown); 19 Salvage-Tickets reconciled; 7 Gate-Blocker auf develop gefixt; DeleteJob-Lost-Update geschlossen</td>
+        <td>Auth-, Sentinel- und Teardown-Fehler; 19 Salvage-Tickets reconciled; 7 Gate-Blocker auf develop behoben; DeleteJob-Lost-Update geschlossen</td>
         <td>AGT-2147/48/49 · Reconciliation 17.07. · Commits <code>13581a70</code>, <code>e9520c2b</code></td>
         <td><span class="pill done">deployed/gemergt</span></td></tr>
-    <tr><td><b>1 · Ergebnis als Vertrag</b><br><span class="s-tiny">vor Remote-Reaktivierung</span></td>
+    <tr><td><b>1 · Ergebnisvertrag</b></td>
         <td>Attempt-Record + Fencing; Outbox mit Result-SHA; Review auf exakter SHA; Divergenz-Reconciliation; truthful Runner-Status</td>
         <td>AGT-2182 · 2183 · 2184 · 2177 · 2189</td>
-        <td><span class="pill queued">gequeued (P0)</span></td></tr>
-    <tr><td><b>2 · Hermetik</b></td>
-        <td>Gate raus aus dem geteilten Checkout; Ressourcen-Klassen; virtuelle Zeit; MachineBound-Meta-Guard; Flake-Quarantäne; 2-Strike nur hermetisch</td>
-        <td>AGT-2155 + Bausteine §5.3 (3–6)</td>
-        <td><span class="pill queued">teils gequeued</span> <span class="pill new">teils neu</span></td></tr>
-    <tr><td><b>3 · Wachsamkeit</b></td>
+        <td><span class="pill done">2177/2182 geliefert</span> <span class="pill queued">2183/2184 offen</span></td></tr>
+    <tr><td><b>2 · Gate-Isolation</b></td>
+        <td>Exakt-SHA-Worktree, getrenntes Gate-Budget, claimbare Remote-Schritte, virtuelle Zeit, MachineBound-Guard, Flake-Quarantäne und gültige Strike-Zählung</td>
+        <td>AGT-2222 · AGT-2229 · Bausteine §5.3</td>
+        <td><span class="pill done">SSH-Brücke live</span> <span class="pill queued">Zielpfad offen</span></td></tr>
+    <tr><td><b>3 · Überwachung</b></td>
         <td>Nightly-Volltest auf develop mit Alarm; Board-Watchdog (escalated &gt; N, steer-pending &gt; 24 h, Phase hängt &gt; X h); Steer-Timeout mit definierter Konsequenz</td>
         <td>Routine/Cron · <code>run-liveness-b-steer-timeout</code>-Branch</td>
-        <td><span class="pill new">neu, je ~1 Abend</span></td></tr>
+        <td><span class="pill new">offen</span></td></tr>
     <tr><td><b>4 · Vereinfachung</b></td>
-        <td>Completion-Gate auf strukturierte Evidenz statt Prosa; Registry-Write-Validierung (PROJ-017-Klasse) + Bereinigung; Sonderpfade abbauen — ein kanonischer Weg, wie Arbeit entsteht, reviewt wird und landet</td>
+        <td>Completion-Gate auf strukturierte Evidenz; Registry-Write-Validierung und Bereinigung; Sonderpfade nach Ersatz entfernen</td>
         <td><code>completion-gate-use-structured-evidence</code> · Kleintickets</td>
         <td><span class="pill queued">teils gequeued</span> <span class="pill open">Registry: Operator-Entscheid</span></td></tr>
   </tbody>
 </table>
 
 <!-- ============================================================ -->
-<h2 id="historie"><span class="no">§8</span>Historie: Summary-Block</h2>
-<p class="dim">Kompaktübersicht aller bekannten Vorfälle und Maßnahmen. Vollständige Chronik mit
-Ursachen, Evidenz und Ticket-Referenzen auf der Unterseite
-<code>historie.html</code> — sie ist der kanonische Ort, an dem künftige
-Vorfälle <b>nachgetragen werden müssen</b>.</p>
+<h2 id="historie"><span class="no">§8</span>Historienübersicht</h2>
+<p class="stx stx-part"><b>Stand 24.07.:</b> Die Übersicht enthält die für dieses Konzept relevanten
+Vorfälle und Lieferungen bis AGT-2182. Offene Strukturarbeit ist mit Karten benannt.</p>
+<p class="dim">Die Zeilen besitzen dokumentinterne <code>#incident-*</code>-Anker. Verweise innerhalb
+dieser Workbench nutzen nur diese Anker, weil relative Seitenlinks im sandboxed Wiki-Viewer nicht
+funktionieren. <code>historie.html</code> verwendet dieselben Anker für die ausführlichen Einträge.</p>
 
 <table>
   <thead><tr><th>Datum</th><th>Problem</th><th>Maßnahme</th><th>Status</th></tr></thead>
   <tbody>
-    <tr><td>07./08.07.</td><td>AGT-1917: Out-of-band erledigte Karte blieb „Leiche“</td><td>External-Completion-Endpoint, „extern erledigt“-Badge, Timeline-Aktor <code>external</code></td><td><span class="pill done">shipped</span></td></tr>
-    <tr><td>10.07.</td><td>API-Mutationen ohne Absender-Identität</td><td><code>X-Client-Id</code> Pflicht-Header</td><td><span class="pill done">shipped</span></td></tr>
-    <tr><td>11.07.</td><td>Phantom-Welle: ~29 Karten „done“ ohne Commit auf origin</td><td>AGT-2147/48/49: verified-push-before-completion, Sentinel-Fix, Push-Probe, read-only-Admission</td><td><span class="pill done">deployed 12.07.</span></td></tr>
-    <tr><td>12.07.</td><td>Gate-Test-Stufe wird Falsch-Eskalations-Fabrik (MachineBound-Saga, 300s-Timeout, BuildProfile-Validierungsbug)</td><td>MachineBound-Filter, Timeout 900 s, Settings-Patch-Workaround</td><td><span class="pill done">Workarounds aktiv</span> <span class="pill open">Validierungsbug offen</span></td></tr>
-    <tr><td>13.07.</td><td>Rescue der Phantom-Charge; QS-15 wedged (missing-terminal-sentinel); Steer ohne Timeout</td><td>Rescue-Branches → develop; QS-15 am 17.07. entstuckt; Steer-Timeout weiter offen</td><td><span class="pill done">Rescue</span> <span class="pill open">Steer-Timeout</span></td></tr>
-    <tr><td>17.07.</td><td>Grade-D-Welle: 17 Karten eskaliert, Salvage nie in task-Branches integriert</td><td>Reconciliation: 19 Karten per Squash auf frische develop-basierte task-Branches, requeued</td><td><span class="pill done">erledigt</span></td></tr>
-    <tr><td>17.07.</td><td>7 vorbestehende Gate-Blocker auf develop (inkl. DeleteJob-Race, Serilog-Freeze)</td><td>2 Fix-Commits (<code>13581a70</code>, <code>e9520c2b</code>), Volltest-verifiziert; 4 Rest-Flakes dokumentiert</td><td><span class="pill done">gemergt</span> <span class="pill open">4 Flakes</span></td></tr>
-    <tr><td>17.07.</td><td>Korrupte Registry-Doppel-Registrierung PROJ-017 (Pfad ohne Backslashes; watchPath-Moves → 404)</td><td>Workaround <code>?project=</code>-Handle; Validierung + Bereinigung ausstehend</td><td><span class="pill open">offen</span></td></tr>
-    <tr><td>17.07.</td><td>Kreuzkontaminierte Salvage-Branches (2191 ⊃ 2108); verlorene Library-API (<code>composerContext</code>); CAC-7 npm-Publish blockiert (E401)</td><td>Basis-SHA-Pickup via AGT-2177; App-lokale Brücke + CAC-Backlog-Ticket; npm-Publish = Operator-Entscheid</td><td><span class="pill queued">2177</span> <span class="pill open">npm</span></td></tr>
-    <tr><td>18.07.</td><td>—</td><td>Dieses Härtungskonzept; Programm in §7</td><td><span class="pill new">beschlossen</span></td></tr>
-    <tr><td>19.07.</td><td>Workstream-Frame nicht bewährt (0 Inhalt nach 10 Tagen/200 Tasks; 0 von 575 Task-Logs lasen Frame-Seiten; Bedarf lag in learnings/common-problems/Workbenches)</td><td>Rückbau: Pulse-Drift auf reale Top-Ordner, human-action als ordnerunabhängige Frontmatter-Konvention, toter Stack (Frame/Seeder/Collector/Curator/Pinning) entfernt</td><td><span class="pill done">done</span></td></tr>
-    <tr><td>19.07.</td><td>16 „überholt“-klassifizierte Wiki-Seiten als gebannerte Altlasten (Inhalt in Nachfolgern aufgegangen)</td><td>Seiten + Companions + pfadgebundenes Drift-Sidecar via <code>git rm</code> gelöscht (34 Dateien); aktive Referenzen auf Nachfolger umgebogen, historische de-linkt; diese Chronik ist Sammelort der Runner-Vorfallsseiten</td><td><span class="pill done">done</span></td></tr>
-    <tr><td>19.07.</td><td>Wissens-Content und Maschinen-Verträge lagen im selben <code>docs/</code>-Baum vermischt; hartkodierte <code>docs/</code>-Pfade verstreut</td><td>Welle 2: Schemas/In-App-Hilfe/Config unter <b>einen</b> Code-Vertrags-Bereich <code>docs/app/</code> gezogen (aus Tree/Suche/Pulse/Grading ausgeblendet); zentrale <code>WikiProducerTargets</code> + Build-brechender Pfad-Guard; Klassifikations-Sidecar ab Seiten-Erstellung + dezente „unklassifiziert“-Pulse-Warnung; fünf Themen-Zweck-READMEs, <code>README-aus-wiki</code> eingeschmolzen</td><td><span class="pill done">done</span></td></tr>
+    <tr id="incident-external-completion"><td>07./08.07.</td><td>AGT-1917: externe Lieferung ohne Abschlusszustand</td><td>External-Completion-Endpoint und Quellattribution</td><td><span class="pill done">geliefert</span></td></tr>
+    <tr id="incident-api-identity"><td>10.07.</td><td>API-Mutationen ohne Absenderidentität</td><td><code>X-Client-Id</code> als Pflicht-Header</td><td><span class="pill done">geliefert</span></td></tr>
+    <tr id="incident-phantom-wave"><td>11.07.</td><td>Etwa 29 Karten mit Status „done“ ohne Commit auf origin</td><td>AGT-2147/2148/2149: Sentinel, Push-Probe und verifizierter Push vor Completion</td><td><span class="pill done">deployed 12.07.</span></td></tr>
+    <tr id="incident-gate-timeout"><td>12.07.</td><td>Gate-Timeouts und maschinenabhängige Tests</td><td>MachineBound-Filter, Timeout 900 s und Settings-Workaround</td><td><span class="pill done">Workaround aktiv</span></td></tr>
+    <tr id="incident-run-wedge"><td>13.07.</td><td>QS-15 ohne Terminal-Sentinel; Steer ohne Timeout</td><td>Rescue und manuelle Phasenbereinigung</td><td><span class="pill done">Rescue</span> <span class="pill open">Timeout offen</span></td></tr>
+    <tr id="incident-grade-d"><td>17.07.</td><td>17 Grade-D-Eskalationen wegen nicht integrierter Salvage-Branches</td><td>19 Karten auf frische Task-Branches reconciled; AGT-2183/2184 als Strukturmaßnahme</td><td><span class="pill done">Charge bereinigt</span> <span class="pill queued">Struktur offen</span></td></tr>
+    <tr id="incident-gate-blockers"><td>17.07.</td><td>Sieben vorbestehende Gate-Blocker auf develop</td><td>Fix-Commits <code>13581a70</code> und <code>e9520c2b</code>; Rest-Flakes dokumentiert</td><td><span class="pill done">gemergt</span> <span class="pill open">Flake-Policy offen</span></td></tr>
+    <tr id="incident-cross-contamination"><td>17.07.</td><td>AGT-2191 enthielt Änderungen aus AGT-2108</td><td>Autoritative Basis-SHA und Divergenzbehandlung mit AGT-2177</td><td><span class="pill done">gelöst</span></td></tr>
+    <tr id="incident-registry"><td>17.07.</td><td>Korrupte Registry-Registrierung PROJ-017</td><td><code>?project=</code>-Workaround; Schreibvalidierung ausstehend</td><td><span class="pill open">offen</span></td></tr>
+    <tr id="incident-zombie-leases"><td>20./21.07.</td><td>Zombie-Leases nach Daemon-Neustart</td><td>Fleet-Pacer bricht prozesslose Leases; persistente Attempt-Authority ergänzt Fencing</td><td><span class="pill part">entschärft</span></td></tr>
+    <tr id="incident-remote-gates"><td>22./23.07.</td><td>Gate-Stau und falsche Eskalationen im lokalen Pfad</td><td>AGT-2222: SSH-Gate-Brücke, vier Slots, exakte Subjekt-SHA</td><td><span class="pill done">live</span> <span class="pill queued">AGT-2229 offen</span></td></tr>
+    <tr id="incident-review-epochs"><td>23.07.</td><td>Ältere Verdikte konnten Operator-Requeues überholen</td><td>AGT-2260-Kern: Verdikte an Operator-Epoche binden</td><td><span class="pill done">aktiv</span></td></tr>
+    <tr id="incident-attempt-authority"><td>24.07.</td><td>Fehlende persistente Autorität für Run- und Review-Versuche</td><td>AGT-2182: Attempt-Authority und Fencing</td><td><span class="pill done">geliefert, Grade B</span></td></tr>
   </tbody>
 </table>
 
 <div class="box accent">
-  <h4>Das Muster über allen Einträgen</h4>
-  <p>Jeder Vorfall hatte dieselbe Tiefenstruktur: <b>Mehrdeutigkeit wurde optimistisch aufgelöst</b>
-  (fehlendes Sentinel → „done“, unklarer Diff-Scope → raten, Prosa-Checkliste → Urteil) und
-  <b>Wahrheit lag an mehreren Orten gleichzeitig</b>. Die gesamte Härtung ist die Umkehrung genau
-  dieser zwei Eigenschaften: fail-closed bei Mehrdeutigkeit, ein Vertrag als einzige Quelle.</p>
+  <h4>Gemeinsame Ursache</h4>
+  <p>Die Vorfälle kombinieren unklare Ergebniszuordnung mit mehreren konkurrierenden Zustandsquellen.
+  Die Maßnahmen führen deshalb verbindliche Ergebnis- und Epochenverträge ein und behandeln
+  Mehrdeutigkeit als eigenen Fehlerzustand.</p>
 </div>
 
 </main>

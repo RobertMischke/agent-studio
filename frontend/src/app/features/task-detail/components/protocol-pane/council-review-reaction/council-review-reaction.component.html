@@ -1,0 +1,30 @@
+<section class="council-reaction"
+         [attr.data-disposition]="disposition()"
+         data-testid="code-review-council-reaction">
+  <header class="council-reaction__header">
+    <span class="council-reaction__eyebrow">Orchestrator reaction</span>
+    <span class="council-reaction__decision">
+      {{ reaction()?.summary || 'No orchestrator reaction recorded for this review.' }}
+    </span>
+  </header>
+  @if (reaction(); as current) {
+    @if (current.assessments.length) {
+      <ul class="council-reaction__findings">
+        @for (assessment of current.assessments; track assessment.finding) {
+          <li>
+            <span class="council-reaction__action">{{ actionLabel(assessment.action) }}</span>
+            <span>{{ assessment.finding }}</span>
+            <small>{{ assessment.reason }}</small>
+          </li>
+        }
+      </ul>
+    }
+    @if (roundHref(); as href) {
+      <a class="council-reaction__round"
+         data-testid="code-review-council-round-link"
+         [href]="href">
+        Open round {{ current.targetRunAttempt }} &rarr;
+      </a>
+    }
+  }
+</section>

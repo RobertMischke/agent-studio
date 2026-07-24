@@ -88,7 +88,9 @@ public sealed class TaskTransitionService
         string? watchPath,
         CancellationToken ct = default,
         int? targetIndex = null,
-        string? cause = null)
+        string? cause = null,
+        AttemptWriteReference? authorityWrite = null,
+        bool suppressProductExecution = false)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -108,6 +110,7 @@ public sealed class TaskTransitionService
         // affects the next move without a backend restart. TryAutoCommitAsync
         // still self-gates on a clean tree and scopes dirty paths to this task.
         var shouldAutoCommit =
+            !suppressProductExecution &&
             !isReadOnly &&
             info.State == TaskStates.Progress &&
             targetState == TaskStates.AutoReview &&
@@ -140,7 +143,7 @@ public sealed class TaskTransitionService
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
-        var outcome = _states.MoveJob(jobId, targetState, watchPath, cause);
+        var outcome = _states.MoveJob(jobId, targetState, watchPath, cause, authorityWrite);
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
             var moved = _scanner.FindJob(jobId, watchPath);
@@ -172,7 +175,8 @@ public sealed class TaskTransitionService
         // same result out, so re-running is a no-op.
         if (outcome.Status == MoveJobStatus.Success
             && info.State == TaskStates.Progress
-            && targetState == TaskStates.AutoReview)
+            && targetState == TaskStates.AutoReview
+            && !suppressProductExecution)
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
             if (attributed != null) EnterPostProcessingPhase(attributed);
@@ -216,7 +220,7 @@ public sealed class TaskTransitionService
             // fully guarded inside the service - it runs after the move has landed,
             // so it can never undo the transition. Re-find post-move so the record
             // is written to the folder's new location with fresh provenance.
-            if (_provenance != null)
+            if (_provenance != null && !suppressProductExecution)
             {
                 var anchored = _scanner.FindJob(jobId, watchPath);
                 if (anchored != null) _provenance.RecordTransition(anchored, targetState);
@@ -251,7 +255,8 @@ public sealed class TaskTransitionService
             if (targetState == TaskStates.Completed && !isReadOnly && _mergeRunner != null)
             {
                 var mergeJob = _scanner.FindJob(jobId, watchPath);
-                if (mergeJob != null) TriggerMergeIntoDevelop(mergeJob, settings);
+                if (mergeJob != null)
+                    await TriggerMergeIntoDevelopAsync(mergeJob, settings, ct);
             }
 
             // AGT-2202: accept-without-merge visibility. After the deferred merge
@@ -515,13 +520,22 @@ public sealed class TaskTransitionService
     /// pipeline view; it self-guards and never throws, so a conflict is made
     /// visible without affecting the lane move that already completed.
     /// </summary>
-    private void TriggerMergeIntoDevelop(TaskInfo moved, ProjectSettings settings)
+    private async Task TriggerMergeIntoDevelopAsync(
+        TaskInfo moved,
+        ProjectSettings settings,
+        CancellationToken ct)
     {
         var runner = _mergeRunner;
         if (runner == null) return;
         try
         {
-            var result = runner.Run(moved.ProjectName, moved.Id, moved.FolderPath, moved.WatchPath, settings.IntegrationBranch);
+            var result = await runner.RunAsync(
+                moved.ProjectName,
+                moved.Id,
+                moved.FolderPath,
+                moved.WatchPath,
+                settings.IntegrationBranch,
+                ct).ConfigureAwait(false);
 
             // ASS-1752: persist the develop-merge fact so the board card can show
             // the landed state (`develop @sha`) instead of a dead worktree path,

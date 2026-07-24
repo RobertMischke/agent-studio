@@ -22,33 +22,51 @@ public sealed class PromptAdminService
 {
     private readonly RuntimePromptService _prompts;
     private readonly ILogger<PromptAdminService> _logger;
+    private readonly ProjectSettingsService? _projectSettings;
 
-    public PromptAdminService(RuntimePromptService prompts, ILogger<PromptAdminService> logger)
+    public PromptAdminService(
+        RuntimePromptService prompts,
+        ILogger<PromptAdminService> logger,
+        ProjectSettingsService? projectSettings = null)
     {
         _prompts = prompts;
         _logger = logger;
+        _projectSettings = projectSettings;
     }
 
     public PromptCatalogResponse GetCatalog()
     {
+        var projectOverrides = ReadProjectOverrides();
         var items = new List<PromptCatalogItem>();
         foreach (var name in _prompts.EnumerateTemplateNames())
         {
             var meta = PromptDescriptionCatalog.Describe(name);
-            var hasOverride = _prompts.HasOverride(name);
+            var hasGlobalOverride = _prompts.HasOverride(name);
             var defaultContent = _prompts.TryReadDefault(name);
             var effective = _prompts.TryReadOverride(name) ?? defaultContent;
+            var matchingProjectOverrides = projectOverrides
+                .Where(item => string.Equals(
+                    item.PromptName,
+                    name,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var globalDefaultChanged = hasGlobalOverride
+                && DefaultChanged(name, defaultContent);
             items.Add(new PromptCatalogItem
             {
                 Name = name,
                 Title = meta.Title,
                 Description = meta.Description,
                 Group = meta.Group,
-                HasOverride = hasOverride,
+                HasGlobalOverride = hasGlobalOverride,
+                HasOverride = hasGlobalOverride || matchingProjectOverrides.Count > 0,
                 HasDefault = defaultContent != null,
-                DefaultChangedSinceOverride = hasOverride && DefaultChanged(name, defaultContent),
+                GlobalDefaultChangedSinceOverride = globalDefaultChanged,
+                DefaultChangedSinceOverride = globalDefaultChanged
+                    || matchingProjectOverrides.Any(item => item.DefaultChangedSinceOverride),
                 Slots = RuntimePromptService.ExtractSlots(effective).ToList(),
                 UsageCount = PromptUsageCatalog.For(name).Count,
+                ProjectOverrides = matchingProjectOverrides,
             });
         }
         return new PromptCatalogResponse
@@ -94,6 +112,12 @@ public sealed class PromptAdminService
             OverrideUpdatedAt = hasOverride ? sidecar?.UpdatedAt : null,
             Slots = RuntimePromptService.ExtractSlots(effective).ToList(),
             Usages = PromptUsageCatalog.For(name).ToList(),
+            ProjectOverrides = ReadProjectOverrides()
+                .Where(item => string.Equals(
+                    item.PromptName,
+                    name,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToList(),
         };
     }
 
@@ -247,6 +271,85 @@ public sealed class PromptAdminService
         return !string.Equals(sidecar.BaseDefaultSha, Sha(defaultContent), StringComparison.OrdinalIgnoreCase);
     }
 
+    private IReadOnlyList<PromptProjectOverride> ReadProjectOverrides()
+    {
+        if (_projectSettings is null) return [];
+
+        var result = new List<PromptProjectOverride>();
+        foreach (var (projectName, settings) in _projectSettings.GetAll())
+        {
+            if (settings.PipelineSteps is null) continue;
+            foreach (var (stepId, setting) in settings.PipelineSteps)
+            {
+                if (string.IsNullOrWhiteSpace(setting.Prompt)) continue;
+
+                var promptName = PromptPipelineBindings.ForStep(stepId);
+                var defaultContent = promptName is null
+                    ? null
+                    : _prompts.TryReadDefault(promptName);
+                var currentDefaultSha = defaultContent is null
+                    ? null
+                    : Sha(defaultContent);
+                var (added, removed) = DiffCounts(defaultContent, setting.Prompt);
+                result.Add(new PromptProjectOverride
+                {
+                    ProjectName = projectName,
+                    StepId = stepId,
+                    PromptName = promptName,
+                    Content = setting.Prompt,
+                    Orphaned = promptName is null || defaultContent is null,
+                    MatchesDefault = defaultContent is not null
+                        && Normalize(defaultContent) == Normalize(setting.Prompt),
+                    AddedLines = added,
+                    RemovedLines = removed,
+                    BaseDefaultSha = setting.PromptBaseDefaultSha,
+                    DefaultChangedSinceOverride =
+                        setting.PromptBaseDefaultSha is not null
+                        && currentDefaultSha is not null
+                        && !string.Equals(
+                            setting.PromptBaseDefaultSha,
+                            currentDefaultSha,
+                            StringComparison.OrdinalIgnoreCase),
+                });
+            }
+        }
+
+        return result
+            .OrderBy(item => item.ProjectName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.StepId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static (int Added, int Removed) DiffCounts(
+        string? defaultContent,
+        string overrideContent)
+    {
+        if (defaultContent is null)
+            return (Normalize(overrideContent).Split('\n').Length, 0);
+
+        var leftCounts = Normalize(defaultContent)
+            .Split('\n')
+            .GroupBy(line => line)
+            .ToDictionary(group => group.Key, group => group.Count());
+        var rightCounts = Normalize(overrideContent)
+            .Split('\n')
+            .GroupBy(line => line)
+            .ToDictionary(group => group.Key, group => group.Count());
+        var added = 0;
+        var removed = 0;
+        foreach (var line in leftCounts.Keys.Concat(rightCounts.Keys).Distinct())
+        {
+            leftCounts.TryGetValue(line, out var before);
+            rightCounts.TryGetValue(line, out var after);
+            if (after > before) added += after - before;
+            if (before > after) removed += before - after;
+        }
+        return (added, removed);
+    }
+
+    private static string Normalize(string value) =>
+        value.Replace("\r\n", "\n").Trim();
+
     // --- sidecar IO (records the default version an override was made against) ---
 
     private string SidecarPath(string name) =>
@@ -306,10 +409,13 @@ public sealed class PromptCatalogItem
     public string Description { get; set; } = "";
     public string Group { get; set; } = "";
     public bool HasDefault { get; set; }
+    public bool HasGlobalOverride { get; set; }
     public bool HasOverride { get; set; }
+    public bool GlobalDefaultChangedSinceOverride { get; set; }
     public bool DefaultChangedSinceOverride { get; set; }
     public List<string> Slots { get; set; } = new();
     public int UsageCount { get; set; }
+    public List<PromptProjectOverride> ProjectOverrides { get; set; } = new();
 }
 
 public sealed class PromptDetail
@@ -330,6 +436,21 @@ public sealed class PromptDetail
     public DateTimeOffset? OverrideUpdatedAt { get; set; }
     public List<string> Slots { get; set; } = new();
     public List<PromptUsageRef> Usages { get; set; } = new();
+    public List<PromptProjectOverride> ProjectOverrides { get; set; } = new();
+}
+
+public sealed class PromptProjectOverride
+{
+    public string ProjectName { get; set; } = "";
+    public string StepId { get; set; } = "";
+    public string? PromptName { get; set; }
+    public string Content { get; set; } = "";
+    public bool Orphaned { get; set; }
+    public bool MatchesDefault { get; set; }
+    public int AddedLines { get; set; }
+    public int RemovedLines { get; set; }
+    public string? BaseDefaultSha { get; set; }
+    public bool DefaultChangedSinceOverride { get; set; }
 }
 
 /// <summary>

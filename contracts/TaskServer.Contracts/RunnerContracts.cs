@@ -66,9 +66,6 @@ public sealed record CompleteRunRequest(
     long Fence,
     string Outcome,
     string? Summary = null,
-    string? ResultSha = null,
-    string? RepositoryId = null,
-    string? RepositoryUrl = null,
-    string? ResultRef = null,
-    string? SourceBundleArtifactId = null,
-    string? SourceBundleSha256 = null);
+    string? ResultEnvelopeDigest = null,
+    string? IdempotencyKey = null,
+    long? Sequence = null);

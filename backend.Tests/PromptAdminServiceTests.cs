@@ -102,6 +102,40 @@ public sealed class PromptAdminServiceTests
     }
 
     [Fact]
+    public void CatalogAndDetail_ExposeProjectOverrideOriginAndStaleDefault()
+    {
+        using var home = new PromptTestHome();
+        const string name = "review-aspect-code-quality.md";
+        home.WriteDefault(name, "Shipped v1");
+        var settings = home.CreateProjectSettings();
+        settings.SetPipelineStep("Agent Studio", "aspect-code-quality", new PipelineStepSetting
+        {
+            Prompt = "Project-specific review",
+            PromptBaseDefaultSha = RuntimePromptService.ContentSha("Shipped v1"),
+            PromptBaseDefaultContent = "Shipped v1",
+        });
+        home.WriteDefault(name, "Shipped v2");
+
+        var admin = home.CreateAdminService(home.CreatePromptService(), settings);
+        var item = Assert.Single(
+            admin.GetCatalog().Items,
+            candidate => candidate.Name == name);
+        var origin = Assert.Single(item.ProjectOverrides);
+
+        Assert.True(item.HasOverride);
+        Assert.False(item.HasGlobalOverride);
+        Assert.True(item.DefaultChangedSinceOverride);
+        Assert.Equal("Agent Studio", origin.ProjectName);
+        Assert.True(origin.DefaultChangedSinceOverride);
+        Assert.Equal(
+            RuntimePromptService.ContentSha("Shipped v1"),
+            origin.BaseDefaultSha);
+
+        var detail = Assert.IsType<PromptDetail>(admin.GetDetail(name));
+        Assert.Equal("Agent Studio", Assert.Single(detail.ProjectOverrides).ProjectName);
+    }
+
+    [Fact]
     public void Preview_RendersDraftAndReportsFilledAndMissingSlots()
     {
         using var home = new PromptTestHome();
@@ -172,8 +206,23 @@ public sealed class PromptAdminServiceTests
             return new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         }
 
-        public PromptAdminService CreateAdminService(RuntimePromptService prompts) =>
-            new(prompts, NullLogger<PromptAdminService>.Instance);
+        public ProjectSettingsService CreateProjectSettings()
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["TaskRepository"] = _root,
+                })
+                .Build();
+            return new ProjectSettingsService(
+                NullLogger<ProjectSettingsService>.Instance,
+                config);
+        }
+
+        public PromptAdminService CreateAdminService(
+            RuntimePromptService prompts,
+            ProjectSettingsService? settings = null) =>
+            new(prompts, NullLogger<PromptAdminService>.Instance, settings);
 
         public void Dispose()
         {

@@ -74,6 +74,7 @@
             @for (entry of group.entries; track entry.ts + entry.summary) {
               <button type="button" class="orch-feed__entry"
                       [class.orch-feed__entry--selected]="isSelected(entry)"
+                      [class.orch-feed__entry--alert]="entry.kind === 'alert'"
                       [class.orch-feed__entry--decision]="entry.kind === 'decision'"
                       [class.orch-feed__entry--action]="entry.kind === 'action'"
                       [class.orch-feed__entry--observation]="entry.kind === 'observation'"

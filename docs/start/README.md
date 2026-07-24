@@ -54,13 +54,16 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Global search palette and API | [domains/frontend.md#global-search](../system/domains/frontend.md#global-search) |
 | Frontend navigation style guide | [frontend/style-guide/navigation.md](../quality/frontend/style-guide/navigation.md) |
 | CLI | [domains/cli.md](../system/domains/cli.md) |
+| Model routing policy (model, thinking level, risk floors, benchmark evidence) | [domains/model-routing-policy.md](../system/domains/model-routing-policy.md) |
 | Tokens | [domains/tokens.md](../system/domains/tokens.md) |
 | ADR archive | [architecture/decisions/adr-archive.md](../system/architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](../system/architecture/model.md) |
 | Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Workbench](../quality/architecture-quality-layer/index.html) |
+| Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Workbench](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |
+| Model and thinking-level indicator vocabulary | [design/model-level-indicator.md](../quality/design/model-level-indicator.md) |
 | Engineering style guides (technology-aware and prompt-injected) | [quality/README.md](../quality/README.md) |
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](../quality/design/app-survey-2026-07-11.html) |
 | Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](../quality/design/angular-performance-report-2026-07.html) |
@@ -78,12 +81,14 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Experiment workbenches (Explorer, orchestrator chat, decision-to-task) | [concept](../concepts/experimentier-workbench.md) · [interactive mockup](../concepts/mockups/experimentier-workbench.html) |
 | Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](../concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](../concepts/mockups/decoupled-lifecycles.html) |
 | Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, and component projects) | [concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md) |
+| Wiki hosting options and recommendation (full networked Studio vs read-only service vs static export; AGT-2276) | [concepts/wiki-hosting-options-2026-07.html](../concepts/wiki-hosting-options-2026-07.html) |
 | Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](../concepts/deployment-first-class.md) · [interactive mockup](../concepts/mockups/deployment-first-class.html) |
 | Release semantics (integration vs acceptance vs release vs stable freeze; transparent watering-can model) | [concept](../concepts/release-semantics.md) |
 | Project Overview operator dashboard (metrics, Visual Evidence Queue, Project URLs, deployment summary, Wiki entry) | [mockup contract](../concepts/project-overview-dashboard/README.md) · [interactive mockup](../concepts/project-overview-dashboard/ui.html) |
 | Wiki classification | [product/wiki-document-classification.md](./wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](./wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../app/schemas/wiki-document-companion.schema.json) |
+| Wiki page lifecycle schema | [schemas/wiki-page-lifecycle.schema.json](../app/schemas/wiki-page-lifecycle.schema.json) |
 | Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](../app/schemas/model-qualification-event.schema.json) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |

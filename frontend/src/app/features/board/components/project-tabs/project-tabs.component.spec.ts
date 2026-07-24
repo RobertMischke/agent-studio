@@ -60,6 +60,8 @@ describe('ProjectTabsComponent (smoke)', () => {
     expect(chip?.models).toEqual(['gpt-5.2', 'claude-sonnet-4-6']);
     expect(chip?.tooltip).toContain('Input 130k');
     expect(chip?.tooltip).toContain('Output 22k');
+    expect(chip?.tooltip).toContain('Estimated cost: $0.13');
+    expect(chip?.tooltip).toContain('historical list prices');
   });
 
   it('derives runner and auto-pickup chip state without component logic', () => {
@@ -105,6 +107,8 @@ function projectJob(
       cacheReadTokens: 0,
       cacheCreationTokens: 0,
       totalTokens: inputTokens + outputTokens,
+      estimatedApiCostUsd: inputTokens / 1_000_000,
+      allModelsPriced: true,
       lastModel: model,
       lastUpdate: ts,
       entries: [{

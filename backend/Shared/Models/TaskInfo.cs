@@ -232,6 +232,13 @@ public record TaskInfo
     public DateTime? PhaseEnteredAt { get; init; }
 
     /// <summary>
+    /// Checks from the optional lifecycle sidecar while a task is in post
+    /// processing. This read-only projection lets compact board activity labels
+    /// name the running step without making the browser read workspace files.
+    /// </summary>
+    public List<LifecycleCheck> PostProcessingChecks { get; init; } = [];
+
+    /// <summary>
     /// Run-Liveness Slice B (concept Rule 2): when this <c>3-progress</c> card is
     /// waiting on an unanswered steer / NeedsInput question, the UTC time the wait
     /// started - read from the durable <c>steer-pending.json</c> marker. Null when
@@ -397,8 +404,8 @@ public record TaskInfo
 
 /// <summary>
 /// Card-renderable projection of the runner that holds a task's active run lease
-/// (AGT-2003). Sourced from the in-memory run-lease record; the fencing token and
-/// lease id ride along for the tooltip / audit trail but the card only needs
+/// (AGT-2003). Sourced from the canonical persisted RunAttempt lease; the attempt,
+/// epoch, fencing token, and lease id ride along for the tooltip / audit trail but the card only needs
 /// <see cref="RunnerName"/> and <see cref="IsRemote"/>.
 /// </summary>
 public record TaskRunnerInfo
@@ -421,6 +428,10 @@ public record TaskRunnerInfo
     public string LeaseId { get; init; } = "";
     /// <summary>Monotonic fencing token of the active grant (audit / tooltip only).</summary>
     public long FencingToken { get; init; }
+    /// <summary>Canonical persisted RunAttempt identity.</summary>
+    public string? AttemptId { get; init; }
+    /// <summary>Authority epoch that issued the current fence.</summary>
+    public long AuthorityEpoch { get; init; }
     /// <summary>UTC instant the active lease was acquired.</summary>
     public DateTime AcquiredAt { get; init; }
 }
@@ -480,7 +491,10 @@ public record TaskOutcomeIssue
     public string Kind { get; init; } = "";
     public string Label { get; init; } = "";
     public string Severity { get; init; } = "Info";
+    /// <summary>Bounded compatibility summary for compact legacy consumers.</summary>
     public string Summary { get; init; } = "";
+    /// <summary>Complete normalized source line for an explicit technical-details surface.</summary>
+    public string TechnicalDetails { get; init; } = "";
     public DateTime? LastSeenAt { get; init; }
 }
 

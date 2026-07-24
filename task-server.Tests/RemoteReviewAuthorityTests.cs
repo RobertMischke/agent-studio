@@ -577,18 +577,48 @@ public sealed class RemoteReviewAuthorityTests
             "test",
             default);
         var coding = await store.ClaimAsync(new ClaimRequest(codingId, codingInstance), codingId, default);
+        var resultRef = $"refs/heads/agent-studio/results/{coding.Run!.RunId}/{ResultSha}";
+        var envelope = new ImmutableResultEnvelope(
+            RepositoryId,
+            coding.Run.RunId,
+            new string('1', 40),
+            ResultSha,
+            resultRef,
+            null,
+            new string('2', 64),
+            RepositoryUrl: RepositoryUrl);
+        var envelopeDigest = ResultEnvelopeDigest.Compute(envelope);
+        await store.AcknowledgeResultHandoffAsync(
+            coding.Run.RunId,
+            new ResultHandoffRequest(
+                codingId,
+                codingInstance,
+                coding.Lease!.LeaseId,
+                coding.Lease.Fence,
+                1,
+                $"handoff:{coding.Run.RunId}:{envelopeDigest}",
+                envelopeDigest,
+                envelope),
+            codingId,
+            default);
         await store.CompleteRunAsync(
-            coding.Run!.RunId,
+            coding.Run.RunId,
             new CompleteRunRequest(
-                codingId, codingInstance, coding.Lease!.LeaseId, coding.Lease.Fence,
-                "success", "done", ResultSha, RepositoryId, RepositoryUrl,
-                $"refs/results/{task.TaskKey}/{ResultSha}"),
+                codingId,
+                codingInstance,
+                coding.Lease.LeaseId,
+                coding.Lease.Fence,
+                "success",
+                "done",
+                envelopeDigest,
+                $"completion:{coding.Run.RunId}:{envelopeDigest}",
+                2),
             codingId,
             default);
         return await store.CreateReviewSubjectAsync(
             new CreateReviewSubjectRequest(
                 task.TaskId, coding.Run.RunId, RepositoryId, RepositoryUrl, ResultSha,
-                $"refs/results/{task.TaskKey}/{ResultSha}", null, null, codingHost,
+                resultRef, null, null, codingHost,
                 "policy-v1", Plan(policyDifferentHost), $"subject-{task.TaskId}"),
             "orchestrator",
             default);

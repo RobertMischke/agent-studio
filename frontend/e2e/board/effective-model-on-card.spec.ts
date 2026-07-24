@@ -80,14 +80,12 @@ test.describe('job-card effective model', () => {
     const chip = card.locator('[data-testid="task-card-effective-model"]');
     await expect(chip).toBeVisible();
     await expect(chip).toHaveAttribute('data-model-source', 'default');
-    await expect(chip).toContainText('opus 4.7');
+    await expect(chip).toContainText('OP4.7');
     // The literal `agent` value ("human") must NOT leak into the chip.
     await expect(chip).not.toContainText('human');
-    // Italics carries the "(default)" cue.
-    const fontStyle = await chip.locator('.task-card__effective-model-name').evaluate(
-      (el) => getComputedStyle(el).fontStyle
-    );
-    expect(fontStyle).toBe('italic');
+    // A dashed outline carries the inherited-default cue without weakening the
+    // family colour or adding text to a dense board card.
+    await expect(chip).toHaveCSS('border-style', 'dashed');
   });
 
   test('renders the explicit model when cliType/model are set on the job', async ({ page }) => {
@@ -113,12 +111,9 @@ test.describe('job-card effective model', () => {
     const chip = card.locator('[data-testid="task-card-effective-model"]');
     await expect(chip).toBeVisible();
     await expect(chip).toHaveAttribute('data-model-source', 'explicit');
-    await expect(chip).toContainText('gpt-5-codex');
-    // Explicit models render in upright type, not italic.
-    const fontStyle = await chip.locator('.task-card__effective-model-name').evaluate(
-      (el) => getComputedStyle(el).fontStyle
-    );
-    expect(fontStyle).toBe('normal');
+    await expect(chip).toContainText('COD5');
+    await expect(chip).toHaveAttribute('data-model-family', 'openai');
+    await expect(chip).toHaveCSS('border-style', 'solid');
   });
 
   test.afterAll(async () => {

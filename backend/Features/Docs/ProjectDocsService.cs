@@ -18,6 +18,7 @@ public class ProjectDocsService
 {
     private readonly TaskScannerService _scanner;
     private readonly ProjectRegistry _registry;
+    private readonly GitService? _git;
     private readonly ILogger<ProjectDocsService> _logger;
 
     private const string SecurityRel = "docs/operations/security";
@@ -90,13 +91,18 @@ public class ProjectDocsService
 
     // projectName -> (docs signature, assembled tree, ETag). A signature hit means
     // the docs/ tree is provably unchanged, so the cached tree is served verbatim.
-    private readonly ConcurrentDictionary<string, (string Signature, WikiTree Tree, string ETag)> _treeCache =
+    private readonly ConcurrentDictionary<string, (string Signature, string SourceKey, WikiTree Tree, string ETag)> _treeCache =
         new(StringComparer.Ordinal);
 
-    public ProjectDocsService(TaskScannerService scanner, ProjectRegistry registry, ILogger<ProjectDocsService> logger)
+    public ProjectDocsService(
+        TaskScannerService scanner,
+        ProjectRegistry registry,
+        ILogger<ProjectDocsService> logger,
+        GitService? git = null)
     {
         _scanner = scanner;
         _registry = registry;
+        _git = git;
         _logger = logger;
     }
 
@@ -120,6 +126,45 @@ public class ProjectDocsService
     /// </summary>
     private string? ResolveBaseDir(string projectName)
         => ProjectRepoResolver.ResolveForProject(projectName, _scanner, _registry);
+
+    private ProjectRecord? FindProject(string projectName) =>
+        _registry.FindByIdOrDisplayName(projectName) ?? _registry.FindByShortCode(projectName);
+
+    private WikiSourceContext? ResolveWikiSource(string projectName)
+    {
+        var checkout = ResolveBaseDir(projectName);
+        if (checkout == null) return null;
+        var configured = FindProject(projectName)?.WikiSourceBranch;
+        var repoRoot = _git?.ResolveRepoRootForProject(projectName) ?? checkout;
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            var status = _git?.GetStatusForRepoRoot(repoRoot);
+            var sha = _git?.GetHeadShaCached(repoRoot);
+            return new(checkout, new WikiSourceInfo(
+                "checkout", status?.Branch ?? "checkout", sha, ShortSha(sha), true, null));
+        }
+
+        if (_git == null)
+            return new(Path.Combine(Path.GetTempPath(), "agent-studio", "wiki-unavailable"),
+                new WikiSourceInfo("branch", configured, null, null, false, "Git service is unavailable."));
+        var snapshot = _git.GetWikiBranchSnapshotCached(repoRoot, configured);
+        var snapshotRoot = string.IsNullOrWhiteSpace(snapshot.RootPath)
+            ? Path.Combine(Path.GetTempPath(), "agent-studio", "wiki-unavailable")
+            : snapshot.RootPath;
+        return new(snapshotRoot, new WikiSourceInfo(
+            "branch", configured, snapshot.Sha, snapshot.ShortSha, false, snapshot.Error));
+    }
+
+    private static string? ShortSha(string? sha) =>
+        string.IsNullOrWhiteSpace(sha) ? null : sha[..Math.Min(8, sha.Length)];
+
+    public string? WikiWriteBlockReason(string projectName)
+    {
+        var branch = FindProject(projectName)?.WikiSourceBranch;
+        return string.IsNullOrWhiteSpace(branch)
+            ? null
+            : $"Wiki source is '{branch}', not the checkout. Editing and uploads are disabled to prevent silent divergence. Switch the wiki source to Checkout in Project Settings to write.";
+    }
 
     private static bool IsSafeRelPath(string relPath)
     {
@@ -231,10 +276,10 @@ public class ProjectDocsService
     /// </summary>
     public WikiOverview? GetWikiOverview(string projectName)
     {
-        var baseDir = ResolveBaseDir(projectName);
-        if (baseDir == null) return null;
+        var source = ResolveWikiSource(projectName);
+        if (source == null) return null;
 
-        var wikiDir = Path.Combine(baseDir, WikiRel);
+        var wikiDir = Path.Combine(source.BaseDir, WikiRel);
         return new WikiOverview(
             ProjectName: projectName,
             BaseDir: wikiDir,
@@ -252,7 +297,8 @@ public class ProjectDocsService
 
     public WikiSaveResult WriteWikiFile(string projectName, string relPath, string content)
     {
-        var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
+        if (WikiWriteBlockReason(projectName) is { } blocked) return WikiSaveResult.Fail(blocked);
+        var full = ResolveWikiPath(projectName, relPath, requireDoc: true, forWrite: true);
         if (full == null) return WikiSaveResult.Fail("Invalid path.");
         if (!File.Exists(full)) return WikiSaveResult.Fail("File not found.");
         var before = File.ReadAllText(full);
@@ -284,7 +330,7 @@ public class ProjectDocsService
     /// <paramref name="requireDoc"/> is set, only wiki document extensions
     /// (<c>.md</c> / <c>.html</c> / <c>.htm</c> / <c>.json</c>) pass.
     /// </summary>
-    private string? ResolveWikiPath(string projectName, string relPath, bool requireDoc)
+    private string? ResolveWikiPath(string projectName, string relPath, bool requireDoc, bool forWrite = false)
     {
         if (string.IsNullOrWhiteSpace(relPath)) return null;
         if (relPath.Contains("..", StringComparison.Ordinal)) return null;
@@ -292,7 +338,8 @@ public class ProjectDocsService
         if (requireDoc && !WikiDocExtensions.Contains(Path.GetExtension(relPath)))
             return null;
 
-        var baseDir = ResolveBaseDir(projectName);
+        if (forWrite && WikiWriteBlockReason(projectName) != null) return null;
+        var baseDir = forWrite ? ResolveBaseDir(projectName) : ResolveWikiSource(projectName)?.BaseDir;
         if (baseDir == null) return null;
 
         var root = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
@@ -336,22 +383,24 @@ public class ProjectDocsService
     /// </summary>
     public WikiTreeResult? GetWikiTreeResult(string projectName)
     {
-        var baseDir = ResolveBaseDir(projectName);
-        if (baseDir == null) return null;
+        var source = ResolveWikiSource(projectName);
+        if (source == null) return null;
 
         using var _t = GitProcessTelemetry.BeginRequest("wiki/tree", _logger);
 
-        var wikiDir = Path.Combine(baseDir, WikiRel);
+        var wikiDir = Path.Combine(source.BaseDir, WikiRel);
         var exists = Directory.Exists(wikiDir);
         if (!exists)
-            return new WikiTreeResult(new WikiTree(projectName, wikiDir, false, []), FormatETag("wiki-tree-empty"));
+            return new WikiTreeResult(new WikiTree(projectName, "docs", false, [], source.Info), FormatETag("wiki-tree-empty-" + (source.Info.Commit ?? source.Info.Branch)));
 
         var fullWikiDir = Path.GetFullPath(wikiDir);
         var signature = ComputeDocsSignature(fullWikiDir);
+        var sourceKey = string.Join('\u001f', source.Info.Mode, source.Info.Branch, source.Info.Commit ?? "unresolved");
 
         if (signature != null
             && _treeCache.TryGetValue(projectName, out var cached)
-            && cached.Signature == signature)
+            && cached.Signature == signature
+            && cached.SourceKey == sourceKey)
         {
             return new WikiTreeResult(cached.Tree, cached.ETag);
         }
@@ -362,11 +411,11 @@ public class ProjectDocsService
             LoadWikiMetadataIndex(wikiDir),
             _titleCache,
             LoadWikiFolderOrder(fullWikiDir));
-        var tree = new WikiTree(projectName, wikiDir, true, root);
-        var etag = FormatETag("wiki-tree-" + (signature ?? "nosig"));
+        var tree = new WikiTree(projectName, "docs", true, root, source.Info);
+        var etag = FormatETag("wiki-tree-" + sourceKey + "-" + (signature ?? "nosig"));
 
         if (signature != null)
-            _treeCache[projectName] = (signature, tree, etag);
+            _treeCache[projectName] = (signature, sourceKey, tree, etag);
 
         return new WikiTreeResult(tree, etag);
     }
@@ -430,13 +479,13 @@ public class ProjectDocsService
     /// </summary>
     public WikiRecentEditsResult? GetWikiRecentEditsResult(string projectName, GitService git, int limit = 12)
     {
-        var baseDir = ResolveBaseDir(projectName);
-        if (baseDir == null) return null;
+        var source = ResolveWikiSource(projectName);
+        if (source == null) return null;
         if (limit <= 0) limit = 12;
 
         using var _t = GitProcessTelemetry.BeginRequest("wiki/recent", _logger);
 
-        var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var wikiDir = Path.GetFullPath(Path.Combine(source.BaseDir, WikiRel));
         var exists = Directory.Exists(wikiDir);
         if (!exists)
             return new WikiRecentEditsResult(
@@ -447,10 +496,12 @@ public class ProjectDocsService
             return new WikiRecentEditsResult(
                 new WikiRecentEdits(projectName, wikiDir, true, []), FormatETag("wiki-recent-norepo"));
 
-        var head = git.GetHeadShaCached(repoRoot);
-        var key = string.Join('', "wiki-recent-payload", repoRoot, wikiDir, limit);
-        var payload = git.MemoizeByHead(repoRoot, key,
-            () => BuildRecentEdits(projectName, git, repoRoot, wikiDir, limit));
+        var head = source.Info.Commit ?? git.GetHeadShaCached(repoRoot);
+        var key = string.Join('', "wiki-recent-payload", repoRoot, wikiDir, limit, head);
+        var payload = source.Info.Mode == "branch"
+            ? BuildRecentEdits(projectName, git, repoRoot, wikiDir, limit, head)
+            : git.MemoizeByHead(repoRoot, key,
+                () => BuildRecentEdits(projectName, git, repoRoot, wikiDir, limit, null));
         var etag = FormatETag("wiki-recent-" + (head ?? "nohead") + "-" + limit);
         return new WikiRecentEditsResult(payload, etag);
     }
@@ -462,21 +513,19 @@ public class ProjectDocsService
     /// unchanged from the original inline implementation.
     /// </summary>
     private WikiRecentEdits BuildRecentEdits(
-        string projectName, GitService git, string repoRoot, string wikiDir, int limit)
+        string projectName, GitService git, string repoRoot, string wikiDir, int limit, string? atRef)
     {
-        var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
+        const string docsRepoRel = "docs";
         // Ask git for more distinct files than we need: some will be filtered
         // out as companions, deletions, or non-doc files below.
-        var raw = git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, Math.Min(limit * 4, 200));
+        var raw = git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, Math.Min(limit * 4, 200), atRef: atRef);
 
         var results = new List<WikiRecentEdit>();
         foreach (var e in raw)
         {
-            var full = Path.GetFullPath(Path.Combine(repoRoot, e.RepoRelPath));
-            if (!full.StartsWith(wikiDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                && !full.Equals(wikiDir, StringComparison.OrdinalIgnoreCase))
-                continue;
-            var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
+            if (!e.RepoRelPath.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)) continue;
+            var docsRel = e.RepoRelPath[5..];
+            var full = Path.GetFullPath(Path.Combine(wikiDir, docsRel));
             var ext = Path.GetExtension(full);
             if (!WikiDocExtensions.Contains(ext)) continue;
             if (IsHiddenWikiPath(docsRel) || IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
@@ -545,11 +594,11 @@ public class ProjectDocsService
     /// </summary>
     public WikiPulse? GetWikiPulse(string projectName, GitService git, int feedLimit = 12)
     {
-        var baseDir = ResolveBaseDir(projectName);
-        if (baseDir == null) return null;
+        var source = ResolveWikiSource(projectName);
+        if (source == null) return null;
         feedLimit = Math.Clamp(feedLimit, 1, 50);
 
-        var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var wikiDir = Path.GetFullPath(Path.Combine(source.BaseDir, WikiRel));
         var generatedAt = DateTime.UtcNow.ToString("o");
 
         if (!Directory.Exists(wikiDir))
@@ -561,7 +610,8 @@ public class ProjectDocsService
                 WikiPulseDrift.Unavailable(reason),
                 WikiPulseCritical.Unavailable(reason),
                 WikiPulseWarnings.Unavailable(reason),
-                WikiPulseActivity.Unavailable(reason));
+                WikiPulseActivity.Unavailable(reason))
+            { Lifecycle = WikiPulseLifecycle.Unavailable(reason) };
         }
 
         // Inbox + the LLM critical-pages list are pure filesystem reads (no git),
@@ -569,6 +619,7 @@ public class ProjectDocsService
         // critical list is the wiki-grading verdict surfaced in Pulse (AGT-2051),
         // supplementing the deterministic drift bar below.
         var allDocs = ListWikiDocs(wikiDir);
+        var lifecycle = BuildPulseLifecycle(wikiDir, allDocs);
         var inbox = BuildPulseInbox(allDocs);
         var critical = BuildPulseCritical(allDocs, LoadWikiMetadataIndex(wikiDir));
         var warnings = BuildPulseWarnings(wikiDir, allDocs);
@@ -584,23 +635,23 @@ public class ProjectDocsService
                 WikiPulseDrift.Unavailable(reason),
                 critical,
                 warnings,
-                activity);
+                activity)
+            { Lifecycle = lifecycle };
         }
 
-        var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
+        const string docsRepoRel = "docs";
         // One git walk backs BOTH the feed (top N, newest first) and the drift
         // heuristic's per-page "last updated" map, so Pulse costs one docs log.
-        var rawRecent = git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, limit: 2000, commitScan: 1500);
+        var rawRecent = git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, limit: 2000, commitScan: 1500,
+            atRef: source.Info.Mode == "branch" ? source.Info.Commit : null);
 
         var feedItems = new List<WikiPulseFeedItem>();
         var lastUpdateByRel = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
         foreach (var e in rawRecent)
         {
-            var full = Path.GetFullPath(Path.Combine(repoRoot, e.RepoRelPath));
-            if (!full.StartsWith(wikiDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                && !full.Equals(wikiDir, StringComparison.OrdinalIgnoreCase))
-                continue;
-            var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
+            if (!e.RepoRelPath.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)) continue;
+            var docsRel = e.RepoRelPath[5..];
+            var full = Path.GetFullPath(Path.Combine(wikiDir, docsRel));
             var ext = Path.GetExtension(full);
             if (!WikiDocExtensions.Contains(ext)) continue;
             if (IsHiddenWikiPath(docsRel) || IsWikiCompanionFile(docsRel) || IsWikiConfigFile(docsRel)) continue;
@@ -634,7 +685,8 @@ public class ProjectDocsService
             allDocs, lastUpdateByRel, repoRoot, codeRoots, git,
             BuildFolderOrderIndex(LoadWikiFolderOrder(wikiDir), parentRel: string.Empty));
 
-        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity);
+        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity)
+        { Lifecycle = lifecycle };
     }
 
     private static readonly Regex MarkdownLinkRegex =
@@ -847,6 +899,224 @@ public class ProjectDocsService
     }
 
     /// <summary>
+    /// Projects lifecycle-aware Markdown pages into Pulse. The page frontmatter
+    /// is the only durable lifecycle source for Markdown: companion sidecars
+    /// keep grading, classification, and task links, but never duplicate this
+    /// workflow state. Workbench descriptors are merged by
+    /// <see cref="MergeWorkbenchLifecycle"/> because HTML cannot carry leading
+    /// YAML without becoming invalid HTML.
+    /// </summary>
+    private static WikiPulseLifecycle BuildPulseLifecycle(
+        string wikiDir, IReadOnlyList<WikiFileEntry> docs)
+    {
+        var items = new List<WikiLifecycleItem>();
+        foreach (var doc in docs.Where(d =>
+                     Path.GetExtension(d.RelPath).Equals(".md", StringComparison.OrdinalIgnoreCase)))
+        {
+            var full = Path.Combine(wikiDir, doc.RelPath.Replace('/', Path.DirectorySeparatorChar));
+            try
+            {
+                var parsed = ParseLifecycleFrontmatter(File.ReadAllText(full));
+                if (parsed == null) continue;
+                items.Add(new WikiLifecycleItem(
+                    doc.RelPath, doc.Title, parsed.PageKind, parsed.State,
+                    parsed.EditedBy, parsed.EditedAtUtc, parsed.History,
+                    WorkbenchId: null, Valid: parsed.Valid, Error: parsed.Error));
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "ProjectDocsService: unreadable lifecycle page ignored.");
+            }
+        }
+
+        SortLifecycleItems(items);
+        return new WikiPulseLifecycle(true,
+            items.Count == 0 ? "No lifecycle-aware designs, concepts, explorations, or Workbenches yet." : null,
+            items.Count, items);
+    }
+
+    /// <summary>
+    /// Adds Workbenches to the same lifecycle projection without copying their
+    /// state into Markdown or companion metadata. Schema-v2 descriptors expose
+    /// the common lifecycle fields directly; v1 descriptors are normalized by
+    /// the Workbench catalogue as a bounded compatibility path.
+    /// </summary>
+    public static WikiPulseLifecycle MergeWorkbenchLifecycle(
+        WikiPulseLifecycle lifecycle, WorkbenchCatalogue? catalogue)
+    {
+        if (catalogue == null || catalogue.Items.Count == 0) return lifecycle;
+        var items = lifecycle.Items.ToList();
+        items.AddRange(catalogue.Items.Select(workbench => new WikiLifecycleItem(
+            workbench.EntryPath,
+            workbench.Title,
+            "workbench",
+            workbench.LifecycleState ?? WorkbenchLifecycleState(workbench.Status, workbench.Phase),
+            workbench.EditedBy,
+            workbench.UpdatedAtUtc.ToString("o"),
+            workbench.LifecycleHistory ?? [],
+            workbench.Id,
+            workbench.Valid,
+            workbench.Error)));
+        SortLifecycleItems(items);
+        return new WikiPulseLifecycle(true, null, items.Count, items);
+    }
+
+    private static WikiLifecycleFrontmatter? ParseLifecycleFrontmatter(string text)
+    {
+        var frontmatter = AgentStudio.Cli.FrontmatterParser.TryExtractRawFrontmatter(text);
+        if (frontmatter == null) return null;
+        var fields = ParseLifecycleTopLevel(frontmatter);
+        string? Get(string key) => fields.TryGetValue(key, out var value)
+            && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
+
+        var schema = Get("lifecycleSchema");
+        var kind = Get("pageKind");
+        var state = Get("lifecycleState");
+        if (schema == null && kind == null && state == null) return null;
+
+        var errors = new List<string>();
+        if (schema != "wiki-page-lifecycle/v1")
+            errors.Add($"Unsupported lifecycleSchema '{schema ?? "(missing)"}'.");
+        if (!WikiLifecycleKinds.Contains(kind ?? string.Empty))
+            errors.Add($"Unsupported pageKind '{kind ?? "(missing)"}'.");
+        if (!WikiLifecycleStates.Contains(state ?? string.Empty))
+            errors.Add($"Unsupported lifecycleState '{state ?? "(missing)"}'.");
+        var editedBy = Get("editedBy");
+        var editedAt = Get("editedAt");
+        if (editedBy == null) errors.Add("editedBy is required.");
+        if (!IsUtcLifecycleTimestamp(editedAt))
+            errors.Add("editedAt must be an ISO UTC timestamp ending in Z.");
+
+        var history = ParseLifecycleHistory(frontmatter, errors);
+        if (history.Count == 0) errors.Add("lifecycleHistory needs at least one entry.");
+        else
+        {
+            var latest = history[^1];
+            if (state != null && latest.State != state)
+                errors.Add("The latest lifecycleHistory state must match lifecycleState.");
+            if (editedBy != null && latest.EditedBy != editedBy)
+                errors.Add("The latest lifecycleHistory editedBy must match editedBy.");
+            if (editedAt != null && latest.EditedAtUtc != editedAt)
+                errors.Add("The latest lifecycleHistory editedAt must match editedAt.");
+        }
+        return new WikiLifecycleFrontmatter(
+            kind ?? "concept", state ?? "in-progress", editedBy, editedAt,
+            history, errors.Count == 0, errors.Count == 0 ? null : string.Join(' ', errors));
+    }
+
+    /// <summary>
+    /// Reads only unindented frontmatter scalars. The shared flat parser also
+    /// sees fields nested below lifecycleHistory, which would let an older
+    /// history entry overwrite the current editedBy/editedAt values.
+    /// </summary>
+    private static Dictionary<string, string> ParseLifecycleTopLevel(string frontmatter)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in frontmatter.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (raw.Length == 0 || char.IsWhiteSpace(raw[0]) || raw.StartsWith('#')) continue;
+            var colon = raw.IndexOf(':');
+            if (colon <= 0) continue;
+            fields[raw[..colon].Trim()] = UnquoteLifecycleScalar(raw[(colon + 1)..]);
+        }
+        return fields;
+    }
+
+    private static List<WikiLifecycleHistoryEntry> ParseLifecycleHistory(
+        string frontmatter, List<string> errors)
+    {
+        var entries = new List<WikiLifecycleHistoryEntry>();
+        Dictionary<string, string>? current = null;
+        var inside = false;
+        var entryNumber = 0;
+
+        void Flush()
+        {
+            if (current == null) return;
+            entryNumber++;
+            current.TryGetValue("state", out var state);
+            current.TryGetValue("editedBy", out var editedBy);
+            current.TryGetValue("editedAt", out var editedAt);
+            current.TryGetValue("note", out var note);
+            if (!WikiLifecycleStates.Contains(state ?? string.Empty))
+                errors.Add($"lifecycleHistory entry {entryNumber} has an unsupported state.");
+            if (string.IsNullOrWhiteSpace(editedBy))
+                errors.Add($"lifecycleHistory entry {entryNumber} needs editedBy.");
+            if (!IsUtcLifecycleTimestamp(editedAt))
+                errors.Add($"lifecycleHistory entry {entryNumber} needs an ISO UTC editedAt ending in Z.");
+            if (!string.IsNullOrWhiteSpace(state)
+                && !string.IsNullOrWhiteSpace(editedBy)
+                && !string.IsNullOrWhiteSpace(editedAt))
+                entries.Add(new(state, editedBy, editedAt, note));
+            current = null;
+        }
+
+        foreach (var raw in frontmatter.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (!inside)
+            {
+                if (raw.Trim().Equals("lifecycleHistory:", StringComparison.OrdinalIgnoreCase)) inside = true;
+                continue;
+            }
+            if (raw.Length > 0 && !char.IsWhiteSpace(raw[0])) { Flush(); break; }
+            var line = raw.Trim();
+            if (line.StartsWith("- ", StringComparison.Ordinal))
+            {
+                Flush();
+                current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                line = line[2..].Trim();
+            }
+            if (current == null || line.Length == 0) continue;
+            var colon = line.IndexOf(':');
+            if (colon <= 0) continue;
+            current[line[..colon].Trim()] = UnquoteLifecycleScalar(line[(colon + 1)..]);
+        }
+        Flush();
+        return entries;
+    }
+
+    private static string UnquoteLifecycleScalar(string value) =>
+        value.Trim().Trim('"', '\'');
+
+    private static bool IsUtcLifecycleTimestamp(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value.EndsWith('Z')
+        && DateTimeOffset.TryParse(value, out var parsed)
+        && parsed.Offset == TimeSpan.Zero;
+
+    private static string WorkbenchLifecycleState(string status, string? phase) => status switch
+    {
+        "decision-pending" => "review-requested",
+        "decided" => "decided",
+        "archived" => "done",
+        "invalid" => "review-requested",
+        _ when phase == "decision-ready" => "review-requested",
+        _ => "in-progress",
+    };
+
+    private static void SortLifecycleItems(List<WikiLifecycleItem> items) => items.Sort((a, b) =>
+    {
+        var byState = LifecycleStateRank(a.State).CompareTo(LifecycleStateRank(b.State));
+        if (byState != 0) return byState;
+        var byDate = string.Compare(b.EditedAtUtc, a.EditedAtUtc, StringComparison.Ordinal);
+        return byDate != 0 ? byDate : string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase);
+    });
+
+    private static int LifecycleStateRank(string state) => state switch
+    {
+        "review-requested" => 0,
+        "in-progress" => 1,
+        "decided" => 2,
+        "done" => 3,
+        _ => 4,
+    };
+
+    private static readonly HashSet<string> WikiLifecycleKinds = new(StringComparer.Ordinal)
+        { "design", "concept", "exploration", "workbench" };
+    private static readonly HashSet<string> WikiLifecycleStates = new(StringComparer.Ordinal)
+        { "in-progress", "review-requested", "decided", "done" };
+
+    /// <summary>
     /// The top-level docs folder a page lives under (the first path segment), or
     /// <c>null</c> for a page directly at the wiki root. Backs the Pulse
     /// change-feed area badge and the per-folder drift grade bar.
@@ -1016,14 +1286,15 @@ public class ProjectDocsService
         if (full == null || !File.Exists(full)) return null;
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
+        var source = ResolveWikiSource(projectName);
         List<GitCommitInfo> commits = [];
         string? trailerModel = null;
         string? head = null;
         if (!string.IsNullOrWhiteSpace(repoRoot))
         {
-            head = git.GetHeadShaCached(repoRoot);
-            var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
-            var info = git.GetWikiDocGitInfoCached(repoRoot, repoRel, 50);
+            head = source?.Info.Commit ?? git.GetHeadShaCached(repoRoot);
+            var repoRel = "docs/" + relPath.Replace('\\', '/');
+            var info = git.GetWikiDocGitInfoCached(repoRoot, repoRel, 50, source?.Info.Mode == "branch" ? source.Info.Commit : null);
             commits = info.Commits;
             trailerModel = info.Model;
         }
@@ -1080,7 +1351,7 @@ public class ProjectDocsService
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot)) return null;
 
-        var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+        var repoRel = "docs/" + relPath.Replace('\\', '/');
         var content = git.GetFileAtCommitCached(repoRoot, sha, repoRel);
         if (content == null) return null;
 
@@ -1675,7 +1946,7 @@ public class ProjectDocsService
     /// move/delete operations resolve too.
     /// </summary>
     public string? ResolveWikiNodeFullPath(string projectName, string relPath) =>
-        ResolveWikiPath(projectName, relPath, requireDoc: false);
+        ResolveWikiPath(projectName, relPath, requireDoc: false, forWrite: true);
 
     /// <summary>
     /// Creates a new wiki document on disk (seed content optional). Returns the
@@ -1684,10 +1955,11 @@ public class ProjectDocsService
     /// </summary>
     public WikiMutationResult CreateWikiPage(string projectName, string relPath, string? content)
     {
+        if (WikiWriteBlockReason(projectName) is { } blocked) return WikiMutationResult.Fail(blocked);
         var ext = Path.GetExtension(relPath);
         if (!WikiDocExtensions.Contains(ext))
             return WikiMutationResult.Fail("Only .md, .html, or .json pages are allowed.");
-        var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
+        var full = ResolveWikiPath(projectName, relPath, requireDoc: true, forWrite: true);
         if (full == null) return WikiMutationResult.Fail("Invalid path.");
         if (File.Exists(full)) return WikiMutationResult.Fail("A page with that name already exists.");
 
@@ -1730,7 +2002,8 @@ public class ProjectDocsService
     /// </summary>
     public WikiMutationResult CreateWikiFolder(string projectName, string relPath)
     {
-        var full = ResolveWikiPath(projectName, relPath, requireDoc: false);
+        if (WikiWriteBlockReason(projectName) is { } blocked) return WikiMutationResult.Fail(blocked);
+        var full = ResolveWikiPath(projectName, relPath, requireDoc: false, forWrite: true);
         if (full == null) return WikiMutationResult.Fail("Invalid path.");
         if (Directory.Exists(full)) return WikiMutationResult.Fail("A folder with that name already exists.");
 
@@ -2414,7 +2687,22 @@ public record WikiTreeNode(
     WikiClassification? Classification = null);
 
 /// <summary>The physical docs/ folder tree exposed to the wiki UI.</summary>
-public record WikiTree(string ProjectName, string BaseDir, bool Exists, List<WikiTreeNode> Root);
+public record WikiSourceInfo(
+    string Mode,
+    string Branch,
+    string? Commit,
+    string? ShortCommit,
+    bool Writable,
+    string? Error);
+
+internal record WikiSourceContext(string BaseDir, WikiSourceInfo Info);
+
+public record WikiTree(
+    string ProjectName,
+    string BaseDir,
+    bool Exists,
+    List<WikiTreeNode> Root,
+    WikiSourceInfo? Source = null);
 
 /// <summary>
 /// A cached wiki payload plus the HTTP entity tag the GET endpoint uses to
@@ -2487,7 +2775,38 @@ public record WikiPulse(
 {
     /// <summary>Open experiment questions projected into Pulse as a thinking inbox.</summary>
     public WorkbenchCatalogue? Workbenches { get; init; }
+
+    /// <summary>Lifecycle-aware designs, concepts, explorations, and Workbenches.</summary>
+    public WikiPulseLifecycle Lifecycle { get; init; } = WikiPulseLifecycle.Unavailable("Lifecycle projection unavailable.");
 }
+
+public record WikiPulseLifecycle(bool Available, string? Reason, int Count, List<WikiLifecycleItem> Items)
+{
+    public static WikiPulseLifecycle Unavailable(string reason) => new(false, reason, 0, []);
+}
+
+public record WikiLifecycleItem(
+    string RelPath,
+    string Title,
+    string PageKind,
+    string State,
+    string? EditedBy,
+    string? EditedAtUtc,
+    List<WikiLifecycleHistoryEntry> History,
+    string? WorkbenchId,
+    bool Valid,
+    string? Error);
+
+public record WikiLifecycleHistoryEntry(string State, string? EditedBy, string EditedAtUtc, string? Note);
+
+internal record WikiLifecycleFrontmatter(
+    string PageKind,
+    string State,
+    string? EditedBy,
+    string? EditedAtUtc,
+    List<WikiLifecycleHistoryEntry> History,
+    bool Valid,
+    string? Error);
 
 public record WikiPulseWarnings(bool Available, string? Reason, int Count, List<WikiPulseWarningItem> Items)
 {

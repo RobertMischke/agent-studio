@@ -21,7 +21,7 @@
     <div class="cwa__windows">
       @for (window of row()?.windows ?? []; track window.label) {
         <article class="cwa__window">
-          <header><strong>{{ window.label }}</strong><span>{{ window.usedPct === null ? 'Usage unavailable' : window.usedPct + '% used' }}</span></header>
+          <header><strong>{{ window.label }}</strong><span>{{ window.usedPct === null ? 'Unknown' : window.usedPct + '% used' }}</span></header>
           <div class="cwa__meter"><span [style.width.%]="window.usedPct ?? 0"></span>
             @if (projected(window, windowHours(window.label)); as projection) {
               <i [style.left.%]="projection > 100 ? 100 : projection" [appTooltip]="projection.toFixed(0) + '% projected at reset'"></i>

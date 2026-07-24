@@ -82,6 +82,13 @@
               @if (entry.thinkingLevel) {
                 <span> &middot; {{ entry.thinkingLevel }}</span>
               }
+              @if (tokenLabel(entry); as usage) {
+                <span class="cr-token-usage"
+                      data-testid="code-review-token-usage"
+                      [cacTooltip]="tokenTooltip(entry)">
+                  &middot; {{ usage }} tokens
+                </span>
+              }
               @if (entry.commit) {
                 <span> &middot; {{ entry.commit.substring(0, 7) }}</span>
               }
@@ -95,6 +102,9 @@
               }
             </span>
           </button>
+          <app-council-review-reaction
+            [job]="job()"
+            [reaction]="entry.councilReaction" />
           @if (expandedFile() === entry.fileName) {
             <div class="cr-body" data-testid="code-review-body">
               <header class="cr-body-header" [attr.data-verdict]="verdictTone(entry.verdict)">
@@ -109,6 +119,11 @@
                   <span class="cr-body-chip">{{ entry.model || 'unknown model' }}</span>
                   @if (entry.thinkingLevel) {
                     <span class="cr-body-chip">{{ entry.thinkingLevel }}</span>
+                  }
+                  @if (tokenLabel(entry); as usage) {
+                    <span class="cr-body-chip"
+                          data-testid="code-review-body-token-usage"
+                          [cacTooltip]="tokenTooltip(entry)">{{ usage }} tokens</span>
                   }
                   @if (entry.commit) {
                     <span class="cr-body-chip">{{ entry.commit.substring(0, 7) }}</span>

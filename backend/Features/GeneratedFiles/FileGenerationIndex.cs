@@ -89,6 +89,8 @@ public sealed class FileGenerationIndex
             Cli = cli,
             TokensIn = step.InputTokens,
             TokensOut = step.OutputTokens,
+            CacheReadTokens = step.CacheReadTokens,
+            CacheCreationTokens = step.CacheCreationTokens,
             TokensTotal = total,
             StartedAt = step.StartedAt,
             EndedAt = step.CompletedAt,
@@ -166,7 +168,7 @@ public sealed class FileGenerationIndex
     {
         var total = meta.TokensTotal > 0
             ? meta.TokensTotal
-            : meta.TokensIn + meta.TokensOut;
+            : meta.TokensIn + meta.TokensOut + meta.CacheReadTokens + meta.CacheCreationTokens;
         var duration = meta.DurationMs > 0 || meta.StartedAt == null || meta.EndedAt == null
             ? meta.DurationMs
             : (long)(meta.EndedAt.Value - meta.StartedAt.Value).TotalMilliseconds;

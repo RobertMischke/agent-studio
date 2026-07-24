@@ -13,7 +13,9 @@ import { CliModelSelectorComponent } from '../../../../components/cli-model-sele
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
 import { QuotaApiService } from '../../../../features/quota';
-import { WorkspaceOverlaysService } from '../../../shell';
+// Service-only direct import avoids evaluating the heavy shell component barrel,
+// which closes a runtime cycle when Project Settings mounts in Project Hub.
+import { WorkspaceOverlaysService } from '../../../shell/state/workspace-overlays.service';
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
@@ -50,6 +52,7 @@ interface ProjectSummaryLite {
   id: string;
   displayName: string;
   workspaceId: string;
+  wikiSourceBranch?: string | null;
 }
 
 interface WorkspaceListItemLite {
@@ -104,6 +107,11 @@ export class ProjectSettingsPanelComponent implements OnInit {
   /** ADR-0052: per-project max parallel coding slots (1 = sequential). */
   readonly maxParallelism = signal<number>(1);
   readonly parallelOptions = [1, 2, 3, 4];
+  readonly projectId = signal<string | null>(null);
+  readonly wikiSourceBranch = signal('');
+  readonly wikiSourceSaving = signal(false);
+  readonly wikiSourceError = signal<string | null>(null);
+  readonly wikiBranchOptions = signal<string[]>([]);
 
   // --- AGT-1812: editable workspace-default orchestrator settings ---------
   /** The workspace that owns this project; the tier these defaults write to. */
@@ -207,6 +215,10 @@ export class ProjectSettingsPanelComponent implements OnInit {
             ),
           );
           if (!owner) return; // project not mapped to a registry workspace yet
+          const project = (owner.projects ?? []).find((p) => p.displayName === name || p.id === name);
+          this.projectId.set(project?.id ?? null);
+          this.wikiSourceBranch.set(project?.wikiSourceBranch ?? '');
+          this.loadWikiBranches();
           this.workspaceId.set(owner.id);
           this.workspaceName.set(owner.displayName);
           this.workspaceOrchestrator.get(owner.id).subscribe({
@@ -216,6 +228,44 @@ export class ProjectSettingsPanelComponent implements OnInit {
         },
         error: () => { /* no workspace context; card stays hidden */ },
       });
+  }
+
+  private loadWikiBranches(): void {
+    this.http.get<{ branches?: { name: string; upstream?: string | null }[] }>(
+      `/api/git/inventory?project=${encodeURIComponent(this.projectName())}`,
+    ).subscribe({
+      next: inventory => {
+        const values = new Set<string>();
+        for (const branch of inventory.branches ?? []) {
+          if (branch.name) values.add(branch.name);
+          if (branch.upstream) values.add(branch.upstream);
+        }
+        if (this.wikiSourceBranch()) values.add(this.wikiSourceBranch());
+        this.wikiBranchOptions.set([...values].sort((a, b) => a.localeCompare(b)));
+      },
+      error: () => { /* Checkout remains available without branch inventory. */ },
+    });
+  }
+
+  setWikiSourceBranch(branch: string): void {
+    const id = this.projectId();
+    if (!id) return;
+    const selected = branch.trim();
+    this.wikiSourceSaving.set(true);
+    this.wikiSourceError.set(null);
+    this.http.put<{ wikiSourceBranch?: string | null }>(`/api/projects/${encodeURIComponent(id)}`, {
+      wikiSourceBranch: selected || undefined,
+      clearWikiSourceBranch: selected.length === 0,
+    }).subscribe({
+      next: project => {
+        this.wikiSourceBranch.set(project.wikiSourceBranch ?? '');
+        this.wikiSourceSaving.set(false);
+      },
+      error: err => {
+        this.wikiSourceSaving.set(false);
+        this.wikiSourceError.set(err?.error?.error ?? 'Could not update the wiki source.');
+      },
+    });
   }
 
   /** Persist the workspace-default orchestrator model (blank clears it). */

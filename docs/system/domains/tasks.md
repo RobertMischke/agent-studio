@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-22
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -100,7 +100,12 @@ This prevents the AGT-2166 archived-orphan/lost-task failure mode.
 `GET /api/tasks/{id}/artifacts` projects supported top-level task documents into
 the Files tab: Markdown, self-contained `.html` / `.htm`, and structured
 `aspect-*.json`. `status.md` remains owned by Result, and subfolders remain out
-of scope. HTML content is fetched through the existing task-file endpoint and
+of scope. A file opens on its current content without historical controls. Its
+History tab lists prior snapshots compactly by run, date, and grade; choosing a
+row loads that snapshot. Arbitrary From/To comparison between review snapshots
+is intentionally absent because it did not support an operator workflow. The
+history list remains the basis if a concrete comparison need emerges. HTML
+content is fetched through the existing task-file endpoint and
 rendered through `srcdoc` with `sandbox="allow-scripts"`. The deliberate omission
 of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
 read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
@@ -216,6 +221,16 @@ own lease owner rather than inheriting a project-wide runner status.
 Settled session events preserve the same projection as historical run evidence.
 Historical entries never reuse disconnected warning treatment. See the
 [execution location schema](../schemas/task-execution-location.schema.json).
+
+## Outcome issue presentation contract
+
+Task reads derive `TaskInfo.outcomeIssue` from typed runner markers in
+`logs/cli-output.log`. `summary` remains a bounded compatibility value for
+compact consumers. `technicalDetails` carries the complete normalized source
+line and is restricted to explicit technical-details surfaces. User-facing
+failure cards map the issue `kind` to a complete human sentence; they never use
+`summary` or `technicalDetails` as primary copy. Unknown kinds use a generic
+failure sentence while retaining the full diagnostic under the disclosure.
 
 ## Verification
 

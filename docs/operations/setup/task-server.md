@@ -15,7 +15,7 @@ an SSH-only private tunnel until AGT-2193 supplies authentication and TLS.
 | `contracts/TaskServer.Contracts` | Versioned resource, runner, review, event, artifact, management, and compatibility DTOs | None |
 | `task-server` | Stable identities, tasks, runs, immutable review subjects, review attempts, reports, events, artifacts, audit, migrations, backup/restore, leases, fences, and management API | Its configured data directory only |
 | `studio-bff` | Optional stateless same-origin proxy for Agent Studio | None |
-| `runner` | Separately registered coding and review services, host probes, Git worktrees, CLI and review processes, bounded execution, and delivery through protocol v1 | Host worktrees and bounded delivery state only |
+| `runner` | Separately registered coding and review services, host probes, Git worktrees, CLI and review processes, bounded execution, and durable result delivery through protocol 2 | Host worktrees, fsynced outboxes, and bounded transfer state only |
 
 The Task Server project references shared contracts and SQLite persistence. It
 does not reference Angular, the legacy Studio backend, Agent Runner, coding
@@ -107,8 +107,8 @@ subject, attempt, fence, and delivery tables.
 ## Fully remote review authority
 
 `POST /api/v1/reviews/subjects` records one immutable subject after a fenced
-coding completion has persisted the same repository identity, full Result-SHA,
-and immutable ref or source-bundle digest. The review policy is a command plan:
+coding completion has persisted the same repository identity and URL, full
+Result-SHA, and immutable ref or source-bundle digest. The review policy is a command plan:
 completion interpretation, build and tests, requirements, code quality,
 documentation, evidence, artifacts, and optional vision remain the existing
 review steps, but their processes run only on a claimed Remote Review Executor.

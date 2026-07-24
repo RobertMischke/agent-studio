@@ -133,9 +133,16 @@ public static class ProjectDocsEndpoints
         app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, WorkbenchCatalogueService workbenches, int? feedLimit) =>
         {
             var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
+            // Pulse is the lifecycle overview, so it deliberately includes
+            // settled Workbenches. Explorer keeps its current-only default.
+            var catalogue = workbenches.List(projectName, includeHistory: true);
             return pulse == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(pulse with { Workbenches = workbenches.List(projectName) });
+                : Results.Ok(pulse with
+                {
+                    Workbenches = catalogue,
+                    Lifecycle = ProjectDocsService.MergeWorkbenchLifecycle(pulse.Lifecycle, catalogue),
+                });
         });
 
         // One directory level of the wiki for the folder-overview surface:
@@ -272,6 +279,8 @@ public static class ProjectDocsEndpoints
         // Move/rename a wiki node (file or folder) via git mv + commit.
         app.MapPost("/api/projects/{projectName}/wiki/move", (string projectName, WikiMoveRequest body, ProjectDocsService docs, GitService git) =>
         {
+            if (docs.WikiWriteBlockReason(projectName) is { } blocked)
+                return Results.Conflict(new { error = blocked });
             var from = Normalize(body.FromRelPath);
             var to = Normalize(body.ToRelPath);
             if (from == null || to == null) return Results.BadRequest(new { error = "fromRelPath and toRelPath are required" });
@@ -308,6 +317,8 @@ public static class ProjectDocsEndpoints
         // Delete a wiki node (file or folder) via git rm + commit.
         app.MapDelete("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
         {
+            if (docs.WikiWriteBlockReason(projectName) is { } blocked)
+                return Results.Conflict(new { error = blocked });
             var rel = Normalize(relPath);
             if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
             var full = docs.ResolveWikiNodeFullPath(projectName, rel);

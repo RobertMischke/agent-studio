@@ -38,6 +38,7 @@ public static class EndpointMapping
         app.MapOrchestratorSessionEndpoints();
         app.MapOrchestratorContextEndpoints();
         app.MapLeaseEndpoints();
+        app.MapAttemptAuthorityEndpoints();
         app.MapIntegrationLeaseEndpoints();
         app.MapLogIngestionEndpoints();
         app.MapRunnerEventIngestionEndpoints();
@@ -56,6 +57,7 @@ public static class EndpointMapping
         app.MapSecurityReviewEndpoints();
         app.MapDesignSurfaceEndpoints();
         app.MapProjectTokenUsageEndpoints();
+        app.MapPipelineHealthEndpoints();
         app.MapTokenPricingEndpoints();
         app.MapReviewDecisionsEndpoints();
         app.MapProjectSnapshotEndpoints();
@@ -82,5 +84,6 @@ public static class EndpointMapping
         app.MapProjectChatEndpoints();
         app.MapConceptDocsEndpoints();
         app.MapGlobalSearchEndpoints();
+        app.MapManagementEndpoints();
     }
 }

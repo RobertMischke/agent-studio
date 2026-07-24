@@ -84,11 +84,6 @@ public sealed class TaskFileHistoryEndpointsTests : IDisposable
         contentResponse.EnsureSuccessStatusCode();
         Assert.Equal("text/markdown", contentResponse.Content.Headers.ContentType?.MediaType);
         Assert.Equal("run 1 review\n", await contentResponse.Content.ReadAsStringAsync());
-
-        using var diffResponse = await client.GetAsync($"/api/tasks/ASS-853/files/code-review.md/diff?watchPath={watchPath}&from={firstSha}&to={secondSha}");
-        diffResponse.EnsureSuccessStatusCode();
-        var diff = await diffResponse.Content.ReadAsStringAsync();
-        Assert.Contains("+run 2 review", diff);
     }
 
     [Fact]
@@ -138,10 +133,6 @@ public sealed class TaskFileHistoryEndpointsTests : IDisposable
         using var contentResponse = await client.GetAsync($"/api/tasks/ASS-900/files/src/app.cs?watchPath={watchPath}&scope=code&at={firstSha}");
         contentResponse.EnsureSuccessStatusCode();
         Assert.Equal("class App { }\n", await contentResponse.Content.ReadAsStringAsync());
-
-        using var diffResponse = await client.GetAsync($"/api/tasks/ASS-900/files/src/app.cs/diff?watchPath={watchPath}&scope=code&from={firstSha}&to={secondSha}");
-        diffResponse.EnsureSuccessStatusCode();
-        Assert.Contains("+class App { void Run() { } }", await diffResponse.Content.ReadAsStringAsync());
     }
 
     private WebApplicationFactory<Program> CreateFactory()

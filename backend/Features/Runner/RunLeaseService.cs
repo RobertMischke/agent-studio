@@ -1,181 +1,118 @@
 namespace AgentStudio.Runner;
 
 /// <summary>
-/// Server-authoritative, fenced <b>task-run</b> lease (parallel-task-execution.md
-/// §8.2C; ADR-0060). Exactly one runner may hold the run lease for a task at a
-/// time; a monotonically increasing <c>fencingToken</c> is minted per task on
-/// every grant so a stale runner — one that missed heartbeats and lost the lease
-/// to a takeover — has its later heartbeats, releases, and (via
-/// <see cref="IsCurrent"/>) state-affecting writes rejected. This is the
-/// split-brain guard §8.2C requires: TTL alone is not sufficient.
-///
-/// <para>
-/// This is the productive successor to the disk-backed <c>.pickup-lock.json</c>
-/// primitive (<see cref="PickupLockFile"/>, ADR-0044). It keeps the same
-/// <see cref="DefaultTtl"/> (120s) so behaviour is comparable, but the lease
-/// lives in the server's memory rather than a shared file, which is what the
-/// multi-system runner split (ADR-0059) needs. Unlike the per-project integration
-/// lease (<see cref="IntegrationLeaseService"/>) there is no queue: a contender
-/// that loses the race is told the task is <c>Held</c> and does not wait — §8.2C
-/// "two runner processes race the same ready task; only one gets a lease".
-/// </para>
-///
-/// <para>
-/// In-memory today: a server restart forgets leases, so takeover on restart is
-/// immediate rather than gated by stored expiry. Persisting lease rows on the
-/// shared Task Store (§8.2C "server restart preserves lease rows") is deferred to
-/// the store-backed slice; this service is the fenced contract the store will
-/// implement behind.
-/// </para>
+/// Compatibility facade for the runner lease API. Canonical identity, lease,
+/// fence, epoch, heartbeat, and restart persistence are owned by
+/// <see cref="AttemptAuthorityService"/>; this type preserves the established
+/// lease wire contract while callers migrate to explicit Attempt IDs.
 /// </summary>
 public sealed class RunLeaseService
 {
-    /// <summary>Default lease TTL — 120s, matching the ADR-0044 pickup lease this supersedes.</summary>
     public static readonly TimeSpan DefaultTtl = TimeSpan.FromSeconds(PickupLockFile.LeaseTtlSeconds);
-    private static readonly TimeSpan MinTtl = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan MaxTtl = TimeSpan.FromMinutes(10);
 
-    private readonly object _gate = new();
-    private readonly Dictionary<string, RunLeaseSlot> _slots = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ILogger<RunLeaseService> _logger;
+    private readonly AttemptAuthorityService _authority;
     private readonly Func<DateTime> _utcNow;
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public RunLeaseService(ILogger<RunLeaseService> logger, AttemptAuthorityService authority)
+    {
+        _authority = authority;
+        _utcNow = () => DateTime.UtcNow;
+    }
 
     public RunLeaseService(ILogger<RunLeaseService> logger, Func<DateTime>? utcNow = null)
     {
-        _logger = logger;
         _utcNow = utcNow ?? (() => DateTime.UtcNow);
+        _authority = new AttemptAuthorityService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AttemptAuthorityService>.Instance,
+            _utcNow);
     }
 
-    /// <summary>
-    /// Acquire (or re-enter) the run lease for a task. Grants when no unexpired
-    /// lease exists, minting a fresh lease id and the next fencing token. A live
-    /// lease held by a <b>different</b> runner is rejected as <c>Held</c>; the same
-    /// runner asking again is idempotent (<c>AlreadyOwn</c>, same lease id + token,
-    /// TTL refreshed).
-    /// </summary>
     public RunLeaseResponse TryAcquire(RunLeaseAcquireRequest request)
     {
         if (Blank(request.TaskKey) || Blank(request.RunnerId))
             return new RunLeaseResponse("Invalid", false, null, "TaskKey and RunnerId are required.");
 
-        var now = _utcNow();
-        var key = Normalize(request.TaskKey);
-        var runnerId = Normalize(request.RunnerId);
-        var ttl = NormalizeTtl(request.RequestedTtlSeconds);
+        var result = _authority.AcquireRun(
+            request.TaskKey,
+            Blank(request.RepositoryId) ? $"legacy:{Normalize(request.TaskKey)}" : request.RepositoryId!,
+            request.SourceRunAttemptId,
+            request.RunnerId,
+            request.Hostname,
+            request.RequestedTtlSeconds,
+            Blank(request.IdempotencyKey) ? NewDelivery("lease-acquire") : request.IdempotencyKey!,
+            request.RunnerName,
+            request.BackendName,
+            request.Pid,
+            request.ClientId);
 
-        lock (_gate)
+        return result.Status switch
         {
-            var slot = SlotFor(key);
-            PruneExpired(slot, key, now);
-
-            if (slot.Current is { } current)
-            {
-                if (SameRunner(current, runnerId))
-                {
-                    slot.Current = current with { ExpiresAt = now.Add(ttl), LastHeartbeatAt = now };
-                    return new RunLeaseResponse("AlreadyOwn", true, ToDto(slot.Current));
-                }
-
-                return new RunLeaseResponse(
-                    "Held",
-                    false,
-                    ToDto(current),
-                    $"Task '{key}' is leased by runner '{current.RunnerId}' (token {current.FencingToken}) until {current.ExpiresAt:o}.");
-            }
-
-            var lease = Grant(slot, key, request, runnerId, ttl, now);
-            _logger.LogInformation(
-                "[run-lease] granted {TaskKey} to runner={RunnerId} lease={LeaseId} token={FencingToken} ttl={TtlSeconds}s",
-                key, runnerId, lease.LeaseId, lease.FencingToken, (int)ttl.TotalSeconds);
-            return new RunLeaseResponse("Acquired", true, ToDto(lease));
-        }
+            AttemptWriteStatus.Accepted => new RunLeaseResponse("Acquired", true, ToLease(result.RunAttempt)),
+            AttemptWriteStatus.Duplicate when result.RunAttempt?.Lease is not null
+                => new RunLeaseResponse("AlreadyOwn", true, ToLease(result.RunAttempt)),
+            AttemptWriteStatus.InvalidState => new RunLeaseResponse("Held", false, ToLease(result.RunAttempt), result.Message),
+            AttemptWriteStatus.Invalid => new RunLeaseResponse("Invalid", false, null, result.Message),
+            _ => new RunLeaseResponse(result.Status.ToString(), false, ToLease(result.RunAttempt), result.Message),
+        };
     }
 
     /// <summary>
-    /// Heartbeat: extend the current lease. Rejected as <c>Expired</c> when the TTL
-    /// already lapsed, or <c>StaleToken</c> when the presented lease id / fencing
-    /// token / runner id no longer matches the holder (a takeover happened).
+    /// Replays a daemon acquire delivery before the server selects a Ready
+    /// task. A null result means the delivery has never acquired a task; any
+    /// non-null result is authoritative and must not fall through to selection.
     /// </summary>
+    public RunLeaseResponse? TryReplayAcquire(string runnerId, string idempotencyKey)
+    {
+        var result = _authority.ReplayRunAcquire(runnerId, idempotencyKey);
+        if (result.Status == AttemptWriteStatus.NotFound) return null;
+        return result.Status switch
+        {
+            AttemptWriteStatus.Duplicate when result.RunAttempt?.Lease is not null
+                => new RunLeaseResponse("AlreadyOwn", true, ToLease(result.RunAttempt)),
+            AttemptWriteStatus.Invalid
+                => new RunLeaseResponse("Invalid", false, null, result.Message),
+            _ => new RunLeaseResponse(
+                result.Status.ToString(), false, ToLease(result.RunAttempt), result.Message),
+        };
+    }
+
     public RunLeaseResponse Renew(RunLeaseHeartbeatRequest request)
     {
-        var invalid = ValidateReference(request.TaskKey, request.LeaseId, request.FencingToken, request.RunnerId);
-        if (invalid != null) return invalid;
+        var reference = ResolveReference(
+            request.TaskKey, request.AttemptId, request.FencingToken, request.AuthorityEpoch,
+            request.IdempotencyKey, "lease-renew");
+        if (reference is null)
+            return new RunLeaseResponse("NotHeld", false, null, "No canonical RunAttempt is held for this task.");
 
-        var now = _utcNow();
-        var key = Normalize(request.TaskKey);
-        var ttl = NormalizeTtl(request.RequestedTtlSeconds);
-
-        lock (_gate)
-        {
-            if (!_slots.TryGetValue(key, out var slot) || slot.Current is null)
-                return new RunLeaseResponse("NotHeld", false, null, "No run lease is currently held for this task.");
-
-            if (slot.Current.ExpiresAt <= now)
-            {
-                var expired = slot.Current;
-                slot.Last = expired;
-                slot.LastState = "expired";
-                slot.Current = null;
-                _logger.LogWarning(
-                    "[run-lease] heartbeat rejected expired {TaskKey} lease={LeaseId} token={FencingToken}",
-                    key, expired.LeaseId, expired.FencingToken);
-                return new RunLeaseResponse("Expired", false, ToDto(expired), "The run lease expired before the heartbeat arrived.");
-            }
-
-            if (!Matches(slot.Current, request.LeaseId, request.FencingToken, request.RunnerId))
-            {
-                _logger.LogWarning(
-                    "[run-lease] heartbeat rejected stale {TaskKey} presented lease={LeaseId} token={FencingToken} runner={RunnerId}; current token={CurrentToken}",
-                    key, request.LeaseId, request.FencingToken, Normalize(request.RunnerId), slot.Current.FencingToken);
-                return new RunLeaseResponse("StaleToken", false, ToDto(slot.Current), "Lease id, fencing token, or runner id does not match the current holder.");
-            }
-
-            slot.Current = slot.Current with { ExpiresAt = now.Add(ttl), LastHeartbeatAt = now };
-            return new RunLeaseResponse("Renewed", true, ToDto(slot.Current));
-        }
+        var result = _authority.RenewRun(
+            reference, request.RunnerId, request.RequestedTtlSeconds, request.LeaseId);
+        return MapMutation(result, "Renewed");
     }
 
-    /// <summary>
-    /// Release the lease held by the matching runner. A stale token is rejected so
-    /// a woken-up stale runner cannot clear the takeover holder's lease. The slot's
-    /// fencing counter is retained so the next acquire is strictly higher.
-    /// </summary>
     public RunLeaseResponse Release(RunLeaseReleaseRequest request)
     {
-        var invalid = ValidateReference(request.TaskKey, request.LeaseId, request.FencingToken, request.RunnerId);
-        if (invalid != null) return invalid;
+        var before = Current(request.TaskKey);
+        var reference = ResolveReference(
+            request.TaskKey, request.AttemptId, request.FencingToken, request.AuthorityEpoch,
+            request.IdempotencyKey, "lease-release");
+        if (reference is null)
+            return new RunLeaseResponse("NotHeld", false, null, "No canonical RunAttempt is held for this task.");
 
-        var key = Normalize(request.TaskKey);
-        lock (_gate)
-        {
-            if (!_slots.TryGetValue(key, out var slot) || slot.Current is null)
-                return new RunLeaseResponse("NotHeld", false, null, "No run lease is currently held for this task.");
-
-            if (!Matches(slot.Current, request.LeaseId, request.FencingToken, request.RunnerId))
-                return new RunLeaseResponse("StaleToken", false, ToDto(slot.Current), "Lease id, fencing token, or runner id does not match the current holder.");
-
-            var released = slot.Current;
-            slot.Last = released;
-            slot.LastState = "released";
-            slot.Current = null;
-            _logger.LogInformation(
-                "[run-lease] released {TaskKey} from runner={RunnerId} lease={LeaseId} token={FencingToken}",
-                key, released.RunnerId, released.LeaseId, released.FencingToken);
-            return new RunLeaseResponse("Released", false, ToDto(released));
-        }
+        var result = _authority.ReleaseRun(reference, request.RunnerId, request.LeaseId);
+        var mapped = MapMutation(result, "Released");
+        return mapped with { Lease = mapped.Lease ?? ToLease(before) };
     }
 
-    /// <summary>Report the current holder (or <c>Free</c>) without mutating a live lease.</summary>
     public RunLeaseResponse Peek(string taskKey)
     {
         if (Blank(taskKey)) return new RunLeaseResponse("Invalid", false, null, "TaskKey is required.");
-        var key = Normalize(taskKey);
-        lock (_gate)
-        {
-            if (!_slots.TryGetValue(key, out var slot)) return new RunLeaseResponse("Free", false, null);
-            PruneExpired(slot, key, _utcNow());
-            return new RunLeaseResponse(slot.Current is null ? "Free" : "Held", false, ToDto(slot.Current));
-        }
+        var run = Current(taskKey);
+        if (run is not { State: AttemptLifecycleState.Leased, Lease: not null }
+            || run.AuthorityEpoch != _authority.AuthorityEpoch
+            || run.Lease.ExpiresAt <= _utcNow())
+            return new RunLeaseResponse("Free", false, null);
+        return new RunLeaseResponse("Held", false, ToLease(run));
     }
 
     /// <summary>
@@ -186,15 +123,15 @@ public sealed class RunLeaseService
     public RunLeaseInspection Inspect(string taskKey)
     {
         if (Blank(taskKey)) return new RunLeaseInspection("none", null);
-        var key = Normalize(taskKey);
-        lock (_gate)
-        {
-            if (!_slots.TryGetValue(key, out var slot)) return new RunLeaseInspection("none", null);
-            PruneExpired(slot, key, _utcNow());
-            return slot.Current is not null
-                ? new RunLeaseInspection("active", ToDto(slot.Current))
-                : new RunLeaseInspection(slot.Last is null ? "none" : slot.LastState, ToDto(slot.Last));
-        }
+        var run = Current(taskKey);
+        if (run?.Lease is null) return new RunLeaseInspection("none", null);
+        var active = run.State == AttemptLifecycleState.Leased
+                     && run.AuthorityEpoch == _authority.AuthorityEpoch
+                     && run.Lease.ExpiresAt > _utcNow();
+        var state = active
+            ? "active"
+            : run.Lease.ExpiresAt <= _utcNow() ? "expired" : "released";
+        return new RunLeaseInspection(state, ToLease(run));
     }
 
     /// <summary>
@@ -206,124 +143,86 @@ public sealed class RunLeaseService
     /// </summary>
     public bool IsCurrent(string taskKey, string leaseId, long fencingToken, string runnerId)
     {
-        if (Blank(taskKey) || Blank(leaseId) || Blank(runnerId) || fencingToken <= 0) return false;
-        var key = Normalize(taskKey);
-        lock (_gate)
+        var run = Current(taskKey);
+        return run is { State: AttemptLifecycleState.Leased, Lease: not null }
+               && run.AuthorityEpoch == _authority.AuthorityEpoch
+               && run.LastFence == fencingToken
+               && run.Lease.ExpiresAt > _utcNow()
+               && string.Equals(run.Lease.LeaseId, leaseId, StringComparison.Ordinal)
+               && string.Equals(run.Lease.ExecutorId, Normalize(runnerId), StringComparison.Ordinal);
+    }
+
+    public AttemptWriteReference? CurrentWriteReference(string taskKey, string? idempotencyKey = null)
+    {
+        var run = Current(taskKey);
+        return run is not { Lease: not null }
+            ? null
+            : new AttemptWriteReference(
+            run.AttemptId,
+            run.LastFence,
+            run.AuthorityEpoch,
+            Blank(idempotencyKey) ? NewDelivery("write") : idempotencyKey!);
+    }
+
+    private AttemptWriteReference? ResolveReference(
+        string taskKey,
+        string? attemptId,
+        long fence,
+        long? epoch,
+        string? idempotencyKey,
+        string operation)
+    {
+        var run = Blank(attemptId) ? Current(taskKey) : _authority.GetRun(attemptId!);
+        if (run is null) return null;
+        return new AttemptWriteReference(
+            run.AttemptId,
+            fence,
+            epoch.GetValueOrDefault(run.AuthorityEpoch),
+            Blank(idempotencyKey) ? NewDelivery(operation) : idempotencyKey!);
+    }
+
+    private RunAttemptDto? Current(string taskKey) => _authority.GetTaskProjection(taskKey).CurrentRunAttempt;
+
+    private static RunLeaseResponse MapMutation(AttemptWriteResult result, string success)
+    {
+        var outcome = result.Status switch
         {
-            if (!_slots.TryGetValue(key, out var slot) || slot.Current is null) return false;
-            if (slot.Current.ExpiresAt <= _utcNow())
-            {
-                slot.Current = null;
-                return false;
-            }
-            return Matches(slot.Current, leaseId, fencingToken, runnerId);
-        }
+            AttemptWriteStatus.Accepted => success,
+            AttemptWriteStatus.Duplicate => success,
+            AttemptWriteStatus.LeaseExpired => "Expired",
+            AttemptWriteStatus.StaleFence or AttemptWriteStatus.AuthorityEpochMismatch or AttemptWriteStatus.Superseded => "StaleToken",
+            AttemptWriteStatus.NotFound => "NotHeld",
+            _ => result.Status.ToString(),
+        };
+        return new RunLeaseResponse(outcome, outcome == "Renewed", ToLease(result.RunAttempt), result.Message);
     }
 
-    private RunLeaseRecord Grant(RunLeaseSlot slot, string key, RunLeaseAcquireRequest request, string runnerId, TimeSpan ttl, DateTime now)
+    private static RunLeaseInfoDto? ToLease(RunAttemptDto? run)
     {
-        slot.LastFencingToken++;
-        var lease = new RunLeaseRecord(
-            key,
-            runnerId,
-            Normalize(request.RunnerName),
-            Normalize(request.Hostname),
-            request.Pid,
-            Normalize(request.BackendName),
-            Normalize(request.ClientId),
-            Guid.NewGuid().ToString("N"),
-            slot.LastFencingToken,
-            now,
-            now,
-            now.Add(ttl));
-        slot.Current = lease;
-        slot.Last = lease;
-        slot.LastState = "active";
-        return lease;
-    }
-
-    private RunLeaseSlot SlotFor(string key)
-    {
-        if (!_slots.TryGetValue(key, out var slot))
-        {
-            slot = new RunLeaseSlot();
-            _slots[key] = slot;
-        }
-        return slot;
-    }
-
-    private void PruneExpired(RunLeaseSlot slot, string key, DateTime now)
-    {
-        if (slot.Current is null || slot.Current.ExpiresAt > now) return;
-        _logger.LogWarning(
-            "[run-lease] expired {TaskKey} lease={LeaseId} token={FencingToken}; reclaimable",
-            key, slot.Current.LeaseId, slot.Current.FencingToken);
-        slot.Last = slot.Current;
-        slot.LastState = "expired";
-        slot.Current = null;
-    }
-
-    private static bool SameRunner(RunLeaseRecord lease, string runnerId)
-        => string.Equals(lease.RunnerId, runnerId, StringComparison.Ordinal);
-
-    private static bool Matches(RunLeaseRecord lease, string leaseId, long fencingToken, string runnerId)
-        => string.Equals(lease.LeaseId, leaseId, StringComparison.Ordinal)
-           && lease.FencingToken == fencingToken
-           && string.Equals(lease.RunnerId, Normalize(runnerId), StringComparison.Ordinal);
-
-    private static RunLeaseResponse? ValidateReference(string taskKey, string leaseId, long fencingToken, string runnerId)
-    {
-        if (Blank(taskKey) || Blank(leaseId) || Blank(runnerId) || fencingToken <= 0)
-            return new RunLeaseResponse("Invalid", false, null, "TaskKey, LeaseId, FencingToken (> 0), and RunnerId are required.");
-        return null;
-    }
-
-    private static TimeSpan NormalizeTtl(int? seconds)
-    {
-        var ttl = seconds is > 0 ? TimeSpan.FromSeconds(seconds.Value) : DefaultTtl;
-        if (ttl < MinTtl) return MinTtl;
-        if (ttl > MaxTtl) return MaxTtl;
-        return ttl;
-    }
-
-    private static RunLeaseInfoDto? ToDto(RunLeaseRecord? lease) => lease is null
-        ? null
-        : new RunLeaseInfoDto(
-            lease.TaskKey,
-            lease.RunnerId,
-            lease.RunnerName,
-            lease.Hostname,
-            lease.Pid,
-            lease.BackendName,
+        if (run?.Lease is null) return null;
+        var lease = run.Lease;
+        return new RunLeaseInfoDto(
+            run.TaskKey,
+            lease.ExecutorId,
+            string.IsNullOrWhiteSpace(lease.ExecutorDisplayName) ? lease.ExecutorId : lease.ExecutorDisplayName,
+            lease.HostId,
+            lease.ProcessId,
+            lease.BackendName ?? "remote",
             lease.LeaseId,
-            lease.FencingToken,
+            lease.Fence,
             lease.AcquiredAt,
-            lease.ExpiresAt) { LastHeartbeatAt = lease.LastHeartbeatAt, ClientId = string.IsNullOrWhiteSpace(lease.ClientId) ? null : lease.ClientId };
-
-    private static string Normalize(string? value) => (value ?? "").Trim();
-    private static bool Blank(string? value) => string.IsNullOrWhiteSpace(value);
-
-    private sealed record RunLeaseRecord(
-        string TaskKey,
-        string RunnerId,
-        string RunnerName,
-        string Hostname,
-        int Pid,
-        string BackendName,
-        string ClientId,
-        string LeaseId,
-        long FencingToken,
-        DateTime AcquiredAt,
-        DateTime LastHeartbeatAt,
-        DateTime ExpiresAt);
-
-    private sealed class RunLeaseSlot
-    {
-        public RunLeaseRecord? Current { get; set; }
-        public RunLeaseRecord? Last { get; set; }
-        public string LastState { get; set; } = "none";
-        public long LastFencingToken { get; set; }
+            lease.ExpiresAt,
+            run.AttemptId,
+            run.AuthorityEpoch)
+        {
+            LastHeartbeatAt = lease.LastHeartbeat,
+            ClientId = string.IsNullOrWhiteSpace(lease.ClientId) ? null : lease.ClientId,
+        };
     }
+
+    private static string NewDelivery(string operation) => $"{operation}:{Guid.NewGuid():N}";
+    private static string Normalize(string? value) => (value ?? string.Empty).Trim();
+    private static bool Blank(string? value) => string.IsNullOrWhiteSpace(value);
 }
 
 public sealed record RunLeaseInspection(string State, RunLeaseInfoDto? Lease);

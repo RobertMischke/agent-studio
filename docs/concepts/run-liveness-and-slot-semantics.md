@@ -212,3 +212,22 @@ The liveness policy pins the complementary invariant: after the grace window a
 `3-progress` card without a live run heartbeat is legal only when it carries an
 explicit `loop-waiting` or `steer-pending` phase. Otherwise it is recovered as a
 zombie within the existing 60 second budget.
+
+### Board fallback visibility
+
+The board also derives an acute `Stalled` presentation without adding a lane or
+persisted task state. A visible `3-progress` card is stalled immediately when no
+live execution, lease, or connected execution location owns it and the latest
+run is failed. A no-error `no-active-run` card becomes stalled after three
+minutes without task, lane-entry, heartbeat, or execution-location activity.
+The three-minute UI grace matches the execution-location freshness window and
+prevents a newly claimed card or a rebuilding runtime registry from flashing an
+attention state. An active rapid-crash backoff remains distinct because its
+countdown already provides a bounded recovery path.
+
+Stalled cards render an amber `Stalled` chip plus a uniform card tint and ring.
+The `In Progress` header shows the stalled subset of its visible count, for
+example `14 · 3 stalled`. Live cards retain their running treatment. The shared
+pure derivation lives in `frontend/src/app/services/run-activity.util.ts`; unit
+coverage pins the fresh/threshold boundary and Playwright covers the card and
+lane aggregate in both themes.

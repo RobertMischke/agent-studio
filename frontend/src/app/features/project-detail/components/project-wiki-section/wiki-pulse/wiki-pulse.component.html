@@ -1,3 +1,10 @@
+<!-- Review-first lifecycle surface: the operator sees fresh concepts before the ordinary dashboard feed. -->
+<app-workbench-inbox
+    [lifecycle]="pulse()?.lifecycle ?? null"
+    [catalogue]="pulse()?.workbenches ?? null"
+    (openPage)="openLifecyclePage($event)"
+    (openWorkbench)="openWorkbench.emit($event)" />
+
 <!-- Drift strip: full-width band across the dashboard grid (deterministic, per top-level docs folder). -->
 <section class="wpulse__card wpulse__card--drift" data-testid="project-wiki-pulse-drift" aria-label="Drift grade bar">
   <header class="wpulse__card-head">
@@ -169,9 +176,6 @@
     }
   </article>
 }
-
-<!-- Workbenches: catalogue entries with title + summary line. -->
-<app-workbench-inbox [catalogue]="pulse()?.workbenches ?? null" (openWorkbench)="openWorkbench.emit($event)" />
 
 <!-- In Arbeit: docs-touching live runs. -->
 @if (activity(); as live) {

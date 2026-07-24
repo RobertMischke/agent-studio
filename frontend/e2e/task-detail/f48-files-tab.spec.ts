@@ -1,8 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { api } from '../helpers/api';
-import { createJob, getJob } from '../helpers/jobs';
+import { createJob } from '../helpers/jobs';
 
 /**
  * Mirror a single page screenshot into the job-folder `results/` directory
@@ -27,14 +27,29 @@ async function captureScreenshot(
 }
 
 /**
- * F48 — "Files" tab on the task-detail prompt pane. The pane used to render
+ * F48 / AGT-2139 - "Docs" tab on the task-detail prompt pane. The pane used to render
  * only prompt.md under a "Description" label; the F48 redesign surfaces
  * every `.md` in the job folder (prompt + aspect-* + *_NOTE) and labels the
- * tab "Files". The legacy testid (`prompt-tab-description`) is preserved
+ * tab "Docs". The legacy testid (`prompt-tab-description`) is preserved
  * for backward-compat with older specs.
  */
 
 interface WatchPath { path: string; name?: string }
+
+test.beforeEach(async ({ page, devBackend }) => {
+  // The fixture is the repository-owned lifecycle boundary for port 5030.
+  // Referencing it here makes this spec self-contained without a persistent
+  // dev backend or ad-hoc process control.
+  void devBackend;
+  await page.route('**/api/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      profile: 'networked', bootstrapRequired: false, authenticated: true,
+      user: { username: 'playwright', role: 'operator' },
+    }),
+  }));
+});
 
 async function pickWatchPath(): Promise<string> {
   const paths = await api<WatchPath[]>('/api/watch-paths');
@@ -53,9 +68,9 @@ async function deleteJob(id: string, watchPath: string): Promise<void> {
 async function setTheme(page: import('@playwright/test').Page, theme: 'light' | 'dark') {
   await page.evaluate((t) => {
     document.documentElement.setAttribute('data-studio-theme', t);
-    try { window.localStorage.setItem('atp.theme', t); } catch { /* ignore */ }
+    try { window.localStorage.setItem('atp.studio.theme', t); } catch { /* ignore */ }
   }, theme);
-  await page.waitForTimeout(120);
+  await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
 }
 
 /**
@@ -65,15 +80,25 @@ async function setTheme(page: import('@playwright/test').Page, theme: 'light' | 
  * of the detail view is interactable. The banner is harmless to F48 but it
  * paints over the corner of the layout and would skew screenshots.
  */
-async function dismissUpdateBannerIfPresent(page: import('@playwright/test').Page): Promise<void> {
+async function dismissBlockingOverlays(page: import('@playwright/test').Page): Promise<void> {
+  // A cold fixture backend can discover existing uncommitted work and open
+  // the global crash-recovery prompt. Leave it untouched and close the prompt
+  // so this Docs-focused spec can interact with the detail view.
+  const leaveAll = page.getByTestId('crash-recovery-dismiss-all');
+  await leaveAll.waitFor({ state: 'visible', timeout: 1_500 }).catch(() => undefined);
+  if (await leaveAll.isVisible().catch(() => false)) {
+    await leaveAll.click({ force: true });
+    await expect(page.getByTestId('crash-recovery-prompt-overlay')).toBeHidden();
+  }
+
   const dismiss = page.getByRole('button', { name: /^Dismiss$/ });
   if (await dismiss.count()) {
     try { await dismiss.first().click({ timeout: 1_500 }); } catch { /* best-effort */ }
   }
 }
 
-test.describe('F48 Files tab — rename + only-prompt + hint', () => {
-  test('tab is labeled "Files" with the legacy data-testid preserved', async ({ page }) => {
+test.describe('Task detail Docs tab - rename + only-prompt + hint', () => {
+  test('tab is labeled "Docs" with the legacy data-testid preserved', async ({ page }) => {
     const watchPath = await pickWatchPath();
     const job = await createJob({
       title: `f48-rename-${Date.now()}`,
@@ -86,18 +111,18 @@ test.describe('F48 Files tab — rename + only-prompt + hint', () => {
 
     try {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
-      await dismissUpdateBannerIfPresent(page);
+      await dismissBlockingOverlays(page);
 
       const tab = page.getByTestId('prompt-tab-description');
       await expect(tab).toBeVisible({ timeout: 10_000 });
-      await expect(tab).toContainText(/Files/i);
+      await expect(tab).toContainText(/Docs/i);
       // The legacy "Description" wording must not leak — the rename is real.
       await expect(tab).not.toContainText(/Description/);
 
       // No badge when only prompt is present.
       await expect(page.getByTestId('prompt-tab-description-badge')).toHaveCount(0);
 
-      // Overview is the default tab on task switch; click into Files so
+      // Overview is the default tab on task switch; click into Docs so
       // the prompt-card / hint card mount.
       await tab.click();
 
@@ -109,14 +134,14 @@ test.describe('F48 Files tab — rename + only-prompt + hint', () => {
       // Hint card surfaces so the user knows other .md files would appear here.
       const hint = page.getByTestId('files-pane-hint');
       await expect(hint).toBeVisible();
-      await expect(hint).toContainText(/agents can drop additional/i);
+      await expect(hint).toContainText(/agent reports.*will appear in docs/i);
     } finally {
       await deleteJob(job.id, watchPath);
     }
   });
 });
 
-test.describe('F48 Files tab — multi-file display', () => {
+test.describe('Task detail Docs tab - multi-document display', () => {
   test('HTML artifact runs scripts while Studio parent access stays blocked', async ({ page }, testInfo) => {
     const watchPath = await pickWatchPath();
     const job = await createJob({
@@ -164,7 +189,7 @@ test.describe('F48 Files tab — multi-file display', () => {
       }));
 
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
-      await dismissUpdateBannerIfPresent(page);
+      await dismissBlockingOverlays(page);
       await page.getByTestId('prompt-tab-description').click();
 
       const card = page.getByTestId('file-card-interactive-report.html');
@@ -187,7 +212,7 @@ test.describe('F48 Files tab — multi-file display', () => {
     }
   });
 
-  test('aspect + note files render in the spec sort order; cards start collapsed', async ({ page }, testInfo) => {
+  test('outcome documents lead, open rendered, and expose metadata only on demand', async ({ page }, testInfo) => {
     const watchPath = await pickWatchPath();
     const job = await createJob({
       title: `f48-multi-${Date.now()}`,
@@ -201,54 +226,91 @@ test.describe('F48 Files tab — multi-file display', () => {
     });
 
     try {
-      // Plant aspect / note artifacts directly on disk — the runtime API
-      // only edits prompt.md, but agents and auto-review usually drop these
-      // files into the job folder themselves. This test fixture mirrors that
-      // server-side state without going through the (non-existent) write
-      // endpoint for them.
-      //
-      // Brief retry so we tolerate the scanner taking a few hundred ms to
-      // index the freshly created job folder on a degraded dev backend.
-      let planted: Awaited<ReturnType<typeof getJob>> | null = null;
-      for (let attempt = 0; attempt < 10 && planted === null; attempt++) {
-        try { planted = await getJob(job.id, watchPath); }
-        catch { await new Promise((r) => setTimeout(r, 500)); }
-      }
-      if (planted === null) {
-        throw new Error(`getJob never returned for ${job.id} after retries`);
-      }
-      await writeFile(join(planted.folderPath, 'aspect-requirement-fit.md'),
-        '# requirement-fit\n\n- Does the change deliver F48?\n- Yes: prompt + aspects show.\n');
-      await writeFile(join(planted.folderPath, 'aspect-code-quality.md'),
-        '# code-quality\n\nNo new lint warnings; new component stays within size budgets.\n');
-      await writeFile(join(planted.folderPath, 'aspect-tests-and-evidence.md'),
-        '# tests\n\nUnit-test the sort + classification; Playwright covers the UI.\n');
-      await writeFile(join(planted.folderPath, 'REVIEW_NOTE.md'),
-        '# Review note\n\nLook at the focus-visible state on the file-card head.\n');
+      const artifactBodies: Record<string, string> = {
+        'aspect-requirement-fit.md':
+          '# requirement-fit\n\n- Does the change deliver F48?\n- Yes: prompt + aspects show.\n',
+        'aspect-code-quality.md':
+          '# code-quality\n\nNo new lint warnings; new component stays within size budgets.\n',
+        'aspect-tests-and-evidence.md':
+          '# tests\n\nUnit-test the sort + classification; Playwright covers the UI.\n',
+        'REVIEW_NOTE.md':
+          '# Review note\n\nLook at the focus-visible state on the file-card head.\n',
+        'code-review-grade-2026-07-11.md':
+          '---\nverdict: concerns\ngrade: C\nmodel: gpt-5\n---\n\n# Code review\n\nTwo details deserve attention.\n',
+      };
+      const statusMarkdown =
+        '# Status\n\n- Result: Success\n- Case: Bugfix\n\n## Overview\n- Problem: Dense operator result.\n- Solution: Navigable document view.\n';
+      await page.route(new RegExp(`/api/tasks/${job.id}(?:\\?.*)?$`), async route => {
+        const response = await route.fetch();
+        const detail = await response.json();
+        detail.info.tags = [...(detail.info.tags ?? []), 'code-review:grade-c'];
+        detail.statusMarkdown = statusMarkdown;
+        detail.statusGeneration = {
+          file: 'status.md', kind: 'summary', model: 'gpt-5-mini', cli: 'codex',
+          tokensIn: 900, tokensOut: 180, tokensTotal: 1080, durationMs: 2200,
+        };
+        await route.fulfill({ response, json: detail });
+      });
+      await page.route(new RegExp(`/api/tasks/${job.id}/artifacts(?:\\?.*)?$`), route => {
+        const files = [
+          { name: 'prompt.md', sizeBytes: 122, mtime: '2026-07-11T08:00:00Z', kind: 'prompt' },
+          { name: 'aspect-requirement-fit.md', sizeBytes: artifactBodies['aspect-requirement-fit.md'].length, mtime: '2026-07-11T08:01:00Z', kind: 'aspect', aspectName: 'requirement-fit' },
+          { name: 'aspect-code-quality.md', sizeBytes: artifactBodies['aspect-code-quality.md'].length, mtime: '2026-07-11T08:02:00Z', kind: 'aspect', aspectName: 'code-quality' },
+          { name: 'aspect-tests-and-evidence.md', sizeBytes: artifactBodies['aspect-tests-and-evidence.md'].length, mtime: '2026-07-11T08:03:00Z', kind: 'aspect', aspectName: 'tests-and-evidence' },
+          { name: 'REVIEW_NOTE.md', sizeBytes: artifactBodies['REVIEW_NOTE.md'].length, mtime: '2026-07-11T08:04:00Z', kind: 'note' },
+          {
+            name: 'code-review-grade-2026-07-11.md',
+            sizeBytes: artifactBodies['code-review-grade-2026-07-11.md'].length,
+            mtime: '2026-07-11T08:05:00Z',
+            kind: 'codeReview',
+            generation: {
+              file: 'code-review-grade-2026-07-11.md', kind: 'code-review', model: 'gpt-5', cli: 'codex',
+              tokensIn: 1000, tokensOut: 250, tokensTotal: 1250, durationMs: 3100,
+            },
+          },
+        ];
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ jobId: job.id, files }),
+        });
+      });
+      await page.route(new RegExp(`/api/tasks/${job.id}/files/[^?]+(?:\\?.*)?$`), route => {
+        const marker = `/api/tasks/${job.id}/files/`;
+        const path = new URL(route.request().url()).pathname;
+        const name = decodeURIComponent(path.slice(path.indexOf(marker) + marker.length));
+        const body = artifactBodies[name];
+        if (body === undefined) return route.fallback();
+        return route.fulfill({ status: 200, contentType: 'text/markdown; charset=utf-8', body });
+      });
 
       await page.setViewportSize({ width: 1600, height: 1000 });
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
-      await dismissUpdateBannerIfPresent(page);
+      await dismissBlockingOverlays(page);
 
       // Tab badge surfaces the file count once we cross 1.
       const badge = page.getByTestId('prompt-tab-description-badge');
       await expect(badge).toBeVisible({ timeout: 10_000 });
-      await expect(badge).toHaveText('5');
+      await expect(badge).toHaveText('6');
 
-      // Overview is the default tab on task switch; click into Files so the
-      // multi-file body mounts.
-      await page.getByTestId('prompt-tab-description').click();
+      // The Grade chip in Result is navigation, not decoration.
+      const grade = page.getByTestId('result-metric-grade');
+      await expect(grade).toBeVisible({ timeout: 10_000 });
+      await grade.click();
+      await expect(page.getByTestId('prompt-tab-description')).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByTestId('file-card-code-review-grade-2026-07-11.md')).toBeFocused();
 
       // Hint card must disappear when more than one file is present.
       await expect(page.getByTestId('files-pane-hint')).toHaveCount(0);
 
-      // Sort: prompt first, then aspects alphabetically, then notes.
+      // Read order: result documents first, source prompt afterwards.
       const expectedOrder = [
-        'file-card-prompt.md',
+        'file-card-code-review-grade-2026-07-11.md',
         'file-card-aspect-code-quality.md',
         'file-card-aspect-requirement-fit.md',
         'file-card-aspect-tests-and-evidence.md',
         'file-card-REVIEW_NOTE.md',
+        'file-card-prompt.md',
       ];
       // Articles only — the `file-card-prompt-edit`/`-cancel` buttons and the
       // `file-card-expand-<name>` expand-links inherit the same prefix.
@@ -259,35 +321,56 @@ test.describe('F48 Files tab — multi-file display', () => {
       );
       expect(seen).toEqual(expectedOrder);
 
-      // Every card starts collapsed in multi-file mode.
-      for (const id of expectedOrder) {
+      // Outcome documents are already readable; the source prompt stays compact.
+      for (const id of expectedOrder.slice(0, 5)) {
+        await expect(page.getByTestId(id)).toHaveAttribute('class', /file-card--expanded/);
+      }
+      for (const id of expectedOrder.slice(5)) {
         await expect(page.getByTestId(id)).toHaveAttribute('class', /file-card--collapsed/);
       }
 
-      // Light-theme screenshot — multi-file, all collapsed (preview mode).
+      const review = page.getByTestId('file-card-code-review-grade-2026-07-11.md');
+      await expect(review.getByTestId('file-card-topic')).toHaveText('Code review');
+      await expect(review.getByTestId('file-card-verdict')).toHaveText('Concerns');
+      await expect(review.getByTestId('file-card-model')).toHaveText('gpt-5');
+      await expect(review).not.toContainText('verdict: concerns');
+      await expect(review.getByTestId('file-source-history')).toHaveCount(0);
+      await review.getByTestId('file-card-details-code-review-grade-2026-07-11.md').click();
+      const details = review.getByTestId('file-card-details-menu');
+      await expect(details).toContainText('code-review-grade-2026-07-11.md');
+      await expect(details).toContainText('1,250 total');
+      await expect(details.getByTestId('file-card-history-code-review-grade-2026-07-11.md')).toBeVisible();
+      const resultCase = page.getByTestId('result-case-badge');
+      const provenance = page.getByTestId('protocol-provenance');
+      await expect(resultCase).toContainText('Bugfix');
+      await expect(provenance).toContainText(/Generated by.*codex \/ gpt-5-mini/);
+      const [caseBox, provenanceBox] = await Promise.all([resultCase.boundingBox(), provenance.boundingBox()]);
+      expect(caseBox).not.toBeNull();
+      expect(provenanceBox).not.toBeNull();
+      expect(Math.abs(caseBox!.y - provenanceBox!.y)).toBeLessThan(8);
+
+      // Light-theme screenshot of the outcome-first document surface.
       await setTheme(page, 'light');
-      await captureScreenshot(page, testInfo, 'f48-files-tab-multi-collapsed-light.png');
+      await captureScreenshot(page, testInfo, 'operator-docs-outcome-first-light.png');
+      await review.getByTestId('file-card-details-code-review-grade-2026-07-11.md').click();
 
       // Click an aspect card -> it expands and renders markdown (h1 visible).
       const aspect = page.getByTestId('file-card-aspect-code-quality.md');
-      const aspectHeader = aspect.getByRole('button', { name: /^aspect-code-quality\.md/ });
+      const aspectHeader = aspect.getByRole('button', { name: /toggle document code-quality/i });
       await aspectHeader.click();
-      await expect(aspect).toHaveAttribute('class', /file-card--expanded/);
-      await expect(aspect.locator('.markdown-body h1')).toBeVisible({ timeout: 5_000 });
+      await expect(aspect).toHaveAttribute('class', /file-card--collapsed/);
 
-      await captureScreenshot(page, testInfo, 'f48-files-tab-aspect-expanded-light.png');
-
-      // Dark-theme screenshot — same multi-file shape, all-collapsed.
-      await aspectHeader.click(); // collapse again
+      // Dark-theme screenshot preserves the same hierarchy and contrast.
+      await aspectHeader.click();
       await setTheme(page, 'dark');
-      await captureScreenshot(page, testInfo, 'f48-files-tab-multi-collapsed-dark.png');
+      await captureScreenshot(page, testInfo, 'operator-docs-outcome-first-dark.png');
     } finally {
       await deleteJob(job.id, watchPath);
     }
   });
 });
 
-test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () => {
+test.describe('Task detail Docs tab - only-prompt theme screenshots + Edit flow', () => {
   for (const theme of ['light', 'dark'] as const) {
     test(`only-prompt looks right in the ${theme} theme`, async ({ page }, testInfo) => {
       const watchPath = await pickWatchPath();
@@ -305,12 +388,12 @@ test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () 
       try {
         await page.setViewportSize({ width: 1400, height: 900 });
         await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
-        await dismissUpdateBannerIfPresent(page);
+        await dismissBlockingOverlays(page);
         await setTheme(page, theme);
 
         // Click the label itself because the trailing edge sits below the pane
         // action cluster at this compact screenshot viewport.
-        await page.getByTestId('prompt-tab-description').getByText('Files', { exact: true }).click();
+        await page.getByTestId('prompt-tab-description').getByText('Docs', { exact: true }).click();
 
         await expect(page.getByTestId('file-card-prompt.md')).toBeVisible({ timeout: 10_000 });
         await expect(page.getByTestId('files-pane-hint')).toBeVisible();
@@ -335,16 +418,16 @@ test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () 
 
     try {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
-      await dismissUpdateBannerIfPresent(page);
+      await dismissBlockingOverlays(page);
 
       // Initially the editor must not be rendered — read-only markdown only.
       await expect(page.getByTestId('prompt-editor')).toHaveCount(0);
 
-      // Overview is the default tab on task switch; click into Files, then
+      // Overview is the default tab on task switch; click into Docs, then
       // explicitly expand prompt.md before editing it.
       await page.getByTestId('prompt-tab-description').click();
       const promptCard = page.getByTestId('file-card-prompt.md');
-      await promptCard.getByRole('button', { name: /^prompt\.md/ }).click();
+      await promptCard.getByRole('button', { name: /toggle document edit me/i }).click();
 
       const edit = page.getByTestId('file-card-prompt-edit');
       await expect(edit).toBeVisible({ timeout: 10_000 });

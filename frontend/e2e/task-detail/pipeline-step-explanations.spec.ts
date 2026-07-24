@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Job-Details pipeline: every step name carries a "what happens here"
@@ -61,6 +62,7 @@ const core = [step('core-agent-run', 'Agent execution', 'core', 'sequential')];
 const post = [
   step('aspect-requirement-fit', 'Requirement fit', 'aspect', 'parallel'),
   step('post-git-commit-attribution', 'Commit attribution', 'tool', 'sequential'),
+  step('post-build-test-gate', 'Build/test gate', 'tool', 'sequential'),
   step('post-orchestrator-decision', 'Final verdict', 'orchestrator', 'sequential'),
   step('post-drift-adr-code', 'ADR vs code drift', 'drift', 'sequential'),
 ];
@@ -109,6 +111,10 @@ function pipelineBody() {
         execStep('core-agent-run', 'core', 'passed'),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('post-git-commit-attribution', 'tool', 'passed'),
+        execStep('post-build-test-gate', 'tool', 'passed', {
+          verdict: 'ok',
+          reason: 'verify gate passed; test-level=work-package; selected=2; full-suite=not-run; omitted=11',
+        }),
         execStep('post-orchestrator-decision', 'orchestrator', 'passed', { verdict: 'accept' }),
         execStep('post-drift-adr-code', 'drift', 'passed'),
       ],
@@ -123,8 +129,22 @@ async function installRoutes(page: Page, state: string) {
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {
+      /* the page may cancel a fallback request during navigation */
+    });
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -238,8 +258,22 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {
+      /* best-effort cleanup for a fixture-only dialog */
+    });
   }
+}
+
+async function expandAllPipelineSections(page: Page): Promise<void> {
+  const collapsed = page.locator(
+    '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
+  );
+  await collapsed.evaluateAll((buttons) => {
+    for (const button of buttons) {
+      (button as HTMLButtonElement).click();
+    }
+  });
+  await expect(collapsed).toHaveCount(0);
 }
 
 test.describe('Pipeline: per-step explanation tooltips', () => {
@@ -256,7 +290,7 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     });
   });
 
-  test('every step name opens an explanation tooltip with the step label as title', async ({ page }) => {
+  test('every step name opens an explanation tooltip with the step label as title', async ({ page }, testInfo) => {
     await installRoutes(page, '4-auto-review');
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
@@ -265,10 +299,11 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
-    // One explanation anchor per rendered pipeline step (6 here).
+    // One explanation anchor per rendered pipeline step (7 here).
     const names = page.getByTestId('overview-pipeline-step-name');
-    await expect(names).toHaveCount(6);
+    await expect(names).toHaveCount(7);
 
     const tooltip = page.getByTestId('cac-tooltip');
 
@@ -294,6 +329,14 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
       .getByTestId('overview-pipeline-step-name').hover();
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('git commits');
 
+    // A passed subset gate exposes the exact coverage scope from its green
+    // status icon instead of implying that the full suite ran.
+    await page.locator('[data-step-id="post-build-test-gate"]')
+      .getByTestId('overview-pipeline-step-status').hover();
+    await expect(tooltip.locator('.cac-tooltip__title')).toHaveText('Build/test gate: Passed');
+    await expect(tooltip.locator('.cac-tooltip__body')).toContainText('test-level=work-package');
+    await expect(tooltip.locator('.cac-tooltip__body')).toContainText('full-suite=not-run');
+
     // DECISION: the orchestrator decision explanation mentions the final ruling.
     await page.locator('[data-step-id="post-orchestrator-decision"]')
       .getByTestId('overview-pipeline-step-name').hover();
@@ -305,14 +348,39 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     await expect(tooltip.locator('.cac-tooltip__body')).toContainText('off by default');
 
     if (RESULTS_DIR) {
-      // Keep the last tooltip open for the capture.
-      await page.locator('[data-step-id="core-agent-run"]')
-        .getByTestId('overview-pipeline-step-name').hover();
-      await expect(tooltip).toBeVisible();
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-step-explanation-tooltip.png'),
-        fullPage: true,
-      });
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        // Keep the subset-coverage proof open for each themed capture.
+        await page.locator('[data-step-id="post-build-test-gate"]')
+          .getByTestId('overview-pipeline-step-status').hover();
+        await expect(tooltip).toBeVisible();
+        const pipelineBox = await pipeline.boundingBox();
+        const tooltipBox = await tooltip.boundingBox();
+        expect(pipelineBox).not.toBeNull();
+        expect(tooltipBox).not.toBeNull();
+        const x = Math.max(0, Math.min(pipelineBox!.x, tooltipBox!.x) - 16);
+        const y = Math.max(0, Math.min(pipelineBox!.y, tooltipBox!.y) - 16);
+        const right = Math.max(
+          pipelineBox!.x + pipelineBox!.width,
+          tooltipBox!.x + tooltipBox!.width,
+        ) + 16;
+        const bottom = Math.max(
+          pipelineBox!.y + pipelineBox!.height,
+          tooltipBox!.y + tooltipBox!.height,
+        ) + 16;
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `pipeline-subset-coverage-tooltip--${theme}.png`,
+        );
+        await page.screenshot({
+          path: screenshotPath,
+          clip: { x, y, width: right - x, height: bottom - y },
+        });
+        await testInfo.attach(`pipeline-subset-coverage-tooltip--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
     }
   });
 });

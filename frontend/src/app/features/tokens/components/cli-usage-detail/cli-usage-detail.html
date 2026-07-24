@@ -34,7 +34,7 @@
           <div class="cud__headroom-main">
             <span aria-hidden="true">{{ row.icon }}</span>
             <strong>{{ row.label }}</strong>
-            <span>{{ row.primaryPct === null ? '?' : row.primaryPct + '%' }}</span>
+            <span>{{ row.primaryPct === null ? 'Unknown' : row.primaryPct + '%' }}</span>
           </div>
           <div class="cud__meter" aria-hidden="true">
             <span [style.width.%]="row.primaryPct === null ? 0 : row.primaryPct"></span>
@@ -146,7 +146,7 @@
                   @for (w of row.windows; track w.label) {
                     <tr>
                       <td>{{ w.label }}</td>
-                      <td class="cud__num">{{ w.usedPct === null ? '?' : w.usedPct + '%' }}</td>
+                      <td class="cud__num">{{ w.usedPct === null ? 'Unknown' : w.usedPct + '%' }}</td>
                       <td>{{ limitText(w) }}</td>
                       <td>{{ w.resetLabel ?? 'n/a' }}</td>
                     </tr>

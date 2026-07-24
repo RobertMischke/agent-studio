@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { RemoteHostCardComponent } from './remote-host-card';
 import type { RemoteHost } from '../../models/remote-host.model';
 
@@ -59,14 +61,18 @@ describe('RemoteHostCardComponent', () => {
   });
 
   it('shows the independent read-only badge when the startup push probe fails', () => {
-    const el: HTMLElement = mount({
+    const fixture = mount({
       ...HOST,
       gitPushStatus: 'read-only',
       gitPushDetail: 'push-dry-run failed (128): permission denied',
-    }).nativeElement;
+    });
+    const el: HTMLElement = fixture.nativeElement;
     const badge = el.querySelector('[data-testid="remote-host-git-status"]');
     expect(badge?.textContent).toContain('Writable: no');
-    expect(badge?.getAttribute('title')).toContain('permission denied');
+    const tooltip = fixture.debugElement
+      .query(By.css('[data-testid="remote-host-git-status"]'))
+      .injector.get(AppTooltipDirective);
+    expect(tooltip.appTooltip()).toContain('permission denied');
   });
 
   it('emits an action event with the host id when a control is clicked', () => {
@@ -120,11 +126,41 @@ describe('RemoteHostCardComponent', () => {
     };
     const fixture = mount({ ...HOST, telemetry });
     const el: HTMLElement = fixture.nativeElement;
-    expect(el.querySelectorAll('.telemetry__row').length).toBe(4);
+    expect(el.querySelectorAll('[data-chart]').length).toBe(4);
     expect(el.querySelector('[data-testid="remote-host-slots-context"]')?.textContent).toContain('6 active slots · load 6.4 of 12 cores');
     expect(el.querySelector('[data-testid="remote-host-findings"]')?.textContent).toContain('VM throttled');
     (el.querySelector('[data-testid="remote-host-window-1h"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.componentInstance.telemetryWindow()).toBe('1h');
+  });
+
+  it('shows the exact synchronized telemetry point selected on the shared plot', () => {
+    const points = [
+      { timestamp: '2026-07-10T11:00:00Z', cpuPercent: 42, load1: 5.8, load5: 5, load15: 4,
+        memoryUsedBytes: 32e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
+        cpuStealPercent: 6, ioWaitPercent: 2, cpuCores: 12, activeSlots: 5 },
+      { timestamp: '2026-07-10T11:30:00Z', cpuPercent: 54.25, load1: 6.4, load5: 6, load15: 5,
+        memoryUsedBytes: 34.5e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
+        cpuStealPercent: 7, ioWaitPercent: 3, cpuCores: 12, activeSlots: 6 },
+    ];
+    const fixture = mount({ ...HOST, telemetry: { clientId: 'agent-runner', window: '14d', points, findings: [] } });
+    const plots = fixture.nativeElement.querySelector('[data-testid="remote-host-telemetry-plots"]') as HTMLElement;
+    plots.getBoundingClientRect = () => ({ left: 100, width: 200 } as DOMRect);
+
+    fixture.componentInstance.showTelemetryPoint({ currentTarget: plots, clientX: 290 } as unknown as PointerEvent);
+    fixture.detectChanges();
+
+    const tooltip = fixture.nativeElement.querySelector('[data-testid="remote-host-telemetry-tooltip"]') as HTMLElement;
+    expect(tooltip.dataset['pointTimestamp']).toBe(points[1].timestamp);
+    expect(tooltip.querySelector('[data-metric="cpu"]')?.textContent).toContain('54.25%');
+    expect(tooltip.querySelector('[data-metric="memory"]')?.textContent).toContain('34.5 GB');
+    expect(tooltip.querySelector('[data-metric="load"]')?.textContent).toContain('6.4 load');
+    expect(tooltip.querySelector('[data-metric="slots"]')?.textContent).toContain('6 slots');
+    expect(fixture.nativeElement.querySelectorAll('.telemetry__point').length).toBe(4);
+
+    fixture.componentInstance.hideTelemetryPoint({ pointerType: 'touch' } as PointerEvent);
+    expect(fixture.componentInstance.hoveredTelemetryIndex()).toBe(1);
+    fixture.componentInstance.hideTelemetryPoint({ pointerType: 'mouse' } as PointerEvent);
+    expect(fixture.componentInstance.hoveredTelemetryIndex()).toBeNull();
   });
 });

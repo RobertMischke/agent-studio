@@ -1,0 +1,7 @@
+<span class="summary"
+      data-testid="lane-post-processing-summary"
+      [attr.data-active-count]="summary().active"
+      [attr.data-waiting-count]="summary().waiting"
+      [cacTooltip]="summary().tooltip">
+  {{ summary().active }} active / {{ summary().waiting }} waiting
+</span>

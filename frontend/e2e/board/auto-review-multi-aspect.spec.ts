@@ -79,6 +79,7 @@ interface AutoReviewStatus {
   pending: number;
   currentJob: string | null;
   currentProject: string | null;
+  activeJobs?: { project: string; jobId: string; step: string; startedAt: string }[];
 }
 
 async function installMocks(
@@ -89,6 +90,13 @@ async function installMocks(
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
+    if (p === '/api/auth/status') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+      });
+    }
     if (p === '/api/tasks/grouped' || p === '/api/tasks/grouped') {
       const body = {
         backlog: jobs.filter((j) => j.state === '0-backlog'),
@@ -104,6 +112,20 @@ async function installMocks(
         archive: jobs.filter((j) => j.state === '7-archive')
       };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    }
+    if (p === '/api/tasks/archive') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [], total: 0, offset: 0, limit: 50 }),
+      });
+    }
+    if (p === '/api/crash-recovery/pending') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ pending: [] }),
+      });
     }
     if (p === '/api/tasks' || p === '/api/tasks/' || p === '/api/tasks' || p === '/api/tasks/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
@@ -174,6 +196,13 @@ async function installMocks(
     }
     if (p === '/api/projects/settings') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+    }
+    if (p === '/api/orchestrator/sessions') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sessions: [] }),
+      });
     }
     if (p === '/api/dev-tools/flags') {
       return route.fulfill({
@@ -298,8 +327,9 @@ test.describe('Auto-review multi-aspect surface', () => {
     await expect(card.getByText('quality:concerns')).toHaveCount(0);
     await expect(card.getByText('docs:concerns')).toHaveCount(0);
 
-    // No lane-mirroring "queued for review" / "review pending" status pill.
-    await expect(card.getByTestId('task-card-auto-review-status')).toHaveCount(0);
+    // The only lane-level state repeated on the card is useful activity:
+    // this idle card shows its elapsed queue wait, not a generic review chip.
+    await expect(card.getByTestId('task-card-post-processing-activity')).toContainText('waiting');
 
     // Capture suppression evidence on the card.
     await page.setViewportSize({ width: 1400, height: 900 });

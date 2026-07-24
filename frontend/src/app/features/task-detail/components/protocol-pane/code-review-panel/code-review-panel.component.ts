@@ -22,6 +22,9 @@ import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { codeReviewVerdictTone, type CodeReviewVerdictTone } from '../../code-review-verdict.util';
 import { describeDiffSize, isLargeDiff } from '../../../../../utils/large-diff-gate';
 import { formatDateTimeUtc } from '../../../../../services/format.util';
+import { buildTokenCostTooltip } from '../../../../tokens';
+import { taskNavigationHref } from '../../../state/task-url';
+import { CouncilReviewReactionComponent } from '../council-review-reaction/council-review-reaction.component';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -57,7 +60,13 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
   selector: 'app-code-review-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, CliModelSelectorComponent, FileSourceHistoryComponent, TooltipDirective],
+  imports: [
+    FormsModule,
+    CliModelSelectorComponent,
+    FileSourceHistoryComponent,
+    TooltipDirective,
+    CouncilReviewReactionComponent,
+  ],
   templateUrl: './code-review-panel.component.html',
   styleUrl: './code-review-panel.component.scss',
 })
@@ -293,6 +302,40 @@ export class CodeReviewPanelComponent implements OnInit {
 
   formatTimestamp(iso: string): string {
     return formatDateTimeUtc(iso);
+  }
+
+  tokenLabel(entry: CodeReviewListEntry): string | null {
+    const input = entry.inputTokens ?? entry.generation?.tokensIn ?? 0;
+    const output = entry.outputTokens ?? entry.generation?.tokensOut ?? 0;
+    const cacheRead = entry.cacheReadTokens ?? entry.generation?.cacheReadTokens ?? 0;
+    const cacheWrite = entry.cacheCreationTokens ?? entry.generation?.cacheCreationTokens ?? 0;
+    const total = entry.totalTokens ?? entry.generation?.tokensTotal ?? (input + output + cacheRead + cacheWrite);
+    if (total <= 0) return null;
+    return `${this.compactTokens(input)} in / ${this.compactTokens(output)} out (${this.compactTokens(total)})`;
+  }
+
+  tokenTooltip(entry: CodeReviewListEntry): string {
+    const input = entry.inputTokens ?? entry.generation?.tokensIn ?? 0;
+    const output = entry.outputTokens ?? entry.generation?.tokensOut ?? 0;
+    const cacheRead = entry.cacheReadTokens ?? entry.generation?.cacheReadTokens ?? 0;
+    const cacheWrite = entry.cacheCreationTokens ?? entry.generation?.cacheCreationTokens ?? 0;
+    const total = entry.totalTokens ?? entry.generation?.tokensTotal ?? (input + output + cacheRead + cacheWrite);
+    return buildTokenCostTooltip({
+      costUsd: entry.estimatedApiCostUsd,
+      priceKnown: entry.priceKnown === true,
+      context: [
+        `${input.toLocaleString()} input + ${output.toLocaleString()} output`,
+        `${cacheRead.toLocaleString()} cache read + ${cacheWrite.toLocaleString()} cache write`,
+        `${total.toLocaleString()} total tokens`,
+        `Pricing date: ${entry.runAt || 'recorded execution time'}.`,
+      ].join('\n'),
+    });
+  }
+
+  private compactTokens(value: number): string {
+    if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}m`;
+    if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}k`;
+    return `${value}`;
   }
 
   provenanceFor(entry: CodeReviewListEntry) {

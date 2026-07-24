@@ -3,7 +3,8 @@ import path from 'path';
 import { Reporter, TestCase, TestResult } from '@playwright/test';
 
 /**
- * Custom Playwright reporter that harvests test artifacts (screenshots, videos, traces)
+ * Custom Playwright reporter that harvests test artifacts (screenshots, videos,
+ * traces, and structured JSON probes)
  * into a job folder's results directory when JOB_RESULTS_DIR env var is set.
  *
  * This reporter activates only when JOB_RESULTS_DIR is defined and copies artifacts
@@ -15,13 +16,22 @@ import { Reporter, TestCase, TestResult } from '@playwright/test';
  */
 export class JobArtifactReporter implements Reporter {
   private readonly jobResultsDir = process.env.JOB_RESULTS_DIR;
-  private readonly testResultsDir = 'frontend/e2e/test-results';
-  private readonly artifacts = new Map<string, { status: string; files: string[] }>();
+  private readonly testResultsDir = 'test-results';
+  private readonly artifacts = new Map<string, {
+    status: string;
+    specFile: string;
+    tests: string[];
+    files: string[];
+  }>();
 
   onTestEnd(test: TestCase, result: TestResult): void {
     if (!this.jobResultsDir) return;
 
-    const specName = test.titlePath()[0] || 'unknown';
+    const specFile = path.relative(process.cwd(), test.location.file).replaceAll('\\', '/');
+    const specName =
+      path.basename(specFile).replace(/\.(?:spec|test)\.[^.]+$/i, '') ||
+      test.titlePath().find(part => part.trim().length > 0) ||
+      'unknown';
     const testName = test.title;
     const status =
       result.status === 'passed'
@@ -33,10 +43,13 @@ export class JobArtifactReporter implements Reporter {
             : '?';
 
     if (!this.artifacts.has(specName)) {
-      this.artifacts.set(specName, { status, files: [] });
+      this.artifacts.set(specName, { status, specFile, tests: [], files: [] });
     }
 
     const specArtifacts = this.artifacts.get(specName)!;
+    if (!specArtifacts.tests.includes(testName)) {
+      specArtifacts.tests.push(testName);
+    }
 
     // Copy artifacts from test-results/<spec>/ subfolder to results/playwright/<spec>/
     const testResultsSpecDir = path.join(this.testResultsDir, specName.replace(/\s+/g, '-').toLowerCase());
@@ -49,7 +62,7 @@ export class JobArtifactReporter implements Reporter {
       const files = fs.readdirSync(testResultsSpecDir);
       for (const file of files) {
         const srcPath = path.join(testResultsSpecDir, file);
-        if (fs.statSync(srcPath).isFile() && /\.(png|webm|zip)$/.test(file)) {
+        if (fs.statSync(srcPath).isFile() && /\.(json|png|webm|zip)$/.test(file)) {
           const destPath = path.join(destDir, file);
           fs.copyFileSync(srcPath, destPath);
           specArtifacts.files.push(file);
@@ -60,7 +73,7 @@ export class JobArtifactReporter implements Reporter {
     // Also copy from result.attachments if available
     if (result.attachments) {
       for (const attachment of result.attachments) {
-        if (attachment.path && fs.existsSync(attachment.path) && /\.(png|webm|zip)$/.test(attachment.path)) {
+        if (attachment.path && fs.existsSync(attachment.path) && /\.(json|png|webm|zip)$/.test(attachment.path)) {
           const destDir = path.join(this.jobResultsDir, 'playwright', specName);
           fs.mkdirSync(destDir, { recursive: true });
 

@@ -1,0 +1,46 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2257",
+      "title": "Gate haengt nach Lock-Erwerb ohne Watchdog - 2.5h Vollblockade",
+      "linkedAt": "2026-07-23T11:53:12.5524622Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2259",
+      "title": "Pipeline-Gesundheitssensorik: Lock-Halte-Alarm, Fingerprint-Wiederholung, Drain-Rate",
+      "linkedAt": "2026-07-23T12:04:46.5671747Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2260",
+      "title": "Operator-Requeue hat Autoritaet: Attempt-Epoche statt Wieder-Eskalation aus Altlasten",
+      "linkedAt": "2026-07-23T12:06:50.4990917Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2256",
+      "title": "Build-profile validation launches bash on Windows and always fails",
+      "linkedAt": "2026-07-23T12:29:47.1572491Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2258",
+      "title": "Gate testet Subject auf aktuellem develop (Stale-Branch-Falle schliessen)",
+      "linkedAt": "2026-07-23T13:23:59.4340374Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2255",
+      "title": "Lane-Move meldet Success, obwohl der Quellordner vollstaendig zurueckbleibt",
+      "linkedAt": "2026-07-23T15:04:36.5873413Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2229",
+      "title": "Eigene Orchestrator-Instanz auf dem Remote-Host: lokale Ausfuehrung entkoppeln",
+      "linkedAt": "2026-07-24T16:13:56.1639307Z",
+      "source": "auto"
+    }
+  ]
+}

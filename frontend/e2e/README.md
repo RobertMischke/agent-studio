@@ -143,7 +143,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `create-job-with-screenshot.spec.ts` | Add Task dialog - drop + paste screenshot uploads |
 | `promote-planning-to-coding.spec.ts` | Promote planning result -> coding task |
 
-### `board/` - 73 specs
+### `board/` - 75 specs
 
 | Spec | Summary |
 |------|---------|
@@ -182,6 +182,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `epic-overview-history.spec.ts` | Epic overview history |
 | `epic-overview-screen.spec.ts` | Epic overview screen |
 | `epic-rollup-tight-viewport.spec.ts` | Epic rollup: tight viewport / resize keeps lanes enclosed and reachable |
+| `execution-location-badge.spec.ts` | shows each concurrent task owner and limits warnings to the stale remote run |
 | `explorer-collapse-screenshots.spec.ts` | F27 visual evidence |
 | `explorer-collapse.spec.ts` | F27: Explorer-tree folder headers are all collapsible |
 | `f39-running-card-themes.spec.ts` | F39 - running task-card across themes |
@@ -215,6 +216,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `post-processing-lane-identity.spec.ts` | Post Processing lane identity |
 | `remote-running-card.spec.ts` | Remote-running card visibility, steer wait, and timeout recovery |
 | `signalr-jobs-hub.spec.ts` | SignalR jobs hub - push delivery |
+| `stalled-progress-card.spec.ts` | stalled Progress cards and lane subset are visible at a glance |
 | `task-filter-removed.spec.ts` | Task filter axis removed from filter list |
 | `thinking-level-indicator.spec.ts` | shows the effective level and highlights deviations from the client default in both themes |
 | `token-popover-contrast.spec.ts` | Token popover WCAG-AA contrast |
@@ -358,12 +360,13 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `task-progress-tracking-mockup.spec.ts` | task-progress-tracking mockup |
 | `vscode-layout-mockup.spec.ts` | @mockup vscode-layout |
 
-### `orchestrator/` - 14 specs
+### `orchestrator/` - 16 specs
 
 | Spec | Summary |
 |------|---------|
 | `f14-context-chip-and-caching.spec.ts` | F14: context badge, menu and send caching |
 | `orchestrator-chat-content-visible.spec.ts` | orchestrator chat - content stays visible after load |
+| `orchestrator-chat-scroll-stability.spec.ts` | mixed-height streamed rows stay mounted without scrollbar correction |
 | `orchestrator-config-panel.spec.ts` | Orchestrator logic config (consolidated Settings, Admin/System entry) |
 | `orchestrator-context-header.spec.ts` | Orchestrator context header · where am I |
 | `orchestrator-feed-overlay.spec.ts` | global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes |
@@ -486,7 +489,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `watchdog-notification-operator-copy.spec.ts` | watchdog Suspicious notification reads in operator-friendly English |
 | `workspace-banner-long-message.spec.ts` | workspace banner clamps long auto-review verdict and keeps project below body |
 
-### `task-detail/` - 88 specs
+### `task-detail/` - 89 specs
 
 | Spec | Summary |
 |------|---------|
@@ -526,6 +529,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `log-overlay-centering.spec.ts` | Log overlay (maximized agent log) - centering |
 | `open-failed-task.spec.ts` | open the failed screenshots-in-editors task and capture errors |
 | `overview-agent-metrics-fix.spec.ts` | Overview agent-run metrics fix (tokens + cumulative duration) |
+| `overview-failure-details.spec.ts` | Overview failure uses human copy and preserves the full raw diagnostic behind details |
 | `overview-prompt-popover.spec.ts` | Overview tab - task prompt modal |
 | `overview-tab-is-default-on-task-switch.spec.ts` | Overview tab is the default on task open + switch |
 | `overview-tab-model-change.spec.ts` | Overview tab - model picker |

@@ -99,6 +99,29 @@ public class TaskScannerMoveTests : IDisposable
     }
 
     [Fact]
+    public void Scanner_AutoReviewJob_ProjectsPostProcessingChecksFromLifecycleSidecar()
+    {
+        WriteJob(TaskStates.AutoReview, "active-review");
+        var jobDir = Path.Combine(_watchPath, TaskStates.AutoReview, "active-review");
+        File.WriteAllText(Path.Combine(jobDir, "lifecycle.json"),
+            """
+            {
+              "version": 1,
+              "phase": "post-processing-running",
+              "postProcessingChecks": [
+                { "name": "code-review-grade", "status": "running" }
+              ]
+            }
+            """);
+
+        var job = BuildScanner().FindJob("active-review", _watchPath);
+
+        var check = Assert.Single(job!.PostProcessingChecks);
+        Assert.Equal("code-review-grade", check.Name);
+        Assert.Equal("running", check.Status);
+    }
+
+    [Fact]
     public void MoveJob_UnknownId_ReturnsNotFound()
     {
         var outcome = BuildStateMachine().MoveJob("ghost", TaskStates.Archive, _watchPath);

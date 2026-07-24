@@ -137,6 +137,12 @@
       "title": "BUG: Quelltext-Detailansicht - Splitter b\u00FCndig und gut greifbar machen, Pfad-Artefakte entfernen",
       "linkedAt": "2026-07-20T03:00:30.8754729Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2165",
+      "title": "Orchestrator-Chat: Invalid Context Key im Task-Kontext selbstheilend verhindern",
+      "linkedAt": "2026-07-23T15:09:52.6254651Z",
+      "source": "auto"
     }
   ],
   "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",

@@ -25,6 +25,7 @@ public sealed class ArtifactIngestionEndpointsTests : IDisposable
     [InlineData("../outside.png")]
     [InlineData("results/../outside.png")]
     [InlineData("C:/temp/outside.png")]
+    [InlineData(@"C:\temp\outside.png")]
     public void NormalizeResultsPath_RejectsEscapes(string path)
     {
         Assert.Throws<ArtifactIngestException>(() => ArtifactIngestionEndpoints.NormalizeResultsPath(path));

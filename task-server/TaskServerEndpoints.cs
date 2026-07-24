@@ -56,6 +56,14 @@ public static class TaskServerEndpoints
                 return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and request runner ids differ."));
             return await InvokeAsync(() => store.ClaimAsync(request, Actor(context), ct));
         });
+        runners.MapPut("/{runnerId}/outbox-status", async (
+            HttpContext context,
+            string runnerId,
+            RunnerOutboxStatusRequest request,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.ReportRunnerOutboxAsync(
+                runnerId, request, Actor(context), ct)));
         runners.MapPost("/{runnerId}/review-claims", async (
             HttpContext context, string runnerId, ReviewClaimRequest request, TaskServerStore store, CancellationToken ct) =>
         {
@@ -72,8 +80,37 @@ public static class TaskServerEndpoints
             HttpContext context, string runId, LeaseReleaseRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ReleaseLeaseAsync(runId, request, Actor(context), ct)));
         runs.MapPost("/{runId}/completion", async (
-            HttpContext context, string runId, CompleteRunRequest request, TaskServerStore store, CancellationToken ct)
-            => await InvokeAsync(() => store.CompleteRunAsync(runId, request, Actor(context), ct)));
+            HttpContext context, string runId, CompleteRunRequest request, TaskServerStore store, CancellationToken ct) =>
+        {
+            if (ProtocolVersion(context) < 2)
+                return Results.Json(
+                    new ApiError(
+                        "protocol-upgrade-required",
+                        "Durable result handoff and idempotent completion require runner protocol 2."),
+                    statusCode: StatusCodes.Status426UpgradeRequired);
+            return await InvokeAsync(() => store.CompleteRunAsync(runId, request, Actor(context), ct));
+        });
+        runs.MapPut("/{runId}/result-handoff", async (
+            HttpContext context,
+            string runId,
+            ResultHandoffRequest request,
+            TaskServerStore store,
+            CancellationToken ct) =>
+        {
+            if (ProtocolVersion(context) < 2)
+                return Results.Json(
+                    new ApiError(
+                        "protocol-upgrade-required",
+                        "Immutable result handoff requires runner protocol 2."),
+                    statusCode: StatusCodes.Status426UpgradeRequired);
+            return await InvokeAsync(() => store.AcknowledgeResultHandoffAsync(
+                runId, request, Actor(context), ct));
+        });
+        runs.MapGet("/{runId}/result-handoff", async (
+            string runId,
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetResultHandoffAsync(runId, ct)));
         runs.MapPost("/{runId}/events", async (
             HttpContext context, string runId, EventIngestRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.IngestEventAsync(runId, request, Actor(context), ct), StatusCodes.Status201Created));
@@ -108,6 +145,8 @@ public static class TaskServerEndpoints
 
         var management = api.MapGroup("/management");
         management.MapGet("/status", (TaskServerStore store) => Results.Ok(store.Status()));
+        management.MapGet("/outboxes", async (TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.ListRunnerOutboxesAsync(ct)));
         management.MapPut("/mode", async (
             HttpContext context, ChangeModeRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ChangeModeAsync(request, Actor(context), ct)));
@@ -137,6 +176,13 @@ public static class TaskServerEndpoints
         => context.Request.Headers["X-Actor-Id"].FirstOrDefault()
            ?? context.Request.Headers["X-Client-Id"].FirstOrDefault()
            ?? "local-compatibility";
+
+    private static int ProtocolVersion(HttpContext context)
+        => int.TryParse(
+            context.Request.Headers[TaskServerProtocol.HeaderName].FirstOrDefault(),
+            out var version)
+            ? version
+            : 0;
 
     private static async Task<IResult> InvokeAsync<T>(Func<Task<T>> action, int successStatus = StatusCodes.Status200OK)
     {

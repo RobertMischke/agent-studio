@@ -50,6 +50,25 @@ public sealed class AccessSecurityTests : IDisposable
     }
 
     [Fact]
+    public void Runner_lifecycle_and_activity_share_the_credential_registry()
+    {
+        var (store, _, _) = NewStore();
+        var enrollment = store.CreateEnrollment(new RunnerEnrollmentRequest("runner-managed", null, null, null));
+        var enrolled = store.EnrollRunner(enrollment.Code);
+
+        var active = store.RecordRunnerActivity(enrolled.Runner.Id, 1, 0, claimed: true);
+        Assert.Equal(1, active!.ActiveSlots);
+        Assert.NotNull(active.LastClaimAt);
+        store.RequestRunnerDrain(enrolled.Runner.Id, retireAfterDrain: true);
+        Assert.False(store.RunnerAcceptsClaims(enrolled.Runner.Id));
+        Assert.NotNull(store.AuthenticateRunner(enrolled.Secret));
+
+        var retired = store.RecordRunnerActivity(enrolled.Runner.Id, 0, 1, claimed: false);
+        Assert.NotNull(retired!.RetiredAt);
+        Assert.Null(store.AuthenticateRunner(enrolled.Secret));
+    }
+
+    [Fact]
     public void Expired_enrollment_and_runner_credential_fail_closed()
     {
         var (store, _, clock) = NewStore();

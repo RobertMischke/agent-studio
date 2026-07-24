@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -29,6 +29,9 @@ pipeline view.
 
 ## Key Code
 
+- [Model Routing Policy](./model-routing-policy.md) is the canonical model and
+  thinking-level selection policy, including weighted criteria, correctness
+  floors, benchmark confidence, quota handling, and reissue promotion.
 - `backend/Features/Pipeline/ModelQualificationService.cs`: zero-token PRE-step
   that classifies the task in project context and maps it onto the selected
   CLI's live model/reasoning ladders. `IModelEconomyAdvisor` is the stable
@@ -82,6 +85,17 @@ pipeline view.
   next to the wiki-maintenance / wiki-learnings producers.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
+- `backend/Features/Pipeline/TestSelectionPlanner.cs`: staged test planning from
+  the lane policy, changed files, project/component ownership, explicit impact
+  rules, and Test Hub history. It produces the immutable selection audit used
+  by the gate log.
+- `backend/Features/Pipeline/LlmTestSelectionAdvisor.cs`: optional constrained
+  adviser. It can add only stable candidate ids from the deterministic safe
+  inventory and cannot emit an executable command.
+- `backend/Features/Pipeline/PreMainTestGate.cs`: fail-closed release boundary
+  that forces the full test level before a configured merge can advance
+  `main`, irrespective of lane settings, diff input, history, or adviser
+  output.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
   condition evaluation.
 - `backend/Services/Pipeline/ProjectPipelineOrder.cs`: project-level step order
@@ -102,6 +116,9 @@ pipeline view.
   `[[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<short>]]` sentinel parser, the
   `code-review:grade-{a..d}` tag mapping, and the grade->pass/concerns/block
   severity mapping.
+- `backend/Features/Review/CouncilReviewReaction.cs`: structured review-finding
+  parsing, the bounded per-finding council policy, targeted follow-up rendering,
+  and the reaction sidecar stored beside each automatic grade artifact.
 - `backend/Features/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
   model/CLI from `CodeReviewStep:DefaultModel` / `CodeReviewStep:DefaultCli`,
   defaulting to Codex's live-discovered flagship (gpt-5.5 fallback) at its top
@@ -131,6 +148,43 @@ pipeline view.
   pipeline presentation.
 
 ## Invariants
+
+- Test execution has three stable levels: `continuous` runs the configured
+  fixed baseline, `work-package` adds tests selected from the current diff and
+  Test Hub history, and `full` runs every declared test command. Project
+  settings map task lanes to levels. Auto Review defaults to `work-package`
+  when no mapping exists; an unavailable diff falls back to `full`. A configured
+  continuous baseline also runs for documentation-only diffs, and an explicitly
+  required `full` level can never be bypassed by the no-code-diff optimization.
+- The build/test step reason always states the effective level, selected count,
+  whether the full suite ran, and how many full-suite commands were omitted.
+  The task Overview exposes that reason from the passed status icon as well, so
+  a green work-package subset cannot be mistaken for a full-suite pass.
+  Its `post-steps/build-test-gate-*.log` contains the exact diff input, history
+  rows, candidate inventory, chosen ids/commands, selector/model, and reasons.
+  `FullSuiteRan` is execution evidence, not a planning claim: it becomes true
+  only after every selected full-suite test command was attempted.
+- A failing continuous-baseline command during a work-package run creates a
+  separate `post-steps/test-findings-*.json` record and a `warn` gate verdict.
+  It does not block the card. Selected work-package tests still block. No
+  failure is non-blocking at the pre-main full-suite boundary. If one physical
+  command belongs to both the baseline and the diff-selected set, the stricter
+  work-package classification wins.
+- Model advice is additive and allowlisted. Deterministic diff/history choices
+  cannot be removed, unknown candidate ids are ignored, and raw model output is
+  never interpreted as a shell command.
+- Any operation that can advance `main` must call `PreMainTestGate` first and
+  proceed only on an `Ok` result with `FullSuiteRequired` and `FullSuiteRan` set.
+  `PreMainTestGate` converts a nominally green runner result without that
+  evidence into a failure, so callers cannot accidentally accept an incomplete
+  release check. It also forces exact-subject execution even if the caller
+  supplied a weaker request. The existing deferred integration merge is an
+  enforced caller when its configured target resolves to `main`: it runs the
+  full suite once on the exact source SHA, records
+  `post-steps/pre-main-test-gate-*.log`, rechecks both branch tips after the
+  suite, and only then fast-forwards `main`. A red or incomplete result leaves
+  `main` unchanged. The future manifest-based release workflow must use the
+  same boundary.
 
 - `pre-model-qualification` runs before CORE and never performs quota fallback
   routing. It recommends from the live CLI catalogue without hardcoded model
@@ -215,18 +269,61 @@ operator changes cause the step to fail before its writer runs.
   commit) is documented. `AspectRunInputs` / `CodeReviewStepRequest` carry the
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
+- A fenced remote completion persists `review-subject.json` with its exact
+  `ResultSha`. Both `post-build-test-gate` and `post-code-review-grade` use that
+  SHA as their authoritative subject. The build gate's selected subject is
+  carried through the later aspect and grade steps. The grade reviews the full
+  merge-base-to-`ResultSha` task range, not only the result commit, and must not
+  fall back to the canonical task-branch HEAD when the runner delivered a
+  different commit. Otherwise the pipeline would test one revision and review
+  another, or omit earlier commits from a multi-commit delivery.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.
+- Automatic quality-grade reviews follow the council contract. Every grade
+  artifact receives an explicit orchestrator reaction. Grade A with no named
+  deficiencies records `Accept, nothing open.` A review that names concrete
+  deficiencies records one `FixNextRound`, `Accept`, or `Escalate` assessment
+  per finding. `FixNextRound` reissues the same card within the shared loop
+  budget and writes only the selected finding sentences to
+  `orchestrator-follow-up.md`; exhausted budget escalates every remaining
+  finding. A B/C/D response without the required concrete finding sentences is
+  never treated as clean: it escalates the missing handoff because no safe,
+  targeted round can be formed. When a deterministic build/test failure already
+  reopens the same attempt, that follow-up includes both the build output and
+  the selected council findings. The sibling `*.council-reaction.json` and the
+  action decision journal entry are the read-side chain for review -> reaction
+  -> target task/run. Task-detail renders this reaction on the review row. A
+  legacy or manually triggered review without a sidecar shows an explicit
+  `No orchestrator reaction recorded` audit state instead of silently omitting
+  the reaction.
+
+  This is a load-bearing review-orchestration contract, not optional reporting.
+  The terminal routing is fixed:
+
+  | Review outcome | Orchestrator reaction | Lane effect | Required durable evidence |
+  |---|---|---|---|
+  | Grade A, no findings | `Accept, nothing open.` | Continue through the remaining gates | Reaction sidecar on the grade artifact |
+  | Named findings, loop budget available | One `FixNextRound` assessment per finding | Reissue the same task to `2-ready` | Sidecar, decision-journal record, targeted `orchestrator-follow-up.md`, and target task/run |
+  | Named findings, loop budget exhausted | One `Escalate` assessment per finding | Move to `5e-escalated` | Sidecar and decision-journal record |
+  | Grade B/C/D without concrete finding sentences | Escalate the missing handoff | Move to `5e-escalated` | Sidecar explaining why no safe targeted round can start |
+
+  A task is not accepted merely because the letter grade is passing. Named
+  findings take precedence over the grade letter. Completion, build/test,
+  evidence, solution-quality, and council decisions share the same bounded
+  reissue budget; the council reaction runs before generic evidence routing so
+  its concrete finding sentences remain the next-round assignment.
 - `post-code-review-grade` is the automatic quality-grade step (ASS-1657). It is
   `DefaultEnabled`, runs after the four aspect reviews and before
   `post-orchestrator-decision`, and assigns every pipelined task an A/B/C/D grade
   with the rubric: A solves the goal completely with tests/evidence, B is solid
   with small gaps, C has concerns (half-done/unclear), D misses the goal or
-  redundantly redoes existing code. It is reporting-only and never gates the lane:
-  the grade surfaces as a `code-review:grade-{a..d}` card tag plus a rendered
-  detail file, a D records a `Failed` step row so it stands out in the Overview,
-  and A-C record `Passed`. The grade model is quality-first: it defaults to the
+  redundantly redoes existing code. The grade token is reporting-only: it
+  surfaces as a `code-review:grade-{a..d}` card tag plus a rendered detail file.
+  A D records a `Failed` step row so it stands out in the Overview, and A-C
+  record `Passed`. Named findings from that review are inputs to the separate
+  council decision above and can therefore start a bounded round. The grade
+  model is quality-first: it defaults to the
   live-discovered Codex flagship with the top supported reasoning level
   (`CodeReviewStep:DefaultModel`, CLI `CodeReviewStep:DefaultCli`), while the four
   bounded aspect reviews use Codex `gpt-5.4-mini` at `high`. Opt out per deployment
@@ -268,6 +365,20 @@ operator changes cause the step to fail before its writer runs.
   a shared checkout and its linked worktrees cannot launch overlapping full
   builds or test suites. Admission and host-load waits are cancellable and do
   not consume the per-command execution timeout.
+- `PipelineHealthService` is the visibility-only sensor for pipeline-wide
+  failure modes. `BuildTestGateRunner` reports acquired/completed pairs into
+  it, and the service reads the existing append-only `lane_changed` ledgers.
+  It never cancels a gate or moves a task. Code-owned conventions are a
+  30-minute acquired-without-completed budget, three consecutive matching
+  `failure_fingerprint` values on distinct cards, and a one-hour lane drain
+  window that alarms when at least two cards have waited for 15 minutes with
+  zero exits. Environmental retries of one card count once for the cross-card
+  fingerprint sequence. Alarms append as `alert` / `pipeline-health` rows in
+  the orchestrator feed; `GET /api/projects/{projectName}/pipeline-health`
+  supplies the compact Pipeline page block with the active gate, global
+  fingerprint streak, and completed/hour for each observed lane. This is
+  sensor and alarm behavior only. Gate termination remains owned by the
+  separate post-acquisition watchdog.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
@@ -370,3 +481,6 @@ operator changes cause the step to fail before its writer runs.
   before the decision, kept in the read-only pipeline).
 - Frontend pipeline rendering changes need Playwright or component coverage plus
   screenshots when the user-facing view changes.
+- Pipeline health changes need `PipelineHealthNightReplayTests`, the
+  `pipeline-health-block` component spec, and the mocked night-alarm screenshot
+  in `pipeline-page-evidence.spec.ts`.

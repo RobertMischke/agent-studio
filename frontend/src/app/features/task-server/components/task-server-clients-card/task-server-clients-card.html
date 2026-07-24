@@ -1,5 +1,29 @@
+@if (securityAvailable()) {
+  <div class="clients__enrollment" data-testid="task-server-runner-enrollment">
+    <label for="task-server-runner-name">Enroll Runner</label>
+    <input id="task-server-runner-name"
+           type="text"
+           autocomplete="off"
+           placeholder="Runner display name"
+           [value]="enrollmentName()"
+           (input)="setEnrollmentName($event)">
+    <button type="button"
+            class="client__action"
+            data-testid="task-server-runner-enrollment-preview"
+            [disabled]="!!busyAction() || !enrollmentName().trim()"
+            (click)="enroll(false)">Preview enrollment</button>
+    @if (hasEnrollmentPreview()) {
+      <button type="button"
+              class="client__action client__action--confirm"
+              data-testid="task-server-runner-enrollment-confirm"
+              [disabled]="!!busyAction()"
+              (click)="enroll(true)">Confirm enrollment</button>
+    }
+  </div>
+}
+
 @if (clients().length) {
-  <ul class="clients" data-testid="task-server-clients" aria-label="Registered clients">
+  <ul class="clients" data-testid="task-server-clients" aria-label="Registered Runners">
     @for (client of clients(); track client.id) {
       <li class="client"
           [class.client--retired]="retired(client)"
@@ -10,10 +34,30 @@
           <span class="client__id">{{ client.id }}</span>
         </span>
         <span class="client__kind" [attr.data-kind]="client.kind">{{ kindLabel(client.kind) }}</span>
+        <span class="client__seen">{{ client.managementState || 'registered' }}</span>
         <span class="client__seen">seen {{ lastSeen(client) }}</span>
         <span class="client__owned">
           <strong>{{ client.ownedTaskCount }}</strong> {{ client.ownedTaskCount === 1 ? 'task' : 'tasks' }}
         </span>
+        @if (manageable(client)) {
+          <span class="client__actions">
+            @for (action of runnerActions(); track action.kind) {
+              <button type="button"
+                      class="client__action"
+                      [class.client__action--danger]="action.kind === 'runner-revoke'"
+                      [disabled]="!!busyAction()"
+                      [attr.data-testid]="'task-server-runner-' + action.kind + '-' + client.id"
+                      (click)="execute(action.kind, client.id, false)">Preview {{ action.label }}</button>
+              @if (hasPreview(action.kind, client.id)) {
+                <button type="button"
+                        class="client__action client__action--confirm"
+                        [disabled]="!!busyAction()"
+                        [attr.data-testid]="'task-server-runner-confirm-' + action.kind + '-' + client.id"
+                        (click)="execute(action.kind, client.id, true)">Confirm</button>
+              }
+            }
+          </span>
+        }
       </li>
     }
   </ul>

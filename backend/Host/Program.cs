@@ -41,11 +41,24 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.Configure<HostOptions>(o =>
     o.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
 
+// WebApplicationFactory runs the real entry point in the xunit process. Keep
+// this signal alongside the Test environment check because a small number of
+// opt-in integration fixtures intentionally exercise the default environment.
+var underTestHost = Array.Exists(
+    AppDomain.CurrentDomain.GetAssemblies(),
+    a => a.GetName().Name?.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) == true);
+
 // Local-only override file (gitignored) - sets per-checkout flags such as
 // Environment:IsDev. Loaded after appsettings.Development.json so a developer
 // can flip the dev banner / dev PWA icon on for their checkout without
-// committing the toggle.
-builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+// committing the toggle. Test hosts must not inherit any configuration from
+// this machine-specific file. In-memory test fixtures are added later by
+// WebApplicationFactory and remain available without merging with local array
+// entries such as WatchPaths:1..n.
+if (!builder.Environment.IsEnvironment("Test") && !underTestHost)
+{
+    builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+}
 
 // Test-isolation guard (prevention). An integration test that boots
 // WebApplicationFactory<Program> must never touch the production task
@@ -58,9 +71,6 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 // renaming or deleting anything in the live board — the root cause of both
 // the atp-orphan-delete-api-tests registry junk and the shared-workspace
 // migration corruption. Never fires in production (xunit is not loaded).
-var underTestHost = Array.Exists(
-    AppDomain.CurrentDomain.GetAssemblies(),
-    a => a.GetName().Name?.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) == true);
 if (underTestHost)
 {
     var configuredRepo = builder.Configuration["TaskRepository"];
@@ -196,6 +206,8 @@ catch (Exception ex)
 
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<AccessSecurityStore>();
+builder.Services.AddSingleton<ManagementService>();
+builder.Services.AddSingleton<MigrationStateStore>();
 builder.Services.AddSingleton<HostTelemetryStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
@@ -367,7 +379,10 @@ builder.Services.AddSingleton<IntegrationLeaseService>();
 // RM-3 / ADR-0060: the fenced task-run lease + this backend's runner identity
 // back the productive /api/runner/lease API (§8.2C), the prepared successor to
 // the disk-backed .pickup-lock.json guard.
-builder.Services.AddSingleton<RunLeaseService>();
+builder.Services.AddSingleton<AttemptAuthorityService>();
+builder.Services.AddSingleton(sp => new RunLeaseService(
+    sp.GetRequiredService<ILogger<RunLeaseService>>(),
+    sp.GetRequiredService<AttemptAuthorityService>()));
 builder.Services.AddSingleton(sp => RunnerIdentity.Resolve(sp.GetRequiredService<IConfiguration>()));
 // ASS-1729: keep the host awake while >=1 agent run is active. Default ON;
 // disable via "KeepAwakeDuringRuns": false. Uses the Windows Power Request API
@@ -464,6 +479,12 @@ builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineExecutionLog>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineHealthDetector>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineHealthService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineHealthSensor>(sp =>
+    sp.GetRequiredService<AgentStudio.Pipeline.PipelineHealthService>());
+builder.Services.AddHostedService(sp =>
+    sp.GetRequiredService<AgentStudio.Pipeline.PipelineHealthService>());
 builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
     AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
@@ -475,8 +496,11 @@ builder.Services.AddSingleton<AgentStudio.GeneratedFiles.FileGenerationIndex>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ProjectPipelineCostService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ILintScssRunner,
     AgentStudio.Pipeline.LintScssRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ITestSelectionAdvisor,
+    AgentStudio.Pipeline.LlmTestSelectionAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.PreMainTestGate>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
 // Opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782): keeps the
@@ -697,6 +721,10 @@ app.UseAccessSecurity();
 // hubs, and health checks live in the middleware itself.
 if (!networkedSecurityProfile) app.UseClientIdentity();
 
+// Management intent is authoritative for admission. Reads, recovery controls,
+// and the bounded set of writes needed to drain an existing Runner remain live.
+app.UseManagementMode();
+
 // Touch the identity store at boot so the bootstrap "local-default" identity
 // is created before any caller looks at it.
 app.Services.GetRequiredService<ClientIdentityStore>().EnsureLoaded();
@@ -857,6 +885,10 @@ catch (Exception ex) { crashRecorder.Record("BusAggregationCache.Wire", ex); }
 // hold up boot.
 _ = Task.Run(() =>
 {
+    var migrationState = app.Services.GetRequiredService<MigrationStateStore>();
+    const string migrationId = "project-chat-v1";
+    try { migrationState.Begin(migrationId, "Migrating legacy project chat and refreshing indexes."); }
+    catch (Exception ex) { crashRecorder.Record("MigrationState.Begin:ProjectChatMigration", ex); }
     try
     {
         var migration = app.Services.GetRequiredService<ProjectChatMigration>();
@@ -869,9 +901,13 @@ _ = Task.Run(() =>
             try { index.EnsureFresh(entry.Path); }
             catch (Exception ex) { crashRecorder.Record($"ProjectChatIndex.EnsureFresh:{entry.Name}", ex); }
         }
+        try { migrationState.Complete(migrationId); }
+        catch (Exception ex) { crashRecorder.Record("MigrationState.Complete:ProjectChatMigration", ex); }
     }
     catch (Exception ex)
     {
+        try { migrationState.Fail(migrationId, ex.Message); }
+        catch (Exception stateEx) { crashRecorder.Record("MigrationState.Fail:ProjectChatMigration", stateEx); }
         crashRecorder.Record("ProjectChatMigration", ex);
     }
 });

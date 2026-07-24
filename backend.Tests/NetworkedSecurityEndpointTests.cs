@@ -30,6 +30,7 @@ public sealed class NetworkedSecurityEndpointTests : IDisposable
         using var anonymous = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://studio.test"), HandleCookies = false });
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/tasks")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/v1/management/status")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/clients/register", new { displayName = "open-runner", kind = "service" })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsync("/hubs/jobs/negotiate", null)).StatusCode);
 
@@ -47,6 +48,7 @@ public sealed class NetworkedSecurityEndpointTests : IDisposable
             value.Contains("HttpOnly", StringComparison.OrdinalIgnoreCase)
             && value.Contains("Secure", StringComparison.OrdinalIgnoreCase)
             && value.Contains("SameSite=Strict", StringComparison.OrdinalIgnoreCase));
+        (await browser.GetAsync("/api/v1/management/status")).EnsureSuccessStatusCode();
 
         var missingCsrf = await browser.PostAsJsonAsync("/api/auth/runner-enrollments", new { name = "runner-01" });
         Assert.Equal(HttpStatusCode.Forbidden, missingCsrf.StatusCode);
@@ -82,6 +84,22 @@ public sealed class NetworkedSecurityEndpointTests : IDisposable
             enrolled.RunnerId, enrolled.RunnerName, "runner-host", 42, "remote-runner", AvailableSlots: 1),
             CancellationToken.None);
         Assert.NotEqual(Runner::AgentRunner.RunnerClaimStatus.Invalid, claim.Status);
+
+        using var drainRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/management/commands")
+        {
+            Content = JsonContent.Create(new
+            {
+                kind = "runner-drain", dryRun = false, confirmation = "runner-drain",
+                idempotencyKey = "networked-runner-drain", runnerId = enrolled.RunnerId,
+            })
+        };
+        drainRequest.Headers.Add("X-CSRF-Token", auth.CsrfToken);
+        drainRequest.Headers.Add("Idempotency-Key", "networked-runner-drain");
+        var drained = await browser.SendAsync(drainRequest);
+        drained.EnsureSuccessStatusCode();
+        var managementStatus = await browser.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/v1/management/status");
+        Assert.Equal("draining", managementStatus.GetProperty("runners")[0].GetProperty("state").GetString());
+        Assert.True(File.Exists(Path.Combine(_workspace, ".audit", "management.jsonl")));
 
         using var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
         logoutRequest.Headers.Add("X-CSRF-Token", auth.CsrfToken);

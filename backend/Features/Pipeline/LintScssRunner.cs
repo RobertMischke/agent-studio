@@ -151,16 +151,7 @@ public sealed class LintScssRunner : ILintScssRunner
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        if (OperatingSystem.IsWindows())
-        {
-            psi.ArgumentList.Add("/c");
-            psi.ArgumentList.Add("npx stylelint \"src/**/*.scss\"");
-        }
-        else
-        {
-            psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add("npx stylelint \"src/**/*.scss\"");
-        }
+        AddStylelintArguments(psi, OperatingSystem.IsWindows());
 
         Process? p;
         try { p = Process.Start(psi); }
@@ -201,6 +192,27 @@ public sealed class LintScssRunner : ILintScssRunner
         {
             try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "LintScssRunner: best effort"); /* best effort */ }
             return (null, $"stylelint timed out after {timeout.TotalSeconds:F0}s");
+        }
+    }
+
+    internal static void AddStylelintArguments(ProcessStartInfo psi, bool isWindows)
+    {
+        if (isWindows)
+        {
+            // Keep every token separate. Passing the entire command as one
+            // ArgumentList item makes ProcessStartInfo quote it for cmd.exe,
+            // which turns the glob into the literal ""src/**/*.scss"".
+            psi.ArgumentList.Add("/d");
+            psi.ArgumentList.Add("/s");
+            psi.ArgumentList.Add("/c");
+            psi.ArgumentList.Add("npx");
+            psi.ArgumentList.Add("stylelint");
+            psi.ArgumentList.Add("src/**/*.scss");
+        }
+        else
+        {
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add("npx stylelint \"src/**/*.scss\"");
         }
     }
 }

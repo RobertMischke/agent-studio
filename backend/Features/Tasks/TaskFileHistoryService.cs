@@ -115,54 +115,6 @@ public sealed class TaskFileHistoryService
         return TaskFileLookupResult<TaskFileContent>.Fail(StatusCodes.Status404NotFound, "File was not found at the requested commit.");
     }
 
-    public TaskFileLookupResult<TaskFileDiff> GetDiff(
-        string jobId,
-        string? watchPath,
-        string requestPath,
-        string? from,
-        string? to,
-        string? scope)
-    {
-        if (!IsSha(from) || !IsSha(to))
-            return TaskFileLookupResult<TaskFileDiff>.Fail(StatusCodes.Status400BadRequest, "from and to must be commit SHAs.");
-
-        var resolved = ResolveCandidates(jobId, watchPath, requestPath, scope);
-        if (!resolved.Success) return TaskFileLookupResult<TaskFileDiff>.Fail(resolved.StatusCode, resolved.Error);
-
-        var sw = Stopwatch.StartNew();
-        foreach (var candidate in resolved.Candidates)
-        {
-            if (candidate.GitRoot == null)
-            {
-                if (resolved.IsExplicitScope)
-                    return TaskFileLookupResult<TaskFileDiff>.Fail(StatusCodes.Status400BadRequest, "The selected file source is not in a git repository.");
-                continue;
-            }
-
-            var existsInRange = GitBlobExists(candidate, from!) || GitBlobExists(candidate, to!);
-            if (!existsInRange)
-            {
-                if (resolved.IsExplicitScope)
-                    return TaskFileLookupResult<TaskFileDiff>.Fail(StatusCodes.Status404NotFound, "File was not found in either requested commit.");
-                continue;
-            }
-
-            var diff = RunGit(candidate.GitRoot, "diff", from!, to!, "--", candidate.GitPath);
-            if (diff.Code != 0)
-            {
-                return TaskFileLookupResult<TaskFileDiff>.Fail(
-                    StatusCodes.Status400BadRequest,
-                    string.IsNullOrWhiteSpace(diff.Err) ? "git diff failed." : diff.Err.Trim());
-            }
-
-            LogSlow(sw, "diff", jobId, candidate.Source, candidate.RequestPath);
-            return TaskFileLookupResult<TaskFileDiff>.Ok(new TaskFileDiff(diff.Out), candidate.Source);
-        }
-
-        LogSlow(sw, "diff", jobId, TaskFileSources.Auto, requestPath);
-        return TaskFileLookupResult<TaskFileDiff>.Fail(StatusCodes.Status404NotFound, "File was not found in either requested commit.");
-    }
-
     private TaskFileLookupResult<TaskFileContent> ReadLiveFile(
         string jobId,
         string? watchPath,
@@ -344,12 +296,6 @@ public sealed class TaskFileHistoryService
         }
 
         return GitValue<IReadOnlyList<TaskFileHistoryEntry>>.Ok(entries);
-    }
-
-    private bool GitBlobExists(TaskFileCandidate candidate, string sha)
-    {
-        var result = RunGit(candidate.GitRoot!, "cat-file", "-e", $"{sha}:{candidate.GitPath}");
-        return result.Code == 0;
     }
 
     private FileGenerationMeta? ReadGenerationAt(TaskFileCandidate candidate, string sha)
@@ -599,5 +545,3 @@ public sealed record TaskFileVersionProvenance(
     FileGenerationMeta? Generation);
 
 public sealed record TaskFileContent(string Content, string ContentType, string Path);
-
-public sealed record TaskFileDiff(string Diff);

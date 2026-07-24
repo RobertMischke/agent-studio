@@ -157,6 +157,16 @@ export interface WikiTree {
   baseDir: string;
   exists: boolean;
   root: WikiTreeNode[];
+  source?: WikiSourceInfo | null;
+}
+
+export interface WikiSourceInfo {
+  mode: 'checkout' | 'branch';
+  branch: string;
+  commit: string | null;
+  shortCommit: string | null;
+  writable: boolean;
+  error: string | null;
 }
 
 /** One recently-edited wiki page (page / git author / when), newest first. */
@@ -198,6 +208,10 @@ export interface WorkbenchListItem {
   valid: boolean;
   error: string | null;
   sourceTaskKeys: string[];
+  /** Shared lifecycle projection. Present on schema-v2 descriptors. */
+  lifecycleState?: WikiLifecycleState | null;
+  editedBy?: string | null;
+  lifecycleHistory?: WikiLifecycleHistoryEntry[] | null;
 }
 
 export interface WorkbenchCatalogue {
@@ -339,6 +353,36 @@ export interface WikiPulseActivity {
   runs: WikiPulseLiveRun[];
 }
 
+export type WikiLifecyclePageKind = 'design' | 'concept' | 'exploration' | 'workbench';
+export type WikiLifecycleState = 'in-progress' | 'review-requested' | 'decided' | 'done';
+
+export interface WikiLifecycleHistoryEntry {
+  state: WikiLifecycleState | string;
+  editedBy: string | null;
+  editedAtUtc: string;
+  note: string | null;
+}
+
+export interface WikiLifecycleItem {
+  relPath: string;
+  title: string;
+  pageKind: WikiLifecyclePageKind | string;
+  state: WikiLifecycleState | string;
+  editedBy: string | null;
+  editedAtUtc: string | null;
+  history: WikiLifecycleHistoryEntry[];
+  workbenchId: string | null;
+  valid: boolean;
+  error: string | null;
+}
+
+export interface WikiPulseLifecycle {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  items: WikiLifecycleItem[];
+}
+
 /**
  * The generated wiki Pulse landing view: a read-only composition of the change
  * feed, the sort-needed inbox, the deterministic drift grade bar, and the LLM
@@ -357,6 +401,7 @@ export interface WikiPulse {
   critical: WikiPulseCritical;
   warnings?: WikiPulseWarnings;
   activity?: WikiPulseActivity;
+  lifecycle?: WikiPulseLifecycle;
   workbenches?: WorkbenchCatalogue | null;
 }
 

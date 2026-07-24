@@ -84,6 +84,8 @@ public sealed class RemoteRunnerDaemon
             () => _client.RegisterAsync(_options.RunnerName, "service", shutdown),
             shutdown);
         _log($"authenticated daemon '{_options.RunnerName}' with attribution '{clientId}'; slots={_options.HostMaxParallelism}");
+        var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
+        await handoffRecovery.RecoverAllAsync(shutdown);
 
         var gitCapability = await GitPushProbe.RunAsync(_options, _log, shutdown);
         await WithServerRetryAsync<object?>(
@@ -124,6 +126,7 @@ public sealed class RemoteRunnerDaemon
 
             try
             {
+                await handoffRecovery.RecoverAllAsync(shutdown);
                 var claimedAny = false;
                 if (active.Count >= _options.HostMaxParallelism)
                 {
@@ -132,14 +135,17 @@ public sealed class RemoteRunnerDaemon
                         _ = await _client.ClaimAsync(new RunnerClaimRequest(
                             _options.RunnerId, _options.RunnerName, _options.Hostname,
                             Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                            sample, AvailableSlots: 0), shutdown);
+                            sample, AvailableSlots: 0,
+                            IdempotencyKey: $"telemetry:{_options.RunnerId}:{Guid.NewGuid():N}"), shutdown);
                 }
                 while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
                 {
                     var claim = await _client.ClaimAsync(new RunnerClaimRequest(
                         _options.RunnerId, _options.RunnerName, _options.Hostname,
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
-                        TakeTelemetry()), shutdown);
+                        TakeTelemetry(),
+                        AvailableSlots: _options.HostMaxParallelism - active.Count,
+                        IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}"), shutdown);
                     if (claim.Status != RunnerClaimStatus.Claimed
                         || string.IsNullOrWhiteSpace(claim.TaskKey)
                         || claim.Lease is null)
@@ -154,8 +160,8 @@ public sealed class RemoteRunnerDaemon
                         shutdown,
                         claim.ProjectId,
                         claim.RepositoryUrl,
-                    claim.DefaultBranch,
-                    claim.TaskKind));
+                        claim.DefaultBranch,
+                        claim.TaskKind));
                 }
 
                 if (!claimedAny)

@@ -719,6 +719,9 @@ public sealed record UpdateProjectRequest
     /// <summary>Absolute repo checkout path; see <see cref="ProjectRecord.RepositoryPath"/>.</summary>
     public string? RepositoryPath { get; init; }
     public bool? ClearRepositoryPath { get; init; }
+    /// <summary>Optional branch/ref used as the read-only source of the complete wiki.</summary>
+    public string? WikiSourceBranch { get; init; }
+    public bool? ClearWikiSourceBranch { get; init; }
     /// <summary>Absolute CLI working directory; see <see cref="ProjectRecord.RootPath"/>.</summary>
     public string? RootPath { get; init; }
     public bool? ClearRootPath { get; init; }
@@ -777,6 +780,7 @@ public sealed record ProjectSummary
     public string? RootPath { get; init; }
     /// <summary>Well-known repository URL projected from <see cref="Urls"/>.</summary>
     public string? RepositoryUrl { get; init; }
+    public string? WikiSourceBranch { get; init; }
     /// <summary>Configured watchable URLs, ordered; empty for most projects.</summary>
     public IReadOnlyList<ProjectUrlRecord> Urls { get; init; } = [];
     public IReadOnlyList<ComponentOwnershipMapping> OwnershipMappings { get; init; } = [];
@@ -801,6 +805,7 @@ public sealed record ProjectSummary
             string.Equals(url.Id, "repo", StringComparison.OrdinalIgnoreCase))?.Url,
         Urls = [.. p.Urls.OrderBy(u => u.SortOrder)],
         OwnershipMappings = p.OwnershipMappings,
+        WikiSourceBranch = p.WikiSourceBranch,
         Archived = p.Archived,
         CreatedAt = p.CreatedAt,
     };

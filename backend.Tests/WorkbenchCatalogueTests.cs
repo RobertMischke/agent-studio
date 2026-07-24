@@ -51,6 +51,105 @@ public sealed class WorkbenchCatalogueTests : IDisposable
     }
 
     [Fact]
+    public void List_SchemaTwoUsesSharedLifecycleAsItsOnlyStoredState()
+    {
+        var dir = Path.Combine(_root, "docs", "workbenches", "shared-lifecycle");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "index.html"), "<h1>Shared lifecycle</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), """
+          {
+            "schemaVersion": 2,
+            "id": "shared-lifecycle",
+            "title": "Shared lifecycle",
+            "summary": "Question",
+            "entrypoint": "index.html",
+            "pageKind": "workbench",
+            "lifecycleState": "review-requested",
+            "phase": "decision-ready",
+            "editedBy": "Robert",
+            "editedAt": "2026-07-21T05:46:33Z",
+            "lifecycleHistory": [
+              { "state": "review-requested", "editedBy": "Robert", "editedAt": "2026-07-21T05:46:33Z" }
+            ]
+          }
+          """);
+
+        var item = Assert.Single(Service().List("Project")!.Items);
+
+        Assert.Equal("review-requested", item.LifecycleState);
+        Assert.Equal("Robert", item.EditedBy);
+        Assert.Single(item.LifecycleHistory!);
+        Assert.Equal("active", item.Status); // compatibility projection, not stored metadata
+    }
+
+    [Fact]
+    public void List_SchemaTwoRejectsDuplicateLegacyStateAndMismatchedHistory()
+    {
+        var dir = Path.Combine(_root, "docs", "workbenches", "duplicate-state");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "index.html"), "<h1>Duplicate state</h1>");
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), """
+          {
+            "schemaVersion": 2,
+            "id": "duplicate-state",
+            "title": "Duplicate state",
+            "summary": "Invalid duplicate truth",
+            "entrypoint": "index.html",
+            "pageKind": "workbench",
+            "lifecycleState": "decided",
+            "status": "active",
+            "editedBy": "Robert",
+            "editedAt": "2026-07-21T05:46:33Z",
+            "lifecycleHistory": [
+              { "state": "decided", "editedBy": "Robert", "editedAt": "2026-07-21T05:46:33Z" }
+            ]
+          }
+          """);
+        var mismatchDir = Path.Combine(_root, "docs", "workbenches", "mismatched-history");
+        Directory.CreateDirectory(mismatchDir);
+        File.WriteAllText(Path.Combine(mismatchDir, "index.html"), "<h1>Mismatched history</h1>");
+        File.WriteAllText(Path.Combine(mismatchDir, "workbench.json"), """
+          {
+            "schemaVersion": 2,
+            "id": "mismatched-history",
+            "title": "Mismatched history",
+            "summary": "Invalid current projection",
+            "entrypoint": "index.html",
+            "pageKind": "workbench",
+            "lifecycleState": "decided",
+            "editedBy": "Robert",
+            "editedAt": "2026-07-21T05:46:33Z",
+            "lifecycleHistory": [
+              { "state": "review-requested", "editedBy": "Robert", "editedAt": "2026-07-21T05:46:33Z" }
+            ]
+          }
+          """);
+
+        var items = Service().List("Project", includeHistory: true)!.Items;
+
+        Assert.Equal(2, items.Count);
+        Assert.Contains(items, item => item.Id == "duplicate-state" && !item.Valid
+            && item.Error!.Contains("legacy status", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(items, item => item.Id == "mismatched-history" && !item.Valid
+            && item.Error!.Contains("latest lifecycleHistory", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void LifecycleMergeKeepsSettledWorkbenchesVisibleForPulse()
+    {
+        WriteWorkbench("decision", "Decision", "decided", "2026-07-12T10:00:00Z");
+        WriteWorkbench("complete", "Complete", "archived", "2026-07-11T10:00:00Z");
+        var catalogue = Service().List("Project", includeHistory: true)!;
+
+        var merged = ProjectDocsService.MergeWorkbenchLifecycle(
+            new WikiPulseLifecycle(true, null, 0, []), catalogue);
+
+        Assert.Equal(2, merged.Count);
+        Assert.Contains(merged.Items, item => item.WorkbenchId == "decision" && item.State == "decided");
+        Assert.Contains(merged.Items, item => item.WorkbenchId == "complete" && item.State == "done");
+    }
+
+    [Fact]
     public void Read_RejectsEscapingEntrypointAndDiscoversNamedLegacyPilot()
     {
         var dir = Path.Combine(_root, "docs", "workbenches", "escape");

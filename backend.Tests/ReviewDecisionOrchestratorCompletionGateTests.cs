@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
+using System.Text.Json;
 
 using Xunit;
 
@@ -212,7 +213,9 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         });
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, slug)));
-        var decision = Assert.Single(ReviewDecisionLog.ReadAll(_workspace, Project).Where(d => d.JobId == slug));
+        var decision = Assert.Single(
+            ReviewDecisionLog.ReadAll(_workspace, Project),
+            item => item.JobId == slug);
         Assert.Equal(ReviewDecisionKind.Escalate, decision.Kind);
         Assert.StartsWith(ReviewDecisionOrchestrator.BuildTestGateInfrastructureReasonPrefix, decision.Reason);
         Assert.Equal("lease-infra", decision.AttemptChainId);
@@ -237,6 +240,66 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.BuildTestGateStepId + "\"", pipelineJson);
         Assert.Contains("\"verdict\": \"ok\"", pipelineJson);
         Assert.True(aspect.Invocations > 0, "a green build gate must let the aspect review run");
+    }
+
+    [Fact]
+    public async Task TaskDone_UnrelatedTestFailure_AdvancesAndPersistsSeparateFinding()
+    {
+        const string slug = "build-unrelated-red";
+        SeedReviewJobWithDone(slug,
+            status: "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n");
+        var result = new BuildTestGateResult(
+            BuildTestGateVerdict.Warn, 0, 25, "baseline red",
+            "work-package gate passed with 1 separate non-blocking finding; test-level=work-package; selected=2; full-suite=not-run; omitted=1",
+            true, false)
+        {
+            TestSelection = new TestSelectionAudit
+            {
+                Level = TestExecutionLevels.WorkPackage,
+                DiffInput = ["src/feature.cs"],
+                SelectedCandidateIds = ["test-feature"],
+                SelectedCommands = ["test-feature", "test-baseline"],
+                OmittedTestCommands = ["test-all"],
+                Selector = "deterministic+llm",
+                SelectorModel = "model-x",
+                AdvisorReason = "shared namespace risk",
+            },
+            Findings = [new BuildTestGateFinding(
+                "out-of-work-package-test-failure",
+                TestExecutionLevels.Continuous,
+                "test-baseline",
+                "baseline failed outside the selected work package",
+                1,
+                "expected 1 but got 2")],
+        };
+        var aspect = new CountingAspect();
+        var orchestrator = BuildOrchestrator(
+            aspect.Cli, maxReissues: 3, new FakeBuildTestGateRunner(result));
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
+        Assert.True(Directory.Exists(folder), "an unrelated baseline failure must not block the card");
+        var findingPath = Path.Combine(folder, "post-steps", "test-findings-1.json");
+        Assert.True(File.Exists(findingPath));
+        var findingJson = File.ReadAllText(findingPath);
+        Assert.Contains("out-of-work-package-test-failure", findingJson);
+        Assert.Contains("\"blocking\": false", findingJson);
+        var gateLog = File.ReadAllText(Path.Combine(folder, "post-steps", "build-test-gate-1.log"));
+        Assert.Contains("\"Level\": \"work-package\"", gateLog);
+        Assert.Contains("\"src/feature.cs\"", gateLog);
+        var selectionStart = gateLog.IndexOf("--- test-selection.json ---\n", StringComparison.Ordinal)
+            + "--- test-selection.json ---\n".Length;
+        var selectionEnd = gateLog.IndexOf(
+            "\n--- process-evidence.json ---", selectionStart, StringComparison.Ordinal);
+        var loggedSelection = JsonSerializer.Deserialize<TestSelectionAudit>(
+            gateLog[selectionStart..selectionEnd]);
+        Assert.NotNull(loggedSelection);
+        Assert.Equal(["test-feature"], loggedSelection!.SelectedCandidateIds);
+        Assert.Equal("deterministic+llm", loggedSelection.Selector);
+        Assert.Equal("model-x", loggedSelection.SelectorModel);
+        Assert.Equal("shared namespace risk", loggedSelection.AdvisorReason);
+        Assert.True(aspect.Invocations > 0);
     }
 
     [Fact]

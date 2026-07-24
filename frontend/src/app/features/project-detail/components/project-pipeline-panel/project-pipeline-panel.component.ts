@@ -28,6 +28,7 @@ import {
   stepTokenTooltip,
 } from './pipeline-config.util';
 import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
+import { PipelineHealthBlockComponent } from '../pipeline-health-block/pipeline-health-block';
 /**
  * Project-level Pipeline page (Nav-rebuild step 3 / T4a). Renders the
  * pre/core/post step catalogue as a calm CSS grid where each configurable
@@ -45,7 +46,7 @@ import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
 @Component({
   selector: 'app-project-pipeline-panel',
   standalone: true,
-  imports: [FormsModule, CliModelSelectorComponent, TooltipDirective],
+  imports: [FormsModule, CliModelSelectorComponent, TooltipDirective, PipelineHealthBlockComponent],
   hostDirectives: [{ directive: PipelineStepFocusDirective, inputs: ['focusStepId'] }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-pipeline-panel.component.html',
@@ -99,9 +100,9 @@ export class ProjectPipelinePanelComponent {
     const overrides = this.overrides();
     const drafts = this.conditionDraft();
     const catalogue = orderedPipelineCatalogue(this.catalogue(), this.order());
-    const tokenByStep = new Map<string, { tokens: number; unknown: boolean }>();
+    const tokenByStep = new Map<string, { tokens: number; costUsd: number; unknown: boolean }>();
     for (const s of this.pipelineCost()?.steps ?? []) {
-      tokenByStep.set(s.stepId, { tokens: s.totalTokens, unknown: s.anyModelUnknown });
+      tokenByStep.set(s.stepId, { tokens: s.totalTokens, costUsd: s.totalCostUsd, unknown: s.anyModelUnknown });
     }
     return catalogue.map((step, index) => {
       const ov = overrides[step.id];
@@ -144,6 +145,7 @@ export class ProjectPipelinePanelComponent {
         canMoveDown: canMovePipelineStep(catalogue, index, 1),
         tokenSum: tok?.tokens ?? null,
         tokenUnknown: tok?.unknown ?? false,
+        tokenCostUsd: tok?.costUsd ?? null,
       };
     });
   });

@@ -44,7 +44,7 @@ describe('FilesPaneComponent (smoke)', () => {
     }
   });
 
-  it('renders generated-file provenance in a subtle header affordance', async () => {
+  it('moves file provenance and technical metadata into the details menu', async () => {
     await TestBed.configureTestingModule({
       imports: [FilesPaneComponent],
       providers: [
@@ -86,10 +86,60 @@ describe('FilesPaneComponent (smoke)', () => {
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
-    const provenance = root.querySelector('[data-testid="file-card-provenance"]');
-    expect(provenance?.textContent).toContain('claude / claude-haiku-4-5');
-    expect(provenance?.textContent).toContain('125 tokens');
-    expect(provenance?.textContent).toContain('2s');
+    expect(root.querySelector('[data-testid="file-card-model"]')?.textContent).toContain('claude-haiku-4-5');
+    const disclosure = root.querySelector<HTMLDetailsElement>('.doc-details')!;
+    expect(disclosure.open).toBe(false);
+    root.querySelector<HTMLElement>('[data-testid="file-card-details-code-review-2026-06-09T12-00-00Z.md"]')!.click();
+    fixture.detectChanges();
+    expect(disclosure.open).toBe(true);
+    const details = root.querySelector('[data-testid="file-card-details-menu"]');
+    expect(details?.textContent).toContain('code-review-2026-06-09T12-00-00Z.md');
+    expect(details?.textContent).toContain('2 KB');
+    expect(details?.textContent).toContain('100 in · 25 out · 125 total');
+    expect(details?.textContent).toContain('claude / claude-haiku-4-5');
+    expect(root.querySelector('[data-testid="file-source-history"]')).toBeNull();
+    http.verify();
+  });
+
+  it('opens technical document history only from the details menu', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('watchPath', '/workspace');
+    fixture.componentRef.setInput('artifacts', [
+      {
+        name: 'code-review-grade.md',
+        sizeBytes: 256,
+        mtime: '2026-07-11T12:00:00Z',
+        kind: 'codeReview',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne((r) => r.url.includes('/api/tasks/demo-job/files/code-review-grade.md'))
+      .flush(utf8Buffer('# Code review\n\nReadable outcome.'));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="file-source-history"]')).toBeNull();
+    root.querySelector<HTMLElement>('[data-testid="file-card-details-code-review-grade.md"]')!.click();
+    fixture.detectChanges();
+    root.querySelector<HTMLButtonElement>('[data-testid="file-card-history-code-review-grade.md"]')!.click();
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="file-source-history"]')).not.toBeNull();
+    http.expectOne((r) => r.url.includes('/api/tasks/demo-job/files/code-review-grade.md/history'))
+      .flush([]);
+    fixture.detectChanges();
     http.verify();
   });
 
@@ -143,7 +193,7 @@ describe('FilesPaneComponent (smoke)', () => {
     fixture.detectChanges();
 
     expect(root.querySelector('[data-testid="file-card-prompt.md"] .file-card__head')?.getAttribute('aria-expanded')).toBe('true');
-    expect(root.querySelector('[data-testid="file-card-aspect-code-quality.json"] .file-card__head')?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('[data-testid="file-card-aspect-code-quality.json"] .file-card__head')?.getAttribute('aria-expanded')).toBe('true');
     TestBed.inject(HttpTestingController).verify();
   });
 

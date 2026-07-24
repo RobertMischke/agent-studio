@@ -185,14 +185,15 @@ describe('PromptAdminPanelComponent', () => {
     expect(list.textContent).toContain('1 overridden');
     expect(list.textContent).toContain('1 inherited');
     expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.parentElement?.classList)
-      .toContain('prompts__item--inherited');
+      .toContain('prompt-catalogue__item--inherited');
     expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.getAttribute('aria-label'))
       .toBe('Runner: fresh start, inherited');
     expect(host.querySelector(`[data-testid="prompt-admin-item-${DRIFT}"]`)?.getAttribute('aria-label'))
-      .toBe('Aspect: code quality, overridden');
+      .toBe('Aspect: code quality, overridden - global');
     expect(host.querySelector(`[data-testid="prompt-admin-override-${DRIFT}"]`)).not.toBeNull();
-    expect(host.querySelector(`[data-testid="prompt-admin-override-${DRIFT}"]`)?.textContent).toContain('Override');
-    expect(host.querySelector(`[data-testid="prompt-admin-drift-${DRIFT}"]`)).toBeNull();
+    expect(host.querySelector(`[data-testid="prompt-admin-override-${DRIFT}"]`)?.textContent)
+      .toContain('overridden - global');
+    expect(host.querySelector(`[data-testid="prompt-admin-stale-${DRIFT}"]`)).not.toBeNull();
 
     host.querySelector<HTMLButtonElement>('[data-testid="prompt-admin-only-overrides"]')!.click();
     fixture.detectChanges();
@@ -211,7 +212,6 @@ describe('PromptAdminPanelComponent', () => {
     runnerHead!.click();
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.isGroupCollapsed('Runner')).toBe(true);
     expect(runnerHead!.getAttribute('aria-expanded')).toBe('false');
     expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)).toBeNull();
     expect(host.querySelector(`[data-testid="prompt-admin-item-${DRIFT}"]`)).not.toBeNull();

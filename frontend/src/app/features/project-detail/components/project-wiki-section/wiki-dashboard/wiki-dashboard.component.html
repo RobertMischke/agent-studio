@@ -63,14 +63,14 @@
           [projectName]="projectName()"
           (openEntry)="openPage.emit($event)" />
     }
-    <app-wiki-home-links
-        [projectName]="projectName()"
-        (openLink)="openPage.emit($event)" />
     <app-wiki-pulse
         [pulse]="pulse()"
         [loading]="loading()"
         (openPage)="openPage.emit($event)"
         (openWorkbench)="openWorkbench.emit($event)" />
+    <app-wiki-home-links
+        [projectName]="projectName()"
+        (openLink)="openPage.emit($event)" />
     <app-project-style-guides-panel
         class="wdash__span"
         [projectName]="projectName()"

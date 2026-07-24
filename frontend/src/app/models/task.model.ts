@@ -194,6 +194,8 @@ export interface TaskInfo {
   projectName: string;
   folderPath: string;
   lastActivity: string;
+  /** UTC instant when the task entered its current lane. */
+  enteredLaneAt?: string | null;
   sessionName: string | null;
   /**
    * Per-job orchestrator token rollup. The kanban card renders a small
@@ -310,6 +312,8 @@ export interface TaskInfo {
   phase?: string | null;
   /** UTC time at which the current lifecycle phase was entered. */
   phaseEnteredAt?: string | null;
+  /** Read-only checks projected from lifecycle.json while post-processing runs. */
+  postProcessingChecks?: LifecycleCheck[];
   /**
    * Run-Liveness Slice B: when this 3-progress card is waiting on an unanswered
    * steer / NeedsInput question (`phase === 'steer-pending'`), the ISO UTC time
@@ -429,6 +433,14 @@ export interface TaskInfo {
   planningSpawn?: PlanningSpawnSummary | null;
 }
 
+export interface LifecycleCheck {
+  name: string;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'skipped' | string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  detail?: string | null;
+}
+
 /**
  * Card-renderable projection of the runner that holds a task's active run lease
  * (AGT-2003). Mirrors backend `TaskRunnerInfo`. Sourced from the in-memory
@@ -496,6 +508,8 @@ export interface TaskOutcomeIssue {
   kind:
     | 'permission-blocked'
     | 'watchdog-timeout'
+    | 'tool-router-error'
+    | 'no-reply'
     | 'missing-terminal-sentinel'
     | 'classifier-unknown'
     | 'heuristic-done'
@@ -503,7 +517,10 @@ export interface TaskOutcomeIssue {
     | string;
   label: string;
   severity: 'Info' | 'Warn' | 'High' | string;
+  /** Bounded compatibility text for compact consumers. */
   summary: string;
+  /** Complete normalized source line, rendered only inside technical details. */
+  technicalDetails?: string | null;
   lastSeenAt: string | null;
 }
 
@@ -786,6 +803,8 @@ export interface FileGenerationMeta {
   cli?: string | null;
   tokensIn: number;
   tokensOut: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   tokensTotal: number;
   startedAt?: string | null;
   endedAt?: string | null;
@@ -1189,6 +1208,8 @@ export interface RegistryProjectSummary {
   rootPath: string | null;
   /** Well-known repository URL (`urls[id=repo]`) projected for project basics editing. */
   repositoryUrl: string | null;
+  /** Optional read-only git ref supplying the complete project Wiki. */
+  wikiSourceBranch?: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
   ownershipMappings?: ComponentOwnershipMapping[];

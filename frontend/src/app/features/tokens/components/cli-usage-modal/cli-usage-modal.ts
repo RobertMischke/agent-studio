@@ -108,7 +108,7 @@ export class CliUsageModalComponent {
       return {
         label: w.label,
         pct,
-        pctLabel: pct === null ? '—' : `${pct}% used`,
+        pctLabel: pct === null ? 'Unknown' : `${pct}% used`,
         remainingLabel: pct === null ? null : `${Math.max(0, 100 - pct)}% left`,
         barPct,
         tone: this.toneForPct(pct),

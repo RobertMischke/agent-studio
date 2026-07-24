@@ -1,4 +1,5 @@
 using AgentRunner;
+using AgentStudio.TaskServer.Contracts;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -64,6 +65,8 @@ public sealed class GitWorkspaceTests : IDisposable
         var result = await workspace.TeardownAsync("Done", CancellationToken.None);
 
         Assert.False(result.SecuredWork);
+        Assert.False(string.IsNullOrWhiteSpace(result.ResultSha));
+        Assert.Equal((await GitAsync(_origin, "rev-parse", "refs/heads/main")).StdOut, result.ResultSha);
         Assert.False(Directory.Exists(workspace.RepoPath));
         var branch = await RunGitAsync(_origin, "show-ref", "--verify", "--quiet",
             "refs/heads/runner/runner-test/AGT-2147");
@@ -87,6 +90,87 @@ public sealed class GitWorkspaceTests : IDisposable
         Assert.True(Directory.Exists(workspace.RepoPath));
         Assert.Equal("must survive", await File.ReadAllTextAsync(Path.Combine(workspace.RepoPath, "work.txt")));
         Directory.Move(offlineOrigin, _origin);
+    }
+
+    [Fact]
+    public async Task Durable_handoff_keeps_worktree_until_matching_ack_and_publishes_immutable_ref()
+    {
+        await SeedOriginAsync();
+        var workspace = CreateWorkspace();
+        await workspace.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(workspace.RepoPath, "result.txt", "durable", "durable result");
+        const string runId = "run_test";
+
+        var secured = await workspace.SecureForHandoffAsync(
+            "Done", runId, CancellationToken.None);
+
+        Assert.True(Directory.Exists(workspace.RepoPath));
+        Assert.Equal(
+            $"refs/heads/agent-studio/results/{runId}/{secured.ResultSha}",
+            secured.ImmutableResultRef);
+        Assert.Equal(
+            secured.ResultSha,
+            (await GitAsync(_origin, "rev-parse", secured.ImmutableResultRef!)).StdOut);
+        var expectedDigest = new string('a', 64);
+        var wrongAck = new ResultHandoffAck(
+            runId,
+            5,
+            new string('b', 64),
+            "acknowledged",
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(30),
+            false);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            workspace.TeardownAfterHandoffAsync(
+                secured, wrongAck, runId, expectedDigest, CancellationToken.None));
+        Assert.True(Directory.Exists(workspace.RepoPath));
+
+        await workspace.TeardownAfterHandoffAsync(
+            secured,
+            wrongAck with { EnvelopeDigest = expectedDigest },
+            runId,
+            expectedDigest,
+            CancellationToken.None);
+
+        Assert.False(Directory.Exists(workspace.RepoPath));
+    }
+
+    [Fact]
+    public async Task Durable_handoff_refuses_cleanup_when_worktree_changes_after_envelope_publication()
+    {
+        await SeedOriginAsync();
+        var workspace = CreateWorkspace();
+        await workspace.PrepareAsync(CancellationToken.None);
+        await CommitFileAsync(workspace.RepoPath, "result.txt", "durable", "durable result");
+        const string runId = "run_post_handoff_change";
+        var secured = await workspace.SecureForHandoffAsync(
+            "Done", runId, CancellationToken.None);
+        var digest = new string('a', 64);
+        var acknowledgement = new ResultHandoffAck(
+            runId,
+            5,
+            digest,
+            "acknowledged",
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(30),
+            false);
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace.RepoPath, "late-work.txt"),
+            "must not be discarded");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            workspace.TeardownAfterHandoffAsync(
+                secured,
+                acknowledgement,
+                runId,
+                digest,
+                CancellationToken.None));
+
+        Assert.Contains("changed after handoff", error.Message);
+        Assert.True(Directory.Exists(workspace.RepoPath));
+        Assert.Equal(
+            "must not be discarded",
+            await File.ReadAllTextAsync(Path.Combine(workspace.RepoPath, "late-work.txt")));
     }
 
     [Fact]

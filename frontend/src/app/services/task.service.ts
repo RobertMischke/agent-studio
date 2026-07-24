@@ -67,6 +67,7 @@ import type {
   PipelineStepSetting,
   PipelineStepCondition,
   StepPromptsResponse,
+  PipelineHealthSnapshot,
 } from '../features/task-pipeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { ExecutiveSummaryResponse } from '../features/summary';
@@ -103,7 +104,33 @@ export interface CodeReviewListEntry {
   thinkingLevel?: string | null;
   commit?: string | null;
   runAt: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  totalTokens?: number;
+  estimatedApiCostUsd?: number;
+  priceKnown?: boolean;
   generation?: FileGenerationMeta | null;
+  councilReaction?: CouncilReviewReaction | null;
+}
+
+export interface CouncilFindingAssessment {
+  finding: string;
+  action: 'FixNextRound' | 'Accept' | 'Escalate';
+  reason: string;
+}
+
+export interface CouncilReviewReaction {
+  createdAt: string;
+  reviewFileName: string;
+  grade: string;
+  disposition: 'Accept' | 'Reissue' | 'Escalate';
+  summary: string;
+  assessments: CouncilFindingAssessment[];
+  startsNewRound: boolean;
+  targetJobId?: string | null;
+  targetRunAttempt?: number | null;
 }
 
 /**
@@ -293,17 +320,31 @@ export class TaskService {
    * project setting, so polling it at the 2 s board cadence would be waste.
    */
   readonly laneSortStrategies = signal<Record<string, Record<string, string>>>({});
+  /** Explorer projection of the build-profile admission gate. */
+  readonly projectPickupGates = signal<Record<string, {
+    pickupAllowed: boolean;
+    buildProfileStatus: string | null;
+  }>>({});
   private laneSortStrategyTick = 0;
 
-  /** Re-read the per-project lane sort strategies into {@link laneSortStrategies}. */
+  /** Re-read slow-moving project settings used by the board and Explorer. */
   refreshLaneSortStrategies(): void {
     this.getAllProjectSettings().subscribe({
       next: (all) => {
         const map: Record<string, Record<string, string>> = {};
+        const pickupGates: Record<string, {
+          pickupAllowed: boolean;
+          buildProfileStatus: string | null;
+        }> = {};
         for (const [project, s] of Object.entries(all)) {
           if (s.laneSortStrategies) map[project] = s.laneSortStrategies;
+          pickupGates[project] = {
+            pickupAllowed: s.buildProfilePickupAllowed !== false,
+            buildProfileStatus: s.buildProfile?.status ?? null,
+          };
         }
         this.laneSortStrategies.set(map);
+        this.projectPickupGates.set(pickupGates);
       },
       // A settings-fetch failure must not surface a dialog — the board still
       // renders fine without strategy indicators; they just fall back.
@@ -1084,21 +1125,6 @@ export class TaskService {
     );
   }
 
-  /** Unified diff for one task file between two commit SHAs. */
-  diffTaskFileVersions(
-    jobId: string,
-    path: string,
-    from: string,
-    to: string,
-    watchPath?: string,
-    scope: TaskFileSourceScope = 'auto',
-  ) {
-    return this.getUtf8Text(
-      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${this.encodeTaskFilePath(path)}/diff`,
-      this.withFileSourceParams(watchPath, scope, { from, to }),
-    );
-  }
-
   reorderJobs(jobs: TaskOrderItem[]) {
     return this.http.post(`${this.baseUrl}/tasks/reorder`, { jobs });
   }
@@ -1810,6 +1836,8 @@ export class TaskService {
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
           orchestratorModel: string | null;
+          buildProfilePickupAllowed?: boolean;
+          buildProfile?: { status?: string | null } | null;
           // F35: resolved per-lane sort strategy map (every lane key present).
           laneSortStrategies?: Record<string, string>;
           pipelineSteps?: Record<string, PipelineStepSetting>;
@@ -1911,6 +1939,13 @@ export class TaskService {
     return this.http.get<PipelineCatalogue>(
       `${this.baseUrl}/projects/pipeline-catalogue`,
       params ? { params } : {},
+    );
+  }
+
+  /** Visibility-only pipeline health signals; this endpoint never mutates a task. */
+  getProjectPipelineHealth(projectName: string) {
+    return this.http.get<PipelineHealthSnapshot>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-health`,
     );
   }
 

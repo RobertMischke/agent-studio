@@ -5,6 +5,7 @@
  * touches Angular — it operates on the catalogue + order arrays directly.
  */
 import type { PipelineCatalogueStep } from '../../../task-pipeline';
+import { buildTokenCostTooltip } from '../../../tokens';
 
 /** Gate-mode choices for steps that expose a warn/fail gate (lint, decision). */
 export const PIPELINE_GATE_MODES: readonly { id: string; label: string }[] = [
@@ -76,6 +77,8 @@ export interface PipelineAdminRow {
   tokenSum: number | null;
   /** True when the step's token sum included a model with no price on file. */
   tokenUnknown: boolean;
+  /** Historical list-price sum for the priced usage rows in the window. */
+  tokenCostUsd: number | null;
 }
 
 /** One pre/core/post phase grouping for the grid. */
@@ -183,9 +186,14 @@ export function stepTokenLabel(row: Pick<PipelineAdminRow, 'tokenSum'>): string 
 }
 
 /** Verbose tooltip behind a step's token sum chip. */
-export function stepTokenTooltip(row: Pick<PipelineAdminRow, 'tokenSum' | 'tokenUnknown'>): string {
+export function stepTokenTooltip(row: Pick<PipelineAdminRow, 'tokenSum' | 'tokenUnknown' | 'tokenCostUsd'>): string {
   const d = PIPELINE_TOKEN_WINDOW_DAYS;
-  if (row.tokenSum == null) return `No token usage recorded for this step in the last ${d} days.`;
-  const base = `${row.tokenSum.toLocaleString()} tokens spent by this step across every task run in the last ${d} days.`;
-  return row.tokenUnknown ? `${base} Some runs used a model with no price on file.` : base;
+  const context = row.tokenSum == null
+    ? `No token usage recorded for this step in the last ${d} days.`
+    : `${row.tokenSum.toLocaleString()} tokens spent by this step across every task run in the last ${d} days.`;
+  return buildTokenCostTooltip({
+    costUsd: row.tokenCostUsd,
+    priceKnown: row.tokenSum != null && !row.tokenUnknown,
+    context,
+  });
 }

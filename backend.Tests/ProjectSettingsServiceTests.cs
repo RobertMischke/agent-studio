@@ -498,6 +498,41 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void SetTestExecution_NormalizesLanePolicyAndPersistsAcrossReload()
+    {
+        var svc = Build();
+        svc.SetTestExecution("runbook", new TestExecutionPolicy
+        {
+            LaneLevels = new()
+            {
+                [" 4-auto-review "] = " FULL ",
+                ["2-ready"] = "unknown",
+            },
+            ContinuousCommands = [" smoke ", "", "SMOKE"],
+            ImpactRules = [new TestImpactRule
+            {
+                PathPrefixes = [" src/api ", ""],
+                TestCommands = [" test-api ", ""],
+                Reason = " api ownership ",
+            }],
+            TestHubHistoryPath = " .test-hub/history.jsonl ",
+        });
+
+        var policy = Build().Get("runbook").TestExecution;
+
+        Assert.NotNull(policy);
+        Assert.Equal(TestExecutionLevels.Full, policy!.LaneLevels![TaskStates.AutoReview]);
+        Assert.Equal(TestExecutionLevels.WorkPackage, policy.LaneLevels![TaskStates.Ready]);
+        Assert.Single(policy.ContinuousCommands!);
+        Assert.Equal("smoke", policy.ContinuousCommands![0], ignoreCase: true);
+        var rule = Assert.Single(policy.ImpactRules!);
+        Assert.Equal(["src/api"], rule.PathPrefixes);
+        Assert.Equal(["test-api"], rule.TestCommands);
+        Assert.Equal("api ownership", rule.Reason);
+        Assert.Equal(".test-hub/history.jsonl", policy.TestHubHistoryPath);
+    }
+
+    [Fact]
     public void MarkBuildProfileValidated_FlipsToPipelineReadyAndStampsTime()
     {
         var svc = Build();

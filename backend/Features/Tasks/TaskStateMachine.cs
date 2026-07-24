@@ -89,7 +89,12 @@ public class TaskStateMachine
     /// decision, runner pickup); the default keeps every existing call site
     /// compiling.
     /// </param>
-    public MoveJobOutcome MoveJob(string jobId, string targetState, string? watchPath = null, string? cause = null)
+    public MoveJobOutcome MoveJob(
+        string jobId,
+        string targetState,
+        string? watchPath = null,
+        string? cause = null,
+        AttemptWriteReference? authorityWrite = null)
     {
         if (!TaskStates.All.Contains(targetState))
             return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
@@ -139,7 +144,7 @@ public class TaskStateMachine
                 {
                     TaskJsonFile.UpdateField(recheck.FolderPath, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
                     ClearIncompatiblePhase(recheck.FolderPath, targetState);
-                    RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause);
+                    RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause, authorityWrite);
                     _scanner.InvalidateCache();
                     EnqueueEvidence(recheck.WatchPath, recheck.ProjectName, recheck.Id, recheck.State, targetState);
                 }
@@ -201,7 +206,7 @@ public class TaskStateMachine
             ClearIncompatiblePhase(targetDir, targetState);
             // T2b: write the lane-change ledger row to the *new* folder (the
             // source folder is gone after the move above).
-            RecordLaneChange(targetDir, recheck.State, targetState, cause);
+            RecordLaneChange(targetDir, recheck.State, targetState, cause, authorityWrite);
             // Keep the canonical id in lockstep with the (possibly suffixed)
             // folder name so FindJob resolves the moved folder immediately,
             // without waiting for the scanner's self-heal pass.
@@ -660,22 +665,36 @@ public class TaskStateMachine
     /// and meshed back in at read time by the unified task reader. Best-effort and
     /// fully guarded - a ledger write must never undo the move that already landed.
     /// </summary>
-    private void RecordLaneChange(string jobFolderPath, string fromState, string toState, string? cause)
+    private void RecordLaneChange(
+        string jobFolderPath,
+        string fromState,
+        string toState,
+        string? cause,
+        AttemptWriteReference? authorityWrite = null)
     {
         if (_timeline == null) return;
         try
         {
             var actor = string.IsNullOrWhiteSpace(cause) ? TimelineActors.System : cause!.Trim();
+            var details = new Dictionary<string, string>
+            {
+                ["from"] = fromState ?? "",
+                ["to"] = toState ?? "",
+            };
+            if (authorityWrite is not null)
+            {
+                details["attemptId"] = authorityWrite.AttemptId;
+                details["fence"] = authorityWrite.Fence.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                details["authorityEpoch"] = authorityWrite.AuthorityEpoch.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                details["idempotencyKey"] = authorityWrite.IdempotencyKey;
+            }
             _timeline.Append(
                 jobFolderPath,
                 TimelineEventKinds.LaneChanged,
                 actor,
                 summary: $"{fromState} → {toState}",
-                details: new Dictionary<string, string>
-                {
-                    ["from"] = fromState ?? "",
-                    ["to"] = toState ?? "",
-                });
+                runId: authorityWrite?.AttemptId,
+                details: details);
         }
         catch (Exception ex)
         {

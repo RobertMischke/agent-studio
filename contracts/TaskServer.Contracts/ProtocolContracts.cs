@@ -2,9 +2,9 @@ namespace AgentStudio.TaskServer.Contracts;
 
 public static class TaskServerProtocol
 {
-    public const int Current = 1;
+    public const int Current = 2;
     public const int MinimumSupported = 1;
-    public const int MaximumSupported = 1;
+    public const int MaximumSupported = 2;
     public const string HeaderName = "X-Task-Protocol-Version";
     public const string ClientVersionHeaderName = "X-Task-Client-Version";
 

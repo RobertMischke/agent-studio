@@ -7,6 +7,7 @@
       <em>content</em> lives in Prompts; changes apply to the next run.
     </p>
   </header>
+  <app-pipeline-health-block [projectName]="projectName()" />
   @if (loadError(); as err) {
     <p class="pp__error" data-testid="pipeline-load-error">{{ err }}</p>
   }
@@ -149,7 +150,6 @@
                     </span>
                     <span class="pp__settings-note" role="cell">{{ activeExplanation(step) }}</span>
                   </div>
-
                   @if (step.usesModel) {
                     @if (step.supportsEconomyModel) {
                     <div class="pp__settings-row" role="row" [attr.data-testid]="'pipeline-step-setting-economy-' + step.id">

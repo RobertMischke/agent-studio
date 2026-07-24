@@ -209,6 +209,37 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void AgentFacingRuntimeTemplates_ReferenceCanonicalModelRoutingPolicy()
+    {
+        var prompts = Prompts();
+        foreach (var template in new[]
+        {
+            RuntimePromptService.RunnerFreshStart,
+            RuntimePromptService.RunnerResumeInterrupted,
+            RuntimePromptService.RunnerResumeRestart,
+            RuntimePromptService.RunnerRecoveryContinuation,
+            RuntimePromptService.RunnerReissueChange,
+            RuntimePromptService.EpicDecomposition,
+            "global-orchestrator-boot.md",
+            "orchestrator-project-boot.md",
+            "orchestrator-reissue-followup.md",
+            "orchestrator-conflict-resolution.md",
+            "orchestrator-decision-oneshot.md",
+            "orchestrator-decision-resume.md",
+            "orchestrator-no-completion-signal.md",
+            "orchestrator-review-decision-fallback.md",
+            "orchestrator-review-decision.md"
+        })
+        {
+            var rendered = prompts.Render(template, new Dictionary<string, string?>());
+
+            Assert.Contains("docs/system/domains/model-routing-policy.md", rendered);
+            Assert.Contains("authoritative source", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("correctness-risk floors", rendered);
+        }
+    }
+
+    [Fact]
     public void AllRunnerTemplates_MentionBuildTimeObservabilityWithoutDominating()
     {
         var prompts = Prompts();

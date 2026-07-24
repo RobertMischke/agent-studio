@@ -42,6 +42,7 @@ contract; the concept page owns the explanation and the running knowledge log.
 | [docs-structure-migration.md](docs-structure-migration.md) | Record of the real `docs/` folder migration into clearer domains, reports, architecture, frontend, CLI, and Wiki areas while keeping Markdown as default and HTML for visual maps. | [`docs/system/contracts/wiki-tree.md`](../system/contracts/wiki-tree.md) |
 | [token-aggregation.md](token-aggregation.md) | Token aggregators -> bus-backed shims (ASS-881): one canonical `ITokenAggregator` over the Agent Message Bus, the legacy shims, and the architecture guard test. | [`docs/system/domains/tokens.md`](../system/domains/tokens.md) |
 | [tree-project-indicator-alternatives.md](tree-project-indicator-alternatives.md) | Eight alternatives and recommendation for a project-level Explorer state indicator that shows situation instead of a total. | [`docs/quality/design/tree-indicator-exploration-2026-07.html`](../quality/design/tree-indicator-exploration-2026-07.html) |
+| [wiki-hosting-options-2026-07.html](wiki-hosting-options-2026-07.html) | Decision memo for hosting the live Wiki: weighted comparison of full networked Studio, a read-only Wiki service, and static export, with the recommended control-plane topology and follow-up cards. | [`docs/system/contracts/wiki-tree.md`](../system/contracts/wiki-tree.md), [`docs/operations/setup/networked-task-server.md`](../operations/setup/networked-task-server.md) |
 
 ## Designated topics (AGENTS/wiki-sync)
 

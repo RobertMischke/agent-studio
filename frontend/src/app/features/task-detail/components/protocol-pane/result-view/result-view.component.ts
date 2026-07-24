@@ -5,6 +5,7 @@ import type { ProtocolVerdict } from '../protocol-verdict';
 import { buildResultDocument } from '../result-document';
 import { RESULT_CASE_META } from '../result-case';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+import type { GeneratedFileProvenanceView } from '../../generated-file-provenance.util';
 
 /**
  * The Result view (Protocol -> Result redesign).
@@ -38,9 +39,14 @@ import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-res
 export class ResultViewComponent {
   readonly detail = input.required<TaskDetail>();
   readonly verdict = input.required<ProtocolVerdict>();
+  readonly provenance = input<GeneratedFileProvenanceView | null>(null);
+  readonly copyLabel = input('Copy');
 
   /** Bubbled up from the detail body so the host opens the source viewer. */
   readonly openSource = output<{ path: string; line: number | null }>();
+  readonly navigateMetric = output<string>();
+  readonly copyRequested = output<void>();
+  readonly moreActions = output<MouseEvent>();
 
   readonly doc = computed(() => buildResultDocument(this.detail(), this.verdict()));
   readonly caseMeta = computed(() => RESULT_CASE_META[this.doc().case.case]);

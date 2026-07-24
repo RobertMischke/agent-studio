@@ -355,6 +355,36 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
     }
 
     [Fact]
+    public async Task HealthObserverFailure_DoesNotFailGateOrRetainMachineLock()
+    {
+        var runner = new BuildTestGateRunner(
+            NullLogger<BuildTestGateRunner>.Instance,
+            health: new ThrowingPipelineHealthSensor());
+        var request = new BuildTestGateRequest(
+            _root,
+            null,
+            "health-observer-test",
+            RequireExactSubject: false)
+        {
+            Project = "Project",
+            WatchPath = _root,
+            JobId = "health-observer-card",
+        };
+
+        var first = await runner.RunAsync(
+            request,
+            changedFiles: null,
+            profile: null,
+            PostStepMode.Fail,
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None);
+        var second = await Run(profile: null);
+
+        Assert.Equal(BuildTestGateVerdict.Skipped, first.Verdict);
+        Assert.Equal(BuildTestGateVerdict.Skipped, second.Verdict);
+    }
+
+    [Fact]
     public async Task ProfileOverride_AllGreen_ReturnsOk()
     {
         var profile = new BuildProfile { BuildCmds = ["exit 0"], TestCmds = ["exit 0"] };
@@ -691,6 +721,18 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             _firstWaitEntered.TrySetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, ct);
         }
+    }
+
+    private sealed class ThrowingPipelineHealthSensor : IPipelineHealthSensor
+    {
+        public void GateAcquired(PipelineGateContext gate)
+            => throw new IOException("synthetic acquire observer failure");
+
+        public void GateCompleted(PipelineGateCompletion completion)
+            => throw new IOException("synthetic completion observer failure");
+
+        public PipelineHealthSnapshot? Snapshot(string project, DateTime? nowUtc = null)
+            => null;
     }
 
     private string InitializeGitRepository()

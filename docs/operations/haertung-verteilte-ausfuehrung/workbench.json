@@ -2,19 +2,10 @@
   "schemaVersion": 1,
   "id": "haertung-verteilte-ausfuehrung",
   "title": "Verteilte Ausführung",
-  "summary": "Das Git-Zwei-Welten-Problem visuell erklärt (Salvage- vs. Task-Branches), Vorfalls-Timeline 08.–18.07., Result-SHA-Vertrag, Schreibmodell mit Agenten-Quarantäne, hermetische Gates — plus die kanonische Historie aller Probleme und Maßnahmen (historie.html).",
+  "summary": "Ergebniszuordnung zwischen Runner- und Task-Branches, Vorfälle vom 08. bis 24.07., Result-SHA-Vertrag, Fencing und hermetische Gates mit kanonischer Historie.",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "decision-ready",
-  "updatedAt": "2026-07-18T00:00:00Z",
-  "sourceTaskKeys": [
-    "AGT-2147",
-    "AGT-2148",
-    "AGT-2149",
-    "AGT-2177",
-    "AGT-2182",
-    "AGT-2183",
-    "AGT-2184",
-    "AGT-2155"
-  ]
+  "updatedAt": "2026-07-24T00:00:00Z",
+  "sourceTaskKeys": ["AGT-2147", "AGT-2148", "AGT-2149", "AGT-2177", "AGT-2182", "AGT-2183", "AGT-2184", "AGT-2155", "AGT-2222", "AGT-2229", "AGT-2260"]
 }

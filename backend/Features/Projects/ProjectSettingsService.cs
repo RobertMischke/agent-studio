@@ -589,6 +589,12 @@ public class ProjectSettingsService
                     Model = normalizedModel,
                     ThinkingLevel = normalizedThinkingLevel,
                     Prompt = normalizedPrompt,
+                    PromptBaseDefaultSha = normalizedPrompt is null
+                        ? null
+                        : setting.PromptBaseDefaultSha,
+                    PromptBaseDefaultContent = normalizedPrompt is null
+                        ? null
+                        : setting.PromptBaseDefaultContent,
                     Condition = normalizedCondition,
                 };
             }
@@ -910,6 +916,57 @@ public class ProjectSettingsService
         {
             _logger.LogError(ex, "Failed to write project-settings.json at {Path}", path);
         }
+    }
+
+    public void SetTestExecution(string projectName, TestExecutionPolicy? policy)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var settings) ? settings : new ProjectSettings();
+            _cache[key] = current with { TestExecution = NormalizeTestExecution(policy) };
+            Persist();
+        }
+        _logger.LogInformation("Staged test policy {Action} for project {Project}",
+            policy is null ? "cleared" : "updated", projectName);
+    }
+
+    private static TestExecutionPolicy? NormalizeTestExecution(TestExecutionPolicy? policy)
+    {
+        if (policy is null) return null;
+        static IReadOnlyList<string>? Clean(IReadOnlyList<string>? values)
+        {
+            var cleaned = (values ?? []).Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            return cleaned.Count == 0 ? null : cleaned;
+        }
+
+        var laneLevels = (policy.LaneLevels ?? new Dictionary<string, string>())
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+            .ToDictionary(pair => pair.Key.Trim(), pair => TestExecutionLevels.Normalize(pair.Value),
+                StringComparer.OrdinalIgnoreCase);
+        var rules = (policy.ImpactRules ?? [])
+            .Select(rule => rule with
+            {
+                PathPrefixes = Clean(rule.PathPrefixes) ?? [],
+                TestCommands = Clean(rule.TestCommands) ?? [],
+                Reason = string.IsNullOrWhiteSpace(rule.Reason) ? null : rule.Reason.Trim(),
+            })
+            .Where(rule => rule.PathPrefixes.Count > 0 && rule.TestCommands.Count > 0)
+            .ToList();
+        return policy with
+        {
+            LaneLevels = laneLevels.Count == 0 ? null : laneLevels,
+            ContinuousCommands = Clean(policy.ContinuousCommands),
+            ImpactRules = rules.Count == 0 ? null : rules,
+            TestHubHistoryPath = string.IsNullOrWhiteSpace(policy.TestHubHistoryPath)
+                ? null : policy.TestHubHistoryPath.Trim(),
+            LlmCliType = string.IsNullOrWhiteSpace(policy.LlmCliType) ? null : policy.LlmCliType.Trim(),
+            LlmModel = string.IsNullOrWhiteSpace(policy.LlmModel) ? null : policy.LlmModel.Trim(),
+            LlmThinkingLevel = string.IsNullOrWhiteSpace(policy.LlmThinkingLevel)
+                ? null : policy.LlmThinkingLevel.Trim(),
+        };
     }
 
     private void PersistStrict()

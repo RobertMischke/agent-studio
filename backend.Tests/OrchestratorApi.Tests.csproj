@@ -23,6 +23,8 @@
   <ItemGroup>
     <None Include="Fixtures\cli\claude\outcome-classifier\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures\cli\codex\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\quota\claude\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\pipeline-health\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -83,6 +85,7 @@
     <Using Include="AgentStudio.GeneratedFiles" />
     <Using Include="AgentStudio.Git" />
     <Using Include="AgentStudio.Host" />
+    <Using Include="AgentStudio.Management" />
     <Using Include="AgentStudio.Orchestrator" />
     <Using Include="AgentStudio.Persistence" />
     <Using Include="AgentStudio.Pipeline" />
