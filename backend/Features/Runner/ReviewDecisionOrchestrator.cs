@@ -1831,7 +1831,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // red deterministic build must stay loud and still receive that
             // evidence before the task is reissued / escalated. The aspect pool
             // is intentionally bypassed on this terminal branch.
-            var failedBuildGrade = await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+            var failedBuildGrade = await RunCodeReviewGradePostStepAsync(
+                entry, current, taskBody, buildGateResult, ct);
             await HandleBuildTestGateFailureAsync(
                 workspace, entry, pending, current, buildGateResult, failedBuildGrade, ct);
             return;
@@ -1898,7 +1899,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reviewer must not silently erase that review artifact or its explicit
         // reaction. Keeping the call here also preserves the normal ordering
         // (after aspects) without running twice.
-        var gradeReport = await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+        var gradeReport = await RunCodeReviewGradePostStepAsync(
+            entry, current, taskBody, buildGateResult, ct);
 
         // Aspect-verdict infra crash (AGT-2021): one or more aspects produced no
         // verdict because the reviewing CLI died - even after the aspect runner's
@@ -3529,6 +3531,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WatchPathEntry entry,
         TaskInfo job,
         string taskBody,
+        BuildTestGateResult? buildGateResult,
         CancellationToken ct)
     {
         var stepId = PipelineCatalogue.CodeReviewGradeStepId;
@@ -3605,7 +3608,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 ThinkingLevel = selectedThinkingLevel,
             });
 
-            var (diff, commitLabel) = BuildGradeDiff(entry, job);
+            var (diff, commitLabel) = BuildGradeDiff(entry, job, buildGateResult);
 
             var request = new AgentStudio.Review.CodeReviewStepRequest(
                 Project: entry.Name,
@@ -3917,18 +3920,39 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// <summary>
     /// Build the diff text the quality-grade pass reviews. A fenced remote
     /// completion's persisted result SHA is authoritative, matching the
-    /// build/test gate subject. Local runs use the aggregate diff of every
-    /// commit the task owns, then fall back to HEAD and the live working tree.
+    /// build/test gate subject. Its review diff spans the merge base with the
+    /// canonical task/integration branch through that result SHA, so a multi-
+    /// commit remote task is reviewed as one change set rather than as only its
+    /// final commit. Local runs use the aggregate diff of every commit the task
+    /// owns, then fall back to HEAD and the live working tree.
     /// Best-effort: returns an empty diff with a "(no diff resolved)" label
     /// when git is not wired or resolution throws.
     /// </summary>
-    private (string Diff, string? CommitLabel) BuildGradeDiff(WatchPathEntry entry, TaskInfo job)
+    private (string Diff, string? CommitLabel) BuildGradeDiff(
+        WatchPathEntry entry,
+        TaskInfo job,
+        BuildTestGateResult? buildGateResult)
     {
         var project = entry.Name;
         var watchPath = entry.Path;
         if (_git == null) return (string.Empty, null);
         try
         {
+            var remoteSubject = ResolveRemoteGradeSubject(job, watchPath, buildGateResult);
+            if (remoteSubject is not null)
+            {
+                var remoteRange = TryBuildRemoteGradeDiff(entry, job, remoteSubject.ResultSha);
+                if (remoteRange is not null) return remoteRange.Value;
+
+                // A missing canonical base must not make the grade fall back to
+                // an unrelated local HEAD. The exact fenced result remains the
+                // safe last-resort subject, even though it can only show the tip
+                // commit when the repository has no resolvable fork point.
+                return (
+                    _git.GetCommitDiff(job.Id, watchPath, remoteSubject.ResultSha, path: null),
+                    remoteSubject.ResultSha[..8] + " (remote result; base unresolved)");
+            }
+
             IReadOnlyList<string> taskShas = Array.Empty<string>();
             if (_sessions != null)
             {
@@ -3944,9 +3968,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     .ToList();
             }
 
-            var reviewSubject = ResolveBuildTestGateSubject(job, watchPath);
             var scope = AgentStudio.Review.CodeReviewScopeResolver.Resolve(
-                overrideCommit: reviewSubject.IsRemote ? reviewSubject.Sha : null,
+                overrideCommit: null,
                 taskShas,
                 _git.GetHeadSha(job.Id, watchPath));
 
@@ -3975,6 +3998,76 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 project, job.Id);
             return (string.Empty, null);
         }
+    }
+
+    private ReviewSubjectRecord? ResolveRemoteGradeSubject(
+        TaskInfo job,
+        string? watchPath,
+        BuildTestGateResult? buildTestGateResult)
+    {
+        var remote = ReviewSubjectStore.Read(job.FolderPath);
+        if (remote is null) return null;
+
+        // Once the build/test gate has selected an exact subject, carry that
+        // same fenced SHA through the later aspect and grade steps. Re-resolving
+        // from mutable session history after a long gate can otherwise switch
+        // the grade to a different local HEAD.
+        if (ReviewSubjectStore.IsValidResultSha(buildTestGateResult?.ExpectedSha))
+        {
+            return string.Equals(
+                buildTestGateResult!.ExpectedSha,
+                remote.ResultSha,
+                StringComparison.OrdinalIgnoreCase)
+                ? remote
+                : null;
+        }
+
+        var resolved = ResolveBuildTestGateSubject(job, watchPath);
+        return resolved.IsRemote
+               && string.Equals(resolved.Sha, remote.ResultSha, StringComparison.OrdinalIgnoreCase)
+            ? remote
+            : null;
+    }
+
+    private (string Diff, string CommitLabel)? TryBuildRemoteGradeDiff(
+        WatchPathEntry entry,
+        TaskInfo job,
+        string resultSha)
+    {
+        if (_git == null) return null;
+        var repoRoot = !string.IsNullOrWhiteSpace(entry.RepositoryPath)
+            ? entry.RepositoryPath
+            : entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return null;
+
+        var configuredBase = _projectSettings?.Get(entry.Name)?.IntegrationBranch;
+        var integrationBranch = _git.ResolveIntegrationBranch(repoRoot, configuredBase);
+        var candidateBases = new[]
+        {
+            job.Provenance?.Branch,
+            $"task/{job.Id}",
+            integrationBranch,
+        }
+        .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+        .Select(candidate => candidate!)
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidateBase in candidateBases)
+        {
+            var mergeBase = _git.GetMergeBase(repoRoot, candidateBase, resultSha);
+            if (!ReviewSubjectStore.IsValidResultSha(mergeBase)) continue;
+
+            var diff = _git.GetDiffInShaRange(
+                job.Id, entry.Path, mergeBase, resultSha, path: null);
+            if (string.IsNullOrWhiteSpace(diff)) continue;
+
+            return (
+                diff,
+                $"{mergeBase![..8]}..{resultSha[..8]} (remote task range vs {candidateBase})");
+        }
+
+        return null;
     }
 
     /// <summary>

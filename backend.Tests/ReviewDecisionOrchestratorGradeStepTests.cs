@@ -159,6 +159,14 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
             aspectStub: (_, _) => PassVerdict,
             gradeCli: _ => "[[CODE_REVIEW_GRADE: grade=A; summary=ok]]\n[[TASK_DONE]]",
             maxReissues: 3,
+            buildTestGate: new FakeBuildTestGateRunner(new BuildTestGateResult(
+                BuildTestGateVerdict.Ok,
+                0,
+                123,
+                "verified",
+                "verify gate passed",
+                true,
+                false)),
             gradePromptObserver: prompt => gradePrompt = prompt,
             wireGit: true);
 
@@ -167,6 +175,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         Assert.Equal(canonicalHead, RunGit("rev-parse", "HEAD"));
         Assert.NotNull(gradePrompt);
         Assert.Contains("REMOTE_COUNCIL_IMPLEMENTATION", gradePrompt);
+        Assert.Contains("REMOTE_COUNCIL_EVIDENCE", gradePrompt);
         Assert.DoesNotContain("CANONICAL_UNRELATED_CHANGE", gradePrompt);
 
         var folder = Path.Combine(
@@ -611,6 +620,12 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
             "REMOTE_COUNCIL_IMPLEMENTATION\n");
         RunGit("add", "council-implementation.txt");
         RunGit("commit", "-q", "-m", "remote council implementation");
+
+        File.WriteAllText(
+            Path.Combine(_watchPath, "council-evidence.txt"),
+            "REMOTE_COUNCIL_EVIDENCE\n");
+        RunGit("add", "council-evidence.txt");
+        RunGit("commit", "-q", "-m", "remote council evidence");
         var remoteResultSha = RunGit("rev-parse", "HEAD");
         RunGit("reset", "--hard", "-q", canonicalHead);
 

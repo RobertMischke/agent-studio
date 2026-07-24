@@ -893,6 +893,27 @@
             the actual review findings instead of revision-scope drift.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2253</code><br><span class="small">remote grade reduced a multi-commit delivery to its tip</span></td>
+          <td>
+            The first remote-subject correction selected the fenced result SHA, but represented it with
+            <code>git show</code>. A multi-commit Council delivery could therefore still appear to omit the implementation
+            when its final commit contained only evidence or documentation. A long aspect phase could also re-resolve the
+            subject from mutable session state instead of retaining the SHA already verified by the build/test gate.
+          </td>
+          <td>
+            The regression modeled only one remote commit and therefore did not distinguish an exact result SHA from the
+            complete task range ending at that SHA. The grade step also discarded the build gate's normalized
+            <code>ExpectedSha</code> before it built its review scope.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the verified remote SHA now flows from the build/test gate into grading. The
+            grade resolves its merge base against the task provenance, canonical task branch, or integration branch and
+            reviews the full range through <code>ResultSha</code>. The regression uses separate implementation and evidence
+            commits and proves that both, but not an unrelated canonical HEAD, reach the grade prompt.
+          </td>
+        </tr>
       </tbody>
     </table>
 
