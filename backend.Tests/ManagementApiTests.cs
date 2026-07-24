@@ -62,7 +62,7 @@ public sealed class ManagementApiTests : IDisposable
         {
             kind = "backup-create", dryRun = false, confirmation = "backup-create", idempotencyKey = "backup-test-key"
         });
-        response.EnsureSuccessStatusCode();
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(1, body.GetProperty("affected").GetInt32());
         var backups = Directory.GetFiles(_backups, "backup-*.zip");
