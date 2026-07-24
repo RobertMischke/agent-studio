@@ -34,9 +34,12 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         Assert.Equal(sha, Assert.Single(evidence.Commands).HeadBefore);
         Assert.Equal("Pass", evidence.Outcome);
         Assert.False(evidence.Workspace.DirtyAfter);
-        Assert.Equal("review-attempt-a", evidence.Workspace.ResourceNamespace);
+        Assert.Equal("review-attempt-a-f1", evidence.Workspace.ResourceNamespace);
         Assert.Equal("24000", workspace.ProcessEnvironment()["PORT"]);
         Assert.StartsWith(workspace.AttemptRoot, workspace.ProcessEnvironment()["XDG_CACHE_HOME"]);
+        var environment = workspace.EnvironmentEvidence();
+        Assert.Contains("sha256=", environment.Toolchain["git"], StringComparison.Ordinal);
+        Assert.Contains("sha256=", environment.Toolchain["command:verify"], StringComparison.Ordinal);
         Assert.True(await workspace.CleanupAsync());
         Assert.False(Directory.Exists(workspace.AttemptRoot));
     }
@@ -100,6 +103,19 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public void Restart_takeover_of_one_attempt_uses_a_new_fenced_workspace()
+    {
+        var sha = new string('a', 40);
+        var first = Workspace("attempt-restart", sha, [], 25100, fence: 1).Workspace;
+        var takeover = Workspace("attempt-restart", sha, [], 25108, fence: 2).Workspace;
+
+        Assert.NotEqual(first.AttemptRoot, takeover.AttemptRoot);
+        Assert.NotEqual(
+            first.ProcessEnvironment()["AGENT_REVIEW_NAMESPACE"],
+            takeover.ProcessEnvironment()["AGENT_REVIEW_NAMESPACE"]);
+    }
+
+    [Fact]
     public async Task Review_child_process_does_not_inherit_unapproved_coding_credentials()
     {
         var sha = await SeedOriginAsync();
@@ -130,7 +146,8 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
         string attemptId,
         string sha,
         IReadOnlyList<ReviewCommandDto> commands,
-        int portBase)
+        int portBase,
+        long fence = 1)
     {
         var repositoryId = TaskServerClient.RepositoryIdentity(_origin)!;
         var subject = new ReviewSubjectDto(
@@ -154,11 +171,11 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             "review-executor",
             "review-instance",
             "review-host",
-            1,
+            fence,
             DateTime.UtcNow,
             DateTime.UtcNow.AddMinutes(2),
             "active",
-            "review-" + attemptId,
+            $"review-{attemptId}-f{fence}",
             portBase);
         var options = new RunnerOptions
         {

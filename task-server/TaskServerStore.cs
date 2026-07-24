@@ -255,11 +255,39 @@ public sealed partial class TaskServerStore
             throw new TaskServerProtocolException(request.ProtocolVersion);
         if (string.IsNullOrWhiteSpace(request.InstanceId) || string.IsNullOrWhiteSpace(request.HostId))
             throw new ArgumentException("Runner host and instance ids are required.");
+        var capabilities = request.Capabilities ?? [];
+        if (capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+            && capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
+            throw new TaskServerConflictException(
+                "runner-role-conflict",
+                "Coding and review executors require separate registered service identities.");
 
         var id = StableOrGeneratedId(runnerId, "rnr");
         var now = Iso(UtcNow);
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
+            var existingCapabilitiesJson = Convert.ToString(
+                await ScalarAsync(
+                    connection,
+                    "SELECT capabilities_json FROM runners WHERE id = $id;",
+                    ct,
+                    transaction,
+                    ("$id", id)),
+                CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(existingCapabilitiesJson))
+            {
+                var existingCapabilities =
+                    JsonSerializer.Deserialize<string[]>(existingCapabilitiesJson) ?? [];
+                var changesExecutorRole =
+                    existingCapabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+                    && capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
+                    || existingCapabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
+                    && capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal);
+                if (changesExecutorRole)
+                    throw new TaskServerConflictException(
+                        "runner-role-conflict",
+                        "A registered coding or review service identity cannot be reused for the other executor role.");
+            }
             await ExecuteAsync(connection, """
                 INSERT INTO runners(id, name, host_id, instance_id, runner_version, protocol_version, capabilities_json, status, registered_at, last_seen_at)
                 VALUES ($id, $name, $host, $instance, $version, $protocol, $capabilities, 'active', $now, $now)
@@ -275,7 +303,7 @@ public sealed partial class TaskServerStore
                 """, ct, transaction,
                 ("$id", id), ("$name", request.Name.Trim()), ("$host", request.HostId.Trim()),
                 ("$instance", request.InstanceId.Trim()), ("$version", request.RunnerVersion),
-                ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(request.Capabilities ?? [])), ("$now", now));
+                ("$protocol", request.ProtocolVersion), ("$capabilities", JsonSerializer.Serialize(capabilities)), ("$now", now));
             await AuditAsync(connection, transaction, actorId, "runner.registered", "runner", id,
                 JsonSerializer.Serialize(new { request.HostId, request.InstanceId, request.RunnerVersion, request.ProtocolVersion }), ct);
         }, ct);
@@ -551,7 +579,13 @@ public sealed partial class TaskServerStore
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var unresolved = Convert.ToInt32(await ScalarAsync(connection,
-                "SELECT count(*) FROM leases WHERE status IN ('active', 'process-unknown');", ct, transaction) ?? 0L,
+                """
+                SELECT
+                    (SELECT count(*) FROM leases
+                      WHERE status IN ('active', 'process-unknown'))
+                  + (SELECT count(*) FROM review_attempts
+                      WHERE status IN ('leased', 'process-unknown'));
+                """, ct, transaction) ?? 0L,
                 CultureInfo.InvariantCulture);
             if (unresolved > 0)
             {
@@ -673,7 +707,13 @@ public sealed partial class TaskServerStore
                 await current.OpenAsync(ct);
                 await ConfigureConnectionAsync(current, ct);
                 var unresolved = Convert.ToInt64(await ScalarAsync(current,
-                    "SELECT count(*) FROM leases WHERE status IN ('active', 'process-unknown');", ct) ?? 0L, CultureInfo.InvariantCulture);
+                    """
+                    SELECT
+                        (SELECT count(*) FROM leases
+                          WHERE status IN ('active', 'process-unknown'))
+                      + (SELECT count(*) FROM review_attempts
+                          WHERE status IN ('leased', 'process-unknown'));
+                    """, ct) ?? 0L, CultureInfo.InvariantCulture);
                 if (unresolved > 0)
                     throw new TaskServerConflictException("attempt-authority-unresolved", "Restore is blocked while active or process-unknown attempts exist.");
 
@@ -773,7 +813,12 @@ public sealed partial class TaskServerStore
     {
         await using var connection = await OpenReadyAsync(ct);
         var builder = new StringBuilder();
-        foreach (var table in new[] { "workspaces", "projects", "tasks", "runs", "events", "artifacts", "audit", "fence_counters", "leases", "runners" })
+        foreach (var table in new[]
+                 {
+                     "workspaces", "projects", "tasks", "runs", "events", "artifacts",
+                     "audit", "fence_counters", "leases", "runners", "review_subjects",
+                     "review_attempts", "review_fence_counters", "review_deliveries",
+                 })
         {
             var count = Convert.ToInt64(await ScalarAsync(connection, $"SELECT count(*) FROM {table};", ct) ?? 0L, CultureInfo.InvariantCulture);
             builder.Append(table).Append(':').Append(count).Append('\n');
@@ -1075,9 +1120,7 @@ public sealed partial class TaskServerStore
         if (!string.Equals(reader.GetString(2), "active", StringComparison.Ordinal))
             throw new TaskServerConflictException("runner-not-active", "Runner is not active.");
         var capabilities = JsonSerializer.Deserialize<string[]>(reader.GetString(3)) ?? [];
-        if (capabilities.Length > 0
-            && !capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
-            && capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
+        if (capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
             throw new TaskServerConflictException(
                 "coding-capability-required",
                 "A separately registered Remote Review Executor cannot claim coding work.");
