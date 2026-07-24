@@ -167,6 +167,45 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     }
 
     [Fact]
+    public void WatchdogTimeout_PreservesCompleteTechnicalDetailsBeyondCompactSummary()
+    {
+        var diagnostic =
+            "[orchestrator] [watchdog-timeout] \"A deliberately long task title that keeps the diagnostic line over the compact summary limit\" (codex): " +
+            "auto-cancelled after 601s of silence. The run will finalize as failed. " +
+            "[phase=TurnCompleted silence=601s allowed=600s lastActivity=2026-07-22T09:10:00.000Z " +
+            "session=019c123456789abcdef0123456789abcdef runner=agent-runner-with-a-long-diagnostic-name]";
+        SeedJob("watchdog-details", TaskStates.HumanReview,
+            $"[09:20:01.000] {diagnostic}{Environment.NewLine}");
+
+        var issue = Outcome("watchdog-details");
+
+        Assert.NotNull(issue);
+        Assert.Equal("watchdog-timeout", issue!.Kind);
+        Assert.Equal(diagnostic, issue.TechnicalDetails);
+        Assert.EndsWith("...", issue.Summary);
+        Assert.DoesNotContain("runner=agent-runner-with-a-long-diagnostic-name", issue.Summary);
+    }
+
+    [Theory]
+    [InlineData("tool-router-error", "Tool router error")]
+    [InlineData("no-reply", "No reply")]
+    public void TypedAgentFailureMarker_SurfacesWithCompleteTechnicalDetails(string kind, string expectedLabel)
+    {
+        var diagnostic =
+            $"[orchestrator] [{kind}] Agent execution failed. " +
+            "[phase=TurnCompleted silence=42s allowed=600s complete-tail]";
+        SeedJob(kind, TaskStates.HumanReview,
+            $"[09:20:01.000] {diagnostic}{Environment.NewLine}");
+
+        var issue = Outcome(kind);
+
+        Assert.NotNull(issue);
+        Assert.Equal(kind, issue!.Kind);
+        Assert.Equal(expectedLabel, issue.Label);
+        Assert.Equal(diagnostic, issue.TechnicalDetails);
+    }
+
+    [Fact]
     public void EmptyFastExitMarker_SurfacesHighSeverityOutcome()
     {
         SeedJob("empty-fast-exit", TaskStates.HumanReview,

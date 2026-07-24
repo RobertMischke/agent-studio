@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-22
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -212,6 +212,16 @@ own lease owner rather than inheriting a project-wide runner status.
 Settled session events preserve the same projection as historical run evidence.
 Historical entries never reuse disconnected warning treatment. See the
 [execution location schema](../schemas/task-execution-location.schema.json).
+
+## Outcome issue presentation contract
+
+Task reads derive `TaskInfo.outcomeIssue` from typed runner markers in
+`logs/cli-output.log`. `summary` remains a bounded compatibility value for
+compact consumers. `technicalDetails` carries the complete normalized source
+line and is restricted to explicit technical-details surfaces. User-facing
+failure cards map the issue `kind` to a complete human sentence; they never use
+`summary` or `technicalDetails` as primary copy. Unknown kinds use a generic
+failure sentence while retaining the full diagnostic under the disclosure.
 
 ## Verification
 

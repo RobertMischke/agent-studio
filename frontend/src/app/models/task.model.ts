@@ -498,6 +498,8 @@ export interface TaskOutcomeIssue {
   kind:
     | 'permission-blocked'
     | 'watchdog-timeout'
+    | 'tool-router-error'
+    | 'no-reply'
     | 'missing-terminal-sentinel'
     | 'classifier-unknown'
     | 'heuristic-done'
@@ -505,7 +507,10 @@ export interface TaskOutcomeIssue {
     | string;
   label: string;
   severity: 'Info' | 'Warn' | 'High' | string;
+  /** Bounded compatibility text for compact consumers. */
   summary: string;
+  /** Complete normalized source line, rendered only inside technical details. */
+  technicalDetails?: string | null;
   lastSeenAt: string | null;
 }
 

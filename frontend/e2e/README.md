@@ -488,7 +488,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `watchdog-notification-operator-copy.spec.ts` | watchdog Suspicious notification reads in operator-friendly English |
 | `workspace-banner-long-message.spec.ts` | workspace banner clamps long auto-review verdict and keeps project below body |
 
-### `task-detail/` - 88 specs
+### `task-detail/` - 89 specs
 
 | Spec | Summary |
 |------|---------|
@@ -528,6 +528,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `log-overlay-centering.spec.ts` | Log overlay (maximized agent log) - centering |
 | `open-failed-task.spec.ts` | open the failed screenshots-in-editors task and capture errors |
 | `overview-agent-metrics-fix.spec.ts` | Overview agent-run metrics fix (tokens + cumulative duration) |
+| `overview-failure-details.spec.ts` | Overview failure uses human copy and preserves the full raw diagnostic behind details |
 | `overview-prompt-popover.spec.ts` | Overview tab - task prompt modal |
 | `overview-tab-is-default-on-task-switch.spec.ts` | Overview tab is the default on task open + switch |
 | `overview-tab-model-change.spec.ts` | Overview tab - model picker |

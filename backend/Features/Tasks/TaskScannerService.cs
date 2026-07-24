@@ -1074,6 +1074,16 @@ public class TaskScannerService : ITaskScanner
             issue = BuildOutcomeIssue("watchdog-timeout", "Watchdog timeout", "High", line, lastSeenAt);
             return true;
         }
+        if (lower.Contains("[tool-router-error]"))
+        {
+            issue = BuildOutcomeIssue("tool-router-error", "Tool router error", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("[no-reply]"))
+        {
+            issue = BuildOutcomeIssue("no-reply", "No reply", "High", line, lastSeenAt);
+            return true;
+        }
         if (lower.Contains("empty-fast-exit"))
         {
             issue = BuildOutcomeIssue("empty-fast-exit", "Empty fast exit", "High", line, lastSeenAt);
@@ -1145,16 +1155,20 @@ public class TaskScannerService : ITaskScanner
     }
 
     private static TaskOutcomeIssue BuildOutcomeIssue(string kind, string label, string severity, string rawLine, DateTime lastSeenAt)
-        => new()
+    {
+        var technicalDetails = NormalizeOutcomeLine(rawLine);
+        return new()
         {
             Kind = kind,
             Label = label,
             Severity = severity,
-            Summary = SummarizeOutcomeLine(rawLine),
+            Summary = SummarizeOutcomeLine(technicalDetails),
+            TechnicalDetails = technicalDetails,
             LastSeenAt = lastSeenAt
         };
+    }
 
-    private static string SummarizeOutcomeLine(string line)
+    private static string NormalizeOutcomeLine(string line)
     {
         var trimmed = line.Trim();
         var end = trimmed.IndexOf(']');
@@ -1162,6 +1176,12 @@ public class TaskScannerService : ITaskScanner
         {
             trimmed = trimmed[(end + 1)..].Trim();
         }
+        return trimmed;
+    }
+
+    private static string SummarizeOutcomeLine(string normalizedLine)
+    {
+        var trimmed = normalizedLine.Trim();
         if (trimmed.Length <= 260) return trimmed;
         return trimmed[..257].TrimEnd() + "...";
     }
