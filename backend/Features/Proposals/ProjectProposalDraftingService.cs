@@ -32,7 +32,10 @@ public class ProjectProposalDraftingService
         if (input.Length == 0) return "";
         var prompt = _prompts.Render(
             AgentStudio.Prompts.RuntimePromptService.ProposalFeedbackRefine,
-            new Dictionary<string, string?> { ["feedback"] = input });
+            new Dictionary<string, string?> { ["feedback"] = input },
+            new AgentStudio.Prompts.PromptCallContext(
+                Step: "proposal-feedback-refine",
+                Model: Model()));
         return (await RunAsync(prompt, null, ct)).Trim();
     }
 
@@ -45,7 +48,10 @@ public class ProjectProposalDraftingService
             {
                 ["topic"] = topic,
                 ["guidance"] = string.IsNullOrWhiteSpace(guidance) ? "None" : guidance.Trim(),
-            });
+            },
+            new AgentStudio.Prompts.PromptCallContext(
+                Step: "proposal-draft-generate",
+                Model: Model()));
         var raw = await RunAsync(prompt, projectRoot, ct);
         return ParseDraft(raw);
     }
@@ -76,9 +82,7 @@ public class ProjectProposalDraftingService
     private async Task<string> RunAsync(string prompt, string? workingDirectory, CancellationToken ct)
     {
         var cli = _configuration["ProposalManagement:Cli"] ?? "claude";
-        var model = _configuration["ProposalManagement:Model"]
-                    ?? _configuration["PromptEnhancement:Model"]
-                    ?? ModelIds.ClaudeHaiku45;
+        var model = Model();
         var result = await _oneShots.Require(cli).RunAsync(new CliOneShotRequest(cli, model, prompt)
         {
             WorkingDirectory = workingDirectory,
@@ -88,4 +92,9 @@ public class ProjectProposalDraftingService
         if (!result.Ok) throw new InvalidOperationException(result.Error ?? "Proposal CLI call failed.");
         return string.IsNullOrWhiteSpace(result.ParsedText) ? result.Stdout : result.ParsedText;
     }
+
+    private string Model() =>
+        _configuration["ProposalManagement:Model"]
+        ?? _configuration["PromptEnhancement:Model"]
+        ?? ModelIds.ClaudeHaiku45;
 }

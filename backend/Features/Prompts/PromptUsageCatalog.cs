@@ -20,6 +20,15 @@ internal static class PromptUsageCatalog
 {
     private static readonly IReadOnlyList<PromptUsageRef> None = Array.Empty<PromptUsageRef>();
 
+    // A class/member can remain in source while no registered runtime path can
+    // reach it. Keep those audited exceptions distinct from the consumer map.
+    private static readonly Dictionary<string, string> Unreachable =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["recurring-output-pattern-review.md"] =
+                "The recorded RecurringOutputPatternService consumer has no DI registration, endpoint, hosted service, or scheduled runner. The prompt is unreachable.",
+        };
+
     private static readonly Dictionary<string, IReadOnlyList<PromptUsageRef>> Map =
         new(StringComparer.OrdinalIgnoreCase)
     {
@@ -161,6 +170,18 @@ internal static class PromptUsageCatalog
         {
             new PromptUsageRef("PromptEnhancementService", "Enhance", "Expands a raw task prompt before queueing."),
         },
+        ["proposal-feedback-refine.md"] = new[]
+        {
+            new PromptUsageRef("ProjectProposalDraftingService", "RefineFeedbackAsync", "Refines free-form proposal feedback before drafting."),
+        },
+        ["proposal-draft-generate.md"] = new[]
+        {
+            new PromptUsageRef("ProjectProposalDraftingService", "GenerateAsync", "Generates a structured project proposal draft."),
+        },
+        ["task-spawner-relevance.md"] = new[]
+        {
+            new PromptUsageRef("TaskSpawnerPostStepRunner", "BuildPrompt", "Decides whether a completed change should spawn a related task."),
+        },
 
         // --- Templates introduced by the T3a inline-migration ---
         ["code-pattern-drift-review.md"] = new[]
@@ -215,4 +236,7 @@ internal static class PromptUsageCatalog
 
     public static IReadOnlyList<PromptUsageRef> For(string name) =>
         Map.TryGetValue(name, out var refs) ? refs : None;
+
+    public static bool TryGetUnreachableReason(string name, out string reason) =>
+        Unreachable.TryGetValue(name, out reason!);
 }

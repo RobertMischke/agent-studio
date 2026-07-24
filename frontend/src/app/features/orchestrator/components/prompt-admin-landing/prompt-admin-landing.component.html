@@ -1,0 +1,136 @@
+<div class="prompt-home" data-testid="prompt-admin-landing">
+  <header class="prompt-home__hero">
+    <div>
+      <p class="prompt-home__eyebrow">Prompt registry</p>
+      <h2>Runtime prompts, their consumers, and their review state</h2>
+      <p>
+        Shipped Markdown is the default. Application-wide edits create a durable
+        override. A project can additionally replace the prompt for one pipeline
+        step in <code>project-settings.json</code>.
+      </p>
+    </div>
+    <button type="button" class="prompt-home__review"
+      data-testid="prompt-admin-review-all"
+      [disabled]="reviewBusy()"
+      (click)="reviewAll.emit()">
+      {{ reviewBusy() ? 'Reviewing all prompts…' : 'Review all prompts' }}
+    </button>
+  </header>
+
+  <section class="prompt-home__override" aria-labelledby="prompt-override-title">
+    <h3 id="prompt-override-title">How overrides resolve</h3>
+    <ol>
+      <li><strong>Shipped file</strong> in <code>prompts/runtime/</code> is the baseline.</li>
+      <li><strong>Application override</strong> replaces that file for every project.</li>
+      <li><strong>Project pipeline override</strong> replaces the bound step prompt only for its project.</li>
+    </ol>
+  </section>
+
+  @if (orphanedOverrides().length) {
+    <section class="prompt-home__warning" data-testid="prompt-admin-orphaned-overrides">
+      <h3>Orphaned project overrides</h3>
+      <p>These settings target a step that no longer maps to a runtime prompt.</p>
+      <ul>
+        @for (item of orphanedOverrides(); track item.projectName + item.stepId) {
+          <li><strong>{{ item.projectName }}</strong> · <code>{{ item.stepId }}</code></li>
+        }
+      </ul>
+    </section>
+  }
+
+  <section class="prompt-home__catalog" data-testid="prompt-admin-overview-table">
+    <header class="prompt-home__catalog-head">
+      <div>
+        <h3>Prompt activity</h3>
+        <p>
+          Runtime evidence ranks the review queue. A quiet row has no call in
+          {{ deadPromptDays() }} days.
+        </p>
+      </div>
+      <span>{{ items().length }} prompts</span>
+    </header>
+    <div class="prompt-home__table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><button type="button" (click)="sort('title')">Prompt{{ sortLabel('title') }}</button></th>
+            <th><button type="button" (click)="sort('calls')">Calls total / 7d{{ sortLabel('calls') }}</button></th>
+            <th>14d</th>
+            <th><button type="button" (click)="sort('lastCalled')">Last called{{ sortLabel('lastCalled') }}</button></th>
+            <th><button type="button" (click)="sort('lastChange')">Last change{{ sortLabel('lastChange') }}</button></th>
+            <th><button type="button" (click)="sort('lastReview')">Last review{{ sortLabel('lastReview') }}</button></th>
+            <th><button type="button" (click)="sort('cost')">Cost total / 7d{{ sortLabel('cost') }}</button></th>
+            <th><button type="button" (click)="sort('status')">Status{{ sortLabel('status') }}</button></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of sortedItems(); track item.name) {
+            <tr [class.prompt-home__row--dead]="item.calls.isDead"
+              [attr.data-testid]="'prompt-admin-overview-row-' + item.name">
+              <td>
+                <button type="button" class="prompt-home__prompt-link" (click)="openPrompt.emit(item.name)">
+                  <span class="prompt-home__activity-dot" [class.prompt-home__activity-dot--dead]="item.calls.isDead"></span>
+                  <span>
+                    <strong>{{ item.title }}</strong>
+                    <code>{{ item.name }}</code>
+                  </span>
+                </button>
+              </td>
+              <td class="prompt-home__number">
+                {{ item.calls.totalCalls | number }} / {{ item.calls.calls7d | number }}
+              </td>
+              <td>
+                <div class="prompt-home__spark" [attr.aria-label]="'14-day call history for ' + item.title">
+                  @for (day of item.calls.daily; track day.date) {
+                    <span [style.height]="sparkHeight(item, day.calls)" [title]="day.date + ': ' + day.calls"></span>
+                  }
+                </div>
+              </td>
+              <td>
+                {{ item.calls.lastCalledAt ? (item.calls.lastCalledAt | date:'dd.MM.yyyy') : 'never' }}
+              </td>
+              <td [title]="item.lastChangedSha ? 'Commit ' + item.lastChangedSha : ''">
+                {{ item.lastChangedAt ? (item.lastChangedAt | date:'dd.MM.yyyy') : '-' }}
+              </td>
+              <td>{{ item.lastReviewedAt ? (item.lastReviewedAt | date:'dd.MM.yyyy') : 'never' }}</td>
+              <td class="prompt-home__number">{{ cost(item) }} / {{ cost(item, true) }}</td>
+              <td>
+                <span class="prompt-home__status"
+                  [class.prompt-home__status--current]="item.reviewStatus === 'current'"
+                  [class.prompt-home__status--needs]="item.reviewStatus === 'needs-review'"
+                  [class.prompt-home__status--stale]="item.reviewStatus === 'stale'">
+                  {{ status(item) }}
+                </span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="prompt-home__cost-note">{{ costDisclaimer() }}</p>
+  </section>
+
+  <div class="prompt-home__classes">
+    @for (promptClass of classes(); track promptClass.id) {
+      <section class="prompt-home__class" [attr.data-testid]="'prompt-admin-class-' + promptClass.id">
+        <header>
+          <h3>{{ promptClass.title }}</h3>
+          <span>{{ promptClass.items.length }}</span>
+        </header>
+        <p>{{ promptClass.description }}</p>
+        <div class="prompt-home__links">
+          @for (item of promptClass.items; track item.name) {
+            <button type="button"
+              [attr.data-testid]="'prompt-admin-landing-link-' + item.name"
+              (click)="openPrompt.emit(item.name)">
+              <span>{{ item.title }}</span>
+              @if (item.projectOverrideCount) {
+                <small>{{ item.projectOverrideCount }} project override{{ item.projectOverrideCount === 1 ? '' : 's' }}</small>
+              }
+            </button>
+          }
+        </div>
+      </section>
+    }
+  </div>
+</div>
