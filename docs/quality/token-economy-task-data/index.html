@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Token Economy Task Server evidence | Experiment Workbench</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f5f6;
+      --surface: #ffffff;
+      --surface-raised: #f8fafb;
+      --surface-soft: #e9eef1;
+      --ink: #172129;
+      --muted: #66727c;
+      --line: #d6dde1;
+      --primary: #285f75;
+      --primary-soft: #dcecf2;
+      --hard: #27664a;
+      --hard-soft: #dceee4;
+      --judged: #74549b;
+      --judged-soft: #ebe3f4;
+      --confounded: #8a6224;
+      --confounded-soft: #f4ead5;
+      --danger: #914845;
+      --danger-soft: #f4dfde;
+      --shadow: 0 18px 48px rgba(24, 36, 45, .08);
+      --radius: 16px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0d1419;
+      --surface: #151e24;
+      --surface-raised: #1b262e;
+      --surface-soft: #25333c;
+      --ink: #edf2f5;
+      --muted: #9eabb4;
+      --line: #34434c;
+      --primary: #8bc6dc;
+      --primary-soft: #1b3946;
+      --hard: #8cd0ab;
+      --hard-soft: #1d3b2c;
+      --judged: #c7afe4;
+      --judged-soft: #352944;
+      --confounded: #e5bd72;
+      --confounded-soft: #43351d;
+      --danger: #e69b97;
+      --danger-soft: #432725;
+      --shadow: 0 20px 52px rgba(0, 0, 0, .3);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.5; }
+    a { color: var(--primary); }
+    button, input { font: inherit; color: inherit; }
+    button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent);
+      outline-offset: 2px;
+    }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    code { font-size: .9em; overflow-wrap: anywhere; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 13px clamp(16px, 3vw, 42px);
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      backdrop-filter: blur(14px);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-weight: 800;
+    }
+    .brand strong, .brand span { display: block; }
+    .brand strong { font-size: 13px; }
+    .brand span { color: var(--muted); font-size: 11px; }
+    .top-actions { display: flex; align-items: center; justify-content: end; gap: 8px; flex-wrap: wrap; }
+    .nav-link, .theme-button {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 7px 9px;
+      background: var(--surface);
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .nav-link:hover, .theme-button:hover { color: var(--ink); background: var(--surface-soft); }
+
+    main {
+      padding: 30px clamp(16px, 3vw, 42px) 64px;
+      display: grid;
+      gap: 22px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(290px, .7fr);
+      gap: 18px;
+    }
+    .hero-copy, .verdict, .section {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .hero-copy { padding: clamp(24px, 4vw, 46px); }
+    .eyebrow {
+      margin: 0 0 11px;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    h1 {
+      margin: 0;
+      max-width: 17ch;
+      font-size: clamp(34px, 5vw, 62px);
+      line-height: 1;
+      letter-spacing: -.045em;
+    }
+    .hero-copy .lead {
+      max-width: 68ch;
+      margin: 22px 0 0;
+      color: var(--muted);
+      font-size: clamp(15px, 1.7vw, 19px);
+    }
+    .verdict {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 22px;
+      background: var(--primary-soft);
+    }
+    .verdict h2 { margin: 0 0 8px; font-size: 22px; }
+    .verdict p { margin: 0; color: var(--muted); }
+    .answer {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: color-mix(in srgb, var(--surface) 76%, transparent);
+      font-size: 12px;
+    }
+    .answer-dot { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: var(--primary); }
+    .answer strong, .answer span { display: block; }
+    .answer span { margin-top: 3px; color: var(--muted); }
+
+    .section { padding: clamp(20px, 3vw, 30px); }
+    .section-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .section-head h2 { margin: 0; font-size: clamp(22px, 3vw, 30px); letter-spacing: -.02em; }
+    .section-head p { margin: 5px 0 0; color: var(--muted); max-width: 78ch; }
+    .stamp {
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 10px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .snapshot-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .snapshot-card {
+      min-height: 126px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-raised);
+    }
+    .snapshot-card strong { display: block; font-size: 27px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .snapshot-card span { display: block; margin-top: 9px; font-size: 12px; font-weight: 700; }
+    .snapshot-card small { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
+    .coverage-note {
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--confounded-soft);
+      color: var(--confounded);
+      font-size: 12px;
+    }
+    .coverage-note strong { color: inherit; }
+
+    .class-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .class-card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--surface-raised);
+    }
+    .class-card h3 { margin: 10px 0 7px; font-size: 18px; }
+    .class-card p { margin: 0; color: var(--muted); font-size: 12px; }
+    .class-card ul { margin: 13px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+    .class-card li + li { margin-top: 5px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .badge.hard { background: var(--hard-soft); color: var(--hard); }
+    .badge.judged { background: var(--judged-soft); color: var(--judged); }
+    .badge.confounded { background: var(--confounded-soft); color: var(--confounded); }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .filters { display: flex; gap: 7px; flex-wrap: wrap; }
+    .filter-button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 10px;
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .filter-button[aria-pressed="true"] { color: var(--ink); background: var(--surface-soft); }
+    .filter-button[data-filter="hard"][aria-pressed="true"] { background: var(--hard-soft); color: var(--hard); }
+    .filter-button[data-filter="judged"][aria-pressed="true"] { background: var(--judged-soft); color: var(--judged); }
+    .filter-button[data-filter="confounded"][aria-pressed="true"] { background: var(--confounded-soft); color: var(--confounded); }
+    .visible-count { color: var(--muted); font-size: 11px; }
+    .metric-list { display: grid; gap: 8px; }
+    .metric-row {
+      display: grid;
+      grid-template-columns: minmax(190px, .72fr) 120px minmax(220px, 1fr) minmax(220px, 1fr);
+      gap: 12px;
+      align-items: start;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface-raised);
+      font-size: 12px;
+    }
+    .metric-row[hidden] { display: none; }
+    .metric-row strong { display: block; }
+    .metric-row p { margin: 3px 0 0; color: var(--muted); }
+    .metric-label small { display: block; margin-top: 4px; color: var(--muted); }
+    .claim-valid strong { color: var(--hard); }
+    .claim-invalid strong { color: var(--danger); }
+
+    .field-tools { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+    .field-search {
+      width: min(340px, 78vw);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 8px 10px;
+      background: var(--surface-raised);
+    }
+    .field-table-wrap { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1040px; font-size: 12px; }
+    th, td { padding: 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); background: var(--surface-soft); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+    tbody tr:last-child td { border-bottom: 0; }
+    td p { margin: 4px 0 0; color: var(--muted); }
+    .source-path { color: var(--muted); font-size: 10px; }
+    .field-row[hidden] { display: none; }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(290px, .85fr);
+      gap: 14px;
+    }
+    .recommendation {
+      padding: 20px;
+      border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--line));
+      border-radius: 13px;
+      background: var(--primary-soft);
+    }
+    .recommendation h3 { margin: 9px 0 7px; font-size: 22px; }
+    .recommendation p { margin: 0; color: var(--muted); }
+    .benchmark-contract {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .contract-cell {
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--surface) 77%, transparent);
+      font-size: 11px;
+    }
+    .contract-cell strong, .contract-cell span { display: block; }
+    .contract-cell span { margin-top: 3px; color: var(--muted); }
+    .roadmap { display: grid; gap: 9px; }
+    .roadmap-item {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 10px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface-raised);
+    }
+    .step-number {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .roadmap-item h4 { margin: 0; font-size: 13px; }
+    .roadmap-item p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .method-card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface-raised);
+    }
+    .method-card h3 { margin: 0 0 7px; font-size: 14px; }
+    .method-card p, .method-card li { color: var(--muted); font-size: 11px; }
+    .method-card p { margin: 0; }
+    .method-card ul { margin: 10px 0 0; padding-left: 18px; }
+    .method-card li + li { margin-top: 5px; }
+    pre {
+      margin: 13px 0 0;
+      padding: 14px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 11px;
+      white-space: pre-wrap;
+    }
+    .source-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .source-links a {
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      text-decoration: none;
+      font-size: 10px;
+    }
+    footer { color: var(--muted); text-align: center; font-size: 10px; }
+
+    @media (max-width: 1180px) {
+      .snapshot-grid { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
+      .metric-row { grid-template-columns: minmax(180px, .7fr) 110px minmax(0, 1fr); }
+      .claim-invalid { grid-column: 3; }
+    }
+    @media (max-width: 860px) {
+      .hero, .split { grid-template-columns: 1fr; }
+      .class-grid, .method-grid { grid-template-columns: 1fr; }
+      .metric-row { grid-template-columns: 1fr; }
+      .claim-invalid { grid-column: auto; }
+      .top-actions .nav-link { display: none; }
+    }
+    @media (max-width: 560px) {
+      .snapshot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .benchmark-contract { grid-template-columns: 1fr; }
+      h1 { font-size: 38px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">TE</div>
+      <div>
+        <strong>Task Server evidence Workbench</strong>
+        <span>AGT-2293 · validity before volume</span>
+      </div>
+    </div>
+    <nav class="top-actions" aria-label="Workbench sections">
+      <a class="nav-link" href="#evidence">Evidence</a>
+      <a class="nav-link" href="#metrics">Metrics</a>
+      <a class="nav-link" href="#fields">Fields</a>
+      <a class="nav-link" href="#reliability">Reliability</a>
+      <button class="theme-button" id="themeButton" type="button" aria-label="Toggle color theme">Dark theme</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Guiding question · 24 July 2026</p>
+        <h1 id="page-title">Can we learn anything reliable?</h1>
+        <p class="lead">Yes, but the reliable result is narrower than a model leaderboard. Task Server data can establish what the system recorded. It cannot rank coding-model quality while card difficulty and reviewer bias remain uncontrolled.</p>
+      </div>
+      <aside class="verdict" aria-label="Validity verdict">
+        <div>
+          <h2>Decision</h2>
+          <p>Use production data for operational truth and measurement coverage. Use a controlled Token Economy benchmark for model comparison.</p>
+        </div>
+        <div>
+          <div class="answer">
+            <span class="answer-dot" aria-hidden="true"></span>
+            <div><strong>Reliable now</strong><span>Gate events, failures, violations, timestamps, recorded durations, counters, attempts, and SHAs.</span></div>
+          </div>
+          <div class="answer">
+            <span class="answer-dot" aria-hidden="true"></span>
+            <div><strong>Not established</strong><span>Absolute quality, or which coding model is better, cheaper, or faster.</span></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section" id="evidence" aria-labelledby="evidence-title">
+      <div class="section-head">
+        <div>
+          <h2 id="evidence-title">Proven extraction, not a benchmark</h2>
+          <p>A deliberately biased technical sample verifies which fields can actually be extracted. It selects the 60 most recently active, non-archived Agent Studio cards carrying a grade tag and reads the latest pipeline attempt.</p>
+        </div>
+        <span class="stamp">snapshot 2026-07-24 11:17 UTC</span>
+      </div>
+      <div class="snapshot-grid" aria-label="Extraction coverage">
+        <article class="snapshot-card">
+          <strong>60 / 60</strong>
+          <span>Pipeline records</span>
+          <small>Structured latest attempt available.</small>
+        </article>
+        <article class="snapshot-card">
+          <strong>56 + 4</strong>
+          <span>Build gate verdicts</span>
+          <small>56 passed, 4 failed. All 60 have duration.</small>
+        </article>
+        <article class="snapshot-card">
+          <strong>224</strong>
+          <span>Step token records</span>
+          <small>Non-zero counters on aspect steps.</small>
+        </article>
+        <article class="snapshot-card">
+          <strong>0 / 60</strong>
+          <span>Task token rollups</span>
+          <small>Missing coverage, not zero consumption.</small>
+        </article>
+        <article class="snapshot-card">
+          <strong>0 / 426</strong>
+          <span>Run durations</span>
+          <small>Run records exist, durationSeconds does not.</small>
+        </article>
+        <article class="snapshot-card">
+          <strong>365</strong>
+          <span>Review records</span>
+          <small>Repeated model opinions across 60 cards.</small>
+        </article>
+      </div>
+      <div class="coverage-note">
+        <strong>Boundary:</strong> all 240 per-card API reads completed, but the sample was selected because it has grade evidence and remains outside the archive. Its 37 D, 13 A, 6 B, and 4 C tags are observed reviewer outputs, not a quality distribution for all tasks. The coding-model mix is also unbalanced: 39 Sol, 20 Terra, and 1 Luna.
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="classes-title">
+      <div class="section-head">
+        <div>
+          <h2 id="classes-title">Three evidence classes</h2>
+          <p>The same raw field can support a hard factual statement and still become confounded when grouped into a coding-model comparison.</p>
+        </div>
+      </div>
+      <div class="class-grid">
+        <article class="class-card">
+          <span class="badge hard">1 · Hard evidence</span>
+          <h3>Recorded system facts</h3>
+          <p>Deterministic events and direct counters remain factual without a baseline, provided coverage and context are stated.</p>
+          <ul>
+            <li>Gate verdict, build failure, violation event</li>
+            <li>Timestamp, duration, attempt, token count</li>
+            <li>Commit, result SHA, integration ancestry</li>
+          </ul>
+        </article>
+        <article class="class-card">
+          <span class="badge judged">2 · Model-judged</span>
+          <h3>Reviewer opinions</h3>
+          <p>Grades and aspects are generated by a reviewer LLM. Ground truth and reviewer bias are unknown.</p>
+          <ul>
+            <li>Relative only under the same review setup</li>
+            <li>Keep rubric, prompt, evidence, and reviewer fixed</li>
+            <li>Never call a grade absolute quality</li>
+          </ul>
+        </article>
+        <article class="class-card">
+          <span class="badge confounded">3 · Confounded</span>
+          <h3>Uncontrolled comparisons</h3>
+          <p>Production cards vary in difficulty, prompt quality, environment, retry history, and pipeline configuration.</p>
+          <ul>
+            <li>No grade-by-coding-model ranking</li>
+            <li>No cycles-to-A ranking</li>
+            <li>No speed or token-efficiency ranking</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="metrics" aria-labelledby="metrics-title">
+      <div class="section-head">
+        <div>
+          <h2 id="metrics-title">Metric validity matrix</h2>
+          <p>Each derivable metric has one primary class. Filter the matrix to see exactly what it supports and what it does not.</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="filters" aria-label="Filter metrics by evidence class">
+          <button class="filter-button" type="button" data-filter="all" aria-pressed="true">All · 20</button>
+          <button class="filter-button" type="button" data-filter="hard" aria-pressed="false">Hard · 12</button>
+          <button class="filter-button" type="button" data-filter="judged" aria-pressed="false">Model-judged · 3</button>
+          <button class="filter-button" type="button" data-filter="confounded" aria-pressed="false">Confounded · 5</button>
+        </div>
+        <output class="visible-count" id="visibleMetricCount">20 visible metrics</output>
+      </div>
+      <div class="metric-list" id="metricList">
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Gate verdict</strong><small><code>pipeline.execution.steps[].status/verdict</code></small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>The configured gate passed, failed, or skipped for this revision and attempt.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>The change is globally correct, or one model is better.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Build or test failure</strong><small><code>step.reason</code>, gate artifact, exit status</small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>A named command or check failed in the recorded gate scope.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Root cause without inspecting the artifact and environment.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Agent Git violation</strong><small><code>outcomeIssue.kind</code>, runtime log event</small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>The detector observed a forbidden Git mutation or claim.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>All Git violations were detected when the field is absent.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Pipeline step duration</strong><small><code>steps[].durationMs</code></small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>Elapsed time for the recorded step under that run context.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>A model speed ranking across heterogeneous cards.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Run wall-clock duration</strong><small><code>runs[].durationSeconds</code></small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>Elapsed CLI time when the start and exit markers are present.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Zero time when missing. Snapshot coverage is 0 of 426.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Token counters</strong><small><code>input/output/cache*Tokens</code></small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>The number reported by the producer for that call or step.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Equal work, cost, or tokenizer semantics across providers.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Pipeline attempt count</strong><small><code>execution.attempt</code>, previous attempts</small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>How many pipeline attempts were recorded for a task.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Why attempts were needed, or whether they reflect agent quality.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Lane transition count</strong><small><code>timeline[].kind=lane_changed</code></small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>The observed state path and timestamps.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Productive progress. Human moves and recovery moves are mixed.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Run outcome or sentinel</strong><small><code>runOutcome</code>, timeline event details</small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>The terminal token or classifier outcome captured by the runner.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Semantic completion unless delivery and gate evidence agree.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Commit and integration provenance</strong><small><code>commits[]</code>, <code>provenance</code>, <code>integration</code></small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>The recorded SHA range and whether Git ancestry contains it.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Quality or completeness of the code in that range.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Tool-call counts and errors</strong><small><code>agent-work</code> projection</small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>How many captured tool calls started and reported errors.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Reasoning effort or useful work not expressed as a tool call.</p></div>
+        </article>
+        <article class="metric-row" data-class="hard">
+          <div class="metric-label"><strong>Review-evidence occurrence</strong><small><code>reviewEvidence[].source/createdAt</code></small></div>
+          <span class="badge hard">Hard</span>
+          <div class="claim-valid"><strong>Supports</strong><p>A producer recorded a finding with named provenance.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Truth of an LLM-authored finding without independent verification.</p></div>
+        </article>
+
+        <article class="metric-row" data-class="judged">
+          <div class="metric-label"><strong>Code-review grade</strong><small><code>post-code-review-grade.verdict</code>, grade file</small></div>
+          <span class="badge judged">Model-judged</span>
+          <div class="claim-valid"><strong>Supports</strong><p>A relative reviewer signal under a frozen rubric, evidence scope, prompt, and reviewer.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>An absolute claim that the delivery has A, B, C, or D quality.</p></div>
+        </article>
+        <article class="metric-row" data-class="judged">
+          <div class="metric-label"><strong>Aspect verdict</strong><small><code>aspect-*.verdict</code>, aspect artifact</small></div>
+          <span class="badge judged">Model-judged</span>
+          <div class="claim-valid"><strong>Supports</strong><p>A reviewer opinion on requirement fit, code, docs, or test evidence.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Ground truth or agreement with another reviewer model.</p></div>
+        </article>
+        <article class="metric-row" data-class="judged">
+          <div class="metric-label"><strong>Orchestrator review decision</strong><small><code>orchestratorVerdict</code>, timeline decision</small></div>
+          <span class="badge judged">Model-judged</span>
+          <div class="claim-valid"><strong>Supports</strong><p>The action chosen by that orchestrator setup from its available evidence.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Objective correctness of accept, reissue, or escalation.</p></div>
+        </article>
+
+        <article class="metric-row" data-class="confounded">
+          <div class="metric-label"><strong>Grade distribution by coding model</strong><small>group grade by <code>info.model</code></small></div>
+          <span class="badge confounded">Confounded</span>
+          <div class="claim-valid"><strong>Supports</strong><p>A descriptive cross-tab of this selected cohort only.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Which coding model produces better work.</p></div>
+        </article>
+        <article class="metric-row" data-class="confounded">
+          <div class="metric-label"><strong>Cycles until Grade A by model</strong><small>attempts plus repeated grade entries</small></div>
+          <span class="badge confounded">Confounded</span>
+          <div class="claim-valid"><strong>Supports</strong><p>A card's recorded review-loop history.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>A fair model efficiency comparison without difficulty normalization.</p></div>
+        </article>
+        <article class="metric-row" data-class="confounded">
+          <div class="metric-label"><strong>Tokens per completed task by model</strong><small>token rollup divided by terminal cards</small></div>
+          <span class="badge confounded">Confounded</span>
+          <div class="claim-valid"><strong>Supports</strong><p>Spend attribution for a defined card when coverage is complete.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Token efficiency across unequal tasks and incomplete counters.</p></div>
+        </article>
+        <article class="metric-row" data-class="confounded">
+          <div class="metric-label"><strong>Wall-clock by coding model</strong><small>duration grouped by <code>info.model</code></small></div>
+          <span class="badge confounded">Confounded</span>
+          <div class="claim-valid"><strong>Supports</strong><p>Historical elapsed time for the exact observed runs.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>Model speed without the same task, host load, CLI, and limits.</p></div>
+        </article>
+        <article class="metric-row" data-class="confounded">
+          <div class="metric-label"><strong>Pass, recovery, or throughput rate by model</strong><small>terminal events grouped by model</small></div>
+          <span class="badge confounded">Confounded</span>
+          <div class="claim-valid"><strong>Supports</strong><p>An operational history for a named production interval.</p></div>
+          <div class="claim-invalid"><strong>Does not support</strong><p>A causal model ranking. Task mix and infrastructure incidents differ.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="fields" aria-labelledby="fields-title">
+      <div class="section-head">
+        <div>
+          <h2 id="fields-title">Field-level inventory</h2>
+          <p>Use API surfaces as stable extraction boundaries. Do not mine task folders directly. Persisted fields and read-time projections have different coverage and failure modes.</p>
+        </div>
+        <div class="field-tools">
+          <label for="fieldSearch" class="visible-count">Find a field</label>
+          <input class="field-search" id="fieldSearch" type="search" placeholder="gate, tokens, SHA, grade..." autocomplete="off">
+          <output class="visible-count" id="visibleFieldCount">9 visible surfaces</output>
+        </div>
+      </div>
+      <div class="field-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>API surface</th>
+              <th>Exact fields</th>
+              <th>Source character</th>
+              <th>Proven extraction</th>
+              <th>Validity or coverage caveat</th>
+            </tr>
+          </thead>
+          <tbody id="fieldRows">
+            <tr class="field-row">
+              <td><strong><code>GET /api/tasks/grouped</code></strong><p class="source-path">TaskInfo</p></td>
+              <td><code>key, state, enteredLaneAt, model, cliType, thinkingLevel, tags, outcomeIssue, commits, provenance, integration</code></td>
+              <td>Mix of persisted task identity and read-time runtime or Git projections.</td>
+              <td>Current cohort selection, state path, configured model, grade tag, violation and integration facts.</td>
+              <td>Archive is always empty here. Use the paged archive endpoint. Configured model is not proof of every actual step model.</td>
+            </tr>
+            <tr class="field-row">
+              <td><strong><code>GET /api/tasks/archive</code></strong><p class="source-path">ArchivedTaskInfo</p></td>
+              <td><code>items, total, offset, limit, enteredLaneAt, commitCount, codeActivityDetected</code></td>
+              <td>Slim, paged terminal-card projection.</td>
+              <td>Complete archive population and bounded cohort selection without loading every detail.</td>
+              <td>Slim items omit pipeline, grades, token details, and run history. Join per key through supported APIs.</td>
+            </tr>
+            <tr class="field-row">
+              <td><strong><code>GET /api/tasks/{key}</code></strong><p class="source-path">TaskDetail</p></td>
+              <td><code>info, promptHistory, statusGeneration, contextUsage, log, reviewEvidence</code></td>
+              <td>Persisted content plus tolerant projections from task logs and result files.</td>
+              <td>Prompt revisions, generated-file provenance, evidence occurrence, current task metadata.</td>
+              <td>Finding presence is hard evidence. Finding truth depends on its producer and may be model-judged.</td>
+            </tr>
+            <tr class="field-row">
+              <td><strong><code>GET /api/tasks/{key}/pipeline</code></strong><p class="source-path">PipelineExecutionRecord</p></td>
+              <td><code>execution.attempt, previousAttempts, steps[].{stepId,status,model,durationMs,inputTokens,outputTokens,cacheReadTokens,cacheCreationTokens,verdict,reason}</code></td>
+              <td>Structured persisted step execution with read-time cost and configuration projections.</td>
+              <td>Gate verdicts and durations, step token counters, actual reviewer model, repeated attempts.</td>
+              <td>A zero can mean a deterministic step or missing usage. Interpret with <code>tokenUsageSource</code> and coverage.</td>
+            </tr>
+            <tr class="field-row">
+              <td><strong><code>GET /api/tasks/{key}/runs</code></strong><p class="source-path">RunTimeline</p></td>
+              <td><code>runCount, runs[].{intent,status,startedAt,endedAt,durationSeconds,exitCode,headShaBefore,headShaAfter,executionLocation}</code></td>
+              <td>Derived from session events plus CLI start and exit log markers.</td>
+              <td>CLI invocation count, session recovery, execution host, SHA range, wall-clock when markers pair.</td>
+              <td>Snapshot has 426 run records and zero durations. Missing duration is unknown, never zero.</td>
+            </tr>
+            <tr class="field-row">
+              <td><strong><code>GET /api/tasks/{key}/timeline</code></strong><p class="source-path">Unified event ledger</p></td>
+              <td><code>ts, kind, actor, runId, payloadRef, summary, details</code></td>
+              <td>Append-only, time-ordered runtime and state events.</td>
+              <td>Lane changes, agent-finished events, loop reopen, accept, escalation, external completion.</td>
+              <td>Event occurrence is factual. Human and model actors must remain separated in causal analysis.</td>
+            </tr>
+            <tr class="field-row">
+              <td><strong><code>GET /api/tasks/{key}/code-review/list</code></strong><p class="source-path">CodeReviewListEntry</p></td>
+              <td><code>fileName, mode, grade, verdict, model, cliType, createdAt, summary</code></td>
+              <td>Versioned reviewer artifacts and their producer metadata.</td>
+              <td>Repeated grade or review sequence, exact reviewer model, review mode, time.</td>
+              <td>Reviewer output is not ground truth. Repeated records are not independent observations.</td>
+            </tr>
+            <tr class="field-row">
+              <td><strong><code>GET /api/tasks/{key}/agent-work</code></strong><p class="source-path">AgentWorkSummary</p></td>
+              <td><code>calls, recovered, toolCalls, toolCounts, startedAt, lastTouchAt</code></td>
+              <td>Projection from session and tool-call JSONL logs.</td>
+              <td>Captured tool mix, call count, recovery occurrence, first and last activity.</td>
+              <td>Tool counts measure observability events, not reasoning quality or semantic progress.</td>
+            </tr>
+            <tr class="field-row">
+              <td><strong>Token usage surfaces</strong><p class="source-path">TaskTokenSummary and pipeline step usage</p></td>
+              <td><code>calls, totalTokens, entries[].participantId</code> and per-step token fields</td>
+              <td>Bus-backed per-task rollup plus producer-reported step counters.</td>
+              <td>Attribution by task, participant, model, step, and time when records exist.</td>
+              <td>Snapshot: 0 of 60 task rollups but 224 populated aspect steps. Coverage must be a companion metric.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="reliability" aria-labelledby="reliability-title">
+      <div class="section-head">
+        <div>
+          <h2 id="reliability-title">What would make the comparison reliable?</h2>
+          <p>Spend first on the smallest controlled pair. More production rows cannot repair uncontrolled task difficulty.</p>
+        </div>
+      </div>
+      <div class="split">
+        <article class="recommendation">
+          <span class="badge hard">Priority 1 · cheapest direct comparison</span>
+          <h3>One frozen scenario, two models, three repeats</h3>
+          <p>Define a medium deterministic scenario in Token Economy and run the same artifact under both coding models. The primary endpoint is the deterministic gate. This is the minimum experiment that can compare coding-model performance.</p>
+          <div class="benchmark-contract">
+            <div class="contract-cell"><strong>Same input</strong><span>Base SHA, prompt, attachments, permissions</span></div>
+            <div class="contract-cell"><strong>Same runtime</strong><span>CLI version, host limits, timeout, network policy</span></div>
+            <div class="contract-cell"><strong>Same scoring</strong><span>Gate commands and expected assertions</span></div>
+            <div class="contract-cell"><strong>Variance visible</strong><span>Randomized order and at least three repeats</span></div>
+          </div>
+        </article>
+        <div class="roadmap">
+          <article class="roadmap-item">
+            <span class="step-number">2</span>
+            <div><h4>Inter-rater replay</h4><p>Grade the same frozen deliveries with two reviewer models. Report raw agreement, a confusion matrix, and weighted Cohen's kappa. Do not mix reviewer disagreement into coding-model performance.</p></div>
+          </article>
+          <article class="roadmap-item">
+            <span class="step-number">3</span>
+            <div><h4>Temporal stability</h4><p>Repeat the same scenario and measurement contract over time. Track coverage, median, dispersion, and drift by exact model and CLI version.</p></div>
+          </article>
+          <article class="roadmap-item">
+            <span class="step-number">4</span>
+            <div><h4>Broaden the benchmark set</h4><p>Add scenario families and difficulty strata only after the first pair is reproducible. Keep scenario-level results visible before aggregation.</p></div>
+          </article>
+          <article class="roadmap-item">
+            <span class="step-number">5</span>
+            <div><h4>Public benchmark anchor</h4><p>Use external results only when exact model version, tool setup, task family, scoring rule, and date are compatible. Otherwise show them as context, not normalization.</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="method-title">
+      <div class="section-head">
+        <div>
+          <h2 id="method-title">Reproduction and audit trail</h2>
+          <p>The extraction is API-only, bounded, and free of task titles or filesystem paths in the committed snapshot.</p>
+        </div>
+      </div>
+      <div class="method-grid">
+        <article class="method-card">
+          <h3>Run the extractor</h3>
+          <p>Defaults to the stable local Task Server, Agent Studio project, 60 cards, and eight concurrent read workers.</p>
+          <pre>node docs/quality/token-economy-task-data/extract-evidence.mjs
+
+TASKBOARD_SAMPLE_LIMIT=20 \
+node docs/quality/token-economy-task-data/extract-evidence.mjs
+
+node --test \
+  docs/quality/token-economy-task-data/extract-evidence.test.mjs</pre>
+        </article>
+        <article class="method-card">
+          <h3>Selection disclosure</h3>
+          <ul>
+            <li>Non-archived only</li>
+            <li>Grade-tagged only</li>
+            <li>Most recently active first</li>
+            <li>Latest pipeline attempt for step coverage</li>
+            <li>All returned review versions counted</li>
+          </ul>
+        </article>
+        <article class="method-card">
+          <h3>Interpretation rules</h3>
+          <ul>
+            <li>Missing is unknown, not zero</li>
+            <li>Always publish numerator and denominator</li>
+            <li>Keep coding model and reviewer model separate</li>
+            <li>Keep scenario-level rows before aggregation</li>
+            <li>Version rubric, prompt, gate, model, CLI, and base SHA</li>
+          </ul>
+        </article>
+      </div>
+      <div class="source-links" aria-label="Source contracts">
+        <a href="../../../backend/Shared/Models/TaskInfo.cs">TaskInfo</a>
+        <a href="../../../backend/Shared/Models/TaskDetail.cs">TaskDetail</a>
+        <a href="../../../backend/Shared/Models/TaskTelemetry.cs">Task telemetry</a>
+        <a href="../../../backend/Shared/Models/PipelineModels.cs">Pipeline records</a>
+        <a href="../../../backend/Features/Runner/RunTimeline.cs">Run timeline</a>
+        <a href="../../../backend/Features/Tasks/TaskPipelineEndpoints.cs">Pipeline API</a>
+        <a href="../../../backend/Features/Tasks/TaskRunnerEndpoints.cs">Run API</a>
+        <a href="../../system/contracts/filesystem.md">Filesystem contract</a>
+        <a href="evidence-snapshot.json">Committed evidence snapshot</a>
+        <a href="brief.md">Prompt-friendly brief</a>
+      </div>
+    </section>
+
+    <footer>AGT-2293 · Related benchmark context: AGT-2200 · Production evidence is not a model leaderboard.</footer>
+  </main>
+
+  <noscript>
+    <p>The complete evidence, metric, field, and reliability content is rendered above. JavaScript only adds theme and filtering controls.</p>
+  </noscript>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var themeButton = document.getElementById("themeButton");
+      var storedTheme = null;
+      try { storedTheme = localStorage.getItem("te-task-data-theme"); } catch (error) {}
+      var initialTheme = storedTheme || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+
+      function setTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        themeButton.textContent = theme === "dark" ? "Light theme" : "Dark theme";
+        try { localStorage.setItem("te-task-data-theme", theme); } catch (error) {}
+      }
+
+      setTheme(initialTheme);
+      themeButton.addEventListener("click", function () {
+        setTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+      });
+
+      var filterButtons = Array.from(document.querySelectorAll(".filter-button"));
+      var metricRows = Array.from(document.querySelectorAll(".metric-row"));
+      var visibleMetricCount = document.getElementById("visibleMetricCount");
+
+      function applyMetricFilter(filter) {
+        var visible = 0;
+        metricRows.forEach(function (row) {
+          var show = filter === "all" || row.dataset.class === filter;
+          row.hidden = !show;
+          if (show) visible += 1;
+        });
+        filterButtons.forEach(function (button) {
+          button.setAttribute("aria-pressed", String(button.dataset.filter === filter));
+        });
+        visibleMetricCount.textContent = visible + (visible === 1 ? " visible metric" : " visible metrics");
+      }
+
+      filterButtons.forEach(function (button) {
+        button.addEventListener("click", function () { applyMetricFilter(button.dataset.filter); });
+      });
+
+      var fieldSearch = document.getElementById("fieldSearch");
+      var fieldRows = Array.from(document.querySelectorAll(".field-row"));
+      var visibleFieldCount = document.getElementById("visibleFieldCount");
+
+      function applyFieldSearch() {
+        var term = fieldSearch.value.trim().toLowerCase();
+        var visible = 0;
+        fieldRows.forEach(function (row) {
+          var show = !term || row.textContent.toLowerCase().includes(term);
+          row.hidden = !show;
+          if (show) visible += 1;
+        });
+        visibleFieldCount.textContent = visible + (visible === 1 ? " visible surface" : " visible surfaces");
+      }
+
+      fieldSearch.addEventListener("input", applyFieldSearch);
+    }());
+  </script>
+</body>
+</html>

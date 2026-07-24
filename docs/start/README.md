@@ -59,6 +59,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | ADR archive | [architecture/decisions/adr-archive.md](../system/architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](../system/architecture/model.md) |
 | Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](../concepts/architecture-quality-layer.md) · [interactive Workbench](../quality/architecture-quality-layer/index.html) |
+| Token Economy Task Server evidence (field inventory, validity classes, controlled-comparison path; AGT-2293) | [interactive Workbench](../quality/token-economy-task-data/index.html) · [brief](../quality/token-economy-task-data/brief.md) |
 | Managed project manifest map | [architecture/project-map.md](../system/architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](../system/architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](../quality/design/style-guide-hard-rules.md) |

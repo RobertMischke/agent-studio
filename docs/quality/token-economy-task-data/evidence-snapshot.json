@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-24T11:17:19.372Z",
+  "source": {
+    "endpoint": "http://127.0.0.1:5031",
+    "project": "AGT",
+    "selection": "Most recently active non-archived Agent Studio tasks carrying a code-review grade tag",
+    "sampleLimit": 60,
+    "pipelineScope": "Latest pipeline attempt per selected card",
+    "purpose": "Technical extraction and coverage proof, not a representative performance cohort"
+  },
+  "cohort": {
+    "selected": 60,
+    "laneCounts": {
+      "humanReview": 48,
+      "escalated": 12
+    },
+    "codingModelCounts": {
+      "gpt-5.6-sol": 39,
+      "gpt-5.6-terra": 20,
+      "gpt-5.6-luna": 1
+    },
+    "gradeTagCounts": {
+      "code-review:grade-d": 37,
+      "code-review:grade-b": 6,
+      "code-review:grade-c": 4,
+      "code-review:grade-a": 13
+    }
+  },
+  "coverage": {
+    "endpointFailures": {
+      "pipeline": 0,
+      "runs": 0,
+      "timeline": 0,
+      "codeReviewList": 0
+    },
+    "pipelineExecutions": 60,
+    "pipelineSteps": 1782,
+    "runTimelineCards": 60,
+    "runRecords": 426,
+    "runRecordsWithDuration": 0,
+    "taskTokenSummaries": 0,
+    "pipelineStepsWithTokens": 224,
+    "aspectStepsWithTokens": 224,
+    "codeReviewEntries": 365
+  },
+  "hardEvidence": {
+    "buildGateRecords": 60,
+    "buildGateStatusCounts": {
+      "passed": 56,
+      "failed": 4
+    },
+    "buildGateRecordsWithDuration": 60,
+    "pipelineAttemptCounts": {
+      "1": 4,
+      "2": 8,
+      "3": 8,
+      "4": 7,
+      "5": 4,
+      "6": 5,
+      "7": 6,
+      "8": 1,
+      "9": 6,
+      "10": 3,
+      "11": 3,
+      "12": 1,
+      "13": 1,
+      "14": 2,
+      "22": 1
+    },
+    "timelineKindCounts": {
+      "prompt_created": 58,
+      "lane_changed": 1421,
+      "agent_run_finished": 354,
+      "orchestrator_verdict_accepted": 108,
+      "quality_loop_reopened": 231,
+      "orchestrator_escalated": 110,
+      "external_completion": 5
+    },
+    "outcomeIssueCounts": {
+      "environment-blocker": 1
+    }
+  },
+  "modelJudgedEvidence": {
+    "gradeStepRecords": 60,
+    "gradeStepStatusCounts": {
+      "failed": 37,
+      "passed": 23
+    },
+    "aspectStepRecords": 240,
+    "aspectVerdictCounts": {
+      "pass": 207,
+      "concerns": 11,
+      "block": 6
+    }
+  },
+  "validityWarning": [
+    "Selection is conditioned on a grade tag and non-archive state.",
+    "Coding-model mix is unbalanced.",
+    "Card difficulty, prompt quality, environment, and pipeline configuration are uncontrolled.",
+    "Grades and aspects are reviewer-model outputs, not ground truth.",
+    "Missing token or duration fields are coverage gaps and must not be treated as zero usage or zero time."
+  ]
+}
