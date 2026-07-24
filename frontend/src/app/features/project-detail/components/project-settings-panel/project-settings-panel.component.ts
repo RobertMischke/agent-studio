@@ -13,7 +13,9 @@ import { CliModelSelectorComponent } from '../../../../components/cli-model-sele
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
 import { QuotaApiService } from '../../../../features/quota';
-import { WorkspaceOverlaysService } from '../../../shell';
+// Service-only direct import avoids evaluating the heavy shell component barrel,
+// which closes a runtime cycle when Project Settings mounts in Project Hub.
+import { WorkspaceOverlaysService } from '../../../shell/state/workspace-overlays.service';
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';

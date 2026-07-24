@@ -15,7 +15,7 @@ import { StudioIconComponent } from '../../../../components/studio-icon/studio-i
 import { TaskService } from '../../../../services/task.service';
 import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { ProjectUrlProbeService, type ProjectUrlStatus } from '../../../../services/project-url-probe.service';
-import { WorkspaceManagerService } from '../../../shell';
+import { WorkspaceManagerService } from '../../../shell/state/workspace-manager.service';
 import { ProjectUrlRecoveryService } from '../../services/project-url-recovery.service';
 import type {
   ProjectUrlStartRule,

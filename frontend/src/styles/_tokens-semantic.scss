@@ -46,6 +46,31 @@
   --studio-surface:         var(--studio-bg-elevated);
   --studio-surface-muted:   color-mix(in srgb, var(--studio-fg-dim) 7%, var(--studio-bg-elevated));
 
+  // Wiki source provenance and its Project Settings control. Provenance is
+  // informational, so dark chrome uses the cool info family instead of the
+  // warmer brand accent. Explicit disabled colours keep the control readable
+  // without reducing the opacity of its text or border.
+  --studio-wiki-source-bg:              var(--studio-surface-muted);
+  --studio-wiki-source-fg:              var(--studio-text-muted);
+  --studio-wiki-source-border:          var(--studio-border-strong);
+  --studio-wiki-source-readonly-bg:     color-mix(in srgb, var(--studio-accent-3) 10%, var(--studio-bg-elevated));
+  --studio-wiki-source-readonly-fg:     var(--studio-accent-3-strong);
+  --studio-wiki-source-readonly-border: color-mix(in srgb, var(--studio-accent-3) 42%, var(--studio-border-strong));
+  --studio-wiki-source-hover-border:    color-mix(in srgb, var(--studio-accent-3) 64%, var(--studio-border-strong));
+  --studio-wiki-source-card-bg:         var(--studio-card-bg);
+  --studio-wiki-source-card-fg:        var(--studio-text-secondary);
+  --studio-wiki-source-description-fg: var(--studio-text-secondary);
+  --studio-wiki-source-card-border:     var(--studio-card-border);
+  --studio-wiki-source-label-fg:        var(--studio-text-muted);
+  --studio-wiki-source-control-bg:      var(--studio-bg-surface);
+  --studio-wiki-source-control-fg:      var(--studio-text-secondary);
+  --studio-wiki-source-control-border:  color-mix(in srgb, var(--studio-fg-dim) 58%, var(--studio-bg-surface));
+  --studio-wiki-source-control-hover:   var(--studio-accent-3-strong);
+  --studio-wiki-source-control-focus:   var(--studio-accent-3-strong);
+  --studio-wiki-source-disabled-bg:     var(--studio-surface-muted);
+  --studio-wiki-source-disabled-fg:     var(--studio-text-muted);
+  --studio-wiki-source-disabled-border: var(--studio-border-muted);
+
   // ---------------------------------------------------------------------------
   // Borders
   // ---------------------------------------------------------------------------
@@ -569,6 +594,29 @@
   --studio-bg-surface:      #ffffff;
   --studio-surface:         var(--studio-bg-surface);
   --studio-surface-muted:   color-mix(in srgb, var(--studio-fg-muted) 6%, var(--studio-bg-surface));
+
+  // Keep the established light provenance treatment while sharing the same
+  // named contract and explicit disabled-state hierarchy as dark mode.
+  --studio-wiki-source-bg:              var(--studio-bg-sidebar);
+  --studio-wiki-source-fg:              var(--studio-text-muted);
+  --studio-wiki-source-border:          var(--studio-border);
+  --studio-wiki-source-readonly-bg:     color-mix(in srgb, var(--studio-accent) 8%, var(--studio-bg-sidebar));
+  --studio-wiki-source-readonly-fg:     var(--studio-accent-strong);
+  --studio-wiki-source-readonly-border: var(--studio-border);
+  --studio-wiki-source-hover-border:    var(--studio-border-strong);
+  --studio-wiki-source-card-bg:         var(--studio-surface-muted);
+  --studio-wiki-source-card-fg:        var(--studio-text-secondary);
+  --studio-wiki-source-description-fg: var(--studio-text-muted);
+  --studio-wiki-source-card-border:     var(--studio-border-strong);
+  --studio-wiki-source-label-fg:        var(--studio-text-muted);
+  --studio-wiki-source-control-bg:      var(--studio-bg-elevated);
+  --studio-wiki-source-control-fg:      var(--studio-text-secondary);
+  --studio-wiki-source-control-border:  var(--studio-border-strong);
+  --studio-wiki-source-control-hover:   var(--studio-accent-3-strong);
+  --studio-wiki-source-control-focus:   var(--studio-accent-3-strong);
+  --studio-wiki-source-disabled-bg:     var(--studio-surface-muted);
+  --studio-wiki-source-disabled-fg:     var(--studio-text-muted);
+  --studio-wiki-source-disabled-border: var(--studio-border-muted);
 
   // Borders
   --studio-border:        var(--color-grey-400);

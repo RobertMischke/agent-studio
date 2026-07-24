@@ -5,11 +5,11 @@
   align-items: center;
   max-width: 18rem;
   padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border: 1px solid var(--studio-border);
+  border: 1px solid var(--studio-wiki-source-border);
   border-radius: 999px;
-  background: var(--studio-bg-sidebar);
-  color: var(--studio-fg-muted);
-  font-family: var(--studio-font-mono, monospace);
+  background: var(--studio-wiki-source-bg);
+  color: var(--studio-wiki-source-fg);
+  font-family: var(--font-mono);
   font-size: 0.72rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -17,6 +17,11 @@
 }
 
 .source--readonly {
-  background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-bg-sidebar));
-  color: var(--studio-accent-strong);
+  border-color: var(--studio-wiki-source-readonly-border);
+  background: var(--studio-wiki-source-readonly-bg);
+  color: var(--studio-wiki-source-readonly-fg);
+}
+
+.source:hover {
+  border-color: var(--studio-wiki-source-hover-border);
 }

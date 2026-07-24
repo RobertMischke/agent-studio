@@ -161,19 +161,22 @@
     </header>
     <div class="ps-settings__execution-grid">
       <app-execution-assignment-card [projectName]="projectName()" />
-      <article class="ps-settings__card" data-testid="project-settings-wiki-source">
+      <article class="ps-settings__card ps-settings__card--wiki-source"
+               data-testid="project-settings-wiki-source">
         <div class="ps-settings__card-head">
           <span class="ps-settings__card-icon" aria-hidden="true">◇</span>
           <span class="ps-settings__card-title">Wiki source</span>
         </div>
-        <p class="ps-settings__card-desc">
+        <p class="ps-settings__card-desc"
+           data-testid="project-settings-wiki-source-description">
           Select the git branch that supplies the complete Wiki. Checkout keeps
           the legacy local view. A branch source is read-only and never switches
           this instance's working tree.
         </p>
         <label class="ps-settings__field">
-          <span class="ps-settings__field-label">Source branch</span>
-          <select class="ps-settings__select"
+          <span class="ps-settings__field-label"
+                data-testid="project-settings-wiki-source-label">Source branch</span>
+          <select class="ps-settings__select ps-settings__select--wiki-source"
                   data-testid="project-settings-wiki-source-select"
                   [disabled]="wikiSourceSaving() || !projectId()"
                   (change)="setWikiSourceBranch($any($event.target).value)">
