@@ -157,6 +157,19 @@ public class LintScssPostStepTests : IDisposable
     }
 
     [Fact]
+    public void LintScssRunner_WindowsCommand_PassesGlobWithoutLiteralQuotes()
+    {
+        var process = new System.Diagnostics.ProcessStartInfo();
+
+        LintScssRunner.AddStylelintArguments(process, isWindows: true);
+
+        Assert.Equal(
+            ["/d", "/s", "/c", "npx", "stylelint", "src/**/*.scss"],
+            process.ArgumentList);
+        Assert.DoesNotContain("\"", process.ArgumentList[^1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LintScssFail_InFailMode_ReissuesToReadyAndJournalsLintReason()
     {
         // Happy path: aspects pass, lint-scss fails, mode=fail -> job

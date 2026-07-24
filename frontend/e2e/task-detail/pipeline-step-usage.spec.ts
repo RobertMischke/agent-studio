@@ -21,6 +21,7 @@ function jobDetail() {
   return {
     info: {
       id: JOB_ID,
+      key: 'AGT-2253',
       jobKey: `${WATCH_PATH}::${JOB_ID}`,
       title: 'Pipeline step usage fixture',
       state: '4-auto-review',
@@ -201,6 +202,9 @@ function runTimeline() {
 
 async function installFixtureRoutes(page: Page) {
   await page.route('**/api/**', route => route.fulfill(json([])));
+  await page.route('**/api/auth/status', route => route.fulfill(json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  })));
   await page.route('**/api/tasks/grouped**', route => route.fulfill(json({
     preparation: [], orchestratorPrep: [], ready: [], progress: [], failedPickup: [],
     autoReview: [jobDetail().info], humanReview: [], completed: [], archive: [],
@@ -386,7 +390,7 @@ test('post-step lifecycle shows backend activation, history, and the exact setti
   await expect.poll(() => activationBody).toMatchObject({ stepId: 'post-wiki-learnings', enabled: true });
 });
 
-test('retro grading stays available on an existing card and is captured in both themes', async ({ page }) => {
+test('council reaction links the targeted follow-up round and renders in both themes', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
     catch { /* ignore */ }
@@ -399,6 +403,21 @@ test('retro grading stays available on an existing card and is captured in both 
     commit: 'base..task/pipeline-step-usage-fixture', runAt: '2026-07-11T22:15:00Z',
     inputTokens: 125000, outputTokens: 18000, cacheReadTokens: 42000, cacheCreationTokens: 6000,
     totalTokens: 191000, estimatedApiCostUsd: 1.42, priceKnown: true,
+    councilReaction: {
+      createdAt: '2026-07-11T22:15:01Z', reviewFileName: 'code-review-grade-2026-07-11T22-15-00Z.md',
+      grade: 'B', disposition: 'Reissue', summary: 'Fix 2 review finding(s) in the next round.',
+      startsNewRound: true, targetJobId: JOB_ID, targetRunAttempt: 2,
+      assessments: [
+        {
+          finding: 'Dark-theme colors are incorrect; fix them and provide both-theme screenshots.',
+          action: 'FixNextRound', reason: 'Concrete review deficiency; provide focused evidence.',
+        },
+        {
+          finding: 'Upload rejection lacks focused test evidence; add the missing regression test.',
+          action: 'FixNextRound', reason: 'Concrete review deficiency; provide focused evidence.',
+        },
+      ],
+    },
   }] })));
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
   await page.getByTestId('prompt-tab-code-review').click();
@@ -412,11 +431,19 @@ test('retro grading stays available on an existing card and is captured in both 
   await expect(tooltip).toContainText('Estimated cost: $1.42');
   await expect(tooltip).toContainText('Estimated - historical list prices');
   await saveShot(page, 'review-token-cost-tooltip--mocked.png');
+  const reaction = page.getByTestId('code-review-council-reaction');
+  await expect(reaction).toContainText('Orchestrator reaction');
+  await expect(reaction).toContainText('Dark-theme colors are incorrect');
+  await expect(reaction).toContainText('Upload rejection lacks focused test evidence');
+  await expect(reaction).toHaveAttribute('data-disposition', 'reissue');
+  await expect(page.getByTestId('code-review-council-round-link')).toHaveAttribute('href', /task=AGT-2253/);
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
+    const fileName = `council-review-reaction-${theme}.png`;
     const path = RESULTS_DIR
-      ? join(RESULTS_DIR, `retro-grading-${theme}--mocked.png`)
-      : `test-results/retro-grading-${theme}--mocked.png`;
+      ? join(RESULTS_DIR, fileName)
+      : join('test-results', fileName);
     await page.getByTestId('code-review-panel').screenshot({ path });
+    await testInfo.attach(fileName, { path, contentType: 'image/png' });
   }
 });

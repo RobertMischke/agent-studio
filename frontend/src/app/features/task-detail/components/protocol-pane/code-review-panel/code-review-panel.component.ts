@@ -23,6 +23,8 @@ import { codeReviewVerdictTone, type CodeReviewVerdictTone } from '../../code-re
 import { describeDiffSize, isLargeDiff } from '../../../../../utils/large-diff-gate';
 import { formatDateTimeUtc } from '../../../../../services/format.util';
 import { buildTokenCostTooltip } from '../../../../tokens';
+import { taskNavigationHref } from '../../../state/task-url';
+import { CouncilReviewReactionComponent } from '../council-review-reaction/council-review-reaction.component';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -58,7 +60,13 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
   selector: 'app-code-review-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, CliModelSelectorComponent, FileSourceHistoryComponent, TooltipDirective],
+  imports: [
+    FormsModule,
+    CliModelSelectorComponent,
+    FileSourceHistoryComponent,
+    TooltipDirective,
+    CouncilReviewReactionComponent,
+  ],
   templateUrl: './code-review-panel.component.html',
   styleUrl: './code-review-panel.component.scss',
 })

@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -116,6 +116,9 @@ pipeline view.
   `[[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<short>]]` sentinel parser, the
   `code-review:grade-{a..d}` tag mapping, and the grade->pass/concerns/block
   severity mapping.
+- `backend/Features/Review/CouncilReviewReaction.cs`: structured review-finding
+  parsing, the bounded per-finding council policy, targeted follow-up rendering,
+  and the reaction sidecar stored beside each automatic grade artifact.
 - `backend/Features/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
   model/CLI from `CodeReviewStep:DefaultModel` / `CodeReviewStep:DefaultCli`,
   defaulting to Codex's live-discovered flagship (gpt-5.5 fallback) at its top
@@ -266,18 +269,61 @@ operator changes cause the step to fail before its writer runs.
   commit) is documented. `AspectRunInputs` / `CodeReviewStepRequest` carry the
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
+- A fenced remote completion persists `review-subject.json` with its exact
+  `ResultSha`. Both `post-build-test-gate` and `post-code-review-grade` use that
+  SHA as their authoritative subject. The build gate's selected subject is
+  carried through the later aspect and grade steps. The grade reviews the full
+  merge-base-to-`ResultSha` task range, not only the result commit, and must not
+  fall back to the canonical task-branch HEAD when the runner delivered a
+  different commit. Otherwise the pipeline would test one revision and review
+  another, or omit earlier commits from a multi-commit delivery.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.
+- Automatic quality-grade reviews follow the council contract. Every grade
+  artifact receives an explicit orchestrator reaction. Grade A with no named
+  deficiencies records `Accept, nothing open.` A review that names concrete
+  deficiencies records one `FixNextRound`, `Accept`, or `Escalate` assessment
+  per finding. `FixNextRound` reissues the same card within the shared loop
+  budget and writes only the selected finding sentences to
+  `orchestrator-follow-up.md`; exhausted budget escalates every remaining
+  finding. A B/C/D response without the required concrete finding sentences is
+  never treated as clean: it escalates the missing handoff because no safe,
+  targeted round can be formed. When a deterministic build/test failure already
+  reopens the same attempt, that follow-up includes both the build output and
+  the selected council findings. The sibling `*.council-reaction.json` and the
+  action decision journal entry are the read-side chain for review -> reaction
+  -> target task/run. Task-detail renders this reaction on the review row. A
+  legacy or manually triggered review without a sidecar shows an explicit
+  `No orchestrator reaction recorded` audit state instead of silently omitting
+  the reaction.
+
+  This is a load-bearing review-orchestration contract, not optional reporting.
+  The terminal routing is fixed:
+
+  | Review outcome | Orchestrator reaction | Lane effect | Required durable evidence |
+  |---|---|---|---|
+  | Grade A, no findings | `Accept, nothing open.` | Continue through the remaining gates | Reaction sidecar on the grade artifact |
+  | Named findings, loop budget available | One `FixNextRound` assessment per finding | Reissue the same task to `2-ready` | Sidecar, decision-journal record, targeted `orchestrator-follow-up.md`, and target task/run |
+  | Named findings, loop budget exhausted | One `Escalate` assessment per finding | Move to `5e-escalated` | Sidecar and decision-journal record |
+  | Grade B/C/D without concrete finding sentences | Escalate the missing handoff | Move to `5e-escalated` | Sidecar explaining why no safe targeted round can start |
+
+  A task is not accepted merely because the letter grade is passing. Named
+  findings take precedence over the grade letter. Completion, build/test,
+  evidence, solution-quality, and council decisions share the same bounded
+  reissue budget; the council reaction runs before generic evidence routing so
+  its concrete finding sentences remain the next-round assignment.
 - `post-code-review-grade` is the automatic quality-grade step (ASS-1657). It is
   `DefaultEnabled`, runs after the four aspect reviews and before
   `post-orchestrator-decision`, and assigns every pipelined task an A/B/C/D grade
   with the rubric: A solves the goal completely with tests/evidence, B is solid
   with small gaps, C has concerns (half-done/unclear), D misses the goal or
-  redundantly redoes existing code. It is reporting-only and never gates the lane:
-  the grade surfaces as a `code-review:grade-{a..d}` card tag plus a rendered
-  detail file, a D records a `Failed` step row so it stands out in the Overview,
-  and A-C record `Passed`. The grade model is quality-first: it defaults to the
+  redundantly redoes existing code. The grade token is reporting-only: it
+  surfaces as a `code-review:grade-{a..d}` card tag plus a rendered detail file.
+  A D records a `Failed` step row so it stands out in the Overview, and A-C
+  record `Passed`. Named findings from that review are inputs to the separate
+  council decision above and can therefore start a bounded round. The grade
+  model is quality-first: it defaults to the
   live-discovered Codex flagship with the top supported reasoning level
   (`CodeReviewStep:DefaultModel`, CLI `CodeReviewStep:DefaultCli`), while the four
   bounded aspect reviews use Codex `gpt-5.4-mini` at `high`. Opt out per deployment

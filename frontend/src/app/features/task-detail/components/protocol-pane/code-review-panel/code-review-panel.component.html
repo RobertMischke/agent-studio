@@ -102,6 +102,9 @@
               }
             </span>
           </button>
+          <app-council-review-reaction
+            [job]="job()"
+            [reaction]="entry.councilReaction" />
           @if (expandedFile() === entry.fileName) {
             <div class="cr-body" data-testid="code-review-body">
               <header class="cr-body-header" [attr.data-verdict]="verdictTone(entry.verdict)">

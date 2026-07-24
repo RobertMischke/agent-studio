@@ -112,6 +112,25 @@ export interface CodeReviewListEntry {
   estimatedApiCostUsd?: number;
   priceKnown?: boolean;
   generation?: FileGenerationMeta | null;
+  councilReaction?: CouncilReviewReaction | null;
+}
+
+export interface CouncilFindingAssessment {
+  finding: string;
+  action: 'FixNextRound' | 'Accept' | 'Escalate';
+  reason: string;
+}
+
+export interface CouncilReviewReaction {
+  createdAt: string;
+  reviewFileName: string;
+  grade: string;
+  disposition: 'Accept' | 'Reissue' | 'Escalate';
+  summary: string;
+  assessments: CouncilFindingAssessment[];
+  startsNewRound: boolean;
+  targetJobId?: string | null;
+  targetRunAttempt?: number | null;
 }
 
 /**

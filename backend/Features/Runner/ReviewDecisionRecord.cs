@@ -38,6 +38,9 @@ public sealed record ReviewDecisionRecord(
     public string? FailureFingerprint { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FailureKind { get; init; }
+    /// <summary>Structured council reaction when this decision was driven by a quality-grade review.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AgentStudio.Review.CouncilReviewReaction? CouncilReaction { get; init; }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

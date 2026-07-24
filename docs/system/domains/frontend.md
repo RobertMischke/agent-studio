@@ -73,6 +73,9 @@ groups, and a failed domain reports an error without hiding successful domains.
   older delivery. The task-detail Docs tab presents rendered result documents
   before prompt and raw artifacts, with per-document anchors and technical file
   metadata disclosed from the document details menu.
+  Each review row also shows its council reaction, including
+  per-finding rulings and the linked follow-up round. Reviews without a reaction
+  sidecar expose that audit gap explicitly.
 - `frontend/src/app/features/project-detail/`: project shell and project-level
   quality, settings, architecture, runtime, drift, and supervisor panels. The
   left rail (`project-shell`) is a collapsible-segment tree

@@ -133,6 +133,7 @@
         "src/app/features/task-detail/components/hygiene-strip/project-hygiene-badge/project-hygiene-badge.component.scss",
         "src/app/features/task-detail/components/prompt-pane/prompt-pane.component.scss",
         "src/app/features/task-detail/components/protocol-pane/code-review-panel/code-review-panel.component.scss",
+        "src/app/features/task-detail/components/protocol-pane/council-review-reaction/council-review-reaction.component.scss",
         "src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.scss",
         "src/app/features/task-detail/components/protocol-pane/review-evidence-panel/review-evidence-panel.component.scss",
         "src/app/features/task-detail/components/protocol-pane/run-git-viewer/run-git-viewer.component.scss",

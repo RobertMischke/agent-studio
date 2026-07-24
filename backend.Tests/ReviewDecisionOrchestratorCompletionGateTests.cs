@@ -213,7 +213,9 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         });
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, slug)));
-        var decision = Assert.Single(ReviewDecisionLog.ReadAll(_workspace, Project).Where(d => d.JobId == slug));
+        var decision = Assert.Single(
+            ReviewDecisionLog.ReadAll(_workspace, Project),
+            item => item.JobId == slug);
         Assert.Equal(ReviewDecisionKind.Escalate, decision.Kind);
         Assert.StartsWith(ReviewDecisionOrchestrator.BuildTestGateInfrastructureReasonPrefix, decision.Reason);
         Assert.Equal("lease-infra", decision.AttemptChainId);
