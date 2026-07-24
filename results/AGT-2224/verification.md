@@ -16,6 +16,8 @@
 
 ## Automated verification
 
+- Rebased conflict-free onto `origin/develop` at `61638164` on 2026-07-24,
+  then repeated the focused verification below from the updated task branch.
 - Focused staged execution and release-boundary tests:
   `27 passed, 0 failed`, including a source-ref move during the suite that
   proves an untested SHA cannot reach `main`.
