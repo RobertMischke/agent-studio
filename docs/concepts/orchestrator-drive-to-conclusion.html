@@ -830,6 +830,26 @@
             <span class="lane">4-auto-review</span>; the regression also proves no coding or salvage branch is created.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-24</td>
+          <td><code>AGT-2290</code><br><span class="small">fresh operator cards cycled through unknown-legacy escalation<br>(also observed on <code>AGT-2291</code>, <code>AGT-2292</code>, <code>AGT-2293</code>, <code>AGT-2294</code>, and <code>AGT-2288</code>)</span></td>
+          <td>
+            Newly-created operator cards did not remain in their requested lane. Verdictless cards seen in
+            <span class="lane">5-human-review</span> were repeatedly swept into
+            <span class="lane">5e-escalated</span> as <code>unknown-legacy</code>, even though no agent run had occurred.
+          </td>
+          <td>
+            Creation silently accepted only Backlog, Preparation, or Ready and replaced every other explicit
+            <code>targetState</code>. Independently, the verdictless Human Review boot repair treated the absence of a
+            decision record as sufficient legacy evidence. It checked neither card age nor durable run provenance.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> an explicit valid creation target is now authoritative. The legacy repair
+            additionally requires a minimum age and durable evidence of an agent run before it may move a verdictless card.
+            Fresh or never-run operator cards remain in their requested lane; genuine old run-backed cards still reach the
+            explained <span class="lane">5e-escalated</span> terminal.
+          </td>
+        </tr>
       </tbody>
     </table>
 

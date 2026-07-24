@@ -178,6 +178,10 @@ cannot erase an operator decision.
 
 - The durable lane sequence is
   `1-preparation -> 2-ready -> 3-progress -> 4-auto-review -> 5-human-review -> 6-completed -> 7-archive`.
+- Task creation defaults to `0-backlog` only when `targetState` is absent.
+  Every explicit valid `targetState` is authoritative, including review and
+  terminal lanes used by operator or automation workflows. Invalid states fail
+  creation instead of silently selecting another lane.
 - `4-auto-review` remains the disk/API key even when the UI labels it Post
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does

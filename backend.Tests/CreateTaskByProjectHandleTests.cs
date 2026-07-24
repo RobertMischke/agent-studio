@@ -1,3 +1,8 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -70,6 +75,64 @@ public class CreateTaskByProjectHandleTests : IDisposable
 
         Assert.Equal("id-task", id);
         Assert.NotNull(scanner.FindJob("id-task", _watchPath));
+    }
+
+    [Fact]
+    public void CreateTask_HonorsExplicitTargetStateBeyondIntakeLanes()
+    {
+        var (machine, scanner, mutations, registry) = Build();
+        machine.EnsureStateFoldersAndMigrate();
+        var record = registry.EnsureProjectForStorage(_watchPath, "Demo Project", "default");
+
+        var id = mutations.CreateJob(new CreateTaskRequest
+        {
+            Title = "Operator Review Task",
+            Project = record.Id,
+            TargetState = TaskStates.HumanReview,
+        });
+
+        Assert.Equal("operator-review-task", id);
+        var info = scanner.FindJob(id!, _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal(TaskStates.HumanReview, info!.State);
+    }
+
+    [Fact]
+    public async Task CreateTaskEndpoint_HonorsExplicitHumanReviewTargetState()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Test");
+                builder.ConfigureAppConfiguration((_, config) =>
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["TaskRepository"] = _workspace,
+                        ["WatchPaths:0:Name"] = Project,
+                        ["WatchPaths:0:Path"] = _watchPath,
+                        ["WatchPaths:0:RootPath"] = _watchPath,
+                    }));
+            });
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        var response = await client.PostAsJsonAsync("/api/tasks", new
+        {
+            title = "Operator Review Through API",
+            watchPath = _watchPath,
+            targetState = TaskStates.HumanReview,
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var created = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var id = created.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(id));
+
+        var detail = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/tasks/{id}?watchPath={Uri.EscapeDataString(_watchPath)}");
+        Assert.Equal(
+            TaskStates.HumanReview,
+            detail.GetProperty("info").GetProperty("state").GetString());
     }
 
     [Fact]

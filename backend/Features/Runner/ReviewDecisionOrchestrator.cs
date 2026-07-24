@@ -104,6 +104,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     public const int DefaultCallsPerHour = 120;
 
+    /// <summary>
+    /// A boot repair must never race a newly-created card. The repair also
+    /// requires durable run provenance, but this age floor protects the short
+    /// interval between lane placement and persistence of the first run event.
+    /// </summary>
+    internal static readonly TimeSpan VerdictlessBackfillMinimumAge = TimeSpan.FromMinutes(10);
+
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _stateMachine;
     private readonly ITaskAccess _taskAccess;
@@ -353,11 +360,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
 
         // Pure data-repair, run on EVERY boot regardless of the Enabled flag:
-        // give any 5-human-review card that carries no orchestrator verdict a
-        // retroactive Escalate verdict + status.md stub so the board can explain
-        // it. These are the cards that landed there before the escalation funnel
-        // existed (the bug this fixes). Idempotent - a card with a verdict is
-        // skipped, so repeated boots are no-ops.
+        // give an old 5-human-review card with durable run provenance but no
+        // orchestrator verdict a retroactive Escalate verdict + status.md stub
+        // so the board can explain it. Age and provenance keep fresh operator
+        // cards that have never run out of this legacy migration.
         try { BackfillVerdictlessHumanReview(workspace!, stoppingToken); }
         catch (OperationCanceledException) { return; }
         catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator: verdict-less human-review backfill failed"); }
@@ -950,8 +956,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// <summary>
     /// One-shot boot repair for the bug
     /// <c>karten-landen-in-5-human-review-ohne-verdict-und-ohne-statusmarkdown</c>:
-    /// every legacy card parked in <c>5-human-review</c> whose per-project decision
-    /// journal holds NO record for that job gets a retroactive
+    /// every old card parked in <c>5-human-review</c> whose per-project decision
+    /// journal holds NO record for that job and whose task folder proves a prior
+    /// agent run gets a retroactive
     /// <see cref="ReviewDecisionKind.Escalate"/> verdict (category
     /// <see cref="HumanReviewEscalationCategories.UnknownLegacy"/>) and a minimal
     /// <c>status.md</c> stub, written through <see cref="HumanReviewEscalation"/>
@@ -959,8 +966,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// These are the cards that reached the lane through the pre-funnel
     /// ProjectRunner paths, so the board showed them as done-but-blank with
     /// <c>orchestratorVerdict == null</c>. Idempotent: the gate is "no existing
-    /// verdict record", and the status stub is never written over a real summary,
-    /// so re-running on later boots is a no-op. Public so tests can drive it.
+    /// verdict record + old enough + durable run provenance", and the status
+    /// stub is never written over a real summary, so re-running on later boots is
+    /// a no-op. A freshly-created manual card without a run is never legacy
+    /// evidence. Public so tests can drive it.
     /// </summary>
     public void BackfillVerdictlessHumanReview(string workspace, CancellationToken ct)
     {
@@ -987,6 +996,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             if (ct.IsCancellationRequested) return;
             if (job.State != TaskStates.HumanReview) continue;
             if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
+            if (DateTime.UtcNow - job.CreatedAt < VerdictlessBackfillMinimumAge) continue;
+            if (!HasRunProvenance(job)) continue;
 
             if (!decisionsByProject.TryGetValue(job.ProjectName, out var records))
             {
@@ -1016,6 +1027,46 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         if (repaired > 0)
             _logger.LogInformation("ReviewDecisionOrchestrator: verdict-less human-review backfill repaired {Repaired} card(s).", repaired);
+    }
+
+    private bool HasRunProvenance(TaskInfo job)
+    {
+        if (job.Commits.Count > 0
+            || job.CodeActivityDetected
+            || job.SessionChain.Count > 0
+            || !string.IsNullOrWhiteSpace(job.SessionName))
+        {
+            return true;
+        }
+
+        try
+        {
+            if (_sessions?.ReadSessionEvents(job.Id, job.WatchPath).Count > 0)
+                return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "ReviewDecisionOrchestrator: session provenance read failed for {Project}/{JobId}.",
+                job.ProjectName,
+                job.Id);
+        }
+
+        try
+        {
+            return _timeline?.ReadAll(job.FolderPath)
+                .Any(evt => evt.Kind == TimelineEventKinds.AgentRunStarted) == true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "ReviewDecisionOrchestrator: timeline provenance read failed for {Project}/{JobId}.",
+                job.ProjectName,
+                job.Id);
+            return false;
+        }
     }
 
     private IReadOnlyList<string> ResolveAspectRunners()
