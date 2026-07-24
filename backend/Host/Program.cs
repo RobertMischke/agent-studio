@@ -196,6 +196,8 @@ catch (Exception ex)
 
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<AccessSecurityStore>();
+builder.Services.AddSingleton<ManagementService>();
+builder.Services.AddSingleton<MigrationStateStore>();
 builder.Services.AddSingleton<HostTelemetryStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
@@ -700,6 +702,10 @@ app.UseAccessSecurity();
 // hubs, and health checks live in the middleware itself.
 if (!networkedSecurityProfile) app.UseClientIdentity();
 
+// Management intent is authoritative for admission. Reads, recovery controls,
+// and the bounded set of writes needed to drain an existing Runner remain live.
+app.UseManagementMode();
+
 // Touch the identity store at boot so the bootstrap "local-default" identity
 // is created before any caller looks at it.
 app.Services.GetRequiredService<ClientIdentityStore>().EnsureLoaded();
@@ -860,6 +866,10 @@ catch (Exception ex) { crashRecorder.Record("BusAggregationCache.Wire", ex); }
 // hold up boot.
 _ = Task.Run(() =>
 {
+    var migrationState = app.Services.GetRequiredService<MigrationStateStore>();
+    const string migrationId = "project-chat-v1";
+    try { migrationState.Begin(migrationId, "Migrating legacy project chat and refreshing indexes."); }
+    catch (Exception ex) { crashRecorder.Record("MigrationState.Begin:ProjectChatMigration", ex); }
     try
     {
         var migration = app.Services.GetRequiredService<ProjectChatMigration>();
@@ -872,9 +882,13 @@ _ = Task.Run(() =>
             try { index.EnsureFresh(entry.Path); }
             catch (Exception ex) { crashRecorder.Record($"ProjectChatIndex.EnsureFresh:{entry.Name}", ex); }
         }
+        try { migrationState.Complete(migrationId); }
+        catch (Exception ex) { crashRecorder.Record("MigrationState.Complete:ProjectChatMigration", ex); }
     }
     catch (Exception ex)
     {
+        try { migrationState.Fail(migrationId, ex.Message); }
+        catch (Exception stateEx) { crashRecorder.Record("MigrationState.Fail:ProjectChatMigration", stateEx); }
         crashRecorder.Record("ProjectChatMigration", ex);
     }
 });

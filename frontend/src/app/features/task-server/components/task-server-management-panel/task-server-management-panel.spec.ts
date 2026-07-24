@@ -15,31 +15,31 @@ describe('TaskServerManagementPanelComponent', () => {
 
   it('renders the three sweeps and emits run on click', async () => {
     const fixture = await mount();
-    const fired: ManagementActionKind[] = [];
-    fixture.componentInstance.run.subscribe((k) => fired.push(k));
+    const fired: { kind: ManagementActionKind; confirmed: boolean }[] = [];
+    fixture.componentInstance.run.subscribe((event) => fired.push(event));
     fixture.detectChanges();
     const el: HTMLElement = fixture.nativeElement;
 
     expect(el.querySelector('[data-testid="task-server-action-archive-sweep"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="task-server-action-orphan-scan"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="task-server-action-fixture-cleanup"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="task-server-action-orphan-sweep"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="task-server-action-fixture-sweep"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="task-server-results-empty"]')).toBeTruthy();
 
-    (el.querySelector('[data-testid="task-server-action-orphan-scan"]') as HTMLButtonElement).click();
-    expect(fired).toEqual(['orphan-scan']);
+    (el.querySelector('[data-testid="task-server-action-orphan-sweep"]') as HTMLButtonElement).click();
+    expect(fired).toEqual([{ kind: 'orphan-sweep', confirmed: false }]);
 
     fixture.destroy();
   });
 
   it('disables the buttons and suppresses run while a sweep is busy', async () => {
     const fixture = await mount();
-    const fired: ManagementActionKind[] = [];
-    fixture.componentInstance.run.subscribe((k) => fired.push(k));
+    const fired: { kind: ManagementActionKind; confirmed: boolean }[] = [];
+    fixture.componentInstance.run.subscribe((event) => fired.push(event));
     fixture.componentRef.setInput('busyAction', 'archive-sweep');
     fixture.detectChanges();
     const el: HTMLElement = fixture.nativeElement;
 
-    const btn = el.querySelector('[data-testid="task-server-action-orphan-scan"]') as HTMLButtonElement;
+    const btn = el.querySelector('[data-testid="task-server-action-orphan-sweep"]') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     btn.click();
     expect(fired).toEqual([]);

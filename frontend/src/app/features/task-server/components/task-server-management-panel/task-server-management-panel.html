@@ -6,14 +6,24 @@
           <span class="mgmt__action-label">{{ action.label }}</span>
           <span class="mgmt__action-desc">{{ action.description }}</span>
         </div>
+        <div class="mgmt__buttons">
         <button class="mgmt__btn"
                 type="button"
                 [class.mgmt__btn--danger]="action.danger"
                 [attr.data-testid]="'task-server-action-' + action.kind"
                 [disabled]="!!busyAction()"
-                (click)="emit(action.kind)">
-          {{ busyAction() === action.kind ? 'Running…' : 'Run' }}
+                (click)="preview(action.kind)">
+          {{ busyAction() === action.kind ? 'Running…' : 'Preview' }}
         </button>
+        @if (hasPreview(action.kind)) {
+          <button class="mgmt__btn"
+                  type="button"
+                  [class.mgmt__btn--danger]="action.danger"
+                  [attr.data-testid]="'task-server-confirm-' + action.kind"
+                  [disabled]="!!busyAction()"
+                  (click)="confirm(action.kind)">Confirm</button>
+        }
+        </div>
       </div>
     }
   </div>
@@ -24,6 +34,17 @@
         <li class="mgmt__result" [attr.data-testid]="'task-server-result-' + result.kind">
           <span class="mgmt__result-kind">{{ actionLabel(result.kind) }}</span>
           <span class="mgmt__result-summary">{{ result.summary }}</span>
+          @if (result.secret) {
+            <span class="mgmt__result-secret">
+              One-time credential <code>{{ result.secret }}</code>
+            </span>
+          }
+          @if (result.enrollmentCode) {
+            <span class="mgmt__result-secret">
+              One-time enrollment <code>{{ result.enrollmentCode }}</code>
+            </span>
+          }
+          <span class="mgmt__result-kind">{{ result.dryRun ? 'Preview' : 'Applied' }}</span>
           <span class="mgmt__result-count"
                 [class.mgmt__result-count--none]="result.affected === 0">{{ result.affected }}</span>
         </li>

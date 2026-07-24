@@ -42,4 +42,60 @@ describe('TaskServerClientsCardComponent', () => {
 
     fixture.destroy();
   });
+
+  it('previews then explicitly confirms a Runner lifecycle command', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskServerClientsCardComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskServerClientsCardComponent);
+    fixture.componentRef.setInput('clients', [CLIENTS[0]]);
+    const fired: unknown[] = [];
+    fixture.componentInstance.run.subscribe(event => fired.push(event));
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    (el.querySelector('[data-testid="task-server-runner-runner-drain-local-default"]') as HTMLButtonElement).click();
+    expect(fired).toEqual([{ kind: 'runner-drain', runnerId: 'local-default', confirmed: false }]);
+
+    fixture.componentRef.setInput('results', [{
+      kind: 'runner-drain', ranAt: '2026-07-20T00:00:00Z', summary: 'Would drain.',
+      affected: 0, matched: 1, dryRun: true, commandId: 'cmd-preview', state: 'completed',
+      targetId: 'local-default',
+    }]);
+    fixture.detectChanges();
+    (el.querySelector('[data-testid="task-server-runner-confirm-runner-drain-local-default"]') as HTMLButtonElement).click();
+    expect(fired.at(-1)).toEqual({ kind: 'runner-drain', runnerId: 'local-default', confirmed: true });
+    fixture.destroy();
+  });
+
+  it('previews and confirms enrollment with the entered Runner name', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskServerClientsCardComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskServerClientsCardComponent);
+    fixture.componentRef.setInput('clients', []);
+    fixture.componentRef.setInput('securityAvailable', true);
+    const fired: unknown[] = [];
+    fixture.componentInstance.run.subscribe(event => fired.push(event));
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    const input = el.querySelector('#task-server-runner-name') as HTMLInputElement;
+    input.value = 'build-runner-02';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    (el.querySelector('[data-testid="task-server-runner-enrollment-preview"]') as HTMLButtonElement).click();
+    expect(fired).toEqual([{ kind: 'runner-enrollment-create', runnerName: 'build-runner-02', confirmed: false }]);
+
+    fixture.componentRef.setInput('results', [{
+      kind: 'runner-enrollment-create', ranAt: '2026-07-20T00:00:00Z', summary: 'Would enroll.',
+      affected: 0, matched: 1, dryRun: true, commandId: 'cmd-enroll-preview', state: 'completed',
+      targetId: 'build-runner-02',
+    }]);
+    fixture.detectChanges();
+    (el.querySelector('[data-testid="task-server-runner-enrollment-confirm"]') as HTMLButtonElement).click();
+    expect(fired.at(-1)).toEqual({ kind: 'runner-enrollment-create', runnerName: 'build-runner-02', confirmed: true });
+    fixture.destroy();
+  });
 });

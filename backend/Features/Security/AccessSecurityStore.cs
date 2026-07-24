@@ -290,7 +290,8 @@ public sealed class AccessSecurityStore
             {
                 var credential = runner.Credentials.FirstOrDefault(x => x.Id == credentialId);
                 if (credential is null) continue;
-                if (runner.RevokedAt is not null || credential.RevokedAt is not null || credential.ExpiresAt <= now
+                if (runner.RevokedAt is not null || runner.RetiredAt is not null
+                    || credential.RevokedAt is not null || credential.ExpiresAt <= now
                     || !PasswordSecretHasher.VerifySecret(bearer!, credential.SecretHash)) return null;
                 if (credential.LastUsedAt is null || now - credential.LastUsedAt >= TimeSpan.FromMinutes(1))
                 {
@@ -308,6 +309,62 @@ public sealed class AccessSecurityStore
     public IReadOnlyList<RunnerServiceIdentity> ListRunners()
     {
         lock (_gate) return StateLocked().Runners.OrderBy(x => x.Name).ToList();
+    }
+
+    public RunnerServiceIdentity? RecordRunnerActivity(
+        string runnerId, int? activeSlots, int availableSlots, bool claimed)
+    {
+        lock (_gate)
+        {
+            var state = StateLocked();
+            var runner = state.Runners.FirstOrDefault(x => x.Id == runnerId);
+            if (runner is null) return null;
+            var now = Now;
+            var reportedActive = activeSlots is null ? runner.ActiveSlots : Math.Max(0, activeSlots.Value);
+            var retiredAt = runner.RetiredAt;
+            if (runner.RetireRequestedAt is not null && reportedActive == 0)
+                retiredAt ??= now;
+            var updated = runner with
+            {
+                LastSeenAt = now,
+                LastClaimAt = claimed ? now : runner.LastClaimAt,
+                ActiveSlots = reportedActive,
+                AvailableSlots = Math.Max(0, availableSlots),
+                RetiredAt = retiredAt,
+            };
+            state.Runners[state.Runners.IndexOf(runner)] = updated;
+            SaveLocked(state);
+            return updated;
+        }
+    }
+
+    public RunnerServiceIdentity RequestRunnerDrain(string runnerId, bool retireAfterDrain)
+    {
+        lock (_gate)
+        {
+            var state = StateLocked();
+            var runner = state.Runners.FirstOrDefault(x => x.Id == runnerId && x.RevokedAt is null && x.RetiredAt is null)
+                ?? throw new SecurityOperationException(404, "runner-not-found", "Runner not found or no longer active.");
+            var now = Now;
+            var updated = runner with
+            {
+                DrainRequestedAt = runner.DrainRequestedAt ?? now,
+                RetireRequestedAt = retireAfterDrain ? runner.RetireRequestedAt ?? now : runner.RetireRequestedAt,
+                RetiredAt = retireAfterDrain && runner.ActiveSlots == 0 ? runner.RetiredAt ?? now : runner.RetiredAt,
+            };
+            state.Runners[state.Runners.IndexOf(runner)] = updated;
+            SaveLocked(state);
+            return updated;
+        }
+    }
+
+    public bool RunnerAcceptsClaims(string runnerId)
+    {
+        lock (_gate)
+        {
+            var runner = StateLocked().Runners.FirstOrDefault(x => x.Id == runnerId);
+            return runner is { RevokedAt: null, RetiredAt: null, DrainRequestedAt: null };
+        }
     }
 
     public (RunnerServiceIdentity Runner, RunnerCredential Credential, string Secret) RotateRunner(string runnerId, RunnerRotateRequest request)
