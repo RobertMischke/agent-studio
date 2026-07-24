@@ -11,7 +11,7 @@ import {
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { PendingButtonDirective } from '../../../../components/async-feedback';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
-import { TooltipDirective } from 'coding-agent-chat/shared';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import {
   PageContext,
   PageTaskIntent,
@@ -31,7 +31,7 @@ import { NotificationService } from '../../../../services/notification.service';
 @Component({
   selector: 'app-page-action-bar',
   standalone: true,
-  imports: [DialogComponent, PendingButtonDirective, StudioIconComponent, TooltipDirective],
+  imports: [AppTooltipDirective, DialogComponent, PendingButtonDirective, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './page-action-bar.html',
   styleUrl: './page-action-bar.scss',

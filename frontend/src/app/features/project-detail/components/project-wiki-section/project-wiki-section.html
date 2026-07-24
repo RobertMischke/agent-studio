@@ -364,14 +364,14 @@
                   <h2 class="pwiki__doc-title">{{ openedTitle() }}</h2>
                 </div>
                 <code class="pwiki__path" data-testid="project-wiki-viewer-path">{{ rel }}</code>
-                @if (openedPageContext(); as pageContext) {
-                  <app-page-action-bar
-                    class="pwiki__page-actions"
-                    [context]="pageContext"
-                    [archived]="openedArchived()"
-                    [archivePending]="archiveBusy()"
-                    (archiveRequest)="archiveOpenedPage()" />
-                }
+                <app-wiki-page-actions
+                  [projectName]="projectName()"
+                  [relPath]="rel"
+                  [title]="openedTitle()"
+                  [content]="openedContent()"
+                  [classification]="openedNode()?.classification ?? null"
+                  [registeredWorkbenchPaths]="registeredWorkbenchPaths()"
+                  (archiveCompleted)="refresh({ soft: true })" />
               </header>
 
               @if (revisionSha(); as sha) {

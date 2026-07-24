@@ -43,10 +43,8 @@ import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.t
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import {
-  PageContext,
   PageType,
   derivePageType,
-  pageExcerpt,
   pageTypeIcon,
 } from '../../../../models/page-context.model';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
@@ -87,7 +85,7 @@ import {
 } from './wiki-linked-element';
 import { WikiMetaPanelStateService } from './wiki-meta-panel-state.service';
 import { WikiMetaSectionComponent } from './wiki-meta-section/wiki-meta-section.component';
-import { PageActionBarComponent } from '../page-action-bar/page-action-bar';
+import { WikiPageActionsComponent } from './wiki-page-actions/wiki-page-actions';
 
 const FILE_DRAG_TYPE = 'application/x-wiki-file';
 const FOLDER_DRAG_TYPE = 'application/x-wiki-folder';
@@ -149,12 +147,12 @@ const WIKI_SEARCH_MIN_LENGTH = 2;
     StudioIconComponent,
     TooltipDirective,
     AppTooltipDirective,
-    PageActionBarComponent,
     WikiDashboardComponent,
     WikiDocHistoryComponent,
     WikiFolderViewComponent,
     WikiMetaSectionComponent,
     WikiRelatedTasksComponent,
+    WikiPageActionsComponent,
     WikiSearchResultsComponent,
     WikiSourceBadgeComponent,
   ],
@@ -232,8 +230,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly saveBusy = signal(false);
   readonly saveError = signal<string | null>(null);
   readonly saveResult = signal<WikiFileSaveResult | null>(null);
-  readonly archiveBusy = signal(false);
-  private readonly archivedOverrides = signal<ReadonlySet<string>>(new Set());
   readonly history = signal<WikiFileHistory | null>(null);
   readonly loadingHistory = signal(false);
 
@@ -507,31 +503,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly openedClassification = computed<WikiClassMeta | null>(() =>
     classificationMeta(this.openedNode()?.classification));
 
-  private readonly registeredWorkbenchPaths = computed<ReadonlySet<string>>(() =>
+  readonly registeredWorkbenchPaths = computed<ReadonlySet<string>>(() =>
     new Set((this.pulse()?.workbenches?.items ?? []).map(item => item.entryPath)));
-
-  readonly openedPageType = computed(() => {
-    const rel = this.openedRel() ?? '';
-    return derivePageType(rel, this.openedNode()?.classification, this.registeredWorkbenchPaths());
-  });
-
-  readonly openedPageContext = computed<PageContext | null>(() => {
-    const relPath = this.openedRel();
-    if (!relPath) return null;
-    return {
-      projectName: this.projectName(),
-      relPath,
-      title: this.openedTitle(),
-      pageType: this.openedPageType(),
-      excerpt: pageExcerpt(this.openedContent(), this.openedTitle()),
-    };
-  });
-
-  readonly openedArchived = computed(() => {
-    const rel = this.openedRel();
-    return !!rel && (this.archivedOverrides().has(rel)
-      || this.openedNode()?.classification?.status?.toLowerCase() === 'archived');
-  });
 
   pageIcon(node: WikiTreeNode): StudioIconName {
     return pageTypeIcon(this.pageType(node));
@@ -543,29 +516,6 @@ export class ProjectWikiSectionComponent implements OnDestroy {
       node.classification,
       this.registeredWorkbenchPaths(),
     );
-  }
-
-  archiveOpenedPage(): void {
-    const rel = this.openedRel();
-    if (!rel || this.archiveBusy() || this.openedArchived()) return;
-    this.archivedOverrides.update(current => new Set(current).add(rel));
-    this.archiveBusy.set(true);
-    this.docs.setWikiClassification(this.projectName(), rel, 'archived').subscribe({
-      next: () => {
-        this.archiveBusy.set(false);
-        this.notifications.success(`Archived ${rel}.`, 'Page classification');
-        this.refresh({ soft: true });
-      },
-      error: () => {
-        this.archivedOverrides.update(current => {
-          const next = new Set(current);
-          next.delete(rel);
-          return next;
-        });
-        this.archiveBusy.set(false);
-        this.notifications.error(`Could not archive ${rel}.`, 'Page classification');
-      },
-    });
   }
 
   /** Successor link in the classification block: opens the superseding page. */
