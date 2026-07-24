@@ -268,9 +268,12 @@ async function expandAllPipelineSections(page: Page): Promise<void> {
   const collapsed = page.locator(
     '[data-testid="overview-pipeline-phase"][aria-expanded="false"]',
   );
-  for (let i = 0; i < 20 && (await collapsed.count()) > 0; i++) {
-    await collapsed.first().click();
-  }
+  await collapsed.evaluateAll((buttons) => {
+    for (const button of buttons) {
+      (button as HTMLButtonElement).click();
+    }
+  });
+  await expect(collapsed).toHaveCount(0);
 }
 
 test.describe('Pipeline: per-step explanation tooltips', () => {
@@ -287,7 +290,7 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     });
   });
 
-  test('every step name opens an explanation tooltip with the step label as title', async ({ page }) => {
+  test('every step name opens an explanation tooltip with the step label as title', async ({ page }, testInfo) => {
     await installRoutes(page, '4-auto-review');
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
@@ -365,12 +368,17 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
           pipelineBox!.y + pipelineBox!.height,
           tooltipBox!.y + tooltipBox!.height,
         ) + 16;
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `pipeline-subset-coverage-tooltip--${theme}.png`,
+        );
         await page.screenshot({
-          path: path.join(
-            RESULTS_DIR,
-            `pipeline-subset-coverage-tooltip--${theme}.png`,
-          ),
+          path: screenshotPath,
           clip: { x, y, width: right - x, height: bottom - y },
+        });
+        await testInfo.attach(`pipeline-subset-coverage-tooltip--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
         });
       }
     }

@@ -2473,7 +2473,12 @@ public class GitService
             }
         }
 
-        var (_, mergeError, mergeCode) = RunGitArgs(repoRoot, "merge", "--ff-only", sourceBranch);
+        // Merge the immutable revision that passed the suite, not the movable
+        // branch name. The branch-tip checks above reject movement already
+        // observed after the gate; this also closes the smaller race between
+        // those checks and the ref mutation itself.
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot, "merge", "--ff-only", expectedSourceSha);
         if (mergeCode != 0)
         {
             return MergeIntoIntegrationResult.Of(

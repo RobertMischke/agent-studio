@@ -6,7 +6,8 @@
   its configured target resolves to `main`.
 - The gate runs once at the mandatory `full` level on the exact source SHA.
   Both source and target refs are checked again after the suite, and `main`
-  advances only by fast-forward to the tested SHA.
+  advances only by fast-forward to the immutable tested SHA, never the movable
+  source branch name.
 - A red or incomplete full-suite result leaves `main` unchanged and records a
   visible failed merge step plus `post-steps/pre-main-test-gate-*.log`.
 - A passed work-package subset exposes `test-level=work-package` and
@@ -19,10 +20,16 @@
   `27 passed, 0 failed`, including a source-ref move during the suite that
   proves an untested SHA cannot reach `main`.
 - Orchestrator, project settings, build gate, and task-transition regression
-  tests: `84 passed, 0 failed`.
+  tests: `98 passed, 0 failed`.
 - Overview component tests: `56 passed, 0 failed`.
 - Focused Playwright spec
   `e2e/task-detail/pipeline-step-explanations.spec.ts`: `1 passed, 0 failed`.
+  Its harvested `playwright/index.json` names the executed spec, test, and both
+  attached theme captures instead of an `unknown` entry with no files.
+  The fully mocked spec ran against this task worktree's frontend on an
+  isolated temporary port. Stable preflight was unavailable because its
+  unrelated Vite session could not resolve `wiki-source-badge.component`;
+  no artifact from that failed preflight is retained here.
 - ESLint on the changed overview and Playwright files: passed.
 - Frontend component-folder structure check: passed.
 - Full frontend lint remains blocked by two pre-existing
