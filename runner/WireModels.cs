@@ -1,7 +1,7 @@
 namespace AgentRunner;
 
 // Protocol-v0 compatibility declarations for the co-hosted legacy backend.
-// Separated Task Server protocol v1 uses the shared TaskServer.Contracts package.
+// Separated Task Server protocols use the shared TaskServer.Contracts package.
 // Delete these declarations when the published compatibility window drops v0;
 // they must not become a second durable model or expand with new v1 features.
 //

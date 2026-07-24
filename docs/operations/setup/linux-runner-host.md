@@ -24,11 +24,12 @@ Linux host and fills a bounded set of task slots without owning task state:
   credential-free URL and pushes with a write-enabled deploy key dedicated to
   this host and repository. The daemon proves that push identity at startup;
   a failed probe leaves the host read-only and blocks new claims.
-- **Results leave via the API** - CLI output goes to `POST /api/runner/logs`,
-  evidence files under `results/` go to `POST /api/runner/artifacts`, and the
-  terminal sentinel is handed off with fenced `POST /api/runner/completion`.
-  `Done` and `NoOp` enter normal `4-auto-review`; blocked, input, and genuinely
-  unknown outcomes go to human review. Remote runs are not labelled as
+- **Results leave through a durable outbox** - protocol 2 journals CLI output,
+  status, artifacts, Git facts, terminal facts, and the final result envelope
+  under `$RUNNER_WORKDIR/outbox/<run-attempt-id>/` before sending them. The
+  Task Server acknowledges one immutable result, then accepts an idempotent
+  completion. `Done` and `NoOp` enter normal review; blocked, input, and
+  genuinely unknown outcomes remain typed. Remote runs are not labelled as
   out-of-band completions.
 - **Exactly-one-runner is enforced by the fenced lease** - acquire mints a
   fencing token, a heartbeat renews it, and a rejected heartbeat (`StaleToken` /
@@ -42,7 +43,8 @@ Linux host and fills a bounded set of task slots without owning task state:
 - **Every slot has its own linked git worktree** under
   `$RUNNER_WORKDIR/<project-id>/worktrees/<task-key>`. Each project has a shared
   clone at `$RUNNER_WORKDIR/<project-id>/repo`; it is fetched before a claimed
-  task starts. Completed task worktrees are removed after handoff.
+  task starts. A coding worktree is removed only after the Task Server has
+  durably acknowledged the matching immutable result envelope.
 
 ### MVP boundaries (read before relying on it)
 
@@ -371,9 +373,10 @@ The runner then, in order: **preflights connectivity** (probes `/healthz`, so a
 dropped tunnel is reported cleanly *before* any lease or CLI work), **registers
 its client identity** (see below), acquires the fenced lease, starts
 heartbeating, checks out the branch from origin, fetches `prompt.md` over the
-API, spawns the CLI in the working tree, ships stdout/stderr to the server every
-few seconds, uploads everything under `results/`, secures and removes the
-worktree, posts the fenced normal runner completion, and releases the lease.
+API, spawns the CLI in the working tree, journals and ships stdout/stderr,
+journals everything under `results/`, secures the exact result on an immutable
+remote ref, obtains the durable Task Server acknowledgement, removes the
+worktree, posts the idempotent fenced completion, and releases the lease.
 Exit code `0` means a clean handoff; `1` a
 blocked/needs-input outcome; `2` lease not granted; `3` lease lost mid-run; `4`
 the task server was unreachable or rejected a call.
@@ -383,7 +386,7 @@ For unattended operation, run `agent-runner --health-check` as a readiness probe
 a service. Both are covered in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
-### Worktree salvage before teardown
+### Durable result handoff before teardown
 
 The runner never removes a checkout that contains work available only on the
 host. This rule applies to success, missing terminal sentinels, failure,
@@ -393,10 +396,37 @@ next process starts:
 1. Inspect `git status` in the task worktree.
 2. Commit dirty and untracked files with
    `wip(runner): salvage before teardown - outcome <X>`.
-3. Push run-produced commits to
-   `runner/<runner-id>/<task-key>` and verify the origin ref matches `HEAD`.
-4. Remove the linked worktree only after that verification. A clean checkout
-   at its original commit needs no salvage branch.
+3. Preserve the moving salvage ref at `runner/<runner-id>/<task-key>` using only
+   a normal create or fast-forward push.
+4. Publish the exact result to
+   `refs/heads/agent-studio/results/<run-attempt-id>/<result-sha>` and verify that ref.
+5. Send the immutable result envelope. It binds repository ID, source
+   RunAttempt ID, base SHA, result SHA, immutable ref, artifact-manifest digest,
+   and applicable submodule or LFS identities.
+6. Persist the matching Task Server acknowledgement locally.
+7. Remove the linked worktree only after that acknowledgement. A local commit
+   or the moving salvage branch alone is not sufficient.
+
+If upload, push, the connection, the runner process, or the Task Server fails,
+the daemon replays the original monotonic outbox before claiming new work.
+Idempotency keys make a lost response safe. A transfer failure is retried
+without starting the coding CLI and without consuming coding or completion
+budget. `transfer-recovery` means the host still owns recoverable transfer work.
+
+Operators can inspect durable server projections without reading host files:
+
+```bash
+curl -sS https://tasks.example.com/api/v1/management/status
+curl -sS https://tasks.example.com/api/v1/management/outboxes
+curl -sS https://tasks.example.com/api/v1/runs/<run-id>/result-handoff \
+  -H 'X-Task-Protocol-Version: 2'
+```
+
+The status projection includes total backlog, oldest unacknowledged sequence,
+and counts by final handoff state. Each outbox row includes its RunAttempt.
+Result envelopes are retained through task completion and for at least
+`TaskServer:ResultRetentionDays` afterward, default 30 days. Automatic deletion
+is not currently enabled.
 
 On a later pickup, the retained local tip and the existing canonical salvage
 ref are compared by ancestry. Local-ahead is published by normal fast-forward;
@@ -408,14 +438,13 @@ both exact tips, then prepares the new checkout from the canonical SHA and start
 the CLI. Repeating the pickup reuses the same collision ref and creates no extra
 history. No force push is used.
 
-The runner-completion deliverables link a successful salvage branch and its
-commit. A divergent recovery also records the collision ref, canonical and
-local SHAs, and which canonical SHA was the next pickup base. Publishing is
-bounded to three attempts. If the remote check or push still fails, the runner
-leaves the worktree in place and records an open `worktree-blocked` gate item
-containing the host, path, exact known tips, failure, and next safe action. Do
-not delete that path manually. Restore origin access, publish the retained tip
-to a new ref, and close the gate only after that ref is verified.
+The result facts retain the salvage branch and commit. A divergent recovery also
+records the collision ref, canonical and local SHAs, and the typed recovery
+action. Each transfer pass makes three publish attempts. Exhaustion leaves the
+worktree and both tips untouched, records `transfer-recovery`, and retries a
+transfer pass with backoff. It does not complete, move, requeue, or launch a new
+coding attempt. Do not delete that path manually. Restore origin access and let
+the outbox converge.
 
 ### Local-profile client attribution
 

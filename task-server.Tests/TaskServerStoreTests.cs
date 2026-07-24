@@ -22,9 +22,9 @@ public sealed class TaskServerStoreTests
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT count(*) FROM schema_migrations WHERE version = 1;";
+            command.CommandText = $"SELECT count(*) FROM schema_migrations WHERE version = {TaskServerStore.CurrentSchemaVersion};";
             Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
-            command.CommandText = "UPDATE meta SET value = '2' WHERE key = 'schema_version';";
+            command.CommandText = $"UPDATE meta SET value = '{TaskServerStore.CurrentSchemaVersion + 1}' WHERE key = 'schema_version';";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -90,7 +90,13 @@ public sealed class TaskServerStoreTests
         var bytes = Encoding.UTF8.GetBytes("evidence");
         var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         await store.IngestArtifactAsync(runId, new ArtifactIngestRequest("art-1", "result.txt", "text/plain", Convert.ToBase64String(bytes), sha, "artifact-1", lease.Fence), "runner-a", default);
-        await store.CompleteRunAsync(runId, new CompleteRunRequest("runner-a", "instance-a", lease.LeaseId, lease.Fence, "success"), "runner-a", default);
+        var handoff = await store.AcknowledgeResultHandoffAsync(
+            runId, Handoff(runId, lease, sequence: 3), "runner-a", default);
+        await store.CompleteRunAsync(runId, new CompleteRunRequest(
+            "runner-a", "instance-a", lease.LeaseId, lease.Fence, "success",
+            ResultEnvelopeDigest: handoff.EnvelopeDigest,
+            IdempotencyKey: $"completion:{runId}",
+            Sequence: 4), "runner-a", default);
 
         var serverId = store.ServerId;
         var backup = await store.CreateBackupAsync(new BackupRequest("acceptance"), "operator", default);
@@ -274,14 +280,209 @@ public sealed class TaskServerStoreTests
             () => store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default));
         Assert.Equal("admission-closed", admission.Code);
 
-        await store.CompleteRunAsync(
+        var lease = claim.Lease!;
+        var handoff = await store.AcknowledgeResultHandoffAsync(
             claim.Run!.RunId,
-            new CompleteRunRequest("runner-a", "instance-a", claim.Lease!.LeaseId, claim.Lease.Fence, "success"),
+            Handoff(claim.Run.RunId, lease, sequence: 1),
+            "runner-a",
+            default);
+        await store.CompleteRunAsync(
+            claim.Run.RunId,
+            new CompleteRunRequest(
+                "runner-a", "instance-a", lease.LeaseId, lease.Fence, "success",
+                ResultEnvelopeDigest: handoff.EnvelopeDigest,
+                IdempotencyKey: $"completion:{claim.Run.RunId}",
+                Sequence: 2),
             "runner-a",
             default);
         var prepared = await store.PrepareShutdownAsync(new PrepareShutdownRequest("upgrade"), "operator", default);
         Assert.True(prepared.SafeToStop);
         Assert.Equal(TaskServerMode.Maintenance, prepared.Mode);
+    }
+
+    [Fact]
+    public async Task Lost_handoff_ack_replays_one_envelope_and_one_lane_transition()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+        var run = claim.Run!;
+        var lease = claim.Lease!;
+        var request = Handoff(run.RunId, lease, sequence: 4);
+
+        var first = await store.AcknowledgeResultHandoffAsync(run.RunId, request, "runner-a", default);
+        var restarted = Store(temp.Path);
+        await restarted.InitializeAsync();
+        var replay = await restarted.AcknowledgeResultHandoffAsync(
+            run.RunId, request, "runner-a", default);
+
+        Assert.False(first.Replay);
+        Assert.True(replay.Replay);
+        Assert.Equal(first.EnvelopeDigest, replay.EnvelopeDigest);
+        Assert.Equal(first.AcknowledgedAt, replay.AcknowledgedAt);
+        var reconstructable = await restarted.GetResultHandoffAsync(run.RunId, default);
+        Assert.NotNull(reconstructable);
+        Assert.Equal(request.Envelope.RepositoryId, reconstructable.Envelope.RepositoryId);
+        Assert.Equal(request.Envelope.ResultSha, reconstructable.Envelope.ResultSha);
+        Assert.Equal(request.Envelope.ImmutableRemoteRef, reconstructable.Envelope.ImmutableRemoteRef);
+
+        var completion = new CompleteRunRequest(
+            "runner-a", "instance-a", lease.LeaseId, lease.Fence, "success",
+            ResultEnvelopeDigest: first.EnvelopeDigest,
+            IdempotencyKey: $"completion:{run.RunId}",
+            Sequence: 5);
+        await restarted.CompleteRunAsync(run.RunId, completion, "runner-a", default);
+        await restarted.CompleteRunAsync(run.RunId, completion, "runner-a", default);
+
+        var audit = await restarted.ListAuditAsync(0, default);
+        Assert.Single(audit, record => record.Action == "result-handoff.acknowledged");
+        Assert.Single(audit, record => record.Action == "run.completed");
+    }
+
+    [Fact]
+    public async Task Restart_accepts_unacknowledged_handoff_from_the_exact_process_unknown_authority()
+    {
+        using var temp = new TempDirectory();
+        var first = Store(temp.Path);
+        await first.InitializeAsync();
+        await SeedReadyTaskAsync(first);
+        await first.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await first.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+
+        var restarted = Store(temp.Path);
+        await restarted.InitializeAsync();
+        var stale = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            restarted.AcknowledgeResultHandoffAsync(
+                claim.Run!.RunId,
+                Handoff(claim.Run.RunId, claim.Lease! with { Fence = claim.Lease.Fence + 1 }, sequence: 8),
+                "runner-a",
+                default));
+        Assert.Equal("stale-fence", stale.Code);
+        var ack = await restarted.AcknowledgeResultHandoffAsync(
+            claim.Run!.RunId,
+            Handoff(claim.Run.RunId, claim.Lease!, sequence: 7),
+            "runner-a",
+            default);
+
+        Assert.Equal("acknowledged", ack.State);
+    }
+
+    [Fact]
+    public async Task Successful_completion_requires_the_matching_durable_envelope()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+
+        var conflict = await Assert.ThrowsAsync<TaskServerConflictException>(() => store.CompleteRunAsync(
+            claim.Run!.RunId,
+            new CompleteRunRequest(
+                "runner-a", "instance-a", claim.Lease!.LeaseId, claim.Lease.Fence, "success",
+                ResultEnvelopeDigest: new string('a', 64),
+                IdempotencyKey: $"completion:{claim.Run.RunId}",
+                Sequence: 2),
+            "runner-a",
+            default));
+
+        Assert.Equal("result-handoff-required", conflict.Code);
+    }
+
+    [Fact]
+    public async Task Outbox_observability_reports_backlog_oldest_sequence_and_final_state()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        await store.ReportRunnerOutboxAsync(
+            "runner-a",
+            new RunnerOutboxStatusRequest(
+                "instance-a", 12, 8, 4, 9, "transfer-recovery", "run-1", null, DateTime.UtcNow),
+            "runner-a",
+            default);
+
+        var rows = await store.ListRunnerOutboxesAsync(default);
+        var row = Assert.Single(rows);
+        Assert.Equal(4, row.BacklogCount);
+        Assert.Equal(9, row.OldestUnacknowledgedSequence);
+        Assert.Equal("transfer-recovery", row.FinalHandoffState);
+        Assert.Equal(4, store.Status().OutboxBacklog);
+        Assert.Equal(9, store.Status().OldestUnacknowledgedSequence);
+    }
+
+    [Fact]
+    public async Task Outbox_sequence_is_persisted_and_rejects_a_late_new_fact()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+        var run = claim.Run!;
+        var lease = claim.Lease!;
+        await store.IngestEventAsync(
+            run.RunId,
+            new EventIngestRequest(
+                "event-2",
+                "runner.status",
+                "{}",
+                "event-key-2",
+                lease.Fence,
+                RunnerId: lease.RunnerId,
+                InstanceId: lease.InstanceId,
+                LeaseId: lease.LeaseId,
+                Sequence: 2),
+            "runner-a",
+            default);
+
+        var stale = await Assert.ThrowsAsync<TaskServerConflictException>(() =>
+            store.IngestEventAsync(
+                run.RunId,
+                new EventIngestRequest(
+                    "event-1",
+                    "runner.status",
+                    "{}",
+                    "event-key-1",
+                    lease.Fence,
+                    RunnerId: lease.RunnerId,
+                    InstanceId: lease.InstanceId,
+                    LeaseId: lease.LeaseId,
+                    Sequence: 1),
+                "runner-a",
+                default));
+
+        Assert.Equal("stale-outbox-sequence", stale.Code);
+        var stored = Assert.Single(await store.ListEventsAsync(run.RunId, 0, default));
+        Assert.Equal(2, stored.Sequence);
+    }
+
+    private static ResultHandoffRequest Handoff(string runId, LeaseDto lease, long sequence)
+    {
+        var envelope = new ImmutableResultEnvelope(
+            "repo-project",
+            runId,
+            new string('1', 40),
+            new string('2', 40),
+            $"refs/heads/agent-studio/results/{runId}/{new string('2', 40)}",
+            null,
+            new string('3', 64));
+        var digest = ResultEnvelopeDigest.Compute(envelope);
+        return new ResultHandoffRequest(
+            lease.RunnerId,
+            lease.InstanceId,
+            lease.LeaseId,
+            lease.Fence,
+            sequence,
+            $"handoff:{runId}:{digest}",
+            digest,
+            envelope);
     }
 
     private static TaskServerStore Store(string dataDirectory)
