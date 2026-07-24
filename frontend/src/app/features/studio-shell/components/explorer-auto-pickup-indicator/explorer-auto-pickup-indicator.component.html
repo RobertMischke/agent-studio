@@ -1,0 +1,12 @@
+<span class="studio-auto-pickup"
+      [class.studio-auto-pickup--active]="state() === 'active'"
+      [class.studio-auto-pickup--paused]="state() === 'paused'"
+      [class.studio-auto-pickup--manual]="state() === 'manual'"
+      [class.studio-auto-pickup--blocked]="state() === 'blocked'"
+      [class.studio-auto-pickup--aggregate]="aggregate()"
+      [attr.data-testid]="testid()"
+      [attr.data-auto-pickup-state]="state()"
+      [attr.data-auto-pickup-reason]="reason()"
+      [cacTooltip]="tooltip()"
+      [attr.role]="state() === 'off' ? null : 'img'"
+      [attr.aria-label]="tooltip() || null"></span>

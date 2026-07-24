@@ -9,7 +9,7 @@ import {
   ExplorerWorkspaceTreeComponent,
   type ExplorerProjectRow,
 } from './explorer-workspace-tree.component';
-import type { ProjectPulseState } from '../../studio-shell.pulse';
+import type { ProjectAutoPickupIndicator, ProjectAutoPickupState } from '../../studio-shell.auto-pickup';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../../../models/task.model';
 
@@ -335,6 +335,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
       'studio-explorer-project-board-Alpha',
       'studio-explorer-project-hub-Alpha',
       'studio-explorer-project-wiki-Alpha',
+      'studio-explorer-project-workbenches-Alpha',
       'studio-explorer-project-epics-Alpha',
     ]);
 
@@ -466,44 +467,47 @@ describe('ExplorerWorkspaceTreeComponent', () => {
   });
 });
 
-describe('ExplorerWorkspaceTreeComponent — AGT-2031 auto-pickup pulse', () => {
-  const pulse = (entries: [string, ProjectPulseState][]) =>
-    new Map<string, ProjectPulseState>(entries);
+describe('ExplorerWorkspaceTreeComponent auto-pickup indicator', () => {
+  const states = (entries: [string, ProjectAutoPickupState][]) =>
+    new Map<string, ProjectAutoPickupIndicator>(entries.map(([name, state]) => [
+      name,
+      {
+        state,
+        reason: state === 'blocked' ? 'build profile declared' : null,
+        tooltip: state === 'blocked'
+          ? 'Auto-pickup blocked: build profile declared'
+          : `Auto-pickup ${state}`,
+      },
+    ]));
 
-  it('renders a per-project pulse dot reflecting idle / active / off state', () => {
+  it('renders active, paused, manual, and blocked marks on project rows', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
     cmp.setCollapsed('workspace', false);
     cmp.setCollapsed('ws:__all__', false);
     fixture.componentRef.setInput('registryWorkspaces', []);
-    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta'), row('Gamma')]);
-    fixture.componentRef.setInput('projectPulseByName', pulse([
-      ['Alpha', 'auto-idle'],
-      ['Beta', 'auto-active'],
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta'), row('Gamma'), row('Delta')]);
+    fixture.componentRef.setInput('projectAutoPickupByName', states([
+      ['Alpha', 'active'],
+      ['Beta', 'paused'],
+      ['Gamma', 'manual'],
+      ['Delta', 'blocked'],
     ]));
     fixture.detectChanges();
 
     const root: HTMLElement = fixture.nativeElement;
     const dot = (name: string) =>
-      root.querySelector<HTMLElement>(`[data-testid="studio-explorer-project-pulse-${name}"]`);
+      root.querySelector<HTMLElement>(`[data-testid="studio-explorer-project-auto-pickup-${name}"]`);
 
-    expect(dot('Alpha')?.getAttribute('data-pulse')).toBe('auto-idle');
-    expect(dot('Alpha')?.classList.contains('studio-auto-pulse--idle')).toBe(true);
-    expect(dot('Alpha')?.getAttribute('aria-label')).toBe('Auto-pickup on');
-
-    expect(dot('Beta')?.getAttribute('data-pulse')).toBe('auto-active');
-    expect(dot('Beta')?.classList.contains('studio-auto-pulse--active')).toBe(true);
-    expect(dot('Beta')?.getAttribute('aria-label')).toBe('Auto-pickup running');
-
-    // Not on auto → the slot still renders (reserved width, no reflow) but is
-    // marked off with no accessible label.
-    expect(dot('Gamma')?.getAttribute('data-pulse')).toBe('off');
-    expect(dot('Gamma')?.classList.contains('studio-auto-pulse--idle')).toBe(false);
-    expect(dot('Gamma')?.classList.contains('studio-auto-pulse--active')).toBe(false);
-    expect(dot('Gamma')?.getAttribute('aria-label')).toBeNull();
+    expect(dot('Alpha')?.getAttribute('data-auto-pickup-state')).toBe('active');
+    expect(dot('Beta')?.getAttribute('data-auto-pickup-state')).toBe('paused');
+    expect(dot('Gamma')?.getAttribute('data-auto-pickup-state')).toBe('manual');
+    expect(dot('Delta')?.getAttribute('data-auto-pickup-state')).toBe('blocked');
+    expect(dot('Delta')?.getAttribute('data-auto-pickup-reason')).toBe('build profile declared');
+    expect(dot('Delta')?.getAttribute('aria-label')).toBe('Auto-pickup blocked: build profile declared');
   });
 
-  it('rolls child pulses into the active-wins aggregate with the on-auto names', () => {
+  it('rolls active and blocked auto projects into a blocked-wins aggregate', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
     fixture.componentRef.setInput('registryWorkspaces', [
@@ -514,18 +518,18 @@ describe('ExplorerWorkspaceTreeComponent — AGT-2031 auto-pickup pulse', () => 
       ]),
     ]);
     fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta'), row('Gamma')]);
-    fixture.componentRef.setInput('projectPulseByName', pulse([
-      ['Alpha', 'auto-idle'],
-      ['Beta', 'auto-active'],
+    fixture.componentRef.setInput('projectAutoPickupByName', states([
+      ['Alpha', 'active'],
+      ['Beta', 'blocked'],
+      ['Gamma', 'manual'],
     ]));
 
-    const agg = cmp.wsPulseAggregate(cmp.groups()[0]);
-    // active beats idle; the off project (Gamma) drops out of the name list.
-    expect(agg).toEqual({ state: 'auto-active', autoProjects: ['Alpha', 'Beta'] });
-    expect(cmp.aggregatePulseTooltip(agg)).toBe('Auto-pickup running: Alpha, Beta');
+    const agg = cmp.wsAutoPickupAggregate(cmp.groups()[0]);
+    expect(agg).toEqual({ state: 'blocked', autoProjects: ['Alpha', 'Beta'] });
+    expect(cmp.aggregateAutoPickupTooltip(agg)).toBe('Auto-pickup blocked: Alpha, Beta');
   });
 
-  it('shows the aggregate dot on a collapsed workspace header, hides it when expanded', () => {
+  it('shows the aggregate mark on a collapsed workspace header, hides it when expanded', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
     cmp.setCollapsed('workspace', false);
@@ -533,10 +537,10 @@ describe('ExplorerWorkspaceTreeComponent — AGT-2031 auto-pickup pulse', () => 
       workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
     ]);
     fixture.componentRef.setInput('projectRows', [row('Alpha')]);
-    fixture.componentRef.setInput('projectPulseByName', pulse([['Alpha', 'auto-idle']]));
+    fixture.componentRef.setInput('projectAutoPickupByName', states([['Alpha', 'active']]));
 
     const root: HTMLElement = fixture.nativeElement;
-    const wsDot = () => root.querySelector<HTMLElement>('[data-testid="studio-explorer-ws-pulse-ws-default"]');
+    const wsDot = () => root.querySelector<HTMLElement>('[data-testid="studio-explorer-ws-auto-pickup-ws-default"]');
 
     cmp.setCollapsed('ws:ws-default', false);
     fixture.detectChanges();
@@ -544,8 +548,8 @@ describe('ExplorerWorkspaceTreeComponent — AGT-2031 auto-pickup pulse', () => 
 
     cmp.setCollapsed('ws:ws-default', true);
     fixture.detectChanges();
-    expect(wsDot()?.getAttribute('data-pulse')).toBe('auto-idle');
-    expect(wsDot()?.getAttribute('aria-label')).toBe('Auto-pickup on: Alpha');
+    expect(wsDot()?.getAttribute('data-auto-pickup-state')).toBe('active');
+    expect(wsDot()?.getAttribute('aria-label')).toBe('Auto-pickup active: Alpha');
   });
 
   it('surfaces the whole-tree aggregate on the panel header only when collapsed', () => {
@@ -553,15 +557,15 @@ describe('ExplorerWorkspaceTreeComponent — AGT-2031 auto-pickup pulse', () => 
     const cmp = fixture.componentInstance;
     fixture.componentRef.setInput('registryWorkspaces', []);
     fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta')]);
-    fixture.componentRef.setInput('projectPulseByName', pulse([
-      ['Alpha', 'auto-idle'],
-      ['Beta', 'auto-active'],
+    fixture.componentRef.setInput('projectAutoPickupByName', states([
+      ['Alpha', 'active'],
+      ['Beta', 'blocked'],
     ]));
 
-    expect(cmp.allPulseAggregate()).toEqual({ state: 'auto-active', autoProjects: ['Alpha', 'Beta'] });
+    expect(cmp.allAutoPickupAggregate()).toEqual({ state: 'blocked', autoProjects: ['Alpha', 'Beta'] });
 
     const root: HTMLElement = fixture.nativeElement;
-    const panelDot = () => root.querySelector<HTMLElement>('[data-testid="studio-explorer-workspace-pulse"]');
+    const panelDot = () => root.querySelector<HTMLElement>('[data-testid="studio-explorer-workspace-auto-pickup"]');
 
     cmp.setCollapsed('workspace', false);
     fixture.detectChanges();
@@ -569,7 +573,7 @@ describe('ExplorerWorkspaceTreeComponent — AGT-2031 auto-pickup pulse', () => 
 
     cmp.setCollapsed('workspace', true);
     fixture.detectChanges();
-    expect(panelDot()?.getAttribute('data-pulse')).toBe('auto-active');
+    expect(panelDot()?.getAttribute('data-auto-pickup-state')).toBe('blocked');
   });
 });
 

@@ -129,6 +129,14 @@
   --studio-mono:           var(--studio-fg-strong);
   --studio-hash:           var(--studio-accent-success-strong);
 
+  // Explorer project-row auto-pickup mini state. These tokens keep the
+  // configuration mark legible without turning manual or paused into acute
+  // signals. Shape remains a second carrier in the component.
+  --studio-auto-pickup-active:  var(--studio-accent-teal);
+  --studio-auto-pickup-paused:  var(--studio-fg-dim);
+  --studio-auto-pickup-manual:  var(--studio-fg-muted);
+  --studio-auto-pickup-blocked: var(--studio-accent-warn-strong);
+
   // F39: "Strong" text-pigment variants of the accent family. Use these for
   // text/icon foregrounds layered on a tinted background of the same accent
   // (e.g. running/active/failed pills) so the pigment stays WCAG-AA legible
@@ -661,6 +669,11 @@
   --studio-error:                 var(--studio-accent-6-strong);
   --studio-mono:                  var(--studio-fg-strong);
   --studio-hash:                  var(--studio-accent-success-strong);
+
+  --studio-auto-pickup-active:  var(--studio-accent-teal);
+  --studio-auto-pickup-paused:  var(--studio-fg-dim);
+  --studio-auto-pickup-manual:  var(--studio-fg-muted);
+  --studio-auto-pickup-blocked: var(--studio-accent-warn-strong);
 
   // Navigation active-item fill on the white shell. Mixed over the opaque
   // elevated grey (not the translucent orange bg-selected) so the band stays a

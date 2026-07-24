@@ -115,6 +115,39 @@ compares well across projects. It says less about work type and can be mistaken
 for generic progress unless labeled "load" in the tooltip. The pips are compact
 status dots with acute color reserved for current pressure or blockage.
 
+### I. Auto-pickup mini state
+
+One reserved eight-pixel slot with a six-pixel mark on every project row
+communicates the project's auto-pickup configuration independently from task
+activity. A filled teal dot means `auto-continuous` is active and pickup is
+allowed. A quiet split dot means the runner is paused, an unfilled neutral ring
+means manual mode, and an amber diamond means `auto-continuous` was requested
+but pickup is blocked by a current gate such as a declared build profile
+without a green validation.
+
+The slot never disappears and never changes size, so switching modes does not
+move the project label, count, hub action, or row height. The neutral manual
+mark is deliberately low contrast, paused is visible but non-acute, and amber
+is reserved for the actionable blocked state. Shape as well as color separates
+the four states. Every mark has a text tooltip and accessible label containing
+both the effective state and, when blocked, the reason.
+
+The four like-for-like row mockups use the same trailing slot:
+
+| Project row | Mini mockup | Effective state | Tooltip copy |
+| --- | --- | --- | --- |
+| `Agent Taskboard` | `●` filled teal dot | `auto-continuous` plus `pickupAllowed` | `Auto-pickup active` |
+| `Coding Agent Chat` | `◐` quiet split dot | `paused` | `Auto-pickup paused` |
+| `Docs Studio` | `○` neutral ring | `manual` | `Auto-pickup manual` |
+| `Release Tools` | `◆` amber diamond | `auto-continuous` plus pickup gate closed | `Auto-pickup blocked: build profile declared` |
+
+This mini state is intentionally not a ninth alternative for task composition.
+It is an orthogonal configuration signal that can sit beside A's sampled
+situation dots later. For the current Explorer requirement it replaces the
+older activity pulse in the project's reserved slot: configuration remains
+visible when idle, paused, manual, or blocked, while live task activity stays
+owned by the Board and task rows.
+
 ## Recommendation
 
 Build **A. Micro dashboard dots** first. It is the clearest continuation of the
@@ -182,6 +215,8 @@ task `results/` folder contains one review capture per alternative:
 1. Can operators correctly distinguish active from escalated in light theme at
    normal sidebar width?
 2. Does the indicator remain useful when a project has hundreds of tasks?
+3. Can operators distinguish active, paused, manual, and pickup-blocked project
+   configuration without expanding a project or relying on color alone?
 
 ## Living knowledge log
 
@@ -192,3 +227,8 @@ task `results/` folder contains one review capture per alternative:
   Option E is the bounded alternative only when always-visible project-row
   liveness is confirmed as mandatory. The mockup includes a local A/E review
   selector and direct links to both candidates.
+- **2026-07-23 operator follow-up:** Auto-pickup configuration is mandatory on
+  every project row. Variant I adds a fixed mini-state slot for active, paused,
+  manual, and pickup-blocked states. The static shape-and-token treatment is
+  selected for the Explorer implementation; it supersedes the older per-project
+  activity pulse without changing the A/E task-composition decision.

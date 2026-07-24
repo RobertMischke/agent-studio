@@ -209,6 +209,7 @@
         "src/app/features/project-detail/components/workbench-viewer/workbench-viewer.component.scss",
         "src/app/features/remote-hosts/components/runner-setup-dialog/runner-setup-dialog.scss",
         "src/app/features/shell/components/onboard-project-dialog/onboard-project-dialog.component.scss",
+        "src/app/features/studio-shell/components/explorer-auto-pickup-indicator/explorer-auto-pickup-indicator.component.scss",
         "src/app/features/studio-shell/components/explorer-workbench-list/explorer-workbench-list.component.scss",
         "src/app/features/task-detail/components/prompt-pane/files-pane/document-details-menu/document-details-menu.component.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-run-history/pipeline-run-history.component.scss",
