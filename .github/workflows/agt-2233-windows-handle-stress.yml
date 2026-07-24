@@ -1,0 +1,61 @@
+name: AGT-2233 Windows handle stress
+
+on:
+  push:
+    branches:
+      - runner/agent-runner-01/AGT-2233
+    paths:
+      - task-server/**
+      - task-server.Tests/**
+      - contracts/TaskServer.Contracts/**
+      - .github/workflows/agt-2233-windows-handle-stress.yml
+
+jobs:
+  windows-handle-stress:
+    name: Windows database handle stress
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore task-server.Tests/TaskServer.Tests.csproj
+
+      - name: Build
+        run: dotnet build task-server.Tests/TaskServer.Tests.csproj --no-restore -warnaserror:false
+
+      - name: Run 80 parallel target-test executions
+        shell: bash
+        env:
+          TARGET_FILTER: >-
+            FullyQualifiedName~TaskServer.Tests.TaskServerStoreTests.Backup_restore_preserves_resources_events_artifacts_audit_identity_and_fences|
+            FullyQualifiedName~TaskServer.Tests.TaskServerStoreTests.Legacy_migration_rehearses_inventory_freeze_import_integrity_and_evidence_git_preservation|
+            FullyQualifiedName~TaskServer.Tests.TaskServerStoreTests.Failed_restore_rolls_back_to_the_live_store_and_remains_ready_in_maintenance|
+            FullyQualifiedName~TaskServer.Tests.TaskServerStoreTests.Backup_and_restore_release_database_file_handles_before_cleanup
+        run: |
+          set -euo pipefail
+          for round in $(seq 1 20); do
+            pids=()
+            for worker in $(seq 1 4); do
+              dotnet test task-server.Tests/TaskServer.Tests.csproj \
+                --no-build \
+                --filter "${TARGET_FILTER//[$'\r\n ']/}" \
+                --logger "console;verbosity=minimal" \
+                > "handle-stress-${round}-${worker}.log" 2>&1 &
+              pids+=("$!")
+            done
+            for pid in "${pids[@]}"; do
+              if ! wait "$pid"; then
+                for log in handle-stress-"${round}"-*.log; do
+                  cat "$log"
+                done
+                exit 1
+              fi
+            done
+            echo "round=${round} workers=4 passed"
+          done
+          echo "windows_parallel_executions=80 tests_per_execution=4 status=passed"
