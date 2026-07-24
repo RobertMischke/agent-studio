@@ -30,6 +30,7 @@ import { InfoButtonComponent } from '../../../../components/info-button/info-but
 import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
 import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
 import { deriveStalledTaskState } from '../../../../services/run-activity.util';
+import { PostProcessingSummaryComponent } from '../post-processing-summary/post-processing-summary.component';
 
 /** ASS-1727: page size for the Archive lane's lazy-load / "load more". */
 const ARCHIVE_PAGE_SIZE = 50;
@@ -39,7 +40,7 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
 @Component({
   selector: 'app-task-column, app-job-column',
   standalone: true,
-  imports: [TaskCardComponent, TooltipDirective, InfoButtonComponent],
+  imports: [TaskCardComponent, TooltipDirective, InfoButtonComponent, PostProcessingSummaryComponent],
   // Signal inputs let OnPush skip unchanged lanes during board polling.
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-column.html',

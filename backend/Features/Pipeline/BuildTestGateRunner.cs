@@ -57,6 +57,8 @@ public sealed record BuildTestGateRequest(
     /// (AGT-2229) and then removed wholesale.
     /// </summary>
     public string? RemoteSshHost { get; init; }
+    public Action? OnMachineGateWaiting { get; init; }
+    public Action? OnMachineGateAcquired { get; init; }
 
     /// <summary>
     /// Budget for the true infrastructure operations that MUST be quick regardless
@@ -272,7 +274,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
             if (completed is null)
             {
-                var acquisition = await AcquireMachineGateAsync(queueWaitTimeout, ct).ConfigureAwait(false);
+                var acquisition = await AcquireMachineGateAsync(
+                    queueWaitTimeout, request.OnMachineGateWaiting, ct).ConfigureAwait(false);
                 fallbackQueueWaitMs = acquisition.QueueWaitMs;
                 fallbackCollision = acquisition.CollisionDetected;
                 if (acquisition.Lease is null)
@@ -283,6 +286,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 else
                 {
                     machineLease = acquisition.Lease;
+                    request.OnMachineGateAcquired?.Invoke();
                     acquiredAtUtc = DateTime.UtcNow;
                     _logger.LogInformation(
                         "build_test_gate_acquired gate_run_id={GateRunId} repository={Repository} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
@@ -833,10 +837,12 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
     private static async Task<MachineGateAcquisition> AcquireMachineGateAsync(
         TimeSpan queueWaitTimeout,
+        Action? onWaiting,
         CancellationToken ct)
     {
         var wait = Stopwatch.StartNew();
         var collision = !await ProcessGate.WaitAsync(0, ct).ConfigureAwait(false);
+        if (collision) onWaiting?.Invoke();
         var ownsProcessGate = !collision;
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
         bounded.CancelAfter(queueWaitTimeout);
@@ -860,6 +866,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     if (!OperatingSystem.IsWindows() && !NativeFileLock.TryAcquireExclusive(stream))
                     {
                         stream.Dispose();
+                        if (!collision) onWaiting?.Invoke();
                         collision = true;
                         await Task.Delay(TimeSpan.FromMilliseconds(100), bounded.Token).ConfigureAwait(false);
                         continue;

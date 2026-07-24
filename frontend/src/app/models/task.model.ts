@@ -312,6 +312,8 @@ export interface TaskInfo {
   phase?: string | null;
   /** UTC time at which the current lifecycle phase was entered. */
   phaseEnteredAt?: string | null;
+  /** Read-only checks projected from lifecycle.json while post-processing runs. */
+  postProcessingChecks?: LifecycleCheck[];
   /**
    * Run-Liveness Slice B: when this 3-progress card is waiting on an unanswered
    * steer / NeedsInput question (`phase === 'steer-pending'`), the ISO UTC time
@@ -429,6 +431,14 @@ export interface TaskInfo {
    * the AGT-1915 trap. Null on every coding / research / epic card.
    */
   planningSpawn?: PlanningSpawnSummary | null;
+}
+
+export interface LifecycleCheck {
+  name: string;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'skipped' | string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  detail?: string | null;
 }
 
 /**

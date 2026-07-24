@@ -5,9 +5,10 @@ namespace AgentStudio.Runner;
 /// Surfaced in compact board indicators so the user sees that the
 /// orchestrator is alive and forming opinions, not silently waving jobs
 /// through. The snapshot is intentionally tiny: last tick time, last
-/// tick's per-outcome counts, and the job slug that the current tick is
-/// mid-way through (if any). Consumers poll it via a small REST endpoint;
-/// nothing pushes.
+/// tick's per-outcome counts, plus live per-card steps owned by the parallel
+/// workers. Tick boundaries reset rollups but do not erase worker activity;
+/// each card remains present until its owner calls <see cref="ClearCurrent"/>.
+/// Consumers poll it via a small REST endpoint; nothing pushes.
 /// </summary>
 public sealed class AutoReviewStatusSnapshot
 {
@@ -25,6 +26,8 @@ public sealed class AutoReviewStatusSnapshot
     private int _escalationRateMinimumDecisions = DefaultEscalationRateMinimumDecisions;
     private string? _currentJob;
     private string? _currentProject;
+    private readonly Dictionary<string, AutoReviewActivityView> _activeJobs =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Read-only view used by the API endpoint.</summary>
     public AutoReviewStatusView Read()
@@ -47,7 +50,10 @@ public sealed class AutoReviewStatusSnapshot
                 EscalationRateAlertThreshold: _escalationRateAlertThreshold,
                 EscalationRateAlert: escalationRateAlert,
                 CurrentJob: _currentJob,
-                CurrentProject: _currentProject);
+                CurrentProject: _currentProject,
+                ActiveJobs: _activeJobs.Values
+                    .OrderBy(activity => activity.StartedAt)
+                    .ToList());
         }
     }
 
@@ -92,8 +98,42 @@ public sealed class AutoReviewStatusSnapshot
         {
             _currentProject = project;
             _currentJob = jobId;
+            var key = ActivityKey(project, jobId);
+            if (!_activeJobs.ContainsKey(key))
+            {
+                _activeJobs[key] = new AutoReviewActivityView(
+                    project, jobId, AutoReviewActivitySteps.Processing, DateTime.UtcNow);
+            }
         }
     }
+
+    public void SetCurrentStep(string project, string jobId, string step)
+    {
+        lock (_lock)
+        {
+            _currentProject = project;
+            _currentJob = jobId;
+            _activeJobs[ActivityKey(project, jobId)] = new AutoReviewActivityView(
+                project, jobId, step, DateTime.UtcNow);
+        }
+    }
+
+    public void ClearCurrent(string project, string jobId)
+    {
+        lock (_lock)
+        {
+            _activeJobs.Remove(ActivityKey(project, jobId));
+            if (string.Equals(_currentProject, project, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(_currentJob, jobId, StringComparison.OrdinalIgnoreCase))
+            {
+                var next = _activeJobs.Values.LastOrDefault();
+                _currentProject = next?.Project;
+                _currentJob = next?.JobId;
+            }
+        }
+    }
+
+    private static string ActivityKey(string project, string jobId) => $"{project}\n{jobId}";
 
     public void RecordAccept() { lock (_lock) _accept++; }
     public void RecordReissue() { lock (_lock) _reissue++; }
@@ -114,4 +154,21 @@ public sealed record AutoReviewStatusView(
     double EscalationRateAlertThreshold,
     bool EscalationRateAlert,
     string? CurrentJob,
-    string? CurrentProject);
+    string? CurrentProject,
+    IReadOnlyList<AutoReviewActivityView> ActiveJobs);
+
+public sealed record AutoReviewActivityView(
+    string Project,
+    string JobId,
+    string Step,
+    DateTime StartedAt);
+
+public static class AutoReviewActivitySteps
+{
+    public const string Processing = "processing";
+    public const string Gate = "gate";
+    public const string GateQueued = "gate-queued";
+    public const string Aspects = "aspects";
+    public const string Grade = "grade";
+    public const string Decision = "decision";
+}
