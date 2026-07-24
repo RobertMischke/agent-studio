@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { contrastRatio, parseRgb } from '../helpers/contrast';
-import { sampleColours, setTheme } from '../helpers/theme';
+import { dismissDevErrorDialog, sampleColours, setTheme } from '../helpers/theme';
 
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR
   ? path.join(process.env.JOB_RESULTS_DIR, 'wiki-source-branch')
@@ -33,11 +33,14 @@ const pulse = {
   activity: { available: true, reason: null, runs: [], collector: null, curator: null },
 };
 
-test('project-wide branch source is visible and read-only in both themes', async ({ page }) => {
+let settingsUpdate: Record<string, unknown> | null;
+let releaseSettingsUpdate: (() => void) | undefined;
+
+test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
-  let settingsUpdate: Record<string, unknown> | null = null;
-  let releaseSettingsUpdate: (() => void) | undefined;
+  settingsUpdate = null;
+  releaseSettingsUpdate = undefined;
   await page.route('**/hubs/jobs/negotiate**', route => route.fulfill({ json: {
     connectionId: 'wiki-source-branch-e2e',
     connectionToken: 'wiki-source-branch-e2e',
@@ -140,7 +143,9 @@ test('project-wide branch source is visible and read-only in both themes', async
     if (endpoint.endsWith('/wiki/grading/status')) return route.fulfill({ json: { status: null } });
     return route.fulfill({ json: {} });
   });
+});
 
+test('branch source is visible and read-only in both themes', async ({ page }) => {
   await page.goto('/#/projects/demo/wiki', { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('project-wiki-section')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('project-wiki-source')).toContainText('origin/develop @ abcdef12');
@@ -173,15 +178,25 @@ test('project-wide branch source is visible and read-only in both themes', async
     await expect.poll(() => source.evaluate(element => getComputedStyle(element).borderColor))
       .not.toBe(borderBeforeHover);
   }
+});
 
+test('project setting is legible in enabled and disabled states in both themes', async ({ page }) => {
   await page.goto('/#/projects/demo/settings', { waitUntil: 'domcontentloaded' });
+  await dismissDevErrorDialog(page);
   const select = page.getByTestId('project-settings-wiki-source-select');
   await expect(select).toBeVisible({ timeout: 10_000 });
   await expect(select).toHaveValue('origin/develop');
+  const enabledStyles: Record<'light' | 'dark', { color: string; background: string; border: string }> = {
+    light: { color: '', background: '', border: '' },
+    dark: { color: '', background: '', border: '' },
+  };
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     const cardColours = await sampleColours(page, '[data-testid="project-settings-wiki-source"]');
     expect(contrastRatio(cardColours.color, cardColours.bg), `${theme} Wiki source card contrast`)
+      .toBeGreaterThanOrEqual(4.5);
+    const descriptionColours = await sampleColours(page, '[data-testid="project-settings-wiki-source-description"]');
+    expect(contrastRatio(descriptionColours.color, descriptionColours.bg), `${theme} Wiki source description contrast`)
       .toBeGreaterThanOrEqual(4.5);
     const labelColours = await sampleColours(page, '[data-testid="project-settings-wiki-source-label"]');
     expect(contrastRatio(labelColours.color, labelColours.bg), `${theme} Wiki source label contrast`)
@@ -189,6 +204,10 @@ test('project-wide branch source is visible and read-only in both themes', async
     const selectColours = await sampleColours(page, '[data-testid="project-settings-wiki-source-select"]');
     expect(contrastRatio(selectColours.color, selectColours.bg), `${theme} Wiki source select contrast`)
       .toBeGreaterThanOrEqual(4.5);
+    enabledStyles[theme] = await select.evaluate(element => {
+      const style = getComputedStyle(element);
+      return { color: style.color, background: style.backgroundColor, border: style.borderColor };
+    });
     await page.mouse.move(0, 0);
     const borderBeforeHover = await select.evaluate(element => getComputedStyle(element).borderColor);
     await select.hover();
@@ -205,11 +224,19 @@ test('project-wide branch source is visible and read-only in both themes', async
   await expect.poll(() => settingsUpdate).toEqual({ clearWikiSourceBranch: true });
   await expect(select).toBeDisabled();
   await expect(select).toHaveCSS('cursor', 'not-allowed');
+  await expect(select).toHaveCSS('opacity', '1');
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
     const disabledColours = await sampleColours(page, '[data-testid="project-settings-wiki-source-select"]');
     expect(contrastRatio(disabledColours.color, disabledColours.bg), `${theme} disabled Wiki source select contrast`)
       .toBeGreaterThanOrEqual(4.5);
+    const disabledStyles = await select.evaluate(element => {
+      const style = getComputedStyle(element);
+      return { color: style.color, background: style.backgroundColor, border: style.borderColor };
+    });
+    expect(disabledStyles.color, `${theme} disabled foreground`).not.toBe(enabledStyles[theme].color);
+    expect(disabledStyles.background, `${theme} disabled background`).not.toBe(enabledStyles[theme].background);
+    expect(disabledStyles.border, `${theme} disabled border`).not.toBe(enabledStyles[theme].border);
     await page.getByTestId('project-settings-wiki-source').screenshot({
       path: path.join(RESULTS_DIR, `wiki-source-setting--${theme}--disabled--real-app.png`),
     });

@@ -58,6 +58,8 @@
   --studio-wiki-source-readonly-border: color-mix(in srgb, var(--studio-accent-3) 42%, var(--studio-border-strong));
   --studio-wiki-source-hover-border:    color-mix(in srgb, var(--studio-accent-3) 64%, var(--studio-border-strong));
   --studio-wiki-source-card-bg:         var(--studio-card-bg);
+  --studio-wiki-source-card-fg:        var(--studio-text-secondary);
+  --studio-wiki-source-description-fg: var(--studio-text-secondary);
   --studio-wiki-source-card-border:     var(--studio-card-border);
   --studio-wiki-source-label-fg:        var(--studio-text-muted);
   --studio-wiki-source-control-bg:      var(--studio-bg-surface);
@@ -590,6 +592,8 @@
   --studio-wiki-source-readonly-border: var(--studio-border);
   --studio-wiki-source-hover-border:    var(--studio-border-strong);
   --studio-wiki-source-card-bg:         var(--studio-surface-muted);
+  --studio-wiki-source-card-fg:        var(--studio-text-secondary);
+  --studio-wiki-source-description-fg: var(--studio-text-muted);
   --studio-wiki-source-card-border:     var(--studio-border-strong);
   --studio-wiki-source-label-fg:        var(--studio-text-muted);
   --studio-wiki-source-control-bg:      var(--studio-bg-elevated);

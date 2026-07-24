@@ -156,16 +156,12 @@
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.pwiki__new-group:hover {
+.pwiki__new-group:hover:not(:disabled) {
   background: var(--studio-bg-hover);
   border-color: color-mix(in srgb, var(--studio-accent) 35%, var(--studio-border));
   color: var(--studio-fg-strong);
 }
-
-.pwiki__new-group:disabled {
-  opacity: 0.62;
-  cursor: default;
-}
+.pwiki__new-group:disabled { border-color: var(--studio-wiki-source-disabled-border); background: var(--studio-wiki-source-disabled-bg); color: var(--studio-wiki-source-disabled-fg); cursor: not-allowed; }
 
 .pwiki__new-group--accent {
   border-color: color-mix(in srgb, var(--studio-accent) 34%, var(--studio-border));

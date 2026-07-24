@@ -88,6 +88,14 @@
   background: var(--studio-bg-hover);
   color: var(--studio-fg);
 }
+.ps-settings__card--wiki-source {
+  border-color: var(--studio-wiki-source-card-border);
+  background: var(--studio-wiki-source-card-bg);
+  color: var(--studio-wiki-source-card-fg);
+}
+.ps-settings__card--wiki-source .ps-settings__card-desc {
+  color: var(--studio-wiki-source-description-fg);
+}
 .ps-settings__card-head {
   display: flex;
   align-items: center;
@@ -200,6 +208,9 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+.ps-settings__card--wiki-source .ps-settings__field-label {
+  color: var(--studio-wiki-source-label-fg);
+}
 .ps-settings__select {
   font: inherit;
   font-size: 0.85rem;
@@ -210,6 +221,30 @@
   color: var(--studio-fg);
 }
 .ps-settings__select:disabled { opacity: 0.6; cursor: progress; }
+.ps-settings__select--wiki-source {
+  border-color: var(--studio-wiki-source-control-border);
+  background: var(--studio-wiki-source-control-bg);
+  color: var(--studio-wiki-source-control-fg);
+}
+.ps-settings__select--wiki-source:hover:not(:disabled) {
+  border-color: var(--studio-wiki-source-control-hover);
+}
+.ps-settings__select--wiki-source:focus-visible:not(:disabled) {
+  outline: 2px solid var(--studio-wiki-source-control-focus);
+  outline-offset: 1px;
+  border-color: var(--studio-wiki-source-control-focus);
+}
+.ps-settings__select--wiki-source:disabled {
+  opacity: 1;
+  border-color: var(--studio-wiki-source-disabled-border);
+  background: var(--studio-wiki-source-disabled-bg);
+  color: var(--studio-wiki-source-disabled-fg);
+  cursor: not-allowed;
+}
+.ps-settings__select--wiki-source option {
+  background: var(--studio-wiki-source-control-bg);
+  color: var(--studio-wiki-source-control-fg);
+}
 .ps-settings__error {
   margin: 0;
   color: var(--studio-danger, var(--studio-fg-strong));
