@@ -230,6 +230,13 @@ public sealed class TaskServerStoreTests
                 Assert.Equal("Migrated prompt", migrated.Body);
                 Assert.Single(await store.ListEventsAsync(string.Empty, 0, default));
                 Assert.Single(await store.ListArtifactsAsync(string.Empty, default));
+
+                var migrationBackup = Assert.Single(Directory.EnumerateFiles(
+                    store.BackupDirectory,
+                    "*-before-legacy-import-*.db",
+                    SearchOption.TopDirectoryOnly));
+                AssertCanOpenExclusively(migrationBackup);
+                AssertCanOpenExclusively(store.DatabasePath);
             });
         });
     }
@@ -295,6 +302,8 @@ public sealed class TaskServerStoreTests
             Assert.Equal(TaskServerMode.Maintenance, store.Mode);
             Assert.Equal(serverId, store.ServerId);
             Assert.Equal(2, (await store.ListTasksAsync(project.ProjectId, default)).Count);
+            AssertCanOpenExclusively(backup.Path);
+            AssertCanOpenExclusively(store.DatabasePath);
         });
     }
 
