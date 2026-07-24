@@ -248,6 +248,7 @@ public sealed class ManagementApiTests : IDisposable
             ["WatchPaths:0:Path"] = _root,
             ["WatchPaths:0:RootPath"] = _root,
             ["Supervisor:StuckResumeWindowMinutes"] = "0",
+            ["CodexModels:WarmupOnBoot"] = "false",
         }));
     });
 
