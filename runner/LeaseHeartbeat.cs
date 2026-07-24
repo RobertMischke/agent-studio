@@ -34,9 +34,6 @@ public sealed class LeaseHeartbeat
     public async Task RunAsync(CancellationTokenSource stopRun, CancellationToken shutdown)
     {
         var interval = TimeSpan.FromSeconds(Math.Max(5, _options.HeartbeatSeconds));
-        var req = new RunLeaseHeartbeatRequest(
-            _lease.TaskKey, _lease.LeaseId, _lease.FencingToken, _options.RunnerId, _options.TtlSeconds);
-
         try
         {
             while (!stopRun.IsCancellationRequested && !shutdown.IsCancellationRequested)
@@ -45,6 +42,10 @@ public sealed class LeaseHeartbeat
                 RunLeaseResponse resp;
                 try
                 {
+                    var req = new RunLeaseHeartbeatRequest(
+                        _lease.TaskKey, _lease.LeaseId, _lease.FencingToken, _options.RunnerId, _options.TtlSeconds,
+                        _lease.AttemptId, _lease.AuthorityEpoch,
+                        $"heartbeat:{_lease.AttemptId}:{Guid.NewGuid():N}");
                     resp = await _client.RenewLeaseAsync(req, shutdown);
                 }
                 catch (Exception ex)

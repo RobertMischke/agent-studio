@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-07-13
+Version: 2026-07-23
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -88,12 +88,45 @@ state.
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
+  (AGT-2182): the Task Server's persisted control-plane authority for separate
+  `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store
+  owns stable attempt IDs, repository/task/source identity, leases, per-task
+  monotonic fences, authority epoch, heartbeat, terminal facts, evidence digests,
+  and task-and-operation-scoped idempotency. Remote completion carries an
+  explicit immutable Result-SHA independently of optional salvage-branch
+  metadata, and rejected late review reports remain non-authoritative attempt
+  history. Only an exact
+  acquire-delivery replay is idempotent; a new acquire from the same executor
+  cannot renew a live lease without the canonical attempt and fence. Replayed
+  review settlements become superseded once another subject is current. It
+  lives under `<TaskRepository>/.metadata/` and performs no
+  checkout, build, test, provider CLI, vision, or semantic review work.
+  Remote claim and completion lane facts carry the same attempt, fence, epoch,
+  and idempotency tuple. Claim, standalone acquire, and completion are serialized
+  at the Task Server mutation boundary, and canonical Remote completion suppresses
+  the generic local auto-commit, commit-attribution, drift, provenance, and
+  post-processing queue path.
+  `AgentSession` and process-holder identity remain continuity metadata only;
+  neither can mint or recover attempt write authority. Failed authority-store
+  persistence restores the last durable snapshot before the error escapes, so
+  the live process cannot retain a fence, epoch, or attempt that restart would
+  forget.
+- Canonical Remote ReviewAttempts are excluded from the legacy
+  `ReviewDecisionOrchestrator` scan. They remain visibly in Auto Review until a
+  fenced Remote Review Executor claims them. This is the fail-closed bootstrap
+  boundary: the Task Server never substitutes its checkout or local
+  `session-events.jsonl` for the ReviewSubject. Legacy tasks without attempt
+  authority continue through the established local compatibility path.
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
-  (AGT-2003): read-time projection of the active run lease onto `TaskInfo.Runner`
+  (AGT-2003, canonicalized by AGT-2182): read-time projection of the active
+  persisted RunAttempt lease onto `TaskInfo.Runner`
   for `3-progress` cards, so the board can show which runner executes a card
   (remote `⇥ <runner>` from the lease owner vs a quiet `lokal` in-process run).
-  A remote runner acquires the run lease; the local in-process runner uses the
-  disk pickup-lock and holds none, which is exactly the lokal-vs-remote signal.
+  The projection includes canonical Attempt ID and authority epoch alongside
+  the lease and fence. A remote runner acquires the run lease; the local
+  in-process runner uses the disk pickup-lock and holds none, which is exactly
+  the lokal-vs-remote signal.
 
 ## Invariants
 

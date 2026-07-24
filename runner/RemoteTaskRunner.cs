@@ -261,8 +261,18 @@ public sealed class RemoteTaskRunner
             uploads.Add(new RunnerArtifactUpload(rel, Convert.ToBase64String(bytes)));
         }
 
+        var digestInput = string.Join("\n", uploads.OrderBy(x => x.Path, StringComparer.Ordinal)
+            .Select(x => $"{x.Path}:{WireDigest.Hash(x.ContentBase64)}"));
         var resp = await _client.UploadArtifactsAsync(new ArtifactIngestRequest(
-            taskKey, uploads, lease.RunnerId, lease.LeaseId, lease.FencingToken), ct);
+            taskKey,
+            uploads,
+            RunnerId: lease.RunnerId,
+            LeaseId: lease.LeaseId,
+            FencingToken: lease.FencingToken,
+            AttemptId: lease.AttemptId,
+            Fence: lease.FencingToken,
+            AuthorityEpoch: lease.AuthorityEpoch,
+            IdempotencyKey: $"artifacts:{lease.AttemptId}:{WireDigest.Hash(digestInput)}"), ct);
         _log($"uploaded {resp?.Uploaded ?? 0} artifact(s); commit {resp?.CommitStatus ?? "n/a"}");
         return resp?.Files ?? [];
     }
@@ -294,11 +304,17 @@ public sealed class RemoteTaskRunner
             SalvageAuthoritativeBaseBranch: teardown.Reconciliation?.AuthoritativeBaseBranch,
             SalvageAuthoritativeBaseSha: teardown.Reconciliation?.AuthoritativeBaseSha,
             OutputLines: outputLines,
-            SourceMutated: sourceMutated), ct);
+            SourceMutated: sourceMutated,
+            AttemptId: lease.AttemptId,
+            AuthorityEpoch: lease.AuthorityEpoch,
+            IdempotencyKey: $"completion:{lease.AttemptId}:{outcome.Kind}:{teardown.ResultSha ?? "none"}"), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 
-    private async Task ReportUnsecuredWorktreeAsync(string taskKey, RunLeaseInfoDto lease, WorktreeSalvageException ex)
+    private async Task ReportUnsecuredWorktreeAsync(
+        string taskKey,
+        RunLeaseInfoDto lease,
+        WorktreeSalvageException ex)
     {
         var refs = $"canonical refs/heads/{ex.Branch} at {ex.RemoteCommitSha ?? "unknown"}; " +
                    $"retained local HEAD {ex.LocalCommitSha ?? "unknown"}";
@@ -309,16 +325,17 @@ public sealed class RemoteTaskRunner
         _log($"worktree-salvage-escalated task={taskKey} host={_options.Hostname} path={ex.WorktreePath} branch={ex.Branch} localSha={ex.LocalCommitSha ?? "unknown"} remoteSha={ex.RemoteCommitSha ?? "unknown"}");
         try
         {
-            await _client.CompleteAsync(taskKey, new ExternalCompletionRequest(
-                Summary: $"Remote runner preserved the host-local worktree on {_options.Hostname} after bounded salvage reconciliation failed. No remote ref was overwritten.",
-                Deliverables:
-                [
-                    new ExternalDeliverable(
-                        Path: ex.WorktreePath,
-                        Note: $"Host-local worktree retained at {ex.LocalCommitSha ?? "unknown"}; canonical refs/heads/{ex.Branch} is {ex.RemoteCommitSha ?? "unknown"}. Next safe action: restore push access and publish retained HEAD to a new ref before requeueing.")
-                ],
-                Source: _options.RunnerName,
-                TargetState: "5-human-review",
+            await _client.CompleteRunAsync(new RemoteRunCompletionRequest(
+                taskKey,
+                lease.LeaseId,
+                lease.FencingToken,
+                _options.RunnerId,
+                RunOutcomeKind.Blocked.ToString(),
+                $"Remote runner retained unsecured worktree at {ex.WorktreePath}; intended branch {ex.Branch}.",
+                _options.RunnerName,
+                AttemptId: lease.AttemptId,
+                AuthorityEpoch: lease.AuthorityEpoch,
+                IdempotencyKey: $"completion:{lease.AttemptId}:worktree-blocked",
                 GateItems: [gate]), CancellationToken.None);
         }
         catch (Exception reportEx)
@@ -332,7 +349,9 @@ public sealed class RemoteTaskRunner
         try
         {
             var resp = await _client.ReleaseLeaseAsync(new RunLeaseReleaseRequest(
-                lease.TaskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId), ct);
+                lease.TaskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId,
+                lease.AttemptId, lease.AuthorityEpoch,
+                $"release:{lease.AttemptId}:{lease.LeaseId}"), ct);
             _log($"lease released: {resp.Outcome}");
         }
         catch (Exception ex)

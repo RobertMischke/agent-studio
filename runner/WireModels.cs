@@ -41,7 +41,10 @@ public sealed record RunLeaseAcquireRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    string? RepositoryId = null,
+    string? SourceRunAttemptId = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Runner -> Server: heartbeat to extend the lease (/api/runner/lease/renew).</summary>
 public sealed record RunLeaseHeartbeatRequest(
@@ -49,14 +52,20 @@ public sealed record RunLeaseHeartbeatRequest(
     string LeaseId,
     long FencingToken,
     string RunnerId,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Runner -> Server: drop the lease when the run ends (/api/runner/lease/release).</summary>
 public sealed record RunLeaseReleaseRequest(
     string TaskKey,
     string LeaseId,
     long FencingToken,
-    string RunnerId);
+    string RunnerId,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 /// <summary>Server projection of the current lease holder + fencing token.</summary>
 public sealed record RunLeaseInfoDto(
@@ -69,7 +78,13 @@ public sealed record RunLeaseInfoDto(
     string LeaseId,
     long FencingToken,
     DateTime AcquiredAt,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    string? AttemptId = null,
+    long AuthorityEpoch = 0)
+{
+    public DateTime LastHeartbeatAt { get; init; } = AcquiredAt;
+    public string? ClientId { get; init; }
+}
 
 /// <summary>
 /// Server reply to any lease operation. <see cref="Granted"/> is the boolean the
@@ -90,7 +105,8 @@ public sealed record RunnerClaimRequest(
     string BackendName,
     int? RequestedTtlSeconds = null,
     HostTelemetrySample? Telemetry = null,
-    int AvailableSlots = 1);
+    int AvailableSlots = 1,
+    string? IdempotencyKey = null);
 
 /// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>
 public sealed record HostTelemetrySample(
@@ -160,13 +176,21 @@ public sealed record RemoteRunCompletionRequest(
     string? Repository = null,
     // AGT-2178: additive Epic-planning fields; salvage fields above stay intact.
     IReadOnlyList<string>? OutputLines = null,
-    bool SourceMutated = false);
+    bool SourceMutated = false,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null,
+    IReadOnlyList<string>? GateItems = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,
     string Outcome,
     string TargetState,
-    string? Message = null);
+    string? Message = null,
+    string? RunAttemptId = null,
+    string? ReviewAttemptId = null,
+    string? ReviewSubjectId = null,
+    string? FailureClassification = null);
 
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);
@@ -177,7 +201,11 @@ public sealed record LogIngestRequest(
     List<CliOutputLine> Lines,
     string? RunnerId = null,
     string? LeaseId = null,
-    long FencingToken = 0);
+    long FencingToken = 0,
+    string? AttemptId = null,
+    long? Fence = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record LogIngestResponse(string TaskKey, int Appended, string? Message = null);
 
@@ -190,7 +218,11 @@ public sealed record ArtifactIngestRequest(
     List<RunnerArtifactUpload> Artifacts,
     string? RunnerId = null,
     string? LeaseId = null,
-    long FencingToken = 0);
+    long FencingToken = 0,
+    string? AttemptId = null,
+    long? Fence = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
 
 public sealed record ArtifactIngestResponse(
     string TaskKey,

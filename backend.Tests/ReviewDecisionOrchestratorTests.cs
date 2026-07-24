@@ -166,6 +166,42 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Canonical_remote_review_attempt_is_not_run_in_task_server_checkout()
+    {
+        const string slug = "remote-result";
+        SeedReviewJobWithDone(slug);
+        var authorityConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+            })
+            .Build();
+        var authority = new AttemptAuthorityService(
+            authorityConfig, NullLogger<AttemptAuthorityService>.Instance);
+        var run = authority.AcquireRun(
+            slug, Project, null, "remote-runner", "remote-host", 60, "claim-remote").RunAttempt!;
+        authority.SettleRun(
+            new AttemptWriteReference(run.AttemptId, run.LastFence, run.AuthorityEpoch, "complete-remote"),
+            "done", "589c462f", null);
+        var review = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            slug, Project, "589c462f", run.AttemptId, "requirements", "policy", [], "create-review"));
+        Assert.Equal(AttemptWriteStatus.Accepted, review.Status);
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=accept; reason=must not run locally.]]",
+            onCall: () => calls++,
+            attemptAuthority: authority);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, slug)));
+        Assert.Empty(ReviewDecisionLog.ReadAll(_workspace, Project));
+        Assert.Equal(review.AttemptId, authority.GetTaskProjection(slug).CurrentReviewAttempt!.AttemptId);
+    }
+
+    [Fact]
     public async Task Escalate_FlipsOriginalToEscalated_WritesSupervisorBanner_NoWrapperCard()
     {
         SeedReviewJobWithNeedsInput("auth-rewrite", "use OAuth or magic-link?");
@@ -2119,7 +2155,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         string cliResponse,
         Action? onCall = null,
         OrchestratorChatLog? chatLogOverride = null,
-        string? reviewCli = null)
+        string? reviewCli = null,
+        AttemptAuthorityService? attemptAuthority = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -2144,7 +2181,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot, config,
             NullLogger<ReviewDecisionOrchestrator>.Instance,
-            timeline: _timeline);
+            timeline: _timeline,
+            attemptAuthority: attemptAuthority);
         orchestrator.CliRunner = (cli, model, prompt, timeout, ct) =>
         {
             onCall?.Invoke();
