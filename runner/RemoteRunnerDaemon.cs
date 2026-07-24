@@ -136,6 +136,7 @@ public sealed class RemoteRunnerDaemon
                             _options.RunnerId, _options.RunnerName, _options.Hostname,
                             Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
                             sample, AvailableSlots: 0,
+                            ActiveSlots: active.Count,
                             IdempotencyKey: $"telemetry:{_options.RunnerId}:{Guid.NewGuid():N}"), shutdown);
                 }
                 while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
@@ -145,6 +146,7 @@ public sealed class RemoteRunnerDaemon
                         Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
                         TakeTelemetry(),
                         AvailableSlots: _options.HostMaxParallelism - active.Count,
+                        ActiveSlots: active.Count,
                         IdempotencyKey: $"claim:{_options.RunnerId}:{Guid.NewGuid():N}"), shutdown);
                     if (claim.Status != RunnerClaimStatus.Claimed
                         || string.IsNullOrWhiteSpace(claim.TaskKey)

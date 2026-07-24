@@ -22,16 +22,13 @@ export class RemoteHostsService {
   readonly loading = signal<boolean>(false);
   readonly error = signal<string | null>(null);
 
-  private loaded = false;
-
   private static readonly FRESH_CLIENT_MS = 90_000;
   private static readonly DEGRADED_CLIENT_MS = 5 * 60_000;
   /** Optional keeps direct-constructor pure tests and non-HTTP previews viable. */
   private readonly http = tryInjectHttpClient();
 
-  /** Load once on first mount; explicit reloads re-seed the registry. */
+  /** Every mount revalidates live state; cached cards are never authoritative. */
   ensureLoaded(): void {
-    if (this.loaded) return;
     this.reload();
   }
 
@@ -39,20 +36,27 @@ export class RemoteHostsService {
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.hosts.set(seedRemoteHosts(Date.now()));
-      this.loaded = true;
+      const current = this.hosts();
+      this.hosts.set((current.length ? current : seedRemoteHosts(Date.now())).map(host => ({
+        ...host,
+        liveDataState: 'loading',
+        telemetryLoading: false,
+      })));
       this.log('loaded', { count: this.hosts().length });
       this.hydrateClientRegistry();
     } catch (e) {
       this.error.set('Failed to load the host registry.');
       this.log('load-failed', { message: (e as Error)?.message ?? 'unknown' });
-    } finally {
       this.loading.set(false);
     }
   }
 
   private hydrateClientRegistry(): void {
-    if (!this.http) return;
+    if (!this.http) {
+      this.hosts.update(hosts => hosts.map(host => ({ ...host, liveDataState: 'error' })));
+      this.loading.set(false);
+      return;
+    }
     const startedAt = performance.now();
     this.http.get<ClientSummary[]>('/api/clients').subscribe({
       next: clients => {
@@ -61,7 +65,13 @@ export class RemoteHostsService {
         this.hosts.update(hosts => {
           const projected = hosts.map(host => {
           const client = byId.get(host.clientId);
-          if (!client) return { ...host, status: 'offline' as const, stats: null };
+          if (!client) return {
+            ...host,
+            status: 'offline' as const,
+            stats: null,
+            liveDataState: 'ready' as const,
+            telemetryLoading: false,
+          };
           if (client.kind === 'retired') {
             return projectClient(host, client, 'retired');
           }
@@ -82,22 +92,34 @@ export class RemoteHostsService {
             .map(client => projectClient({
               id: client.id, name: client.displayName, role: 'remote', address: null, clientId: client.id,
               status: 'offline', os: 'Remote runner', lastHeartbeatAt: null, uptimeLabel: null,
-              capabilities: [], cliQuotas: [], stats: null,
+              capabilities: [], cliQuotas: [], stats: null, liveDataState: 'ready',
             }, client, client.kind === 'retired' ? 'retired' : client.drainRequestedAt ? 'draining' : statusFor(client.lastSeenAt, now)));
           return [...projected, ...discovered];
         });
+        this.loading.set(false);
         this.log('clients-hydrated', {
           clients: clients?.length ?? 0,
           durationMs: Math.round(performance.now() - startedAt),
         });
         for (const host of this.hosts().filter(host => byId.has(host.clientId) && host.status !== 'retired')) {
+          this.patch(host.id, current => ({
+            ...current,
+            stats: null,
+            telemetry: null,
+            telemetryLoading: true,
+          }));
           this.hydrateTelemetry(host.id, host.clientId);
         }
       },
-      error: error => this.log('clients-hydrate-failed', {
-        message: error?.message ?? 'unknown',
-        durationMs: Math.round(performance.now() - startedAt),
-      }),
+      error: error => {
+        this.hosts.update(hosts => hosts.map(host => ({ ...host, liveDataState: 'error' })));
+        this.loading.set(false);
+        this.error.set('Live host status is temporarily unavailable.');
+        this.log('clients-hydrate-failed', {
+          message: error?.message ?? 'unknown',
+          durationMs: Math.round(performance.now() - startedAt),
+        });
+      },
     });
   }
 
@@ -123,13 +145,16 @@ export class RemoteHostsService {
                 diskFreeGb: 0,
               }
             : null;
-          return { ...host, stats, telemetry };
+          return { ...host, stats, telemetry, telemetryLoading: false };
         });
         this.log('telemetry-hydrated', { hostId, points: telemetry.points.length, findings: telemetry.findings.length,
           durationMs: Math.round(performance.now() - startedAt) });
       },
-      error: error => this.log('telemetry-hydrate-failed', { hostId, message: error?.message ?? 'unknown',
-        durationMs: Math.round(performance.now() - startedAt) }),
+      error: error => {
+        this.patch(hostId, host => ({ ...host, stats: null, telemetry: null, telemetryLoading: false }));
+        this.log('telemetry-hydrate-failed', { hostId, message: error?.message ?? 'unknown',
+          durationMs: Math.round(performance.now() - startedAt) });
+      },
     });
   }
 
@@ -149,6 +174,7 @@ export class RemoteHostsService {
       capabilities: ['linux', 'git', 'node 22', 'dotnet 10', 'playwright'],
       cliQuotas: [],
       stats: null,
+      liveDataState: 'ready',
     };
     this.hosts.update((hosts) => [...hosts.filter((item) => item.id !== id), host]);
     this.log('wizard-completed', { hostId: id, address: host.address });
@@ -225,12 +251,14 @@ function statusFor(lastSeenAt: string | null, now: number): RemoteHost['status']
 
 function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHost['status']): RemoteHost {
   return {
-    ...host, status, lastHeartbeatAt: client.lastSeenAt, stats: status === 'offline' || status === 'retired' ? null : host.stats,
+    ...host, status, lastHeartbeatAt: client.lastSeenAt, stats: null, telemetry: null,
+    liveDataState: 'ready', telemetryLoading: status !== 'retired',
     gitPushStatus: client.runnerGitStatus ?? null, gitPushDetail: client.runnerGitDetail ?? null,
     gitPushCheckedAt: client.runnerGitCheckedAt ?? null,
     daemonState: status === 'offline' || status === 'retired' ? 'stopped' : client.runnerDaemonState ?? (client.runnerGitStatus === 'read-only' ? 'read-only' : 'running'),
     lastClaimAt: client.runnerLastClaimAt ?? null, activeTaskCount: client.runnerActiveSlots ?? 0,
     availableSlots: client.runnerAvailableSlots ?? 0, retireRequestedAt: client.retireRequestedAt ?? null,
+    activeGateCount: client.runnerActiveGateCount ?? 0, gateCapacity: client.runnerGateCapacity ?? 0,
   };
 }
 

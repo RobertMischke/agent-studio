@@ -621,6 +621,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner", Telemetry: new RTelemetry(
                 DateTime.UtcNow, 54, 6.4, 6, 5, 34_000_000_000, 64_000_000_000,
                 0, 0, 6.2, 2.1, 12, 6),
+            AvailableSlots: 20,
+            ActiveSlots: 0,
             IdempotencyKey: "daemon-claim-1");
         var claim = await client.ClaimAsync(request, CancellationToken.None);
 
@@ -656,6 +658,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Single(telemetry!.Points);
         Assert.Equal(6.4, telemetry.Points[0].Load1);
         Assert.Equal(6, telemetry.Points[0].ActiveSlots);
+        var clients = await http.GetFromJsonAsync<List<ClientSummary>>("/api/clients");
+        var runner = Assert.Single(clients!, item => item.Id == client.ClientId);
+        Assert.Equal(1, runner.RunnerActiveSlots);
+        Assert.Equal(19, runner.RunnerAvailableSlots);
     }
 
     [Fact]

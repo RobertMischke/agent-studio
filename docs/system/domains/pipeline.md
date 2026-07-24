@@ -62,6 +62,10 @@ pipeline view.
   step's `PipelineSteps` override. The origin push primitive is
   `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
   reported, never overwritten).
+- `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
+  read model fed by the SSH gate start/completion events. The Remote Hosts view
+  uses it to show GATE work separately from daemon RUN slots; the store is
+  visibility-only and never admits, cancels, or reorders a gate.
 - `backend/Features/Pipeline/TaskSpawnerPostStepRunner.cs` (+ `TaskSpawnerDecision.cs`,
   `TaskSpawnerModelSelector.cs`, `SpawnedTaskLedger.cs`): the opt-in
   `post-task-spawner` step (AGT-2028). After a task settles it asks the best

@@ -550,6 +550,8 @@ export interface ClientSummary {
   runnerLastClaimAt?: string | null;
   runnerActiveSlots?: number | null;
   runnerAvailableSlots?: number | null;
+  runnerActiveGateCount?: number | null;
+  runnerGateCapacity?: number | null;
 }
 
 /**

@@ -119,6 +119,60 @@
 .activity span { color: var(--studio-fg-muted); font-size: 11px; }
 .activity strong { color: var(--studio-fg-strong); font-size: 12px; }
 .activity--stale { opacity: 0.62; }
+
+.workloads {
+  margin-top: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg);
+}
+.workloads__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  color: var(--studio-fg-strong);
+  font-size: 12px;
+}
+.workloads__head span {
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+}
+.workloads__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-2);
+}
+.workload {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+}
+.workload__kind {
+  color: var(--studio-accent-3-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.workload strong {
+  color: var(--studio-fg-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.workload small {
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+}
+.workloads__explain {
+  margin: var(--studio-spacing-2) 0 0;
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+}
 .host__stale {
   margin: var(--studio-spacing-3) 0 0;
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
