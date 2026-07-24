@@ -35,7 +35,9 @@ public sealed record RunDto(
     long? Fence,
     DateTime CreatedAt,
     DateTime? StartedAt,
-    DateTime? FinishedAt);
+    DateTime? FinishedAt,
+    string? ResultSha = null,
+    string? RepositoryId = null);
 
 public sealed record CreateWorkspaceRequest(string Name, string? WorkspaceId = null);
 public sealed record CreateProjectRequest(string WorkspaceId, string Name, string TaskKeyPrefix, string? ProjectId = null);
@@ -163,6 +165,15 @@ public sealed record RunnerOutboxStatusDto(
     string? RunId,
     string? EnvelopeDigest,
     DateTime ObservedAt);
+
+public sealed record ArtifactContentDto(
+    string ArtifactId,
+    string RunId,
+    string Name,
+    string MediaType,
+    string Sha256,
+    string ContentBase64,
+    long SizeBytes);
 
 public sealed record AuditRecordDto(
     long Sequence,

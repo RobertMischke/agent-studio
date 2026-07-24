@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace AgentStudio.TaskServer;
 
-public sealed class TaskServerStore
+public sealed partial class TaskServerStore
 {
     public const int CurrentSchemaVersion = 2;
     private const string TimestampFormat = "O";
@@ -68,6 +68,9 @@ public sealed class TaskServerStore
                 UPDATE runs
                    SET status = 'process-unknown'
                  WHERE status = 'running';
+                UPDATE review_attempts
+                   SET status = 'process-unknown'
+                 WHERE status = 'leased';
                 """, cancellationToken);
 
             var integrity = Convert.ToString(await ScalarAsync(connection, "PRAGMA integrity_check;", cancellationToken), CultureInfo.InvariantCulture);
@@ -1429,6 +1432,7 @@ public sealed class TaskServerStore
             INSERT INTO schema_migrations(version, applied_at) VALUES ($version, $now)
             ON CONFLICT(version) DO NOTHING;
             """, ct, ("$version", CurrentSchemaVersion), ("$now", Iso(UtcNow)));
+        await ApplyReviewMigrationAsync(connection, ct);
         await SetMetaAsync(connection, null, "schema_version", CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture), ct);
     }
 
@@ -1843,7 +1847,7 @@ public sealed class TaskServerStore
     private static async Task ValidateRunnerAsync(SqliteConnection connection, SqliteTransaction transaction, string runnerId, string instanceId, CancellationToken ct)
     {
         await using var command = Command(connection,
-            "SELECT instance_id, protocol_version, status FROM runners WHERE id = $id;", transaction, ("$id", runnerId));
+            "SELECT instance_id, protocol_version, status, capabilities_json FROM runners WHERE id = $id;", transaction, ("$id", runnerId));
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) throw new KeyNotFoundException("Runner is not registered.");
         if (!string.Equals(reader.GetString(0), instanceId, StringComparison.Ordinal))
@@ -1852,6 +1856,13 @@ public sealed class TaskServerStore
         if (!TaskServerProtocol.Supports(protocol)) throw new TaskServerProtocolException(protocol);
         if (!string.Equals(reader.GetString(2), "active", StringComparison.Ordinal))
             throw new TaskServerConflictException("runner-not-active", "Runner is not active.");
+        var capabilities = JsonSerializer.Deserialize<string[]>(reader.GetString(3)) ?? [];
+        if (capabilities.Length > 0
+            && !capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+            && capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
+            throw new TaskServerConflictException(
+                "coding-capability-required",
+                "A separately registered Remote Review Executor cannot claim coding work.");
     }
 
     private static async Task<(string Prefix, long Next)> ReadProjectCounterAsync(

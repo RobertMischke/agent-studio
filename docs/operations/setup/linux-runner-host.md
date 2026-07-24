@@ -46,6 +46,28 @@ Linux host and fills a bounded set of task slots without owning task state:
   task starts. A coding worktree is removed only after the Task Server has
   durably acknowledged the matching immutable result envelope.
 
+### Remote Review Executor service
+
+Run review as a second systemd identity, even when it shares the physical host
+with coding. Set `RUNNER_ROLE=review`, use a different `RUNNER_ID`, service
+account, credential file, cgroup quota, and `RUNNER_REVIEW_WORKDIR`. Do not point
+the review root at `RUNNER_WORKDIR`.
+
+The Review Executor advertises Git/source-bundle, semantic, and vision
+capabilities. Each claimed ReviewAttempt receives a fresh workspace, cache,
+temporary directory, eight-port block, Compose namespace, database namespace,
+and fenced cleanup lifecycle. Child processes start from a cleared environment.
+Only names in `RUNNER_REVIEW_CREDENTIAL_ENV` are admitted; the corresponding
+service credentials must be read-only. Coding deploy keys and write-enabled
+provider credentials must not be present in the review unit.
+
+The executor fetches the immutable result ref or verified Git bundle, proves
+repository identity, HEAD, tree, and clean state, then proves HEAD again before
+every completion, build/test, requirement, quality, documentation, evidence,
+artifact, or vision command. A missing ref reports
+`ReviewInfra/SnapshotUnavailable`; there is no coding-worktree or Task Server
+checkout fallback.
+
 ### MVP boundaries (read before relying on it)
 
 - **Push capability is explicit.** Each host/repository assignment has its own
@@ -188,6 +210,9 @@ list.
 | `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
 | `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
 | `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
+| `RUNNER_ROLE` | `--role` | `coding` | `coding` or the separately registered `review` service. |
+| `RUNNER_REVIEW_WORKDIR` | `--review-workdir` | `$TMPDIR/agent-review-work` | Disposable review-only workspace, cache, temp, and evidence root. Must differ from `RUNNER_WORKDIR`. |
+| `RUNNER_REVIEW_CREDENTIAL_ENV` | `--review-credential-env` | (none) | Comma-separated read-only credential variable names admitted into the cleared review environment. |
 | `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). |
 | `RUNNER_CLI_ARGS` | `--cli-args` | `-p` | Headless CLI args; the prompt is streamed on stdin. |
 | `RUNNER_AUTH_TOKEN_FILE` | `--auth-token-file` | (none on loopback) | Protected file containing the owner-enrolled Runner service credential. Required for every non-loopback Task Server. |
