@@ -37,6 +37,24 @@ export function buildWorkbenchSrcdoc(html: string): string {
   for (const node of Array.from(artifact.body.childNodes))
     wrapper.body.append(wrapper.importNode(node, true));
 
+  // base=about:blank neutralises navigation, but that also breaks in-page
+  // anchors: a plain "#section" click navigates the frame to about:blank and
+  // blanks it. Re-implement anchor clicks as scrolling; swallow every other
+  // link so nothing can blank the frame.
+  const nav = wrapper.createElement('script');
+  nav.textContent = `document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    e.preventDefault();
+    if (href.charAt(0) === '#') {
+      var el = document.getElementById(href.slice(1))
+        || document.querySelector('a[name="' + href.slice(1).replace(/"/g, '') + '"]');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, true);`;
+  wrapper.body.append(nav);
+
   return `<!doctype html>${wrapper.documentElement.outerHTML}`;
 }
 
