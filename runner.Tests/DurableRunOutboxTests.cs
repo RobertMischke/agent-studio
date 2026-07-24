@@ -29,12 +29,23 @@ public sealed class DurableRunOutboxTests
         using var temp = new TempDirectory();
         var authority = Authority();
         var outbox = DurableRunOutbox.Open(temp.Path, authority);
-        var acknowledgement = Ack(new string('a', 64));
+        var envelope = Envelope();
+        var item = outbox.Enqueue(
+            "final-result",
+            System.Text.Json.JsonSerializer.Serialize(
+                envelope,
+                new System.Text.Json.JsonSerializerOptions(
+                    System.Text.Json.JsonSerializerDefaults.Web)));
+        var acknowledgement = Ack(
+            ResultEnvelopeDigest.Compute(envelope),
+            item.Sequence);
         outbox.RecordHandoffAcknowledgement(acknowledgement);
 
         var restarted = DurableRunOutbox.Open(temp.Path, authority);
 
         Assert.Equal(acknowledgement, restarted.HandoffAcknowledgement);
+        Assert.Equal(item.Sequence, restarted.LastAcknowledgedSequence);
+        Assert.Empty(restarted.Pending);
         Assert.Equal("acknowledged", restarted.Snapshot.FinalHandoffState);
         Assert.Equal(acknowledgement.EnvelopeDigest, restarted.Snapshot.EnvelopeDigest);
     }
@@ -78,12 +89,32 @@ public sealed class DurableRunOutboxTests
     {
         var envelope = Envelope();
         var digest = ResultEnvelopeDigest.Compute(envelope);
-        var gate = new DurableHandoffGate(digest);
+        var gate = new DurableHandoffGate("run-1", digest);
 
         Assert.Throws<InvalidOperationException>(() => gate.RequireAcknowledged(null));
         Assert.Throws<InvalidOperationException>(() => gate.RequireAcknowledged(
-            Ack(new string('f', 64))));
-        gate.RequireAcknowledged(Ack(digest));
+            Ack(new string('f', 64), 1)));
+        Assert.Throws<InvalidOperationException>(() => gate.RequireAcknowledged(
+            Ack(digest, 1) with { RunId = "run-other" }));
+        gate.RequireAcknowledged(Ack(digest, 1));
+    }
+
+    [Fact]
+    public void Open_discards_only_a_torn_unflushed_journal_tail()
+    {
+        using var temp = new TempDirectory();
+        var authority = Authority();
+        var outbox = DurableRunOutbox.Open(temp.Path, authority);
+        outbox.Enqueue("status", """{"phase":"running"}""");
+        File.AppendAllText(
+            Path.Combine(outbox.DirectoryPath, "journal.jsonl"),
+            "{\"sequence\":2,\"kind\":\"terminal\"");
+
+        var recovered = DurableRunOutbox.Open(temp.Path, authority);
+        var next = recovered.Enqueue("terminal", """{"outcome":"Done"}""");
+
+        Assert.Equal(2, next.Sequence);
+        Assert.Equal(2, DurableRunOutbox.Open(temp.Path, authority).Items.Count);
     }
 
     [Fact]
@@ -119,8 +150,8 @@ public sealed class DurableRunOutboxTests
         null,
         new string('3', 64));
 
-    private static ResultHandoffAck Ack(string digest) => new(
-        "run-1", 10, digest, "acknowledged", DateTime.UtcNow, DateTime.UtcNow.AddDays(30), false);
+    private static ResultHandoffAck Ack(string digest, long sequence) => new(
+        "run-1", sequence, digest, "acknowledged", DateTime.UtcNow, DateTime.UtcNow.AddDays(30), false);
 
     private sealed class TempDirectory : IDisposable
     {

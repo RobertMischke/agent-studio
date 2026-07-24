@@ -463,6 +463,61 @@ public sealed class TaskServerStoreTests
         Assert.Equal(2, stored.Sequence);
     }
 
+    [Fact]
+    public async Task Completed_task_extends_result_retention_from_the_terminal_transition()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(
+            new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero));
+        var store = Store(temp.Path, clock, resultRetentionDays: 30);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync(
+            "runner-a",
+            Runner("instance-a"),
+            "test",
+            default);
+        var claim = await store.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "test",
+            default);
+        var request = Handoff(
+            claim.Run!.RunId,
+            claim.Lease!,
+            sequence: 1);
+        var acknowledgement = await store.AcknowledgeResultHandoffAsync(
+            claim.Run.RunId,
+            request,
+            "runner-a",
+            default);
+        Assert.Equal(
+            clock.GetUtcNow().AddDays(30).UtcDateTime,
+            acknowledgement.RetainUntil);
+
+        clock.Advance(TimeSpan.FromDays(10));
+        var current = await store.GetTaskAsync(
+            project.ProjectId,
+            task.TaskKey,
+            default);
+        await store.UpdateTaskAsync(
+            project.ProjectId,
+            task.TaskKey,
+            new UpdateTaskRequest(
+                null,
+                null,
+                "6-completed",
+                current!.Version),
+            "test",
+            default);
+
+        var retained = await store.GetResultHandoffAsync(
+            claim.Run.RunId,
+            default);
+        Assert.Equal(
+            clock.GetUtcNow().AddDays(30).UtcDateTime,
+            retained!.RetainUntil);
+    }
+
     private static ResultHandoffRequest Handoff(string runId, LeaseDto lease, long sequence)
     {
         var envelope = new ImmutableResultEnvelope(
@@ -485,8 +540,17 @@ public sealed class TaskServerStoreTests
             envelope);
     }
 
-    private static TaskServerStore Store(string dataDirectory)
-        => new(Options.Create(new TaskServerOptions { DataDirectory = dataDirectory }), TimeProvider.System);
+    private static TaskServerStore Store(
+        string dataDirectory,
+        TimeProvider? clock = null,
+        int resultRetentionDays = 30)
+        => new(
+            Options.Create(new TaskServerOptions
+            {
+                DataDirectory = dataDirectory,
+                ResultRetentionDays = resultRetentionDays,
+            }),
+            clock ?? TimeProvider.System);
 
     private static RegisterRunnerRequest Runner(string instance)
         => new("runner", "host-a", instance, "1.0.0", TaskServerProtocol.Current);
@@ -498,6 +562,15 @@ public sealed class TaskServerStoreTests
         var task = await store.CreateTaskAsync(project.ProjectId, new CreateTaskRequest("Task", "Do the work", "2-ready"), "test", default);
         return (workspace, project, task);
     }
+}
+
+internal sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
+{
+    private DateTimeOffset _utcNow = utcNow;
+
+    public override DateTimeOffset GetUtcNow() => _utcNow;
+
+    public void Advance(TimeSpan duration) => _utcNow += duration;
 }
 
 internal sealed class TempDirectory : IDisposable

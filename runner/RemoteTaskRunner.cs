@@ -79,15 +79,16 @@ public sealed class RemoteTaskRunner
     {
         _log($"running claimed task '{taskKey}' with lease {lease.LeaseId}, fencing token {lease.FencingToken}");
 
-        using var stopRun = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
-        var heartbeat = new LeaseHeartbeat(_client, _options, lease, _log);
-        var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
-
         var outbox = _client.UsesDurableTaskServer
             ? DurableRunOutbox.Open(
                 Path.Combine(_options.WorkDir, "outbox"),
                 _client.OutboxAuthority(taskKey))
             : null;
+        using var activeOutbox = outbox?.MarkActive();
+        using var stopRun = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
+        var heartbeat = new LeaseHeartbeat(_client, _options, lease, _log);
+        var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
+
         outbox?.Enqueue("status", JsonSerializer.Serialize(
             new { phase = "claimed", taskKey },
             new JsonSerializerOptions(JsonSerializerDefaults.Web)));
@@ -175,7 +176,6 @@ public sealed class RemoteTaskRunner
                         salvageResolution = teardown.Reconciliation?.Kind,
                     },
                     new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-                outbox.Enqueue("artifact-manifest", artifactManifest.Json);
                 var finalItem = outbox.Enqueue(
                     "final-result",
                     JsonSerializer.Serialize(
@@ -187,12 +187,14 @@ public sealed class RemoteTaskRunner
                     finalItem,
                     envelope,
                     shutdown);
-                outbox.Acknowledge(finalItem.Sequence);
                 outbox.RecordHandoffAcknowledgement(handoffAcknowledgement);
                 await ReportOutboxSafeAsync(outbox, shutdown);
                 await workspace.TeardownAfterHandoffAsync(
                     teardown,
-                    handoffAcknowledgement,
+                    outbox.HandoffAcknowledgement
+                    ?? throw new InvalidDataException(
+                        "Durable handoff acknowledgement was not persisted."),
+                    outbox.Authority.RunId,
                     envelopeDigest,
                     CancellationToken.None);
             }
@@ -398,12 +400,12 @@ public sealed class RemoteTaskRunner
     {
         var resultsDir = ResultsDir(taskKey);
         var manifest = new List<ArtifactManifestEntry>();
-        if (!Directory.Exists(resultsDir))
-            return BuildArtifactManifest(manifest);
-
-        var files = Directory.EnumerateFiles(resultsDir, "*", SearchOption.AllDirectories).ToList();
-        if (files.Count == 0)
-            return BuildArtifactManifest(manifest);
+        var files = Directory.Exists(resultsDir)
+            ? Directory.EnumerateFiles(
+                resultsDir,
+                "*",
+                SearchOption.AllDirectories).ToList()
+            : [];
 
         var uploads = new List<RunnerArtifactUpload>();
         foreach (var file in files)
@@ -431,8 +433,10 @@ public sealed class RemoteTaskRunner
             }
         }
 
+        var artifactManifest = BuildArtifactManifest(manifest);
         if (outbox is not null)
         {
+            outbox.Enqueue("artifact-manifest", artifactManifest.Json);
             await outbox.ReplayAsync(
                 (item, token) => _client.SendOutboxItemAsync(outbox.Authority, item, token),
                 ct);
@@ -454,7 +458,7 @@ public sealed class RemoteTaskRunner
                 IdempotencyKey: $"artifacts:{lease.AttemptId}:{WireDigest.Hash(digestInput)}"), ct);
             _log($"uploaded {resp?.Uploaded ?? 0} artifact(s); commit {resp?.CommitStatus ?? "n/a"}");
         }
-        return BuildArtifactManifest(manifest);
+        return artifactManifest;
     }
 
     private async Task<WorktreeTeardownResult> SecureForHandoffWithRetryAsync(

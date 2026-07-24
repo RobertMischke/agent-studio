@@ -37,6 +37,8 @@ public sealed class DurableHandoffRecovery
                     _options.RunnerId,
                     StringComparison.Ordinal))
                 continue;
+            if (DurableRunOutbox.IsActive(outbox.Authority.RunId))
+                continue;
             if (string.Equals(
                     outbox.Snapshot.FinalHandoffState,
                     "completed",
@@ -136,23 +138,20 @@ public sealed class DurableHandoffRecovery
         }
 
         ResultHandoffAck acknowledgement;
-        if (outbox.LastAcknowledgedSequence < finalItem.Sequence)
+        if (outbox.HandoffAcknowledgement is null)
         {
             acknowledgement = await _client.AcknowledgeResultHandoffAsync(
                 outbox.Authority,
                 finalItem,
                 envelope,
                 ct);
-            outbox.Acknowledge(finalItem.Sequence);
+            outbox.RecordHandoffAcknowledgement(acknowledgement);
         }
         else
         {
-            acknowledgement = outbox.HandoffAcknowledgement
-                              ?? throw new InvalidDataException(
-                                  "The final result sequence is acknowledged but its durable server acknowledgement is missing.");
+            acknowledgement = outbox.HandoffAcknowledgement;
         }
         var envelopeDigest = acknowledgement.EnvelopeDigest;
-        outbox.RecordHandoffAcknowledgement(acknowledgement);
         await ReportSafeAsync(outbox, ct);
 
         if (Directory.Exists(workspace.RepoPath))
@@ -160,6 +159,7 @@ public sealed class DurableHandoffRecovery
             await workspace.TeardownAfterHandoffAsync(
                 secured,
                 acknowledgement,
+                outbox.Authority.RunId,
                 envelopeDigest,
                 ct);
         }

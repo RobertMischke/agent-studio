@@ -247,10 +247,13 @@ public sealed class GitWorkspace
     public async Task TeardownAfterHandoffAsync(
         WorktreeTeardownResult secured,
         ResultHandoffAck acknowledgement,
+        string expectedRunId,
         string expectedEnvelopeDigest,
         CancellationToken ct)
     {
-        new DurableHandoffGate(expectedEnvelopeDigest).RequireAcknowledged(acknowledgement);
+        new DurableHandoffGate(
+            expectedRunId,
+            expectedEnvelopeDigest).RequireAcknowledged(acknowledgement);
         await GitMetadataGate.WaitAsync(ct);
         try
         {

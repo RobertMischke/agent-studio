@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using AgentStudio.TaskServer.Contracts;
 
@@ -35,6 +36,8 @@ public sealed record RunOutboxSnapshot(
 public sealed class DurableRunOutbox
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly ConcurrentDictionary<string, byte> ActiveRuns =
+        new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private readonly string _directory;
     private readonly string _journalPath;
@@ -122,6 +125,16 @@ public sealed class DurableRunOutbox
         }
     }
 
+    public static bool IsActive(string runId) => ActiveRuns.ContainsKey(runId);
+
+    public IDisposable MarkActive()
+    {
+        if (!ActiveRuns.TryAdd(Authority.RunId, 0))
+            throw new InvalidOperationException(
+                $"Run '{Authority.RunId}' already has an active executor in this process.");
+        return new ActiveRunRegistration(Authority.RunId);
+    }
+
     public static DurableRunOutbox Open(string root, RunOutboxAuthority authority)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
@@ -145,6 +158,7 @@ public sealed class DurableRunOutbox
         var items = new List<RunOutboxItem>();
         if (File.Exists(journalPath))
         {
+            RepairTornJournalTail(journalPath);
             foreach (var line in File.ReadLines(journalPath))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
@@ -233,7 +247,37 @@ public sealed class DurableRunOutbox
                     Authority.RunId,
                     StringComparison.Ordinal))
                 throw new InvalidOperationException("Handoff acknowledgement belongs to a different RunAttempt.");
+            if (!string.Equals(
+                    acknowledgement.State,
+                    "acknowledged",
+                    StringComparison.Ordinal))
+                throw new InvalidOperationException("Handoff acknowledgement is not durable.");
+            var finalItem = _items.SingleOrDefault(
+                item => item.Sequence == acknowledgement.AcknowledgedSequence);
+            if (finalItem is null
+                || !string.Equals(finalItem.Kind, "final-result", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Handoff acknowledgement does not identify the journaled final result.");
+            }
+            var envelope = JsonSerializer.Deserialize<ImmutableResultEnvelope>(
+                               finalItem.PayloadJson,
+                               Json)
+                           ?? throw new InvalidDataException(
+                               "Journaled final result envelope is empty.");
+            var expectedDigest = ResultEnvelopeDigest.Compute(envelope);
+            if (!string.Equals(
+                    acknowledgement.EnvelopeDigest,
+                    expectedDigest,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Handoff acknowledgement digest does not match the journaled final result.");
+            }
             _handoffAcknowledgement = acknowledgement;
+            _lastAcknowledgedSequence = Math.Max(
+                _lastAcknowledgedSequence,
+                acknowledgement.AcknowledgedSequence);
             _finalHandoffState = acknowledgement.State;
             _envelopeDigest = acknowledgement.EnvelopeDigest;
             PersistAck();
@@ -282,6 +326,20 @@ public sealed class DurableRunOutbox
         File.Move(temporary, path, overwrite: true);
     }
 
+    private static void RepairTornJournalTail(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        if (bytes.Length == 0 || bytes[^1] == (byte)'\n') return;
+        var lastNewline = Array.LastIndexOf(bytes, (byte)'\n');
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Write,
+            FileShare.Read);
+        stream.SetLength(lastNewline + 1L);
+        stream.Flush(flushToDisk: true);
+    }
+
     private static string SafeSegment(string value)
     {
         var characters = value.Select(character =>
@@ -298,14 +356,32 @@ public sealed class DurableRunOutbox
         string? EnvelopeDigest,
         ResultHandoffAck? HandoffAcknowledgement,
         DateTime PersistedAt);
+
+    private sealed class ActiveRunRegistration(string runId) : IDisposable
+    {
+        private string? _runId = runId;
+
+        public void Dispose()
+        {
+            var activeRunId = Interlocked.Exchange(ref _runId, null);
+            if (activeRunId is not null)
+                ActiveRuns.TryRemove(activeRunId, out _);
+        }
+    }
 }
 
-public sealed class DurableHandoffGate(string expectedEnvelopeDigest)
+public sealed class DurableHandoffGate(
+    string expectedRunId,
+    string expectedEnvelopeDigest)
 {
     public void RequireAcknowledged(ResultHandoffAck? acknowledgement)
     {
         if (acknowledgement is null
             || !string.Equals(acknowledgement.State, "acknowledged", StringComparison.Ordinal)
+            || !string.Equals(
+                acknowledgement.RunId,
+                expectedRunId,
+                StringComparison.Ordinal)
             || !string.Equals(
                 acknowledgement.EnvelopeDigest,
                 expectedEnvelopeDigest,

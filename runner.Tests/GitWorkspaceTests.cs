@@ -122,12 +122,13 @@ public sealed class GitWorkspaceTests : IDisposable
             false);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             workspace.TeardownAfterHandoffAsync(
-                secured, wrongAck, expectedDigest, CancellationToken.None));
+                secured, wrongAck, runId, expectedDigest, CancellationToken.None));
         Assert.True(Directory.Exists(workspace.RepoPath));
 
         await workspace.TeardownAfterHandoffAsync(
             secured,
             wrongAck with { EnvelopeDigest = expectedDigest },
+            runId,
             expectedDigest,
             CancellationToken.None);
 
