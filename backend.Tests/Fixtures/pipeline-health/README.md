@@ -17,3 +17,15 @@ must therefore produce:
 - the systemic fingerprint alarm on the third distinct card;
 - the filled `4-auto-review` zero-drain alarm from the inventory snapshot;
 - the hanging-gate alarm 30 minutes after acquisition, well before restart.
+
+The deterministic alarm schedule is:
+
+| Signal | First observable input | Alarm time | Detection latency |
+| --- | --- | --- | --- |
+| Filled `4-auto-review` at `0/h` | 04:20:00Z inventory | 04:20:00Z | Immediate on the first sensor evaluation |
+| Repeated fingerprint across three distinct cards and two projects | 04:21:12Z first failure | 04:29:31Z third failure | 8 min 19 s |
+| Acquired gate without completion | 04:37:37Z acquisition | 05:07:37Z budget expiry | 30 min |
+
+All three alarms predate the 07:15:00Z restart. The replay test asserts the
+exact fingerprint latency, the cross-project sequence, the code-owned gate
+budget, and that every alarm time falls inside the incident window.

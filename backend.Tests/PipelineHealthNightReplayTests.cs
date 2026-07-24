@@ -25,6 +25,7 @@ public sealed class PipelineHealthNightReplayTests
         PipelineHealthAlert? fingerprintAlert = null;
         PipelineLaneDrainHealth? stalledLane = null;
         DateTime? firstFingerprintAt = null;
+        DateTime? laneObservedAt = null;
         DateTime? gateAcquiredAt = null;
         DateTime? replayEndedAt = null;
         string? acquiredGateRunId = null;
@@ -66,6 +67,7 @@ public sealed class PipelineHealthNightReplayTests
                     break;
 
                 case "pipeline.lane-inventory":
+                    laneObservedAt = at;
                     var queueCount = payload.GetProperty("queueCount").GetInt32();
                     var oldestQueuedAtUtc = payload.GetProperty("oldestQueuedAtUtc").GetDateTime();
                     stalledLane = PipelineHealthDetector.MeasureLane(
@@ -84,12 +86,15 @@ public sealed class PipelineHealthNightReplayTests
         Assert.NotNull(fingerprintAlert);
         Assert.Equal("systemic-gate-failure", fingerprintAlert.Kind);
         Assert.NotNull(firstFingerprintAt);
-        Assert.InRange(
-            fingerprintAlert.DetectedAtUtc - firstFingerprintAt.Value,
-            TimeSpan.Zero,
-            TimeSpan.FromMinutes(10));
+        var fingerprintLatency = fingerprintAlert.DetectedAtUtc - firstFingerprintAt.Value;
+        Assert.Equal(TimeSpan.FromMinutes(8) + TimeSpan.FromSeconds(19), fingerprintLatency);
+        var fingerprintHealth = detector.FingerprintHealth();
+        Assert.NotNull(fingerprintHealth);
+        Assert.Equal(3, fingerprintHealth.ConsecutiveFailures);
+        Assert.Equal(["Agent Taskboard", "Website"], fingerprintHealth.Projects);
 
         Assert.NotNull(stalledLane);
+        Assert.NotNull(laneObservedAt);
         Assert.True(stalledLane.IsStalled);
         Assert.Equal(TaskStates.AutoReview, stalledLane.Lane);
         Assert.Equal(0, stalledLane.CompletedPerHour);
@@ -98,14 +103,18 @@ public sealed class PipelineHealthNightReplayTests
         Assert.NotNull(gateAcquiredAt);
         Assert.NotNull(replayEndedAt);
         Assert.False(gateCompleted);
-        var hanging = detector.DetectHangingGates(
-            gateAcquiredAt.Value + PipelineHealthConventions.GateCompletionBudget);
+        var gateAlarmAt = gateAcquiredAt.Value + PipelineHealthConventions.GateCompletionBudget;
+        var hanging = detector.DetectHangingGates(gateAlarmAt);
         var gateAlert = Assert.Single(hanging);
         Assert.Equal("gate-hanging", gateAlert.Alert.Kind);
         Assert.Equal("7bbed536", gateAlert.Gate.GateRunId);
-        Assert.True(
-            gateAlert.Alert.DetectedAtUtc < replayEndedAt,
-            "The visibility alarm must predate the backend restart that released the night gate.");
+        Assert.Equal(PipelineHealthConventions.GateCompletionBudget, gateAlarmAt - gateAcquiredAt.Value);
+
+        Assert.All(
+            new[] { laneObservedAt.Value, fingerprintAlert.DetectedAtUtc, gateAlert.Alert.DetectedAtUtc },
+            detectedAt => Assert.True(
+                detectedAt < replayEndedAt,
+                "Every visibility alarm must predate the backend restart that released the night gate."));
     }
 
     [Fact]
