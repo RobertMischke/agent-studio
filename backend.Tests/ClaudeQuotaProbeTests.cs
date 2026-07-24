@@ -6,6 +6,14 @@ namespace AgentStudio.Tests;
 
 public class ClaudeQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "claude",
+            name));
+
     /// <summary>
     /// Live capture from claude --version 2.1.140 on 2026-05-13. The probe
     /// sent "1&lt;Enter&gt;" to a trust prompt that never appeared (the scratch
@@ -155,6 +163,33 @@ public class ClaudeQuotaProbeTests
         Assert.Equal("Weekly (all models)", windows[0].Label);
         Assert.Equal(28, windows[0].UsedPct);
         Assert.Equal("Apr 28, 2pm (Europe/Berlin)", windows[0].ResetLabel);
+    }
+
+    [Fact]
+    public void ParseUsageWindows_RecognizesRealV2_1_202TabbedApiBillingPanelAsUnknown()
+    {
+        var snapshot = ReadFixture("claude-usage-v2.1.202-api-billing.txt");
+
+        var windows = ClaudeQuotaProbe.ParseUsageWindows(snapshot);
+
+        var quota = Assert.Single(windows);
+        Assert.Equal("Quota", quota.Label);
+        Assert.Null(quota.UsedPct);
+        Assert.Equal("%", quota.Unit);
+        Assert.False(ClaudeQuotaProbe.LooksLikeParserDrift(snapshot, windows));
+    }
+
+    [Fact]
+    public void ParseUsageWindows_V2_1_202IgnoresUnknownPanelLines()
+    {
+        var snapshot = ReadFixture("claude-usage-v2.1.202-api-billing.txt")
+            .Replace("Session", "Session\nExperimental provider field: ignored", StringComparison.Ordinal)
+            .Replace("Usage:", "Unrecognized line with arbitrary values\nUsage:", StringComparison.Ordinal);
+
+        var quota = Assert.Single(ClaudeQuotaProbe.ParseUsageWindows(snapshot));
+
+        Assert.Equal("Quota", quota.Label);
+        Assert.Null(quota.UsedPct);
     }
 
     [Theory]

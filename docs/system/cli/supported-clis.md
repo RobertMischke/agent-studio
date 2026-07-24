@@ -75,7 +75,7 @@ The frontend's model dropdown reads `/api/cli/{cliType}/models`. No CLI-specific
 **Contract.** A `QuotaProbeBase` subclass returns a `QuotaSnapshot` with:
 
 - `Plan` — human-readable subscription tier ("Pro", "Plus", "Free", …) or `null`.
-- `Windows[]` — one or more `QuotaWindow`s with `UsedPct` (0–100, may exceed when overage allowed), `ResetAt` UTC, and `ResetLabel` for display.
+- `Windows[]`: one or more `QuotaWindow`s with `UsedPct` (0-100, may exceed when overage allowed), `ResetAt` UTC, and `ResetLabel` for display. When the CLI exposes a recognized quota surface but no numeric utilization, return an explicit window with `UsedPct = null`; consumers render `Unknown` and must not treat that as a probe error.
 - `Source` — what the probe queried (`/usage`, `/status`, footer text, HTTP endpoint, …).
 - `RawSample` — truncated raw output for debugging.
 
@@ -188,7 +188,7 @@ A CLI with no isolation mechanism honestly **declares `shared-only`** (`Supports
 | Process lifecycle | ✅ `claude -p "<prompt>" --output-format stream-json --verbose --dangerously-skip-permissions` |
 | Session model | ✅ UUIDs only (`IsCompatibleSessionName` rejects slugs); resume via `-r <uuid>`; named-session create via `--name` |
 | Model selection | ⚠ Hardcoded list (Opus 4.7, Sonnet 4.6, Haiku 4.5) — no live discovery yet |
-| Quota probe | ✅ `/usage` PTY probe — session bucket + weekly bucket |
+| Quota probe | ✅ `/usage` PTY probe - session + weekly buckets when reported; explicit unknown window for the Claude Code 2.1.202 tabbed API-billing view |
 | Logging | ✅ stream-json → marker lines via `TransformReadLine` |
 | Cancellation | ✅ |
 | Availability | ✅ `claude --version` |
@@ -197,6 +197,8 @@ A CLI with no isolation mechanism honestly **declares `shared-only`** (`Supports
 **Quirks.**
 - Claude reads stdin even with `-p`; the base class closes stdin immediately to avoid a 3 s "no stdin received" warning.
 - The npm shim on Windows points to `node_modules/@anthropic-ai/claude-code/bin/claude.exe`. An interrupted update can leave a `claude.exe.old.<timestamp>` and no `claude.exe`, breaking `--version`. Reinstall via `npm i -g @anthropic-ai/claude-code` to fix.
+- Claude Code 2.1.202 renders `/usage` as a tabbed `Settings / Status / Config / Usage / Stats` view. API-billed accounts can show only session cost and token counts there, with no subscription utilization percentage. The probe recognizes that exact PTY shape and returns `Quota: Unknown` instead of an empty/error snapshot. Older `Current session` and `Current week` text remains supported.
+- Rate-limit frames accept both the original camelCase keys and forgiving snake_case aliases. Unknown fields and optional fields with unexpected types are ignored so telemetry drift cannot break the CLI output loop.
 
 ### 3.2 Codex CLI (`codex`)
 

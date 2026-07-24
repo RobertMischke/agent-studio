@@ -258,7 +258,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
         windowKey,
         tag: this.windowTag(w.label),
         label: w.label,
-        value: pct == null ? '—' : `${pct}%`,
+        value: pct == null ? 'Unknown' : `${pct}%`,
         barPct: Math.max(0, Math.min(100, pct ?? 0)),
         tone: this.toneFor(pct),
       };
@@ -356,8 +356,11 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private cardAriaLabel(label: string, chips: QuotaChip[]): string {
     const real = chips.filter(c => c.windowKey !== 'none');
     if (real.length === 0) return `${label} quota: no data yet`;
-    const parts = real.map(c => (c.label ? `${c.label} ${c.value}` : c.tag ? `${c.tag} ${c.value}` : c.value));
-    return `${label} quota: ${parts.join(', ')} used`;
+    const parts = real.map(c => {
+      const name = c.label ?? c.tag;
+      return `${name ? name + ' ' : ''}${c.value}${c.value === 'Unknown' ? '' : ' used'}`;
+    });
+    return `${label} quota: ${parts.join(', ')}`;
   }
 
   /**

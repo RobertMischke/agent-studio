@@ -240,7 +240,7 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
   }
 
   formatPct(pct: number | null): string {
-    if (pct === null || isNaN(pct)) return '—';
+    if (pct === null || isNaN(pct)) return 'Unknown';
     return `${pct.toFixed(pct >= 10 ? 0 : 1)}%`;
   }
 
