@@ -94,14 +94,59 @@
         </div>
       }
       <div class="telemetry__charts">
-        @for (row of chartRows(); track row.key) {
-          <div class="telemetry__row" [attr.data-chart]="row.key">
+        <div class="telemetry__labels" aria-hidden="true">
+          @for (row of chartRows(); track row.key) {
             <span>{{ row.label }}</span>
-            <svg viewBox="0 0 100 30" preserveAspectRatio="none" role="img" [attr.aria-label]="row.label + ' history'">
+          }
+        </div>
+        <div class="telemetry__plots"
+             data-testid="remote-host-telemetry-plots"
+             tabindex="0"
+             role="group"
+             aria-label="Performance history. Hover, tap, or use arrow keys to inspect exact values."
+             (pointerdown)="showTelemetryPoint($event)"
+             (pointermove)="showTelemetryPoint($event)"
+             (pointerleave)="hideTelemetryPoint($event)"
+             (focus)="focusTelemetry()"
+             (blur)="clearTelemetryHover()"
+             (keydown)="moveTelemetryHover($event)">
+          @for (row of chartRows(); track row.key) {
+            <svg [attr.data-chart]="row.key"
+                 viewBox="0 0 100 30"
+                 preserveAspectRatio="none"
+                 role="img"
+                 [attr.aria-label]="row.label + ' history'">
               <polyline [attr.points]="row.path"></polyline>
+              @if (row.hoverY !== null) {
+                <circle class="telemetry__point"
+                        [attr.cx]="hoveredTelemetry()?.position"
+                        [attr.cy]="row.hoverY"
+                        r="1.8"></circle>
+              }
             </svg>
-          </div>
-        }
+          }
+          @if (hoveredTelemetry(); as hovered) {
+            <span class="telemetry__crosshair"
+                  aria-hidden="true"
+                  [style.left.%]="hovered.position"></span>
+            <div class="telemetry__tooltip"
+                 [class.telemetry__tooltip--start]="hovered.position < 20"
+                 [class.telemetry__tooltip--end]="hovered.position > 80"
+                 [style.left.%]="hovered.position"
+                 [attr.data-point-index]="hovered.index"
+                 [attr.data-point-timestamp]="hovered.point.timestamp"
+                 data-testid="remote-host-telemetry-tooltip"
+                 role="tooltip">
+              <time [attr.datetime]="hovered.point.timestamp">{{ hovered.point.timestamp | date:'medium' }}</time>
+              <div class="telemetry__tooltip-values">
+                @for (detail of hovered.values; track detail.key) {
+                  <span>{{ detail.label }}</span>
+                  <strong [attr.data-metric]="detail.key">{{ detail.value }}</strong>
+                }
+              </div>
+            </div>
+          }
+        </div>
       </div>
     </section>
   }

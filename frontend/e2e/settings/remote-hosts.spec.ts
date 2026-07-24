@@ -33,6 +33,7 @@ async function stubBackgroundApis(page: Page) {
 
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/tasks/grouped', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
+  await page.route('**/api/auth/status', json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }));
   await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: 'C:/projects/agent-taskboard', rootPath: 'C:/projects' }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
@@ -203,7 +204,8 @@ test.describe('Remote Hosts settings section', () => {
     const badge = remote.getByTestId('remote-host-git-status');
     await expect(badge).toBeVisible();
     await expect(badge).toContainText('Writable: no');
-    await expect(badge).toHaveAttribute('title', /permission denied/);
+    await badge.hover();
+    await expect(page.getByRole('tooltip')).toContainText('permission denied');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-read-only--mocked.png'), fullPage: false });
   });
 
@@ -236,6 +238,29 @@ test.describe('Remote Hosts settings section', () => {
     await expect(remote.getByTestId('remote-host-slots-context')).toContainText('6 active slots · load 6.4 of 12 cores');
     await expect(remote.getByTestId('remote-host-findings')).toContainText('VM throttled');
     await expect(remote.locator('[data-chart]')).toHaveCount(4);
+
+    const inspectedIndex = 4;
+    const plots = remote.getByTestId('remote-host-telemetry-plots');
+    await plots.scrollIntoViewIfNeeded();
+    const bounds = await plots.boundingBox();
+    expect(bounds).not.toBeNull();
+    await plots.hover({ position: {
+      x: bounds!.width * inspectedIndex / (points.length - 1),
+      y: bounds!.height / 2,
+    } });
+    const tooltip = remote.getByTestId('remote-host-telemetry-tooltip');
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toHaveAttribute('data-point-timestamp', points[inspectedIndex].timestamp);
+    await expect(tooltip.locator('[data-metric="cpu"]')).toHaveText('56%');
+    await expect(tooltip.locator('[data-metric="memory"]')).toHaveText('37.2 GB');
+    await expect(tooltip.locator('[data-metric="load"]')).toHaveText('6.1 load');
+    await expect(tooltip.locator('[data-metric="slots"]')).toHaveText('6 slots');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-telemetry-tooltip--mocked.png'), fullPage: false });
+    await setTheme(page, 'light');
+    await expect(tooltip).toBeVisible();
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-telemetry-tooltip-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+
     await remote.getByTestId('remote-host-window-1h').click();
     await expect(remote.getByTestId('remote-host-window-1h')).toHaveAttribute('aria-pressed', 'true');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-telemetry--mocked.png'), fullPage: false });

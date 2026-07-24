@@ -62,19 +62,46 @@ export class RemoteHostCardComponent {
   readonly retired = computed(() => this.host().status === 'retired');
   readonly stale = computed(() => hostIsStale(this.host().lastHeartbeatAt, this.now()));
   readonly telemetryWindow = signal<'1h' | '6h' | '48h' | '14d'>('6h');
+  readonly hoveredTelemetryIndex = signal<number | null>(null);
   readonly telemetryPoints = computed(() => {
     const hours = { '1h': 1, '6h': 6, '48h': 48, '14d': 336 }[this.telemetryWindow()];
     const cutoff = this.now() - hours * 60 * 60 * 1000;
     return (this.host().telemetry?.points ?? []).filter(point => Date.parse(point.timestamp) >= cutoff);
   });
+  readonly hoveredTelemetry = computed(() => {
+    const points = this.telemetryPoints();
+    const index = this.hoveredTelemetryIndex();
+    if (index === null) return null;
+    const point = points[index] ?? null;
+    if (!point) return null;
+    return {
+      index,
+      point,
+      position: points.length > 1 ? index * 100 / (points.length - 1) : 50,
+      values: [
+        { key: 'cpu', label: 'CPU', value: formatTelemetryNumber(point.cpuPercent, '%') },
+        { key: 'memory', label: 'Memory', value: formatTelemetryNumber(
+          point.memoryUsedBytes === null ? null : point.memoryUsedBytes / 1_000_000_000,
+          ' GB',
+        ) },
+        { key: 'load', label: 'Load / cores', value: formatTelemetryNumber(point.load1, ' load') },
+        { key: 'slots', label: 'Active slots', value: `${point.activeSlots} ${point.activeSlots === 1 ? 'slot' : 'slots'}` },
+      ],
+    };
+  });
   readonly chartRows = computed(() => {
     const points = this.telemetryPoints();
+    const hoveredPoint = this.hoveredTelemetry()?.point ?? null;
     return [
       { key: 'cpu', label: 'CPU', value: (p: HostTelemetryPoint) => p.cpuPercent, max: 100 },
       { key: 'memory', label: 'Memory', value: (p: HostTelemetryPoint) => p.memoryUsedBytes !== null && p.memoryTotalBytes ? p.memoryUsedBytes * 100 / p.memoryTotalBytes : null, max: 100 },
       { key: 'load', label: 'Load / cores', value: (p: HostTelemetryPoint) => p.load1, max: Math.max(1, ...points.map(p => p.cpuCores), ...points.map(p => p.load1 ?? 0)) },
       { key: 'slots', label: 'Active slots', value: (p: HostTelemetryPoint) => p.activeSlots, max: Math.max(1, ...points.map(p => p.activeSlots)) },
-    ].map(row => ({ ...row, path: sparkline(points, row.value, row.max) }));
+    ].map(row => ({
+      ...row,
+      path: sparkline(points, row.value, row.max),
+      hoverY: hoveredPoint ? sparklineY(row.value(hoveredPoint), row.max) : null,
+    }));
   });
   readonly latestContext = computed(() => {
     const point = this.telemetryPoints().at(-1);
@@ -140,13 +167,65 @@ export class RemoteHostCardComponent {
     this.setup.emit(host);
   }
 
-  selectTelemetryWindow(window: '1h' | '6h' | '48h' | '14d'): void { this.telemetryWindow.set(window); }
+  selectTelemetryWindow(window: '1h' | '6h' | '48h' | '14d'): void {
+    this.hoveredTelemetryIndex.set(null);
+    this.telemetryWindow.set(window);
+  }
+
+  showTelemetryPoint(event: PointerEvent): void {
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    const lastIndex = this.telemetryPoints().length - 1;
+    if (lastIndex < 0) return;
+    this.hoveredTelemetryIndex.set(Math.round(ratio * lastIndex));
+  }
+
+  hideTelemetryPoint(event: PointerEvent): void {
+    if (event.pointerType !== 'touch') this.hoveredTelemetryIndex.set(null);
+  }
+
+  focusTelemetry(): void {
+    const lastIndex = this.telemetryPoints().length - 1;
+    if (lastIndex >= 0 && this.hoveredTelemetryIndex() === null) this.hoveredTelemetryIndex.set(lastIndex);
+  }
+
+  moveTelemetryHover(event: KeyboardEvent): void {
+    const lastIndex = this.telemetryPoints().length - 1;
+    if (lastIndex < 0) return;
+    const current = this.hoveredTelemetryIndex() ?? lastIndex;
+    let next: number;
+    if (event.key === 'ArrowLeft') next = Math.max(0, current - 1);
+    else if (event.key === 'ArrowRight') next = Math.min(lastIndex, current + 1);
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = lastIndex;
+    else if (event.key === 'Escape') {
+      this.hoveredTelemetryIndex.set(null);
+      return;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    this.hoveredTelemetryIndex.set(next);
+  }
+
+  clearTelemetryHover(): void { this.hoveredTelemetryIndex.set(null); }
 }
 
 function sparkline(points: readonly HostTelemetryPoint[], value: (point: HostTelemetryPoint) => number | null, max: number): string {
   if (points.length < 2) return '';
   return points.map((point, index) => ({ index, value: value(point) }))
     .filter(item => item.value !== null)
-    .map(item => `${(item.index * 100 / (points.length - 1)).toFixed(1)},${(28 - Math.max(0, Math.min(1, item.value! / max)) * 26).toFixed(1)}`)
+    .map(item => `${(item.index * 100 / (points.length - 1)).toFixed(1)},${sparklineY(item.value, max)}`)
     .join(' ');
+}
+
+function sparklineY(value: number | null, max: number): string | null {
+  if (value === null) return null;
+  return (28 - Math.max(0, Math.min(1, value / max)) * 26).toFixed(1);
+}
+
+function formatTelemetryNumber(value: number | null, unit: string): string {
+  if (value === null || !Number.isFinite(value)) return '-';
+  return `${Number(value.toFixed(2))}${unit}`;
 }
