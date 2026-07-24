@@ -33,9 +33,7 @@ public sealed class WorkbenchCatalogueService
 
     private static readonly LegacyWorkbench[] LegacyPilot =
     [
-        new("pipeline-workbench", "Pipeline workbench",
-            "Inspect the pipeline contract and its current implementation signals.",
-            "docs/system/domains/pipeline.md.report.html", "testing", ["AGT-2091"]),
+        // "Pipeline workbench" removed 2026-07-24: idea discarded by the operator.
         new("workbench-mockup-family", "Workbench mockup family",
             "Shape the Workbench host, list, viewer, and later decision surfaces.",
             "docs/concepts/mockups/experimentier-workbench.html", "testing", ["AGT-2122"]),
