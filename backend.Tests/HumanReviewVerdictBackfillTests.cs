@@ -23,6 +23,7 @@ public sealed class HumanReviewVerdictBackfillTests : IDisposable
     private readonly string _watchPath;
     private readonly IConfiguration _config;
     private readonly TaskScannerService _scanner;
+    private readonly TaskMutationService _mutations;
     private readonly ReviewDecisionOrchestrator _orchestrator;
 
     public HumanReviewVerdictBackfillTests()
@@ -47,26 +48,28 @@ public sealed class HumanReviewVerdictBackfillTests : IDisposable
         _scanner = new TaskScannerService(_config, NullLogger<TaskScannerService>.Instance, summary);
         var states = new TaskStateMachine(_scanner, NullLogger<TaskStateMachine>.Instance);
         var clients = new ClientIdentityStore(_config, NullLogger<ClientIdentityStore>.Instance);
-        var mutations = new TaskMutationService(
+        _mutations = new TaskMutationService(
             _scanner, clients, new ProjectRegistry(_config, NullLogger<ProjectRegistry>.Instance),
             new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var prompts = new RuntimePromptService(_config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, _config);
         var git = new GitService(NullLogger<GitService>.Instance, _scanner, _config, prompts);
-        var transitions = new TaskTransitionService(_scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
+        var transitions = new TaskTransitionService(_scanner, states, _mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var indexCache = new TaskIndexCache(_scanner, NullLogger<TaskIndexCache>.Instance, _config);
         _scanner.SetIndexCache(indexCache);
         var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
-            _scanner, mutations, states, transitions, indexCache,
+            _scanner, _mutations, states, transitions, indexCache,
             NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
         var funnel = new HumanReviewEscalation(states, transitions, _workspaceRoot, NullLogger<HumanReviewEscalation>.Instance);
+        var sessions = new TaskSessionLog(_scanner, NullLogger<TaskSessionLog>.Instance);
 
         _orchestrator = new ReviewDecisionOrchestrator(
             _scanner, states, taskAccess, chatLog, prompts, aspectRunner,
             new AutoReviewStatusSnapshot(), _config,
             NullLogger<ReviewDecisionOrchestrator>.Instance,
+            sessions: sessions,
             humanReviewEscalation: funnel);
     }
 
@@ -78,8 +81,13 @@ public sealed class HumanReviewVerdictBackfillTests : IDisposable
     [Fact]
     public void Backfill_RepairsVerdictlessCard_AndLeavesExplainedCardUntouched()
     {
-        // Legacy card: parked in 5-human-review with NO verdict and no status.
-        WriteJob(TaskStates.HumanReview, "legacy-verdictless");
+        // Legacy card: old, parked in 5-human-review after a real run, with NO
+        // verdict and no status.
+        WriteJob(
+            TaskStates.HumanReview,
+            "legacy-verdictless",
+            createdAt: DateTime.UtcNow.AddDays(-30),
+            hasRun: true);
         // Already-explained card: carries a prior accept verdict + a real summary.
         WriteJob(TaskStates.HumanReview, "already-explained");
         ReviewDecisionLog.Append(_workspaceRoot, new ReviewDecisionRecord(
@@ -115,7 +123,11 @@ public sealed class HumanReviewVerdictBackfillTests : IDisposable
     [Fact]
     public void Backfill_IsIdempotent_SecondRunAddsNoNewRecords()
     {
-        WriteJob(TaskStates.HumanReview, "legacy-verdictless");
+        WriteJob(
+            TaskStates.HumanReview,
+            "legacy-verdictless",
+            createdAt: DateTime.UtcNow.AddDays(-30),
+            hasRun: true);
 
         _orchestrator.BackfillVerdictlessHumanReview(_workspaceRoot, CancellationToken.None);
         _orchestrator.BackfillVerdictlessHumanReview(_workspaceRoot, CancellationToken.None);
@@ -123,6 +135,49 @@ public sealed class HumanReviewVerdictBackfillTests : IDisposable
         var records = ReviewDecisionLog.ReadAll(_workspaceRoot, ProjectName)
             .Where(r => r.JobId == "legacy-verdictless").ToList();
         Assert.Single(records);
+    }
+
+    [Fact]
+    public void Backfill_DoesNotTouchFreshVerdictlessCardWithoutRun()
+    {
+        var id = _mutations.CreateJob(new CreateTaskRequest
+        {
+            Id = "fresh-operator-card",
+            Title = "Fresh operator card",
+            WatchPath = _watchPath,
+            TargetState = TaskStates.HumanReview,
+        });
+        Assert.Equal("fresh-operator-card", id);
+
+        _orchestrator.BackfillVerdictlessHumanReview(_workspaceRoot, CancellationToken.None);
+
+        var card = _scanner.FindJob(id!, _watchPath);
+        Assert.NotNull(card);
+        Assert.Equal(TaskStates.HumanReview, card!.State);
+        Assert.Empty(ReviewDecisionLog.ReadAll(_workspaceRoot, ProjectName));
+    }
+
+    [Fact]
+    public void Backfill_RequiresBothMinimumAgeAndRunProvenance()
+    {
+        WriteJob(
+            TaskStates.HumanReview,
+            "old-without-run",
+            createdAt: DateTime.UtcNow.AddDays(-30),
+            hasRun: false);
+        WriteJob(
+            TaskStates.HumanReview,
+            "fresh-with-run",
+            createdAt: DateTime.UtcNow,
+            hasRun: true);
+
+        _orchestrator.BackfillVerdictlessHumanReview(_workspaceRoot, CancellationToken.None);
+
+        Assert.True(Directory.Exists(
+            Path.Combine(_watchPath, TaskStates.HumanReview, "old-without-run")));
+        Assert.True(Directory.Exists(
+            Path.Combine(_watchPath, TaskStates.HumanReview, "fresh-with-run")));
+        Assert.Empty(ReviewDecisionLog.ReadAll(_workspaceRoot, ProjectName));
     }
 
     [Fact]
@@ -136,13 +191,27 @@ public sealed class HumanReviewVerdictBackfillTests : IDisposable
         Assert.Empty(ReviewDecisionLog.ReadAll(_workspaceRoot, ProjectName));
     }
 
-    private void WriteJob(string state, string slug)
+    private void WriteJob(
+        string state,
+        string slug,
+        DateTime? createdAt = null,
+        bool hasRun = false)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
+        var created = createdAt ?? DateTime.UtcNow.AddDays(-30);
         File.WriteAllText(
             Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\"," +
+            $"\"createdAt\":\"{created:o}\",\"enteredLaneAt\":\"{created:o}\"," +
             "\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"}");
+
+        if (!hasRun) return;
+
+        var logs = Path.Combine(dir, "logs");
+        Directory.CreateDirectory(logs);
+        File.WriteAllText(
+            Path.Combine(logs, "session-events.jsonl"),
+            $"{{\"ts\":\"{created.AddMinutes(1):o}\",\"kind\":\"start\",\"cli\":\"claude\"}}{Environment.NewLine}");
     }
 }
