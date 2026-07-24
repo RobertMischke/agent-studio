@@ -133,7 +133,7 @@ public static class LeaseEndpoints
                 ? null
                 : accessSecurity.RecordRunnerActivity(
                     runnerPrincipal.RunnerId, activeSlots, req.AvailableSlots, claimed: false);
-            var client = runnerPrincipal is not null || string.IsNullOrWhiteSpace(clientId)
+            var client = string.IsNullOrWhiteSpace(clientId)
                 ? null
                 : clients.RecordRunnerActivity(clientId, activeSlots, req.AvailableSlots, claimed: false);
             if (securedRunner is not null && !accessSecurity.RunnerAcceptsClaims(securedRunner.Id))
@@ -193,6 +193,18 @@ public static class LeaseEndpoints
                                 Message: "The original claim repository is no longer configured."));
                         }
 
+                        if (runnerPrincipal is not null)
+                            accessSecurity.RecordRunnerActivity(
+                                runnerPrincipal.RunnerId,
+                                (activeSlots ?? securedRunner?.ActiveSlots ?? 0) + 1,
+                                Math.Max(0, req.AvailableSlots - 1),
+                                claimed: true);
+                        if (!string.IsNullOrWhiteSpace(clientId))
+                            clients.RecordRunnerActivity(
+                                clientId,
+                                (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
+                                Math.Max(0, req.AvailableSlots - 1),
+                                claimed: true);
                         return Results.Ok(new RunnerClaimResponse(
                             RunnerClaimStatus.Claimed,
                             replay.Lease.TaskKey,
@@ -369,7 +381,7 @@ public static class LeaseEndpoints
                         (activeSlots ?? securedRunner?.ActiveSlots ?? 0) + 1,
                         Math.Max(0, req.AvailableSlots - 1),
                         claimed: true);
-                else if (!string.IsNullOrWhiteSpace(clientId))
+                if (!string.IsNullOrWhiteSpace(clientId))
                     clients.RecordRunnerActivity(
                         clientId,
                         (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,

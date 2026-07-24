@@ -32,9 +32,6 @@ async function stubBackgroundApis(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
   await page.route('**/api/tasks', json([]));
-  await page.route('**/api/auth/status', json({
-    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
-  }));
   await page.route('**/api/tasks/grouped', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
   await page.route('**/api/auth/status', json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }));
   await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: 'C:/projects/agent-taskboard', rootPath: 'C:/projects' }]));
@@ -45,7 +42,7 @@ async function stubBackgroundApis(page: Page) {
     { id: 'local-default', displayName: 'operator-workstation', kind: 'human', registeredAt: now, lastSeenAt: now },
     { id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service', registeredAt: now, lastSeenAt: now,
       runnerGitStatus: 'ready', runnerGitCheckedAt: now, runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 2,
-      runnerActiveGateCount: 0, runnerGateCapacity: 2 },
+      runnerActiveGateCount: 0, runnerGateCapacity: 4 },
   ]));
   await page.route('**/api/clients/*/telemetry?window=14d', json({ clientId: 'mock', window: '14d', points: [{
     timestamp: now, cpuPercent: 7, load1: 0.1, load5: 0.1, load15: 0.1,
@@ -115,7 +112,7 @@ test.describe('Remote Hosts settings section', () => {
         id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
         registeredAt: now, lastSeenAt: now, runnerGitStatus: 'ready',
         runnerDaemonState: 'running', runnerActiveSlots: 1, runnerAvailableSlots: 19,
-        runnerActiveGateCount: 2, runnerGateCapacity: 2,
+        runnerActiveGateCount: 2, runnerGateCapacity: 4,
       }]) });
     });
     await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', route => route.fulfill({
@@ -139,7 +136,7 @@ test.describe('Remote Hosts settings section', () => {
     await expect(remote.getByTestId('remote-host-status')).toContainText('Online');
     await expect(remote.getByTestId('remote-host-activity')).toContainText('Daemonrunning');
     await expect(remote.getByTestId('remote-host-run-pool')).toContainText('1 active · 19 free · 20 max');
-    await expect(remote.getByTestId('remote-host-gate-pool')).toContainText('2 running · pool 2');
+    await expect(remote.getByTestId('remote-host-gate-pool')).toContainText('2 running · pool 4');
     await expect(remote.getByTestId('remote-host-cpu-context')).toContainText('GATE work does not consume a RUN slot');
     await expect(remote.getByTestId('remote-host-vitals')).toContainText('53%');
     await expect(remote.getByTestId('remote-host-slots-context')).toContainText('1 RUN active · host load 7.7 of 12 cores');

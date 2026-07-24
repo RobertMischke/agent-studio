@@ -30,7 +30,7 @@ const HOST: RemoteHost = {
   activeTaskCount: 1,
   availableSlots: 19,
   activeGateCount: 2,
-  gateCapacity: 2,
+  gateCapacity: 4,
 };
 
 function mount(host: RemoteHost) {
@@ -56,7 +56,7 @@ describe('RemoteHostCardComponent', () => {
     // RAM 24/62 GB used => 39%
     expect(el.querySelector('[data-meter="ram"] .meter__pct')?.textContent).toContain('39%');
     expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('1 active · 19 free · 20 max');
-    expect(el.querySelector('[data-testid="remote-host-gate-pool"]')?.textContent).toContain('2 running · pool 2');
+    expect(el.querySelector('[data-testid="remote-host-gate-pool"]')?.textContent).toContain('2 running · pool 4');
     expect(el.querySelector('[data-testid="remote-host-cpu-context"]')?.textContent).toContain('does not consume a RUN slot');
   });
 

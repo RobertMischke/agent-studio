@@ -82,7 +82,7 @@ describe('RemoteHostsService client registry hydration', () => {
       runnerActiveSlots: 1,
       runnerAvailableSlots: 19,
       runnerActiveGateCount: 2,
-      runnerGateCapacity: 2,
+      runnerGateCapacity: 4,
     }]);
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
@@ -95,7 +95,7 @@ describe('RemoteHostsService client registry hydration', () => {
       activeTaskCount: 1,
       availableSlots: 19,
       activeGateCount: 2,
-      gateCapacity: 2,
+      gateCapacity: 4,
       liveDataState: 'ready',
     });
 

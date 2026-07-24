@@ -19,7 +19,7 @@ public sealed class RemoteGateActivityStoreTests
         var active = store.ForRunner("agent-runner-01");
 
         Assert.Equal(2, active.Active);
-        Assert.Equal(RemoteGateActivityStore.Capacity, active.Capacity);
+        Assert.Equal(4, active.Capacity);
         Assert.Equal(["gate-a", "gate-b"], active.Gates.Select(gate => gate.GateRunId));
 
         store.Completed("gate-a");
