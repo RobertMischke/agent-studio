@@ -78,61 +78,30 @@
 
 .ws-settings__body {
   display: grid;
-  grid-template-columns: 210px 1fr;
-  gap: var(--studio-spacing-4);
-  padding: var(--studio-spacing-4) var(--studio-spacing-5) var(--studio-spacing-5);
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
   overflow: hidden;
   flex: 1;
   min-height: 0;
 }
 
 .ws-settings__rail {
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 8px;
-  padding: var(--studio-spacing-2);
-  align-self: start;
+  min-height: 0;
+  overflow: auto;
+  background: var(--studio-bg-sidebar);
+  border-right: 1px solid var(--studio-border);
+  padding: var(--studio-spacing-1) 0;
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-1);
 }
-.ws-settings__rail-group {
-  color: var(--studio-fg-muted);
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin: var(--studio-spacing-1) var(--studio-spacing-2);
-}
-.ws-settings__rail-item {
-  display: flex;
-  align-items: center;
-  gap: var(--studio-spacing-2);
-  padding: var(--studio-spacing-2);
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--studio-fg);
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  font-size: 0.85rem;
-}
-.ws-settings__rail-item:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
-.ws-settings__rail-item:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -2px; }
-// Unified active side-menu item (AGT-2010): shared accent band + side bar.
-.ws-settings__rail-item--active {
-  background: var(--studio-nav-active-bg);
-  color: var(--studio-nav-active-fg);
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
-}
-.ws-settings__rail-item--active:hover { background: var(--studio-nav-active-bg-hover); }
-.ws-settings__rail-icon { width: 18px; text-align: center; }
+
+.ws-settings__rail app-tree-row { display: block; }
 
 .ws-settings__panel {
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 8px;
+  background: var(--studio-bg-editor);
+  border: 0;
+  border-radius: 0;
   padding: var(--studio-spacing-5);
   min-height: 280px;
   min-width: 0;
@@ -195,8 +164,8 @@
 }
 .ws-settings__card-icon {
   grid-row: 1 / 3;
-  font-size: 1.3rem;
-  line-height: 1;
+  color: var(--studio-fg-muted);
+  line-height: 0;
 }
 .ws-settings__card-title {
   font-weight: 600;
@@ -223,31 +192,7 @@
 
 .ws-settings--inline .ws-settings__rail {
   align-self: stretch;
-  min-height: 0;
-  overflow: auto;
-  border: 0;
-  border-right: 1px solid var(--studio-border);
-  border-radius: 0;
-  background: var(--studio-bg-sidebar);
-  padding: var(--studio-spacing-1) 0;
 }
-
-.ws-settings--inline .ws-settings__rail-group {
-  margin: var(--studio-spacing-2) var(--studio-spacing-3);
-}
-
-.ws-settings--inline .ws-settings__rail-item {
-  border-radius: 0;
-  padding: var(--studio-spacing-2) var(--studio-spacing-3);
-}
-
-// Inline (workspace-settings home) rail keeps the same unified active band as
-// the standalone rail; only the flush square corners differ.
-.ws-settings--inline .ws-settings__rail-item--active {
-  background: var(--studio-nav-active-bg);
-  color: var(--studio-nav-active-fg);
-}
-.ws-settings--inline .ws-settings__rail-item--active:hover { background: var(--studio-nav-active-bg-hover); }
 
 .ws-settings--inline .ws-settings__panel {
   min-height: 0;
@@ -261,12 +206,20 @@
   padding: var(--studio-spacing-4) var(--studio-spacing-5);
 }
 
+// Prompt administration is a rail + detail workbench. Keep it full-bleed like
+// the project Prompts surface so the one shared catalogue starts at the same
+// panel edge in both hosts.
+.ws-settings__panel[data-section='prompts'],
+.ws-settings--inline .ws-settings__panel[data-section='prompts'] {
+  overflow: hidden;
+  padding: 0;
+}
+
 @media (max-width: 760px) {
   .ws-settings__body { grid-template-columns: 1fr; overflow: auto; }
   .ws-settings__rail {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
+    max-height: 18rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--studio-border);
   }
-  .ws-settings__rail-group { width: 100%; }
 }

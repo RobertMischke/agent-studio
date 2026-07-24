@@ -48,19 +48,29 @@
     <aside class="ws-settings__rail"
            data-testid="workspace-settings-rail"
            aria-label="Settings sections">
-      @for (item of railItems; track item.key; let i = $index) {
-        @if (isGroupStart(i)) {
-          <div class="ws-settings__rail-group">{{ groupLabels[item.group] }}</div>
+      @for (group of railGroups; track group; let first = $first) {
+        <app-section-header
+          [title]="groupLabels[group]"
+          [collapsible]="true"
+          [collapsed]="isGroupCollapsed(group)"
+          [divider]="!first"
+          [testid]="'workspace-settings-group-' + group"
+          (collapsedChange)="setGroupCollapsed(group, $event)" />
+        @if (!isGroupCollapsed(group)) {
+          @for (item of railItemsFor(group); track item.key) {
+            <app-tree-row
+              level="root"
+              [glyph]="item.icon"
+              [reserveChevron]="true"
+              [reserveGlyph]="true"
+              [label]="item.label"
+              [active]="item.key === overlays.section()"
+              [ariaCurrent]="item.key === overlays.section() ? 'page' : null"
+              [ariaLabel]="item.label"
+              [testid]="'workspace-settings-rail-' + item.key"
+              (selectRequest)="overlays.select(item.key)" />
+          }
         }
-        <button class="ws-settings__rail-item"
-                type="button"
-                [class.ws-settings__rail-item--active]="item.key === overlays.section()"
-                [attr.data-testid]="'workspace-settings-rail-' + item.key"
-                [attr.aria-current]="item.key === overlays.section() ? 'page' : null"
-                (click)="overlays.select(item.key)">
-          <span class="ws-settings__rail-icon" aria-hidden="true">{{ item.icon }}</span>
-          <span class="ws-settings__rail-label">{{ item.label }}</span>
-        </button>
       }
     </aside>
 
@@ -84,7 +94,9 @@
                       type="button"
                       [attr.data-testid]="'workspace-settings-card-' + item.key"
                       (click)="overlays.select(item.key)">
-                <span class="ws-settings__card-icon" aria-hidden="true">{{ item.icon }}</span>
+                <span class="ws-settings__card-icon" aria-hidden="true">
+                  <app-studio-icon [name]="item.icon" [size]="16" />
+                </span>
                 <span class="ws-settings__card-title">{{ item.label }}</span>
                 <span class="ws-settings__card-desc">{{ item.description }}</span>
               </button>

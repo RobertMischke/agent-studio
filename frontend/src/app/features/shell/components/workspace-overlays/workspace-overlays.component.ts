@@ -1,5 +1,5 @@
 ﻿import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output, signal } from '@angular/core';
 import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
 import type { WorkspaceSettingsSection } from '../../state/workspace-overlays.service';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
@@ -22,6 +22,12 @@ import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import type { WatchPathEntry } from '../../../../models/task.model';
+import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
+import {
+  StudioIconComponent,
+  type StudioIconName,
+} from '../../../../components/studio-icon/studio-icon.component';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 
@@ -32,7 +38,7 @@ interface SettingsRailItem {
   key: WorkspaceSettingsSection;
   label: string;
   description: string;
-  icon: string;
+  icon: StudioIconName;
   group: SettingsRailGroup;
 }
 
@@ -76,6 +82,9 @@ interface SettingsRailItem {
     AppearanceSettingsComponent,
     UpdatesSettingsComponent,
     WorkspaceManagementComponent,
+    SectionHeaderComponent,
+    TreeRowComponent,
+    StudioIconComponent,
     TooltipDirective,
     OverlayPortalDirective,
   ],
@@ -99,24 +108,27 @@ export class WorkspaceOverlaysComponent {
   private readonly modalStack = inject(ModalStackService);
   private readonly destroyRef = inject(DestroyRef);
   private modalDisposer: (() => void) | null = null;
+  readonly collapsedGroups = signal<ReadonlySet<SettingsRailGroup>>(new Set());
 
   /** Rail order: overview first, then the Global group, then the Workspace group. */
   readonly railItems: readonly SettingsRailItem[] = [
-    { key: 'overview', label: 'Overview', description: 'Everything in one place, split into Global and Workspace.', icon: '\u{1F3E0}', group: 'general' },
-    { key: 'appearance', label: 'Appearance', description: 'Theme and activity-bar side. Applies to you everywhere.', icon: '\u{1F3A8}', group: 'global' },
-    { key: 'updates', label: 'Updates', description: 'Keep this instance in sync with stable.', icon: '\u{1F504}', group: 'global' },
-    { key: 'workspaces', label: 'Workspaces', description: 'Manage every workspace and its projects.', icon: '\u{1F5C2}', group: 'global' },
-    { key: 'task-server', label: 'Task Server', description: 'Connected URL, workspace store, evidence git, client registry, and management sweeps.', icon: '\u{1F5C4}', group: 'global' },
-    { key: 'remote-hosts', label: 'Remote hosts', description: 'Execution locations: heartbeat, vitals, quota, and Re-Probe / Drain / Retire.', icon: '\u{1F4E1}', group: 'global' },
-    { key: 'orchestrator', label: 'Orchestrator', description: 'Platform-global supervisor, meta-cycle, and auto-intervention lifecycle flags.', icon: '\u{1F916}', group: 'global' },
-    { key: 'caps', label: 'CLI Management', description: 'What CLIs and models are available, their fallback routes, usage caps and completion contracts.', icon: '⚙', group: 'workspace' },
-    { key: 'cli-sessions', label: 'CLI sessions', description: 'Per-CLI per-project native session inventory.', icon: '\u{1F5C3}', group: 'workspace' },
-    { key: 'cli-paths', label: 'CLI paths', description: 'Where each CLI lives on disk: executable path and known project roots.', icon: '\u{1F4CD}', group: 'workspace' },
-    { key: 'working-memory', label: 'Working memory', description: 'Per-CLI memory and session state. Auth stays protected.', icon: '\u{1F9E0}', group: 'workspace' },
-    { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'T', group: 'workspace' },
-    { key: 'tokens', label: 'Token usage', description: 'The single usage area: token spend across every project.', icon: '\u{1F4CA}', group: 'workspace' },
-    { key: 'screenshots', label: 'Visual evidence', description: 'Screenshots captured by tasks across all projects.', icon: '\u{1F441}', group: 'workspace' },
+    { key: 'overview', label: 'Overview', description: 'Everything in one place, split into Global and Workspace.', icon: 'grid', group: 'general' },
+    { key: 'appearance', label: 'Appearance', description: 'Theme and activity-bar side. Applies to you everywhere.', icon: 'sun', group: 'global' },
+    { key: 'updates', label: 'Updates', description: 'Keep this instance in sync with stable.', icon: 'refresh', group: 'global' },
+    { key: 'workspaces', label: 'Workspaces', description: 'Manage every workspace and its projects.', icon: 'folder', group: 'global' },
+    { key: 'task-server', label: 'Task Server', description: 'Connected URL, workspace store, evidence git, client registry, and management sweeps.', icon: 'file', group: 'global' },
+    { key: 'remote-hosts', label: 'Remote hosts', description: 'Execution locations: heartbeat, vitals, quota, and Re-Probe / Drain / Retire.', icon: 'activity', group: 'global' },
+    { key: 'orchestrator', label: 'Orchestrator', description: 'Platform-global supervisor, meta-cycle, and auto-intervention lifecycle flags.', icon: 'bot', group: 'global' },
+    { key: 'caps', label: 'CLI Management', description: 'What CLIs and models are available, their fallback routes, usage caps and completion contracts.', icon: 'cli', group: 'workspace' },
+    { key: 'cli-sessions', label: 'CLI sessions', description: 'Per-CLI per-project native session inventory.', icon: 'list', group: 'workspace' },
+    { key: 'cli-paths', label: 'CLI paths', description: 'Where each CLI lives on disk: executable path and known project roots.', icon: 'link', group: 'workspace' },
+    { key: 'working-memory', label: 'Working memory', description: 'Per-CLI memory and session state. Auth stays protected.', icon: 'book', group: 'workspace' },
+    { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'code', group: 'workspace' },
+    { key: 'tokens', label: 'Token usage', description: 'The single usage area: token spend across every project.', icon: 'activity', group: 'workspace' },
+    { key: 'screenshots', label: 'Visual evidence', description: 'Screenshots captured by tasks across all projects.', icon: 'eye', group: 'workspace' },
   ];
+
+  readonly railGroups: readonly SettingsRailGroup[] = ['general', 'global', 'workspace'];
 
   /** Human labels for the rail group headers. */
   readonly groupLabels: Record<SettingsRailGroup, string> = {
@@ -130,10 +142,19 @@ export class WorkspaceOverlaysComponent {
     return this.railItems.filter(i => i.key !== 'overview');
   }
 
-  /** True when `item` is the first of its group, so the rail draws a header. */
-  isGroupStart(index: number): boolean {
-    if (index === 0) return true;
-    return this.railItems[index].group !== this.railItems[index - 1].group;
+  railItemsFor(group: SettingsRailGroup): readonly SettingsRailItem[] {
+    return this.railItems.filter(item => item.group === group);
+  }
+
+  isGroupCollapsed(group: SettingsRailGroup): boolean {
+    return this.collapsedGroups().has(group);
+  }
+
+  setGroupCollapsed(group: SettingsRailGroup, collapsed: boolean): void {
+    const next = new Set(this.collapsedGroups());
+    if (collapsed) next.add(group);
+    else next.delete(group);
+    this.collapsedGroups.set(next);
   }
 
   constructor() {

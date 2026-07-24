@@ -1,0 +1,75 @@
+<aside class="prompt-catalogue" id="prompt-admin-list"
+       data-testid="prompt-admin-list" aria-label="Prompt templates">
+  <div class="prompt-catalogue__summary" data-testid="prompt-admin-inheritance-summary">
+    <span><strong>{{ overrideCount() }}</strong> overridden</span>
+    <span class="prompt-catalogue__inherited">{{ inheritedCount() }} inherited</span>
+    <button type="button" class="prompt-catalogue__filter"
+      [class.prompt-catalogue__filter--active]="onlyOverrides()"
+      [attr.aria-pressed]="onlyOverrides()"
+      data-testid="prompt-admin-only-overrides"
+      (click)="onlyOverrides.set(!onlyOverrides())">Only overridden</button>
+  </div>
+
+  @if (hasTelemetry()) {
+    <div class="prompt-catalogue__columns" aria-hidden="true">
+      <span>Prompt</span>
+      <span>Last change</span>
+      <span>Last review</span>
+    </div>
+  }
+
+  @for (group of groups(); track group.name; let first = $first) {
+    <app-section-header
+      [collapsible]="true"
+      [collapsed]="isGroupCollapsed(group.name)"
+      [title]="group.name"
+      [count]="group.items.length"
+      [divider]="!first"
+      [testid]="'prompt-admin-group-' + group.name"
+      (collapsedChange)="setGroupCollapsed(group.name, $event)" />
+    @if (!isGroupCollapsed(group.name)) {
+      @for (item of group.items; track item.name) {
+        <app-tree-row
+          level="root"
+          glyph="file"
+          [class.prompt-catalogue__item--inherited]="!hasVisibleOverride(item)"
+          [reserveChevron]="true"
+          [label]="item.title"
+          [active]="item.name === selectedName()"
+          [ariaCurrent]="item.name === selectedName() ? 'page' : null"
+          [ariaLabel]="item.title + (hasVisibleOverride(item) ? ', ' + overrideLabel(item) : ', inherited')"
+          [testid]="'prompt-admin-item-' + item.name"
+          (selectRequest)="selectPrompt.emit(item.name)">
+          <span class="prompt-catalogue__row-meta"
+                [class.prompt-catalogue__row-meta--telemetry]="hasTelemetry()">
+            @if (hasVisibleOverride(item)) {
+              <span class="prompt-catalogue__origin"
+                    [cacTooltip]="overrideTooltip(item)"
+                    [attr.data-testid]="'prompt-admin-override-' + item.name">
+                {{ overrideLabel(item) }}
+              </span>
+              @if (isStale(item)) {
+                <span class="prompt-catalogue__stale"
+                      role="img"
+                      aria-label="Override based on outdated shipped default - review needed"
+                      cacTooltip="Override based on outdated shipped default - review needed"
+                      [attr.data-testid]="'prompt-admin-stale-' + item.name">
+                  <app-studio-icon name="warn" [size]="12" />
+                </span>
+              }
+            }
+            @if (hasTelemetry()) {
+              <time [attr.datetime]="item.lastChangedAt ?? null"
+                    [cacTooltip]="item.lastChangedSha ? 'Commit ' + item.lastChangedSha : 'No git revision available'">
+                {{ item.lastChangedAt ? (item.lastChangedAt | date:'dd.MM.yyyy') : 'not recorded' }}
+              </time>
+              <time [attr.datetime]="item.lastReviewedAt ?? null">
+                {{ item.lastReviewedAt ? (item.lastReviewedAt | date:'dd.MM.yyyy') : 'not reviewed' }}
+              </time>
+            }
+          </span>
+        </app-tree-row>
+      }
+    }
+  }
+</aside>

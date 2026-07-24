@@ -449,6 +449,20 @@ public record PipelineStepSetting
     public string? Prompt { get; init; }
 
     /// <summary>
+    /// SHA-256 of the shipped prompt default when <see cref="Prompt"/> was
+    /// created. Kept beside the project override so the catalogue can warn
+    /// when an application update changes the shipped default.
+    /// </summary>
+    public string? PromptBaseDefaultSha { get; init; }
+
+    /// <summary>
+    /// Shipped prompt content captured with <see cref="PromptBaseDefaultSha"/>.
+    /// This is the project-level equivalent of the global override sidecar and
+    /// supports the same detail comparison workflow.
+    /// </summary>
+    public string? PromptBaseDefaultContent { get; init; }
+
+    /// <summary>
     /// Run condition gating whether this step executes for a given task run.
     /// Null (or an <see cref="PipelineStepConditions.Always"/> condition) means
     /// "run whenever the step is enabled".

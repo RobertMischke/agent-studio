@@ -129,7 +129,7 @@
   }
   @defer (when activeRail() === 'prompts') {
     @if (activeRail() === 'prompts') {
-      <app-prompt-admin-panel />
+      <app-prompt-admin-panel [projectName]="projectName()" />
     }
   }
   @defer (when isSettingsRail(activeRail())) {
