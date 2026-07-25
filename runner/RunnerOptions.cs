@@ -1,5 +1,7 @@
 namespace AgentRunner;
 
+using System.Globalization;
+
 /// <summary>
 /// Resolved runner configuration for a single remote task run. Every value comes
 /// from an environment variable (systemd-friendly) with a small set of required
@@ -100,6 +102,12 @@ public sealed class RunnerOptions
     /// <summary>Delay between empty daemon pickup polls.</summary>
     public int PollSeconds { get; init; }
 
+    /// <summary>New claims stop when the one-minute load average divided by CPU cores exceeds this value.</summary>
+    public double ClaimMaxLoadPerCore { get; init; } = 1.5;
+
+    /// <summary>Continuous high-load duration required before claim admission closes.</summary>
+    public int LoadGateSustainedSeconds { get; init; } = 120;
+
     /// <summary>
     /// When set (<c>--health-check</c>), the runner only probes the Task Server's
     /// liveness and exits: 0 when the server is reachable, 4 when it is not. No task
@@ -113,6 +121,16 @@ public sealed class RunnerOptions
 
     public static int EnvInt(string name, int fallback)
         => int.TryParse(Environment.GetEnvironmentVariable(name), out var v) && v > 0 ? v : fallback;
+
+    public static double EnvDouble(string name, double fallback)
+        => double.TryParse(
+               Environment.GetEnvironmentVariable(name),
+               NumberStyles.Float,
+               CultureInfo.InvariantCulture,
+               out var value)
+           && value > 0
+            ? value
+            : fallback;
 
     /// <summary>
     /// Build options from environment defaults, then apply <c>--key value</c> and
@@ -193,6 +211,16 @@ public sealed class RunnerOptions
                 ? maxV : EnvInt("RUNNER_MAX_PARALLELISM", 2),
             PollSeconds = overrides.TryGetValue("poll-seconds", out var poll) && int.TryParse(poll, out var pollV) && pollV > 0
                 ? pollV : EnvInt("RUNNER_POLL_SECONDS", 5),
+            ClaimMaxLoadPerCore = overrides.TryGetValue("claim-max-load-per-core", out var maxLoad)
+                                      && double.TryParse(
+                                          maxLoad,
+                                          NumberStyles.Float,
+                                          CultureInfo.InvariantCulture,
+                                          out var maxLoadValue)
+                                      && maxLoadValue > 0
+                ? maxLoadValue
+                : EnvDouble("RUNNER_CLAIM_MAX_LOAD_PER_CORE", 1.5),
+            LoadGateSustainedSeconds = EnvInt("RUNNER_LOAD_GATE_SUSTAINED_SECONDS", 120),
             HealthCheckOnly = healthCheck,
         };
 

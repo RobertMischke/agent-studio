@@ -1,8 +1,5 @@
 # The control plane as a distributable
 
-**Elaborated concept page:** `distributable.html` — packages, binaries, install/run,
-target VM picture, and the four sign-off decisions D1–D4.
-
 **Open question (raised by Robert, 2026-07-24, on AGT-2277):** should the control
 plane be extracted into its own distributable *before* it is hosted on the
 public Hetzner VM? Leaning: yes — sharpen this picture first, then deploy.
@@ -37,3 +34,8 @@ public Hetzner VM? Leaning: yes — sharpen this picture first, then deploy.
   without publishing the monolith as the target control-plane package.
 - Building the versioned distributable remains a prerequisite for Tranche 1 and
   also serves local installation with the same package and different config.
+- On Linux runner hosts, `agent-host` owns role-specific cgroup controls in the
+  main Coding and Review units on every install and update. Values follow
+  host-derived defaults unless the operator deliberately changes
+  `/etc/agent-host/profile.conf`; see
+  [runner-host resource governance](resource-governance.md).

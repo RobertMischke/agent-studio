@@ -11,8 +11,9 @@ server_url=""
 topology=""
 client_id=""
 runner_id=""
-auth_token_file="/etc/agent-runner/runner-auth-token"
+auth_token_file=""
 runner_name=""
+role="coding"
 git_remote=""
 git_push_remote=""
 package_id="CodingAgentRunner"
@@ -29,10 +30,12 @@ Usage: remote-runner-onboard.sh \
   --client-id <optional-attribution-label> \
   --runner-id <owner-enrolled-runner-id> \
   --runner-name <runner-name> \
+  --role <coding|review> \
   --git-remote <fetch-origin-url> \
-  --git-push-remote <write-origin-url> [options]
+  [--git-push-remote <write-origin-url>] [options]
 
 Options:
+  --role <role>           Managed service role (default: coding)
   --package-id <id>       NuGet DotnetTool package (default: CodingAgentRunner)
   --runner-command <cmd>  Installed tool command (default: agent-runner)
   --minimum-version <v>   Minimum accepted package version (default: 0.5.0)
@@ -60,6 +63,7 @@ while (($#)); do
     --runner-id) runner_id="${2:-}"; shift 2 ;;
     --auth-token-file) auth_token_file="${2:-}"; shift 2 ;;
     --runner-name) runner_name="${2:-}"; shift 2 ;;
+    --role) role="${2:-}"; shift 2 ;;
     --git-remote) git_remote="${2:-}"; shift 2 ;;
     --git-push-remote) git_push_remote="${2:-}"; shift 2 ;;
     --package-id) package_id="${2:-}"; shift 2 ;;
@@ -76,7 +80,17 @@ done
 [[ -n "$topology" ]] || die "--topology is required."
 [[ -n "$runner_name" ]] || die "--runner-name is required."
 [[ -n "$git_remote" ]] || die "--git-remote is required."
-[[ -n "$git_push_remote" ]] || die "--git-push-remote is required."
+[[ "$role" =~ ^(coding|review)$ ]] || die "--role must be coding or review."
+if [[ "$role" == "coding" ]]; then
+  [[ -n "$git_push_remote" ]] || die "--git-push-remote is required for the coding role."
+fi
+if [[ -z "$auth_token_file" ]]; then
+  if [[ "$role" == "coding" ]]; then
+    auth_token_file="/etc/agent-runner/runner-auth-token"
+  else
+    auth_token_file="/etc/agent-runner/review-auth-token"
+  fi
+fi
 
 host_pattern='^([A-Za-z0-9][A-Za-z0-9._-]*@)?[A-Za-z0-9][A-Za-z0-9._-]*$'
 server_url_pattern='^https?://(\[[0-9A-Fa-f:]+\]|[A-Za-z0-9.-]+)(:[0-9]{1,5})?(/[A-Za-z0-9._~:/%+-]*)?$'
@@ -99,7 +113,8 @@ if [[ ! "$git_remote" =~ $https_git_pattern \
       && ! "$git_remote" =~ $scp_git_pattern ]]; then
   die "--git-remote must be a credential-free SSH or HTTPS origin URL."
 fi
-if [[ ! "$git_push_remote" =~ $ssh_git_pattern \
+if [[ -n "$git_push_remote" \
+      && ! "$git_push_remote" =~ $ssh_git_pattern \
       && ! "$git_push_remote" =~ $scp_git_pattern \
       && ! "$git_push_remote" =~ $https_git_pattern ]]; then
   die "--git-push-remote must be a credential-free SSH or HTTPS origin URL."
@@ -122,8 +137,8 @@ else
   [[ -n "$client_id" ]] || die "--client-id is required for the local profile reached through a tunnel."
 fi
 
-printf '[onboarding] host=%s runner=%s client=%s topology=%s server=%s\n' \
-  "$host" "$runner_name" "${client_id:-none}" "$topology" "$server_url"
+printf '[onboarding] host=%s runner=%s role=%s client=%s topology=%s server=%s\n' \
+  "$host" "$runner_name" "$role" "${client_id:-none}" "$topology" "$server_url"
 
 ssh_base=(ssh -o BatchMode=yes -o ConnectTimeout=10)
 
@@ -235,23 +250,40 @@ if ! remote_login_status; then
 fi
 
 printf '[onboarding] phase=systemd Writing configuration and enabling the OS-owned service.\n'
+resource_governance_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/agent-host-resource-governance.sh"
+[[ -x "$resource_governance_script" ]] \
+  || die "The agent-host resource governance helper is missing or not executable: $resource_governance_script"
+"${ssh_base[@]}" -T "$host" \
+  'helper_tmp="$(mktemp)"; trap '"'"'rm -f "$helper_tmp"'"'"' EXIT; cat >"$helper_tmp"; chmod 0755 "$helper_tmp"; sudo install -d -m 0755 /usr/local/libexec; sudo install -m 0755 "$helper_tmp" /usr/local/libexec/agent-host-resource-governance' \
+  <"$resource_governance_script"
 "${ssh_base[@]}" -T "$host" bash -s -- \
-  "$server_url" "$client_id" "$runner_id" "$runner_name" "$git_remote" "$git_push_remote" "$runner_command" "$auth_token_file" "$service_auth" <<'REMOTE_SYSTEMD'
+  "$server_url" "$client_id" "$runner_id" "$runner_name" "$role" "$git_remote" "$git_push_remote" "$runner_command" "$auth_token_file" "$service_auth" <<'REMOTE_SYSTEMD'
 set -euo pipefail
 server_url="$1"
 client_id="$2"
 runner_id="$3"
 runner_name="$4"
-git_remote="$5"
-git_push_remote="$6"
-runner_command="$7"
-auth_token_file="$8"
-service_auth="$9"
+role="$5"
+git_remote="$6"
+git_push_remote="$7"
+runner_command="$8"
+auth_token_file="$9"
+service_auth="${10}"
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
 runner_bin="$(command -v "$runner_command")"
 runner_user="$(id -un)"
 runner_group="$(id -gn)"
 runner_home="$HOME"
+
+if [[ "$role" == "coding" ]]; then
+  service_name="agent-runner"
+  env_file="/etc/agent-runner/runner.env"
+  service_root="/var/lib/agent-runner"
+else
+  service_name="agent-runner-review"
+  env_file="/etc/agent-runner/review.env"
+  service_root="/var/lib/agent-runner-review"
+fi
 
 env_tmp="$(mktemp)"
 unit_tmp="$(mktemp)"
@@ -262,17 +294,25 @@ chmod 600 "$env_tmp"
   [[ -z "$client_id" ]] || printf 'RUNNER_CLIENT_ID=%s\n' "$client_id"
   printf 'RUNNER_ID=%s\n' "$runner_id"
   printf 'RUNNER_NAME=%s\n' "$runner_name"
+  printf 'RUNNER_ROLE=%s\n' "$role"
   [[ "$service_auth" == 1 ]] && printf 'RUNNER_AUTH_TOKEN_FILE=%s\n' "$auth_token_file"
   printf 'RUNNER_GIT_REMOTE=%s\n' "$git_remote"
-  printf 'RUNNER_GIT_PUSH_REMOTE=%s\n' "$git_push_remote"
-  printf 'RUNNER_WORKDIR=/var/lib/agent-runner/work\n'
-  printf 'RUNNER_STATE_DIR=/var/lib/agent-runner/state\n'
+  [[ -z "$git_push_remote" ]] || printf 'RUNNER_GIT_PUSH_REMOTE=%s\n' "$git_push_remote"
+  printf 'RUNNER_WORKDIR=%s/work\n' "$service_root"
+  [[ "$role" != "review" ]] || printf 'RUNNER_REVIEW_WORKDIR=%s/review-work\n' "$service_root"
+  printf 'RUNNER_STATE_DIR=%s/state\n' "$service_root"
   printf 'RUNNER_MAX_PARALLELISM=2\n'
 } >"$env_tmp"
 
+resource_policy="$(sudo /usr/local/libexec/agent-host-resource-governance \
+  --role "$role" \
+  --profile /etc/agent-host/profile.conf \
+  --drop-in-dir "/etc/systemd/system/${service_name}.service.d" \
+  --migrate-drop-ins)"
+
 cat >"$unit_tmp" <<EOF
 [Unit]
-Description=Agent Studio remote runner daemon
+Description=Agent Studio remote $role runner daemon
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=300
@@ -282,59 +322,65 @@ StartLimitBurst=5
 Type=simple
 User=$runner_user
 Group=$runner_group
-WorkingDirectory=/var/lib/agent-runner
+WorkingDirectory=$service_root
 Environment=HOME=$runner_home
 Environment="PATH=$runner_home/.dotnet/tools:$runner_home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-EnvironmentFile=/etc/agent-runner/runner.env
+EnvironmentFile=$env_file
 ExecStart=$runner_bin --poll
 Restart=always
 RestartSec=10s
 TimeoutStopSec=90s
 KillSignal=SIGTERM
 KillMode=process
-SyslogIdentifier=agent-runner
+SyslogIdentifier=$service_name
 StandardOutput=journal
 StandardError=journal
+$resource_policy
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/var/lib/agent-runner $runner_home
+ReadWritePaths=$service_root $runner_home
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner /var/lib/agent-runner/work /var/lib/agent-runner/state
-sudo chown -R "$runner_user:$runner_group" /var/lib/agent-runner
+sudo install -d -m 0750 /etc/agent-runner "$service_root" "$service_root/work" "$service_root/state"
+if [[ "$role" == "review" ]]; then
+  sudo install -d -m 0750 "$service_root/review-work"
+fi
+sudo chown -R "$runner_user:$runner_group" "$service_root"
 if [[ "$service_auth" == 1 ]]; then
   sudo chown root:"$runner_group" "$auth_token_file"
   sudo chmod 0640 "$auth_token_file"
 fi
-sudo install -m 0640 -o root -g "$runner_group" "$env_tmp" /etc/agent-runner/runner.env
-sudo install -m 0644 "$unit_tmp" /etc/systemd/system/agent-runner.service
+sudo install -m 0640 -o root -g "$runner_group" "$env_tmp" "$env_file"
+sudo install -m 0644 "$unit_tmp" "/etc/systemd/system/${service_name}.service"
 sudo systemctl daemon-reload
-sudo systemctl enable agent-runner
-sudo systemctl restart agent-runner
+sudo systemctl enable "$service_name"
+sudo systemctl restart "$service_name"
 sleep 2
-sudo systemctl is-enabled agent-runner
-sudo systemctl is-active agent-runner
+sudo systemctl is-enabled "$service_name"
+sudo systemctl is-active "$service_name"
 RUNNER_AUTH_TOKEN_FILE="$([[ "$service_auth" == 1 ]] && printf '%s' "$auth_token_file")" \
   "$runner_bin" --health-check --server "$server_url"
 
-git_status=""
-for _ in $(seq 1 30); do
-  journal="$(sudo journalctl -u agent-runner -n 80 --no-pager)"
-  printf '%s' "$journal" | grep -Fq 'runner-git-capability status=ready' && { git_status=ready; break; }
-  printf '%s' "$journal" | grep -Fq 'runner-git-capability status=read-only' && { git_status=read-only; break; }
-  sleep 2
-done
-[[ "$git_status" == ready ]] || {
-  sudo journalctl -u agent-runner -n 40 --no-pager >&2
-  printf '[remote] Runner Git push capability is %s; claims remain disabled.\n' "${git_status:-unreported}" >&2
-  exit 40
-}
-printf '[remote] service=active health=passed identity=%s gitPushStatus=ready\n' "$runner_id"
+if [[ "$role" == "coding" ]]; then
+  git_status=""
+  for _ in $(seq 1 30); do
+    journal="$(sudo journalctl -u "$service_name" -n 80 --no-pager)"
+    printf '%s' "$journal" | grep -Fq 'runner-git-capability status=ready' && { git_status=ready; break; }
+    printf '%s' "$journal" | grep -Fq 'runner-git-capability status=read-only' && { git_status=read-only; break; }
+    sleep 2
+  done
+  [[ "$git_status" == ready ]] || {
+    sudo journalctl -u "$service_name" -n 40 --no-pager >&2
+    printf '[remote] Runner Git push capability is %s; claims remain disabled.\n' "${git_status:-unreported}" >&2
+    exit 40
+  }
+fi
+printf '[remote] service=%s role=%s active health=passed identity=%s\n' "$service_name" "$role" "$runner_id"
 REMOTE_SYSTEMD
 
-printf '[onboarding] completed host=%s runner=%s client=%s\n' "$host" "$runner_name" "$client_id"
+printf '[onboarding] completed host=%s runner=%s role=%s client=%s\n' "$host" "$runner_name" "$role" "$client_id"
 printf '[onboarding] Next: assign the probe project to %s and run one Ready task through the fenced remote claim path.\n' "$runner_name"

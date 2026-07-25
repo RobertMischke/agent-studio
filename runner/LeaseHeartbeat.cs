@@ -14,13 +14,23 @@ public sealed class LeaseHeartbeat
     private readonly RunnerOptions _options;
     private readonly RunLeaseInfoDto _lease;
     private readonly Action<string> _log;
+    private readonly RunnerProcessInventoryTracker? _inventory;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
 
-    public LeaseHeartbeat(TaskServerClient client, RunnerOptions options, RunLeaseInfoDto lease, Action<string> log)
+    public LeaseHeartbeat(
+        TaskServerClient client,
+        RunnerOptions options,
+        RunLeaseInfoDto lease,
+        Action<string> log,
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        RunnerProcessInventoryTracker? inventory = null)
     {
         _client = client;
         _options = options;
         _lease = lease;
         _log = log;
+        _inventory = inventory;
+        _delay = delay ?? Task.Delay;
     }
 
     /// <summary>Set when a heartbeat is rejected: the run must stop, the lease is gone.</summary>
@@ -34,6 +44,7 @@ public sealed class LeaseHeartbeat
     public async Task RunAsync(CancellationTokenSource stopRun, CancellationToken shutdown)
     {
         var interval = TimeSpan.FromSeconds(Math.Max(5, _options.HeartbeatSeconds));
+        var authorityExpiresAt = _lease.ExpiresAt;
         try
         {
             while (!stopRun.IsCancellationRequested && !shutdown.IsCancellationRequested)
@@ -41,31 +52,63 @@ public sealed class LeaseHeartbeat
                 RunLeaseResponse resp;
                 try
                 {
+                    var inventory = _inventory?.Snapshot();
                     var req = new RunLeaseHeartbeatRequest(
                         _lease.TaskKey, _lease.LeaseId, _lease.FencingToken, _options.RunnerId, _options.TtlSeconds,
                         _lease.AttemptId, _lease.AuthorityEpoch,
-                        $"heartbeat:{_lease.AttemptId}:{Guid.NewGuid():N}");
+                        $"heartbeat:{_lease.AttemptId}:{Guid.NewGuid():N}",
+                        inventory);
                     resp = await _client.RenewLeaseAsync(req, shutdown);
+                    if (_client.UsesDurableTaskServer && inventory is not null)
+                        _inventory!.AcknowledgeReports(inventory);
+                }
+                catch (TaskServerException ex) when (IsDefinitiveLeaseRejection(ex))
+                {
+                    MarkLeaseLost(
+                        stopRun,
+                        $"Task Server rejected lease renewal with HTTP {ex.StatusCode}: {ex.Message}");
+                    return;
                 }
                 catch (Exception ex)
                 {
-                    // A transient network error is not proof of a takeover; log and
-                    // let the next tick retry while the TTL still has headroom.
+                    // A transient network error is not proof of a takeover while
+                    // the last acknowledged lease window is still open. Once that
+                    // window closes, continuing the process would be an unfenced
+                    // split brain, so fail closed and reap it.
+                    if (DateTime.UtcNow >= authorityExpiresAt)
+                    {
+                        MarkLeaseLost(
+                            stopRun,
+                            $"renewal could not be confirmed before lease expiry {authorityExpiresAt:o}: {ex.Message}");
+                        return;
+                    }
                     _log($"heartbeat error (will retry): {ex.Message}");
-                    await Task.Delay(interval, stopRun.Token);
+                    await _delay(interval, stopRun.Token);
                     continue;
                 }
 
                 if (!resp.Granted)
                 {
-                    LeaseLost = true;
-                    _log($"lease lost: {resp.Outcome} - {resp.Message}");
-                    stopRun.Cancel();
+                    MarkLeaseLost(stopRun, $"{resp.Outcome} - {resp.Message}");
                     return;
                 }
-                await Task.Delay(interval, stopRun.Token);
+                if (resp.Lease is not null)
+                    authorityExpiresAt = resp.Lease.ExpiresAt;
+                _inventory?.Apply(resp.ReconciliationActions);
+                await _delay(interval, stopRun.Token);
             }
         }
         catch (OperationCanceledException) { /* run finished or shutting down */ }
+    }
+
+    internal static bool IsDefinitiveLeaseRejection(TaskServerException ex)
+        => ex.StatusCode is >= 400 and < 500
+           && ex.StatusCode is not 408 and not 429;
+
+    private void MarkLeaseLost(CancellationTokenSource stopRun, string reason)
+    {
+        LeaseLost = true;
+        _log($"lease lost; terminating CLI process group: {reason}");
+        stopRun.Cancel();
     }
 }

@@ -17,7 +17,7 @@ a repeated decision or regression class.
 5. Add or update catalogue and intake-selector tests. A UI rule also needs
    focused component coverage and both-theme visual evidence when it changes a
    rendered surface.
-6. Verify the guide is reachable from this index and from the Project Hub Wiki
+6. Verify the guide is reachable from this index and from the Deck Wiki
    card for an applicable fixture project.
 
 ## Frontmatter rules
@@ -41,7 +41,7 @@ a repeated decision or regression class.
 - Keep the file below 32 KiB. Only the first 64 Markdown files in deterministic
   path order are inspected, and symbolic or reparse paths are excluded.
 
-The Project Hub and intake normally share a cached five-minute catalogue
+The Deck and intake normally share a cached five-minute catalogue
 snapshot. During authoring, append `?refresh=true` to the style-guide catalogue
 request when a bounded immediate refresh is required; confirm the returned
 `snapshotId` changed before judging the result.

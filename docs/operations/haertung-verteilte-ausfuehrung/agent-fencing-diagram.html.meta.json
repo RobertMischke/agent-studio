@@ -1,0 +1,40 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Agent fencing: authority and quarantine diagram",
+  "source": {
+    "path": "docs/operations/haertung-verteilte-ausfuehrung/agent-fencing-diagram.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "53cc11afe17bb067346c64a0724e1bb84847f1b9cc2babf5f085bf09060179e4",
+      "sizeBytes": 12537,
+      "lineCount": 328,
+      "capturedAt": "2026-07-24T21:34:31.000Z"
+    }
+  },
+  "classification": {
+    "owner": "operations",
+    "documentMode": "mixed",
+    "temporalState": "mixed",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-24"
+  },
+  "relatedTasks": [
+    {
+      "key": "TE-13",
+      "title": "Trust level per model: capability record + violation/incident evidence collection (proof over claim)",
+      "linkedAt": "2026-07-24T21:34:31.000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2300",
+      "title": "P0: per-run worktree isolation for docs/local projects - shared checkout is a serious bug",
+      "linkedAt": "2026-07-24T21:34:31.000Z",
+      "source": "manual"
+    }
+  ]
+}

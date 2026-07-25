@@ -1002,12 +1002,6 @@ public class ProjectRunner
         var slotMax = SlotMax();
         if (_processing || !_activeRuns.HasFreeSlot(slotMax)) return;
 
-        // Check if there's a running process for this project on any CLI. Only
-        // meaningful at slotMax==1 (sequential, main checkout). At >1, parallel
-        // runs live in isolated worktrees, not Entry.RootPath, so this guard is
-        // skipped and the slot/admission logic governs concurrency instead.
-        if (slotMax == 1 && _router.All.Any(c => c.IsRunningForProject(Entry.RootPath))) return;
-
         // Pickup gating ends here. The picker below considers 3-progress and
         // 2-ready only; jobs sitting in 1-preparation, 1a-orchestrator-prep,
         // 4-auto-review, or 5-human-review do NOT
@@ -1185,27 +1179,33 @@ public class ProjectRunner
         return ParallelSlotPolicy.Decide(jobId, p, _activeRuns.RunningTasks(), slotMax);
     }
 
-    /// <summary>Where parallel task worktrees live (sibling temp root, off the repo).</summary>
+    /// <summary>Where isolated coding worktrees live (sibling temp root, off the repo).</summary>
     private string WorktreeRoot()
         => Path.Combine(Path.GetTempPath(), "ass-worktrees", System.Text.RegularExpressions.Regex.Replace(ProjectName, "[^A-Za-z0-9_.-]", "-"));
 
     private sealed record WorktreeCommitRange(string HeadShaBefore, string HeadShaAfter);
 
     /// <summary>
-    /// Post-run integration for a worktree (parallel-slot) run: commit the agent's
+    /// Post-run integration for an isolated coding run: commit the agent's
     /// edits onto the task branch, then under the per-project merge-queue lock
     /// merge the branch into the work branch (develop). Teardown is DEFERRED to
     /// <see cref="TeardownWorktreeForJob"/> at the terminal accept/escalate point
     /// so a resume/reissue can reuse this worktree+branch (the worktree is owned
     /// by the task, not the run). On conflict the branch is left for resolution.
-    /// No-op for the sequential (max==1) path.
+    /// Every coding path, including max==1 local runs, enters here.
     /// </summary>
     private async Task<WorktreeCommitRange?> IntegrateWorktreeRunAsync(ActiveRun run, TaskInfo info)
     {
         if (!run.IsWorktreeRun) return null;
+        var repositoryRoot = run.RepositoryRoot;
+        if (string.IsNullOrWhiteSpace(repositoryRoot))
+        {
+            _logger.LogError("[taskboard] worktree run {Job} lost its authoritative repository root", run.JobId);
+            return null;
+        }
         if (MainCheckoutChangedDuringWorktreeRun(run))
         {
-            var summary = $"Worktree run {run.JobId} changed the shared main checkout `{Entry.RootPath}`; integration skipped.";
+            var summary = $"Worktree run {run.JobId} changed the shared main checkout `{repositoryRoot}`; integration skipped.";
             _logger.LogWarning("[taskboard] worktree containment violation for {Job}: main checkout changed; skipping integration", run.JobId);
             RecordWorktreeContainment(info, PipelineStepStatus.Failed, "main-checkout-modified", summary);
             _chatLog.Append(info, OrchestratorMessageKind.WorktreeContainment,
@@ -1217,7 +1217,7 @@ public class ProjectRunner
             $"Worktree run stayed contained in `{run.WorktreePath}`.");
 
         var settings = _projectSettings.Get(ProjectName);
-        var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, settings.IntegrationBranch);
+        var workBranch = _git.ResolveIntegrationBranch(repositoryRoot, settings.IntegrationBranch);
         var strategy = string.IsNullOrWhiteSpace(settings.IntegrationStrategy) ? IntegrationStrategies.DirectMerge : settings.IntegrationStrategy!;
         try
         {
@@ -1276,7 +1276,7 @@ public class ProjectRunner
                     }
                 }
 
-                var integrationBaseSha = _git.ReadHeadShaAt(Entry.RootPath);
+                var integrationBaseSha = _git.ReadHeadShaAt(repositoryRoot);
                 var leaseSuffix = integrationLease is null
                     ? ""
                     : $" Integration lease token `{integrationLease.FencingToken}` is current.";
@@ -1304,7 +1304,7 @@ public class ProjectRunner
                 }
 
                 var res = Worktree.Integrate(
-                    Entry.RootPath,
+                    repositoryRoot,
                     run.WorktreePath!,
                     run.Branch!,
                     workBranch,
@@ -1583,7 +1583,7 @@ public class ProjectRunner
         }
 
         var pushed = await Worktree.PushTaskBranchWithRetryAsync(
-            Entry.RootPath,
+            run.RepositoryRoot!,
             branchHeadAfterRun,
             run.Branch,
             CancellationToken.None,
@@ -1769,7 +1769,7 @@ public class ProjectRunner
                     run.JobId, commit.Sha ?? "<unknown>");
 
             var retry = Worktree.CompleteIntegrationAfterResolution(
-                Entry.RootPath,
+                run.RepositoryRoot!,
                 run.WorktreePath!,
                 run.Branch!,
                 workBranch);
@@ -1845,7 +1845,7 @@ public class ProjectRunner
     {
         if (!run.IsWorktreeRun) return false;
         var before = run.MainCheckoutStatusBefore;
-        var after = _git.GetPorcelainStatus(Entry.RootPath);
+        var after = _git.GetPorcelainStatus(run.RepositoryRoot!);
         if (before == null || after == null)
         {
             _logger.LogDebug(
@@ -1957,17 +1957,22 @@ public class ProjectRunner
     /// + branch - but only if the branch is already folded into the work branch,
     /// so unresolved conflict work is never dropped (the gate lives in
     /// <see cref="WorktreeTaskLifecycle.TeardownIfIntegrated"/>). Deferred here,
-    /// not per-run, so resume/reissue can reuse the worktree. Guarded to max&gt;1
-    /// so the sequential path issues no extra git and stays byte-identical.
+    /// not per-run, so resume/reissue can reuse the worktree. This applies at
+    /// every slot count.
     /// </summary>
     private void TeardownWorktreeForJob(string jobId)
     {
-        if (SlotMax() <= 1) return;
         try
         {
+            var repositoryRoot = _git.ResolveRepositoryRoot(Entry);
+            if (string.IsNullOrWhiteSpace(repositoryRoot))
+            {
+                _logger.LogWarning("[taskboard] worktree teardown skipped for {Job}: authoritative repository root unavailable", jobId);
+                return;
+            }
             var settings = _projectSettings.Get(ProjectName);
-            var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, settings.IntegrationBranch);
-            var res = Worktree.TeardownIfIntegrated(Entry.RootPath, jobId, workBranch, WorktreeRoot());
+            var workBranch = _git.ResolveIntegrationBranch(repositoryRoot, settings.IntegrationBranch);
+            var res = Worktree.TeardownIfIntegrated(repositoryRoot, jobId, workBranch, WorktreeRoot());
             if (!res.Success)
                 _logger.LogWarning("[taskboard] worktree teardown for {Job} reported: {Err}", jobId, res.Error);
         }
@@ -2232,24 +2237,44 @@ public class ProjectRunner
             // (PrepareOrReuse) so the run continues where it left off instead of
             // opening a second independent landing. Read-only modes
             // (planning/research) and epic planning runs write nothing, so they
-            // legitimately run in-place; a non-git workspace has no worktree
-            // machinery and also runs in-place (the only path left in Entry.RootPath).
-            var requiresWorktree = WorktreeRunPolicy.RequiresWorktree(info.Mode, isEpicPlanningRun)
-                                   && _git.IsGitRepo(Entry.RootPath);
+            // legitimately run in-place. A mutating run without an authoritative
+            // Git repository is rejected: task storage / a local folder is never
+            // a safe fallback checkout.
+            var requiresWorktree = WorktreeRunPolicy.RequiresWorktree(info.Mode, isEpicPlanningRun);
+            var repositoryRoot = requiresWorktree ? _git.ResolveRepositoryRoot(Entry) : null;
+            if (requiresWorktree && string.IsNullOrWhiteSpace(repositoryRoot))
+            {
+                const string missingRepository = "No authoritative Git repository is configured for this coding run.";
+                RecordWorktreePreparationFailure(jobId, missingRepository);
+                ReleaseRun(jobId);
+                _mutations.RollbackStashedPendingIntent(info.FolderPath);
+                if (movedToProgressThisCall)
+                    RevertFailedStartFromProgress(jobId, info, intent);
+                NotifyStatus();
+                return RunOutcome.Reject(new RunRejection(
+                    Reason: RunRejectReason.ProjectBusy,
+                    Message: $"{missingRepository} Refusing shared-checkout/in-place execution for '{jobId}'.",
+                    BusyJobId: jobId,
+                    BusyJobTitle: info.Title));
+            }
             if (requiresWorktree && _activeRuns.Get(jobId) is { } claimed)
             {
                 claimed.Parallelism = PredictParallelism(info);
                 var wtSettings = _projectSettings.Get(ProjectName);
-                var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, wtSettings.IntegrationBranch);
-                var prep = Worktree.PrepareOrReuse(Entry.RootPath, jobId, workBranch, WorktreeRoot());
+                var workBranch = _git.ResolveIntegrationBranch(repositoryRoot!, wtSettings.IntegrationBranch);
+                var prep = Worktree.PrepareOrReuse(repositoryRoot!, jobId, workBranch, WorktreeRoot());
                 if (prep.Success)
                 {
                     claimed.WorktreePath = prep.WorktreePath;
+                    claimed.WorkingDirectory = WorktreeRunPolicy.ResolveWorkingDirectory(
+                        repositoryRoot!, Entry.RootPath, prep.WorktreePath!);
+                    claimed.RepositoryRoot = repositoryRoot;
                     claimed.Branch = prep.Branch;
                     claimed.WorktreeReused = prep.Reused;
                     _logger.LogInformation(
-                        "[taskboard] worktree for {Job}: {Path} on {Branch} ({Mode})",
-                        jobId, prep.WorktreePath, prep.Branch, prep.Reused ? "reused" : "fresh-cut");
+                        "[taskboard] worktree for {Job}: {Path} (cwd={Cwd}) on {Branch} from {RepositoryRoot} ({Mode})",
+                        jobId, prep.WorktreePath, claimed.WorkingDirectory, prep.Branch, repositoryRoot,
+                        prep.Reused ? "reused" : "fresh-cut");
                 }
                 else
                 {
@@ -2325,24 +2350,27 @@ public class ProjectRunner
                 "[taskboard] {Intent} for job {JobId} on {Cli}: kind={Kind} resume={Resume} session={Session} reason={Reason}",
                 intent, jobId, cli.CliType, plan.EventKind, plan.ResumeFlag,
                 plan.SessionToResume ?? "<none>", plan.EventReason ?? "<none>");
-            // Log the ACTUAL working directory the CLI will run in: a parallel
+            // Log the ACTUAL working directory the CLI will run in: every coding
             // slot runs inside its isolated worktree, not the shared checkout.
             // (Previously this always printed Entry.RootPath, masking the worktree
             // path and hiding shared-checkout fallbacks in the log.)
-            var runWorkingDir = _activeRuns.Get(jobId)?.WorktreePath ?? Entry.RootPath;
+            var runWorkingDir = _activeRuns.Get(jobId)?.WorkingDirectory
+                                ?? _activeRuns.Get(jobId)?.WorktreePath
+                                ?? Entry.RootPath;
             _logger.LogInformation("[taskboard] using working directory {Path}", runWorkingDir);
 
             // ASS-1732 guard (defense-in-depth): a coding run that REQUIRES a
             // worktree must never start with its working directory pointed at the
             // shared main checkout. The gate above already rejects on a failed
-            // worktree prepare/reuse, so reaching here with runWorkingDir ==
-            // Entry.RootPath means a worktree was silently skipped - an invariant
-            // violation we refuse loudly + escalate rather than let the agent
-            // dirty `develop`. Read-only / planning runs (requiresWorktree==false)
-            // legitimately run in the main checkout and never trip this.
-            if (WorktreeRunPolicy.IsMainCheckoutViolation(requiresWorktree, runWorkingDir, Entry.RootPath))
+            // worktree prepare/reuse, so reaching here anywhere inside the
+            // authoritative checkout means a worktree was silently skipped - an
+            // invariant violation we refuse loudly + escalate rather than let the
+            // agent dirty `develop`. Read-only / planning runs
+            // (requiresWorktree==false) legitimately run in-place and never trip
+            // this.
+            if (WorktreeRunPolicy.IsMainCheckoutViolation(requiresWorktree, runWorkingDir, repositoryRoot))
             {
-                var violation = $"Coding run {jobId} resolved to the shared main checkout `{Entry.RootPath}` without an isolated worktree; refusing to start (worktree isolation is mandatory for coding runs).";
+                var violation = $"Coding run {jobId} resolved to the shared main checkout `{repositoryRoot}` without an isolated worktree; refusing to start (worktree isolation is mandatory for coding runs).";
                 _logger.LogError("[taskboard] worktree isolation guard tripped for {Job}: {Violation}", jobId, violation);
                 _chatLog.Append(info, OrchestratorMessageKind.WorktreeContainment,
                     "[worktree-containment] " + violation);
@@ -2354,7 +2382,7 @@ public class ProjectRunner
                     details: new()
                     {
                         ["jobId"] = jobId,
-                        ["mainCheckout"] = Entry.RootPath ?? string.Empty,
+                        ["mainCheckout"] = repositoryRoot ?? string.Empty,
                         ["mode"] = info.Mode ?? string.Empty,
                     });
                 ReleaseRun(jobId);
@@ -2370,7 +2398,7 @@ public class ProjectRunner
             }
 
             if (_activeRuns.Get(jobId) is { IsWorktreeRun: true } worktreeRun)
-                worktreeRun.MainCheckoutStatusBefore = _git.GetPorcelainStatus(Entry.RootPath);
+                worktreeRun.MainCheckoutStatusBefore = _git.GetPorcelainStatus(worktreeRun.RepositoryRoot!);
 
             // Reissue open-items pre-check (deterministic pre-pipeline step):
             // when this run is an auto-review re-issue that still carries open
@@ -2500,7 +2528,7 @@ public class ProjectRunner
             // looks for the session marker under the cwd it is launched in. A
             // session is therefore resumable only when this run's cwd matches the
             // one the session was born in:
-            //  - non-worktree run (read-only / non-git): always the same place ->
+            //  - non-worktree run (read-only): always the same place ->
             //    resume normally.
             //  - REUSED worktree (resume / reissue / crash-recovery requeue of a
             //    task whose worktree already existed): same canonical worktree
@@ -4111,8 +4139,14 @@ public class ProjectRunner
     private void EnqueueIntegrationPush(TaskInfo info, string branch)
     {
         if (_integrationPushQueue == null) return;
+        var repositoryRoot = _git.ResolveRepositoryRoot(Entry);
+        if (string.IsNullOrWhiteSpace(repositoryRoot))
+        {
+            _logger.LogWarning("integration-push enqueue skipped project={Project} job={JobId} reason=repository-root-unavailable", ProjectName, info.Id);
+            return;
+        }
         var enqueued = _integrationPushQueue.Enqueue(new AgentStudio.Pipeline.IntegrationPushRequest(
-            ProjectName, info.Id, info.FolderPath, Entry.RootPath, branch));
+            ProjectName, info.Id, info.FolderPath, repositoryRoot, branch));
         if (!enqueued)
             _logger.LogWarning("integration-push enqueue failed project={Project} job={JobId} branch={Branch}", ProjectName, info.Id, branch);
     }
@@ -4767,10 +4801,10 @@ public class ProjectRunner
                 jobId, ProjectName, cliType, execution.Status, execution.ExitCode, execution.DurationSeconds ?? 0.0);
 
             WorktreeCommitRange? worktreeCommitRange = null;
-            // ADR-0052 slice 2: a parallel (worktree) run commits its edits on the
+            // ADR-0052/0057: every coding worktree run commits its edits on the
             // task branch and integrates them into the work branch BEFORE the
             // post-run review reads the result; a merge conflict is left for the
-            // review to escalate. No-op for the sequential (max==1) path.
+            // review to escalate. Slot count does not select this path.
             if (run.IsWorktreeRun)
             {
                 var wtInfo = _scanner.FindJob(jobId, Entry.Path);
@@ -5453,7 +5487,7 @@ public class ProjectRunner
                     // the card, a later run should start from zero rather than
                     // inherit a near-trip count.
                     _consecutiveFailNoProgress.TryRemove(jobId, out _);
-                    // Terminal: tear down the parallel worktree+branch (kept only
+                    // Terminal: tear down the coding worktree+branch (kept only
                     // if its work is unmerged, so a human can still resolve it).
                     TeardownWorktreeForJob(jobId);
                     var move = await _humanReviewEscalation.EscalateAsync(
@@ -5536,7 +5570,7 @@ public class ProjectRunner
                     _abortReviewRerunsUsed.TryRemove(jobId, out _);
                     _completionRetriggerUsed.TryRemove(jobId, out _);
                     // Terminal: the task left the loop into review, so tear down
-                    // its parallel worktree+branch (deferred from per-run).
+                    // its coding worktree+branch (deferred from per-run).
                     TeardownWorktreeForJob(jobId);
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);
                     if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
@@ -6072,7 +6106,7 @@ public class ProjectRunner
                 var move = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, Entry.Path, CancellationToken.None);
                 if (move.Status == MoveJobStatus.Success)
                 {
-                    // Terminal accept: tear down the parallel worktree+branch.
+                    // Terminal accept: tear down the coding worktree+branch.
                     TeardownWorktreeForJob(jobId);
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);
                     if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
@@ -6514,11 +6548,16 @@ public class ProjectRunner
 
     private string RenderPrompt(RunPlan plan, TaskInfo info, string runWorkingDir)
     {
+        var worktreeCheckout = _activeRuns.Get(info.Id)?.WorktreePath;
+        if (string.IsNullOrWhiteSpace(worktreeCheckout) && IsWorktreePath(runWorkingDir))
+            worktreeCheckout = runWorkingDir;
+
         if (plan.PromptOverride != null)
         {
-            var rewrittenOverride = RewriteMainCheckoutPathsForRun(plan.PromptOverride, runWorkingDir);
+            var rewrittenOverride = RewriteMainCheckoutPathsForRun(
+                plan.PromptOverride, runWorkingDir, worktreeCheckout);
             return IsWorktreePath(runWorkingDir)
-                ? BuildWorktreeContainmentNotice(runWorkingDir) + rewrittenOverride
+                ? BuildWorktreeContainmentNotice(runWorkingDir, worktreeCheckout) + rewrittenOverride
                 : rewrittenOverride;
         }
         if (string.IsNullOrWhiteSpace(plan.PromptTemplate))
@@ -6526,7 +6565,7 @@ public class ProjectRunner
 
         var promptPath = Path.Combine(info.FolderPath, "prompt.md");
         var repositoryPath = string.IsNullOrWhiteSpace(Entry.RepositoryPath) ? Entry.RootPath : Entry.RepositoryPath;
-        var effectiveRepositoryPath = IsWorktreePath(runWorkingDir) ? runWorkingDir : repositoryPath;
+        var effectiveRepositoryPath = IsWorktreePath(runWorkingDir) ? worktreeCheckout : repositoryPath;
         var promptText = ReadPromptText(promptPath);
         if (ShouldForegroundIntakeEnrichment(plan))
             promptText = PrependIntakeEnrichment(info.FolderPath, promptText);
@@ -6534,7 +6573,7 @@ public class ProjectRunner
         var values = new Dictionary<string, string?>(plan.PromptVariables)
         {
             ["prompt_path"] = promptPath,
-            ["prompt_text"] = RewriteMainCheckoutPathsForRun(promptText, runWorkingDir),
+            ["prompt_text"] = RewriteMainCheckoutPathsForRun(promptText, runWorkingDir, worktreeCheckout),
             ["job_folder"] = info.FolderPath,
             ["title"] = string.IsNullOrWhiteSpace(info.Title) ? "(untitled)" : info.Title,
             ["working_directory"] = runWorkingDir,
@@ -6543,9 +6582,9 @@ public class ProjectRunner
             ["mode_framing"] = _prompts.RenderModeFraming(info.Mode, info.AllowWebAccess)
         };
         var rendered = _prompts.Render(plan.PromptTemplate, values);
-        rendered = RewriteMainCheckoutPathsForRun(rendered, runWorkingDir);
+        rendered = RewriteMainCheckoutPathsForRun(rendered, runWorkingDir, worktreeCheckout);
         return IsWorktreePath(runWorkingDir)
-            ? BuildWorktreeContainmentNotice(runWorkingDir) + rendered
+            ? BuildWorktreeContainmentNotice(runWorkingDir, worktreeCheckout) + rendered
             : rendered;
     }
 
@@ -6597,20 +6636,34 @@ public class ProjectRunner
         => !string.IsNullOrWhiteSpace(path)
            && !string.Equals(NormalizePath(path), NormalizePath(Entry.RootPath), StringComparison.OrdinalIgnoreCase);
 
-    private string RewriteMainCheckoutPathsForRun(string text, string runWorkingDir)
+    private string RewriteMainCheckoutPathsForRun(
+        string text,
+        string runWorkingDir,
+        string? worktreeCheckout)
     {
         if (string.IsNullOrEmpty(text) || !IsWorktreePath(runWorkingDir)) return text;
 
         var result = text.Replace(Entry.RootPath, runWorkingDir, StringComparison.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(Entry.RepositoryPath))
-            result = result.Replace(Entry.RepositoryPath, runWorkingDir, StringComparison.OrdinalIgnoreCase);
+            result = result.Replace(
+                Entry.RepositoryPath,
+                string.IsNullOrWhiteSpace(worktreeCheckout) ? runWorkingDir : worktreeCheckout,
+                StringComparison.OrdinalIgnoreCase);
         return result;
     }
 
-    private string BuildWorktreeContainmentNotice(string runWorkingDir)
-        => "## Worktree containment\n\n"
-         + $"Your repository checkout for this run is `{runWorkingDir}`. Do all file edits, reads, builds, tests, and git commands in that worktree. "
-         + $"The main checkout `{Entry.RootPath}` is shared by other slots and is off limits for this run; do not edit it, build from it, test from it, or pass it to tools.\n\n";
+    private string BuildWorktreeContainmentNotice(string runWorkingDir, string? worktreeCheckout)
+    {
+        var mainCheckout = _git.ResolveRepositoryRoot(Entry)
+                           ?? (!string.IsNullOrWhiteSpace(Entry.RepositoryPath)
+                               ? Entry.RepositoryPath
+                               : Entry.RootPath);
+        var repository = string.IsNullOrWhiteSpace(worktreeCheckout) ? runWorkingDir : worktreeCheckout;
+        return "## Worktree containment\n\n"
+         + $"Your repository checkout for this run is `{repository}` and your working directory is `{runWorkingDir}`. "
+         + "Do all file edits, reads, builds, tests, and git commands in that worktree. "
+         + $"The main checkout `{mainCheckout}` is shared by other slots and is off limits for this run; do not edit it, build from it, test from it, or pass it to tools.\n\n";
+    }
 
     private static string NormalizePath(string path)
     {

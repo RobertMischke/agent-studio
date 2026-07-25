@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -17,6 +18,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
         Directory.CreateDirectory(_workspaceRoot);
         foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        InitializeGitRepository();
     }
 
     public void Dispose()
@@ -88,6 +90,37 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
             Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order}," +
             "\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"}");
+    }
+
+    private void InitializeGitRepository()
+    {
+        RunGit("init", "-q", "-b", "main");
+        RunGit("config", "user.email", "test@example.invalid");
+        RunGit("config", "user.name", "Pickup Atomicity Test");
+        File.WriteAllText(Path.Combine(_watchPath, "README.md"), "test repository");
+        RunGit("add", "README.md");
+        RunGit("commit", "-q", "-m", "seed");
+        RunGit("checkout", "-q", "-b", "develop");
+    }
+
+    private void RunGit(params string[] arguments)
+    {
+        var start = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = _watchPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)
+            ?? throw new InvalidOperationException("git did not start");
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(stderr), stderr);
     }
 
     private ProjectRunner BuildRunner(FailingCliService cli)

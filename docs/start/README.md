@@ -15,7 +15,7 @@ Use this page as the first stop when you need the right document quickly.
 | [domains/](../system/domains/README.md) | Current system-of-record domain maps for runner, pipeline, tasks, frontend, CLI, tokens, and token pricing. |
 | [contracts/](../system/contracts/README.md) | Durable filesystem, task, protocol, run outcome, code-pattern, and wiki organization contracts. |
 | [design/](../quality/design/README.md) | Product-wide, prompt-known design hard rules (no left accent bars, full-bleed views, aggregate = sum, acute-only signals, both themes). |
-| [quality/](../quality/README.md) | Technology-aware Angular and .NET style guides, applicability metadata, and the rule-authoring workflow used by Project Hub and intake prompts. |
+| [quality/](../quality/README.md) | Technology-aware Angular and .NET style guides, applicability metadata, and the rule-authoring workflow used by Deck and intake prompts. |
 | [frontend/](../quality/frontend/README.md) | Frontend design system, style guide, testing contract, performance playbook, and audits. |
 | [cli/](../system/cli/README.md) | Supported CLI contract, per-CLI skills, audits, and investigations. |
 | [operations/](../operations/README.md) | Setup, onboarding, security docs, runtime observability, git doctrine, and test workspaces. |
@@ -92,10 +92,12 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../app/schemas/wiki-document-companion.schema.json) |
 | Wiki page lifecycle schema | [schemas/wiki-page-lifecycle.schema.json](../app/schemas/wiki-page-lifecycle.schema.json) |
 | Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](../app/schemas/model-qualification-event.schema.json) |
+| Model escalation and companion routing concept | [concepts/model-escalation-and-companion-routing.md](../concepts/model-escalation-and-companion-routing.md) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |
 | Standalone remote runner (Linux host) | [operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md) |
+| Runner-host resource governance (Linux cgroups, coding/review role defaults, AIMD capacity boundary) | [target architecture](../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md) |
 | Remote hosts operator lifecycle | [operations/remote-hosts.md](../operations/remote-hosts.md) |
 | Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](../operations/setup/remote-runner-persistent-connection.md) |
 | Common problems | [common-problems/README.md](../operations/common-problems/README.md) |
@@ -117,6 +119,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Admin CLI onboarding | [concepts/admin-cli-onboarding.html](../concepts/admin-cli-onboarding.html) |
 | Orchestrator supervision loop | [concepts/orchestrator-supervision-loop.html](../concepts/orchestrator-supervision-loop.html) |
 | Runner stability & incident chronicle (incidents, invariants, sessions; supersedes the retired runner-stability / overnight / claude-termination pages) | [workbenches/haertung-verteilte-ausfuehrung/historie.html](../operations/haertung-verteilte-ausfuehrung/historie.html) |
+| Agent fencing (platform-owned Git history, trust-graded oversight, real incidents, open proof point) | [operations/haertung-verteilte-ausfuehrung/agent-fencing.html](../operations/haertung-verteilte-ausfuehrung/agent-fencing.html) · [separate AHP-style diagram](../operations/haertung-verteilte-ausfuehrung/agent-fencing-diagram.html) |
 | Process termination & abort scenarios (test suite) | [concepts/process-termination-scenarios.html](../concepts/process-termination-scenarios.html) |
 | Wiki consolidation analysis 2026-07-18 (inventory, redundancy clusters, cleanup plan) | [konsolidierung-analyse-2026-07-18.md](konsolidierung-analyse-2026-07-18.md) |
 

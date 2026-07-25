@@ -23,27 +23,68 @@ public static class WorktreeRunPolicy
     /// <summary>
     /// True when this run must execute inside an isolated task worktree. A coding
     /// run always does; read-only modes (planning / research) and epic planning
-    /// runs do not (they mutate nothing). The caller still gates on the project
-    /// root actually being a git repository - a non-git workspace has no worktree
-    /// machinery and falls back to running in-place.
+    /// runs do not (they mutate nothing). A required worktree with no
+    /// authoritative Git repository is a rejected admission, never an in-place
+    /// fallback.
     /// </summary>
     public static bool RequiresWorktree(string? mode, bool isEpicPlanningRun)
         => !isEpicPlanningRun && !TaskModes.IsReadOnly(mode);
 
     /// <summary>
+    /// Maps the project's configured CLI cwd into a newly materialized worktree.
+    /// A cwd inside the authoritative checkout keeps its relative monorepo path.
+    /// A storage/local folder outside that checkout cannot be mirrored and falls
+    /// back to the worktree root, so source-mutating work never runs in task
+    /// storage.
+    /// </summary>
+    public static string ResolveWorkingDirectory(
+        string repositoryRoot,
+        string? configuredWorkingDirectory,
+        string worktreeRoot)
+    {
+        if (string.IsNullOrWhiteSpace(configuredWorkingDirectory))
+            return Normalize(worktreeRoot);
+
+        var repository = Normalize(repositoryRoot);
+        var configured = Normalize(configuredWorkingDirectory!);
+        var worktree = Normalize(worktreeRoot);
+        var relative = Path.GetRelativePath(repository, configured);
+        if (relative == ".") return worktree;
+        if (Path.IsPathRooted(relative)
+            || relative == ".."
+            || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            || relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+            return worktree;
+
+        return Path.GetFullPath(Path.Combine(worktree, relative));
+    }
+
+    /// <summary>
     /// True when a run that <paramref name="requiresWorktree"/> would illegally
-    /// execute in the shared main checkout (<paramref name="runWorkingDir"/> ==
-    /// <paramref name="mainCheckoutRoot"/>). This is the guard condition: a coding
-    /// run resolving to the main checkout means worktree preparation silently fell
-    /// through, and the run must be refused + escalated rather than allowed to
-    /// dirty the shared tree. Read-only / planning runs (requiresWorktree == false)
+    /// execute in the shared main checkout (at its root or in a configured
+    /// subfolder). This is the guard condition: a coding run resolving anywhere
+    /// inside the main checkout means worktree preparation silently fell through,
+    /// and the run must be refused + escalated rather than allowed to dirty the
+    /// shared tree. Read-only / planning runs (requiresWorktree == false)
     /// legitimately run in the main checkout, so they never trip the guard.
     /// </summary>
     public static bool IsMainCheckoutViolation(bool requiresWorktree, string? runWorkingDir, string? mainCheckoutRoot)
     {
         if (!requiresWorktree) return false;
         if (string.IsNullOrWhiteSpace(runWorkingDir) || string.IsNullOrWhiteSpace(mainCheckoutRoot)) return false;
-        return PathsEqual(runWorkingDir!, mainCheckoutRoot!);
+        var run = Normalize(runWorkingDir!);
+        var main = Normalize(mainCheckoutRoot!);
+        if (string.Equals(
+                run,
+                main,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            return true;
+
+        var relative = Path.GetRelativePath(main, run);
+        return relative != ".."
+               && !Path.IsPathRooted(relative)
+               && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+               && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
     }
 
     /// <summary>

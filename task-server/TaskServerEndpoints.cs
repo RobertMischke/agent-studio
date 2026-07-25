@@ -167,6 +167,8 @@ public static class TaskServerEndpoints
             => await InvokeAsync(() => store.ResolveUnknownAttemptAsync(runId, request, Actor(context), ct)));
         management.MapGet("/audit", async (long? after, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ListAuditAsync(after ?? 0, ct)));
+        management.MapGet("/invariants", async (TaskServerStore store, CancellationToken ct)
+            => await InvokeAsync(() => store.GetInvariantRegistryAsync(ct)));
         management.MapPost("/migrations/legacy/inventory", async (
             LegacyMigrationRequest request, LegacyMigrationService migration, CancellationToken ct)
             => await InvokeAsync(() => migration.InventoryAsync(request, ct)));

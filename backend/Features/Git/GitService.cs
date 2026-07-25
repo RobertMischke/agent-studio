@@ -143,10 +143,10 @@ public record WikiBranchSnapshot(string Ref, string Sha, string ShortSha, string
 /// <summary>
 /// Per-commit enrichment for the deterministic commit-attribution step: the
 /// full commit body (<c>%B</c>, scanned for <c>Co-Authored-By:</c> trailers
-/// so an agent co-author is detected even when the operator is the author)
-/// and whether the commit is a merge (&gt;1 parent).
+/// so an agent co-author is detected even when the operator is the author),
+/// whether the commit is a merge (&gt;1 parent), and its author timestamp.
 /// </summary>
-public record CommitMeta(string Body, bool IsMerge);
+public record CommitMeta(string Body, bool IsMerge, DateTime AuthorDateUtc);
 
 public record GitProjectSummary(
     string ProjectName,
@@ -1127,6 +1127,19 @@ public class GitService
     /// </summary>
     public string? ResolveProjectRepoRoot(string projectName) => ResolveProjectRoot(projectName);
 
+    /// <summary>
+    /// Resolves one runner entry to its authoritative Git checkout root.
+    /// <c>RepositoryPath</c> wins over <c>RootPath</c>; the latter may be a
+    /// monorepo subfolder, while task storage in <c>Path</c> is never treated as
+    /// source. Returns null instead of handing a non-Git local folder to a
+    /// mutating run.
+    /// </summary>
+    public string? ResolveRepositoryRoot(WatchPathEntry entry)
+    {
+        var configured = ResolveConfiguredRepositoryPath(entry);
+        return string.IsNullOrWhiteSpace(configured) ? null : ResolveGitToplevel(configured);
+    }
+
     /// <summary>Resolve the repository root for a job.</summary>
     public string? ResolveRepoRoot(string jobId, string? watchPath)
     {
@@ -1218,10 +1231,10 @@ public class GitService
     }
 
     /// <summary>
-    /// True when <paramref name="path"/> lives inside a git working tree (so the
-    /// worktree machinery is available). The runner gates its "always-worktree"
-    /// requirement on this: a non-git workspace has no worktree primitives and
-    /// runs in-place. Cheap: a single <c>rev-parse --show-toplevel</c>.
+    /// True when <paramref name="path"/> lives inside a git working tree.
+    /// Diagnostic helper only: coding isolation must resolve the authoritative
+    /// repository through <see cref="ResolveRepositoryRoot"/> and fail closed
+    /// when it is absent. Cheap: a single <c>rev-parse --show-toplevel</c>.
     /// </summary>
     public bool IsGitRepo(string? path) => ResolveGitToplevel(path ?? string.Empty) != null;
 
@@ -1645,13 +1658,13 @@ public class GitService
         if (root == null) return new GitCommitResult(false, null, $"Not a git repository: {configured}");
 
         // Scoped commit: when the caller names the task's own paths, stage and
-        // commit ONLY those. A sequential (maxParallelism==1) run shares the
-        // main checkout, so unrelated dirty changes from operator edits or an
-        // earlier task that never committed pile up there. A blanket `git add
-        // -A` would sweep all of them into THIS task's commit (the mega-blob /
+        // commit ONLY those. Always-worktree coding runs should already be
+        // isolated, but this legacy/transition path also handles read-only,
+        // operator-authored, and pre-policy state. A blanket `git add -A` could
+        // sweep unrelated dirty changes into THIS task's commit (the mega-blob /
         // mis-attribution bug). Restricting the pathspec keeps the commit - and
         // its stamped SHA - to exactly the files this task touched, and leaves
-        // the foreign changes dirty for their own owner to handle.
+        // foreign changes dirty for their own owner to handle.
         if (pathspecs is { Count: > 0 })
         {
             var addArgs = new List<string> { "add", "-A", "--" };
@@ -2237,12 +2250,12 @@ public class GitService
         return new GitWorktreeResult(false, repoRoot, err);
     }
 
-    // ADR-0052 worktree + integration primitives. These are low-level git
-    // plumbing for the parallel-task model (worktree-per-task on task/<id>
-    // branches off the integration branch). They take an explicit repo or
-    // worktree root so the orchestrator can drive them directly and so they
-    // are unit-testable against a temp repo. None of them run while
-    // maxParallelism == 1, so the sequential runner is unaffected.
+    // ADR-0052/ADR-0057 worktree + integration primitives. These are low-level
+    // git plumbing for the worktree-per-coding-task model on task/<id> branches
+    // off the integration branch. They take an explicit repo or worktree root
+    // so the orchestrator can drive them directly and so they are unit-testable
+    // against a temp repo. Coding runs use them at every slot count;
+    // maxParallelism controls admission capacity only.
 
     /// <summary>
     /// Creates a new worktree at <paramref name="worktreePath"/> with a fresh
@@ -3376,7 +3389,7 @@ public class GitService
 
         const char US = '';
         const char RS = '';
-        var args = "show -s --no-patch --pretty=format:\"%H%x1f%P%x1f%B%x1e\" " + string.Join(' ', list);
+        var args = "show -s --no-patch --pretty=format:\"%H%x1f%P%x1f%aI%x1f%B%x1e\" " + string.Join(' ', list);
         var (output, _, code) = RunGit(root, args);
         if (code != 0 || string.IsNullOrEmpty(output)) return result;
 
@@ -3391,9 +3404,22 @@ public class GitService
             var secondUs = rest.IndexOf(US);
             if (secondUs < 0) continue;
             var parents = rest[..secondUs];
-            var body = rest[(secondUs + 1)..];
+            rest = rest[(secondUs + 1)..];
+            var thirdUs = rest.IndexOf(US);
+            if (thirdUs < 0) continue;
+            if (!DateTime.TryParse(
+                    rest[..thirdUs],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                    | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var authoredAt))
+                continue;
+            var body = rest[(thirdUs + 1)..];
             var parentCount = parents.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-            result[sha] = new CommitMeta(body, parentCount > 1);
+            result[sha] = new CommitMeta(
+                body,
+                parentCount > 1,
+                DateTime.SpecifyKind(authoredAt, DateTimeKind.Utc));
         }
         return result;
     }

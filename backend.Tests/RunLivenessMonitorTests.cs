@@ -306,6 +306,44 @@ public sealed class RunLivenessMonitorTests : IDisposable
     }
 
     [Fact]
+    public async Task Boot_does_not_requeue_known_remote_attempt_before_runner_handshake()
+    {
+        const string slug = "remote-restart";
+        WriteJobWithSession(TaskStates.Progress, slug, sessionName: "remote", chain: ["remote"]);
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        WriteCliLog(folder, "remote CLI may still be alive on its host");
+        SetMtimeOld(Path.Combine(folder, "logs", "cli-output.log"));
+        var leases = new RunLeaseService(NullLogger<RunLeaseService>.Instance);
+        var acquired = leases.TryAcquire(new RunLeaseAcquireRequest(
+            slug,
+            "runner-remote",
+            "runner-remote",
+            "remote-host",
+            42,
+            "remote",
+            RequestedTtlSeconds: 120,
+            RepositoryId: ProjectName,
+            IdempotencyKey: "remote-restart-acquire"));
+        Assert.True(acquired.Granted);
+        var lease = acquired.Lease!;
+        leases.Release(new RunLeaseReleaseRequest(
+            slug,
+            lease.LeaseId,
+            lease.FencingToken,
+            lease.RunnerId,
+            lease.AttemptId,
+            lease.AuthorityEpoch,
+            "remote-restart-release"));
+
+        var (monitor, _) = Build(leases: leases);
+        var outcomes = await monitor.AdoptOnBootAsync();
+
+        Assert.Empty(outcomes);
+        Assert.True(Directory.Exists(folder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)));
+    }
+
+    [Fact]
     public async Task Disabled_SkipsScanEntirely()
     {
         const string slug = "would-be-zombie";
@@ -323,7 +361,9 @@ public sealed class RunLivenessMonitorTests : IDisposable
 
     // ---- harness ---------------------------------------------------------
 
-    private (RunLivenessMonitor Monitor, TaskScannerService Scanner) Build(bool enabled = true)
+    private (RunLivenessMonitor Monitor, TaskScannerService Scanner) Build(
+        bool enabled = true,
+        RunLeaseService? leases = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -356,7 +396,8 @@ public sealed class RunLivenessMonitorTests : IDisposable
 
         var monitor = new RunLivenessMonitor(
             scanner, transitions, sessions, pickupLock, chatLog, sp, config, taskAccess,
-            NullLogger<RunLivenessMonitor>.Instance);
+            NullLogger<RunLivenessMonitor>.Instance,
+            leases: leases);
         return (monitor, scanner);
     }
 

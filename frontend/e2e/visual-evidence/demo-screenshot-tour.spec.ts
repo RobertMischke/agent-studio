@@ -83,7 +83,7 @@ async function selectProject(page: Page, name: string): Promise<void> {
 }
 
 /**
- * Open the Project Hub via the explorer tree (not a hash deep-link — under
+ * Open the Deck via the explorer tree (not a hash deep-link — under
  * `ng serve`'s JIT build the project-detail feature is a lazy chunk and the
  * dev-server compiles it on demand on first hit, which can take well past
  * a hash-reconciliation race). Real clicks tolerate that first-hit compile
@@ -95,7 +95,7 @@ async function openProjectHub(page: Page, projectName: string): Promise<void> {
   // expand the row's children first.
   const projectRow = page.getByTestId(`studio-explorer-project-${projectName}`);
   await expect(projectRow).toBeVisible({ timeout: 15_000 });
-  await projectRow.getByRole('button', { name: 'Open Project Hub' }).click();
+  await projectRow.getByRole('button', { name: 'Open Deck' }).click();
   await dismissCrashRecoveryCards(page);
 }
 
@@ -164,7 +164,7 @@ test('screenshot tour — orchestrator chat (composer + conversation)', async ({
   await captureBoth(page, testInfo, 'orchestrator-chat-context-menu');
 });
 
-test('screenshot tour — project hub rails (URLs, token usage, wiki)', async ({ page }, testInfo) => {
+test('screenshot tour — Deck rails (URLs, token usage, wiki)', async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   await page.goto('/');
   await dismissBlockingOverlays(page);

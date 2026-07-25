@@ -50,8 +50,10 @@ Linux host and fills a bounded set of task slots without owning task state:
 
 Run review as a second systemd identity, even when it shares the physical host
 with coding. Set `RUNNER_ROLE=review`, use a different `RUNNER_ID`, service
-account, credential file, cgroup quota, and `RUNNER_REVIEW_WORKDIR`. Do not point
-the review root at `RUNNER_WORKDIR`.
+account, credential file, and `RUNNER_REVIEW_WORKDIR`. The managed agent-host
+unit supplies the role cgroup policy described in
+[runner-host resource governance](../haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md).
+Do not point the review root at `RUNNER_WORKDIR`.
 
 The Review Executor advertises Git/source-bundle, semantic, and vision
 capabilities. Each claimed ReviewAttempt receives a fresh workspace, cache,
@@ -403,26 +405,29 @@ autonomous task store on the Runner.
 
 ### systemd deployment
 
-Install the shipped unit and an environment file, then enable it:
+Use the product-owned host controller for the first install and every update.
+The Coding example is:
 
 ```bash
-sudo install -D -m 0644 deploy/systemd/agent-runner.service /etc/systemd/system/agent-runner.service
-sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner
-sudoedit /etc/agent-runner/runner.env
-sudo systemctl daemon-reload
-sudo systemctl enable --now agent-runner
-sudo journalctl -u agent-runner -f
+bash scripts/remote-runner-onboard.sh \
+  --host <ssh-target> \
+  --server <task-server-url> \
+  --topology central \
+  --runner-id <enrolled-runner-id> \
+  --runner-name agent-runner-01 \
+  --role coding \
+  --git-remote <fetch-url> \
+  --git-push-remote <push-url>
 ```
 
-At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, `RUNNER_NAME`,
-`RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. A networked deployment also
-sets `RUNNER_AUTH_TOKEN_FILE`; the credential itself stays in that separate
-protected file. `RUNNER_CLIENT_ID` remains optional attribution. The unit restarts after failures, logs to journald,
-requests graceful SIGTERM drain, and best-effort starts
-`~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
-clean Mode-A Studio stack.
+Use `--role review`, a separate enrolled identity, and a separate credential
+file to install or update `agent-runner-review.service`. The controller derives
+role resource policy, writes it into the main unit, migrates legacy resource
+drop-ins, runs `daemon-reload`, and restarts the selected service. Do not copy
+`deploy/systemd/agent-runner.service` directly for a managed host; that file is
+the legacy static unit reference and cannot derive a host quota.
 
-The shipped unit deliberately uses `KillMode=process`. This is required:
+The managed units deliberately use `KillMode=process`. This is required:
 `control-group` kills detached job workers and makes safe reattachment
 impossible. `StartLimitIntervalSec=300`, `StartLimitBurst=5`, and
 `RestartSec=10s` bound a broken-binary restart loop while allowing ordinary
@@ -637,3 +642,9 @@ The host card raises these sustained findings after at least three consecutive s
 - **Memory pressure**: combined swap-in and swap-out traffic stays above 64 KiB/s. A single historical swap allocation without traffic does not trigger this finding.
 
 Short spikes remain visible in the quiet history chart but do not create a badge. Check I/O wait alongside CPU when load is high: high load with low CPU and elevated I/O wait usually points to storage contention rather than missing cores.
+
+Claim admission uses the same one-minute load sample. New claims stop only
+after load divided by logical CPU cores remains above
+`RUNNER_CLAIM_MAX_LOAD_PER_CORE` (default `1.5`) for
+`RUNNER_LOAD_GATE_SUSTAINED_SECONDS` (default `120`). Existing runs continue,
+and one recovery event is reported per sustained high-load interval.

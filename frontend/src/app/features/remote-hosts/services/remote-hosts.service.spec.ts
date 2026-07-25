@@ -41,6 +41,21 @@ describe('RemoteHostsService', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  it('refresh initializes an empty registry before hydrating live data', () => {
+    svc.refresh();
+
+    expect(svc.hosts().length).toBeGreaterThan(0);
+  });
+
+  it('refreshes an already loaded registry without replacing its visible entries', () => {
+    svc.ensureLoaded();
+    svc.addProvisionedHost('Runner Berlin 02', 'ssh://runner@berlin.example');
+
+    svc.refresh();
+
+    expect(svc.hosts().some((host) => host.id === 'runner-berlin-02')).toBe(true);
+  });
+
   it('adds a wizard-completed host as an idle remote runner', () => {
     svc.ensureLoaded();
     svc.addProvisionedHost('Runner Berlin 02', 'ssh://runner@berlin.example');
@@ -58,6 +73,64 @@ describe('RemoteHostsService', () => {
 });
 
 describe('RemoteHostsService client registry hydration', () => {
+  it('uses a compact refresh window while preserving a loaded 14-day series', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date();
+    const older = new Date(now.getTime() - 60_000).toISOString();
+    const latest = now.toISOString();
+    const client = {
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      kind: 'service',
+      registeredAt: older,
+      lastSeenAt: latest,
+      runnerGitStatus: 'ready' as const,
+    };
+    const point = (timestamp: string, load1: number) => ({
+      timestamp,
+      cpuPercent: 40,
+      load1,
+      load5: load1,
+      load15: load1,
+      memoryUsedBytes: 4_000_000_000,
+      memoryTotalBytes: 16_000_000_000,
+      swapInBytesPerSecond: 0,
+      swapOutBytesPerSecond: 0,
+      cpuStealPercent: 0,
+      ioWaitPercent: 0,
+      cpuCores: 12,
+      activeSlots: 1,
+    });
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([client]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: client.id,
+      window: '14d',
+      points: [point(older, 2)],
+      findings: [],
+    });
+
+    svc.refresh();
+    http.expectOne('/api/clients').flush([client]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=1h').flush({
+      clientId: client.id,
+      window: '1h',
+      points: [point(latest, 3)],
+      findings: [],
+    });
+
+    expect(svc.hosts().find(host => host.id === client.id)?.telemetry).toMatchObject({
+      window: '14d',
+      points: [{ timestamp: older }, { timestamp: latest }],
+    });
+    http.verify();
+  });
+
   it('projects fresh and stale LastSeen and takes retirement only from the server', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],

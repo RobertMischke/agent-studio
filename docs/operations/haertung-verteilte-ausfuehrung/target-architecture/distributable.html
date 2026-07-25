@@ -122,13 +122,13 @@ deliverable but ship through the npm registry, not through an archive.</p>
       <footer>runs on: the <b>control-plane host</b> (Hetzner VM — or any Linux box, incl. a local one)</footer>
     </div>
     <div class="pkg pkg-rn">
-      <header><b>agent-runner</b><span>execution · one binary per host</span></header>
+      <header><b>agent-host</b><span>execution · one binary per host</span></header>
       <ul>
-        <li class="bin">agent-runner <em style="font-weight:400;color:var(--ink-3)">(binary)</em></li>
-        <li>one systemd unit</li>
-        <li>config: <code>runner.env</code> (server URL, token, parallelism)</li>
+        <li class="bin">agent-host <em style="font-weight:400;color:var(--ink-3)">(binary)</em></li>
+        <li>Coding and Review systemd role units as installed</li>
+        <li>config: <code>runner.env</code> plus operator-owned <code>/etc/agent-host/profile.conf</code></li>
         <li>work dirs: <code>runner-work/</code> per project, worktree per run</li>
-        <li>salvage snapshotting</li>
+        <li>salvage snapshotting and Linux cgroup resource policy</li>
       </ul>
       <footer>runs on: <b>every runner host</b> (agent-runner-01, future hosts) — never on the control-plane host</footer>
     </div>
@@ -392,6 +392,21 @@ use exists precisely to work on local repos), A for evaluation/demo (“look at 
 minutes”, no repos mounted). That would make Docker the <em>demo</em> channel and the native
 all-in-one the <em>local product</em> — both from the same release pipeline. Open for Robert’s
 call.</p>
+
+<h2>9 · Runner-host resource governance</h2>
+<p>On Linux, <code>agent-host</code> owns the resource controls in every Coding and Review systemd
+unit it installs or updates. Slot counts are admission decisions, not capacity units: a single
+slot can fan out into many compiler and test processes. systemd/cgroup v2 is therefore the hard
+host boundary, while the central host-capacity controller adjusts admitted slots through AIMD.</p>
+<table>
+  <tr><th>Role</th><th>CPU quota derived from <code>nproc</code></th><th>CPU / I/O weight</th><th>Memory</th></tr>
+  <tr><td>Coding</td><td>all logical CPUs</td><td><code>100 / 100</code></td><td>uncapped by default</td></tr>
+  <tr><td>Review</td><td>one third, minimum one CPU</td><td><code>30 / 30</code></td><td>uncapped by default</td></tr>
+</table>
+<p>The only explicit override surface is <code>/etc/agent-host/profile.conf</code>. Existing manual
+resource drop-ins are adopted into missing profile values and then replaced by directives in the
+managed main unit. Windows enforcement through Job Objects is out of scope and requires a separate
+card. Full contract: <a href="resource-governance.md">runner-host resource governance</a>.</p>
 
 </body>
 </html>

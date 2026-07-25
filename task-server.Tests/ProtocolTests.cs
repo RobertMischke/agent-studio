@@ -100,8 +100,8 @@ public sealed class ProtocolTests
         var decision = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
             claim.Run!.RunId,
             ExecutionAttemptKind.Coding,
-            StdErr: "429 quota exceeded",
-            ExitCode: 1));
+            FinalAssistantOutput: "[[TASK_BLOCKED:deck-panel-v1-decision-missing]]",
+            ExitCode: 0));
         var completion = await client.PostAsJsonAsync(
             $"/api/v1/runs/{claim.Run.RunId}/completion",
             new CompleteRunRequest(
@@ -119,9 +119,12 @@ public sealed class ProtocolTests
             "/api/v1/projects/prj-outcome/tasks/OUT-1/attempts");
         var attempt = Assert.Single(attempts!);
         Assert.Equal(claim.Run.RunId, attempt.Run.RunId);
-        Assert.Equal(ExecutionOutcomeKind.QuotaExceeded, attempt.OutcomeDecision!.Outcome);
-        Assert.Equal(ExecutionRecoveryAction.WaitForCapabilityRecovery, attempt.OutcomeDecision.RecoveryAction);
-        Assert.Equal("429 quota exceeded", attempt.OutcomeDecision.RawFacts.StdErr);
+        Assert.Equal(ExecutionOutcomeKind.ExplicitAgentBlocker, attempt.OutcomeDecision!.Outcome);
+        Assert.Equal(ExecutionRecoveryAction.AskForHumanInput, attempt.OutcomeDecision.RecoveryAction);
+        Assert.Equal("deck-panel-v1-decision-missing", attempt.OutcomeDecision.Detail);
+        Assert.Equal(
+            "[[TASK_BLOCKED:deck-panel-v1-decision-missing]]",
+            attempt.OutcomeDecision.RawFacts.FinalAssistantOutput);
     }
 
     internal static string RepositoryRoot()

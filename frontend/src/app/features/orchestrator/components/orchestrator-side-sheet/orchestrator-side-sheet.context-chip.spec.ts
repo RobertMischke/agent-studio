@@ -6,6 +6,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import { ChatComponent } from 'coding-agent-chat/composer';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
 import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.component';
 
@@ -77,6 +78,48 @@ describe('OrchestratorSideSheetComponent context badge and menu', () => {
     expect(root.querySelector('[data-testid="orch-side-sheet-pin"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="orch-side-sheet-settings"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="orch-side-sheet-refresh"]')).not.toBeNull();
+  });
+
+  it('explains every context action in one sentence at the option', async () => {
+    const fixture = await makeFixture();
+    fixture.componentRef.setInput('activeJobId', 'task-id');
+    fixture.componentRef.setInput('activeJobTitle', 'Task title');
+    fixture.componentRef.setInput('activeWatchPath', '/workspace/project');
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    (root.querySelector('[data-testid="orch-context-badge"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const explanation = (testId: string) => fixture.debugElement
+      .query(By.css(`[data-testid="${testId}"]`))
+      .injector.get(AppTooltipDirective)
+      .appTooltip();
+
+    expect(explanation('orch-side-sheet-pin')).toBe(
+      'Pin this context when you want the chat to stay on the current project or task while you navigate elsewhere.',
+    );
+    expect(explanation('orch-side-sheet-verbose-debug')).toBe(
+      'Open verbose runtime details when you need to investigate this task chat.',
+    );
+    expect(explanation('orch-side-sheet-settings')).toBe(
+      'Open Orchestrator settings when you need to change its behavior or defaults.',
+    );
+    expect(explanation('orch-side-sheet-refresh')).toBe(
+      'Reload this context digest and chat when you need the latest available state.',
+    );
+    expect(explanation('orch-context-send-toggle')).toBe(
+      'Send your next message without the current context when it would distract from the request.',
+    );
+
+    fixture.componentInstance.togglePin();
+    fixture.componentInstance.toggleNextMessageContext();
+    fixture.detectChanges();
+    expect(explanation('orch-side-sheet-pin')).toBe(
+      'Follow navigation when you want this chat to track the project or task you open.',
+    );
+    expect(explanation('orch-context-send-toggle')).toBe(
+      'Include the current context with your next message when it is relevant to the request.',
+    );
   });
 
   it('renders the standard composer footer once and removes both host task workflows', async () => {

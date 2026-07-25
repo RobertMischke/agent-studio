@@ -5,6 +5,7 @@ namespace AgentRunner;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AgentStudio.TaskServer.Contracts;
 
 /// <summary>
@@ -21,17 +22,20 @@ public sealed class RemoteTaskRunner
     private readonly TaskServerClient _client;
     private readonly Action<string> _log;
     private readonly RunnerStateStore _state;
+    private readonly RunnerProcessInventoryTracker _inventory;
 
     public RemoteTaskRunner(
         RunnerOptions options,
         TaskServerClient client,
         Action<string> log,
-        RunnerStateStore? state = null)
+        RunnerStateStore? state = null,
+        RunnerProcessInventoryTracker? inventory = null)
     {
         _options = options;
         _client = client;
         _log = log;
         _state = state ?? new RunnerStateStore(options.StateDir);
+        _inventory = inventory ?? new RunnerProcessInventoryTracker();
     }
 
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
@@ -127,6 +131,13 @@ public sealed class RemoteTaskRunner
     {
         var taskKey = slot.TaskKey;
         var lease = slot.Lease;
+        var inventoryRunId = slot.RunId ?? slot.AttemptId;
+        using var inventoryRegistration = _inventory.Track(
+            inventoryRunId,
+            taskKey,
+            workspace.RepoPath);
+        if (slot.ProcessId is > 0)
+            _inventory.AttachProcess(inventoryRunId, slot.ProcessId.Value);
 
         var outbox = _client.UsesDurableTaskServer
             ? DurableRunOutbox.Open(
@@ -135,7 +146,12 @@ public sealed class RemoteTaskRunner
             : null;
         using var activeOutbox = outbox?.MarkActive();
         using var stopRun = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
-        var heartbeat = new LeaseHeartbeat(_client, _options, lease, _log);
+        var heartbeat = new LeaseHeartbeat(
+            _client,
+            _options,
+            lease,
+            _log,
+            inventory: _inventory);
         var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
 
         outbox?.Enqueue("status", JsonSerializer.Serialize(
@@ -292,6 +308,29 @@ public sealed class RemoteTaskRunner
             _log($"detached worker lost; attempt will be released to Ready: {ex.Message}");
             return 3;
         }
+        catch (RemoteClaimPreparationException ex)
+        {
+            outcome = new RunOutcome(RunOutcomeKind.EnvironmentFailure, ex.Message);
+            shipper.Add("system", $"[runner] remote-claim-environment-failed: {ex.Message}");
+            await shipper.FlushAsync(CancellationToken.None);
+            if (!heartbeat.LeaseLost)
+            {
+                await CompleteAsync(
+                    taskKey,
+                    lease,
+                    outcome,
+                    outcomeDecision,
+                    WorktreeTeardownResult.NoWork,
+                    workspace.RepositoryUrl,
+                    baseSha: null,
+                    artifactManifestDigest: null,
+                    outputLines,
+                    sourceMutated: false,
+                    CancellationToken.None);
+                handedBack = true;
+            }
+            return 1;
+        }
         catch (WorktreeSalvageException ex)
         {
             if (outbox is not null)
@@ -372,9 +411,25 @@ public sealed class RemoteTaskRunner
     {
         var taskKey = slot.TaskKey;
         var lease = slot.Lease;
-        var branch = epicPlanning
-            ? await workspace.PrepareReadOnlyAsync(shutdown)
-            : await workspace.PrepareAsync(shutdown);
+        string branch;
+        try
+        {
+            branch = epicPlanning
+                ? await workspace.PrepareReadOnlyAsync(shutdown)
+                : await workspace.PrepareAsync(shutdown);
+        }
+        catch (WorktreeSalvageException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RemoteClaimPreparationException(DescribePreparationFailure(ex), ex);
+        }
         shipper.Add("system", $"[runner] working tree ready on branch '{branch}'");
         if (outbox is not null && !epicPlanning)
         {
@@ -431,8 +486,16 @@ public sealed class RemoteTaskRunner
             WorktreePath = workspace.RepoPath,
             Phase = "launching",
         });
-        var process = DurableAgentProcess.Start(
-            _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir);
+        DurableAgentProcess process;
+        try
+        {
+            process = DurableAgentProcess.Start(
+                _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir);
+        }
+        catch (Exception ex)
+        {
+            throw new RemoteClaimPreparationException(DescribePreparationFailure(ex), ex);
+        }
         slot = _state.Save(slot with
         {
             ProcessId = process.ProcessId,
@@ -440,6 +503,7 @@ public sealed class RemoteTaskRunner
             WorktreePath = workspace.RepoPath,
             Phase = "running",
         });
+        _inventory.AttachProcess(slot.RunId ?? slot.AttemptId, process.ProcessId);
         _log($"detached worker started task={taskKey} pid={process.ProcessId} attempt={slot.AttemptId}");
         return await AwaitDetachedAsync(slot, workspace, shipper, outbox, stopRun.Token);
     }
@@ -511,6 +575,9 @@ public sealed class RemoteTaskRunner
                             ProcessStartedAtUtc = resumed.ProcessStartedAtUtc,
                             Phase = "running",
                         });
+                        _inventory.AttachProcess(
+                            resumeSlot.RunId ?? resumeSlot.AttemptId,
+                            resumed.ProcessId);
                         return await AwaitDetachedAsync(
                             resumeSlot,
                             workspace,
@@ -863,6 +930,32 @@ public sealed class RemoteTaskRunner
 
     private string ResultsDir(string taskKey)
         => Path.Combine(_options.WorkDir, "tasks", GitWorkspace.SafeSegment(taskKey), "results");
+
+    private static readonly Regex CredentialedHttpUrl = new(
+        @"(?<scheme>https?://)[^/@\s]+(?::[^/@\s]+)?@",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static string DescribePreparationFailure(Exception exception)
+    {
+        var message = CredentialedHttpUrl
+            .Replace(exception.Message, "${scheme}***@")
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+        if (message.StartsWith("git clone ", StringComparison.OrdinalIgnoreCase))
+            return $"clone failed: {message}";
+        if (message.StartsWith("git fetch ", StringComparison.OrdinalIgnoreCase))
+            return $"fetch failed: {message}";
+        return $"environment preparation failed: {message}";
+    }
+
+    private sealed class RemoteClaimPreparationException : Exception
+    {
+        public RemoteClaimPreparationException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+    }
 
     internal static ExecutionOutcomeDecision WithDurableOutput(
         ExecutionOutcomeDecision decision,

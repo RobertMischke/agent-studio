@@ -1,5 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, input, output, signal, viewChild, inject } from '@angular/core';
-import { ScrollingModule } from '@angular/cdk/scrolling';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, input, output, signal, viewChild, inject } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { CliOutputLine } from '../../../../models/task.model';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -25,8 +24,9 @@ import {
   isDebugNoise,
   roleHeading,
 } from './activity-log-view-model';
+import { ConversationHistoryWindow } from './activity-log-windowing';
 
-import { TooltipDirective } from 'coding-agent-chat/shared';
+import { StickToBottomDirective, TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 type ViewMode = 'conversation' | 'trace';
 
@@ -50,17 +50,12 @@ type ViewMode = 'conversation' | 'trace';
 @Component({
   selector: 'app-activity-log-view',
   standalone: true,
-  imports: [ScrollingModule, MarkdownViewComponent, TooltipDirective, MenuComponent],
-  // Cycle 7b: OnPush. The activity log re-derives conversation turns
-  // from a capped lines() signal whenever new CLI output arrives. With
-  // default CD, every parent change-detection pass also walked through
-  // the full template (markdown blocks, tool chips, scroll anchor) -
-  // measurable lag during a busy run with hundreds of log lines.
+  imports: [MarkdownViewComponent, StickToBottomDirective, TooltipDirective, MenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './activity-log-view.html',
   styleUrl: './activity-log-view.scss'
 })
-export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
+export class ActivityLogViewComponent implements OnDestroy {
   readonly lines = input<CliOutputLine[]>([]);
   readonly bodyMaxHeight = input('400px');
   readonly variant = input<'framed' | 'embedded'>('framed');
@@ -100,7 +95,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   /** Open/closed state for tool bursts (Conversation) and groups (Trace), keyed by id. */
   readonly expandedTurns = signal<Record<string, boolean>>({});
   readonly expandedGroups = signal<Record<string, boolean>>({});
-  readonly stickToBottom = signal(true);
+  private readonly historyWindow = new ConversationHistoryWindow();
 
   readonly parsedGroups = computed(() => parseActivityLog(this.lines()));
 
@@ -112,31 +107,22 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     () => buildConversationTurns(this.parsedGroups())
   );
 
-  /**
-   * Cycle 7i memoization cache for renderTurn output. Keyed by the
-   * stable turn.id (`turn-N-<kind>`). buildConversationTurns rebuilds
-   * the array on every parsedGroups change, so the same logical turn
-   * comes back as a fresh object reference; without this cache,
-   * renderTurn (which calls markdownToHtml on agent text) ran for
-   * every turn on every signal change. Memoizing reduces the work to
-   * O(new turns) per refresh; a 2000-line conversation that grew by 5
-   * lines now reparses 1-2 turns instead of all 1200. Capped at 4 x
-   * the current turn count to prevent unbounded growth across long
-   * sessions; cache eviction is lazy at the next refresh that fills it.
-   */
+  /** Memoized presentation for stable turn ids; the DOM only receives the history window. */
   private renderTurnCache = new Map<string, RenderedTurn>();
+  readonly conversationWindowSize = this.historyWindow.size;
 
-  /** trackBy for *cdkVirtualFor: stable id keeps DOM rows reused. */
-  readonly trackByTurnId = (_: number, item: RenderedTurn) => item.turn.id;
+  readonly filteredConversationTurns = computed<ConversationTurn[]>(() => {
+    const showTools = this.toolsEnabled();
+    return this.conversationTurns().filter((turn) => showTools || turn.kind !== 'tools');
+  });
 
   readonly visibleConversation = computed<RenderedTurn[]>(() => {
-    const turns = this.conversationTurns();
-    const showTools = this.toolsEnabled();
-    const filtered = turns.filter((turn) => showTools || turn.kind !== 'tools');
-    if (this.renderTurnCache.size > filtered.length * 4) {
+    const all = this.filteredConversationTurns();
+    const turns = this.historyWindow.slice(all);
+    if (this.renderTurnCache.size > Math.max(turns.length * 4, 100)) {
       this.renderTurnCache.clear();
     }
-    return filtered.map((turn) => {
+    return turns.map((turn) => {
       const cached = this.renderTurnCache.get(turn.id);
       if (cached) return cached;
       const rendered = this.renderTurn(turn);
@@ -144,6 +130,13 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       return rendered;
     });
   });
+
+  readonly olderConversationCount = computed(() =>
+    this.historyWindow.olderCount(
+      this.filteredConversationTurns().length,
+      this.visibleConversation().length
+    )
+  );
 
   /**
    * Trace feed: every parsed group, optionally filtered for "debug noise" -
@@ -158,8 +151,9 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   });
 
   private readonly bodyRef = viewChild<ElementRef<HTMLDivElement>>('body');
-  private scrollFrame: number | null = null;
-  private suppressScrollEvent = false;
+  private readonly stick = viewChild(StickToBottomDirective);
+  readonly stickToBottom = computed(() => this.stick()?.stuck() ?? true);
+  private prependFrame: number | null = null;
   private readonly sanitizer = inject(DomSanitizer);
 
   /**
@@ -214,28 +208,24 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   readonly toolsEnabled = computed(() => this.toolsVisible() ?? this.showTools());
   readonly debugEnabled = computed(() => this.debugVisible() ?? this.showDebug());
 
+  /**
+   * Keep the oldest rendered turn anchored while detached from Follow. New
+   * tail turns expand the window instead of evicting the row the user reads.
+   */
+  private readonly conversationGrowthEffect = effect(() => {
+    const turns = this.filteredConversationTurns();
+    const firstKey = turns[0] ? `${turns[0].kind}:${turns[0].timestamp}` : '';
+    this.historyWindow.sync(firstKey, turns.length, this.stickToBottom());
+  });
+
   formatSince(ms: number): string {
     return formatLiveSince(ms);
   }
 
-  private readonly autoScrollEffect = effect(() => {
-    this.lines();
-    this.mode();
-    this.visibleConversation();
-    this.visibleTraceGroups();
-    this.expandedTurns();
-    this.expandedGroups();
-    if (!this.stickToBottom()) return;
-    this.scheduleScrollToBottom();
-  });
-
-  ngAfterViewInit(): void {
-    this.scheduleScrollToBottom();
-  }
-
   ngOnDestroy(): void {
-    if (this.scrollFrame !== null && typeof cancelAnimationFrame !== 'undefined') {
-      cancelAnimationFrame(this.scrollFrame);
+    if (this.prependFrame !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(this.prependFrame);
+      this.prependFrame = null;
     }
     if (this.copyResetTimer !== null) {
       clearTimeout(this.copyResetTimer);
@@ -245,7 +235,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       clearInterval(this.liveTicker);
       this.liveTicker = null;
     }
-    this.autoScrollEffect.destroy();
+    this.conversationGrowthEffect.destroy();
     this.liveTickerEffect.destroy();
     this.defaultModeEffect.destroy();
   }
@@ -357,30 +347,23 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     return parts.join('\n').trimEnd();
   }
 
-  onBodyScroll(): void {
-    if (this.suppressScrollEvent) return;
+  loadOlderConversation(): void {
     const el = this.bodyRef()?.nativeElement;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    this.stickToBottom.set(distanceFromBottom <= 24);
+    const remaining = this.olderConversationCount();
+    if (!el || remaining === 0) return;
+    const beforeHeight = el.scrollHeight;
+    const beforeTop = el.scrollTop;
+    this.historyWindow.loadOlder(remaining);
+    if (typeof requestAnimationFrame === 'undefined') return;
+    if (this.prependFrame !== null) cancelAnimationFrame(this.prependFrame);
+    this.prependFrame = requestAnimationFrame(() => {
+      this.prependFrame = null;
+      el.scrollTop = beforeTop + Math.max(0, el.scrollHeight - beforeHeight);
+    });
   }
 
   jumpToBottom(): void {
-    this.stickToBottom.set(true);
-    this.scheduleScrollToBottom();
-  }
-
-  private scheduleScrollToBottom(): void {
-    if (typeof requestAnimationFrame === 'undefined') return;
-    if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
-    this.scrollFrame = requestAnimationFrame(() => {
-      this.scrollFrame = null;
-      const el = this.bodyRef()?.nativeElement;
-      if (!el) return;
-      this.suppressScrollEvent = true;
-      el.scrollTop = el.scrollHeight;
-      requestAnimationFrame(() => { this.suppressScrollEvent = false; });
-    });
+    this.stick()?.scrollToBottom();
   }
 
   kindLabel(kind: ActivityLogKind): string {

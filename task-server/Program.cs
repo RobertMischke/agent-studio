@@ -8,6 +8,7 @@ builder.Services.Configure<TaskServerOptions>(builder.Configuration.GetSection(T
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<TaskServerStore>();
 builder.Services.AddSingleton<LegacyMigrationService>();
+builder.Services.AddHostedService<TaskServerInvariantReconciliationService>();
 
 var configuredUrl = builder.Configuration[$"{TaskServerOptions.SectionName}:ListenUrl"];
 if (!string.IsNullOrWhiteSpace(configuredUrl)

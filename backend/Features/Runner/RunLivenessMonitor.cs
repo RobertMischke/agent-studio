@@ -66,6 +66,7 @@ public sealed class RunLivenessMonitor
     private readonly ITaskAccess _taskAccess;
     private readonly ILogger<RunLivenessMonitor> _logger;
     private readonly IJsonlAppender _appender;
+    private readonly RunLeaseService? _leases;
 
     /// <summary>Default uptime grace: silence tolerated before a missing heartbeat counts as process-lost.</summary>
     public const int DefaultGraceSeconds = 30;
@@ -83,7 +84,8 @@ public sealed class RunLivenessMonitor
         IConfiguration configuration,
         ITaskAccess taskAccess,
         ILogger<RunLivenessMonitor> logger,
-        IJsonlAppender? appender = null)
+        IJsonlAppender? appender = null,
+        RunLeaseService? leases = null)
     {
         _scanner = scanner;
         _transitions = transitions;
@@ -95,6 +97,7 @@ public sealed class RunLivenessMonitor
         _taskAccess = taskAccess;
         _logger = logger;
         _appender = appender ?? new JsonlAppender();
+        _leases = leases;
     }
 
     /// <summary>
@@ -162,11 +165,13 @@ public sealed class RunLivenessMonitor
                 // A folder-shaped orphan (no task.json) is not a runnable run;
                 // leave it to StaleProgressArchiver's debris/mid-move handling.
                 var hasJobJson = File.Exists(Path.Combine(folder, "task.json"));
+                var taskKey = hasJobJson ? TryReadTaskKey(folder) ?? laneFolder.Slug : laneFolder.Slug;
                 candidates.Add(new Candidate(
                     laneFolder.Slug,
                     folder,
                     hasJobJson,
                     isActiveHere,
+                    HasRemoteLeaseHistory: _leases?.Inspect(taskKey).Lease is not null,
                     HasLiveHeartbeat: isActiveHere || _pickupLock.HasLiveOwner(folder),
                     HasVisibleWaitingState: hasJobJson && HasVisibleWaitingState(folder),
                     CoreRunFinished: hasJobJson && RunFinishedSignal.CoreRunFinished(folder),
@@ -182,6 +187,13 @@ public sealed class RunLivenessMonitor
                     // Not a runnable run - out of scope for run-liveness.
                     continue;
                 }
+
+                // Remote progress recovery is deliberately owned by the claim
+                // handshake. After a Task Server restart an old lease can be
+                // invalid while its host CLI is still alive; only the assigned
+                // runner can answer that question after the remote grace.
+                if (c.HasRemoteLeaseHistory)
+                    continue;
 
                 var facts = new RunLivenessFacts(
                     HasLiveRunHeartbeat: c.HasLiveHeartbeat,
@@ -434,6 +446,30 @@ public sealed class RunLivenessMonitor
         catch { return null; }
     }
 
+    private static string? TryReadTaskKey(string jobFolder)
+    {
+        var path = Path.Combine(jobFolder, "task.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            foreach (var name in new[] { "key", "taskKey", "id" })
+            {
+                if (doc.RootElement.TryGetProperty(name, out var value)
+                    && !string.IsNullOrWhiteSpace(value.GetString()))
+                    return value.GetString();
+            }
+        }
+        catch (Exception ex)
+        {
+            // The existing malformed-folder recovery owns unreadable task JSON.
+            SilentCatch.Note(
+                ex,
+                "RunLivenessMonitor: unreadable task key; folder slug drives the lease-history lookup");
+        }
+        return null;
+    }
+
     private void WriteDemotionDiagnostic(string jobFolder, double silenceSeconds)
     {
         try
@@ -503,6 +539,7 @@ public sealed class RunLivenessMonitor
         string JobFolder,
         bool HasJobJson,
         bool IsActiveHere,
+        bool HasRemoteLeaseHistory,
         bool HasLiveHeartbeat,
         bool HasVisibleWaitingState,
         bool CoreRunFinished,

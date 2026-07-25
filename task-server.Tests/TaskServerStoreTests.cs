@@ -469,6 +469,33 @@ public sealed class TaskServerStoreTests
         Assert.Equal("admission-closed", admission.Code);
 
         var lease = claim.Lease!;
+        var inventoryPulse = await store.ClaimAsync(
+            new ClaimRequest(
+                "runner-a",
+                "instance-a",
+                AvailableSlots: 0,
+                Inventory: new RunnerProcessInventory(
+                    DateTime.UtcNow,
+                    [new RunnerProcessInfo(
+                        claim.Run!.RunId,
+                        claim.Task!.TaskKey,
+                        4242,
+                        "/worktrees/active",
+                        DateTime.UtcNow)])),
+            "runner-a",
+            default);
+        Assert.Equal("empty", inventoryPulse.Status);
+        var renewed = await store.RenewLeaseAsync(
+            claim.Run!.RunId,
+            new LeaseRenewRequest(
+                "runner-a",
+                "instance-a",
+                lease.LeaseId,
+                lease.Fence),
+            "runner-a",
+            default);
+        Assert.Equal("renewed", renewed.Status);
+
         var handoff = await store.AcknowledgeResultHandoffAsync(
             claim.Run!.RunId,
             Handoff(claim.Run.RunId, lease, sequence: 1),
@@ -747,6 +774,173 @@ public sealed class TaskServerStoreTests
         Assert.Equal(
             clock.GetUtcNow().AddDays(30).UtcDateTime,
             retained!.RetainUntil);
+    }
+
+    [Fact]
+    public async Task Invariant_reconciliation_schedules_orphan_process_termination()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(
+            new DateTimeOffset(2026, 7, 25, 0, 40, 0, TimeSpan.Zero));
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await store.RegisterRunnerAsync(
+            "runner-a", Runner("instance-a"), "test", default);
+
+        var started = clock.GetUtcNow().UtcDateTime;
+        clock.Advance(TimeSpan.FromSeconds(121));
+        await store.ClaimAsync(
+            new ClaimRequest(
+                "runner-a",
+                "instance-a",
+                AvailableSlots: 0,
+                Inventory: new RunnerProcessInventory(
+                    clock.GetUtcNow().UtcDateTime,
+                    [new RunnerProcessInfo(
+                        "run-without-lease", "TS-404", 4242,
+                        "/worktrees/TS-404", started)])),
+            "runner-a",
+            default);
+
+        Assert.Equal(1, await store.ReconcileInvariantsAsync(default));
+        var response = await store.ClaimAsync(
+            new ClaimRequest(
+                "runner-a",
+                "instance-a",
+                AvailableSlots: 0,
+                Inventory: new RunnerProcessInventory(
+                    clock.GetUtcNow().UtcDateTime,
+                    [new RunnerProcessInfo(
+                        "run-without-lease", "TS-404", 4242,
+                        "/worktrees/TS-404", started)])),
+            "runner-a",
+            default);
+
+        var action = Assert.Single(response.ReconciliationActions!);
+        Assert.Equal("run-inventory", action.Category);
+        Assert.Equal("terminate-process", action.Action);
+        Assert.Equal(4242, action.Pid);
+        Assert.Contains(
+            await store.ListAuditAsync(0, default),
+            record => record.Action == "invariant.orphan-process");
+        var registry = await store.GetInvariantRegistryAsync(default);
+        Assert.Equal(4, registry.Definitions.Count);
+        Assert.Equal(1, registry.PendingRunnerActions);
+        Assert.Contains(
+            registry.RecentViolations,
+            record => record.Action == "invariant.orphan-process");
+    }
+
+    [Fact]
+    public async Task Invariant_reconciliation_records_lease_without_process_for_backend_authority()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(
+            new DateTimeOffset(2026, 7, 25, 1, 0, 0, TimeSpan.Zero));
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync(
+            "runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                "runner-a",
+                "instance-a",
+                RequestedTtlSeconds: 180),
+            "runner-a",
+            default);
+
+        clock.Advance(TimeSpan.FromSeconds(121));
+        await store.RenewLeaseAsync(
+            claim.Run!.RunId,
+            new LeaseRenewRequest(
+                "runner-a",
+                "instance-a",
+                claim.Lease!.LeaseId,
+                claim.Lease.Fence,
+                Inventory: new RunnerProcessInventory(
+                    clock.GetUtcNow().UtcDateTime,
+                    [])),
+            "runner-a",
+            default);
+
+        Assert.Equal(1, await store.ReconcileInvariantsAsync(default));
+        var retained = await store.GetTaskAsync(
+            project.ProjectId, task.TaskKey, default);
+        Assert.Equal("3-progress", retained!.State);
+        var events = await store.ListEventsAsync(claim.Run.RunId, 0, default);
+        var mismatch = Assert.Single(
+            events,
+            item => item.Kind == "invariant.lease-without-process");
+        Assert.Contains("backend-authority", mismatch.PayloadJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Invariant_reconciliation_records_progress_without_run_without_requeueing()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(
+            new DateTimeOffset(2026, 7, 25, 1, 20, 0, TimeSpan.Zero));
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        var workspace = await store.CreateWorkspaceAsync(
+            new CreateWorkspaceRequest("Workspace"), "test", default);
+        var project = await store.CreateProjectAsync(
+            new CreateProjectRequest(
+                workspace.WorkspaceId, "Project", "TS"),
+            "test",
+            default);
+        var task = await store.CreateTaskAsync(
+            project.ProjectId,
+            new CreateTaskRequest(
+                "Stranded", "No run owns this card", "3-progress"),
+            "test",
+            default);
+
+        clock.Advance(TimeSpan.FromSeconds(121));
+        Assert.Equal(1, await store.ReconcileInvariantsAsync(default));
+
+        var retained = await store.GetTaskAsync(
+            project.ProjectId, task.TaskKey, default);
+        Assert.Equal("3-progress", retained!.State);
+        var audit = await store.ListAuditAsync(0, default);
+        Assert.Contains(
+            audit,
+            record => record.Action == "invariant.lane-process-consistency");
+    }
+
+    [Fact]
+    public async Task Lane_reconciliation_retains_process_unknown_authority()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(
+            new DateTimeOffset(2026, 7, 25, 1, 40, 0, TimeSpan.Zero));
+        var first = Store(temp.Path, clock);
+        await first.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(first);
+        await first.RegisterRunnerAsync(
+            "runner-a", Runner("instance-a"), "test", default);
+        await first.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "runner-a",
+            default);
+
+        var restarted = Store(temp.Path, clock);
+        await restarted.InitializeAsync();
+        clock.Advance(TimeSpan.FromSeconds(121));
+
+        Assert.Equal(1, await restarted.ReconcileInvariantsAsync(default));
+        var contained = await restarted.GetTaskAsync(
+            project.ProjectId, task.TaskKey, default);
+        Assert.Equal("3-progress", contained!.State);
+        var audit = await restarted.ListAuditAsync(0, default);
+        Assert.Contains(
+            audit,
+            record => record.Action == "invariant.lane-process-consistency"
+                      && record.DetailJson.Contains(
+                          "containment-required",
+                          StringComparison.Ordinal));
+        Assert.Equal(0, await restarted.ReconcileInvariantsAsync(default));
     }
 
     private static ResultHandoffRequest Handoff(string runId, LeaseDto lease, long sequence)

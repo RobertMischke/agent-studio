@@ -302,11 +302,19 @@ public sealed class TaskServerClient : IDisposable
 
         var claim = await PostJsonAsync<Contract.ClaimRequest, Contract.ClaimResponse>(
             $"/api/v1/runners/{Uri.EscapeDataString(req.RunnerId)}/claims",
-            new Contract.ClaimRequest(req.RunnerId, RunnerInstanceId, req.RequestedTtlSeconds ?? 120, req.AvailableSlots),
+            new Contract.ClaimRequest(
+                req.RunnerId,
+                RunnerInstanceId,
+                req.RequestedTtlSeconds ?? 120,
+                req.AvailableSlots,
+                ToContract(req.Inventory)),
             ct);
         if (claim is null || !string.Equals(claim.Status, "claimed", StringComparison.OrdinalIgnoreCase)
             || claim.Task is null || claim.Run is null || claim.Lease is null)
-            return new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: claim?.Message ?? "No task available.");
+            return new RunnerClaimResponse(
+                RunnerClaimStatus.Empty,
+                Message: claim?.Message ?? "No task available.",
+                ReconciliationActions: FromContract(claim?.ReconciliationActions));
 
         var legacyLease = new RunLeaseInfoDto(
             claim.Task.TaskKey,
@@ -330,7 +338,8 @@ public sealed class TaskServerClient : IDisposable
             Lease: legacyLease,
             ProjectId: claim.Task.ProjectId,
             RunId: claim.Run.RunId,
-            LeaseInstanceId: RunnerInstanceId);
+            LeaseInstanceId: RunnerInstanceId,
+            ReconciliationActions: FromContract(claim.ReconciliationActions));
     }
 
     /// <summary>
@@ -475,16 +484,64 @@ public sealed class TaskServerClient : IDisposable
         var authority = V1Authority(req.TaskKey);
         var response = await PostJsonAsync<Contract.LeaseRenewRequest, Contract.LeaseResponse>(
             $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/lease/renew",
-            new Contract.LeaseRenewRequest(req.RunnerId, authority.InstanceId, req.LeaseId, req.FencingToken, req.RequestedTtlSeconds ?? 120),
+            new Contract.LeaseRenewRequest(
+                req.RunnerId,
+                authority.InstanceId,
+                req.LeaseId,
+                req.FencingToken,
+                req.RequestedTtlSeconds ?? 120,
+                ToContract(req.Inventory)),
             ct);
         if (response?.Lease is not null)
         {
             var updated = authority.Lease with { ExpiresAt = response.Lease.ExpiresAt };
             _v1Leases[req.TaskKey] = (authority.RunId, updated, authority.InstanceId);
-            return new RunLeaseResponse("Renewed", true, updated);
+            return new RunLeaseResponse(
+                "Renewed",
+                true,
+                updated,
+                ReconciliationActions: FromContract(response.ReconciliationActions));
         }
-        return new RunLeaseResponse(response?.Status ?? "Invalid", false, authority.Lease, response?.Message);
+        return new RunLeaseResponse(
+            response?.Status ?? "Invalid",
+            false,
+            authority.Lease,
+            response?.Message,
+            FromContract(response?.ReconciliationActions));
     }
+
+    private static Contract.RunnerProcessInventory? ToContract(RunnerProcessInventory? inventory)
+        => inventory is null
+            ? null
+            : new Contract.RunnerProcessInventory(
+                inventory.ObservedAt,
+                inventory.Processes.Select(process => new Contract.RunnerProcessInfo(
+                    process.RunId,
+                    process.TaskKey,
+                    process.Pid,
+                    process.Cwd,
+                    process.StartedAt)).ToArray(),
+                inventory.Reports?.Select(report => new Contract.RunnerInvariantReport(
+                    report.ReportId,
+                    report.Category,
+                    report.DetectedAt,
+                    report.Action,
+                    report.Detail,
+                    report.RunId,
+                    report.TaskKey,
+                    report.Pid)).ToArray(),
+                inventory.AcknowledgedActionIds);
+
+    private static IReadOnlyList<RunnerReconciliationAction>? FromContract(
+        IReadOnlyList<Contract.RunnerReconciliationAction>? actions)
+        => actions?.Select(action => new RunnerReconciliationAction(
+            action.ActionId,
+            action.Category,
+            action.Action,
+            action.Detail,
+            action.Pid,
+            action.RunId,
+            action.TaskKey)).ToArray();
 
     public async Task<RunLeaseResponse> ReleaseLeaseAsync(RunLeaseReleaseRequest req, CancellationToken ct)
     {

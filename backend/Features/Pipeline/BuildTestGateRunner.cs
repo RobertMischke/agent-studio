@@ -119,6 +119,7 @@ public sealed record BuildTestGateResult(
     public DateTimeOffset? GateCompletedAtUtc { get; init; }
     public long GateQueueWaitMs { get; init; }
     public bool GateCollisionDetected { get; init; }
+    public bool SelfHealed { get; init; }
     public string GateId { get; init; } = PipelineCatalogue.BuildTestGateStepId;
     public string? Repository { get; init; }
     public string? ExpectedSha { get; init; }
@@ -156,6 +157,8 @@ public interface IBuildTestGateRunner
 public sealed class BuildTestGateRunner : IBuildTestGateRunner
 {
     public const int MaxOutputLines = 300;
+    internal const string FullOriginBranchesRefspec =
+        "+refs/heads/*:refs/remotes/origin/*";
 
     private static readonly SemaphoreSlim ProcessGate = new(1, 1);
     internal static readonly string MachineGateLockPath = Path.Combine(
@@ -235,6 +238,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         BuildTestGateResult? completed = null;
         string? workspace = null;
         string? testedSha = null;
+        var selfHealed = false;
         long fallbackQueueWaitMs = 0;
         var fallbackCollision = false;
         DateTime? acquiredAtUtc = null;
@@ -264,6 +268,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                         completed = remote.Result;
                         workspace = remote.Workspace;
                         testedSha = remote.TestedSha;
+                        selfHealed = remote.Result.SelfHealed;
                         fallbackQueueWaitMs = remote.QueueWaitMs;
                     }
                 }
@@ -320,6 +325,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     workspaceLease = prepared.Lease;
                     workspace = workspaceLease.Path;
                     testedSha = workspaceLease.TestedSha;
+                    selfHealed = prepared.SelfHealed;
                 }
             }
             else if (completed is null && !Directory.Exists(repositoryPath))
@@ -400,6 +406,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 GateCompletedAtUtc = DateTimeOffset.UtcNow,
                 GateQueueWaitMs = machineLease?.QueueWaitMs ?? fallbackQueueWaitMs,
                 GateCollisionDetected = machineLease?.CollisionDetected ?? fallbackCollision,
+                SelfHealed = selfHealed,
                 Repository = repositoryPath,
                 ExpectedSha = request.ExpectedSha,
                 TestedSha = testedSha,
@@ -415,7 +422,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 await workspaceLease.RemoveBestEffortAsync(infrastructureTimeout).ConfigureAwait(false);
             var completedAt = completed?.GateCompletedAtUtc ?? DateTimeOffset.UtcNow;
             _logger.LogInformation(
-                "build_test_gate_completed gate_run_id={GateRunId} gate_id={GateId} completed_at_utc={CompletedAtUtc:o} repository={Repository} expected_sha={ExpectedSha} tested_sha={TestedSha} attempt_chain_id={AttemptChainId} executor={Executor} workspace={Workspace} verdict={Verdict} exit={ExitCode} signal={Signal} failure_kind={FailureKind} failure_fingerprint={FailureFingerprint} collision={CollisionDetected} queue_wait_ms={QueueWaitMs}",
+                "build_test_gate_completed gate_run_id={GateRunId} gate_id={GateId} completed_at_utc={CompletedAtUtc:o} repository={Repository} expected_sha={ExpectedSha} tested_sha={TestedSha} attempt_chain_id={AttemptChainId} executor={Executor} workspace={Workspace} verdict={Verdict} exit={ExitCode} signal={Signal} failure_kind={FailureKind} failure_fingerprint={FailureFingerprint} collision={CollisionDetected} queue_wait_ms={QueueWaitMs} self_healed={SelfHealed}",
                 gateRunId, request.GateId, completedAt, repositoryPath,
                 request.ExpectedSha ?? "missing", completed?.TestedSha ?? testedSha ?? "missing",
                 request.AttemptChainId ?? "missing", request.Executor,
@@ -423,7 +430,8 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 completed?.ExitCode?.ToString() ?? "n/a", completed?.TerminationSignal ?? "n/a",
                 completed?.FailureKind.ToString() ?? BuildTestGateFailureKind.Cancellation.ToString(),
                 completed?.FailureFingerprint ?? "none",
-                machineLease?.CollisionDetected ?? false, machineLease?.QueueWaitMs ?? 0);
+                machineLease?.CollisionDetected ?? false, machineLease?.QueueWaitMs ?? 0,
+                completed?.SelfHealed ?? selfHealed);
             machineLease?.Dispose();
             machineLease = null;
             if (acquiredAtUtc.HasValue && HasHealthContext(request))
@@ -452,6 +460,35 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     private sealed record RemoteGateOutcome(
         BuildTestGateResult Result, string Workspace, string TestedSha, long QueueWaitMs);
 
+    internal static string BuildRemoteSubjectDiscoveryScript(
+        string sha,
+        string repositoryGlob = "$HOME/runner-work/*/repo")
+    {
+        if (!SafeSha.IsMatch(sha))
+            throw new ArgumentException("A full Git commit SHA is required.", nameof(sha));
+        if (string.IsNullOrWhiteSpace(repositoryGlob))
+            throw new ArgumentException("A repository glob is required.", nameof(repositoryGlob));
+
+        return
+            $"for d in {repositoryGlob}; do if git -C \"$d\" cat-file -e {sha}^{{commit}} 2>/dev/null; then echo \"FOUND:$d\"; exit 0; fi; done; " +
+            $"for d in {repositoryGlob}; do git -C \"$d\" fetch -q origin >/dev/null 2>&1; if git -C \"$d\" cat-file -e {sha}^{{commit}} 2>/dev/null; then echo \"FOUND:$d\"; exit 0; fi; done; " +
+            $"for d in {repositoryGlob}; do git -C \"$d\" fetch -q origin --prune '{FullOriginBranchesRefspec}' >/dev/null 2>&1; if git -C \"$d\" cat-file -e {sha}^{{commit}} 2>/dev/null; then echo \"SELF_HEALED:$d\"; exit 0; fi; done; echo NONE";
+    }
+
+    internal static (string? Repository, bool SelfHealed) ParseRemoteSubjectDiscovery(
+        string output)
+    {
+        var line = output.Split('\n', StringSplitOptions.TrimEntries)
+            .FirstOrDefault(value =>
+                value.StartsWith("FOUND:", StringComparison.Ordinal)
+                || value.StartsWith("SELF_HEALED:", StringComparison.Ordinal));
+        if (line is null) return (null, false);
+        const string selfHealedPrefix = "SELF_HEALED:";
+        var selfHealed = line.StartsWith(selfHealedPrefix, StringComparison.Ordinal);
+        var separator = line.IndexOf(':');
+        return (separator >= 0 ? line[(separator + 1)..] : null, selfHealed);
+    }
+
     private async Task<RemoteGateOutcome?> TryRunRemoteAsync(
         string sshHost,
         string sha,
@@ -479,23 +516,28 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         var activityStarted = false;
         try
         {
-            // 1. Locate a host repo that already knows the subject SHA (second
-            //    pass fetches, in case the branch was pushed after the host's
-            //    last fetch). No hit -> local fallback.
+            // 1. Locate a host repo that already knows the subject SHA. The second
+            //    pass uses today's configured fetch path. If its refspec is too
+            //    narrow, the third pass explicitly fetches every origin branch
+            //    before the honest missing-source fallback.
             var discover = await RunSshCaptureAsync(sshHost,
-                "for d in $HOME/runner-work/*/repo; do if git -C \"$d\" cat-file -e " + sha + "^{commit} 2>/dev/null; then echo \"FOUND:$d\"; exit 0; fi; done; " +
-                "for d in $HOME/runner-work/*/repo; do git -C \"$d\" fetch -q origin >/dev/null 2>&1; if git -C \"$d\" cat-file -e " + sha + "^{commit} 2>/dev/null; then echo \"FOUND:$d\"; exit 0; fi; done; echo NONE",
+                BuildRemoteSubjectDiscoveryScript(sha),
                 infrastructureTimeout, ct).ConfigureAwait(false);
-            var found = discover.Stdout.Split('\n', StringSplitOptions.TrimEntries)
-                .FirstOrDefault(l => l.StartsWith("FOUND:", StringComparison.Ordinal));
-            if (discover.ExitCode != 0 || found is null)
+            var discovery = ParseRemoteSubjectDiscovery(discover.Stdout);
+            if (discover.ExitCode != 0 || discovery.Repository is null)
             {
                 _logger.LogInformation(
                     "remote_gate_subject_not_on_host gate_run_id={GateRunId} host={Host} sha={Sha} exit={Exit}; falling back to the local gate",
                     gateRunId, sshHost, sha, discover.ExitCode);
                 return null;
             }
-            repo = found["FOUND:".Length..];
+            repo = discovery.Repository;
+            if (discovery.SelfHealed)
+            {
+                _logger.LogInformation(
+                    "remote_gate_subject_self_healed gate_run_id={GateRunId} host={Host} repo={Repo} sha={Sha} self_healed={SelfHealed}",
+                    gateRunId, sshHost, repo, sha, true);
+            }
 
             // 2. Disposable worktree at the exact SHA; verify HEAD before testing.
             var prep = await RunSshCaptureAsync(sshHost,
@@ -560,6 +602,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     {
                         Processes = evidence,
                         TerminationSignal = process.TerminationSignal,
+                        SelfHealed = discovery.SelfHealed,
                     }, kind);
                     return new RemoteGateOutcome(result, $"{sshHost}:{worktree}", sha, queueWait.ElapsedMilliseconds);
                 }
@@ -571,6 +614,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 $"verify gate passed ({planSource}) [remote:{sshHost}]", ranBackend, ranFrontend)
             {
                 Processes = evidence,
+                SelfHealed = discovery.SelfHealed,
             };
             return new RemoteGateOutcome(result, $"{sshHost}:{worktree}", sha, queueWait.ElapsedMilliseconds);
         }
@@ -987,6 +1031,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         try
         {
             Directory.CreateDirectory(ReviewWorkspaceRoot);
+            var selfHealed = false;
             var available = await RunGitAsync(
                 repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"], bounded.Token)
                 .ConfigureAwait(false);
@@ -996,12 +1041,33 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 var fetch = await RunGitAsync(
                     repositoryPath, ["fetch", "--no-tags", "origin", fetchTarget!], bounded.Token)
                     .ConfigureAwait(false);
-                if (fetch.ExitCode != 0)
+                available = await RunGitAsync(
+                    repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"], bounded.Token)
+                    .ConfigureAwait(false);
+                if (available.ExitCode != 0)
                 {
-                    var fetchEvidence = fetch.StandardOutput + "\n" + fetch.StandardError;
-                    return WorkspacePreparation.Failed(
-                        ClassifyInfrastructureOrMissing(fetchEvidence),
-                        "exact review subject could not be fetched", fetchEvidence);
+                    var fullFetch = await RunGitAsync(
+                        repositoryPath,
+                        ["fetch", "--no-tags", "origin", "--prune", FullOriginBranchesRefspec],
+                        bounded.Token).ConfigureAwait(false);
+                    available = await RunGitAsync(
+                        repositoryPath, ["cat-file", "-e", expectedSha + "^{commit}"], bounded.Token)
+                        .ConfigureAwait(false);
+                    if (available.ExitCode != 0)
+                    {
+                        var fetchEvidence =
+                            $"targeted fetch:\n{fetch.StandardOutput}\n{fetch.StandardError}\n" +
+                            $"full branch fetch:\n{fullFetch.StandardOutput}\n{fullFetch.StandardError}\n" +
+                            $"subject probe:\n{available.StandardOutput}\n{available.StandardError}";
+                        return WorkspacePreparation.Failed(
+                            ClassifyInfrastructureOrMissing(fetchEvidence),
+                            "exact review subject could not be fetched", fetchEvidence);
+                    }
+
+                    selfHealed = true;
+                    _logger.LogInformation(
+                        "build_test_gate_subject_self_healed repository={Repository} expected_sha={ExpectedSha} self_healed={SelfHealed}",
+                        repositoryPath, expectedSha, true);
                 }
             }
 
@@ -1038,9 +1104,9 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             }
 
             _logger.LogInformation(
-                "build_test_gate_workspace_ready repository={Repository} expected_sha={ExpectedSha} tested_sha={TestedSha} workspace={Workspace}",
-                repositoryPath, expectedSha, testedSha, workspace);
-            return WorkspacePreparation.Ready(lease);
+                "build_test_gate_workspace_ready repository={Repository} expected_sha={ExpectedSha} tested_sha={TestedSha} workspace={Workspace} self_healed={SelfHealed}",
+                repositoryPath, expectedSha, testedSha, workspace, selfHealed);
+            return WorkspacePreparation.Ready(lease, selfHealed);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -1118,14 +1184,15 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         ExactWorkspaceLease? Lease,
         BuildTestGateFailureKind FailureKind,
         string Reason,
-        string Output)
+        string Output,
+        bool SelfHealed)
     {
-        public static WorkspacePreparation Ready(ExactWorkspaceLease lease)
-            => new(lease, BuildTestGateFailureKind.None, string.Empty, string.Empty);
+        public static WorkspacePreparation Ready(ExactWorkspaceLease lease, bool selfHealed)
+            => new(lease, BuildTestGateFailureKind.None, string.Empty, string.Empty, selfHealed);
 
         public static WorkspacePreparation Failed(
             BuildTestGateFailureKind kind, string reason, string output = "")
-            => new(null, kind, reason, output);
+            => new(null, kind, reason, output, false);
     }
 
     private sealed record WorkspaceCleanupError(

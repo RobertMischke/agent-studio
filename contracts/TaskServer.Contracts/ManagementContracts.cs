@@ -30,6 +30,18 @@ public sealed record RestoreRequest(string BackupId, bool VerifyOnly = false);
 public sealed record RestoreResult(string BackupId, bool Verified, bool Restored, string Sha256, string Message);
 public sealed record ResolveUnknownAttemptRequest(string ContainmentProof, string Resolution = "requeue");
 
+public sealed record InvariantDefinitionDto(
+    string Key,
+    string Category,
+    string ComparedTruths,
+    string Violation,
+    string SelfHealingAction);
+
+public sealed record InvariantRegistryDto(
+    IReadOnlyList<InvariantDefinitionDto> Definitions,
+    IReadOnlyList<AuditRecordDto> RecentViolations,
+    int PendingRunnerActions);
+
 public sealed record LegacyMigrationRequest(
     string LegacyRoot,
     string WorkspaceName,

@@ -40,7 +40,11 @@ state.
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
 - `backend/Features/Runner/WorktreeRunPolicy.cs`: pure always-worktree policy -
   whether a run must be worktree-isolated, the main-checkout guard condition, and
-  the cwd-keyed session-resume gate (see ADR-0057).
+  the cwd-keyed session-resume gate (see ADR-0057). Every source-mutating run,
+  including a single-slot run, requires an authoritative Git repository and its
+  own task worktree. A non-Git project is rejected for mutating runs instead of
+  falling back to in-place execution; read-only planning and research remain
+  eligible to run in place.
 - `backend/Services/Runner/AgentOutcomeAnalyzer.cs`: terminal sentinel and
   issue-kind classification.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action
@@ -99,6 +103,13 @@ state.
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `scripts/remote-runner-onboard.sh` and
+  `scripts/agent-host-resource-governance.sh`: the current agent-host Linux
+  install/update path and its role-specific systemd resource renderer. The
+  renderer derives defaults from `nproc`, reads deliberate overrides only from
+  `/etc/agent-host/profile.conf`, and adopts legacy resource drop-ins before the
+  managed main unit replaces them. The target contract lives in
+  [runner-host resource governance](../../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md).
 - `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
   (AGT-2182): the Task Server's persisted control-plane authority for separate
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store
@@ -138,6 +149,11 @@ state.
   the lease and fence. A remote runner acquires the run lease; the local
   in-process runner uses the disk pickup-lock and holds none, which is exactly
   the lokal-vs-remote signal.
+- `TaskRunnerService.GetStatus` owns the status-bar running count. It counts
+  live `3-progress` cards backed by either a local execution slot or an active
+  fenced run lease, deduplicated by card. `RunnerStatus.RunningCount` is the
+  client contract; consumers do not infer it from local `ActiveJobId` or remote
+  host `ActiveSlots` telemetry.
 
 ## Invariants
 
@@ -176,6 +192,11 @@ state.
   and load include both pools and unrelated processes, so neither is inferred
   from lane membership or from CPU percentage. This keeps claim/lane drift
   visible instead of silently folding it into a slot count.
+
+- Linux host resource enforcement belongs to agent-host-managed systemd units,
+  separately for Coding and Review. Host-level cgroups are the hard CPU and I/O
+  boundary; AIMD slot admission reacts within that envelope. A slot count is
+  never interpreted as CPU capacity. Windows Job Objects are not implemented.
 
 - Remote pickup ownership lives in the project record (`executionRunner` plus
   `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner

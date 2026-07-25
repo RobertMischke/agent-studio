@@ -1,0 +1,52 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Agent fencing: the platform owns Git history",
+  "source": {
+    "path": "docs/operations/haertung-verteilte-ausfuehrung/agent-fencing.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "f1253dcf9990f8f073a93d301d7e67cab96a96bcec7ca625dedea2c47fd6baa7",
+      "sizeBytes": 14895,
+      "lineCount": 332,
+      "capturedAt": "2026-07-24T23:01:30.000Z"
+    }
+  },
+  "classification": {
+    "owner": "operations",
+    "documentMode": "mixed",
+    "temporalState": "mixed",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-24"
+  },
+  "relatedTasks": [
+    {
+      "key": "AIP-7",
+      "title": "Pattern: AI as autonomous actors in process chains (survey + dock)",
+      "linkedAt": "2026-07-24T21:34:31.000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AIP-10",
+      "title": "Pattern: prompt management as versioned text + usage telemetry (survey + dock)",
+      "linkedAt": "2026-07-24T21:34:31.000Z",
+      "source": "manual"
+    },
+    {
+      "key": "TE-13",
+      "title": "Trust level per model: capability record + violation/incident evidence collection (proof over claim)",
+      "linkedAt": "2026-07-24T21:34:31.000Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2300",
+      "title": "P0: per-run worktree isolation for docs/local projects - shared checkout is a serious bug",
+      "linkedAt": "2026-07-24T21:34:31.000Z",
+      "source": "manual"
+    }
+  ]
+}

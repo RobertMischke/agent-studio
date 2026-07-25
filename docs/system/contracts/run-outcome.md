@@ -12,10 +12,13 @@ or signal, timeout, OOM, cancellation, host shutdown, lease state, transport
 state, provider session state, and durable output state. A terminal sentinel and
 an exit code are evidence, not independent routing authorities.
 
-The adapter emits a typed outcome, confidence or ambiguity, and one recovery
-action. Authentication, quota, invalid model/configuration, launch failure, CLI
-crash, timeout, OOM, transport loss, host shutdown, lease loss, invalid session,
-explicit blocker, successful completion, and protocol-inconclusive are distinct.
+The adapter emits a typed outcome, confidence or ambiguity, one recovery
+action, and an optional detail. Authentication, quota, invalid
+model/configuration, launch failure, CLI crash, timeout, OOM, transport loss,
+host shutdown, lease loss, invalid session, explicit blocker, successful
+completion, and protocol-inconclusive are distinct. `ExplicitAgentBlocker`
+preserves the exact `TASK_BLOCKED` or `TASK_NEEDS_INPUT` reason in `Detail`, so
+the Task Server timeline and board consumers can show the blocking reason.
 `ProtocolInconclusive` remains visible and never aliases a product defect.
 
 Review infrastructure recovery is constrained by an immutable
@@ -56,6 +59,12 @@ Claude-style `type=result` frame with `is_error=true`, an `error_*` subtype, or
 an error status is failure evidence, never provider completion. When several
 terminal frames are present, the last terminal state wins. A session rejected
 by the provider cannot select `ResumeSameSession` again.
+
+An exit-zero invocation with any explicit terminal sentinel (`TASK_DONE`,
+`TASK_NOOP`, `TASK_BLOCKED`, or `TASK_NEEDS_INPUT`) suppresses infrastructure
+regex matches found only in diagnostic narrative. Authoritative facts such as
+`OomKilled`, lease loss, timeout, transport loss, invalid session state, or
+launch failure still win over the sentinel.
 
 Fresh-attempt recovery requires a published salvage reference whose
 durable state is `Published` or `Acknowledged`. A host-local worktree path is

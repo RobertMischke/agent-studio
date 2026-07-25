@@ -1005,6 +1005,27 @@
         </tr>
         <tr>
           <td>2026-07-25</td>
+          <td><code>AGT-2341</code><br><span class="small">blocked sentinel overridden by diagnostic narrative<br>(observed on <code>AGT-2280</code>)</span></td>
+          <td>
+            The CLI exited zero with the honest terminal
+            <code>[[TASK_BLOCKED:deck-panel-v1-decision-missing]]</code>. Diagnostic narrative mentioned an OOM scenario,
+            so the shared classifier emitted <code>OutOfMemory</code> with <code>TerminateHonestly</code> while the legacy
+            outcome remained <code>Unknown</code>. No real OOM fact existed.
+          </td>
+          <td>
+            The diagnostic-regex guard covered only exit-zero <code>TASK_DONE</code> and <code>TASK_NOOP</code>.
+            <code>TASK_BLOCKED</code> therefore remained vulnerable to narrative OOM, quota, authentication, session, and
+            configuration matches. The typed blocker also discarded the sentinel's reason slug.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> every explicit exit-zero terminal now suppresses diagnostic-only
+            infrastructure regex matches, while authoritative facts such as <code>OomKilled</code> still win.
+            <code>ExplicitAgentBlocker</code> remains the stable typed terminal and carries the exact reason slug in its
+            additive <code>Detail</code> field for Task Server and board consumers.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-25</td>
           <td><code>AGT-2335</code><br><span class="small">expired dead-attempt release kept daemon in startup retry<br>(observed on <code>AGT-2326</code>)</span></td>
           <td>
             Startup found a dead persisted Drain-Stop attempt. The Task Server answered its release with
@@ -1021,6 +1042,32 @@
             <span class="pill ok">fixed</span> all explicit lease-absent outcomes now delete the dead persisted slot and let
             daemon startup continue. Unknown outcomes and request failures still retain the slot and reach the fail-closed
             retry terminal. The restart regression pins the observed <code>Expired</code> response.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-25</td>
+          <td><code>AGT-2320</code><br><span class="small">remote lease-loss requeue and deleted-cwd spiral</span></td>
+          <td>
+            A backend restart invalidated leases for active remote runs. Their cards returned to
+            <span class="lane">2-ready</span> and were claimed again while the first CLIs still ran.
+            Teardown removed those live worktrees, leaving more than 30 CLIs in deleted working
+            directories. Host load reached 178 on 12 cores; heartbeat timeouts then returned the
+            second generation and a third claim wave was imminent until the operator killed the
+            deleted-cwd processes and reduced caps.
+          </td>
+          <td>
+            Lease rejection cancelled only a token and did not guarantee OS process-group reaping;
+            worktree removal did not inspect cwd owners; boot/claim recovery treated a free lease as
+            proof that the remote process was dead; and remote claim admission used only configured
+            slot count, not host load per core.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> stale fence, changed epoch, revoked lease, or an
+            unconfirmed renewal past expiry kills the isolated CLI process group. Worktree teardown
+            terminates and verifies every cwd owner before removal. A known remote attempt requeues
+            only after a 120-second grace and the assigned runner's explicit inactive-task report.
+            New claims close above load/core 1.5. Focused tests pin all four boundaries; the run
+            terminates as fenced lease loss, never as another overlapping coding generation.
           </td>
         </tr>
       </tbody>

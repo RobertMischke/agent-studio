@@ -55,7 +55,8 @@ public sealed record RunLeaseHeartbeatRequest(
     int? RequestedTtlSeconds = null,
     string? AttemptId = null,
     long? AuthorityEpoch = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    RunnerProcessInventory? Inventory = null);
 
 /// <summary>Runner -> Server: drop the lease when the run ends (/api/runner/lease/release).</summary>
 public sealed record RunLeaseReleaseRequest(
@@ -95,7 +96,8 @@ public sealed record RunLeaseResponse(
     string Outcome,
     bool Granted,
     RunLeaseInfoDto? Lease,
-    string? Message = null);
+    string? Message = null,
+    IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null);
 
 public sealed record RunnerClaimRequest(
     string RunnerId,
@@ -107,7 +109,41 @@ public sealed record RunnerClaimRequest(
     HostTelemetrySample? Telemetry = null,
     int AvailableSlots = 1,
     int? ActiveSlots = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    IReadOnlyList<string>? ActiveTaskKeys = null,
+    RunnerProcessInventory? Inventory = null);
+
+public sealed record RunnerProcessInventory(
+    DateTime ObservedAt,
+    IReadOnlyList<RunnerProcessInfo> Processes,
+    IReadOnlyList<RunnerInvariantReport>? Reports = null,
+    IReadOnlyList<string>? AcknowledgedActionIds = null);
+
+public sealed record RunnerProcessInfo(
+    string RunId,
+    string TaskKey,
+    int Pid,
+    string Cwd,
+    DateTime StartedAt);
+
+public sealed record RunnerInvariantReport(
+    string ReportId,
+    string Category,
+    DateTime DetectedAt,
+    string Action,
+    string Detail,
+    string? RunId = null,
+    string? TaskKey = null,
+    int? Pid = null);
+
+public sealed record RunnerReconciliationAction(
+    string ActionId,
+    string Category,
+    string Action,
+    string Detail,
+    int? Pid = null,
+    string? RunId = null,
+    string? TaskKey = null);
 
 /// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>
 public sealed record HostTelemetrySample(
@@ -139,7 +175,8 @@ public sealed record RunnerClaimResponse(
     string? DefaultBranch = null,
     string? TaskKind = null,
     string? RunId = null,
-    string? LeaseInstanceId = null);
+    string? LeaseInstanceId = null,
+    IReadOnlyList<RunnerReconciliationAction>? ReconciliationActions = null);
 
 public static class RemoteChatWorkKinds
 {

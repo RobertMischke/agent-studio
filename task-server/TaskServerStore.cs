@@ -11,7 +11,7 @@ namespace AgentStudio.TaskServer;
 
 public sealed partial class TaskServerStore
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
     private const string TimestampFormat = "O";
     private readonly TaskServerOptions _options;
     private readonly TimeProvider _clock;
@@ -381,17 +381,28 @@ public sealed partial class TaskServerStore
 
     public async Task<ClaimResponse> ClaimAsync(ClaimRequest request, string actorId, CancellationToken ct)
     {
-        RequireAdmission();
+        if (request.AvailableSlots > 0)
+            RequireAdmission();
+        else
+            RequireWritable();
         ClaimResponse? response = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             await ValidateRunnerAsync(connection, transaction, request.RunnerId, request.InstanceId, ct);
+            await RecordRunnerInventoryAsync(
+                connection, transaction, request.RunnerId, request.InstanceId,
+                request.Inventory, actorId, ct);
+            var reconciliationActions = await ReadPendingReconciliationActionsAsync(
+                connection, transaction, request.RunnerId, request.InstanceId, ct);
             await ExecuteAsync(connection, "UPDATE runners SET last_seen_at = $now WHERE id = $id;", ct, transaction,
                 ("$now", Iso(UtcNow)), ("$id", request.RunnerId));
 
             if (request.AvailableSlots <= 0)
             {
-                response = new ClaimResponse("empty", Message: "Runner has no available execution slot.");
+                response = new ClaimResponse(
+                    "empty",
+                    Message: "Runner has no available execution slot.",
+                    ReconciliationActions: reconciliationActions);
                 return;
             }
 
@@ -411,7 +422,10 @@ public sealed partial class TaskServerStore
 
             if (task is null)
             {
-                response = new ClaimResponse("empty", Message: "No admissible task is ready.");
+                response = new ClaimResponse(
+                    "empty",
+                    Message: "No admissible task is ready.",
+                    ReconciliationActions: reconciliationActions);
                 return;
             }
 
@@ -441,20 +455,33 @@ public sealed partial class TaskServerStore
 
             var run = new RunDto(runId, task.TaskId, "running", request.RunnerId, fence, now, now, null);
             var lease = new LeaseDto(leaseId, runId, task.TaskId, request.RunnerId, request.InstanceId, fence, now, expires, "active");
-            response = new ClaimResponse("claimed", run, task with { State = "3-progress", Version = task.Version + 1, UpdatedAt = now }, lease);
+            response = new ClaimResponse(
+                "claimed",
+                run,
+                task with { State = "3-progress", Version = task.Version + 1, UpdatedAt = now },
+                lease,
+                ReconciliationActions: reconciliationActions);
         }, ct);
         return response!;
     }
 
     public async Task<LeaseResponse> RenewLeaseAsync(string runId, LeaseRenewRequest request, string actorId, CancellationToken ct)
     {
-        RequireAdmission();
+        // Draining closes new admission, not heartbeat renewal for work that is
+        // already fenced. ReadOnly and Maintenance still block the write.
+        RequireWritable();
         LeaseDto? renewed = null;
+        IReadOnlyList<RunnerReconciliationAction> reconciliationActions = [];
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
             var lease = await ReadLeaseAsync(connection, transaction, runId, ct)
                 ?? throw new KeyNotFoundException("Run lease was not found.");
             ValidateLeaseReference(lease, request.RunnerId, request.InstanceId, request.LeaseId, request.Fence);
+            await RecordRunnerInventoryAsync(
+                connection, transaction, request.RunnerId, request.InstanceId,
+                request.Inventory, actorId, ct);
+            reconciliationActions = await ReadPendingReconciliationActionsAsync(
+                connection, transaction, request.RunnerId, request.InstanceId, ct);
             if (!string.Equals(lease.Status, "active", StringComparison.Ordinal))
                 throw new TaskServerConflictException("lease-not-active", $"Lease status is '{lease.Status}'.");
             if (lease.ExpiresAt <= UtcNow)
@@ -470,7 +497,10 @@ public sealed partial class TaskServerStore
             await AuditAsync(connection, transaction, actorId, "lease.renewed", "run", runId,
                 JsonSerializer.Serialize(new { request.Fence, expiresAt = expires }), ct);
         }, ct);
-        return new LeaseResponse("renewed", renewed);
+        return new LeaseResponse(
+            "renewed",
+            renewed,
+            ReconciliationActions: reconciliationActions);
     }
 
     public async Task<LeaseResponse> ReleaseLeaseAsync(string runId, LeaseReleaseRequest request, string actorId, CancellationToken ct)
@@ -1350,6 +1380,8 @@ public sealed partial class TaskServerStore
                      "workspaces", "projects", "tasks", "runs", "events", "artifacts",
                      "audit", "fence_counters", "leases", "runners", "review_subjects",
                      "review_attempts", "review_fence_counters", "review_deliveries",
+                     "runner_inventories", "invariant_reports",
+                     "runner_reconciliation_actions",
                  })
         {
             var count = Convert.ToInt64(await ScalarAsync(connection, $"SELECT count(*) FROM {table};", ct) ?? 0L, CultureInfo.InvariantCulture);
@@ -1600,6 +1632,34 @@ public sealed partial class TaskServerStore
                 target_id TEXT NOT NULL,
                 detail_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS runner_inventories(
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                PRIMARY KEY(runner_id, instance_id)
+            );
+            CREATE TABLE IF NOT EXISTS invariant_reports(
+                report_id TEXT PRIMARY KEY,
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                detected_at TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runner_reconciliation_actions(
+                action_id TEXT PRIMARY KEY,
+                runner_id TEXT NOT NULL REFERENCES runners(id),
+                instance_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                pid INTEGER,
+                run_id TEXT,
+                task_key TEXT,
+                created_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS ix_tasks_project_state ON tasks(project_id, state);
             CREATE INDEX IF NOT EXISTS ix_leases_task_status ON leases(task_id, status);
             CREATE INDEX IF NOT EXISTS ix_events_run_cursor ON events(run_id, cursor);
@@ -1607,6 +1667,8 @@ public sealed partial class TaskServerStore
             CREATE INDEX IF NOT EXISTS ix_result_handoffs_retain_until ON result_handoffs(retain_until);
             CREATE INDEX IF NOT EXISTS ix_runner_outbox_backlog ON runner_outbox_status(backlog_count);
             CREATE INDEX IF NOT EXISTS ix_outbox_receipts_run ON outbox_receipts(run_id, sequence);
+            CREATE INDEX IF NOT EXISTS ix_runner_inventory_observed ON runner_inventories(observed_at);
+            CREATE INDEX IF NOT EXISTS ix_runner_actions_owner ON runner_reconciliation_actions(runner_id, instance_id);
             """, ct);
         await EnsureColumnAsync(connection, "events", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);

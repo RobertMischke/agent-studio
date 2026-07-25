@@ -119,6 +119,66 @@ public static class TaskGitEndpoints
             return Results.Ok(aggregate);
         });
 
+        // API-owned repair for accepted integration commits that already exist
+        // in Git but were not part of the task's automatic attribution window.
+        // This route never creates or rewrites Git history. It only appends the
+        // resolved commit metadata to task.json through TaskMutationService.
+        // The full-SHA and task-key-in-message fences keep it narrower than the
+        // retired generic operator include/exclude surface.
+        group.MapPost("/{jobId}/commits/integration", (
+            string jobId, string? project, string? watchPath,
+            AppendIntegrationCommitRequest req,
+            TaskScannerService scanner, GitService git,
+            TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Task not found." });
+
+            var sha = req?.Sha?.Trim() ?? "";
+            if (sha.Length != 40 || sha.Any(c => !Uri.IsHexDigit(c)))
+                return Results.BadRequest(new { error = "A full 40-character commit SHA is required." });
+
+            var metadata = git.GetCommitMeta(jobId, watchPath, [sha]);
+            if (!metadata.TryGetValue(sha, out var commitMeta))
+                return Results.BadRequest(new { error = "Commit does not exist in the task repository." });
+
+            var taskKey = string.IsNullOrWhiteSpace(info.Key) ? info.Id : info.Key;
+            if (string.IsNullOrWhiteSpace(taskKey)
+                || !commitMeta.Body.Contains(taskKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"Integration commit message must name task key '{taskKey}'."
+                });
+            }
+
+            var files = git.GetCommitFiles(jobId, watchPath, sha);
+            var commit = new TaskCommitInfo
+            {
+                Sha = sha,
+                ShortSha = sha[..8],
+                Message = commitMeta.Body.Trim(),
+                FilesChanged = files.Count,
+                Files = files.Select(file => file.Path).ToList(),
+                At = commitMeta.AuthorDateUtc,
+                Attribution = CommitAttributionKinds.Manual,
+                Confidence = 1.0,
+            };
+
+            if (!mutations.SetJobCommit(jobId, commit, watchPath))
+                return Results.Json(
+                    new { error = "Failed to append the integration commit." },
+                    statusCode: StatusCodes.Status500InternalServerError);
+
+            var refreshed = scanner.FindJob(jobId, watchPath);
+            return Results.Ok(new
+            {
+                commit = refreshed?.Commit ?? commit,
+                commits = refreshed?.Commits ?? [commit],
+            });
+        });
+
         group.MapGet("/{jobId}/commits/files", (
             string jobId, string? project, string? watchPath,
             TaskScannerService scanner, TaskSessionLog sessions, GitService git,
@@ -424,3 +484,5 @@ public static class TaskGitEndpoints
         };
     }
 }
+
+public sealed record AppendIntegrationCommitRequest(string Sha);

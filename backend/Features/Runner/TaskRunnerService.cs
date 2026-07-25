@@ -312,16 +312,12 @@ public class TaskRunnerService : BackgroundService
         foreach (var rawEntry in entries)
         {
             // The registry (set via the onboarding dialog or project settings)
-            // is the source of truth once a record exists (ADR-0042); the
-            // static WatchPaths RootPath is only the bootstrap-era fallback
-            // for projects that predate the registry field. Without this, a
-            // RootPath set through the UI after this backend last started
-            // silently has no effect until someone also hand-edits the
-            // gitignored appsettings.Local.json.
-            var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
-            var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
-                ? rawEntry
-                : rawEntry with { RootPath = registryRootPath };
+            // is the source of truth once a record exists (ADR-0042); static
+            // WatchPaths fields are bootstrap-era fallbacks. RepositoryPath is
+            // independent of task storage and also supplies the working directory
+            // when no narrower RootPath is configured.
+            var registryProject = _projectRegistry?.FindByStorageLocation(rawEntry.Path);
+            var entry = ResolveRunnerEntry(rawEntry, registryProject);
 
             if (string.IsNullOrEmpty(entry.RootPath))
             {
@@ -520,12 +516,63 @@ public class TaskRunnerService : BackgroundService
 
     public RunnerStatus GetStatus()
     {
-        var projects = new Dictionary<string, ProjectRunnerStatus>();
+        var projects = new Dictionary<string, ProjectRunnerStatus>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, runner) in _runners)
         {
             projects[name] = runner.GetStatus();
         }
-        return new RunnerStatus { Projects = projects };
+
+        var runningByProject = CountRunningTasksByProject(
+            _scanner.ScanAllJobs(),
+            task => _runners.TryGetValue(task.ProjectName, out var local)
+                    && local.GetRunActivity(task.Id).SlotActive,
+            taskKey => _runLeases?.Peek(taskKey).Lease is not null);
+
+        foreach (var (name, count) in runningByProject)
+        {
+            if (projects.TryGetValue(name, out var project))
+            {
+                projects[name] = project with { RunningTaskCount = count };
+            }
+        }
+
+        return new RunnerStatus
+        {
+            Projects = projects,
+            RunningCount = runningByProject.Values.Sum(),
+        };
+    }
+
+    /// <summary>
+    /// Counts live cards rather than runner sources. Lane membership prevents a
+    /// stale slot or lease from leaking beyond <c>3-progress</c>; the OR keeps a
+    /// locally-owned lease from double-counting the same card.
+    /// </summary>
+    internal static Dictionary<string, int> CountRunningTasksByProject(
+        IEnumerable<AgentStudio.Shared.TaskInfo> tasks,
+        Func<AgentStudio.Shared.TaskInfo, bool> hasLocalExecutionSlot,
+        Func<string, bool> hasActiveRunLease)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var task in tasks)
+        {
+            if (!string.Equals(
+                    task.State,
+                    AgentStudio.Shared.TaskStates.Progress,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!hasLocalExecutionSlot(task) && !hasActiveRunLease(task.TaskKey))
+            {
+                continue;
+            }
+
+            counts[task.ProjectName] = counts.GetValueOrDefault(task.ProjectName) + 1;
+        }
+
+        return counts;
     }
 
     public bool SetMode(string projectName, string mode, string? reason = null)
@@ -1230,10 +1277,8 @@ public class TaskRunnerService : BackgroundService
     {
         if (_runners.ContainsKey(rawEntry.Name)) return true;
 
-        var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
-        var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
-            ? rawEntry
-            : rawEntry with { RootPath = registryRootPath };
+        var registryProject = _projectRegistry?.FindByStorageLocation(rawEntry.Path);
+        var entry = ResolveRunnerEntry(rawEntry, registryProject);
         if (string.IsNullOrWhiteSpace(entry.RootPath) || !Directory.Exists(entry.RootPath))
         {
             _logger.LogInformation(
@@ -1280,6 +1325,33 @@ public class TaskRunnerService : BackgroundService
             catch (Exception ex) { _logger.LogWarning(ex, "Orchestrator boot failed for {Project}", entry.Name); }
         });
         return true;
+    }
+
+    /// <summary>
+    /// Registry repository authority is independent of task storage. A project
+    /// with a repository but no separate working-directory setting runs from
+    /// the repository path; a configured RootPath remains the desired CLI
+    /// subfolder and is later mapped into each task worktree.
+    /// </summary>
+    internal static WatchPathEntry ResolveRunnerEntry(
+        WatchPathEntry rawEntry,
+        ProjectRecord? registryProject)
+    {
+        var repositoryPath = !string.IsNullOrWhiteSpace(registryProject?.RepositoryPath)
+            ? registryProject.RepositoryPath!
+            : rawEntry.RepositoryPath;
+        var configuredWorkingDirectory = !string.IsNullOrWhiteSpace(registryProject?.RootPath)
+            ? registryProject.RootPath!
+            : rawEntry.RootPath;
+        var effectiveWorkingDirectory = !string.IsNullOrWhiteSpace(configuredWorkingDirectory)
+            ? configuredWorkingDirectory
+            : repositoryPath;
+
+        return rawEntry with
+        {
+            RootPath = effectiveWorkingDirectory ?? string.Empty,
+            RepositoryPath = repositoryPath ?? string.Empty,
+        };
     }
 
     public bool StartRunner(string projectName)

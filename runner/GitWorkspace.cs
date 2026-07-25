@@ -144,7 +144,10 @@ public sealed class GitWorkspace
             }
 
             if (Directory.Exists(RepoPath))
+            {
+                await WorktreeProcessReaper.ReapAsync(RepoPath, _log, ct);
                 await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
+            }
             await TryGit(["worktree", "prune"], SharedRepoPath, ct);
 
             var requested = string.IsNullOrWhiteSpace(_options.Branch) ? _baseBranch : _options.Branch!;
@@ -175,6 +178,7 @@ public sealed class GitWorkspace
             var status = (await Git(["status", "--porcelain=v1", "--untracked-files=all"], RepoPath, ct)).StdOut;
             var mutated = !string.IsNullOrWhiteSpace(status);
             _log($"epic-planning-checkout-teardown path={RepoPath} sourceMutated={mutated}");
+            await WorktreeProcessReaper.ReapAsync(RepoPath, _log, ct);
             await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
             await TryGit(["worktree", "prune"], SharedRepoPath, ct);
             return mutated;
@@ -442,6 +446,7 @@ public sealed class GitWorkspace
 
     private async Task RemoveSecuredWorktreeAsync(bool securedWork, CancellationToken ct)
     {
+        await WorktreeProcessReaper.ReapAsync(RepoPath, _log, ct);
         await Git(["worktree", "remove", "--force", RepoPath], SharedRepoPath, ct);
         await TryGit(["worktree", "prune"], SharedRepoPath, ct);
         await TryGit(["branch", "-D", _workBranch], SharedRepoPath, ct);

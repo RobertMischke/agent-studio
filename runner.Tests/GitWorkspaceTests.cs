@@ -74,6 +74,35 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Teardown_kills_processes_with_cwd_in_worktree_before_removal()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        await SeedOriginAsync();
+        var logs = new List<string>();
+        var workspace = CreateWorkspace(logs.Add);
+        await workspace.PrepareAsync(CancellationToken.None);
+        var processTask = ProcessRunner.RunAsync(
+            "/bin/sh",
+            ["-c", "sleep 300 & wait"],
+            workingDirectory: workspace.RepoPath,
+            isolateProcessGroup: true);
+        for (var attempt = 0;
+             attempt < 100 && WorktreeProcessReaper.FindByCwd(workspace.RepoPath).Count == 0;
+             attempt++)
+            await Task.Delay(20);
+        Assert.NotEmpty(WorktreeProcessReaper.FindByCwd(workspace.RepoPath));
+
+        await workspace.TeardownAsync("Done", CancellationToken.None);
+        var process = await processTask;
+
+        Assert.NotEqual(0, process.ExitCode);
+        Assert.False(Directory.Exists(workspace.RepoPath));
+        var reapStart = logs.FindIndex(line => line.Contains("worktree-process-reap-started", StringComparison.Ordinal));
+        var teardownDone = logs.FindIndex(line => line.Contains("worktree-teardown-completed", StringComparison.Ordinal));
+        Assert.True(reapStart >= 0 && teardownDone > reapStart);
+    }
+
+    [Fact]
     public async Task Teardown_keeps_the_worktree_when_the_salvage_push_fails()
     {
         await SeedOriginAsync();

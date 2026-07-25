@@ -163,7 +163,7 @@ function qualificationPipeline(
  */
 interface MockState {
   config: Record<string, Record<string, unknown>>;
-  pipelineStepPuts: Array<Record<string, unknown>>;
+  pipelineStepPuts: Record<string, unknown>[];
 }
 
 function makeMockState(): MockState {
@@ -176,8 +176,20 @@ async function installRoutes(page: Page, state: string, mock: MockState): Promis
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
@@ -289,7 +301,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
   }
 }
 
@@ -302,8 +314,10 @@ async function dismissErrorDialog(page: Page): Promise<void> {
 async function expandAllPipelineSections(page: Page): Promise<void> {
   const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
   for (let i = 0; i < 20; i++) {
-    if ((await collapsed.count()) === 0) break;
+    const before = await collapsed.count();
+    if (before === 0) break;
     await collapsed.first().click();
+    await expect.poll(() => collapsed.count()).toBeLessThan(before);
   }
 }
 
