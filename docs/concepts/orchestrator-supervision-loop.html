@@ -255,70 +255,80 @@
        a quota and never a substitute for checking whether overlapping work already exists.</p>
 
     <div class="callout zielbild">
-      <strong>Current goal-planning slice.</strong> An Epic planning run emits a bounded structured plan. Each node has a
-      local id, a self-contained prompt, a <code>delivery</code> or <code>verification</code> purpose, and local
-      <code>dependsOn</code> edges. The server validates the graph as a DAG, creates nodes in topological order, translates
-      the local edges into stable task keys, and persists <code>creationProvenance</code> with initiator, method, owning
-      goal, orchestrator context, purpose, and creation time. Generated work lands in Backlog by default or Ready only
-      through the project setting; unresolved dependencies remain visibly blocked by the existing waits-on gate. If the
-      plan contains delivery work, the server rejects a verification node that is not transitively ordered after delivery.
+      <strong>Role contract.</strong> The global orchestrator watches the distance between an explicit outcome goal and
+      verified reality. It may create work when that distance exposes a real gap. The per-project orchestrator remains
+      the decision role for one active task and reports uncovered dependencies or validation gaps upward. Neither role
+      should confuse moving existing cards with achieving the goal.
     </div>
 
+    <h3>Goal decomposition composes existing mechanics</h3>
+    <p>This role change does not introduce another decomposition service or another provenance model. It uses the
+       capabilities already present in the product:</p>
+    <ol>
+      <li><b>Observe the gap.</b> Compare the stated goal with active cards, completed work, dependency state, and actual
+          evidence. Reuse or reprioritise matching cards first.</li>
+      <li><b>Create an Epic only when useful.</b> The global orchestrator may create a <code>kind=epic</code> card in
+          Ready. Its prompt records a goal-plan provenance header with the initiator, goal, observed gap, overlap check,
+          constraints, and acceptance criteria. This makes the root planning decision inspectable without adding a new
+          task schema.</li>
+      <li><b>Use the shipped planning path.</b> <code>EpicDecompositionLifecycle</code>,
+          <code>EpicDecompositionParser</code>, and <code>EpicSubTaskFactory</code> turn the Epic's ordered
+          <code>title</code>/<code>prompt</code> plan into child cards. Each child carries <code>epicId</code>; the source
+          Epic records the children in its planning-spawn ledger. Those are the durable origin links for generated work.</li>
+      <li><b>Persist execution order.</b> Once the generated cards have stable keys, the orchestrator maps the plan's
+          prerequisites onto the existing <code>references.dependsOn</code> API. Its validator rejects self-references
+          and cycles. The existing waits-on pickup gate then keeps dependent cards visibly waiting until their
+          prerequisites complete.</li>
+      <li><b>Follow delivery provenance.</b> The existing <code>TaskProvenanceService</code> records branch, base,
+          transition anchors, merge facts, and derived landed state for executed cards. It proves where delivered work
+          lives; it is not repurposed as a second task-creation record.</li>
+    </ol>
+    <p>The distinction matters. The current Epic parser persists <code>title</code> and <code>prompt</code>; it does not
+       itself persist local plan ids, purpose fields, or dependency edges. Dependency intent therefore stays explicit in
+       each generated prompt until the global orchestrator translates it into the existing stable-key reference graph.
+       Documentation and prompts must not claim a parallel <code>creationProvenance</code> or plan-DAG mechanism.</p>
+
     <h3>Validation is planned work</h3>
-    <p>The orchestrator may add an explicit verification task and order its checks after the delivery tasks whose output
-       it inspects. This is separate scheduled work, not an extra success claim from the implementation run. Its prompt
-       must provide a concrete checklist with expected evidence, inspect the submitted revision and actual evidence such
-       as command results, test reports, screenshots, or result artifacts, and record missing, stale, or contradictory
+    <p>The orchestrator may include an independent verification card in the decomposition and set it to wait on every
+       delivery card whose output it checks. This is separate scheduled work, not an extra success claim from the
+       implementation run. Its prompt orders a concrete checklist, names the expected evidence for each check, pins the
+       revision or delivery subject to inspect, and requires the verifier to record missing, stale, or contradictory
        evidence.</p>
-    <p>This follows the <a href="auto-review-evidence-gate-analysis.html">Evidence Gate analysis</a>: a reviewer must not
-       decide from a truncated log, a terminal sentinel, expected keywords, or confident prose when the real artifacts
-       say otherwise. Planned verification complements deterministic completion and evidence gates; it does not bypass
-       them or turn a model's wording into authority.</p>
+    <p>Relevant evidence includes the canonical branch diff, command results, test reports, screenshots, and the
+       <code>results/</code> inventory. A configured verification card is only a plan. Its existence, terminal sentinel,
+       expected keywords, or confident prose do not prove that a check ran or passed.</p>
+    <p>This follows the <a href="auto-review-evidence-gate-analysis.html">Evidence Gate analysis</a>: review must judge
+       real artifacts rather than a truncated log or a text scanner. It also follows the
+       <a href="../operations/common-problems/completion-gate-dead-code/">Completion Gate dead-code incident</a>: wired
+       code and configured checks are not execution evidence. Planned verification complements deterministic completion
+       and evidence gates; it does not bypass them or turn model wording into authority.</p>
 
-    <h3>Reviewability is part of the validation contract</h3>
-    <p>The orchestrator may conclude that a goal advanced only from a canonical review subject that exposes the task
-       branch diff, the <code>results/</code> inventory, and the card mode together. A salvage-branch link is a recovery
-       pointer, not proof of what changed. If the review subject reports an empty or unrelated diff while task evidence
-       names a substantive change, that contradiction is an evidence defect: rebuild or repair the review subject before
-       grading the work. Do not reinterpret missing reviewer input as proof that the requested capability is absent.</p>
-    <p>This makes the role contract operational at review time and follows the
-       <a href="../system/domains/pipeline.md#invariants">pipeline evidence contract</a>. Goal provenance explains why a
-       task exists; the review subject proves what its execution actually delivered. Both are required for a traceable
-       goal decision.</p>
-
-    <h3 id="goal-plan-review-map">Reviewer-facing acceptance map</h3>
-    <p>A review of this role contract must use the aggregate task change set, not only the newest incremental commit.
-       The following map keeps the requested behavior and its durable implementation evidence visible together:</p>
+    <h3 id="goal-plan-review-map">Goal-progress decision record</h3>
+    <p>For every goal it actively pursues, the global orchestrator should be able to explain:</p>
     <ul>
-      <li><b>Goal-driven role:</b> the global orchestrator prompt compares an explicit goal with current work and may
-          create a goal Epic only when a real gap remains.</li>
-      <li><b>Traceable decomposition:</b> Epic plan nodes carry local dependencies and a delivery or verification
-          purpose; server validation, topological materialization, stable task-key dependencies, and
-          <code>creationProvenance</code> make the resulting plan auditable.</li>
-      <li><b>Planned validation:</b> verification nodes are ordered after the delivery they inspect and require concrete
-          checks plus real revision, command, report, screenshot, or result-artifact evidence.</li>
-      <li><b>Evidence discipline:</b> the Evidence Gate analysis remains the review policy. A success sentence, terminal
-          sentinel, keyword match, configured check, or salvage pointer cannot replace observed execution and output.</li>
+      <li>which existing cards were reused and which cards it created;</li>
+      <li>which Epic and planning-spawn records connect generated cards to the goal;</li>
+      <li>which stable-key dependency edges order delivery and verification;</li>
+      <li>which delivery revisions and result artifacts were actually inspected; and</li>
+      <li>which acceptance criteria remain unverified.</li>
     </ul>
-    <p>If the supplied review subject contains only unrelated metadata or a recovery pointer, the role change is not
-       reviewable from that subject. Repair the subject and re-run review against the aggregate branch diff before
-       assigning a completion grade.</p>
+    <p>A goal is not verified while the review subject is empty, stale, or unrelated to the claimed delivery. Repair the
+       review subject or schedule the missing check before reporting the goal as achieved.</p>
 
     <h3>Ownership across the three units</h3>
     <ul>
-      <li><b>Agent Studio / orchestrator role</b> compares goal, work, and evidence, then authors the optional plan.</li>
-      <li><b>Task Server / control plane</b> is the durable owner of the resulting tasks, graph, provenance, and state.
-          The current compatibility implementation still materializes these fields through the Studio backend until the
-          separated Task Server cutover is complete.</li>
-      <li><b>Agent Runner</b> executes admitted delivery or verification tasks and respects the same waits-on graph. It
-          does not invent a second task truth.</li>
+      <li><b>Agent Studio / global orchestrator role</b> owns the goal horizon. It compares goal, board, dependencies,
+          and evidence; optionally creates the goal Epic; orders the resulting work; and plans verification.</li>
+      <li><b>Task Server / control plane</b> is the durable authority for task identity, Epic membership, references,
+          lane state, events, and artifacts. During the staged separation, the compatibility APIs still expose these
+          contracts through the Studio backend.</li>
+      <li><b>Agent Runner</b> executes admitted delivery or verification cards, records run evidence, and respects the
+          existing waits-on graph. It does not invent goals or a second task truth.</li>
     </ul>
-    <p class="small">See the <a href="drei-einheiten-architektur.html">three-unit architecture</a> for the deployment
+    <p class="small">See the <a href="drei-einheiten-architektur.html">three-unit architecture</a> for this ownership
        boundary, the <a href="designated-topics/evidence-gate.md">Evidence Gate designated topic</a> for current-state
-       routing, the <a href="../operations/common-problems/completion-gate-dead-code/">Completion Gate dead-code
-       incident</a> for why configured checks are not evidence that a check ran, and the
-       <a href="../operations/haertung-verteilte-ausfuehrung/historie.html">distributed-execution hardening
-       chronicle</a> for why durable provenance and control-plane ownership matter.</p>
+       routing, and the <a href="../operations/haertung-verteilte-ausfuehrung/historie.html">distributed-execution
+       hardening chronicle</a> for why durable control-plane state and execution evidence must remain separate.</p>
 
     <h3>L1 / L2 / L3 layering (vocabulary already in the code)</h3>
     <p>The heartbeat comment in the supervisor code already names a "Layer 3 system review". The watch loop unifies the
