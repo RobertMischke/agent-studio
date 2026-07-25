@@ -46,8 +46,14 @@ pre-existing lifecycle defect was not widened into the file-scoped integration.
 ## Legacy waves 3 and 4
 
 - AGT-2212 `f1a18ea4c2dd60f925067fcddef1d23c1416cd4f`
+- AGT-2218 `b5f277aeb5b03961e4352725a0171ebfe448ef48`
 
 AGT-2212 was already present as the final platform WIP commit before this
 integration run. Its focused component, utility, and triage unit gate passed
 60/60. The explicit follow-up integration boundary records adoption without
 replaying its stale salvage basis.
+
+AGT-2218 passed 18/18 Runner URL/claim tests and 4/4 focused Backend
+resolver/claim tests. The reconciled lane behavior leaves a project without a
+registered repository URL in Ready while returning a clear not-remote-capable
+claim response.
