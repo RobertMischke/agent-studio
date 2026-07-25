@@ -103,6 +103,13 @@ state.
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
+- `scripts/remote-runner-onboard.sh` and
+  `scripts/agent-host-resource-governance.sh`: the current agent-host Linux
+  install/update path and its role-specific systemd resource renderer. The
+  renderer derives defaults from `nproc`, reads deliberate overrides only from
+  `/etc/agent-host/profile.conf`, and adopts legacy resource drop-ins before the
+  managed main unit replaces them. The target contract lives in
+  [runner-host resource governance](../../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md).
 - `AttemptAuthorityService` + `RunLeaseService` + `AttemptAuthorityEndpoints`
   (AGT-2182): the Task Server's persisted control-plane authority for separate
   `RunAttempt`, `ReviewAttempt`, and immutable `ReviewSubject` records. The store
@@ -185,6 +192,11 @@ state.
   and load include both pools and unrelated processes, so neither is inferred
   from lane membership or from CPU percentage. This keeps claim/lane drift
   visible instead of silently folding it into a slot count.
+
+- Linux host resource enforcement belongs to agent-host-managed systemd units,
+  separately for Coding and Review. Host-level cgroups are the hard CPU and I/O
+  boundary; AIMD slot admission reacts within that envelope. A slot count is
+  never interpreted as CPU capacity. Windows Job Objects are not implemented.
 
 - Remote pickup ownership lives in the project record (`executionRunner` plus
   `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner

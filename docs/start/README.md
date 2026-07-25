@@ -97,6 +97,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](../operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](../operations/setup/README.md) |
 | Standalone remote runner (Linux host) | [operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md) |
+| Runner-host resource governance (Linux cgroups, coding/review role defaults, AIMD capacity boundary) | [target architecture](../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md) |
 | Remote hosts operator lifecycle | [operations/remote-hosts.md](../operations/remote-hosts.md) |
 | Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](../operations/setup/remote-runner-persistent-connection.md) |
 | Common problems | [common-problems/README.md](../operations/common-problems/README.md) |

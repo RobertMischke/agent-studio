@@ -34,3 +34,8 @@ public Hetzner VM? Leaning: yes — sharpen this picture first, then deploy.
   without publishing the monolith as the target control-plane package.
 - Building the versioned distributable remains a prerequisite for Tranche 1 and
   also serves local installation with the same package and different config.
+- On Linux runner hosts, `agent-host` owns role-specific cgroup controls in the
+  main Coding and Review units on every install and update. Values follow
+  host-derived defaults unless the operator deliberately changes
+  `/etc/agent-host/profile.conf`; see
+  [runner-host resource governance](resource-governance.md).

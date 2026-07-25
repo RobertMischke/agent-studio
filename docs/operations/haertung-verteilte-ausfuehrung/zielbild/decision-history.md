@@ -6,6 +6,12 @@
 - **2026-07-24 — Quality is a contract, not an actor.** The consolidation point between the Architecture and Quality-Layer pages; both now defer to this folder.
 - **2026-07-24 — Control plane as distributable (open).** Robert paused AGT-2277: extract the control plane into a versioned distributable before hosting it publicly; see distributable.md. Deploy cards get re-cut against the defined package.
 - **2026-07-24 (evening) — Capacity: one source of truth.** Per-project maxParallelism is deprecated; capacity lives at host level (ceiling, target load, ramp strategy — AGT-2228/2302), quota caps enter central admission. Runners report measurements only.
+- **2026-07-25 - Linux runner-host resource governance.** `agent-host` owns
+  role-specific CPU and I/O controls in the main systemd units on install and
+  update. Review defaults to one third of `nproc` with weight 30; Coding keeps
+  weight 100. Host-level cgroups are the hard boundary while AIMD adjusts
+  admitted slots. Legacy manual resource drop-ins are adopted into the explicit
+  host profile and replaced. Windows Job Objects remain a separate future card.
 - **2026-07-24 (evening) — Lane semantics.** Escalated is the intervention basin ("machine stuck", always with a stated reason) and sits before Review on the board; human-review is exclusively acceptance of evidenced deliveries.
 - **2026-07-24 (evening) — Task-type-aware pipelines.** Pipeline steps resolve per task type; planning gets a lightweight chain (content review, HTML deliverable, no code gates).
 - **2026-07-24 (evening) — Document format rule.** HTML only for diagram-first lead pages; text pages stay Markdown (better diffs, fewer tokens, human+machine readable).

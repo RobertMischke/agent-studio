@@ -1,3 +1,6 @@
+# Legacy static reference for unmanaged/manual deployments.
+# Managed Linux hosts use remote-runner-onboard.sh, which renders host-derived
+# CPUQuota, CPUWeight, IOWeight, and optional MemoryMax into the main unit.
 [Unit]
 Description=Agent Studio remote runner daemon
 After=network-online.target
