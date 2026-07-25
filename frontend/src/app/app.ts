@@ -37,6 +37,7 @@ import {
 } from './features/board';
 import {
   TaskDetailComponent,
+  DetailLoadErrorComponent,
   TaskSelectionService,
   TriageController,
   LanePagerService,
@@ -148,6 +149,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
   imports: [
     TaskColumnComponent,
     TaskDetailComponent,
+    DetailLoadErrorComponent,
     OrchestratorSideSheetComponent,
     ProjectOverlaysComponent,
     AutoReviewIndicatorComponent,
@@ -237,6 +239,7 @@ export class App implements OnInit, OnDestroy {
   readonly selectedJob = this.jobSelection.selected;
   readonly boardLoading = this.jobService.loading;
   readonly detailLoading = this.jobSelection.detailLoading;
+  readonly detailLoadError = this.jobSelection.detailLoadError;
   readonly triageToast = this.jobSelection.triageToast;
   // ASS-1751: run-activity pill for the slim studio tab-bar header. The
   // studio shell hides <app-detail-header>, so the open task's run state is
@@ -1264,6 +1267,9 @@ export class App implements OnInit, OnDestroy {
   }
   closeDetail() {
     this.jobSelection.closeDetail();
+  }
+  retryDetailLoad() {
+    this.jobSelection.retryDetailLoad();
   }
   isSelectedJob(job: TaskInfo): boolean {
     return this.jobSelection.isSelected(job);

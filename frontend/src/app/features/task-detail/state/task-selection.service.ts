@@ -1,14 +1,19 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { TaskDetail, TaskInfo, TaskState } from '../../../models/task.model';
 import { TaskService } from '../../../services/task.service';
-import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { NotificationService } from '../../../services/notification.service';
 import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
-import { LanePagerService } from './lane-pager.service';
+import { LanePagerService, type LanePagerEntry } from './lane-pager.service';
 import { BoardFiltersService } from '../../board/state/board-filters.service';
 import { laneLabelFor } from './triage-actions.model';
 import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
 import { clearTaskUrl, taskUrlKey, writeTaskUrl, type TaskUrlHistoryMode } from './task-url';
+import { ProjectLookupService } from '../../../services/project-lookup.service';
+
+export interface TaskDetailLoadError {
+  taskLabel: string;
+  message: string;
+}
 
 /**
  * Cycle 9j job-detail-feature service: owns the "currently selected
@@ -32,11 +37,11 @@ import { clearTaskUrl, taskUrlKey, writeTaskUrl, type TaskUrlHistoryMode } from 
 @Injectable({ providedIn: 'root' })
 export class TaskSelectionService {
   private readonly jobService = inject(TaskService);
-  private readonly errorDialog = inject(ErrorDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly pager = inject(LanePagerService);
   private readonly prefetch = inject(TaskDetailPrefetchService);
   private readonly boardFilters = inject(BoardFiltersService);
+  private readonly projectLookup = inject(ProjectLookupService);
   private readonly destroyRef = inject(DestroyRef);
 
   /** How many slots ahead of the current pager index to warm. */
@@ -152,6 +157,8 @@ export class TaskSelectionService {
    * superseded navigation never clears the spinner of the current one.
    */
   readonly detailLoading = signal(false);
+  readonly detailLoadError = signal<TaskDetailLoadError | null>(null);
+  private detailLoadRetry: (() => void) | null = null;
 
   /**
    * Transient banner shown by the triage panel auto-advance flow.
@@ -250,10 +257,39 @@ export class TaskSelectionService {
   }
 
   private getDetailFor(info: TaskInfo) {
-    const key = taskUrlKey(info);
-    return key
-      ? this.jobService.getDetail(key)
-      : this.jobService.getDetail(info.id, info.watchPath);
+    const project = this.projectLookup.getProjectDisplay(
+      info.projectName,
+      info.watchPath,
+    );
+    const handle = project.id ?? project.shortCode ?? project.displayName;
+    return this.jobService.getDetail(info.id, undefined, handle);
+  }
+
+  /**
+   * Resolve a persisted composite key's storage reference to registry
+   * identity. Older search snapshots may include the lane directory below
+   * the project root, so use the longest containing registry path. The
+   * storage reference is never sent to the detail endpoint.
+   */
+  private projectHandleForStorageReference(storageReference: string): string | undefined {
+    const normalize = (value: string) =>
+      value.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+    const reference = normalize(storageReference);
+    const project = [...this.projectLookup.allProjects()]
+      .filter(candidate => {
+        const storage = normalize(candidate.storageLocation);
+        return reference === storage || reference.startsWith(`${storage}/`);
+      })
+      .sort((left, right) => right.storageLocation.length - left.storageLocation.length)[0];
+    return project?.id ?? project?.shortCode ?? project?.displayName;
+  }
+
+  private getDetailForPagerEntry(entry: LanePagerEntry) {
+    const liveInfo = this.jobService.jobs().find(task => task.taskKey === entry.taskKey);
+    if (liveInfo) return this.getDetailFor(liveInfo);
+    if (entry.routeKey) return this.jobService.getDetail(entry.routeKey);
+    const project = this.projectHandleForStorageReference(entry.watchPath);
+    return this.jobService.getDetail(entry.id, undefined, project);
   }
 
   /**
@@ -267,6 +303,7 @@ export class TaskSelectionService {
     // accept-to-next-task pipeline owns its own marks via markAcceptClick;
     // this one covers ad-hoc board clicks where no accept-click preceded.
     perfMark('job-select-click');
+    this.prepareDetailLoad(() => this.openDetail(job, opts));
     this.syncTaskUrl(job, 'push');
     this.triageLaneState = job.state;
     if (!opts.keepPagerSnapshot) {
@@ -296,6 +333,7 @@ export class TaskSelectionService {
       next: (detail) => {
         if (token !== this.openDetailToken) return;
         this.detailLoading.set(false);
+        this.clearDetailLoadFailure();
         this.selected.set(detail);
         if (!cached) {
           this.markNextTaskRendered();
@@ -310,12 +348,7 @@ export class TaskSelectionService {
         // the panel is already showing the cached detail and a transient
         // network blip should not pop a modal.
         if (cached) return;
-        clearTaskUrl('replace');
-        this.errorDialog.show(err, {
-          title: 'Failed to load task details',
-          fallbackMessage: 'Failed to load task details',
-          source: `Task ${job.id}`,
-        });
+        this.failDetailLoad(err, job.key || job.id, () => this.openDetail(job, opts));
       },
     });
   }
@@ -354,6 +387,12 @@ export class TaskSelectionService {
   pagerStep(direction: -1 | 1): boolean {
     const entry = this.pager.step(direction);
     if (!entry) return false;
+    this.loadPagerEntry(entry);
+    return true;
+  }
+
+  private loadPagerEntry(entry: LanePagerEntry): void {
+    this.prepareDetailLoad(() => this.loadPagerEntry(entry));
     if (entry.routeKey) writeTaskUrl(entry.routeKey, 'push');
     const token = ++this.openDetailToken;
     const cached = this.prefetch.take(entry.id, entry.watchPath);
@@ -365,11 +404,12 @@ export class TaskSelectionService {
     } else {
       this.detailLoading.set(true);
     }
-    this.jobService.getDetail(entry.routeKey ?? entry.id, entry.routeKey ? undefined : entry.watchPath).subscribe({
+    this.getDetailForPagerEntry(entry).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
         if (!entry.routeKey) this.syncTaskUrl(detail.info, 'push');
         this.detailLoading.set(false);
+        this.clearDetailLoadFailure();
         // Re-anchor the triage lane to the snapshot's lane so the
         // external-advance effect in the shell doesn't fire on the
         // brand-new selection (the new job's state matches the lane
@@ -383,14 +423,9 @@ export class TaskSelectionService {
         if (token !== this.openDetailToken) return;
         this.detailLoading.set(false);
         if (cached) return;
-        this.errorDialog.show(err, {
-          title: 'Failed to load task details',
-          fallbackMessage: 'Failed to load task details',
-          source: `Task ${entry.id}`,
-        });
+        this.failDetailLoad(err, entry.routeKey || entry.id, () => this.loadPagerEntry(entry));
       },
     });
-    return true;
   }
 
   closeDetail(): void {
@@ -399,6 +434,7 @@ export class TaskSelectionService {
     // the panel does not pop back open after we close it.
     this.openDetailToken++;
     this.detailLoading.set(false);
+    this.clearDetailLoadFailure();
     this.selected.set(null);
     this.triageLaneState = null;
     this.pager.clear();
@@ -416,22 +452,44 @@ export class TaskSelectionService {
    * `?task=<AGT-NNN>` route. The watch path never enters browser history.
    */
   openDetailByTaskKey(taskKey: string): void {
+    const liveInfo = this.jobService.jobs().find(task => task.taskKey === taskKey);
     const sep = taskKey.lastIndexOf('::');
-    if (sep < 0) return;
-    const watchPath = taskKey.slice(0, sep);
+    if (!liveInfo && sep < 0) {
+      this.detailLoading.set(false);
+      this.failDetailLoad(null, taskKey, () => this.openDetailByTaskKey(taskKey));
+      return;
+    }
+    const storageReference = taskKey.slice(0, sep);
     const jobId = taskKey.slice(sep + 2);
-    if (!jobId || !watchPath) return;
+    if (!liveInfo && (!jobId || !storageReference)) {
+      this.detailLoading.set(false);
+      this.failDetailLoad(null, taskKey, () => this.openDetailByTaskKey(taskKey));
+      return;
+    }
+    const label = liveInfo?.key || liveInfo?.id || jobId;
+    this.prepareDetailLoad(() => this.openDetailByTaskKey(taskKey));
+    this.detailLoading.set(true);
     const token = ++this.openDetailToken;
-    this.jobService.getDetail(jobId, watchPath).subscribe({
+    const request = liveInfo
+      ? this.getDetailFor(liveInfo)
+      : this.jobService.getDetail(
+          jobId,
+          undefined,
+          this.projectHandleForStorageReference(storageReference),
+        );
+    request.subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
+        this.clearDetailLoadFailure();
         this.syncTaskUrl(detail.info, 'replace');
         this.selected.set(detail);
         this.triageLaneState = detail.info.state;
       },
-      error: () => {
+      error: (err) => {
         if (token !== this.openDetailToken) return;
-        this.clearTaskParamsFromUrl();
+        this.detailLoading.set(false);
+        this.failDetailLoad(err, label, () => this.openDetailByTaskKey(taskKey));
       },
     });
   }
@@ -446,6 +504,7 @@ export class TaskSelectionService {
   clearSelectionForTabSwitch(): void {
     this.openDetailToken++;
     this.detailLoading.set(false);
+    this.clearDetailLoadFailure();
     this.selected.set(null);
     this.triageLaneState = null;
     this.pager.clear();
@@ -484,6 +543,7 @@ export class TaskSelectionService {
     }
 
     const token = ++this.openDetailToken;
+    this.prepareDetailLoad(() => this.restoreFromUrl(fromPopState));
     this.detailLoading.set(true);
     const request = taskReference
       ? this.jobService.getDetail(taskReference)
@@ -493,6 +553,7 @@ export class TaskSelectionService {
       next: (detail) => {
         if (token !== this.openDetailToken) return;
         this.detailLoading.set(false);
+        this.clearDetailLoadFailure();
         // A clean canonical URL is deliberately left byte-for-byte untouched.
         // Legacy locators are redirected once, and mixed URLs are scrubbed
         // after the server proves which stable key owns the reference.
@@ -508,12 +569,12 @@ export class TaskSelectionService {
           this.triageLaneState = detail.info.state;
         }
       },
-      error: () => {
+      error: (err) => {
         if (token !== this.openDetailToken) return;
         this.detailLoading.set(false);
         this.selected.set(null);
         this.triageLaneState = null;
-        clearTaskUrl('replace');
+        this.failDetailLoad(err, taskReference || legacyJobId || 'task', () => this.restoreFromUrl(fromPopState));
       },
     });
   }
@@ -561,6 +622,12 @@ export class TaskSelectionService {
       return false;
     }
     this.triageLaneState = this.pager.snapshot()?.lane ?? this.triageLaneState;
+    this.loadAdvancedEntry(entry);
+    return true;
+  }
+
+  private loadAdvancedEntry(entry: LanePagerEntry): void {
+    this.prepareDetailLoad(() => this.loadAdvancedEntry(entry));
     if (entry.routeKey) writeTaskUrl(entry.routeKey, 'replace');
     const token = ++this.openDetailToken;
     // Optimistic-navigation path: serve a prefetched detail synchronously
@@ -575,11 +642,12 @@ export class TaskSelectionService {
     } else {
       this.detailLoading.set(true);
     }
-    this.jobService.getDetail(entry.routeKey ?? entry.id, entry.routeKey ? undefined : entry.watchPath).subscribe({
+    this.getDetailForPagerEntry(entry).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
         if (!entry.routeKey) this.syncTaskUrl(detail.info, 'replace');
         this.detailLoading.set(false);
+        this.clearDetailLoadFailure();
         this.selected.set(detail);
         if (!cached) this.markNextTaskRendered();
       },
@@ -587,14 +655,36 @@ export class TaskSelectionService {
         if (token !== this.openDetailToken) return;
         this.detailLoading.set(false);
         if (cached) return;
-        this.errorDialog.show(err, {
-          title: 'Failed to load task details',
-          fallbackMessage: 'Failed to load task details',
-          source: `Task ${entry.id}`,
-        });
+        this.failDetailLoad(err, entry.routeKey || entry.id, () => this.loadAdvancedEntry(entry));
       },
     });
-    return true;
+  }
+
+  retryDetailLoad(): void {
+    this.detailLoadRetry?.();
+  }
+
+  private prepareDetailLoad(retry: () => void): void {
+    this.detailLoadRetry = retry;
+    this.detailLoadError.set(null);
+  }
+
+  private clearDetailLoadFailure(): void {
+    this.detailLoadRetry = null;
+    this.detailLoadError.set(null);
+  }
+
+  private failDetailLoad(error: unknown, taskLabel: string, retry: () => void): void {
+    const status = typeof error === 'object' && error !== null && 'status' in error
+      ? Number((error as { status?: unknown }).status)
+      : 0;
+    this.detailLoadRetry = retry;
+    this.detailLoadError.set({
+      taskLabel,
+      message: status === 404
+        ? 'The task reference is no longer current. Retry to resolve its latest location.'
+        : 'The detail request failed. Check the connection and try again.',
+    });
   }
 
   /** Bumps the request token and returns the new value. Use from advance handlers. */
