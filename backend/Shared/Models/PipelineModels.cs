@@ -205,7 +205,7 @@ public sealed record PipelineStepExecution
     public string? RecommendedModel { get; init; }
     /// <summary>Reasoning level recommended before overrides.</summary>
     public string? RecommendedThinkingLevel { get; init; }
-    /// <summary>Where the effective selection came from, e.g. qualification or task-override.</summary>
+    /// <summary>Where the effective selection came from: policy, policy-economy, or task-override.</summary>
     public string? SelectionSource { get; init; }
     /// <summary>Heuristic saving versus the live catalogue's top rung.</summary>
     public int? EstimatedSavingsPercent { get; init; }

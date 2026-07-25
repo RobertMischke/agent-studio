@@ -2,6 +2,53 @@
 
 .cli-models { display: block; }
 
+.cli-models__policy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-4);
+  margin-bottom: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--studio-accent-3) 8%, var(--studio-bg-hover));
+}
+
+.cli-models__policy-copy {
+  display: grid;
+  gap: var(--studio-spacing-1);
+}
+
+.cli-models__policy-title {
+  color: var(--studio-fg-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cli-models__policy-detail {
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+}
+
+.cli-models__economy {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: var(--studio-spacing-2);
+  color: var(--studio-fg);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cli-models__economy input {
+  grid-row: 1 / 3;
+}
+
+.cli-models__economy small {
+  color: var(--studio-fg-muted);
+  font-size: 9px;
+}
+
 /* One stacked, compact row per CLI. Collapsed rows answer "what's present";
    expanding reveals the route editor + full model list. No left accent bar
    (style-guide R1): status/hierarchy reads from weight and a caret, not a stripe. */
@@ -182,4 +229,11 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--studio-accent-warn-strong);
+}
+
+@media (max-width: 720px) {
+  .cli-models__policy {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

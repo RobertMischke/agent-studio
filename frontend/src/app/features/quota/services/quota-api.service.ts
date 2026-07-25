@@ -11,6 +11,40 @@ export interface CliModelRouteProfile {
   fallbackThinkingLevel: string | null;
 }
 
+export interface ModelRoutingRecommendation {
+  policyVersion: string;
+  policyWikiPath: string;
+  taskType: string;
+  tier: string;
+  model: string;
+  thinkingLevel: string | null;
+  score: number;
+  economyMode: boolean;
+  economyDowngraded: boolean;
+  correctnessFloorTier: string | null;
+  reason: string;
+  estimatedSavingsPercent: number;
+}
+
+export interface ModelRoutingPolicyView {
+  version: string;
+  wikiPath: string;
+  economyMode: boolean;
+  economyModeLabel: string;
+  tiers: {
+    id: string;
+    rank: number;
+    model: string;
+    thinkingLevel: string;
+    estimatedSavingsPercent: number;
+  }[];
+  taskTypeDefaults: Record<string, {
+    tier: string;
+    hardFloorTier: string | null;
+    score: number;
+  }>;
+}
+
 /**
  * Cycle 10d API client for the per-CLI quota / rate-limit endpoints.
  * Lifted out of the TaskService god-service per ADR-0034 so the per-feature
@@ -84,6 +118,26 @@ export class QuotaApiService {
   setModelRoute(profile: CliModelRouteProfile) {
     return this.http.put<CliModelRouteProfile>(
       `${this.baseUrl}/cli/quota/model-routes`, profile,
+    );
+  }
+
+  getModelRoutingPolicy() {
+    return this.http.get<ModelRoutingPolicyView>(
+      `${this.baseUrl}/cli/model-routing/policy`,
+    );
+  }
+
+  getModelRoutingRecommendation(taskType: string, cliType: string) {
+    const query = new URLSearchParams({ taskType, cliType });
+    return this.http.get<ModelRoutingRecommendation>(
+      `${this.baseUrl}/cli/model-routing/recommendation?${query.toString()}`,
+    );
+  }
+
+  setModelRoutingEconomyMode(economyMode: boolean) {
+    return this.http.put<{ economyMode: boolean }>(
+      `${this.baseUrl}/cli/model-routing/economy-mode`,
+      { economyMode },
     );
   }
 }

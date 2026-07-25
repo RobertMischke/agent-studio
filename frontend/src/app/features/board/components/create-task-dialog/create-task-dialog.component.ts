@@ -3,8 +3,7 @@ import { ModalStackService } from '../../../../services/modal-stack.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
-import type { CliType, ComponentRoutingResolution, TagRegistryEntry, TaskKind, TaskMode, WatchPathEntry } from '../../../../models/task.model';
-import { TaskState } from '../../../../models/task.model';
+import { TaskState, type CliType, type ComponentRoutingResolution, type TagRegistryEntry, type TaskKind, type TaskMode, type WatchPathEntry } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
@@ -13,6 +12,8 @@ import { CliModelSelectorComponent } from '../../../../components/cli-model-sele
 import { CreateEpicPickerComponent } from '../create-epic-picker/create-epic-picker.component';
 import { CreateModePickerComponent } from '../create-mode-picker/create-mode-picker.component';
 import { RoutingPreviewComponent } from '../routing-preview/routing-preview.component';
+import type { ModelRoutingRecommendation } from '../../../quota';
+import { ModelRoutingSuggestionComponent } from '../model-routing-suggestion/model-routing-suggestion.component';
 export interface PendingAttachment {
   id: string;
   file: File;
@@ -24,11 +25,7 @@ export interface LaneOption {
   label: string;
   icon: string;
 }
-/**
- * Lanes a user is allowed to land a freshly created task in. Everything
- * past Ready (3-progress and later) is orchestrator-owned and not a valid
- * manual create target.
- */
+/** Manual create targets stop before orchestrator-owned Progress. */
 export const CREATE_LANE_OPTIONS: readonly LaneOption[] = [
   { state: TaskState.Backlog,     label: 'Backlog',     icon: '🗒️' },
   { state: TaskState.Preparation, label: 'Preparation', icon: '📋' },
@@ -56,7 +53,7 @@ const PENDING_PREFIX = 'pending-attachment-';
   selector: 'app-create-job-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent, CreateEpicPickerComponent, CreateModePickerComponent, RoutingPreviewComponent],
+  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent, CreateEpicPickerComponent, CreateModePickerComponent, RoutingPreviewComponent, ModelRoutingSuggestionComponent],
   templateUrl: './create-task-dialog.component.html',
   styleUrl: './create-task-dialog.component.scss'
 })
@@ -65,7 +62,7 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   readonly availableModels = input<CliModelInfo[]>([]);
   readonly cliTypeDraft = input.required<CliType>();
   readonly routing = input<ComponentRoutingResolution | null>(null); readonly routingPending = input(false);
-
+  readonly policySuggestion = input<ModelRoutingRecommendation | null>(null); readonly modelSelectionExplicit = input(false);
   readonly newTitle = model<string>('');
   readonly newWatchPath = model<string>('');
   readonly newModel = model<string>('');
@@ -112,7 +109,7 @@ export class CreateTaskDialogComponent implements AfterViewInit {
     this.newTargetState.set(state);
   }
   readonly cliTypeChange = output<CliType>();
-  readonly modelSelectionTouched = output<void>();
+  readonly modelSelectionTouched = output<void>(); readonly policySelectionRequest = output<void>();
   readonly cancelRequest = output<void>();
   readonly openChatRequest = output<void>();
   readonly submitRequest = output<void>();

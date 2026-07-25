@@ -493,6 +493,10 @@ builder.Services.AddHostedService(sp =>
     sp.GetRequiredService<AgentStudio.Pipeline.PipelineHealthService>());
 builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
     AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelRoutingPolicyRegistry>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelRoutingPolicyStateStore>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IModelRoutingModeProvider>(sp =>
+    sp.GetRequiredService<AgentStudio.Pipeline.ModelRoutingPolicyStateStore>());
 builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineModelCatalogueProvider,
     AgentStudio.Pipeline.CliPipelineModelCatalogueProvider>();
