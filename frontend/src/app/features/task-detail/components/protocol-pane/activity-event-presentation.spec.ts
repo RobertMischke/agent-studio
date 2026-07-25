@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { ConversationEvent, ToolBurstEvent } from 'coding-agent-chat/core';
+import {
+  codexTextModeStderrTranscriptFragment,
+  projectConversation,
+  type ConversationEvent,
+  type ToolBurstEvent,
+} from 'coding-agent-chat/core';
+import { sanitizeProjectionLines } from '../conversation-projection';
 import { formatCompactTokens, presentActivityEvents } from './activity-event-presentation';
 
 const range = { source: 'AGT-2088', start: 10, end: 12 };
@@ -37,5 +43,53 @@ describe('presentActivityEvents', () => {
     }], 'AGT-2088', null);
     expect(result[0]).toMatchObject({ label: 'Turn completed', explanation: '14,6M tokens' });
     expect(formatCompactTokens(14_587_328)).toBe('14,6M');
+  });
+
+  it('removes the synthetic current-task title marker from the activity feed', () => {
+    const result = presentActivityEvents([{
+      id: 'task', kind: 'taskMarker', timestamp: '2026-07-11T10:00:02Z', rawRange: range,
+      marker: '4-auto-review', lane: '4-auto-review', jobId: 'AGT-2168',
+      title: 'Completion judge: semantically interpret final-attempt prose with typed evidence',
+    }, {
+      id: 'run', kind: 'runMarker', timestamp: '2026-07-11T10:00:01Z', rawRange: range,
+      marker: 'complete', runId: 1,
+    }], 'AGT-2088', null);
+
+    expect(result.map((event) => event.kind)).toEqual(['runMarker']);
+  });
+
+  it('keeps reissue as decision information instead of a link-like next action', () => {
+    const result = presentActivityEvents([{
+      id: 'decision', kind: 'decision.orchestrator', timestamp: '2026-07-11T10:00:02Z',
+      rawRange: range, decisionType: 'reissue', reason: 'One more pass is needed.',
+      action: 'reissue',
+    }], 'AGT-2088', null);
+
+    expect(result[0]).toMatchObject({
+      kind: 'decision.orchestrator',
+      decisionType: 'reissue',
+      reason: 'One more pass is needed.',
+      action: undefined,
+    });
+  });
+
+  it('projects a Codex stderr transcript as neutral evidence plus the complete agent answer', () => {
+    const events = projectConversation({
+      source: 'AGT-2168',
+      lines: sanitizeProjectionLines(codexTextModeStderrTranscriptFragment()),
+    });
+
+    expect(events.filter((event) =>
+      event.kind === 'system.status' && event.label === 'CLI failed')).toHaveLength(0);
+    expect(events).toContainEqual(expect.objectContaining({
+      kind: 'system.status',
+      category: 'codex-transcript',
+      label: 'Codex transcript',
+      severity: 'info',
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      kind: 'message.taskAgent',
+      body: expect.stringContaining('Its second line is preserved in that same turn.'),
+    }));
   });
 });

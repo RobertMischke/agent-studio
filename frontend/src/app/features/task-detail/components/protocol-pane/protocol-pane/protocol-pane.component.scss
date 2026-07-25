@@ -972,3 +972,48 @@ cac-conversation-view {
   flex: 1 1 auto;
   min-height: 0;
 }
+
+/*
+ * The shared conversation component intentionally exposes semantic class
+ * names for host-level density adjustments. The embedded Activity pane uses
+ * the full available width and follows the Studio status vocabulary: tinted
+ * surfaces and badges, never a decorative left rail. Only the real Trace
+ * button keeps action styling; the orchestrator's next-action text is plain
+ * information.
+ */
+:host ::ng-deep cac-conversation-view {
+  .conv__row--decision {
+    width: 100%;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .decision {
+    gap: var(--studio-spacing-2);
+    padding: var(--studio-spacing-2) var(--studio-spacing-3);
+    border-radius: var(--studio-card-compact-radius);
+  }
+
+  .decision__rail {
+    display: none;
+  }
+
+  .decision__action {
+    color: inherit;
+    font-weight: 400;
+    cursor: default;
+    text-decoration: none;
+  }
+
+  .conv__row--supervisor,
+  .conv__row--needs-input,
+  .conv__row--system,
+  .conv__row--system-status,
+  .conv__row--feedback,
+  .conv__row--image .image,
+  .image--rendered,
+  cac-plan-checklist .plan {
+    border-left: 0;
+    border-radius: var(--studio-card-compact-radius);
+  }
+}

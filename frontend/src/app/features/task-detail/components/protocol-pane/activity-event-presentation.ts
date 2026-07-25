@@ -24,6 +24,14 @@ export function presentActivityEvents(
   const presented: ConversationEvent[] = [];
 
   for (const event of events) {
+    // projectConversation appends the open task itself as a final marker.
+    // In a task-local Activity feed that repeats the surrounding card title
+    // without representing a transition, which made it look like an
+    // unexplained lane event. Real run and lane evidence remains untouched.
+    if (event.kind === 'taskMarker') {
+      continue;
+    }
+
     if (event.kind === 'system.parserWarning') {
       const burstIndex = findOwningBurst(presented, event);
       if (burstIndex >= 0) {
@@ -37,6 +45,15 @@ export function presentActivityEvents(
       const otherArtifacts = (event.artifacts ?? []).filter((path) => !IMAGE_EXTENSION.test(path));
       presented.push({ ...event, artifacts: otherArtifacts.length > 0 ? otherArtifacts : undefined });
       presented.push(...imageArtifacts.map((path, index) => artifactImage(event, path, index, jobId, watchPath)));
+      continue;
+    }
+
+    if (
+      event.kind === 'decision.orchestrator'
+      && event.decisionType.toLowerCase() === 'reissue'
+      && event.action?.toLowerCase() === 'reissue'
+    ) {
+      presented.push({ ...event, action: undefined });
       continue;
     }
 
