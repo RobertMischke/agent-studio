@@ -401,6 +401,15 @@ public record SetJobTagsRequest
 }
 
 /// <summary>
+/// Replace-all body for <c>PUT /api/tasks/{id}/commits</c>. Each value must be
+/// a full commit SHA that exists in and is reachable from the task's repository.
+/// </summary>
+public sealed record ReplaceTaskCommitsRequest
+{
+    public IReadOnlyList<string> Commits { get; init; } = [];
+}
+
+/// <summary>
 /// Body for <c>PUT /api/tasks/{id}/task-type</c>. Validated via
 /// <see cref="TaskTypes.Normalize"/>; an unknown value collapses to
 /// <see cref="TaskTypes.Chore"/>.

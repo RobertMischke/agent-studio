@@ -278,7 +278,7 @@ export interface TaskCommitInfo {
   at: string;
   /**
    * How this commit was attributed to the task (ADR "Commit-Attribution-Regel").
-   * One of `automatic` or `legacy` when the rule engine has not yet stamped it.
+   * One of `automatic`, `operator`, or `legacy` when the rule engine has not yet stamped it.
    */
   attribution?: string;
   /** Confidence of an automatic attribution (0..1); absent otherwise. */

@@ -169,6 +169,11 @@ public static class TimelineEventKinds
     /// <summary>The task's lane changed (any move).</summary>
     public const string LaneChanged = "lane_changed";
     /// <summary>
+    /// An authenticated operator explicitly replaced the task's attributed
+    /// <c>commits[]</c> chain with repository-validated SHAs.
+    /// </summary>
+    public const string CommitAttributionReplaced = "commit_attribution_replaced";
+    /// <summary>
     /// An epic's planning/decomposition run (way 3) authored a sub-task list
     /// and the runner created those sub-tasks under the epic. The "Epic
     /// decomposition" step in the timeline/pipeline; <see cref="TimelineEvent.Summary"/>

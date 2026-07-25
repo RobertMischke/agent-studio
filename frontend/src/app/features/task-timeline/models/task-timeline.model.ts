@@ -44,6 +44,7 @@ export const TIMELINE_KIND = {
   qualityLoopReopened: 'quality_loop_reopened',
   humanReviewDecided: 'human_review_decided',
   laneChanged: 'lane_changed',
+  commitAttributionReplaced: 'commit_attribution_replaced',
   epicDecomposed: 'epic_decomposed',
   mergedIn: 'merged_in',
   readOnlyContainmentViolation: 'read_only_containment_violation',

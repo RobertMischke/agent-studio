@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Formats.Tar;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -24,6 +25,11 @@ public record GitCommitResult(bool Success, string? Sha, string? Error, CommitGa
 public record GitPushResult(bool Success, string Sha, string Status, string? Error);
 public record GitDiffLookupResult(bool Success, string Diff, string? Error);
 public record GitWorkerCommitCleanupResult(bool Success, string Status, string? Error);
+public sealed record ReachableCommitLookupResult(
+    bool Success,
+    TaskCommitInfo? Commit,
+    string? ErrorCode,
+    string? Error);
 
 /// <summary>
 /// Result of a single-file content lookup that backs the git-pane's
@@ -1933,6 +1939,67 @@ public class GitService
         var root = ResolveGitToplevel(configured);
         if (root == null) return [];
         return GetCommitFilesAtRoot(root, sha);
+    }
+
+    /// <summary>
+    /// Validates an operator-supplied full SHA against the task's canonical
+    /// repository and returns durable task-commit metadata. A loose commit
+    /// object is not sufficient: at least one repository ref must contain it,
+    /// which prevents an unreachable/pruned branch tip from being attributed.
+    /// </summary>
+    public ReachableCommitLookupResult GetReachableCommit(
+        string jobId,
+        string? watchPath,
+        string? suppliedSha)
+    {
+        var sha = suppliedSha?.Trim() ?? "";
+        if (!Regex.IsMatch(sha, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant))
+            return new(false, null, "invalid-sha", "Each commit must be a full 40-character hexadecimal SHA.");
+
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null)
+            return new(false, null, "repository-unavailable", "The task's repository could not be resolved.");
+        var root = ResolveGitToplevel(configured);
+        if (root == null)
+            return new(false, null, "repository-unavailable", $"Not a git repository: {configured}");
+
+        var (canonicalOut, _, canonicalCode) = RunGitArgs(
+            root, "rev-parse", "--verify", "--quiet", sha + "^{commit}");
+        var canonicalSha = canonicalOut.Trim();
+        if (canonicalCode != 0
+            || !Regex.IsMatch(canonicalSha, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant))
+            return new(false, null, "unknown-sha", $"Commit '{sha}' does not exist in the task's repository.");
+
+        var (refsOut, _, refsCode) = RunGitArgs(
+            root, "for-each-ref", "--contains=" + canonicalSha, "--format=%(refname)");
+        if (refsCode != 0 || string.IsNullOrWhiteSpace(refsOut))
+            return new(false, null, "unreachable-sha", $"Commit '{canonicalSha}' is not reachable from any repository ref.");
+
+        const char US = '\x1f';
+        var (metaOut, _, metaCode) = RunGitArgs(
+            root, "show", "-s", "--no-patch",
+            "--format=%H%x1f%h%x1f%aI%x1f%s", canonicalSha);
+        var parts = metaOut.TrimEnd('\r', '\n').Split(US);
+        if (metaCode != 0 || parts.Length < 4
+            || !DateTime.TryParse(
+                parts[2],
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var authoredAt))
+            return new(false, null, "metadata-unavailable", $"Commit metadata could not be read for '{canonicalSha}'.");
+
+        var files = GetCommitFilesAtRoot(root, canonicalSha);
+        return new(true, new TaskCommitInfo
+        {
+            Sha = parts[0],
+            ShortSha = parts[1],
+            Message = parts[3],
+            FilesChanged = files.Count,
+            Files = files.Select(file => file.Path).ToList(),
+            At = DateTime.SpecifyKind(authoredAt, DateTimeKind.Utc),
+            Attribution = CommitAttributionKinds.Operator,
+            Confidence = null,
+        }, null, null);
     }
 
     /// <summary>

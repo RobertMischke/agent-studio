@@ -88,6 +88,69 @@ public static class TaskGitEndpoints
             return DiffTextResult(git.GetCommitDiffResult(jobId, watchPath, info.Commit.Sha, path));
         });
 
+        // Explicit operator correction of the durable attributed commit chain.
+        // Validation is all-or-nothing: every supplied full SHA must exist in
+        // the canonical task repository and be reachable from at least one ref
+        // before task.json or the timeline is touched.
+        group.MapPut("/{jobId}/commits", (
+            string jobId,
+            string? project,
+            string? watchPath,
+            ReplaceTaskCommitsRequest req,
+            HttpContext context,
+            TaskScannerService scanner,
+            GitService git,
+            TaskMutationService mutations,
+            AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            var clientId = context.Request.Headers["X-Client-Id"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(clientId))
+                return Results.Json(
+                    new { error = "client-unknown", message = "X-Client-Id header is required for mutations" },
+                    statusCode: StatusCodes.Status401Unauthorized);
+
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            if (string.IsNullOrWhiteSpace(watchPath))
+                return Results.BadRequest(new { error = "A canonical watchPath or project handle is required." });
+
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+
+            var supplied = req?.Commits?
+                .Select(sha => sha?.Trim() ?? "")
+                .ToList() ?? [];
+            if (supplied.Count == 0)
+                return Results.BadRequest(new { error = "At least one commit SHA is required." });
+            if (supplied.Count > 100)
+                return Results.BadRequest(new { error = "At most 100 commit SHAs may be attributed in one request." });
+            if (supplied.Distinct(StringComparer.OrdinalIgnoreCase).Count() != supplied.Count)
+                return Results.BadRequest(new { error = "Duplicate commit SHAs are not allowed." });
+
+            var validated = new List<TaskCommitInfo>(supplied.Count);
+            var errors = new List<object>();
+            foreach (var sha in supplied)
+            {
+                var result = git.GetReachableCommit(jobId, watchPath, sha);
+                if (!result.Success || result.Commit == null)
+                {
+                    errors.Add(new { sha, code = result.ErrorCode, message = result.Error });
+                    continue;
+                }
+                validated.Add(result.Commit);
+            }
+            if (errors.Count > 0)
+                return Results.BadRequest(new { error = "Invalid commit attribution.", errors });
+
+            if (!mutations.ReplaceJobCommitChain(jobId, validated, clientId, watchPath))
+                return Results.Problem("The commit chain could not be persisted.");
+
+            return Results.Ok(new
+            {
+                commits = validated,
+                commit = validated[^1],
+            });
+        });
+
         // Job-level commit aggregation: every commit attributed to this
         // job across all of its runs (deduped by SHA), plus the
         // auto-commit when present. Drives the protocol-pane "Commits

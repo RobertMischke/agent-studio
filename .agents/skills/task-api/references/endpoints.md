@@ -199,6 +199,29 @@ Single-field edits. Body: `{ "title": "new" }`, `{ "cliType": "codex" }`,
 `{ "model": "gpt-5.5" }`, etc. Updating `cli-type` also keeps the parallel
 `agent` field in lockstep.
 
+### `PUT /api/tasks/{jobId}/commits?watchPath=...`
+
+Explicitly replace the task's complete attributed commit chain. This is an
+operator correction/backfill path, not an append operation:
+
+```json
+{
+  "commits": [
+    "2a25bd3a46cde65a1dbe9e2f357b14c029bfd1b9"
+  ]
+}
+```
+
+Every value must be a unique full 40-character SHA that exists in the
+project's configured repository and is reachable from at least one repository
+ref. Validation is all-or-nothing. Unknown or unreachable SHAs return `400`
+without changing the task. The endpoint preserves caller order, mirrors the
+last entry into the singular legacy `commit` field, and appends a
+`commit_attribution_replaced` timeline row attributed to `X-Client-Id`.
+
+Resolve the canonical `watchPath` through `GET /api/watch-paths`, or pass a
+registry `project` handle (`shortCode` or `PROJ-NNN`) instead.
+
 ### `POST /api/tasks/{jobId}/intake`
 
 Trigger the orchestrator-intake gate for a single job (when configured).

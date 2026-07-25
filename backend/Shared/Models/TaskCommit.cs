@@ -64,6 +64,8 @@ public static class CommitAttributionKinds
 {
     /// <summary>The deterministic rule engine attributed this commit.</summary>
     public const string Automatic = "automatic";
+    /// <summary>An operator explicitly replaced the task's attributed commit chain.</summary>
+    public const string Operator = "operator";
     /// <summary>
     /// An operator attached an already-existing integration commit through the
     /// API-owned integration backfill route. This is deliberately narrower
@@ -76,7 +78,7 @@ public static class CommitAttributionKinds
     /// </summary>
     public const string Legacy = "legacy";
 
-    public static readonly string[] All = [Automatic, Manual, Legacy];
+    public static readonly string[] All = [Automatic, Operator, Manual, Legacy];
 
     public static string Normalize(string? value)
     {

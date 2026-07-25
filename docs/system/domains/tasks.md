@@ -203,6 +203,21 @@ cannot erase an operator decision.
   two-tier orchestrator config; the precedence and read sites live runner-side
   (ADR-0061, see [runner.md](runner.md)).
 
+## Operator commit-attribution correction
+
+`PUT /api/tasks/{jobId}/commits` is the explicit replace-all correction path
+for a task's attributed `commits[]` chain. It requires `X-Client-Id` and a
+canonical `watchPath` or registry-backed `project` handle. The request body is
+`{"commits":["<full SHA>", ...]}`. Before any task write, every SHA must resolve
+to a commit in the task project's configured repository and be reachable from
+at least one repository ref. Unknown, malformed, duplicate, or unreachable
+SHAs reject the whole request.
+
+Successful writes preserve caller order, set attribution to `operator`, mirror
+the last entry into the singular legacy `commit` projection, and append a
+`commit_attribution_replaced` event to `logs/timeline.jsonl` with the client id,
+old/new counts, and replacement SHAs. Direct `task.json` edits remain forbidden.
+
 ## Invariants
 
 - The durable lane sequence is

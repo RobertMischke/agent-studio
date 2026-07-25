@@ -289,6 +289,45 @@ public class TaskMutationService
         return WriteCommitState(folderPath, ordered);
     }
 
+    /// <summary>
+    /// Operator-owned replace-all write for the public commit-attribution API.
+    /// The endpoint validates repository existence and reachability before
+    /// calling this method. Caller order is preserved, the singular legacy
+    /// projection follows the newest supplied entry, and one unified timeline
+    /// row makes the correction auditable.
+    /// </summary>
+    public bool ReplaceJobCommitChain(
+        string jobId,
+        IReadOnlyList<TaskCommitInfo> commits,
+        string clientId,
+        string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null || commits == null || commits.Count == 0) return false;
+
+        var previousCount = info.Commits.Count > 0 ? info.Commits.Count : info.Commit == null ? 0 : 1;
+        if (!WriteCommitState(info.FolderPath, commits.ToList())) return false;
+
+        var shas = string.Join(",", commits.Select(commit => commit.Sha));
+        _timeline?.Append(
+            info.FolderPath,
+            TimelineEventKinds.CommitAttributionReplaced,
+            TimelineActors.Human(clientId),
+            $"Attributed commit chain replaced by {clientId}: {commits.Count} commit{(commits.Count == 1 ? "" : "s")}.",
+            details: new Dictionary<string, string>
+            {
+                ["clientId"] = clientId,
+                ["previousCount"] = previousCount.ToString(CultureInfo.InvariantCulture),
+                ["newCount"] = commits.Count.ToString(CultureInfo.InvariantCulture),
+                ["shas"] = shas,
+            });
+        _logger.LogInformation(
+            "task-commit-attribution-replaced job={JobId} clientId={ClientId} previousCount={PreviousCount} newCount={NewCount} shas={Shas}",
+            jobId, clientId, previousCount, commits.Count, shas);
+        _notifier.PublishUpdated(info.ProjectName, info.Id, info.WatchPath);
+        return true;
+    }
+
     private bool WriteCommitState(string folderPath, List<TaskCommitInfo> chain)
     {
         try
