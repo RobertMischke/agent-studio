@@ -474,6 +474,9 @@ export function buildEscalationStateSentence(
     ? 'the reissue budget is exhausted'
     : reason?.trim() || 'the orchestrator escalated the remaining gaps';
   const open = gateItems.filter((item) => !item.checked).length;
+  if (gateItems.length === 0) {
+    return `${deliveryText}; waiting for your decision because ${why}.`;
+  }
   const gateText = open === 1 ? '1 gate point remains open' : `${open} gate points remain open`;
   return `${deliveryText}; waiting for your decision because ${why}, and ${gateText}.`;
 }

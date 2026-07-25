@@ -107,6 +107,14 @@ describe('needsPlanningAcceptWarning — AGT-2069 spawn-contract accept guard', 
 });
 
 describe('primaryActionFor — Enter-bound primary per source lane', () => {
+  it('uses decision-oriented labels for the escalated lane', () => {
+    const primary = primaryActionFor('5e-escalated');
+    expect(primary?.label).toBe('Continue (reissue)');
+    expect(overflowActionsFor('5e-escalated').map(action => action.label)).toEqual(
+      expect.arrayContaining(['Accept as-is', 'Abort']),
+    );
+  });
+
   it('labels the Completed lane primary "Archive & Next" and moves to 7-archive', () => {
     const primary = primaryActionFor('6-completed');
     expect(primary).not.toBeNull();

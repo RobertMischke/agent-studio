@@ -37,7 +37,7 @@ async function saveShot(testInfo: TestInfo, name: string, body: Buffer): Promise
   }
 }
 
-function buildInfo(state: string) {
+function buildInfo(state: string, emptyContext = false) {
   return {
     id: JOB_ID,
     taskKey: `${WATCH_PATH}::${JOB_ID}`,
@@ -54,11 +54,11 @@ function buildInfo(state: string) {
     kind: 'task',
     epicId: null,
     commit: null,
-    commits: [
+    commits: emptyContext ? [] : [
       { sha: 'b2ed3f47', shortSha: 'b2ed3f47', message: 'first slice', filesChanged: 3, files: ['a.ts', 'b.ts', 'c.ts'], at: '2026-07-09T18:00:00Z' },
       { sha: '1a526e97', shortSha: '1a526e97', message: 'wire it', filesChanged: 2, files: ['c.ts', 'd.ts'], at: '2026-07-09T19:00:00Z' },
     ],
-    mergeSignal: {
+    mergeSignal: emptyContext ? null : {
       branch: 'task/AGT-1994',
       inIntegration: true,
       inRelease: true,
@@ -73,9 +73,9 @@ function buildInfo(state: string) {
   };
 }
 
-function buildDetail(state: string) {
+function buildDetail(state: string, emptyContext = false) {
   return {
-    info: buildInfo(state),
+    info: buildInfo(state, emptyContext),
     promptMarkdown: '# Task',
     promptHistory: [],
     titleHistory: [],
@@ -141,9 +141,9 @@ const TIMELINE = [
   },
 ];
 
-async function installRoutes(page: Page, state: string): Promise<void> {
-  const info = buildInfo(state);
-  const detail = buildDetail(state);
+async function installRoutes(page: Page, state: string, emptyContext = false): Promise<void> {
+  const info = buildInfo(state, emptyContext);
+  const detail = buildDetail(state, emptyContext);
   const grouped = {
     backlog: [], preparation: [], orchestratorPrep: [], ready: [], progress: [],
     failedPickup: [], codeNotComplete: [], review: [], autoReview: [],
@@ -157,6 +157,12 @@ async function installRoutes(page: Page, state: string): Promise<void> {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
 
   // Shell boot dependencies.
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }));
   await page.route('**/api/watch-paths**', (route) =>
     route.fulfill({
       status: 200,
@@ -187,9 +193,15 @@ async function installRoutes(page: Page, state: string): Promise<void> {
 
   // Narrow sub-routes win over the detail route (registered later).
   await page.route('**/code-review/list**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(CODE_REVIEW_LIST) }));
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(emptyContext ? { entries: [] } : CODE_REVIEW_LIST),
+    }));
   await page.route('**/files/orchestrator-follow-up.md**', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/plain', body: FOLLOW_UP }));
+    route.fulfill(emptyContext
+      ? { status: 404, contentType: 'text/plain', body: '' }
+      : { status: 200, contentType: 'text/plain', body: FOLLOW_UP }));
   await page.route('**/timeline**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(TIMELINE) }));
 }
@@ -213,9 +225,9 @@ async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
   }, theme);
 }
 
-async function openDetail(page: Page, state: string): Promise<void> {
+async function openDetail(page: Page, state: string, emptyContext = false): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 960 });
-  await installRoutes(page, state);
+  await installRoutes(page, state, emptyContext);
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
   await expect(page.getByTestId('escalation-summary')).toBeVisible({ timeout: 20_000 });
 }
@@ -260,6 +272,7 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     );
     // Recommendation stays on the header.
     await expect(page.getByTestId('escalation-recommendation')).toHaveText('Needs decision');
+    await expect(panel.getByTestId('escalation-action-reissue-escalated')).toHaveCount(0);
 
     // 3. The section is fully borderless. Separation comes from its quiet wash.
     const borders = await panel.evaluate((el) => {
@@ -338,8 +351,31 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     // Acute lane: the operator is here to act, so the panel opens by default.
     await expect(page.getByTestId('escalation-body')).toBeVisible();
     await expect(page.getByTestId('escalation-toggle')).toHaveAttribute('aria-expanded', 'true');
+    const panel = page.getByTestId('escalation-summary');
+    await expect(panel.getByTestId('escalation-action-reissue-escalated')).toHaveText('Continue (reissue)');
+    await expect(panel.getByTestId('escalation-action-accept-escalated')).toHaveText('Accept as-is');
+    await expect(panel.getByTestId('escalation-action-discard-escalated')).toHaveText('Abort');
     await dismissAppErrorDialog(page);
     await shootBothThemes(page, testInfo, 'escalation-5e-open');
+  });
+
+  test('collapses three empty context columns into one compact row', async ({ page }, testInfo) => {
+    await openDetail(page, '5e-escalated', true);
+    const panel = page.getByTestId('escalation-summary');
+
+    await expect(page.getByTestId('escalation-state-sentence')).toHaveText(
+      'Not delivered yet; waiting for your decision because the reissue budget is exhausted.',
+    );
+    await expect(page.getByTestId('escalation-context-empty')).toHaveText('No structured context was recorded.');
+    await expect(page.getByTestId('escalation-gate-items')).toHaveCount(0);
+    await expect(page.getByTestId('escalation-review-head')).toHaveCount(0);
+    await expect(page.getByTestId('escalation-delivery')).toHaveCount(0);
+    await expect(panel.getByTestId('escalation-action-reissue-escalated')).toBeEnabled();
+
+    const height = await panel.evaluate((element) => element.getBoundingClientRect().height);
+    expect(height).toBeLessThan(300);
+    await dismissAppErrorDialog(page);
+    await shootBothThemes(page, testInfo, 'escalation-empty-context');
   });
 });
 

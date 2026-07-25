@@ -48,7 +48,11 @@
   }
 
   @if (isEscalated()) {
-    <app-escalation-summary [detail]="detail()" />
+    <app-escalation-summary
+      [detail]="detail()"
+      [mutationsBlocked]="mutationsBlocked()"
+      [triageActingId]="triageActingId()"
+      (triageAction)="onTriageAction($event)" />
   }
 
   <app-command-deck

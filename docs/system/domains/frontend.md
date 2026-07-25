@@ -88,8 +88,12 @@ boundary, route map, and visual ownership diagram are in
 - `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
   Escalated tasks render a borderless, collapsible decision section that
-  reconciles delivery and decision state in one sentence, lists reissue
-  timestamps and triggers from the timeline, and shows open gate evidence.
+  reconciles delivery and decision state in one sentence, places the primary
+  reissue, accept-as-is, and abort decisions beside the recommendation, lists
+  reissue timestamps and triggers from the timeline, and shows only recorded
+  gate, review, and delivery context. When none of that structured context is
+  present, the section renders one compact empty-context line instead of three
+  placeholder columns.
   The Runs modal also shows the current operator-owned review-attempt epoch and
   the closed cycle history, including requeue reason, lane crossing, and rotated
   artifact count.

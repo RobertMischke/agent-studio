@@ -4,6 +4,7 @@ import type { CodeReviewListEntry } from '../../../../services/task.service';
 import type { SteeringInfo } from '../../../../components/steering-detail';
 import {
   buildDelivery,
+  buildEscalationStateSentence,
   buildEscalationSummaryView,
   deriveEscalationClass,
   deriveReissues,
@@ -308,6 +309,22 @@ describe('buildEscalationSummaryView', () => {
     );
     // A completion-gate escalation is a logical / quality review, not a give-up.
     expect(view.escalation?.kind).toBe('needs-review');
+  });
+});
+
+describe('buildEscalationStateSentence', () => {
+  it('does not claim that zero gate points remain open when no gate data exists', () => {
+    const sentence = buildEscalationStateSentence(
+      { merge: null, commitCount: 0, filesChanged: 0 },
+      [],
+      [],
+      null,
+    );
+
+    expect(sentence).toBe(
+      'Not delivered yet; waiting for your decision because the orchestrator escalated the remaining gaps.',
+    );
+    expect(sentence).not.toContain('0 gate points');
   });
 });
 
