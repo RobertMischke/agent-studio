@@ -28,6 +28,10 @@ public class ClientIdentityMiddleware
     private static readonly string[] OpenPathPrefixes =
     {
         "/api/clients/register",
+        // The versioned plane owns its Runner registration and fenced
+        // attribution contract. Networked deployments still pass through the
+        // bearer-token AccessSecurity boundary before this local-only shim.
+        "/api/v1/",
         "/hubs/",
         "/api/health",
         "/healthz",

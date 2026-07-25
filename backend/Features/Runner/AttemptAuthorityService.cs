@@ -287,7 +287,9 @@ public sealed class AttemptAuthorityService
         string? executorId = null,
         string? leaseId = null,
         string? expectedTaskKey = null,
-        bool requireResultSha = true)
+        bool requireResultSha = true,
+        AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope? resultEnvelope = null,
+        string? resultEnvelopeDigest = null)
     {
         lock (_gate)
         {
@@ -320,6 +322,37 @@ public sealed class AttemptAuthorityService
                     run.AttemptId,
                     "Successful remote completion requires the immutable Result-SHA.",
                     RunAttempt: ToDto(run));
+            }
+            if (resultEnvelope is not null)
+            {
+                try
+                {
+                    AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Validate(resultEnvelope);
+                }
+                catch (Exception exception) when (exception is ArgumentException or FormatException)
+                {
+                    return new AttemptWriteResult(
+                        AttemptWriteStatus.Invalid,
+                        run.AttemptId,
+                        exception.Message,
+                        RunAttempt: ToDto(run));
+                }
+                var computedDigest =
+                    AgentStudio.TaskServer.Contracts.ResultEnvelopeDigest.Compute(resultEnvelope);
+                if (!Same(resultEnvelope.SourceRunAttemptId, run.AttemptId)
+                    || !Same(resultEnvelope.RepositoryId, run.RepositoryId)
+                    || !Same(resultEnvelope.ResultSha, resultSha)
+                    || (!Blank(resultEnvelopeDigest)
+                        && !Same(computedDigest, resultEnvelopeDigest)))
+                {
+                    return new AttemptWriteResult(
+                        AttemptWriteStatus.SubjectMismatch,
+                        run.AttemptId,
+                        "Immutable result envelope does not match the fenced RunAttempt.",
+                        RunAttempt: ToDto(run));
+                }
+                run.ResultEnvelope = resultEnvelope;
+                run.ResultEnvelopeDigest = computedDigest;
             }
 
             run.IdempotencyKeys.Add(deliveryKey);
@@ -422,6 +455,9 @@ public sealed class AttemptAuthorityService
                 TaskRequirementsHash = Normalize(request.TaskRequirementsHash),
                 ReviewPolicyHash = Normalize(request.ReviewPolicyHash),
                 EvidenceDigestInputs = evidence,
+                RepositoryUrl = NormalizeNull(request.RepositoryUrl),
+                ResultRef = NormalizeNull(request.ResultRef),
+                Plan = request.Plan,
                 CreatedAt = now,
             };
 
@@ -481,7 +517,13 @@ public sealed class AttemptAuthorityService
         }
     }
 
-    public AttemptWriteResult ClaimReview(string attemptId, string executorId, string hostId, int? requestedTtlSeconds, string idempotencyKey)
+    public AttemptWriteResult ClaimReview(
+        string attemptId,
+        string executorId,
+        string hostId,
+        int? requestedTtlSeconds,
+        string idempotencyKey,
+        string? instanceId = null)
     {
         if (Blank(attemptId) || Blank(executorId) || Blank(hostId) || Blank(idempotencyKey))
             return new AttemptWriteResult(
@@ -506,11 +548,55 @@ public sealed class AttemptAuthorityService
             review.LastFence = fence;
             review.AuthorityEpoch = _state.AuthorityEpoch;
             review.State = AttemptLifecycleState.Leased;
-            review.Lease = NewLease(executorId, hostId, fence, requestedTtlSeconds, now);
+            review.Lease = NewLease(
+                executorId,
+                hostId,
+                fence,
+                requestedTtlSeconds,
+                now,
+                clientId: NormalizeNull(instanceId));
             review.CurrentClaimDeliveryKey = deliveryKey;
             review.IdempotencyKeys.Add(deliveryKey);
             PersistLocked();
             return new AttemptWriteResult(AttemptWriteStatus.Accepted, review.AttemptId, ReviewAttempt: ToDto(review));
+        }
+    }
+
+    /// <summary>
+    /// Atomically selects the oldest current unleased ReviewAttempt and claims it.
+    /// The versioned review plane uses this operation so selection and fencing
+    /// cannot race across concurrent review executors.
+    /// </summary>
+    public AttemptWriteResult ClaimNextReview(
+        string executorId,
+        string hostId,
+        string instanceId,
+        int? requestedTtlSeconds)
+    {
+        if (Blank(executorId) || Blank(hostId) || Blank(instanceId))
+            return new AttemptWriteResult(
+                AttemptWriteStatus.Invalid,
+                string.Empty,
+                "ExecutorId, HostId, and InstanceId are required.");
+
+        lock (_gate)
+        {
+            var now = _utcNow();
+            var candidate = _state.ReviewAttempts
+                .Where(review => IsCurrentReview(review) && !Terminal(review.State))
+                .Where(review => review.Lease is null || review.Lease.ExpiresAt <= now)
+                .OrderBy(review => review.CreatedAt)
+                .FirstOrDefault();
+            if (candidate is null)
+                return new AttemptWriteResult(AttemptWriteStatus.NotFound, string.Empty);
+
+            return ClaimReview(
+                candidate.AttemptId,
+                executorId,
+                hostId,
+                requestedTtlSeconds,
+                $"v1-review-claim:{executorId}:{instanceId}:{candidate.AttemptId}",
+                instanceId);
         }
     }
 
@@ -606,6 +692,23 @@ public sealed class AttemptAuthorityService
     public RunAttemptDto? GetRun(string attemptId)
     {
         lock (_gate) return FindRun(attemptId) is { } run ? ToDto(run) : null;
+    }
+
+    public AgentStudio.TaskServer.Contracts.ResultHandoffDto? GetResultHandoff(string attemptId)
+    {
+        lock (_gate)
+        {
+            var run = FindRun(attemptId);
+            if (run?.ResultEnvelope is null || Blank(run.ResultEnvelopeDigest)) return null;
+            var acknowledgedAt = run.TerminalAt ?? run.CreatedAt;
+            return new AgentStudio.TaskServer.Contracts.ResultHandoffDto(
+                run.AttemptId,
+                run.ResultEnvelope,
+                run.ResultEnvelopeDigest!,
+                1,
+                acknowledgedAt,
+                acknowledgedAt.AddDays(30));
+        }
     }
 
     public ReviewAttemptDto? GetReview(string attemptId)
@@ -933,11 +1036,13 @@ public sealed class AttemptAuthorityService
         lease.ExecutorDisplayName, lease.BackendName, lease.ProcessId, lease.ClientId);
     private static ReviewSubjectDto ToDto(ReviewSubjectRecord subject) => new(
         subject.SubjectId, subject.RepositoryId, subject.ExpectedResultSha, subject.SourceRunAttemptId,
-        subject.TaskRequirementsHash, subject.ReviewPolicyHash, subject.EvidenceDigestInputs, subject.CreatedAt);
+        subject.TaskRequirementsHash, subject.ReviewPolicyHash, subject.EvidenceDigestInputs, subject.CreatedAt,
+        subject.RepositoryUrl, subject.ResultRef, subject.Plan);
     private static RunAttemptDto ToDto(RunAttemptRecord run) => new(
         run.AttemptId, run.TaskKey, run.RepositoryId, run.SourceAttemptId, run.State, ToDto(run.Lease),
         run.LastFence, run.AuthorityEpoch, run.CreatedAt, run.TerminalAt, run.ResultSha,
-        run.TerminalOutcome, run.TerminalReason, run.EvidenceDigests);
+        run.TerminalOutcome, run.TerminalReason, run.EvidenceDigests,
+        run.ResultEnvelope, run.ResultEnvelopeDigest);
     private static ReviewAttemptDto ToDto(ReviewAttemptRecord review) => new(
         review.AttemptId, review.TaskKey, review.RepositoryId, review.SourceRunAttemptId,
         review.SourceReviewAttemptId, ToDto(review.Subject), review.State, ToDto(review.Lease),
@@ -1007,6 +1112,8 @@ public sealed class AttemptAuthorityService
         public string? TerminalOutcome { get; set; }
         public string? TerminalReason { get; set; }
         public List<string> EvidenceDigests { get; set; } = [];
+        public AgentStudio.TaskServer.Contracts.ImmutableResultEnvelope? ResultEnvelope { get; set; }
+        public string? ResultEnvelopeDigest { get; set; }
         public HashSet<string> IdempotencyKeys { get; set; } = [];
     }
 
@@ -1055,6 +1162,9 @@ public sealed class AttemptAuthorityService
         public string TaskRequirementsHash { get; set; } = string.Empty;
         public string ReviewPolicyHash { get; set; } = string.Empty;
         public List<string> EvidenceDigestInputs { get; set; } = [];
+        public string? RepositoryUrl { get; set; }
+        public string? ResultRef { get; set; }
+        public AgentStudio.TaskServer.Contracts.ReviewPlanDto? Plan { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }

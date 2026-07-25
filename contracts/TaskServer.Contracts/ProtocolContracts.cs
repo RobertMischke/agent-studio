@@ -18,7 +18,8 @@ public sealed record ProtocolRangeDto(
     int MaximumSupported,
     string ServerVersion,
     string ServerId,
-    IReadOnlyList<string> ClientKinds);
+    IReadOnlyList<string> ClientKinds,
+    IReadOnlyList<string>? Capabilities = null);
 
 public sealed record ProtocolCompatibilityRequest(
     string ClientKind,

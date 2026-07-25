@@ -253,7 +253,10 @@ public sealed record RemoteRunCompletionRequest(
     long? AuthorityEpoch = null,
     string? IdempotencyKey = null,
     IReadOnlyList<string>? GateItems = null,
-    AgentStudio.TaskServer.Contracts.ExecutionOutcomeDecision? OutcomeDecision = null);
+    AgentStudio.TaskServer.Contracts.ExecutionOutcomeDecision? OutcomeDecision = null,
+    string? BaseSha = null,
+    string? ImmutableResultRef = null,
+    string? ArtifactManifestDigest = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,
