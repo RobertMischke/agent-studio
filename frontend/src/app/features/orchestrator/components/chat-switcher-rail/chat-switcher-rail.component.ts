@@ -1,14 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import type { TaskInfo } from '../../../../models/task.model';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
 
 interface RailRow extends OrchestratorContextSession {
   label: string;
+  explanation: string;
 }
 
 @Component({
   selector: 'app-chat-switcher-rail',
   standalone: true,
+  imports: [AppTooltipDirective],
   templateUrl: './chat-switcher-rail.component.html',
   styleUrl: './chat-switcher-rail.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,6 +45,7 @@ export class ChatSwitcherRailComponent {
         : session.kind === 'project'
           ? (session.projectId ?? session.contextKey)
           : this.taskLabel(session),
+      explanation: this.contextExplanation(session.kind),
     }));
   });
 
@@ -65,6 +69,26 @@ export class ChatSwitcherRailComponent {
     if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}m`;
     if (total >= 1_000) return `${Math.round(total / 1_000)}k`;
     return String(total);
+  }
+
+  navigationExplanation(row: RailRow): string {
+    if (row.kind === 'global') {
+      return 'Return to the workspace view when you want to leave a project or task page.';
+    }
+    if (row.kind === 'project') {
+      return 'Open this project when you want its board and project tools in view.';
+    }
+    return 'Open this task when you want to inspect or update the work behind this chat.';
+  }
+
+  private contextExplanation(kind: RailRow['kind']): string {
+    if (kind === 'global') {
+      return 'Switch to the workspace-wide chat when your question spans projects and tasks.';
+    }
+    if (kind === 'project') {
+      return "Switch to this project's chat when your question concerns the project beyond one task.";
+    }
+    return "Switch to this task's chat when your question concerns this specific piece of work.";
   }
 
   private taskLabel(session: OrchestratorContextSession): string {
