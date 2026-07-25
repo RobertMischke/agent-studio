@@ -14,8 +14,10 @@ public sealed class GitWorkspace
     private readonly Action<string> _log;
     private readonly string _safeTaskKey;
     private readonly string? _gitRemote;
+    private readonly string? _gitPushRemote;
     private readonly string _baseBranch;
     private readonly string? _projectId;
+    private readonly bool _isProjectClone;
     private readonly string _workBranch;
     private string? _startedHead;
     private bool _startedFromSalvage;
@@ -29,13 +31,19 @@ public sealed class GitWorkspace
         Action<string> log,
         string? projectId = null,
         string? gitRemote = null,
-        string? defaultBranch = null)
+        string? defaultBranch = null,
+        bool isProjectClone = false)
     {
         _options = options;
         _log = log;
         _safeTaskKey = SafeSegment(taskKey);
         _projectId = string.IsNullOrWhiteSpace(projectId) ? null : projectId.Trim();
-        _gitRemote = string.IsNullOrWhiteSpace(gitRemote) ? options.GitRemote : gitRemote.Trim();
+        _isProjectClone = isProjectClone || _projectId is not null;
+        var claimedRemote = string.IsNullOrWhiteSpace(gitRemote) ? null : gitRemote.Trim();
+        _gitRemote = _isProjectClone ? claimedRemote : claimedRemote ?? options.GitRemote;
+        _gitPushRemote = _isProjectClone
+            ? claimedRemote
+            : string.IsNullOrWhiteSpace(options.GitPushRemote) ? _gitRemote : options.GitPushRemote.Trim();
         _baseBranch = string.IsNullOrWhiteSpace(defaultBranch) ? options.BaseBranch : defaultBranch.Trim();
         _workBranch = $"runner/{SafeSegment(_options.RunnerId)}/{_safeTaskKey}";
     }
@@ -50,7 +58,7 @@ public sealed class GitWorkspace
     public async Task<string> PrepareAsync(CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_gitRemote))
-            throw new InvalidOperationException("The claim has no repositoryUrl and RUNNER_GIT_REMOTE is not configured as a fallback.");
+            throw MissingRepositoryUrl();
 
         Directory.CreateDirectory(ProjectCachePath);
         Directory.CreateDirectory(Path.Combine(ProjectCachePath, "worktrees"));
@@ -58,19 +66,18 @@ public sealed class GitWorkspace
         await GitMetadataGate.WaitAsync(ct);
         try
         {
-            if (!Directory.Exists(Path.Combine(SharedRepoPath, ".git")))
+            var existingClone = Directory.Exists(Path.Combine(SharedRepoPath, ".git"));
+            if (!existingClone)
             {
                 _log($"git clone origin -> {SharedRepoPath}");
                 await Git(["clone", _gitRemote, SharedRepoPath], ProjectCachePath, ct);
             }
-            else
+            await ConfigureOriginAsync(ct);
+            if (existingClone)
             {
-                await Git(["remote", "set-url", "origin", _gitRemote], SharedRepoPath, ct);
                 _log("git fetch origin --prune");
                 await Git(["fetch", "origin", "--prune"], SharedRepoPath, ct);
             }
-            if (!string.IsNullOrWhiteSpace(_options.GitPushRemote))
-                await Git(["remote", "set-url", "--push", "origin", _options.GitPushRemote], SharedRepoPath, ct);
 
             // Reclaim debris from a process crash before creating the new
             // linked checkout. A crashed process may have left its only copy of
@@ -128,18 +135,19 @@ public sealed class GitWorkspace
     public async Task<string> PrepareReadOnlyAsync(CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_gitRemote))
-            throw new InvalidOperationException("The claim has no repositoryUrl and RUNNER_GIT_REMOTE is not configured as a fallback.");
+            throw MissingRepositoryUrl();
 
         Directory.CreateDirectory(ProjectCachePath);
         Directory.CreateDirectory(Path.Combine(ProjectCachePath, "worktrees"));
         await GitMetadataGate.WaitAsync(ct);
         try
         {
-            if (!Directory.Exists(Path.Combine(SharedRepoPath, ".git")))
+            var existingClone = Directory.Exists(Path.Combine(SharedRepoPath, ".git"));
+            if (!existingClone)
                 await Git(["clone", _gitRemote, SharedRepoPath], ProjectCachePath, ct);
-            else
+            await ConfigureOriginAsync(ct);
+            if (existingClone)
             {
-                await Git(["remote", "set-url", "origin", _gitRemote], SharedRepoPath, ct);
                 await Git(["fetch", "origin", "--prune"], SharedRepoPath, ct);
             }
 
@@ -163,6 +171,31 @@ public sealed class GitWorkspace
             GitMetadataGate.Release();
         }
     }
+
+    private async Task ConfigureOriginAsync(CancellationToken ct)
+    {
+        var fetchUrl = _gitRemote
+            ?? throw new InvalidOperationException("Cannot configure origin without a repository URL.");
+        // Enforce the project-clone invariant at the mutation point as well as
+        // in constructor resolution. A later caller or fallback change must
+        // never make a project push anywhere except its registered fetch URL.
+        var pushUrl = _isProjectClone ? fetchUrl : _gitPushRemote ?? fetchUrl;
+        var source = _isProjectClone ? "project-registry" : "runner-fallback";
+        // replace-all repairs clones that accumulated more than one stale fetch
+        // or push URL. `remote set-url` refuses either multi-value configuration.
+        await Git(["config", "--replace-all", "remote.origin.url", fetchUrl], SharedRepoPath, ct);
+        await Git(["config", "--replace-all", "remote.origin.pushurl", pushUrl], SharedRepoPath, ct);
+        _log(
+            $"git-remote-configured projectId={_projectId ?? "legacy"} source={source} " +
+            $"fetchUrl={fetchUrl} pushUrl={pushUrl}");
+    }
+
+    private InvalidOperationException MissingRepositoryUrl()
+        => _isProjectClone
+            ? new InvalidOperationException(
+                $"Project '{_projectId ?? "unknown"}' is not remote-capable because its registry has no repository URL.")
+            : new InvalidOperationException(
+                "The one-shot run has no repositoryUrl and RUNNER_GIT_REMOTE is not configured as a fallback.");
 
     /// <summary>
     /// Remove a planning checkout without salvage. Returns true when the agent

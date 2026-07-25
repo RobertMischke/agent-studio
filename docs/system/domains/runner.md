@@ -242,6 +242,12 @@ state.
   autonomous authority. Task Server restart records `process-unknown`; only
   positive containment or infrastructure-fencing proof permits a higher-fence
   replacement.
+- A remote project clone is eligible only when the project registry contains a
+  repository URL. On every new clone and refresh, the standalone runner sets
+  both fetch and push URLs to that registry value and logs the effective pair.
+  Host-level probe and one-shot fallback URLs never flow into project clones.
+  A project without a registry URL stays Ready, is reported as not
+  remote-capable, and creates no clone.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
   occupies a normal host slot and holds the same fenced lease, heartbeat,

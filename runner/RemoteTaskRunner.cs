@@ -93,10 +93,20 @@ public sealed class RemoteTaskRunner
         string? runId = null,
         string? leaseInstanceId = null)
     {
+        var isProjectClone = !string.IsNullOrWhiteSpace(projectId);
+        if (isProjectClone && string.IsNullOrWhiteSpace(repositoryUrl))
+        {
+            _log(
+                $"remote-runner-project-not-remote-capable projectId={projectId ?? "unknown"} " +
+                $"task={taskKey} reason=repository-url-not-configured");
+            await ReleaseAsync(lease, CancellationToken.None);
+            return 2;
+        }
+
         _log($"running claimed task '{taskKey}' with lease {lease.LeaseId}, fencing token {lease.FencingToken}");
 
         var workspace = new GitWorkspace(
-            _options, taskKey, _log, projectId, repositoryUrl, defaultBranch);
+            _options, taskKey, _log, projectId, repositoryUrl, defaultBranch, isProjectClone);
         var slot = _state.Create(
             taskKey, lease, workspace.RepoPath, runId, leaseInstanceId,
             projectId, repositoryUrl, defaultBranch, taskKind);

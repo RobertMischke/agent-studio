@@ -17,6 +17,94 @@ public sealed class GitWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task New_project_clone_sets_fetch_and_push_urls_from_registry()
+    {
+        await SeedOriginAsync();
+        var logs = new List<string>();
+        var workspace = CreateProjectWorkspace(_origin, logs.Add);
+
+        await workspace.PrepareAsync(CancellationToken.None);
+
+        Assert.Equal(_origin,
+            (await GitAsync(workspace.SharedRepoPath, "remote", "get-url", "origin")).StdOut);
+        Assert.Equal(_origin,
+            (await GitAsync(workspace.SharedRepoPath, "remote", "get-url", "--push", "origin")).StdOut);
+        Assert.Equal(_origin,
+            (await GitAsync(workspace.SharedRepoPath, "config", "--get-all", "remote.origin.pushurl")).StdOut);
+        Assert.Contains(logs, line => line ==
+            $"git-remote-configured projectId=PROJ-016 source=project-registry " +
+            $"fetchUrl={_origin} pushUrl={_origin}");
+    }
+
+    [Fact]
+    public async Task Existing_project_clone_repairs_wrong_push_url_from_registry()
+    {
+        await SeedOriginAsync();
+        var first = CreateProjectWorkspace(_origin);
+        await first.PrepareAsync(CancellationToken.None);
+        await first.TeardownAsync("Done", CancellationToken.None);
+        await GitAsync(first.SharedRepoPath, "config", "--replace-all", "remote.origin.url",
+            "https://github.com/agent-orc/stale-fetch.git");
+        await GitAsync(first.SharedRepoPath, "config", "--add", "remote.origin.url",
+            "https://github.com/agent-orc/another-stale-fetch.git");
+        await GitAsync(first.SharedRepoPath, "config", "--replace-all", "remote.origin.pushurl",
+            "git@github.com-agentstudio:agent-orc/agent-studio.git");
+        await GitAsync(first.SharedRepoPath, "config", "--add", "remote.origin.pushurl",
+            "https://github.com/agent-orc/another-fallback.git");
+
+        var refreshed = CreateProjectWorkspace(_origin);
+        await refreshed.PrepareAsync(CancellationToken.None);
+
+        Assert.Equal(_origin,
+            (await GitAsync(refreshed.SharedRepoPath, "remote", "get-url", "origin")).StdOut);
+        Assert.Equal(_origin,
+            (await GitAsync(refreshed.SharedRepoPath, "config", "--get-all", "remote.origin.url")).StdOut);
+        Assert.Equal(_origin,
+            (await GitAsync(refreshed.SharedRepoPath, "remote", "get-url", "--push", "origin")).StdOut);
+        Assert.Equal(_origin,
+            (await GitAsync(refreshed.SharedRepoPath, "config", "--get-all", "remote.origin.pushurl")).StdOut);
+    }
+
+    [Fact]
+    public async Task Project_without_registry_url_creates_no_clone_and_reports_not_remote_capable()
+    {
+        var workspace = CreateProjectWorkspace(repositoryUrl: null);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => workspace.PrepareAsync(CancellationToken.None));
+
+        Assert.Contains("not remote-capable", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("registry has no repository URL", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(workspace.ProjectCachePath));
+        Assert.False(Directory.Exists(workspace.SharedRepoPath));
+    }
+
+    [Fact]
+    public async Task Project_claim_without_id_still_never_inherits_host_fallback()
+    {
+        var workspace = new GitWorkspace(new RunnerOptions
+        {
+            ServerUrl = "http://localhost",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = _origin,
+            GitPushRemote = "git@github.com-agentstudio:agent-orc/agent-studio.git",
+            WorkDir = _workDir,
+            BaseBranch = "main",
+            CliBin = "test",
+            CliArgs = "",
+        }, "QS-31", _ => { }, isProjectClone: true);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => workspace.PrepareAsync(CancellationToken.None));
+
+        Assert.Contains("not remote-capable", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(workspace.ProjectCachePath));
+    }
+
+    [Fact]
     public async Task Teardown_commits_and_pushes_uncommitted_changes_before_removal()
     {
         await SeedOriginAsync();
@@ -366,6 +454,22 @@ public sealed class GitWorkspaceTests : IDisposable
             CliBin = "test",
             CliArgs = "",
         }, "AGT-2147", log ?? (_ => { }));
+
+    private GitWorkspace CreateProjectWorkspace(string? repositoryUrl, Action<string>? log = null)
+        => new(new RunnerOptions
+        {
+            ServerUrl = "http://localhost",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = Path.Combine(_root, "fallback-fetch.git"),
+            GitPushRemote = "git@github.com-agentstudio:agent-orc/agent-studio.git",
+            WorkDir = _workDir,
+            BaseBranch = "main",
+            CliBin = "test",
+            CliArgs = "",
+        }, "QS-30", log ?? (_ => { }), "PROJ-016", repositoryUrl, "main");
 
     private async Task CommitFileAsync(string repo, string path, string content, string message)
     {

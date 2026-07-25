@@ -217,8 +217,8 @@ identity values such as `RUNNER_ID=agent-runner-01` are not renamed.
 | `RUNNER_ID` | `--runner-id` | `agent-runner-<host>` | Stable lease owner identity. Fencing is per task, not per pid. |
 | `RUNNER_NAME` | `--runner-name` | `agent-runner-01` | Board-facing runner/project name. |
 | `RUNNER_CLIENT_ID` | `--client-id` | (none) | Optional attribution label. It is not authentication and grants no access. |
-| `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Credential-free fetch URL and startup push-probe repository. Required for daemon onboarding; normally use HTTPS. |
-| `RUNNER_GIT_PUSH_REMOTE` | `--git-push-remote` | (fetch URL) | Write URL installed as Git `origin.pushurl`; normally the SSH URL backed by this host/repository deploy key. |
+| `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Startup push-probe repository and legacy one-shot fallback. It is never inherited by a project clone. |
+| `RUNNER_GIT_PUSH_REMOTE` | `--git-push-remote` | (fetch URL) | Startup push-probe and legacy one-shot write URL. It is never inherited by a project clone. |
 | `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
 | `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
 | `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
@@ -262,24 +262,38 @@ $RUNNER_WORKDIR/
   PROJ-007/worktrees/QS-104
 ```
 
-The Task Server resolves the repository URL from the project's registry URL
-entry whose id or label is `repo` (label `repository` is also accepted). If that
-entry is absent, it derives `remote.origin.url` and the default branch from the
-registered local `RepositoryPath`. Local filesystem remotes are not usable on a
-different host. An assigned project with no resolvable network repository URL
-is skipped before a lease is created and is logged as
-`remote-runner-project-skipped`; the card remains Ready and is not escalated.
+The Task Server resolves the repository URL only from the project's registry URL
+entry whose id or label is `repo` (label `repository` is also accepted). The
+registered local `RepositoryPath` may supply default-branch metadata, but its
+origin is never used as a remote fallback. An assigned project without that
+registry URL is reported as not remote-capable and skipped before a lease is
+created. The server logs `remote-runner-project-not-remote-capable`; the card
+remains Ready and no project clone is created.
 
-`RUNNER_GIT_REMOTE` is also the repository used by the daemon's one-time startup
-write probe. Configure it together with `RUNNER_GIT_PUSH_REMOTE` for the
-host/repository assignment. Do not point one global push URL at unrelated claim
-repositories.
+On every project-clone contact, including the first clone, the daemon replaces
+the complete `remote.origin.url` and `remote.origin.pushurl` value sets with the
+project registry URL. This repairs stale existing clones and prevents the
+startup probe or one-shot fallback from redirecting project pushes. The runner
+emits `git-remote-configured` with `source=project-registry`, the project id,
+and both effective URLs.
+
+`RUNNER_GIT_REMOTE` and `RUNNER_GIT_PUSH_REMOTE` are used by the daemon's
+one-time startup write probe. They verify baseline host capability only. Every
+claimed project must have write credentials for its registry URL; the global
+probe URLs do not rewrite project clone remotes.
 
 ### Push identity setup
 
-The recommended identity is one write-enabled repository deploy key per runner
-host and repository. Generate it as the systemd runner user. Only the public key
-leaves the host:
+Project clones keep their registered HTTPS URL for both fetch and push. The
+simplest write identity is a fine-grained personal access token owned by a
+dedicated machine account. Limit it to the assigned repositories with
+**Contents: Read and write**, store it in the runner user's OS credential
+helper, and keep the HTTPS URL free of embedded secrets. Do not put a token in
+`runner.env`, a command line, task output, or evidence.
+
+A repository deploy key also works when the host uses an exact per-repository
+Git URL rewrite for transport. Generate it as the systemd runner user. Only the
+public key leaves the host:
 
 ```bash
 install -d -m 0700 ~/.ssh
@@ -292,7 +306,7 @@ organization security/settings policy. If the GitHub API returns `422 Deploy
 keys are disabled for this repository`, this organization policy is still off.
 After it is enabled, add the public key under repository Settings, Deploy keys,
 select **Allow write access**, and keep the private key on the runner. Pin its
-use without changing the fetch URL:
+use without changing the stored project remote:
 
 ```sshconfig
 Host github-agent-studio
@@ -303,15 +317,16 @@ Host github-agent-studio
 ```
 
 ```bash
+git config --global url."git@github-agent-studio:agent-orc/agent-studio.git".insteadOf \
+  https://github.com/agent-orc/agent-studio.git
 RUNNER_GIT_REMOTE=https://github.com/agent-orc/agent-studio.git
 RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:agent-orc/agent-studio.git
 ```
 
-As a fallback when organization policy cannot allow deploy keys, create a
-fine-grained personal access token owned by a dedicated machine account. Limit
-it to this repository with **Contents: Read and write**, store it in the runner
-user's OS credential helper, and keep the HTTPS URL free of embedded secrets.
-Do not put a token in `runner.env`, a command line, task output, or evidence.
+The exact rewrite keeps `remote.origin.url` and `remote.origin.pushurl` equal to
+the registry value while Git uses the deploy-key SSH transport. Add one exact
+rewrite per assigned repository. The `RUNNER_GIT_PUSH_REMOTE` value above is
+still only the startup probe input.
 
 At daemon startup, the runner performs `git push --dry-run` to
 `refs/heads/runner-capability-probe/<runner-id>`, publishes `ready` or

@@ -5,9 +5,9 @@ namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Resolves the git origin and default branch a remote runner needs from the
-/// durable project registry. A URL entry named <c>repo</c> is authoritative;
-/// otherwise the origin and branch are derived from the registered local
-/// repository checkout.
+/// durable project registry. A URL entry named <c>repo</c> is mandatory and
+/// authoritative. The registered local checkout may supply only branch metadata;
+/// its origin is never a remote-runner fallback.
 /// </summary>
 public static class RemoteProjectRepositoryResolver
 {
@@ -25,12 +25,8 @@ public static class RemoteProjectRepositoryResolver
             || string.Equals(url.Label, "repository", StringComparison.OrdinalIgnoreCase));
 
         var repositoryUrl = IsUsableRemote(repoEntry?.Url) ? repoEntry!.Url.Trim() : null;
-        var source = repositoryUrl is null ? "repository-path" : "registry-url";
+        if (repositoryUrl is null) return null;
         var gitDirectory = ResolveGitDirectory(project.RepositoryPath);
-
-        repositoryUrl ??= ReadOriginUrl(gitDirectory);
-        if (!IsUsableRemote(repositoryUrl)) return null;
-        var resolvedUrl = repositoryUrl!;
 
         var defaultBranch = ReadDefaultBranch(gitDirectory);
         if (string.IsNullOrWhiteSpace(defaultBranch))
@@ -40,10 +36,10 @@ public static class RemoteProjectRepositoryResolver
 
         return new RemoteProjectRepository(
             project.Id,
-            RepositoryIdentityContract.FromUrl(resolvedUrl)!,
-            resolvedUrl.Trim(),
+            RepositoryIdentityContract.FromUrl(repositoryUrl)!,
+            repositoryUrl,
             defaultBranch,
-            source);
+            "registry-url");
     }
 
     private static string? ResolveGitDirectory(string? repositoryPath)
@@ -62,32 +58,6 @@ public static class RemoteProjectRepositoryResolver
 
         var path = pointer[prefix.Length..].Trim();
         return Path.GetFullPath(path, repositoryPath);
-    }
-
-    private static string? ReadOriginUrl(string? gitDirectory)
-    {
-        if (gitDirectory is null) return null;
-        var configPath = Path.Combine(gitDirectory, "config");
-        if (!File.Exists(configPath)) return null;
-
-        var inOrigin = false;
-        foreach (var raw in File.ReadLines(configPath))
-        {
-            var line = raw.Trim();
-            if (line.StartsWith("[", StringComparison.Ordinal))
-            {
-                inOrigin = string.Equals(line, "[remote \"origin\"]", StringComparison.OrdinalIgnoreCase);
-                continue;
-            }
-
-            if (!inOrigin) continue;
-            var separator = line.IndexOf('=');
-            if (separator < 0 || !string.Equals(line[..separator].Trim(), "url", StringComparison.OrdinalIgnoreCase))
-                continue;
-            return line[(separator + 1)..].Trim();
-        }
-
-        return null;
     }
 
     private static string? ReadDefaultBranch(string? gitDirectory)

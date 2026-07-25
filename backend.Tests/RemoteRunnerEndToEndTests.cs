@@ -1087,6 +1087,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         Assert.Equal(RClaimStatus.Empty, claim.Status);
         Assert.Null(claim.RepositoryUrl);
+        Assert.Contains("not remote-capable", claim.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("repository URL is not configured", claim.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
     }
 

@@ -70,8 +70,10 @@ it receives work. **Writable: no** means the daemon is read-only and the server
 refuses new claims.
 
 AGT-2141 added per-project repository URLs and isolated shared clones. Configure
-each project repository to move from one remote project to all projects remote;
-the fallback URL above remains the startup probe repository.
+each project repository to move from one remote project to all projects remote.
+The fallback URLs above remain startup probe inputs only. Each project clone
+uses its registry URL for both fetch and push and repairs both values on every
+refresh.
 
 ## Connect the daemon
 

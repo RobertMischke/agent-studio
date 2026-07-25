@@ -51,10 +51,14 @@ public sealed class RunnerOptions
     /// </summary>
     public string? TlsServerCertificateSha256 { get; init; }
 
-    /// <summary>Fallback git remote for one-shot runs and claims from older servers.</summary>
+    /// <summary>Fallback git remote for one-shot runs and the daemon startup capability probe.</summary>
     public string? GitRemote { get; init; }
 
-    /// <summary>Optional write-only URL installed as origin.pushurl while fetches keep using <see cref="GitRemote"/>.</summary>
+    /// <summary>
+    /// Optional write-only URL for the daemon startup capability probe and legacy
+    /// one-shot runs. Project-scoped clones always use their registry URL for both
+    /// fetch and push and never inherit this fallback.
+    /// </summary>
     public string? GitPushRemote { get; init; }
 
     /// <summary>Directory the runner checks the repo out into on the runner host.</summary>

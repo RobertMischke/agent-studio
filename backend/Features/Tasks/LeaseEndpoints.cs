@@ -358,6 +358,7 @@ public static class LeaseEndpoints
                 TaskInfo? candidate = null;
                 RemoteProjectRepository? repository = null;
                 var readOnlyCodingSkipped = false;
+                string? nonRemoteCapableProject = null;
                 foreach (var task in eligible)
                 {
                     if (client is not null
@@ -381,19 +382,11 @@ public static class LeaseEndpoints
                         break;
                     }
 
-                    logger.LogInformation(
-                        "remote-runner-project-skipped project={Project} task={TaskKey} reason=repository-url-unresolved",
+                    nonRemoteCapableProject = task.ProjectName;
+                    logger.LogWarning(
+                        "remote-runner-project-not-remote-capable project={Project} task={TaskKey} reason=repository-url-not-configured",
                         task.ProjectName,
                         task.Key ?? task.TaskKey ?? task.Id);
-                    var reason =
-                        $"Remote claim could not resolve a cloneable repository URL for project '{task.ProjectName}'.";
-                    await humanReviewEscalation.EscalateAsync(
-                        task.Id,
-                        task.WatchPath,
-                        task.ProjectName,
-                        HumanReviewEscalationCategories.RemoteRepositoryUnavailable,
-                        reason,
-                        ct);
                 }
 
                 if (candidate is null || repository is null)
@@ -401,7 +394,9 @@ public static class LeaseEndpoints
                         RunnerClaimStatus.Empty,
                         Message: readOnlyCodingSkipped
                             ? $"runner is read-only: {client?.RunnerGitDetail ?? "git push probe failed"}"
-                            : null));
+                            : nonRemoteCapableProject is not null
+                                ? $"project '{nonRemoteCapableProject}' is not remote-capable: repository URL is not configured"
+                                : null));
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
