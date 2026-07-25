@@ -345,15 +345,14 @@ public sealed partial class TaskServerStore
             {
                 var existingCapabilities =
                     JsonSerializer.Deserialize<string[]>(existingCapabilitiesJson) ?? [];
-                var changesExecutorRole =
-                    existingCapabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
-                    && capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
-                    || existingCapabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
-                    && capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal);
+                var existingExecutorRole = ExecutorRole(existingCapabilities);
+                var requestedExecutorRole = ExecutorRole(capabilities);
+                var changesExecutorRole = existingExecutorRole is not null
+                    && !string.Equals(existingExecutorRole, requestedExecutorRole, StringComparison.Ordinal);
                 if (changesExecutorRole)
                     throw new TaskServerConflictException(
                         "runner-role-conflict",
-                        "A registered coding or review service identity cannot be reused for the other executor role.");
+                        "A registered coding or review service identity cannot remove or change its executor role.");
             }
             await ExecuteAsync(connection, """
                 INSERT INTO runners(id, name, host_id, instance_id, runner_version, protocol_version, capabilities_json, status, registered_at, last_seen_at)
@@ -2118,11 +2117,19 @@ public sealed partial class TaskServerStore
         if (!string.Equals(reader.GetString(2), "active", StringComparison.Ordinal))
             throw new TaskServerConflictException("runner-not-active", "Runner is not active.");
         var capabilities = JsonSerializer.Deserialize<string[]>(reader.GetString(3)) ?? [];
-        if (capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
+        if (!capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+            || capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal))
             throw new TaskServerConflictException(
                 "coding-capability-required",
-                "A separately registered Remote Review Executor cannot claim coding work.");
+                "Runner did not advertise the separately registered coding executor capability.");
     }
+
+    private static string? ExecutorRole(IReadOnlyCollection<string> capabilities)
+        => capabilities.Contains(ReviewCapabilities.CodingExecutor, StringComparer.Ordinal)
+            ? ReviewCapabilities.CodingExecutor
+            : capabilities.Contains(ReviewCapabilities.ReviewExecutor, StringComparer.Ordinal)
+                ? ReviewCapabilities.ReviewExecutor
+                : null;
 
     private static async Task<(string Prefix, long Next)> ReadProjectCounterAsync(
         SqliteConnection connection, SqliteTransaction transaction, string projectId, CancellationToken ct)

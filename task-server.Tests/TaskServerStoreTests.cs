@@ -978,7 +978,13 @@ public sealed class TaskServerStoreTests
             clock ?? TimeProvider.System);
 
     private static RegisterRunnerRequest Runner(string instance)
-        => new("runner", "host-a", instance, "1.0.0", TaskServerProtocol.Current);
+        => new(
+            "runner",
+            "host-a",
+            instance,
+            "1.0.0",
+            TaskServerProtocol.Current,
+            [ReviewCapabilities.CodingExecutor]);
 
     private static void AssertCanOpenExclusively(string path)
     {
