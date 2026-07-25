@@ -139,17 +139,26 @@ Environmental cycles never accrue toward the per-task no-progress quarantine
 streak (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and a transient
 environmental fault does not raise the crash toast while it is being retried.
 
-**Per-attempt-chain reissue budget.** The shared reissue budget (spent by the
-completion gate, evidence gate, and reissue-loop breaker) is counted per attempt
-chain, not over the job's whole lifetime:
-`ReviewDecisionOrchestrator.CountReissuesInCurrentChain` counts the `Reissue`
-records recorded *since* the most recent chain-ending verdict (`Escalate` /
-`AcceptAsDone`). A verdict that parks a card to human review or accepts it closes
-the chain, so when a human reopens it the next attempt chain starts with a fresh
-budget. Before this the count was sticky - a card whose budget was spent on an
-earlier, already-resolved chain could never pass a budget-gated check again and
-escalated on the first new concern (AGT-1935). In-chain behaviour is unchanged:
-with no chain-ender in between, the per-chain count equals the old lifetime total.
+**Per-attempt-epoch reissue budget.** The shared reissue budget (spent by the
+completion gate, evidence gate, build/test gate, lint gate, and reissue-loop
+breaker) belongs to an operator-owned attempt epoch. Legacy journal rows are
+epoch 0. An explicit human move out of `5-human-review` or `5e-escalated` into a
+work/review lane appends an `OperatorRequeue` decision and increments
+`.metadata/review-attempt.json`; only rows in that new epoch count afterward.
+Automatic verdicts and automatic lane moves never increment the epoch, including
+`Escalate` and `AcceptAsDone`, so agent loops cannot replenish their own
+anti-churn budget. Historical rows remain append-only and readable.
+
+The operator requeue also rotates active verdict residue (`status.md` when it is
+an escalation summary, aspect/code-review outputs, pipeline/lifecycle state,
+post-step outputs, and the old follow-up) into
+`results/history/review-epoch-NNNN/`. That history is audit evidence and is
+excluded from the active `ResultsInventory`. A requeue directly into
+`4-auto-review` then enters Post Processing and queues the full gate plus aspect
+path. Assessments in the new epoch do not supply the pre-requeue `status.md` or
+the consumed prefix of the append-only CLI log as decision evidence;
+deterministic gates and aspects must create the first decision-capable evidence
+in the new epoch before another escalation can be emitted.
 
 **Escalation categories.** The system-initiated escalation funnel
 (`HumanReviewEscalationCategories`) records WHY a card was parked. AGT-1944 adds

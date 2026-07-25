@@ -25,6 +25,7 @@ public sealed class TaskTransitionService
     private readonly AgentStudio.Bus.AgentMessageBusBridge? _bus;
     private readonly TaskIntegrationStatusService? _integrationStatus;
     private readonly TimelineLog? _timeline;
+    private readonly OperatorReviewRequeueService? _operatorReviewRequeue;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -54,7 +55,8 @@ public sealed class TaskTransitionService
         TaskProvenanceService? provenance = null,
         AgentStudio.Bus.AgentMessageBusBridge? bus = null,
         TaskIntegrationStatusService? integrationStatus = null,
-        TimelineLog? timeline = null)
+        TimelineLog? timeline = null,
+        OperatorReviewRequeueService? operatorReviewRequeue = null)
     {
         _scanner = scanner;
         _states = states;
@@ -72,6 +74,7 @@ public sealed class TaskTransitionService
         _bus = bus;
         _integrationStatus = integrationStatus;
         _timeline = timeline;
+        _operatorReviewRequeue = operatorReviewRequeue;
     }
 
     /// <summary>
@@ -89,6 +92,7 @@ public sealed class TaskTransitionService
         CancellationToken ct = default,
         int? targetIndex = null,
         string? cause = null,
+        string? reason = null,
         AttemptWriteReference? authorityWrite = null,
         bool suppressProductExecution = false)
     {
@@ -144,6 +148,23 @@ public sealed class TaskTransitionService
 
         ReleaseCliOutputResourcesBeforeMove(info);
         var outcome = _states.MoveJob(jobId, targetState, watchPath, cause, authorityWrite);
+        var operatorRequeue = outcome.Status == MoveJobStatus.Success
+            && OperatorReviewRequeueService.IsOperatorRequeue(fromState, targetState, cause);
+        if (operatorRequeue && _operatorReviewRequeue != null)
+        {
+            var movedFolder = outcome.NewFolderPath
+                ?? _scanner.FindJob(jobId, watchPath)?.FolderPath
+                ?? info.FolderPath;
+            _operatorReviewRequeue.Apply(
+                movedFolder,
+                jobId,
+                projectName,
+                fromState,
+                targetState,
+                reason,
+                cause!);
+            _scanner.InvalidateCache();
+        }
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
             var moved = _scanner.FindJob(jobId, watchPath);
@@ -174,8 +195,8 @@ public sealed class TaskTransitionService
         // review lane renders it. No LLM, no tokens; same git + windows in,
         // same result out, so re-running is a no-op.
         if (outcome.Status == MoveJobStatus.Success
-            && info.State == TaskStates.Progress
             && targetState == TaskStates.AutoReview
+            && (info.State == TaskStates.Progress || operatorRequeue)
             && !suppressProductExecution)
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
@@ -183,7 +204,8 @@ public sealed class TaskTransitionService
             // Commit-attribution is a git step; skip it for read-only runs (they
             // produce no commits to attribute). Drift below is not a git step and
             // self-gates, so it still runs.
-            if (attributed != null && !isReadOnly) RunCommitAttribution(attributed, watchPath);
+            if (attributed != null && !isReadOnly && info.State == TaskStates.Progress)
+                RunCommitAttribution(attributed, watchPath);
 
             // DRIFT Nachtrag: fire the enabled drift dimensions as automatic
             // post-steps once the task has settled into auto-review. Fire-and-
@@ -403,7 +425,14 @@ public sealed class TaskTransitionService
             MoveJobOutcome outcome;
             try
             {
-                outcome = await MoveAsync(item.JobId, item.TargetState, item.WatchPath, ct, item.TargetIndex);
+                outcome = await MoveAsync(
+                    item.JobId,
+                    item.TargetState,
+                    item.WatchPath,
+                    ct,
+                    item.TargetIndex,
+                    cause: TimelineActors.Human(""),
+                    reason: item.Reason);
             }
             catch (Exception ex)
             {

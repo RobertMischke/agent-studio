@@ -222,7 +222,8 @@
         "src/app/features/task-detail/components/prompt-pane/overview-failure/overview-failure.component.scss",
         "src/app/features/task-detail/components/prompt-pane/post-step-controls/post-step-controls.component.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-step-details/pipeline-step-details.component.scss",
-        "src/app/features/task-detail/components/prompt-pane/pipeline-step-toggle/pipeline-step-toggle.component.scss"
+        "src/app/features/task-detail/components/prompt-pane/pipeline-step-toggle/pipeline-step-toggle.component.scss",
+        "src/app/features/task-detail/components/protocol-pane/run-timeline/review-attempt-history/review-attempt-history.component.scss"
       ],
       "rules": {
         "color-no-hex": null,

@@ -154,6 +154,12 @@ public static class TimelineEventKinds
     public const string QualityLoopReopened = "quality_loop_reopened";
     /// <summary>A human review verdict was recorded.</summary>
     public const string HumanReviewDecided = "human_review_decided";
+    /// <summary>
+    /// A human deliberately moved a task out of human review or escalation,
+    /// opening a fresh review-attempt epoch. Details carry the operator reason,
+    /// new epoch, and rotated artefact count.
+    /// </summary>
+    public const string OperatorRequeued = "operator_requeued";
     /// <summary>The task's lane changed (any move).</summary>
     public const string LaneChanged = "lane_changed";
     /// <summary>

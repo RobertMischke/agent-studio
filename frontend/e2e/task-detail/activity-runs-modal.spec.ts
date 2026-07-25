@@ -90,8 +90,20 @@ async function installRoutes(page: Page, runs: object[]): Promise<void> {
   const detail = makeDetail('3-progress');
 
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        profile: 'local',
+        bootstrapRequired: false,
+        authenticated: true,
+        user: null,
+      }),
+    }),
+  );
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
@@ -205,6 +217,31 @@ async function installRoutes(page: Page, runs: object[]): Promise<void> {
         lastActivityAt: '2026-05-29T10:05:00Z',
         hasActiveRun: false,
         runs,
+        reviewAttemptEpoch: 1,
+        reviewAttemptCycles: [
+          {
+            epoch: 1,
+            isCurrent: true,
+            startedAt: '2026-05-29T09:45:00Z',
+            endedAt: null,
+            actor: 'human:operator@example.com',
+            reason: 'Runner repaired; assess the card from fresh evidence.',
+            fromState: '5e-escalated',
+            toState: '4-auto-review',
+            rotatedArtifacts: 3,
+          },
+          {
+            epoch: 0,
+            isCurrent: false,
+            startedAt: '2026-05-28T20:00:00Z',
+            endedAt: '2026-05-29T09:45:00Z',
+            actor: null,
+            reason: 'Initial review cycle.',
+            fromState: null,
+            toState: null,
+            rotatedArtifacts: 0,
+          },
+        ],
       }),
     }),
   );
@@ -247,7 +284,7 @@ async function dismissErrorDialog(page: Page): Promise<void> {
       const el = document.querySelector<HTMLElement>('[data-testid="error-dialog-overlay"]');
       el?.click();
     });
-    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    await overlay.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
   }
 }
 
@@ -267,7 +304,7 @@ test.describe('Activity-pane: compact N Runs chip + modal', () => {
         );
         localStorage.setItem('taskboard.activeInspectorTab', '"activity"');
       } catch {
-        /* private mode */
+        return;
       }
     });
   });
@@ -311,6 +348,48 @@ test.describe('Activity-pane: compact N Runs chip + modal', () => {
 
     if (RESULTS_DIR) {
       await page.screenshot({ path: path.join(RESULTS_DIR, 'activity-runs-modal-open.png') });
+    }
+  });
+
+  test('the modal shows the current review epoch and closed cycle history', async ({ page }) => {
+    await installRoutes(page, RUNS);
+    await openDetail(page);
+
+    await page.getByTestId('activity-runs-open').click();
+
+    const history = page.getByTestId('review-attempt-history');
+    await expect(history).toBeVisible();
+    await expect(page.getByTestId('review-attempt-current')).toContainText('Epoch 1');
+    await expect(page.getByTestId('review-attempt-cycle-1')).toContainText(
+      'Runner repaired; assess the card from fresh evidence.',
+    );
+    await expect(page.getByTestId('review-attempt-cycle-1')).toContainText('3 artifacts archived');
+    await expect(page.getByTestId('review-attempt-cycle-0')).toContainText('Initial review cycle.');
+
+    if (RESULTS_DIR) {
+      await page.screenshot({ path: path.join(RESULTS_DIR, 'activity-runs-review-epochs.png') });
+    }
+  });
+
+  test('review epoch history remains legible in dark theme', async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('atp.studio.theme', 'dark');
+      } catch {
+        return;
+      }
+    });
+    await installRoutes(page, RUNS);
+    await openDetail(page);
+
+    await page.getByTestId('activity-runs-open').click();
+
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+    await expect(page.getByTestId('review-attempt-cycle-1')).toBeVisible();
+    await expect(page.getByTestId('review-attempt-cycle-0')).toContainText('Closed');
+
+    if (RESULTS_DIR) {
+      await page.screenshot({ path: path.join(RESULTS_DIR, 'activity-runs-review-epochs-dark.png') });
     }
   });
 

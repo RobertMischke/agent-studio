@@ -108,6 +108,19 @@ export interface RunPromptEntry {
   contextSnapshot: RunPromptContextSnapshot | null;
 }
 
+/** One operator-owned review cycle, newest first in the Runs response. */
+export interface ReviewAttemptCycle {
+  epoch: number;
+  isCurrent: boolean;
+  startedAt: string | null;
+  endedAt: string | null;
+  actor: string | null;
+  reason: string | null;
+  fromState: string | null;
+  toState: string | null;
+  rotatedArtifacts: number;
+}
+
 /** Response of `GET /api/tasks/{id}/runs/{index}/context`. `context` is null when nothing was captured for the run. */
 export interface RunContextResponse {
   runIndex: number;
@@ -124,6 +137,10 @@ export interface RunTimeline {
   hasActiveRun: boolean;
   runs: RunRecord[];
   promptEntries?: RunPromptEntry[];
+  /** Operator-owned anti-churn epoch. Legacy tasks are epoch zero. */
+  reviewAttemptEpoch?: number;
+  /** Current and closed review cycles, newest first. */
+  reviewAttemptCycles?: ReviewAttemptCycle[];
 }
 
 export interface RunCommitInfo {

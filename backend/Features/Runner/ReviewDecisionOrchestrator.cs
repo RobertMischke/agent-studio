@@ -225,6 +225,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
     internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
     internal const string BuildTestGateInfrastructureReasonPrefix = "build-test-gate review infrastructure: ";
+    internal const string OperatorRequeueFreshAssessmentReason = "operator-requeue-fresh-assessment";
 
     /// <summary>
     /// Stable prefix on the <c>Reason</c> field of the <see cref="ReviewDecisionKind.Escalate"/>
@@ -1754,7 +1755,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             entry.Name, pending.Job.Id, AutoReviewActivitySteps.Gate);
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var (taskBody, recentLog) = LoadTaskContext(pending);
-        var statusSummary = LoadStatusSummary(current.FolderPath);
+        // An operator-owned epoch reassesses the current subject, not the old
+        // escalation narrative. Rotation normally removes status.md, but the
+        // freshness boundary must remain true even if that best-effort file move
+        // failed. A later status written by a fresh core run is admitted again.
+        var statusPath = Path.Combine(current.FolderPath, "status.md");
+        var statusSummary = OperatorReviewRequeueService.IsArtifactFresh(
+            current.FolderPath,
+            statusPath)
+                ? LoadStatusSummary(current.FolderPath)
+                : string.Empty;
         var diffSummary = LoadDiffSummary(entry, current);
         var resultsInventory = ResultsInventory.Render(current.FolderPath);
         var cardMode = ReviewCardMode.Describe(current.Mode);
@@ -2459,8 +2469,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
             BuildInfraCrashDetails(crashedAspects, reason));
 
-        // Escalate, NOT Reissue: a chain-ending verdict that resets the reissue
-        // budget, so the environmental infra crash never counts against the card.
+        // Escalate, NOT Reissue: the environmental infra crash adds no spend to
+        // the current attempt epoch. The existing ceiling is retained until an
+        // operator explicitly requeues the card.
         AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
@@ -4796,9 +4807,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             pendingStepReason: "Not run because the build/test gate stopped this pipeline attempt: " + result.Reason);
 
         var decisions = ReviewDecisionLog.ReadAll(workspace, entry.Name);
+        var currentEpoch = OperatorReviewRequeueService.ReadEpoch(current.FolderPath);
         var priorBuildGateReissues = decisions.Count(r =>
             r.JobId == current.Id
             && r.Kind == ReviewDecisionKind.Reissue
+            && IsInAttemptEpoch(r, currentEpoch)
             && string.Equals(r.AttemptChainId, result.AttemptChainId, StringComparison.Ordinal)
             && string.Equals(r.GateId, result.GateId, StringComparison.Ordinal)
             && string.Equals(r.SubjectSha, result.ExpectedSha, StringComparison.OrdinalIgnoreCase)
@@ -4966,9 +4979,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         LintScssResult result,
         CancellationToken ct)
     {
+        var currentEpoch = OperatorReviewRequeueService.ReadEpoch(current.FolderPath);
         var priorLintReissues = ReviewDecisionLog.ReadAll(workspace, entry.Name)
             .Count(r => r.JobId == current.Id
                         && r.Kind == ReviewDecisionKind.Reissue
+                        && IsInAttemptEpoch(r, currentEpoch)
                         && r.Reason != null
                         && r.Reason.StartsWith(LintScssReissueReasonPrefix, StringComparison.Ordinal));
 
@@ -5340,51 +5355,37 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         => CountReissuesInCurrentChain(ReviewDecisionLog.ReadAll(workspace, project), jobId);
 
     /// <summary>
-    /// Count the reissues in the job's CURRENT attempt chain - the reissues
-    /// recorded SINCE the most recent chain-ending verdict
-    /// (<see cref="ReviewDecisionKind.Escalate"/> /
-    /// <see cref="ReviewDecisionKind.AcceptAsDone"/>), not the job's whole
-    /// lifetime total.
+    /// Count the reissues in the job's current operator-owned attempt epoch.
+    /// The epoch changes only when an explicit
+    /// <see cref="ReviewDecisionKind.OperatorRequeue"/> boundary is appended.
+    /// Automatic escalate, accept, and lane moves stay in the same epoch and
+    /// therefore retain the anti-churn budget.
     ///
     /// <para>
-    /// A verdict that parks the card to human review or accepts it CLOSES the
-    /// chain: whatever happens next (a human reopens it, a follow-up moves it back
-    /// to <c>2-ready</c>) begins a fresh attempt chain that must get its own
-    /// reissue budget. Before this the count was sticky - it summed EVERY
-    /// <see cref="ReviewDecisionKind.Reissue"/> record the job ever accrued, so a
-    /// card whose budget was already spent on an earlier, already-resolved chain
-    /// could never pass a budget-gated check again: it escalated on the first new
-    /// concern instead of getting a fresh reissue (AGT-1935 sticky-budget belege).
-    /// Counting per-chain fixes that while leaving in-chain behaviour identical -
-    /// with no chain-ender in between, this returns exactly the old lifetime total.
+    /// Legacy records without <see cref="ReviewDecisionRecord.AttemptEpoch"/>
+    /// belong to epoch 0. Once an operator requeue opens epoch N, only reissues
+    /// stamped with N count. Old rows remain readable history. This deliberately
+    /// does not infer a reset from an Escalate or AcceptAsDone verdict: an
+    /// automated move must never replenish an agent loop's budget.
     /// </para>
     ///
-    /// <para><see cref="ReviewDecisionKind.Skipped"/> is not a chain boundary: it
-    /// leaves the card for the normal sentinel path, so it neither counts nor
-    /// resets. Records are consumed in append (chronological) order, the order
+    /// <para><see cref="ReviewDecisionKind.Skipped"/> is neither a count nor a
+    /// boundary. Records are consumed in append order, the order
     /// <see cref="ReviewDecisionLog.ReadAll"/> returns them.</para>
     /// </summary>
     internal static int CountReissuesInCurrentChain(IEnumerable<ReviewDecisionRecord> records, string jobId)
     {
-        var count = 0;
-        foreach (var record in records)
-        {
-            if (record.JobId != jobId) continue;
-            switch (record.Kind)
-            {
-                case ReviewDecisionKind.Reissue:
-                    count++;
-                    break;
-                case ReviewDecisionKind.Escalate:
-                case ReviewDecisionKind.AcceptAsDone:
-                    // Chain boundary: the previous attempt chain is closed. Reset
-                    // so a reopened card gets a fresh reissue budget (AGT-1935).
-                    count = 0;
-                    break;
-            }
-        }
-        return count;
+        var jobRecords = records.Where(r => r.JobId == jobId).ToList();
+        var currentEpoch = jobRecords.Count == 0
+            ? 0
+            : jobRecords.Max(r => Math.Max(0, r.AttemptEpoch ?? 0));
+        return jobRecords.Count(r =>
+            r.Kind == ReviewDecisionKind.Reissue
+            && IsInAttemptEpoch(r, currentEpoch));
     }
+
+    internal static bool IsInAttemptEpoch(ReviewDecisionRecord record, int epoch)
+        => Math.Max(0, record.AttemptEpoch ?? 0) == Math.Max(0, epoch);
 
     /// <summary>
     /// No-verdict guard (requirement 7): true when a 4-auto-review card has sat
@@ -5416,16 +5417,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         try
         {
-            // Operator authority (AGT-2260): verdicts recorded BEFORE the card's
-            // current review-cycle epoch belong to a closed cycle (the operator
-            // requeued the card afterwards). They do not count as "this cycle
-            // has a verdict" - otherwise a requeued card would sit inert forever:
-            // its old sentinel is resolved, its old verdict is ignored by the
-            // stale-with-verdict guard, and nothing would ever drive it again.
-            var epoch = CurrentReviewCycleEpoch(info);
+            var currentEpoch = OperatorReviewRequeueService.ReadEpoch(info.FolderPath);
             return !ReviewDecisionLog.ReadAll(workspace, project).Any(r =>
                 r.JobId == info.Id
-                && (epoch is null || r.CreatedAt >= epoch));
+                && IsInAttemptEpoch(r, currentEpoch));
         }
         catch
         {
@@ -5496,9 +5491,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         catch { return null; }
 
         ReviewDecisionRecord? latest = null;
+        var currentEpoch = OperatorReviewRequeueService.ReadEpoch(info.FolderPath);
         for (var i = records.Count - 1; i >= 0; i--)
         {
-            if (records[i].JobId == info.Id) { latest = records[i]; break; }
+            if (records[i].JobId == info.Id
+                && IsInAttemptEpoch(records[i], currentEpoch))
+            {
+                latest = records[i];
+                break;
+            }
         }
         if (latest == null) return null;
 
@@ -6032,6 +6033,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? beforeMoveFolderPath,
         string? afterMoveFolderPath)
     {
+        var epochFolder = !string.IsNullOrWhiteSpace(afterMoveFolderPath)
+            ? afterMoveFolderPath
+            : beforeMoveFolderPath;
+        record = record with
+        {
+            AttemptEpoch = record.AttemptEpoch
+                ?? OperatorReviewRequeueService.ReadEpoch(epochFolder),
+        };
         ReviewDecisionLog.Append(workspace, record);
         var result = _workspaceArtifactCommits?.TryCommitRunBoundary(
             workspace,
@@ -6053,12 +6062,28 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var promptPath = Path.Combine(folder, "prompt.md");
         var task = File.Exists(promptPath) ? File.ReadAllText(promptPath) : string.Empty;
         var logPath = TaskPaths.CliOutputLog(folder);
-        var recent = File.Exists(logPath) ? TailLines(File.ReadAllText(logPath), 200) : string.Empty;
+        var recent = ReadActiveEpochLogTail(folder, logPath);
         // The terminal sentinel, final verification summary, and CLI exit are
         // at the end of the log. Head-truncating a verbose 200-line tail kept
         // early pre-restore failures while discarding their later successful
         // restore/re-run, which made the completion gate reissue clean tasks.
         return (Truncate(task, 4_000), TruncateTail(recent, 6_000));
+    }
+
+    private static string ReadActiveEpochLogTail(string folder, string logPath)
+    {
+        if (!File.Exists(logPath)) return string.Empty;
+        var lines = File.ReadAllLines(logPath);
+        var boundary = OperatorReviewRequeueService.ReadCliLogLineBoundary(folder);
+        if (boundary is >= 0)
+        {
+            // A shorter file was replaced/truncated after the boundary, so all
+            // of its current content is fresh. Otherwise skip the consumed
+            // prefix retained by the append-only log.
+            var skip = boundary.Value <= lines.Length ? boundary.Value : 0;
+            lines = lines.Skip(skip).ToArray();
+        }
+        return TailLines(string.Join('\n', lines), 200);
     }
 
     /// <summary>
@@ -6080,17 +6105,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             && !string.IsNullOrWhiteSpace(r.HeadShaAfter));
 
     private static bool HasResultsArtifacts(string jobFolderPath)
-    {
-        try
-        {
-            var results = Path.Combine(jobFolderPath, "results");
-            return Directory.Exists(results) && Directory.EnumerateFiles(results, "*", SearchOption.AllDirectories).Any();
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        => ResultsInventory.HasActiveArtifacts(jobFolderPath);
 
     private static string LoadRoadmap(string rootPath)
     {
@@ -6157,6 +6172,37 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 _logger.LogDebug(
                     "ReviewDecisionOrchestrator skipped canonical remote review {TaskKey}; awaiting fenced ReviewAttempt executor.",
                     authorityKey);
+                continue;
+            }
+
+            // An operator requeue is an explicit request to reassess the existing
+            // completed run from fresh evidence. Its old terminal sentinel is
+            // normally already resolved by the prior escalation follow-up, so
+            // log scanning alone would yield no work and the queued card would
+            // be skipped. While OperatorRequeue is the newest record in the
+            // active epoch, force the full DONE gate + aspect path exactly as if
+            // the completed run had just arrived. The first verdict appended by
+            // that path supersedes the boundary and makes this trigger false.
+            var pendingOperatorAssessment = false;
+            try
+            {
+                var epoch = OperatorReviewRequeueService.ReadEpoch(info.FolderPath);
+                ReviewDecisionLog.ReadLatestByJob(workspace, entry.Name)
+                    .TryGetValue(info.Id, out var latest);
+                pendingOperatorAssessment = IsPendingOperatorRequeueAssessment(latest, epoch);
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "operator-requeue: fresh-assessment journal probe failed");
+            }
+            if (pendingOperatorAssessment)
+            {
+                yield return new PendingDecision(
+                    info,
+                    ReviewSignalKind.Done,
+                    LineNumber: -1,
+                    Reason: OperatorRequeueFreshAssessmentReason,
+                    NeedsInput: null);
                 continue;
             }
 
@@ -6267,6 +6313,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             ["decision"] = verdict.Reason,
         }).TrimEnd('\r', '\n');
+
+    internal static bool IsPendingOperatorRequeueAssessment(
+        ReviewDecisionRecord? latest,
+        int epoch)
+    {
+        epoch = Math.Max(0, epoch);
+        if (epoch == 0)
+        {
+            return latest?.Kind == ReviewDecisionKind.OperatorRequeue
+                && IsInAttemptEpoch(latest, epoch);
+        }
+
+        // The epoch sidecar is authoritative. If the best-effort journal
+        // boundary failed after the lane move, the latest row still belongs to
+        // an older epoch and must not resurrect its verdict. Keep forcing the
+        // full gate/aspect path until a decision from this epoch is durable.
+        if (latest is null || !IsInAttemptEpoch(latest, epoch))
+            return true;
+
+        return latest.Kind == ReviewDecisionKind.OperatorRequeue;
+    }
 
     private static string TailLines(string text, int n)
     {
