@@ -1643,7 +1643,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var record = Assert.Single(records);
         Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
         Assert.DoesNotContain(records, r => r.Kind == ReviewDecisionKind.Reissue);
-        Assert.StartsWith(ReviewDecisionOrchestrator.AspectInfraCrashReasonPrefix, record.Reason);
+        Assert.Contains(ReviewDecisionOrchestrator.AspectInfraCrashReasonPrefix, record.Reason);
         // No reissue in the chain -> the card's reissue budget is untouched.
         Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, "infra-crash-job"));
 

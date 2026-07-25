@@ -381,6 +381,15 @@ public static class LeaseEndpoints
                         "remote-runner-project-skipped project={Project} task={TaskKey} reason=repository-url-unresolved",
                         task.ProjectName,
                         task.Key ?? task.TaskKey ?? task.Id);
+                    var reason =
+                        $"Remote claim could not resolve a cloneable repository URL for project '{task.ProjectName}'.";
+                    await humanReviewEscalation.EscalateAsync(
+                        task.Id,
+                        task.WatchPath,
+                        task.ProjectName,
+                        HumanReviewEscalationCategories.RemoteRepositoryUnavailable,
+                        reason,
+                        ct);
                 }
 
                 if (candidate is null || repository is null)
@@ -934,24 +943,7 @@ public static class LeaseEndpoints
 
             if (targetState == TaskStates.Escalated)
             {
-                var (category, reason) = outcome switch
-                {
-                    "blocked" => (
-                        HumanReviewEscalationCategories.AgentBlocked,
-                        string.IsNullOrWhiteSpace(reportedReason)
-                            ? "Remote agent emitted TASK_BLOCKED without a stated reason; inspect the run log before deciding."
-                            : $"Remote agent emitted TASK_BLOCKED: {reportedReason}"),
-                    "needsinput" => (
-                        HumanReviewEscalationCategories.AgentNeedsInput,
-                        string.IsNullOrWhiteSpace(reportedReason)
-                            ? "Remote agent emitted TASK_NEEDS_INPUT without a stated question; inspect the run log before deciding."
-                            : $"Remote agent emitted TASK_NEEDS_INPUT: {reportedReason}"),
-                    _ => (
-                        HumanReviewEscalationCategories.OrchestratorInconclusive,
-                        string.IsNullOrWhiteSpace(reportedReason)
-                            ? "Remote run ended without a terminal sentinel or a diagnostic."
-                            : reportedReason),
-                };
+                var (category, reason) = RemoteEscalation(outcome, req.Reason);
                 var escalated = await humanReviewEscalation.EscalateAsync(
                     task.Id,
                     task.WatchPath,
@@ -1093,4 +1085,36 @@ public static class LeaseEndpoints
 
     private static string InitiatingPrincipal(string? ownerClientId)
         => string.IsNullOrWhiteSpace(ownerClientId) ? "automation:unknown" : ownerClientId;
+
+    private static (string Category, string Reason) RemoteEscalation(string outcome, string? reportedReason)
+    {
+        var reason = CredentialRedactor.Redact(reportedReason)
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+        return outcome switch
+        {
+            "blocked" when reason.StartsWith(
+                "Remote environment preparation failed after ",
+                StringComparison.OrdinalIgnoreCase)
+                => (
+                    HumanReviewEscalationCategories.RemoteEnvironmentPreparation,
+                    reason),
+            "blocked" => (
+                HumanReviewEscalationCategories.AgentBlocked,
+                reason.Length == 0
+                    ? "The remote agent reported that it could not continue."
+                    : $"The remote agent reported a blocker: {reason}"),
+            "needsinput" => (
+                HumanReviewEscalationCategories.NeedsHumanInput,
+                reason.Length == 0
+                    ? "The remote agent requires operator input before it can continue."
+                    : $"The remote agent requires operator input: {reason}"),
+            _ => (
+                HumanReviewEscalationCategories.RemoteOutcomeUnknown,
+                reason.Length == 0
+                    ? "The remote runner ended without a recognized terminal outcome."
+                    : $"The remote runner ended without a recognized terminal outcome: {reason}"),
+        };
+    }
 }

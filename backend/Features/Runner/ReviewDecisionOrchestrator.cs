@@ -220,7 +220,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// <see cref="ReviewDecisionRecord"/> that the lint-scss post-step
     /// emitted. Used for the infinite-spin guard (a prior reissue with
     /// this prefix means the agent already had one chance to clear the
-    /// gate; the next failure escalates to human review).
+    /// gate; the next failure escalates for operator intervention).
     /// </summary>
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
     internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
@@ -1134,9 +1134,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             var fallback = new OrchestratorDecisionVerdict(
                 OrchestratorDecisionAction.Escalate,
-                "Review-decision model returned no parseable [[ORCHESTRATOR_DECISION]]; human review required.");
+                "Review-decision model returned no parseable [[ORCHESTRATOR_DECISION]]; operator intervention required.");
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: no decision sentinel parsed for {Project}/{JobId}; escalating to human review",
+                "ReviewDecisionOrchestrator: no decision sentinel parsed for {Project}/{JobId}; escalating to 5e-escalated",
                 entry.Name, pending.Job.Id);
             await HandleEscalateAsync(workspace, entry, pending, prompt, response, fallback, cliBinary, ct);
             return;
@@ -1278,7 +1278,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
 
         // ADR-0049: escalation records the event on the original card's
-        // timeline and leaves it in the human-review lane - no wrapper card.
+        // timeline and leaves it in the intervention lane - no wrapper card.
         EmitVerdictTimeline(move.NewFolderPath ?? current.FolderPath,
             TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
             BuildEscalateDetails("noop-escalate", reason,
@@ -1303,7 +1303,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// Deterministic-completion contract (requirement 4): the run finished
     /// without emitting any terminal sentinel. Mirrors <see cref="ProcessNoOpAsync"/> -
     /// reissue with a sentinel-demanding follow-up while the shared reissue
-    /// budget allows, otherwise escalate to human review. The run is NEVER
+    /// budget allows, otherwise escalate for operator intervention. The run is NEVER
     /// accepted as done here: a job counts as completed only when the
     /// deterministic signal is present.
     /// </summary>
@@ -1496,6 +1496,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        reason = HumanReviewEscalation.FormatReason(
+            HumanReviewEscalationCategories.NoCompletionSignal,
+            reason);
 
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator could not obtain a deterministic completion signal. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
@@ -1539,9 +1542,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
-        var reason = string.IsNullOrWhiteSpace(pending.Reason)
+        var detail = string.IsNullOrWhiteSpace(pending.Reason)
             ? "Agent emitted [[TASK_BLOCKED]] without further detail; user attention required."
             : $"Agent emitted [[TASK_BLOCKED]]: {pending.Reason}";
+        var reason = HumanReviewEscalation.FormatReason(
+            HumanReviewEscalationCategories.AgentBlocked,
+            detail);
 
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator escalated BLOCKED for human decision. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
@@ -3430,8 +3436,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         if (gate.Action == CompletionGate.CompletionGateAction.Escalate)
         {
+            var escalationReason = HumanReviewEscalation.FormatReason(
+                HumanReviewEscalationCategories.CompletionGateUnresolved,
+                gate.Reason);
             _chatLog.AppendSupervisor(current, "escalate",
-                $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
+                $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {escalationReason}. Promoted to {TaskStates.Escalated}.");
 
             var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status != MoveJobStatus.Success)
@@ -3444,24 +3453,24 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
             var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.Escalated };
             RecordOrchestratorReviewStep(escalatedFolder, PipelineStepStatus.Failed,
-                DecisionVerdictEscalate, gate.Reason);
+                DecisionVerdictEscalate, escalationReason);
             WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
-                summary: gate.Reason,
+                summary: escalationReason,
                 stepId: PipelineCatalogue.OrchestratorReviewStepId,
                 evidenceRef: "pipeline-execution.json",
                 findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList(),
                 performer: PostProcessingPerformers.Orchestrator);
 
             EmitVerdictTimeline(escalatedFolder,
-                TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
-                BuildEscalateDetails("completion-gate", gate.Reason, priorReissues));
+                TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, escalationReason,
+                BuildEscalateDetails("completion-gate", escalationReason, priorReissues));
 
             AppendReviewDecision(workspace, new ReviewDecisionRecord(
                 CreatedAt: DateTime.UtcNow,
                 JobId: current.Id,
                 Project: entry.Name,
                 Kind: ReviewDecisionKind.Escalate,
-                Reason: gate.Reason,
+                Reason: escalationReason,
                 Prompt: "(completion-gate static scan)",
                 Response: findingsBlock,
                 FollowUp: string.Empty),
@@ -5876,6 +5885,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var escalationReason = HumanReviewEscalation.FormatReason(
+            HumanReviewEscalationCategories.NeedsHumanInput,
+            verdict.Reason);
 
         // ADR-0049: the orchestrator could not decide this 4-auto-review
         // task unattended. It flips the *original* card to 5e-escalated
@@ -5900,17 +5912,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsHumanInput,
-            summary: verdict.Reason,
+            summary: escalationReason,
             performerCliType: NormalizeReviewCliType(cliBinary),
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
             evidenceRef: "pipeline-execution.json");
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
-            $"Auto-review escalated \"{title}\" to {TaskStates.Escalated} for human attention. Reason: {verdict.Reason}.");
+            $"Auto-review escalated \"{title}\" to {TaskStates.Escalated} for human attention. Reason: {escalationReason}.");
 
         EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
-            TimelineActors.Orchestrator, verdict.Reason,
-            BuildEscalateDetails("needs-input-escalate", verdict.Reason,
+            TimelineActors.Orchestrator, escalationReason,
+            BuildEscalateDetails("needs-input-escalate", escalationReason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
 
         AppendReviewDecision(workspace, new ReviewDecisionRecord(
@@ -5918,7 +5930,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             JobId: current.Id,
             Project: entry.Name,
             Kind: ReviewDecisionKind.Escalate,
-            Reason: verdict.Reason,
+            Reason: escalationReason,
             Prompt: prompt,
             Response: response,
             FollowUp: string.Empty),
@@ -6241,7 +6253,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 // partial outcome here. Such a run must never be silently
                 // accepted as completed; it has to keep looping (reissue
                 // demanding a sentinel) until the shared reissue budget is
-                // spent, then escalate to human review.
+                // spent, then escalate for operator intervention.
                 //
                 // LacksTerminalSentinelInLatestRun separates that from a
                 // sentinel that was already resolved on a prior tick (the

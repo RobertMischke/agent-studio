@@ -571,8 +571,8 @@ export class App implements OnInit, OnDestroy {
     }
     lanes.push(
       { state: TaskState.AutoReview, title: 'Post Processing', icon: '🤖', jobs: grouped.autoReview },
-      { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
+      { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
       { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
     );
@@ -584,9 +584,8 @@ export class App implements OnInit, OnDestroy {
    *
    *  - backlog: 0-backlog, 1-preparation, 2-ready
    *  - active:  3-progress, 4-auto-review
-   *  - decide:  5-human-review, 5e-escalated, 6-completed, 7-archive ("Done & Decide" -
-   *             the user-owned tail of the pipeline; sign-off plus the
-   *             archive sit together because they all wait on the user.)
+   *  - decide:  5e-escalated, 5-human-review, 6-completed, 7-archive ("Done & Decide" -
+   *             intervention precedes acceptance in the user-owned tail.)
    *
    * The previous human/agent axis suffix was misleading (Backlog mixes
    * agent prep with human triage) and is removed.
@@ -674,10 +673,9 @@ export class App implements OnInit, OnDestroy {
         id: 'decide',
         label: 'Done & Decide',
         lanes: [
-          // ADR-0025: human-review waits on the user; it sits alongside
-          // completed and archive in the user-owned tail.
-          { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
+          // Intervention comes before acceptance in the visible workflow.
           { state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
+          { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
           { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
           { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
         ],
@@ -728,8 +726,8 @@ export class App implements OnInit, OnDestroy {
   readonly studioLaneOptions: readonly { state: string; label: string }[] = [
     { state: TaskState.Preparation,   label: 'Preparation' },
     { state: TaskState.Ready,         label: 'Ready' },
-    { state: TaskState.HumanReview,   label: 'Review' },
     { state: TaskState.Escalated,     label: 'Escalated' },
+    { state: TaskState.HumanReview,   label: 'Review' },
     { state: TaskState.Completed,     label: 'Delivered' },
     { state: TaskState.Archive,       label: 'Archive' },
   ];

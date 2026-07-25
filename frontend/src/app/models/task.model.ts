@@ -17,8 +17,8 @@ export const TaskState = {
   FailedPickup: '3a-failed-pickup',
   CodeNotComplete: '3b-code-not-complete',
   AutoReview: '4-auto-review',
-  HumanReview: '5-human-review',
   Escalated: '5e-escalated',
+  HumanReview: '5-human-review',
   Completed: '6-completed',
   Archive: '7-archive',
 } as const;
@@ -898,7 +898,7 @@ export interface GroupedJobs {
   codeNotComplete: TaskInfo[];
   /** ADR-0025 lane: orchestrator's review pass (4-auto-review). */
   autoReview: TaskInfo[];
-  /** ADR-0025 lane: waiting for the user (5-human-review). */
+  /** Acceptance lane for finished deliveries backed by evidence (5-human-review). */
   humanReview: TaskInfo[];
   /** Decision lane: true escalations that need operator input (5e-escalated). */
   escalated: TaskInfo[];

@@ -18,6 +18,8 @@ using AgentStudio.TaskServer.Contracts;
 /// </summary>
 public sealed class RemoteTaskRunner
 {
+    internal const int MaxEnvironmentPreparationAttempts = 3;
+
     private readonly RunnerOptions _options;
     private readonly TaskServerClient _client;
     private readonly Action<string> _log;
@@ -404,12 +406,16 @@ public sealed class RemoteTaskRunner
     {
         var taskKey = slot.TaskKey;
         var lease = slot.Lease;
+        Func<CancellationToken, Task<string>> prepare = epicPlanning
+            ? workspace.PrepareReadOnlyAsync
+            : workspace.PrepareAsync;
         string branch;
         try
         {
-            branch = epicPlanning
-                ? await workspace.PrepareReadOnlyAsync(shutdown)
-                : await workspace.PrepareAsync(shutdown);
+            branch = await RetryEnvironmentPreparationAsync(
+                prepare,
+                _log,
+                shutdown);
         }
         catch (WorktreeSalvageException)
         {
@@ -418,6 +424,12 @@ public sealed class RemoteTaskRunner
         catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
         {
             throw;
+        }
+        catch (RemoteEnvironmentPreparationException ex)
+        {
+            throw new RemoteClaimPreparationException(
+                DescribePreparationFailure(ex.InnerException ?? ex),
+                ex);
         }
         catch (Exception ex)
         {
@@ -1008,12 +1020,59 @@ public sealed class RemoteTaskRunner
             SameSessionResumeAttempts,
             FreshSalvageAttempts);
 
+    internal static async Task<T> RetryEnvironmentPreparationAsync<T>(
+        Func<CancellationToken, Task<T>> prepare,
+        Action<string> log,
+        CancellationToken ct,
+        Func<TimeSpan, CancellationToken, Task>? delay = null)
+    {
+        ArgumentNullException.ThrowIfNull(prepare);
+        ArgumentNullException.ThrowIfNull(log);
+        delay ??= Task.Delay;
+
+        Exception? last = null;
+        for (var attempt = 1; attempt <= MaxEnvironmentPreparationAttempts; attempt++)
+        {
+            try
+            {
+                return await prepare(ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not WorktreeSalvageException)
+            {
+                last = ex;
+                log(
+                    $"remote-environment-preparation-failed attempt={attempt}/{MaxEnvironmentPreparationAttempts} " +
+                    $"error={OneLine(ex.Message)}");
+                if (attempt < MaxEnvironmentPreparationAttempts)
+                    await delay(TimeSpan.FromSeconds(attempt), ct);
+            }
+        }
+
+        throw new RemoteEnvironmentPreparationException(
+            MaxEnvironmentPreparationAttempts,
+            last ?? new InvalidOperationException("Environment preparation failed without an exception."));
+    }
+
+    private static string OneLine(string value)
+        => value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+
     private static async Task SafeAwait(Task task)
     {
         try { await task; }
         catch (OperationCanceledException) { /* expected on teardown */ }
         catch { /* background loops already logged their own failures */ }
     }
+}
+
+internal sealed class RemoteEnvironmentPreparationException : Exception
+{
+    public RemoteEnvironmentPreparationException(int attempts, Exception innerException)
+        : base($"Remote environment preparation failed after {attempts} attempts.", innerException)
+    {
+        Attempts = attempts;
+    }
+
+    public int Attempts { get; }
 }
 
 internal sealed record RemoteExecutionResult(

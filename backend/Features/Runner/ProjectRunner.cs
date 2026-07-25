@@ -148,7 +148,7 @@ public class ProjectRunner
     // "Intelligente Abbruch-Bewertung" (ADR-0032): the LLM abort-review step.
     // Optional + default-OFF per project. When null (every existing
     // construction site / test fixture) or disabled, OnCliFinishedAsync keeps
-    // its byte-identical fixed terminal route to human review. When wired AND
+    // its byte-identical fixed terminal route to typed escalation. When wired AND
     // enabled, a non-clean run end consults the step before escalating.
     private readonly PostAbortReviewStepService? _postAbortReview;
     // Reads Claude session transcripts (~/.claude/projects) to reconstruct
@@ -163,7 +163,7 @@ public class ProjectRunner
     // Per-job count of automatic completion-loop re-triggers already spent on
     // transient (watchdog) aborts. The breaker: budget remaining =
     // CompletionRetriggerDecider.DefaultBudget - used. Cleared when the job
-    // leaves the run loop (moved to review, or escalated to human review).
+    // leaves the run loop (moved to acceptance review, or escalated for intervention).
     // Loop id completion.retrigger-transient-abort-per-job.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _completionRetriggerUsed = new();
     private string _mode = "manual";
@@ -1957,7 +1957,7 @@ public class ProjectRunner
 
     /// <summary>
     /// Terminal worktree cleanup: when a task leaves the run loop (accepted into
-    /// review or escalated to human review) tear down its task/&lt;id&gt; worktree
+    /// acceptance review or escalated for operator intervention) tear down its task/&lt;id&gt; worktree
     /// + branch - but only if the branch is already folded into the work branch,
     /// so unresolved conflict work is never dropped (the gate lives in
     /// <see cref="WorktreeTaskLifecycle.TeardownIfIntegrated"/>). Deferred here,
@@ -3288,7 +3288,7 @@ public class ProjectRunner
         var jobId = jobKey[(sep + 2)..];
         // Most likely to find an active job in 3-progress; fall through
         // the rest of the lifecycle if not.
-        foreach (var lane in new[] { TaskStates.Progress, TaskStates.FailedPickup, TaskStates.CodeNotComplete, TaskStates.AutoReview, TaskStates.HumanReview, TaskStates.Preparation, TaskStates.Ready, TaskStates.Backlog, TaskStates.Completed, TaskStates.Archive })
+        foreach (var lane in new[] { TaskStates.Progress, TaskStates.FailedPickup, TaskStates.CodeNotComplete, TaskStates.AutoReview, TaskStates.Escalated, TaskStates.HumanReview, TaskStates.Preparation, TaskStates.Ready, TaskStates.Backlog, TaskStates.Completed, TaskStates.Archive })
         {
             var candidate = System.IO.Path.Combine(watchPath, lane, jobId);
             if (System.IO.Directory.Exists(candidate)) return candidate;
@@ -5212,14 +5212,14 @@ public class ProjectRunner
             {
                 action = new OutcomeAction(
                     Kind: OutcomeActionKind.NotifyUserAndStop,
-                    MetaMessage: "The follow-up failed before first agent output. A prior completed run with a code-review grade remains the authoritative review basis; routing to human review without reissue.",
+                    MetaMessage: "The follow-up failed before first agent output. A prior completed run with a code-review grade remains the authoritative review basis; routing to Escalated without reissue.",
                     IsHeuristicFallback: false)
                 {
                     IssueKind = RunIssueKind.CliLaunchFailed,
                     MessageKind = OrchestratorMessageKind.GiveUp,
                 };
                 _logger.LogWarning(
-                    "review_basis_preserved job={JobId} failedAttempt=cli-launch-failed basis=last-successful-graded-run action=human-review",
+                    "review_basis_preserved job={JobId} failedAttempt=cli-launch-failed basis=last-successful-graded-run action=escalated",
                     jobId);
             }
 
@@ -5229,7 +5229,7 @@ public class ProjectRunner
             // UserContinue re-issue it spawns - the loop that bypassed every
             // other breaker); once the streak reaches QuarantineFailThreshold,
             // override the action to a terminal quarantine so we STOP
-            // re-issuing and park the task in 5-human-review. Progress (a new
+            // re-issuing and park the task in 5e-escalated. Progress (a new
             // commit) or reaching review resets the streak below, so a healthy
             // long-running task that keeps committing is never quarantined.
             var deliberateStop = WasDeliberatelyStopped(execution.Status);
@@ -5269,11 +5269,11 @@ public class ProjectRunner
                         Topic = "quarantined",
                         JobId = jobId,
                         Summary = $"Quarantined \"{activeInfo.Title}\" after {fails} consecutive failed runs without progress (last: {priorTopic}).",
-                        Reasoning = "Per-task circuit breaker: repeated no-progress failures (no new commit between attempts) would otherwise re-issue forever. Parking in human review to stop the loop."
+                        Reasoning = "Per-task circuit breaker: repeated no-progress failures (no new commit between attempts) would otherwise re-issue forever. Parking in Escalated to stop the loop."
                     });
                     action = new OutcomeAction(
                         Kind: OutcomeActionKind.NotifyUserAndStop,
-                        MetaMessage: $"quarantined after {fails} consecutive failed runs without progress (last issue: {priorTopic}). Re-issuing would loop; the task is parked for human review.",
+                        MetaMessage: $"quarantined after {fails} consecutive failed runs without progress (last issue: {priorTopic}). Re-issuing would loop; the task is parked in Escalated for operator intervention.",
                         IsHeuristicFallback: false)
                     {
                         IssueKind = RunIssueKind.Quarantined,
@@ -5371,12 +5371,12 @@ public class ProjectRunner
                 }
 
                 // Intelligente Abbruch-Bewertung (ADR-0032): before the fixed
-                // terminal route to human review, let the abort-review step
+                // terminal route to Escalated, let the abort-review step
                 // (default-OFF per project) judge whether the abort was
                 // legitimate. A rerun/accept verdict short-circuits the
                 // escalation; an escalate verdict, a disabled step, an
                 // unwired service, or a review failure all fall through to
-                // the existing human-review route below unchanged.
+                // the existing typed escalation route below unchanged.
                 //
                 // The step now also honours its per-project run condition: this
                 // is the abort path (Aborted = true) with the run's exit code
@@ -5392,14 +5392,14 @@ public class ProjectRunner
                 };
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
-                    && ShouldRouteIssueToHumanReview(action.IssueKind)
+                    && ShouldRouteIssueToEscalated(action.IssueKind)
                     && !preserveSuccessfulRunContext
                     // Non-retryable verdicts skip abort-review entirely: rerunning
                     // a context-overflow walks straight back into the same input
                     // window, a model-invalid into the same 400, and a quota-
                     // exhausted into the same rejection; the quarantine breaker
                     // exists precisely to STOP re-running this task. All go
-                    // directly to human review.
+                    // directly to Escalated.
                     && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.AuthRefreshFailed or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
@@ -5417,13 +5417,13 @@ public class ProjectRunner
                 // completion.retrigger-transient-abort-per-job). A transient
                 // process abort (the watchdog killed the run) is a runner
                 // outcome, not an agent decision: instead of dead-ending the
-                // task in human-review, re-spawn the same job up to N times.
+                // task in Escalated, re-spawn the same job up to N times.
                 // This is the deterministic default-on fallback that runs only
                 // when the LLM abort-review step above did NOT handle the run
                 // (that step is default-OFF per project, so for most projects
                 // this is the only completion loop). Scoped to WatchdogTimeout
                 // - EnvironmentBlocker is unrecoverable and PermissionBlocked
-                // needs a human, so both still fall through to review below.
+                // needs an operator, so both still fall through to escalation below.
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
                     && CompletionRetriggerDecider.ShouldRetrigger(action.IssueKind, RemainingCompletionRetriggerBudget(jobId, action.IssueKind)))
@@ -5448,7 +5448,7 @@ public class ProjectRunner
                         Topic = OrchestratorLogTopics.Watchdog,
                         JobId = jobId,
                         Summary = $"Completion-loop re-triggered \"{activeInfo.Title}\" after {issueTopic} (attempt {attemptNo}/{maxAttempts}).",
-                        Reasoning = "Transient process abort (watchdog/timeout/infra crash) is a runner outcome, not an agent decision. Re-spawning the same job with its unchanged model instead of escalating to human review; the bounded budget converges to escalation."
+                            Reasoning = "Transient process abort (watchdog/timeout/infra crash) is a runner outcome, not an agent decision. Re-spawning the same job with its unchanged model instead of escalating for operator intervention; the bounded budget converges to Escalated."
                     });
 
                     // Release the active-job latch so the re-issue can claim
@@ -5473,21 +5473,21 @@ public class ProjectRunner
 
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
-                    && ShouldRouteIssueToHumanReview(action.IssueKind))
+                    && ShouldRouteIssueToEscalated(action.IssueKind))
                 {
                     _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
                     {
                         Kind = OrchestratorLogKinds.Intervention,
                         Topic = ToIssueTopic(action.IssueKind),
                         JobId = jobId,
-                        Summary = $"Routed \"{activeInfo.Title}\" to human review after {ToIssueTopic(action.IssueKind)}.",
+                        Summary = $"Routed \"{activeInfo.Title}\" to Escalated after {ToIssueTopic(action.IssueKind)}.",
                         Reasoning = action.MetaMessage
                     });
-                    // The job is leaving the run loop for human review; forget
+                    // The job is leaving the run loop for operator intervention; forget
                     // any spent completion-loop budget so a future run starts
                     // fresh (mirrors the abort-review reset).
                     _completionRetriggerUsed.TryRemove(jobId, out _);
-                    // Same for the per-task quarantine streak: once a human owns
+                    // Same for the per-task quarantine streak: once an operator owns
                     // the card, a later run should start from zero rather than
                     // inherit a near-trip count.
                     _consecutiveFailNoProgress.TryRemove(jobId, out _);
@@ -5502,7 +5502,7 @@ public class ProjectRunner
                     if (move.Status != MoveJobStatus.Success)
                     {
                         _logger.LogWarning(
-                            "Issue routing to human review failed for {JobId}: {Status} {Message}",
+                            "Issue routing to Escalated failed for {JobId}: {Status} {Message}",
                             jobId, move.Status, move.Message);
                     }
                     return;
@@ -5620,13 +5620,13 @@ public class ProjectRunner
                 var backstopTopic = ToIssueTopic(backstopIssueKind);
                 var backstopReason = !string.IsNullOrWhiteSpace(action?.MetaMessage)
                     ? action!.MetaMessage!
-                    : $"Run failed ({backstopTopic}) and reached no terminal verdict; routed to human review so it cannot strand in 3-progress.";
+                    : $"Run failed ({backstopTopic}) and reached no terminal verdict; routed to Escalated so it cannot strand in 3-progress.";
                 _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
                 {
                     Kind = OrchestratorLogKinds.Intervention,
                     Topic = backstopTopic,
                     JobId = jobId,
-                    Summary = $"Routed \"{activeInfo.Title}\" to human review: a failed run that no terminal route claimed ({backstopTopic}) would otherwise strand in 3-progress.",
+                    Summary = $"Routed \"{activeInfo.Title}\" to Escalated: a failed run that no terminal route claimed ({backstopTopic}) would otherwise strand in 3-progress.",
                     Reasoning = backstopReason
                 });
                 _completionRetriggerUsed.TryRemove(jobId, out _);
@@ -5641,7 +5641,7 @@ public class ProjectRunner
                 if (backstopMove.Status != MoveJobStatus.Success)
                 {
                     _logger.LogWarning(
-                        "Drive-to-conclusion backstop human-review routing failed for {JobId}: {Status} {Message}",
+                        "Drive-to-conclusion backstop escalation routing failed for {JobId}: {Status} {Message}",
                         jobId, backstopMove.Status, backstopMove.Message);
                 }
             }
@@ -5790,26 +5790,26 @@ public class ProjectRunner
             _states, _timeline, _chatLog, _logger);
     }
 
-    private static bool ShouldRouteIssueToHumanReview(RunIssueKind issueKind)
+    private static bool ShouldRouteIssueToEscalated(RunIssueKind issueKind)
         => issueKind is RunIssueKind.PermissionBlocked
                      or RunIssueKind.WatchdogTimeout
                      or RunIssueKind.EnvironmentBlocker
                      or RunIssueKind.EmptyFastExit
                      or RunIssueKind.ContextOverflow
                      // Non-retryable model rejection and transient quota
-                     // exhaustion both reach human review with an honest,
+                     // exhaustion both reach Escalated with an honest,
                      // distinct reason instead of the orchestrator-inconclusive
                      // catch-all (AGT-1941: codex model-invalid / claude quota).
                      or RunIssueKind.ModelInvalid
                      or RunIssueKind.QuotaExhausted
                      // A failed OAuth-session refresh (AGT-2066 breaker) is
-                     // non-retryable and must reach human review with a re-auth
+                     // non-retryable and must reach Escalated with a re-auth
                      // instruction instead of stranding in 3-progress.
                      or RunIssueKind.AuthRefreshFailed
                      // A transient environmental fault that persisted after the
                      // bounded retry-with-backoff, and a CLI launch/resume failure
                      // that persisted after the fresh-start retry, both reach human
-                     // review with their own honest category (AGT-1944).
+                     // intervention with their own honest category (AGT-1944).
                      or RunIssueKind.EnvironmentalTransient
                      or RunIssueKind.CliLaunchFailed
                      or RunIssueKind.Quarantined
@@ -5817,7 +5817,7 @@ public class ProjectRunner
                      // Drive-to-conclusion: a failed run the deterministic
                      // contract could not close out (a hard CLI crash, or real
                      // text that maps to no terminal verdict) returns
-                     // NotifyUserAndStop and MUST reach human review. Without
+                     // NotifyUserAndStop and MUST reach Escalated. Without
                      // these two it stayed in 3-progress forever (the old
                      // classifier-unknown stranding: ASS-1757, AGT dashboard).
                      or RunIssueKind.InfraCrash
@@ -5901,7 +5901,7 @@ public class ProjectRunner
         _                                     => "none"
     };
 
-    /// <summary>Maps the issue that triggered a human-review route onto a
+    /// <summary>Maps the issue that triggered an Escalated route onto a
     /// <see cref="HumanReviewEscalationCategories"/> value so the decision
     /// journal records WHY the card was escalated.</summary>
     private static string ToEscalationCategory(RunIssueKind issueKind) => issueKind switch
@@ -5928,7 +5928,7 @@ public class ProjectRunner
     /// could not map it to a terminal verdict) that nonetheless left files in
     /// <c>results/</c>, this returns the distinct
     /// <see cref="HumanReviewEscalationCategories.InconclusiveWithResults"/>
-    /// category so the board routes it to human review WITH a "there is partial
+    /// category so the board routes it to Escalated WITH a "there is partial
     /// work to inspect" hint rather than the bare inconclusive park. Only an
     /// inconclusive run with an EMPTY results/ dir keeps the plain category
     /// (AGT-1944 taxonomy: inconclusive-with-results vs inconclusive-empty).
@@ -5998,8 +5998,8 @@ public class ProjectRunner
     /// Runs the abort-review step for a non-clean run end and applies its
     /// binding action. Returns true when the step handled the run (a rerun
     /// was scheduled, or the run was accepted into review); false when the
-    /// step escalates to human review or fails - in which case the caller
-    /// falls through to the existing human-review route. Never throws: any
+    /// step requests operator intervention or fails, in which case the caller
+    /// falls through to the existing typed escalation route. Never throws: any
     /// failure inside the step fails closed to false (escalate).
     /// </summary>
     private async Task<bool> TryRunAbortReviewAsync(
@@ -6062,7 +6062,7 @@ public class ProjectRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "abort-review step crashed for {JobId}; falling back to human review", jobId);
+            _logger.LogError(ex, "abort-review step crashed for {JobId}; falling back to Escalated", jobId);
             return false;
         }
 
@@ -6153,7 +6153,7 @@ public class ProjectRunner
                     : "unparseable",
                 VerdictSummary = $"action={PostAbortReviewStepService.ActionToken(report.Action)}" +
                     (string.IsNullOrWhiteSpace(reasoning) ? string.Empty : $"; {reasoning}"),
-                Reason = parsed ? null : "CLI failure / unparseable reply; failed closed to human review",
+                Reason = parsed ? null : "CLI failure / unparseable reply; failed closed to operator escalation",
             });
         }
         catch (Exception ex)
@@ -6737,7 +6737,7 @@ public class ProjectRunner
     /// <remarks>
     /// Filters strictly on <c>State == 2-ready</c>. Jobs sitting in
     /// <c>1-preparation</c>, <c>1a-orchestrator-prep</c>,
-    /// <c>4-auto-review</c>, or
+    /// <c>4-auto-review</c>, <c>5e-escalated</c>, or
     /// <c>5-human-review</c> have no influence here - those lanes are
     /// processed by their own background services in parallel with the
     /// runner. The single-state-machine rule (ADR-0001) is preserved by
@@ -6791,7 +6791,7 @@ public class ProjectRunner
            // pickup lane (old data / stray move).
            && !IsUnpickableEpic(job)
            // Hard safety net for the human-decision-needed marker:
-           // never auto-run such a card even if the 2-ready->5-human-review
+           // never auto-run such a card even if the 2-ready->5e-escalated
            // relocation sweep failed to move it. Running it just NOOP-burns
            // a CLI and trips the breaker.
            && !TaskSlugs.IsHumanDecisionNeeded(job.Id)
@@ -7101,7 +7101,7 @@ public class ProjectRunner
     /// when a pickup attempt never started the CLI process (spawn failure).
     /// Used by the reroute classifier to tell "the CLI is unavailable"
     /// (requeue to 2-ready and pause) apart from "the CLI ran but produced
-    /// nothing" (escalate to 5-human-review).
+    /// nothing" (escalate to 5e-escalated with a typed reason).
     /// </summary>
     internal const string SpawnFailedExecutionStatus = "spawn-failed";
     internal const string WorktreeBlockedExecutionStatus = "worktree-blocked";
@@ -7163,7 +7163,7 @@ public class ProjectRunner
     /// entry so the over-budget classifier can be exercised: pass
     /// <see cref="SpawnFailedExecutionStatus"/> to drive the spawn-failure ->
     /// 2-ready + pause path, or leave it null for the task-shaped ->
-    /// 5-human-review path. History is bounded at the threshold to mirror the
+    /// 5e-escalated path. History is bounded at the threshold to mirror the
     /// real recorder.</summary>
     internal void SetPickupAttemptsForTest(string slug, int count, string? executionStatus = null, string? error = null)
     {
@@ -7726,8 +7726,8 @@ public class ProjectRunner
     internal static readonly string[] PostProgressLanes =
     [
         TaskStates.AutoReview,
-        TaskStates.HumanReview,
         TaskStates.Escalated,
+        TaskStates.HumanReview,
         TaskStates.Completed,
         TaskStates.Archive,
     ];

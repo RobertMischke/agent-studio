@@ -396,19 +396,20 @@ public static class TaskStates
     public const string CodeNotComplete = "3b-code-not-complete";
 
     // 4-auto-review is the orchestrator's lane: ReviewDecisionOrchestrator
-    // can reissue, accept-as-done, or escalate. Accepted work crosses into
-    // 5-human-review for quick operator approval; escalations cross into
-    // 5e-escalated because they need an operator decision, not a rubber stamp.
+    // can reissue, accept-as-done, or escalate. Escalated is the intervention
+    // basin: the machine cannot continue and records a category plus a concrete
+    // reason for the operator. HumanReview is later in the flow and is reserved
+    // for acceptance of a finished delivery backed by review evidence.
     // The legacy single 4-review lane is migrated on backend boot via
     // TaskStateMachine.EnsureStateFoldersAndMigrate. See ADR-0025.
     public const string AutoReview = "4-auto-review";
-    public const string HumanReview = "5-human-review";
     public const string Escalated = "5e-escalated";
+    public const string HumanReview = "5-human-review";
     public const string Completed = "6-completed";
     public const string Archive = "7-archive";
 
     public static readonly string[] All =
-        [Backlog, Preparation, OrchestratorPrep, Ready, Progress, FailedPickup, CodeNotComplete, AutoReview, HumanReview, Escalated, Completed, Archive];
+        [Backlog, Preparation, OrchestratorPrep, Ready, Progress, FailedPickup, CodeNotComplete, AutoReview, Escalated, HumanReview, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()
