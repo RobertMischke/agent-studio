@@ -48,6 +48,7 @@ pre-existing lifecycle defect was not widened into the file-scoped integration.
 - AGT-2212 `f1a18ea4c2dd60f925067fcddef1d23c1416cd4f`
 - AGT-2218 `b5f277aeb5b03961e4352725a0171ebfe448ef48`
 - AGT-2225 `27ae6317effb2ad4f221d3c31288e1e0d4bf9a78`
+- AGT-2204 `b6e549bfc82049e29092ee1891029ff1732d14ad`
 
 AGT-2212 was already present as the final platform WIP commit before this
 integration run. Its focused component, utility, and triage unit gate passed
@@ -63,3 +64,7 @@ AGT-2225 passed 10/10 focused route and task URL units, its immutable-project-id
 Wiki restore test, TypeScript typecheck, frontend lint, and 2/2 Playwright
 deep-link cases covering reload, browser history, and legacy-slug
 canonicalization.
+
+AGT-2204 passed 3/3 focused backend event-source and journal tests, 11/11
+frontend replay units, TypeScript typecheck, frontend lint, and its recorded
+Playwright replay against the retained `coding-agent-chat` 0.3.2 package.
