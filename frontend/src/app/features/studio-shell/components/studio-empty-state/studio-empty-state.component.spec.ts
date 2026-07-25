@@ -20,8 +20,9 @@ describe('StudioEmptyStateComponent', () => {
     const fixture = TestBed.createComponent(StudioEmptyStateComponent);
     expect(() => fixture.detectChanges()).not.toThrow();
     expect(fixture.componentInstance).toBeTruthy();
-    // A subtitle is always present so the empty-state never reads as blank.
-    expect(fixture.componentInstance.subtitle().length).toBeGreaterThan(0);
+    const punchline = fixture.nativeElement.querySelector('[data-testid="studio-empty-subtitle"]');
+    expect(punchline?.textContent).toContain('404 tabs found');
+    expect(fixture.componentInstance.phase()).toBeTruthy();
     expect(() => fixture.destroy()).not.toThrow();
   });
 });

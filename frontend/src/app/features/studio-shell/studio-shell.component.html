@@ -449,48 +449,10 @@
         -->
         <ng-content select="[studioContent]"></ng-content>
         @if (activeTab() === null) {
-          <div class="studio-welcome" data-testid="studio-welcome">
-            <app-studio-empty-state class="studio-welcome__idle" />
-            <div class="studio-welcome__card">
-              <h2 class="studio-welcome__title">Agent Software Studio</h2>
-              <p class="studio-welcome__sub">No tab open. Pick a project to open its board, or jump straight to a new task.</p>
-              <div class="studio-welcome__projects">
-                @for (p of projectRows(); track p.name) {
-                  <button type="button"
-                          class="studio-welcome__project"
-                          (click)="openBoard(p.name)">
-                    <span class="studio-tree-row__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
-                    <span>{{ p.name }}</span>
-                    <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
-                  </button>
-                }
-                @if (projectRows().length > 0) {
-                  <button type="button"
-                          class="studio-welcome__project studio-welcome__project--all"
-                          (click)="openBoard('__all__')">
-                    <span class="studio-tree-row__glyph" aria-hidden="true">▦</span>
-                    <span>All projects</span>
-                  </button>
-                }
-              </div>
-              @if (projectRows().length === 0) {
-                <app-empty-state>No projects loaded yet. Check the backend connection or wait for the next poll tick.</app-empty-state>
-              } @else {
-                <div class="studio-welcome__cta">
-                  <button type="button"
-                          class="studio-button studio-button--primary studio-welcome__primary-cta"
-                          data-testid="studio-welcome-add-task"
-                          (click)="addTaskRequested.emit()">
-                    <span aria-hidden="true">＋</span>
-                    <span>New task</span>
-                  </button>
-                  <button type="button"
-                          class="studio-button studio-button--ghost"
-                          (click)="chatToggle.emit()">Open project chat</button>
-                </div>
-              }
-            </div>
-          </div>
+          <app-studio-welcome
+            [projects]="projectRows()"
+            (boardOpened)="openBoard($event)"
+            (chatOpened)="chatToggle.emit()" />
         }
         </div>
       </div>

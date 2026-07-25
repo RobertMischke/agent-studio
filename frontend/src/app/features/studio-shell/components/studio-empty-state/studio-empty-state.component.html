@@ -1,6 +1,11 @@
-<div class="empty" data-testid="studio-empty-state">
-  <div class="empty__stage" [class.empty--static]="reducedMotion()">
+<div class="empty"
+     data-testid="studio-empty-state"
+     [attr.data-phase]="phase()"
+     [attr.data-progress]="phaseProgress()">
+  <div class="empty__stage" [class.empty__stage--static]="reducedMotion()">
     <canvas #canvas class="empty__canvas" aria-hidden="true" data-testid="studio-empty-canvas"></canvas>
   </div>
-  <p class="empty__subtitle" data-testid="studio-empty-subtitle" aria-live="polite">{{ subtitle() }}</p>
+  <p class="empty__punchline" data-testid="studio-empty-subtitle">
+    404 tabs found. Have some cellular automata instead.
+  </p>
 </div>
