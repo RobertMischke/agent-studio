@@ -295,13 +295,103 @@ packaging side:</p>
 <table>
   <tr><th>#</th><th>Decision</th><th>Proposal on this page</th></tr>
   <tr><td>D1</td><td>Package cut</td><td>3 distributables; control plane = one archive, two binaries</td></tr>
-  <tr><td>D2</td><td>Names</td><td><code>agent-orchestrator</code> (control plane) · <code>agent-runner</code> · <code>agent-studio</code></td></tr>
+  <tr><td>D2</td><td>Names</td><td><b>open — see §8.1</b>: <code>agent-runner</code> collides with the CAR library name and hides the host level; candidates <code>agent-host</code> (recommended) · <code>orchestrator-host</code> · <code>runner-host</code></td></tr>
   <tr><td>D3</td><td>Order of work</td><td>extract + package <em>before</em> public hosting; AGT-2277 re-cut afterwards as “deploy the distributable”</td></tr>
-  <tr><td>D4</td><td>Tranche 0 scope</td><td>split the monolith along the table in §2, build the release pipeline (§3), define the config contract (§5)</td></tr>
+  <tr><td>D4</td><td>Tranche 0 scope</td><td>split the monolith along §2, release pipeline (§3), config contract (§5) — <b>extended 25.07.</b> by the protocol-version handshake (honest incompatibility refusal instead of silent 409s) and drain-before-update (lease-graceful window); both proven necessary by the 25.07. incidents</td></tr>
+  <tr><td>D5</td><td>Local installer</td><td><b>new, discussion in §8.8</b>: one-command local install; Docker-based vs. native all-in-one</td></tr>
 </table>
-<p class="sub" style="margin-top:10px">Sign-off on D1–D4 turns this page into tranche-0 cards on the
+<p class="sub" style="margin-top:10px">Sign-off turns this page into tranche-0 cards on the
 migration path. Decision record: <a href="decision-history.md">decision-history.md</a> ·
 short decision note: <a href="distributable.md">distributable.md</a>.</p>
+
+<!-- ————————————————— 8 · REVIEW ANSWERS ————————————————— -->
+<h2>8 · Robert’s review (25.07.) — answers &amp; open discussion</h2>
+
+<h3>8.1 Naming: <code>agent-runner</code> collides, host level missing</h3>
+<p>Agreed. The name clashes with the <b>Coding Agent Runner</b> library (CAR, PROJ-011) and does not
+say “this is the per-host daemon”. Candidates: <code>agent-host</code> (recommended: it is the thing
+that <em>represents a host</em> — claims work, cuts worktrees, runs CLIs), <code>orchestrator-host</code>,
+<code>runner-host</code>. The binary exists today as <code>runner/AgentRunner.csproj</code> → published
+to <code>/opt/agent-runner</code> — so this is purely a naming decision, not new code.</p>
+
+<h3>8.2 Does <code>agent-orchestrator</code> require Docker/Linux? What about macOS?</h3>
+<p><b>No Docker requirement anywhere.</b> All binaries are self-contained .NET executables published
+per target (<code>linux-x64</code> first-class; <code>osx-arm64</code> and <code>win-x64</code> are
+ordinary additional publish targets). systemd units are the <em>Linux integration</em>, not a
+prerequisite — macOS would use launchd, Windows a service wrapper. Practical support matrix
+(proposal): control plane <b>linux-x64 first-class</b>; host daemon linux-x64 first-class,
+osx-arm64 supported (needs git + the agent CLIs installed), Windows dev-only. Docker appears only
+as the <em>evaluation channel</em> (§6) and possibly the local installer (§8.8).</p>
+
+<h3>8.3 Where do orchestration flows live? (alignment with the other target pictures)</h3>
+<p>Three layers, consistent with <a href="actors.md">actors.md</a> and
+<code>orchestrator-plan.md</code>:</p>
+<table>
+  <tr><th>Layer</th><th>Lives in</th><th>Examples</th></tr>
+  <tr><td><b>Flow definitions</b> (data)</td><td>Task Server store — project settings, pipeline steps, task-type-aware pipelines</td><td>which steps, which models, which gates per task type</td></tr>
+  <tr><td><b>Flow execution</b></td><td>Orchestrator Engine — reads definitions via the API, drives council/review/post-processing/gate dispatch</td><td>review pipelines, completion decisions, reissue budgets</td></tr>
+  <tr><td><b>Episodic orchestration</b> (LLM)</td><td>Sentinel/Companion sessions per <code>orchestrator-plan.md</code> — pure API clients on top</td><td>incident handling, day planning, operator dialogue</td></tr>
+</table>
+<p>So: the Engine <em>executes</em> flows, it does not own their definitions — those are server data
+and therefore editable through the normal API (see §8.7).</p>
+
+<h3>8.4 Versioning</h3>
+<p>Every binary answers <code>--version</code> (release + git SHA). The control-plane archive
+versions <b>as one unit</b> (task-server + engine always ship together — they are the tightest
+compatibility pair). Host daemon and Studio version independently. Compatibility is enforced at
+<em>runtime</em> via the protocol handshake that already exists
+(<code>POST /api/v1/protocol/compatibility</code>): an incompatible host daemon is refused with a
+clear reason — never silent 409s (the 25.07. lesson).</p>
+
+<h3>8.5 Update story — agreed, needs build-out</h3>
+<p>The symlink/rollback shelf (§3) is the skeleton. Tranche 0 adds: <b>drain-before-update</b>
+(stop claims, let leases finish or kill-on-lease-loss per AGT-2320), <b>health-gated restart</b>
+(new version must pass <code>/readyz</code> within N seconds or auto-rollback), and <b>rolling host
+updates</b> (one host at a time once there are several). These become explicit acceptance criteria
+of the tranche-0 cards.</p>
+
+<h3>8.6 Fresh install &amp; who owns Caddy</h3>
+<p>Fresh install: <code>install.sh</code> is the same script — creates user + directories, writes
+config from template (prompting for origin/credentials), installs units; the store initialises
+itself through the same migration path on first start (migrations are <em>code inside the
+task-server binary</em>, not a separate tool — see §8.9). <b>Caddy is host infrastructure, not part
+of our package</b>: our archive ships only the site config template; install.sh offers to install
+and enable the distro’s Caddy service. Alternative kept open: Kestrel terminates TLS itself and
+Caddy becomes optional — decision deferred to the deploy card of AGT-2277.</p>
+
+<h3>8.7 Configuration must stay agent-editable</h3>
+<p>Two config layers, cleanly split (this also matches “Konvention statt Settings”):</p>
+<table>
+  <tr><th>Layer</th><th>Where</th><th>Changed by</th></tr>
+  <tr><td><b>Bootstrap</b> — listen URL, store path, credentials, host identity</td><td><code>/etc/agent-orchestrator/*.env</code></td><td>host operator only; rarely changes; never by agents</td></tr>
+  <tr><td><b>Operational</b> — projects, pipelines, caps, models, flow definitions</td><td>Task Server store, via the public API</td><td>UI, operator <em>and coding agents</em> — exactly as today</td></tr>
+</table>
+<p>So yes: everything agents steer today stays editable — it lives in the store, not in shipped
+files. The env files only hold what the process needs <em>before</em> it can reach the store.</p>
+
+<h3>8.9 Store migrations / backup are not separate things</h3>
+<p>Reworded to avoid the impression of extra components: <b>migrations are code in the task-server
+binary</b> (run idempotently at startup — nothing to operate). <b>Backup is one systemd timer</b>
+invoking the task-server’s own <code>backup</code> subcommand; the “verified restore path” is a test
+of that subcommand, not a product. The §1 package table lists them as archive <em>contents</em>, not
+as runnable units of their own.</p>
+
+<h3>8.8 NEW — D5: a single local installer (discussion)</h3>
+<p>Goal: local use with one command, no source checkout, no neighbour repos (AGT-2305’s
+“one-command onboarding” as a first-class target). Two candidate shapes:</p>
+<table>
+  <tr><th></th><th>A · Docker-based (<code>docker compose up</code>)</th><th>B · Native all-in-one</th></tr>
+  <tr><td>Install</td><td>one compose file; requires Docker Desktop</td><td>one binary (the un-split monolith already exists!) via winget/brew/script</td></tr>
+  <tr><td>Cross-platform</td><td>uniform (Win/macOS/Linux)</td><td>per-RID builds, more packaging work</td></tr>
+  <tr><td><b>Repo access</b></td><td><b>the hard part:</b> coding agents must reach LOCAL repos and CLI credentials → volume mounts for every project + credential passthrough into containers; friction grows with each repo</td><td>native process sees the filesystem and installed CLIs exactly like today — zero mount friction</td></tr>
+  <tr><td>Agent CLIs</td><td>must be baked into the image (versions lag) or mounted</td><td>uses the user’s installed codex/claude directly</td></tr>
+  <tr><td>Update</td><td><code>compose pull</code></td><td>installer re-run / self-update</td></tr>
+</table>
+<p><b>Leaning:</b> B for the local developer story (the decisive factor is repo/CLI access — local
+use exists precisely to work on local repos), A for evaluation/demo (“look at the board in 2
+minutes”, no repos mounted). That would make Docker the <em>demo</em> channel and the native
+all-in-one the <em>local product</em> — both from the same release pipeline. Open for Robert’s
+call.</p>
 
 </body>
 </html>
