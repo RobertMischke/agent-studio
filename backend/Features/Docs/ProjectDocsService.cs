@@ -452,7 +452,14 @@ public class ProjectDocsService
     }
 
     /// <summary>Formats a cache token as a quoted strong HTTP entity tag.</summary>
-    internal static string FormatETag(string token) => "\"" + token + "\"";
+    // The token can carry arbitrary bytes (the tree source key joins its parts
+    // with U+001F); a raw token in the ETag header throws in Kestrel. Hashing
+    // keeps the strong-validator semantics and is always header-safe.
+    internal static string FormatETag(string token)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
+        return "\"" + Convert.ToHexString(bytes, 0, 16).ToLowerInvariant() + "\"";
+    }
 
     /// <summary>
     /// The most-recently-edited wiki documents for the dashboard "recent edits"
