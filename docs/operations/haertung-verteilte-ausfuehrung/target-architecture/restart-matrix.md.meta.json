@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Restart matrix and decoupled lifecycles",
+  "source": {
+    "path": "docs/operations/haertung-verteilte-ausfuehrung/target-architecture/restart-matrix.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "f6b5ec8f817ae8f19d6c35e611ee7aaf18e66bdf37d2e136e6f08bf37f02e1f9",
+      "sizeBytes": 1010,
+      "lineCount": 12,
+      "capturedAt": "2026-07-24T21:17:41Z"
+    }
+  },
+  "classification": {
+    "owner": "distributed-execution",
+    "documentMode": "mixed",
+    "temporalState": "mixed",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-24"
+  }
+}

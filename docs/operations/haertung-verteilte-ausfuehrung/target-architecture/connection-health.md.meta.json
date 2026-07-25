@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Connection health",
+  "source": {
+    "path": "docs/operations/haertung-verteilte-ausfuehrung/target-architecture/connection-health.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "1dd7be3bc26f5e32b457e71331bb5524b44c4f78b8596da860d0355f2281e701",
+      "sizeBytes": 919,
+      "lineCount": 8,
+      "capturedAt": "2026-07-24T21:17:41Z"
+    }
+  },
+  "classification": {
+    "owner": "distributed-execution",
+    "documentMode": "vision",
+    "temporalState": "future",
+    "implementationState": "partial",
+    "status": "aktuell",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-07-24"
+  }
+}

@@ -10,6 +10,23 @@
 - **2026-07-24 (evening) — Task-type-aware pipelines.** Pipeline steps resolve per task type; planning gets a lightweight chain (content review, HTML deliverable, no code gates).
 - **2026-07-24 (evening) — Document format rule.** HTML only for diagram-first lead pages; text pages stay Markdown (better diffs, fewer tokens, human+machine readable).
 - **2026-07-24 (evening) — Orchestrator control plane plan adopted** (see orchestrator-plan.md): persistent deterministic control plane, episodic LLM sessions, phased after current P0 healing.
+
+## 2026-07-25 - Distributable sign-off (D1-D5)
+
+Robert signed off the distributable concept (`distributable.html`):
+
+- **D1 Package cut:** three distributables; control plane = one archive, two binaries.
+- **D2 Names:** `agent-orchestrator` (control plane), **`agent-host`** (per-host daemon; renamed from
+  `agent-runner` because it collided with the CAR library and hid the host level), and `agent-studio` (web bundle).
+- **D3 Order:** extract and package before public hosting; AGT-2277 is re-cut afterwards as "deploy the distributable".
+- **D4 Tranche-0 scope:** monolith split (§2), release pipeline (§3), two-layer config contract (§5/§8.7),
+  plus protocol-version handshake with honest refusal and drain-before-update, both mandated by the 25.07. incidents.
+- **D5 Installer and onboarding:** super-simple guided installer; on Linux ideally a single executable with
+  guided prerequisite steps (Docker for the demo path); multi-machine setup guide is first-class.
+  Download plus easy onboarding is the marketing milestone.
+
+Tranche-0 cards were cut the same day.
+
 - **2026-07-25 - One runner load gate.** `RunnerLoadGate` is the only claim-admission load gate. It uses the configurable `RUNNER_CLAIM_MAX_LOAD_PER_CORE` threshold introduced with AGT-2320 and requires 120 seconds of sustained high normalized load before it closes new claims. Existing runs continue. The immediate `HostLoadAdmissionPolicy` implementation was removed.
 - **2026-07-25 - One process inventory.** `RunnerProcessInventoryTracker` owns runner process truth. Both consumers use the same snapshot: `ActiveTaskKeys` for the deployed backend claim protocol and the structured inventory for the versioned Task Server claim and heartbeat protocol.
 - **2026-07-25 - One deployed requeue authority.** The backend requeue grace from AGT-2320 remains authoritative today. Versioned Task Server invariant reconciliation is runnable as a hosted Tranche 0 service, uses the same 120-second grace, can request idempotent runner-local orphan termination, and records lease or lane mismatches without moving tasks. Task Server requeue activation requires a later authority cutover; it is not wired in parallel with the backend.
