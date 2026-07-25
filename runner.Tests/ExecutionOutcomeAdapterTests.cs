@@ -125,6 +125,32 @@ public sealed class ExecutionOutcomeAdapterTests
     }
 
     [Fact]
+    public void Clean_done_completion_is_not_reclassified_by_diagnostic_text_mentions()
+    {
+        // Live incident 25.07.: agent CLIs narrate over stderr; a successful
+        // TASK_DONE run that merely *discussed* OOM handling was classified
+        // OutOfMemory. Regex-based infrastructure matches must not override an
+        // exit-0 run with an explicit DONE sentinel.
+        var result = ExecutionOutcomeAdapter.Classify(Coding(
+            ExitCode: 0,
+            FinalAssistantOutput: "Hardened the lease path for out of memory kills.\n\n[[TASK_DONE]]",
+            StdErr: "considering: cannot allocate memory scenarios; quota exceeded paths; invalid session recovery"));
+
+        Assert.Equal(ExecutionOutcomeKind.SuccessfulCompletion, result.Outcome);
+    }
+
+    [Fact]
+    public void Real_oom_kill_still_wins_even_with_done_sentinel()
+    {
+        var result = ExecutionOutcomeAdapter.Classify(Coding(
+            ExitCode: 0,
+            FinalAssistantOutput: "[[TASK_DONE]]",
+            OomKilled: true));
+
+        Assert.Equal(ExecutionOutcomeKind.OutOfMemory, result.Outcome);
+    }
+
+    [Fact]
     public void Same_session_resume_is_bounded_once_then_falls_back_once_then_stops()
     {
         var first = ExecutionOutcomeAdapter.Classify(Coding(

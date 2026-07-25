@@ -197,6 +197,15 @@ public static class ExecutionOutcomeAdapter
                 ? facts.StdOut ?? string.Empty
                 : facts.FinalAssistantOutput);
 
+        // A clean completion (exit 0 + explicit DONE/NOOP sentinel) must never be
+        // overridden by REGEX matches on the diagnostic text: agent CLIs stream
+        // their working narrative over stderr, so a run that merely *talks about*
+        // "out of memory" or "quota" would otherwise be misclassified as an
+        // infrastructure failure (seen live 25.07.: TASK_DONE run typed as
+        // OutOfMemory). Hard facts (OomKilled, LeaseLost, timeouts, transport)
+        // still win - those are observations, not text.
+        var cleanCompletion = facts.ExitCode == 0 && sentinel is "DONE" or "NOOP";
+
         if (facts.LeaseLost)
             return Decide(facts, ExecutionOutcomeKind.LeaseLoss, OutcomeConfidence.High,
                 "The current fence no longer owns the attempt.", infrastructure: true);
@@ -208,15 +217,15 @@ public static class ExecutionOutcomeAdapter
             return Decide(facts, ExecutionOutcomeKind.TransportLoss, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.TimedOut)
             return Decide(facts, ExecutionOutcomeKind.Timeout, OutcomeConfidence.High, null, infrastructure: true);
-        if (facts.OomKilled || OutOfMemory.IsMatch(diagnostic))
+        if (facts.OomKilled || (!cleanCompletion && OutOfMemory.IsMatch(diagnostic)))
             return Decide(facts, ExecutionOutcomeKind.OutOfMemory, OutcomeConfidence.High, null, infrastructure: true);
-        if (facts.SessionState == ExecutionSessionState.Invalid || InvalidSession.IsMatch(diagnostic))
+        if (facts.SessionState == ExecutionSessionState.Invalid || (!cleanCompletion && InvalidSession.IsMatch(diagnostic)))
             return Decide(facts, ExecutionOutcomeKind.InvalidSession, OutcomeConfidence.High, null, infrastructure: true);
-        if (Authentication.IsMatch(diagnostic))
+        if (!cleanCompletion && Authentication.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.AuthenticationFailure, OutcomeConfidence.High, null, infrastructure: true);
-        if (Quota.IsMatch(diagnostic))
+        if (!cleanCompletion && Quota.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.QuotaExceeded, OutcomeConfidence.High, null, infrastructure: true);
-        if (InvalidConfiguration.IsMatch(diagnostic))
+        if (!cleanCompletion && InvalidConfiguration.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.InvalidModelOrConfiguration, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.LaunchFailed)
             return Decide(facts, ExecutionOutcomeKind.LaunchFailure, OutcomeConfidence.High, null, infrastructure: true);
