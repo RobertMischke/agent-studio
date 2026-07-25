@@ -438,6 +438,10 @@ test('shared page action bar preserves placement, task source, chat context, and
   await page.getByTestId('page-action-archive').click();
   await expect(page.getByTestId('page-action-archive')).toContainText('Archived');
   expect(captured.archivePaths).toContain(CONCEPT_PATH);
+  const notificationClose = page.getByTestId('notification-close');
+  while (await notificationClose.count()) {
+    await notificationClose.first().click();
+  }
 
   await page.getByTestId('page-action-open-chat').click();
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
