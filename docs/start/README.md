@@ -76,6 +76,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Wiki as a cognitive interface (AIP-4 page backchannel, page context, archive semantics) | [concept](../concepts/wiki-as-cognitive-interface.md) · [Visual StyleGuide Workbench](../quality/visual-styleguide-workbench-wiki/index.html) |
 | Wiki grading run (global LLM grade per page; trigger + critical pages; GRADE-1) | [concepts/wiki-grading-run.md](../concepts/wiki-grading-run.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md) |
+| UI task iteration pipeline and Human Gate hand-off | [contracts/ui-task-pipeline.md](../system/contracts/ui-task-pipeline.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](../concepts/result-view-and-case-templates.md) |
 | Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](../concepts/publishing-workflows.md) |
 | Git-info performance measurements and cache invalidation (AGT-2007) | [reports/git-info-performance-agt-2007.md](../system/reports/git-info-performance-agt-2007.md) |

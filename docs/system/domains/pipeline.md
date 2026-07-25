@@ -43,6 +43,12 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineCatalogue.cs`: standard and read-only
   pipeline definitions, step ids, default ordering, step run modes, and display
   names.
+- `backend/Features/Pipeline/PipelineCatalogue.cs`,
+  `backend/Features/Runner/UiTaskPipelineRouter.cs`, and
+  `backend/Features/Runner/UiIterationGate.cs`: the named UI iteration pipeline,
+  shared EvidenceGate-based routing, mandatory iteration result layout, and
+  bounded hand-off to Human Review. The durable Part 2 consumer shape is defined
+  in [the UI task pipeline contract](../contracts/ui-task-pipeline.md).
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.

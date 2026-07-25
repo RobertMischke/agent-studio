@@ -146,7 +146,10 @@ public sealed class CrashRecoveryService
             // recovery complete a different transition before its configured
             // steer timeout chooses auto-answer or blocked. Malformed markers
             // deliberately fall through to the ordinary recovery net.
-            if (SteerPendingMarker.TryRead(jobFolder, _logger) != null) continue;
+            var steerMarker = SteerPendingMarker.TryRead(jobFolder, _logger);
+            if (steerMarker != null
+                && !string.Equals(steerMarker.Kind, SteerPendingKinds.UiIterationReview, StringComparison.OrdinalIgnoreCase))
+                continue;
             var marker = CompletionMarker.TryRead(jobFolder, _logger);
             if (marker == null) continue;
 

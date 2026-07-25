@@ -2007,6 +2007,7 @@ export class TaskService {
       stepId: string;
       enabled?: boolean | null;
       economyModel?: boolean | null;
+      maxIterations?: number | null;
       mode?: string | null;
       cliType?: string | null;
       model?: string | null;

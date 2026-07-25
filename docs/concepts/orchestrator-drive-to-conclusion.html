@@ -738,6 +738,25 @@
           </td>
         </tr>
         <tr>
+          <td>2026-07-23</td>
+          <td><code>AGT-2206</code><br><span class="small">completion gate treated <code>steer-pending.json</code> as open work</span></td>
+          <td>
+            A completed UI-pipeline implementation described its versioned <code>steer-pending.json</code> Human Review
+            contract in the final log. The completion gate extracted the same successful description from stdout and stderr as
+            two unfinished-work findings, reissued the task twice, and then escalated the exhausted gate.
+          </td>
+          <td>
+            The generic incomplete-work expression matched the standalone word <code>pending</code> inside a hyphenated JSON
+            filename. It did not distinguish a status word from an artifact identifier.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the <code>pending</code> signal now requires identifier-safe boundaries, so
+            <code>steer-pending.json</code> and similar names are diagnostic context while real prose such as
+            <em>"route wiring is still pending"</em> remains blocking. A regression fixture pins the duplicated production log
+            lines and the exhausted-budget pass decision.
+          </td>
+        </tr>
+        <tr>
           <td>2026-07-12</td>
           <td><code>AGT-2157</code><br><span class="small">review CLI configuration silently forced Claude</span></td>
           <td>

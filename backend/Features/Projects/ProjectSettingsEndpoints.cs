@@ -148,9 +148,15 @@ public static class ProjectSettingsEndpoints
             }
 
             var pipeline = PipelineCatalogue.Standard;
-            var steps = pipeline.Pre.Select(s => ProjectPipelineStepDto(s, "pre"))
-                .Concat(pipeline.Core.Select(s => ProjectPipelineStepDto(s, "core")))
-                .Concat(pipeline.Post.Select(s => ProjectPipelineStepDto(s, PhaseForPostStep(s))))
+            var catalogueSteps = PipelineCatalogue.All
+                .SelectMany(p => p.Pre.Select(s => (Step: s, Phase: "pre", PipelineId: p.Id))
+                    .Concat(p.Core.Select(s => (Step: s, Phase: "core", PipelineId: p.Id)))
+                    .Concat(p.Post.Select(s => (Step: s, Phase: PhaseForPostStep(s), PipelineId: p.Id))))
+                .GroupBy(x => x.Step.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+            var steps = catalogueSteps
+                .Select(x => ProjectPipelineStepDto(x.Step, x.Phase, x.PipelineId))
                 .ToList();
 
             static string PhaseForPostStep(PipelineStep step)
@@ -163,7 +169,7 @@ public static class ProjectSettingsEndpoints
                 return "post";
             }
 
-            object ProjectPipelineStepDto(PipelineStep s, string phase)
+            object ProjectPipelineStepDto(PipelineStep s, string phase, string? pipelineId = null)
             {
                 var resolved = PipelineStepModelDefaults.Resolve(projectSettings, s);
                 var configured = PipelineStepConfigResolver.Lookup(projectSettings, s.Id);
@@ -179,6 +185,7 @@ public static class ProjectSettingsEndpoints
                 return new
                 {
                     id = s.Id,
+                    pipelineId,
                     displayName = s.DisplayName,
                     kind = s.Kind.ToString(),
                     phase,
@@ -214,6 +221,10 @@ public static class ProjectSettingsEndpoints
                     // initial state when the project has no explicit override.
                     defaultEnabled = s.DefaultEnabled,
                     supportsCondition = s.Kind != StepKind.Core,
+                    supportsMaxIterations = string.Equals(s.Id, PipelineCatalogue.UiPipelineRoutingStepId, StringComparison.OrdinalIgnoreCase),
+                    defaultMaxIterations = string.Equals(s.Id, PipelineCatalogue.UiPipelineRoutingStepId, StringComparison.OrdinalIgnoreCase)
+                        ? UiIterationGate.DefaultMaxIterations
+                        : (int?)null,
                 };
             }
 
@@ -245,6 +256,9 @@ public static class ProjectSettingsEndpoints
 
             if (!string.IsNullOrWhiteSpace(req.Mode) && PostStepConfigResolver.ParseMode(req.Mode) is null)
                 return Results.BadRequest(new { error = $"Unsupported mode '{req.Mode}' (expected off / warn / fail)" });
+
+            if (req.MaxIterations is < UiIterationGate.MinimumIterations or > UiIterationGate.MaximumIterations)
+                return Results.BadRequest(new { error = $"maxIterations must be between {UiIterationGate.MinimumIterations} and {UiIterationGate.MaximumIterations}" });
 
             // Validate any run condition: the token must be known and
             // value-bearing tokens need a value. An "always" / blank condition
@@ -295,6 +309,7 @@ public static class ProjectSettingsEndpoints
             {
                 Enabled = req.Enabled,
                 EconomyModel = req.EconomyModel,
+                MaxIterations = req.MaxIterations,
                 Mode = req.Mode,
                 CliType = req.CliType,
                 Model = req.Model,
@@ -818,7 +833,7 @@ public static class ProjectSettingsEndpoints
     private static bool IsKnownPipelineStep(string? stepId)
     {
         if (string.IsNullOrWhiteSpace(stepId)) return false;
-        return PipelineCatalogue.Standard.AllSteps
+        return PipelineCatalogue.All.SelectMany(p => p.AllSteps)
                 .Any(s => string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase))
             || string.Equals(PipelineCatalogue.AbortReviewStep.Id, stepId, StringComparison.OrdinalIgnoreCase);
     }

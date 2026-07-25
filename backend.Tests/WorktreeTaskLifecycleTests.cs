@@ -547,6 +547,9 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         Assert.Equal(taskTip, RunGit(second.WorktreePath!, "rev-parse HEAD").Out.Trim());
     }
 
+    // MachineBound 23.07.: FileShare.None blocks orphan-directory removal on
+    // Windows, while Linux permits unlinking the open file.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void PrepareOrReuse_RejectsCleanly_WhenOrphanDirBusy()
     {

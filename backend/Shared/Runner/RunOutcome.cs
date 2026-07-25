@@ -20,7 +20,10 @@ public enum RunRejectReason
     /// tick (after quota resets); manual start surfaces as a 4xx so the
     /// user knows why the click did nothing.
     /// </summary>
-    QuotaCapExceeded
+    QuotaCapExceeded,
+    /// <summary>A UI feedback continuation was refused because the configured
+    /// human-review iteration cap had already been reached.</summary>
+    UiIterationCapReached
 }
 
 /// <summary>

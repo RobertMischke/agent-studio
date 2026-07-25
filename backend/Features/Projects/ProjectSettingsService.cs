@@ -626,7 +626,7 @@ public class ProjectSettingsService
             var normalizedPrompt = string.IsNullOrWhiteSpace(setting?.Prompt) ? null : setting!.Prompt!.Trim();
             var normalizedCondition = NormalizeCondition(setting?.Condition);
             var isEmpty = setting is null
-                || (setting.Enabled is null && setting.EconomyModel is null && normalizedMode is null && normalizedCliType is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedPrompt is null && normalizedCondition is null);
+                || (setting.Enabled is null && setting.EconomyModel is null && setting.MaxIterations is null && normalizedMode is null && normalizedCliType is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedPrompt is null && normalizedCondition is null);
 
             if (isEmpty)
             {
@@ -638,6 +638,7 @@ public class ProjectSettingsService
                 {
                     Enabled = setting!.Enabled,
                     EconomyModel = setting.EconomyModel,
+                    MaxIterations = setting.MaxIterations,
                     Mode = normalizedMode,
                     CliType = normalizedCliType,
                     Model = normalizedModel,

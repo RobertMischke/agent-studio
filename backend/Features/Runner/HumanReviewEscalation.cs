@@ -134,6 +134,10 @@ public static class HumanReviewEscalationCategories
     /// indefinitely (belegt 2062/2067/2068, 2026-07-10).</summary>
     public const string SteerUnanswered = "steer-unanswered";
 
+    /// <summary>The bounded UI feedback loop exhausted its configured cap, or
+    /// repeatedly failed to produce the mandatory iteration evidence.</summary>
+    public const string UiIterationCap = "ui-iteration-cap";
+
     /// <summary>Retroactive category for cards parked in 5-human-review before
     /// the escalation funnel existed (boot-time backfill).</summary>
     public const string UnknownLegacy = "unknown-legacy";

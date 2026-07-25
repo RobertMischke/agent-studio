@@ -2020,6 +2020,29 @@ public class ProjectRunner
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
             admissionInfo = info;
 
+            // Part 2 will submit human feedback through the ordinary Continue
+            // path. Refuse that continuation once the durable review contract
+            // says the configured cap is reached; a finish action does not call
+            // the runner and remains available to the review UI.
+            var pendingUiReview = SteerPendingMarker.TryRead(info.FolderPath, _logger);
+            if (UiIterationGate.IsFeedbackContinuation(intent, info.PendingIntent is not null)
+                && string.Equals(pendingUiReview?.Kind, SteerPendingKinds.UiIterationReview, StringComparison.OrdinalIgnoreCase)
+                && UiIterationGate.MustEscalateFeedbackContinuation(pendingUiReview?.UiIterationReview))
+            {
+                var ui = pendingUiReview!.UiIterationReview!;
+                var reason = $"UI iteration cap {ui.MaxIterations} was reached without a finish decision; additional feedback iterations are not allowed.";
+                var escalation = await _humanReviewEscalation.EscalateAsync(
+                    jobId, info.WatchPath, ProjectName,
+                    HumanReviewEscalationCategories.UiIterationCap, reason, ct);
+                if (escalation.Status == MoveJobStatus.Success && !string.IsNullOrWhiteSpace(escalation.NewFolderPath))
+                    SteerPendingMarker.Clear(escalation.NewFolderPath!, _logger);
+                _logger.LogWarning(
+                    "ui_pipeline_cap project={Project} job={JobId} iteration={Iteration}/{MaxIterations} action=escalate status={Status}",
+                    ProjectName, jobId, ui.Iteration, ui.MaxIterations, escalation.Status);
+                return RunOutcome.Reject(new RunRejection(
+                    RunRejectReason.UiIterationCapReached, reason));
+            }
+
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
             // the next invocation return to primary automatically.
@@ -2205,6 +2228,23 @@ public class ProjectRunner
                 acquiredPickupLockFolder = jobFolder;
             }
 
+            var uiProjectSettings = _projectSettings.Get(ProjectName);
+            var isUiIterationPipeline = string.Equals(
+                UiTaskPipelineRouter.Select(info, uiProjectSettings).Id,
+                AgentStudio.Pipeline.PipelineCatalogue.UiPipelineId,
+                StringComparison.Ordinal);
+            var reviewedUiIteration = string.Equals(
+                    pendingUiReview?.Kind,
+                    SteerPendingKinds.UiIterationReview,
+                    StringComparison.OrdinalIgnoreCase)
+                ? pendingUiReview?.UiIterationReview
+                : null;
+            var uiIteration = UiIterationGate.ResolveRunIteration(
+                info.FolderPath,
+                reviewedUiIteration);
+            if (isUiIterationPipeline)
+                UiIterationGate.PrepareIterationDirectory(info.FolderPath, uiIteration);
+
             claimedRunThisCall = _activeRuns.TryClaim(new ActiveRun
             {
                 JobId = jobId,
@@ -2213,6 +2253,13 @@ public class ProjectRunner
                 Followup = followupPrompt,
                 Plan = plan,
                 ReissueAttempt = reissueAttempt,
+                IsUiIterationPipeline = isUiIterationPipeline,
+                // The prepared directory is the durable current-iteration
+                // checkpoint. Only a Human Review feedback marker advances it;
+                // retries therefore cannot accidentally reuse prior evidence.
+                UiIteration = uiIteration,
+                UiMaxIterations = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveUiMaxIterations(
+                    uiProjectSettings),
                 PickupLockFolder = _activePickupLockFolder,
             });
             _activePickupLockFolder = null;
@@ -2454,6 +2501,15 @@ public class ProjectRunner
             }
 
             var prompt = RenderPrompt(plan, info, runWorkingDir);
+            if (_activeRuns.Get(jobId) is { IsUiIterationPipeline: true } uiRun)
+            {
+                prompt += UiIterationGate.BuildAgentInstructions(
+                    info.FolderPath, uiRun.UiIteration, uiRun.UiMaxIterations);
+                _logger.LogInformation(
+                    "pipeline_route project={Project} job={JobId} pipeline={PipelineId} iteration={Iteration}/{MaxIterations} classifier=evidence-gate-ui-heuristic",
+                    ProjectName, jobId, AgentStudio.Pipeline.PipelineCatalogue.UiPipelineId,
+                    uiRun.UiIteration, uiRun.UiMaxIterations);
+            }
 
             if (plan.ClearStaleSessionName)
                 _sessions.SetJobSessionName(jobId, null, Entry.Path);
@@ -4092,7 +4148,7 @@ public class ProjectRunner
                 var pipelineRecord = _pipelineLog.EnsureAgentRunStart(
                     info.FolderPath,
                     AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                        AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                        UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
                         _projectSettings.Get(ProjectName)),
                     ProjectName,
                     info.Id);
@@ -4185,7 +4241,7 @@ public class ProjectRunner
             var record = _pipelineLog.EnsureAgentRunStart(
                 info.FolderPath,
                 AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                    AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                    UiTaskPipelineRouter.Select(info, settings),
                     settings),
                 ProjectName,
                 info.Id);
@@ -4284,7 +4340,7 @@ public class ProjectRunner
             // Complete() stamped it, as long as it already crossed core/post.
             var prior = _pipelineLog?.Read(info.FolderPath);
             var pipeline = AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
                 _projectSettings.Get(ProjectName));
             var priorRunExists = prior != null
                 && (prior.IsComplete
@@ -4569,7 +4625,7 @@ public class ProjectRunner
             var record = _pipelineLog.EnsureRun(
                 folder,
                 AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
-                    AgentStudio.Pipeline.PipelineCatalogue.ForMode(info?.Mode),
+                    UiTaskPipelineRouter.Select(info, _projectSettings.Get(ProjectName)),
                     _projectSettings.Get(ProjectName)),
                 ProjectName,
                 jobId);
@@ -5603,6 +5659,21 @@ public class ProjectRunner
 
             // movedToReview was computed up-front for the circuit breaker.
 
+            // UI tasks do not enter the standard aspect-review pipeline. A
+            // successful core run must first satisfy its iteration-scoped visual
+            // contract, then pauses directly in Human Review with the durable
+            // marker that Part 2 consumes.
+            if (movedToReview
+                && activeInfo != null
+                && snapRun is { IsUiIterationPipeline: true })
+            {
+                await HandleUiIterationCompletionAsync(
+                    activeInfo, jobId, execution,
+                    snapRun.UiIteration, snapRun.UiMaxIterations,
+                    capturedAttempt);
+                return;
+            }
+
             // Way 3 (non-deterministic half): an epic's planning run just
             // finished successfully. Parse the authored plan and create the
             // sub-tasks under the epic BEFORE the epic moves to review, so a
@@ -5817,6 +5888,134 @@ public class ProjectRunner
                 ApplyPendingModeIfAny(jobId);
                 NotifyStatus();
             }
+        }
+    }
+
+    private async Task HandleUiIterationCompletionAsync(
+        TaskInfo info,
+        string jobId,
+        CliExecution execution,
+        int iteration,
+        int maxIterations,
+        int evidenceRetryAttempt)
+    {
+        var decision = UiIterationGate.Evaluate(info.FolderPath, iteration, maxIterations);
+        var now = DateTime.UtcNow;
+        _pipelineLog?.RecordStep(info.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.UiIterationArtifactStepId,
+            Kind = StepKind.Tool,
+            Status = decision.Action == UiIterationGateAction.ReadyForHumanReview
+                ? PipelineStepStatus.Passed
+                : PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = decision.Action switch
+            {
+                UiIterationGateAction.ReadyForHumanReview => "evidence-ready",
+                UiIterationGateAction.EscalateCapReached => "cap-exhausted",
+                _ => "evidence-missing",
+            },
+            Reason = decision.Findings.Count == 0 ? null : string.Join(" ", decision.Findings),
+            VerdictSummary = decision.Findings.Count == 0
+                ? $"Iteration {iteration}/{maxIterations}: {decision.ArtifactPaths.Count} visual artifact(s) and changes.md present."
+                : string.Join(" ", decision.Findings),
+        });
+
+        if (decision.Action == UiIterationGateAction.Incomplete
+            && evidenceRetryAttempt < RunOutcomePolicy.MaxAutoReissueAttempts)
+        {
+            _chatLog.Append(info, OrchestratorMessageKind.Reissue,
+                $"[ui-iteration] Iteration {iteration}/{maxIterations} is incomplete: {string.Join(" ", decision.Findings)} Reissuing once to produce the mandatory evidence.");
+            ReleaseRun(jobId);
+            NotifyStatus();
+            var retryPrompt = UiIterationGate.BuildMissingEvidenceFollowUp(decision);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt,
+                        evidenceRetryAttempt + 1, ContinueModes.Continue, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "UI iteration evidence reissue failed for {JobId}", jobId);
+                }
+            });
+            return;
+        }
+
+        if (decision.Action is UiIterationGateAction.Incomplete or UiIterationGateAction.EscalateCapReached)
+        {
+            _pipelineLog?.Complete(info.FolderPath,
+                pendingStepReason: "UI iteration could not reach its human gate.");
+            TeardownWorktreeForJob(jobId);
+            var reason = decision.Action == UiIterationGateAction.EscalateCapReached
+                ? $"UI iteration cap {maxIterations} was exhausted without a human finish decision."
+                : $"UI iteration {iteration}/{maxIterations} still lacked mandatory evidence after its bounded retry: {string.Join(" ", decision.Findings)}";
+            var escalation = await _humanReviewEscalation.EscalateAsync(
+                jobId, info.WatchPath, ProjectName,
+                HumanReviewEscalationCategories.UiIterationCap, reason,
+                CancellationToken.None);
+            _logger.LogWarning(
+                "ui_pipeline_escalated project={Project} job={JobId} iteration={Iteration}/{MaxIterations} status={Status} reason={Reason}",
+                ProjectName, jobId, iteration, maxIterations, escalation.Status, reason);
+            return;
+        }
+
+        var contract = new UiIterationReviewContract
+        {
+            Iteration = iteration,
+            MaxIterations = maxIterations,
+            CapReached = decision.CapReached,
+            ArtifactPaths = decision.ArtifactPaths,
+            ChangeDescriptionPath = decision.ChangeDescriptionPath!,
+        };
+        SteerPendingMarker.Write(info.FolderPath, new SteerPendingRecord
+        {
+            WaitStartedAt = DateTime.UtcNow,
+            Kind = SteerPendingKinds.UiIterationReview,
+            Question = decision.CapReached
+                ? "Final configured UI iteration. Finish this task or escalate; another feedback iteration is not allowed."
+                : "Review the visual result and choose finish or provide feedback for the next iteration.",
+            CliType = info.CliType,
+            UiIterationReview = contract,
+        }, _logger);
+        _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.AwaitingReview);
+        _pipelineLog?.RecordStep(info.FolderPath, new PipelineStepExecution
+        {
+            StepId = AgentStudio.Pipeline.PipelineCatalogue.UiHumanReviewGateStepId,
+            Kind = StepKind.Orchestrator,
+            Status = PipelineStepStatus.Running,
+            StartedAt = DateTime.UtcNow,
+            Verdict = "awaiting-human-review",
+            VerdictSummary = $"Iteration {iteration}/{maxIterations} is ready for visual review.",
+        });
+        CompletionMarker.Write(info.FolderPath, new CompletionMarker
+        {
+            TargetState = TaskStates.HumanReview,
+            ExecutionStatus = execution.Status,
+            AgentOutcome = $"ui-iteration-{iteration:D3}-awaiting-review",
+        }, _logger);
+
+        var move = await _transitions.MoveAsync(jobId, TaskStates.HumanReview, Entry.Path, CancellationToken.None);
+        if (move.Status == MoveJobStatus.Success)
+        {
+            TeardownWorktreeForJob(jobId);
+            var movedFolder = move.NewFolderPath ?? info.FolderPath;
+            CompletionMarker.Clear(movedFolder, _logger);
+            _mutations.SetJobPhase(movedFolder, null);
+            _logger.LogInformation(
+                "ui_pipeline_review_pending project={Project} job={JobId} pipeline={PipelineId} iteration={Iteration}/{MaxIterations} artifacts={ArtifactCount} marker={Marker}",
+                ProjectName, jobId, AgentStudio.Pipeline.PipelineCatalogue.UiPipelineId,
+                iteration, maxIterations, decision.ArtifactPaths.Count,
+                SteerPendingMarker.PathFor(movedFolder));
+        }
+        else
+        {
+            _logger.LogWarning(
+                "UI iteration {Iteration}/{MaxIterations} for {JobId} is evidenced but could not move to human review: {Status} {Message}",
+                iteration, maxIterations, jobId, move.Status, move.Message);
         }
     }
 

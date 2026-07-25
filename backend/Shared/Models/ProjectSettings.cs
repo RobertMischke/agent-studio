@@ -146,9 +146,11 @@ public record ProjectSettings
     /// per-step override of <c>enabled</c> / <c>mode</c> / <c>model</c>.
     /// A missing step id, or a null field inside an entry, falls through
     /// to the built-in pipeline default. The known step ids come from
-    /// <c>PipelineCatalogue.Standard</c>; this map only overrides those
-    /// code-defined steps because the runtime maps each step id to a concrete
-    /// service. Resolution order for <c>model</c> is step -&gt;
+    /// <c>PipelineCatalogue.All</c>; this map only overrides code-defined steps
+    /// because the runtime maps each step id to a concrete service. The
+    /// catalogue includes standard, read-only, and UI iteration
+    /// step sets. The UI routing entry also accepts <c>maxIterations</c>.
+    /// Resolution order for <c>model</c> is step -&gt;
     /// <see cref="OrchestratorModel"/> -&gt; global default -&gt; runtime default;
     /// for <c>mode</c> it is step -&gt; built-in default.
     /// Persisted in <c>project-settings.json</c>.
@@ -414,6 +416,13 @@ public record PipelineStepCondition
 /// </summary>
 public record PipelineStepSetting
 {
+    /// <summary>
+    /// Optional bounded iteration count for steps that own an iterative loop.
+    /// Today this is consumed by the UI-pipeline routing step. Null preserves
+    /// the catalogue default; unsupported steps ignore it.
+    /// </summary>
+    public int? MaxIterations { get; init; }
+
     /// <summary>
     /// Opts this LLM-backed step into the TokenEconomy recommendation path.
     /// An explicit per-step <see cref="Model"/> still wins. The runtime falls

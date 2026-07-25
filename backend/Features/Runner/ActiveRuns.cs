@@ -26,6 +26,9 @@ internal sealed class ActiveRun
     public string? Followup { get; init; }
     public RunPlan? Plan { get; init; }
     public int ReissueAttempt { get; init; }
+    public bool IsUiIterationPipeline { get; init; }
+    public int UiIteration { get; init; }
+    public int UiMaxIterations { get; init; }
 
     /// <summary>
     /// HEAD in the actual CLI working directory immediately before process
