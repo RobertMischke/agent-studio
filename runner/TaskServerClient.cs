@@ -22,6 +22,7 @@ public sealed class TaskServerClient : IDisposable
     private readonly HttpClient _http;
     private readonly string? _configuredClientId;
     private readonly RunnerOptions? _options;
+    private readonly string _clientKind;
     // Per-run caches, evicted on completion/release so the long-lived daemon does
     // not retain every claimed task's lease and full prompt body for its lifetime.
     private readonly ConcurrentDictionary<string, (string RunId, RunLeaseInfoDto Lease, string InstanceId)> _v1Leases = new(StringComparer.OrdinalIgnoreCase);
@@ -32,6 +33,9 @@ public sealed class TaskServerClient : IDisposable
     public TaskServerClient(RunnerOptions options)
     {
         _options = options;
+        _clientKind = string.Equals(options.Role, "review", StringComparison.OrdinalIgnoreCase)
+            ? "review-runner"
+            : "runner";
         _http = new HttpClient { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
         _configuredClientId = options.ClientId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(options.AuthToken);
@@ -57,9 +61,13 @@ public sealed class TaskServerClient : IDisposable
         string runnerId,
         string? configuredClientId = null,
         string? authToken = null,
-        bool usesDurableTaskServer = false)
+        bool usesDurableTaskServer = false,
+        string role = "coding")
     {
         _http = http;
+        _clientKind = string.Equals(role, "review", StringComparison.OrdinalIgnoreCase)
+            ? "review-runner"
+            : "runner";
         _configuredClientId = configuredClientId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(authToken);
         if (_usesServiceCredential)
@@ -79,7 +87,7 @@ public sealed class TaskServerClient : IDisposable
         var clientVersion = typeof(TaskServerClient).Assembly.GetName().Version?.ToString() ?? "1.0.0";
         using var response = await _http.PostAsJsonAsync(
             "/api/v1/protocol/compatibility",
-            new Contract.ProtocolCompatibilityRequest("runner", clientVersion, RunnerOptions.ProtocolVersion),
+            new Contract.ProtocolCompatibilityRequest(_clientKind, clientVersion, RunnerOptions.ProtocolVersion),
             Json,
             ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -94,6 +102,13 @@ public sealed class TaskServerClient : IDisposable
         var compatibility = JsonSerializer.Deserialize<Contract.ProtocolCompatibilityResponse>(detail, Json);
         if (compatibility?.Supported != true)
             throw new TaskServerException(426, compatibility?.Reason ?? "Task Server protocol is not compatible.");
+        if (!string.Equals(_clientKind, "review-runner", StringComparison.Ordinal)
+            && compatibility.Server.Capabilities is { Count: > 0 } capabilities
+            && !capabilities.Contains("coding-plane", StringComparer.Ordinal))
+        {
+            _useV1 = false;
+            return;
+        }
         _useV1 = true;
     }
 

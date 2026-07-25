@@ -16,7 +16,7 @@ public static class TaskServerEndpoints
         api.MapPost("/protocol/compatibility", (ProtocolCompatibilityRequest request, TaskServerStore store) =>
         {
             var supported = TaskServerProtocol.Supports(request.ProtocolVersion)
-                && request.ClientKind is "studio" or "runner" or "management";
+                && request.ClientKind is "studio" or "runner" or "review-runner" or "management";
             var response = new ProtocolCompatibilityResponse(
                 supported,
                 store.Status().Protocol,

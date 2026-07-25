@@ -171,6 +171,7 @@ public sealed class RemoteTaskRunner
         var handedBack = false;
         var teardownAttempted = false;
         var releaseOnly = false;
+        DurableArtifactManifest? artifactManifest = null;
         try
         {
             var execution = reattach
@@ -180,7 +181,7 @@ public sealed class RemoteTaskRunner
             outcomeDecision = execution.Decision;
             outputLines = execution.OutputLines;
             await shipper.FlushAsync(shutdown);
-            var artifactManifest = await UploadResultsAsync(taskKey, lease, outbox, shutdown);
+            artifactManifest = await UploadResultsAsync(taskKey, lease, outbox, shutdown);
 
             if (heartbeat.LeaseLost)
             {
@@ -291,6 +292,8 @@ public sealed class RemoteTaskRunner
                     outcomeDecision,
                     teardown,
                     workspace.RepositoryUrl,
+                    workspace.BaseSha,
+                    artifactManifest.Digest,
                     outputLines,
                     sourceMutated,
                     shutdown);
@@ -319,6 +322,8 @@ public sealed class RemoteTaskRunner
                     outcomeDecision,
                     WorktreeTeardownResult.NoWork,
                     workspace.RepositoryUrl,
+                    baseSha: null,
+                    artifactManifestDigest: null,
                     outputLines,
                     sourceMutated: false,
                     CancellationToken.None);
@@ -366,6 +371,8 @@ public sealed class RemoteTaskRunner
                             outcomeDecision,
                             teardown,
                             workspace.RepositoryUrl,
+                            workspace.BaseSha,
+                            artifactManifest?.Digest,
                             outputLines,
                             sourceMutated,
                             CancellationToken.None);
@@ -832,6 +839,8 @@ public sealed class RemoteTaskRunner
         ExecutionOutcomeDecision outcomeDecision,
         WorktreeTeardownResult teardown,
         string? repository,
+        string? baseSha,
+        string? artifactManifestDigest,
         IReadOnlyList<string> outputLines,
         bool sourceMutated,
         CancellationToken ct)
@@ -857,7 +866,10 @@ public sealed class RemoteTaskRunner
             AttemptId: lease.AttemptId,
             AuthorityEpoch: lease.AuthorityEpoch,
             IdempotencyKey: $"completion:{lease.AttemptId}:{outcome.Kind}:{teardown.ResultSha ?? "none"}",
-            OutcomeDecision: outcomeDecision), ct);
+            OutcomeDecision: outcomeDecision,
+            BaseSha: baseSha,
+            ImmutableResultRef: teardown.ImmutableResultRef ?? teardown.Branch ?? teardown.ResultSha,
+            ArtifactManifestDigest: artifactManifestDigest), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 

@@ -28,6 +28,9 @@ public Hetzner VM? Leaning: yes — sharpen this picture first, then deploy.
 
 - AGT-2277 (host the control plane on the Hetzner VM) is **parked** until this
   definition is decided; it then gets re-cut as "deploy the distributable".
-- The migration path (migration-path.md) gains a tranche 0: "define + build the
-  distributable" — which also serves the local installation (same package,
-  different config).
+- The migration path now distinguishes the operational Tranche 0 Review mount
+  from the public distributable. Mounting the stable `/api/v1` Review contract
+  in `OrchestratorApi` restores Remote Review against the existing authority
+  without publishing the monolith as the target control-plane package.
+- Building the versioned distributable remains a prerequisite for Tranche 1 and
+  also serves local installation with the same package and different config.

@@ -143,7 +143,7 @@
   <p class="lede">Ursachen von Arbeitsverlust und falschen Review-Scopes sowie die zugehörigen
   Maßnahmen: Result-SHA-Vertrag, Fencing und hermetische Verifikation.</p>
   <div class="meta">
-    <span><b>Stand:</b> 24.07.2026</span>
+    <span><b>Stand:</b> 25.07.2026</span>
     <span><b>Anlass:</b> Grade-D-Welle 17.07. (Spätfolge der Phantom-Welle 11.07.)</span>
     <span><b>Historie:</b> <a href="#historie">Zusammenfassung und Anker</a>; Langform mit
     identischen <code>#incident-*</code>-Ankern in <code>historie.html</code></span>
@@ -171,9 +171,12 @@
 
 <section id="tldr" class="box accent">
   <h4>Kernaussagen</h4>
-  <p class="stx stx-part"><b>Stand 24.07.:</b> Drei Grundlagen sind aktiv: verifizierter Push vor
-  Completion, persistente Attempt-Authority mit Fencing (AGT-2182) und Remote-Gates auf einer exakten
-  Subjekt-SHA. Der unveränderliche Result-SHA-Handoff für alle Konsumenten bleibt mit AGT-2183/2184 offen.</p>
+  <p class="stx stx-part"><b>Current state, 25 Jul:</b> Verified push,
+  persisted AttemptAuthority fencing, durable result envelopes, and exact-SHA
+  Remote Review are implemented. Tranche 0 now mounts the versioned Review
+  plane in <code>OrchestratorApi</code> against that same authority, so the
+  deployed Review unit has a reachable executor API before the standalone Task
+  Server store migration.</p>
   <ul>
     <li><b>Ergebnisevidenz ist noch nicht durchgängig ein Vertrag.</b> Das Gate erhält bereits eine exakte
         Subjekt-SHA. Grade-Step, Merge und UI benötigen weiterhin den einheitlichen Attempt-Record mit
@@ -193,6 +196,12 @@
 
 <!-- ============================================================ -->
 <h2 id="system"><span class="no">§1</span>Systembild</h2>
+<p class="stx stx-ok"><b>Tranche 0, 25 Jul:</b> The monolith exposes only the
+versioned <code>review-plane</code> capability: compatibility, Review Executor
+registration and claim, heartbeat, fenced grade and cleanup writes, and result
+envelope reads. Coding Runners continue to negotiate the legacy monolith path.
+The later actor split moves the same routes and contract to the standalone Task
+Server without changing AttemptId, fence, epoch, or idempotency semantics.</p>
 <p class="stx stx-part"><b>Stand 24.07.:</b> Das Systembild enthält den aktuellen Remote-Runner,
 die SSH-Gate-Brücke und die persistente Attempt-Authority. Result-SHA-Handoff und claimbare
 Remote-Schritte sind noch nicht vollständig umgesetzt.</p>
@@ -1096,6 +1105,11 @@ Commit-Kette. AGT-2183/2184 ersetzen die verbleibende Scope-Kaskade durch <code>
 
 <!-- ============================================================ -->
 <h2 id="programm"><span class="no">§7</span>Umsetzungsprogramm</h2>
+<p class="stx stx-ok"><b>Current state, 25 Jul:</b> The P0 Review-plane gap is
+closed in the task branch. The existing <code>RemoteReviewDaemon</code> can
+claim canonical cards through the monolith mount while all writes remain fenced
+by the existing persisted AttemptAuthority. Standalone Task Server deployment
+and store takeover remain the next migration tranche.</p>
 <p class="stx stx-part"><b>Stand 24.07.:</b> Phase 0 ist abgeschlossen. In Phase 1 sind AGT-2177 und
 AGT-2182 geliefert; AGT-2183/2184 bleiben offen. Die Gate-Isolation aus Phase 2 ist als SSH-Brücke
 produktiv. AGT-2229 und die Testdisziplin-Bausteine schließen den Zielzustand.</p>
@@ -1160,6 +1174,7 @@ funktionieren. <code>historie.html</code> verwendet dieselben Anker für die aus
     <tr id="incident-remote-gates"><td>22./23.07.</td><td>Gate-Stau und falsche Eskalationen im lokalen Pfad</td><td>AGT-2222: SSH-Gate-Brücke, vier Slots, exakte Subjekt-SHA</td><td><span class="pill done">live</span> <span class="pill queued">AGT-2229 offen</span></td></tr>
     <tr id="incident-review-epochs"><td>23.07.</td><td>Ältere Verdikte konnten Operator-Requeues überholen</td><td>AGT-2260-Kern: Verdikte an Operator-Epoche binden</td><td><span class="pill done">aktiv</span></td></tr>
     <tr id="incident-attempt-authority"><td>24.07.</td><td>Fehlende persistente Autorität für Run- und Review-Versuche</td><td>AGT-2182: Attempt-Authority und Fencing</td><td><span class="pill done">geliefert, Grade B</span></td></tr>
+    <tr id="incident-review-plane"><td>25.07.</td><td>Canonical cards waited in Auto Review because no deployed process hosted the versioned Review API</td><td>Tranche 0 mounts the V1 Review plane in the monolith against the existing store and AttemptAuthority</td><td><span class="pill done">task branch verified</span></td></tr>
   </tbody>
 </table>
 
