@@ -7,6 +7,7 @@ import type {
   GitCleanupResult,
   GitFileChange,
   GitProjectInventory,
+  ProjectIntegrationView,
 } from '../features/git';
 
 /** Diff payload envelope shared with the per-task commit-diff endpoints. */
@@ -29,6 +30,13 @@ export class ProjectGitService {
   /** Branch / worktree / recent-history inventory for one project. */
   getInventory(project: string): Observable<GitProjectInventory> {
     return this.http.get<GitProjectInventory>('/api/git/inventory', {
+      params: new HttpParams().set('project', project),
+    });
+  }
+
+  /** Honest remote integration queue and develop-to-main promotion delta. */
+  getIntegration(project: string): Observable<ProjectIntegrationView> {
+    return this.http.get<ProjectIntegrationView>('/api/git/integration', {
       params: new HttpParams().set('project', project),
     });
   }

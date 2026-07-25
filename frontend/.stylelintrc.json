@@ -201,6 +201,7 @@
         "src/app/features/project-detail/components/project-basics-card/project-basics-card.component.scss",
         "src/app/features/project-detail/components/deployment-definition-editor/deployment-definition-editor.scss",
         "src/app/features/project-detail/components/project-deployment-panel/project-deployment-panel.component.scss",
+        "src/app/features/project-detail/components/project-integration-panel/project-integration-panel.component.scss",
         "src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.scss",
         "src/app/features/project-detail/components/project-overview-urls/project-overview-urls.scss",
         "src/app/features/project-detail/components/pipeline-health-block/pipeline-health-block.scss",

@@ -25,6 +25,7 @@ export { ProjectUrlPreviewTabComponent } from './components/project-url-preview-
 export { WorkbenchViewerComponent } from './components/workbench-viewer/workbench-viewer.component';
 export { PageActionBarComponent } from './components/page-action-bar/page-action-bar';
 export { ProjectGitPanelComponent } from './components/project-git-panel/project-git-panel.component';
+export { ProjectIntegrationPanelComponent } from './components/project-integration-panel/project-integration-panel.component';
 export { ProjectProposalsPanelComponent } from './components/project-proposals-panel/project-proposals-panel.component';
 export { ProjectGraphComponent } from './components/project-graph/project-graph.component';
 export { OwnershipMappingPanelComponent } from './components/ownership-mapping-panel/ownership-mapping-panel.component';

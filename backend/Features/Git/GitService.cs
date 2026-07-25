@@ -212,6 +212,19 @@ public record GitBranchEntry(
 public record GitRefLine(string FullName, string ShortName, string Sha, string ShortSha);
 
 /// <summary>
+/// A curated publisher commit found on the integration line. The task key is
+/// parsed from the canonical <c>merge(KEY): ...</c> or
+/// <c>merge-recut(KEY): ...</c> subject.
+/// </summary>
+public record GitIntegrationMergeCommit(
+    string TaskKey,
+    string Sha,
+    string ShortSha,
+    DateTime CommittedAtUtc,
+    string Publisher,
+    string Subject);
+
+/// <summary>
 /// Read-only branch + worktree + recent-history inventory for a single
 /// project, returned by <see cref="GitService.GetProjectInventory"/> and
 /// surfaced on the Project Hub Git View. Deliberately project-scoped: it
@@ -2619,6 +2632,20 @@ public class GitService
         return configured;
     }
 
+    /// <summary>
+    /// Resolves the remote-tracking ref for an integration/release branch.
+    /// Queue and promotion projections deliberately do not fall back to a local
+    /// branch: a local integration commit is still waiting until the publisher
+    /// has made it visible on <c>origin</c>.
+    /// </summary>
+    public string ResolveOriginReadRef(string branch)
+    {
+        var candidate = string.IsNullOrWhiteSpace(branch) ? "develop" : branch.Trim();
+        return candidate.StartsWith("origin/", StringComparison.Ordinal)
+            ? candidate
+            : "origin/" + candidate;
+    }
+
     private bool RemoteBranchExists(string repoRoot, string branch)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
@@ -3607,6 +3634,19 @@ public class GitService
         if (configured == null) return [];
         var root = ResolveGitToplevel(configured);
         if (root == null) return [];
+
+        return GetFilesChangedInRangeAtRoot(root, beforeSha!, afterSha!);
+    }
+
+    /// <summary>
+    /// Project/root-scoped aggregate file stat for a ref range. This is the
+    /// promotion counterpart to the per-task SHA-range reader.
+    /// </summary>
+    public List<GitFileChange> GetFilesChangedInRangeAtRoot(string root, string beforeSha, string afterSha)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return [];
+        if ((!IsLikelyShaOrRef(beforeSha) && !IsLikelyBranchName(beforeSha))
+            || (!IsLikelyShaOrRef(afterSha) && !IsLikelyBranchName(afterSha))) return [];
 
         var cacheKey = $"files|{root}|{beforeSha}|{afterSha}";
         if (TryGetShaRangeCached<List<GitFileChange>>(cacheKey, out var cached)) return cached;
@@ -4907,6 +4947,44 @@ public class GitService
             pair => pair.Key,
             pair => (IReadOnlyList<GitIntegrationMerge>)pair.Value,
             StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Curated publisher history on one integration ref, newest first. Unlike
+    /// the key-to-SHA lookup this retains subject, committer identity, and
+    /// commit timestamp for the operator-facing integration feed.
+    /// </summary>
+    public List<GitIntegrationMergeCommit> GetIntegrationMergeCommits(string repoRoot, string integrationRef)
+    {
+        var result = new List<GitIntegrationMergeCommit>();
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return result;
+        if (!IsLikelyBranchName(integrationRef)) return result;
+
+        const char US = '\x1f';
+        var (output, _, code) = RunGitArgs(
+            repoRoot,
+            "log",
+            "--no-color",
+            "-E",
+            "--grep=^merge(-recut)?\\(",
+            "--format=%H%x1f%h%x1f%cI%x1f%cN%x1f%s",
+            integrationRef);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return result;
+
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var parts = line.Split(US);
+            if (parts.Length < 5) continue;
+            var key = ParseIntegrationMergeKey(parts[4]);
+            if (key == null) continue;
+            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var at)) continue;
+            result.Add(new GitIntegrationMergeCommit(
+                key, parts[0], parts[1], DateTime.SpecifyKind(at, DateTimeKind.Utc), parts[3], parts[4]));
+        }
+        return result;
     }
 
     /// <summary>

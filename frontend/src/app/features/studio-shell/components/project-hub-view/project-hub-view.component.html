@@ -31,6 +31,11 @@
       <app-project-git-panel [projectName]="projectName()" />
     }
   }
+  @defer (when activeRail() === 'integration') {
+    @if (activeRail() === 'integration') {
+      <app-project-integration-panel [projectName]="projectName()" />
+    }
+  }
   @defer (when activeRail() === 'security') {
     @if (activeRail() === 'security') {
       <app-security-panel
