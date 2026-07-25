@@ -5,6 +5,7 @@ namespace AgentRunner;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AgentStudio.TaskServer.Contracts;
 
 /// <summary>
@@ -289,6 +290,27 @@ public sealed class RemoteTaskRunner
             _log($"detached worker lost; attempt will be released to Ready: {ex.Message}");
             return 3;
         }
+        catch (RemoteClaimPreparationException ex)
+        {
+            outcome = new RunOutcome(RunOutcomeKind.EnvironmentFailure, ex.Message);
+            shipper.Add("system", $"[runner] remote-claim-environment-failed: {ex.Message}");
+            await shipper.FlushAsync(CancellationToken.None);
+            if (!heartbeat.LeaseLost)
+            {
+                await CompleteAsync(
+                    taskKey,
+                    lease,
+                    outcome,
+                    outcomeDecision,
+                    WorktreeTeardownResult.NoWork,
+                    workspace.RepositoryUrl,
+                    outputLines,
+                    sourceMutated: false,
+                    CancellationToken.None);
+                handedBack = true;
+            }
+            return 1;
+        }
         catch (WorktreeSalvageException ex)
         {
             if (outbox is not null)
@@ -367,9 +389,25 @@ public sealed class RemoteTaskRunner
     {
         var taskKey = slot.TaskKey;
         var lease = slot.Lease;
-        var branch = epicPlanning
-            ? await workspace.PrepareReadOnlyAsync(shutdown)
-            : await workspace.PrepareAsync(shutdown);
+        string branch;
+        try
+        {
+            branch = epicPlanning
+                ? await workspace.PrepareReadOnlyAsync(shutdown)
+                : await workspace.PrepareAsync(shutdown);
+        }
+        catch (WorktreeSalvageException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RemoteClaimPreparationException(DescribePreparationFailure(ex), ex);
+        }
         shipper.Add("system", $"[runner] working tree ready on branch '{branch}'");
         if (outbox is not null && !epicPlanning)
         {
@@ -426,8 +464,16 @@ public sealed class RemoteTaskRunner
             WorktreePath = workspace.RepoPath,
             Phase = "launching",
         });
-        var process = DurableAgentProcess.Start(
-            _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir);
+        DurableAgentProcess process;
+        try
+        {
+            process = DurableAgentProcess.Start(
+                _options, slot.WorkerDirectory, workspace.RepoPath, prompt, resultsDir);
+        }
+        catch (Exception ex)
+        {
+            throw new RemoteClaimPreparationException(DescribePreparationFailure(ex), ex);
+        }
         slot = _state.Save(slot with
         {
             ProcessId = process.ProcessId,
@@ -850,6 +896,32 @@ public sealed class RemoteTaskRunner
 
     private string ResultsDir(string taskKey)
         => Path.Combine(_options.WorkDir, "tasks", GitWorkspace.SafeSegment(taskKey), "results");
+
+    private static readonly Regex CredentialedHttpUrl = new(
+        @"(?<scheme>https?://)[^/@\s]+(?::[^/@\s]+)?@",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static string DescribePreparationFailure(Exception exception)
+    {
+        var message = CredentialedHttpUrl
+            .Replace(exception.Message, "${scheme}***@")
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+        if (message.StartsWith("git clone ", StringComparison.OrdinalIgnoreCase))
+            return $"clone failed: {message}";
+        if (message.StartsWith("git fetch ", StringComparison.OrdinalIgnoreCase))
+            return $"fetch failed: {message}";
+        return $"environment preparation failed: {message}";
+    }
+
+    private sealed class RemoteClaimPreparationException : Exception
+    {
+        public RemoteClaimPreparationException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+    }
 
     internal static ExecutionOutcomeDecision WithDurableOutput(
         ExecutionOutcomeDecision decision,

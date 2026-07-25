@@ -4,14 +4,19 @@ using System.Text.RegularExpressions;
 namespace AgentRunner;
 
 /// <summary>The terminal outcome an agent signs its run off with.</summary>
-public enum RunOutcomeKind { Done, Blocked, NeedsInput, NoOp, Unknown }
+public enum RunOutcomeKind { Done, Blocked, NeedsInput, NoOp, Unknown, EnvironmentFailure }
 
 public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
 {
-    /// <summary>Lane expected from the server's normal remote-run completion policy.</summary>
+    /// <summary>
+    /// Lane expected from the server's normal remote-run completion policy.
+    /// Environment failures return to Ready while the server-owned retry budget
+    /// remains; the exhausted attempt is promoted to Escalated by the server.
+    /// </summary>
     public string TargetState => Kind switch
     {
         RunOutcomeKind.Done or RunOutcomeKind.NoOp => "4-auto-review",
+        RunOutcomeKind.EnvironmentFailure => "2-ready",
         _ => "5-human-review",
     };
 
@@ -21,6 +26,7 @@ public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
         RunOutcomeKind.Blocked => "Remote run blocked",
         RunOutcomeKind.NeedsInput => "Remote run needs input",
         RunOutcomeKind.NoOp => "Remote run was a no-op",
+        RunOutcomeKind.EnvironmentFailure => "Remote claim environment preparation failed",
         _ => "Remote run ended without a terminal sentinel",
     };
 }
@@ -62,6 +68,10 @@ public static class SentinelScanner
             "NOOP" => RunOutcomeKind.NoOp,
             _ => RunOutcomeKind.Unknown,
         };
+        if (reason is null && kind == RunOutcomeKind.Blocked)
+            reason = "Agent emitted TASK_BLOCKED without a stated reason.";
+        else if (reason is null && kind == RunOutcomeKind.NeedsInput)
+            reason = "Agent emitted TASK_NEEDS_INPUT without a stated question.";
         return new RunOutcome(kind, reason);
     }
 

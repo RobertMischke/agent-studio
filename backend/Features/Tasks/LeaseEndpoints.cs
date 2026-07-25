@@ -143,10 +143,13 @@ public static class LeaseEndpoints
             AgentStudio.Clients.ClientIdentityStore clients,
             AgentStudio.Clients.HostTelemetryStore telemetry,
             AccessSecurityStore accessSecurity,
+            HumanReviewEscalation humanReviewEscalation,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerClaim");
+            var remoteClaimFailures = new RemoteClaimFailureBudget(
+                loggerFactory.CreateLogger<RemoteClaimFailureBudget>());
             if (string.IsNullOrWhiteSpace(req.RunnerId) || string.IsNullOrWhiteSpace(req.RunnerName))
                 return Results.BadRequest(new RunnerClaimResponse(RunnerClaimStatus.Invalid, Message: "runnerId and runnerName are required."));
             if (!RunnerMatches(context, req.RunnerId, req.RunnerName))
@@ -273,6 +276,32 @@ public static class LeaseEndpoints
                     var recoveryWrite = leases.CurrentWriteReference(
                         interruptedKey,
                         $"lane-recovery:{interruptedKey}:{req.RunnerId.Trim()}");
+                    var preparationFailure = remoteClaimFailures.GetState(interrupted);
+                    if (preparationFailure?.Attempts >= RemoteClaimFailureBudget.MaxAttempts)
+                    {
+                        var reason =
+                            $"Remote claim repository/environment preparation failed " +
+                            $"({preparationFailure.Attempts}/{RemoteClaimFailureBudget.MaxAttempts}): " +
+                            preparationFailure.Reason;
+                        var escalated = await humanReviewEscalation.EscalateAsync(
+                            interrupted.Id,
+                            interrupted.WatchPath,
+                            interrupted.ProjectName,
+                            HumanReviewEscalationCategories.RemoteClaimEnvironment,
+                            reason,
+                            ct,
+                            recoveryWrite);
+                        logger.Log(
+                            escalated.Status == MoveJobStatus.Success
+                                ? LogLevel.Error
+                                : LogLevel.Critical,
+                            "remote-claim-exhausted-recovery project={Project} task={TaskKey} status={Status} reason={Reason}",
+                            interrupted.ProjectName,
+                            interruptedKey,
+                            escalated.Status,
+                            reason);
+                        continue;
+                    }
                     await transitions.MoveAsync(
                         interrupted.Id, TaskStates.Ready, interrupted.WatchPath, ct,
                         cause: $"remote-runner-lease-recovery:{req.RunnerName.Trim()}",
@@ -343,6 +372,7 @@ public static class LeaseEndpoints
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
                 if (string.IsNullOrWhiteSpace(taskKey)) taskKey = candidate.Id;
+                remoteClaimFailures.PrepareForClaim(candidate);
                 var claimKey = string.IsNullOrWhiteSpace(req.IdempotencyKey)
                     ? $"claim:{taskKey}:{req.RunnerId.Trim()}:{Guid.NewGuid():N}"
                     : req.IdempotencyKey.Trim();
@@ -496,6 +526,7 @@ public static class LeaseEndpoints
             TaskMutationService mutations,
             TaskStateMachine states,
             OrchestratorChatLog chatLog,
+            HumanReviewEscalation humanReviewEscalation,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
@@ -503,6 +534,8 @@ public static class LeaseEndpoints
             await ClaimGate.WaitAsync(ct);
             try
             {
+            var remoteClaimFailures = new RemoteClaimFailureBudget(
+                loggerFactory.CreateLogger<RemoteClaimFailureBudget>());
             var reportedOutcome = req.Outcome ?? string.Empty;
             var task = scanner.ScanAllJobs().FirstOrDefault(t =>
                 string.Equals(t.TaskKey, req.TaskKey, StringComparison.OrdinalIgnoreCase)
@@ -517,13 +550,14 @@ public static class LeaseEndpoints
             var targetState = outcome switch
             {
                 "done" or "noop" => TaskStates.AutoReview,
-                "blocked" or "needsinput" or "unknown" => TaskStates.HumanReview,
+                "blocked" or "needsinput" or "unknown" => TaskStates.Escalated,
+                "environmentfailure" => TaskStates.Ready,
                 _ => string.Empty,
             };
             if (targetState.Length == 0)
                 return Results.BadRequest(new RemoteRunCompletionResponse(
                     req.TaskKey, reportedOutcome, TaskStates.Progress,
-                    "Outcome must be Done, NoOp, Blocked, NeedsInput, or Unknown."));
+                    "Outcome must be Done, NoOp, Blocked, NeedsInput, Unknown, or EnvironmentFailure."));
 
             // AGT-2178: Epic planning is source-read-only - it produces no commit
             // and therefore no fenced ResultSha. The 2177 ResultSha gate only
@@ -567,7 +601,7 @@ public static class LeaseEndpoints
                 req.RunnerId,
                 req.LeaseId,
                 req.TaskKey,
-                requireResultSha: !isEpicPlanning);
+                requireResultSha: !isEpicPlanning && outcome is ("done" or "noop"));
             if (!settled.Accepted)
             {
                 var response = new RemoteRunCompletionResponse(
@@ -621,6 +655,7 @@ public static class LeaseEndpoints
             var salvageCommitSha = CredentialRedactor.Redact(req.SalvageCommitSha);
             var salvageBranchUrl = CredentialRedactor.Redact(req.SalvageBranchUrl);
             var salvageRecoveryBranchUrl = CredentialRedactor.Redact(req.SalvageRecoveryBranchUrl);
+            var reportedReason = CredentialRedactor.Redact(req.Reason);
             var details = new Dictionary<string, string>
             {
                 ["cli"] = "remote-runner",
@@ -661,6 +696,15 @@ public static class LeaseEndpoints
                 details["salvageAuthoritativeBaseBranch"] = req.SalvageAuthoritativeBaseBranch;
             if (!string.IsNullOrWhiteSpace(req.SalvageAuthoritativeBaseSha))
                 details["salvageAuthoritativeBaseSha"] = req.SalvageAuthoritativeBaseSha;
+            if (!string.IsNullOrWhiteSpace(reportedReason))
+                details["reason"] = reportedReason;
+            RemoteClaimFailureDecision? claimFailure = null;
+            if (outcome == "environmentfailure")
+            {
+                claimFailure = remoteClaimFailures.Record(task, reportedReason);
+                details["attempt"] = claimFailure.Attempt.ToString();
+                details["maximumAttempts"] = claimFailure.MaximumAttempts.ToString();
+            }
             if (reviewAttempt is not null)
             {
                 details["reviewAttemptId"] = reviewAttempt.AttemptId;
@@ -725,6 +769,92 @@ public static class LeaseEndpoints
                 epoch,
                 $"lane-completion:{completionKey}");
 
+            if (claimFailure is not null)
+            {
+                var reason =
+                    $"Remote claim repository/environment preparation failed " +
+                    $"({claimFailure.Attempt}/{claimFailure.MaximumAttempts}): {claimFailure.Reason}";
+                if (!claimFailure.Escalate)
+                {
+                    var retryMove = await transitions.MoveAsync(
+                        task.Id,
+                        TaskStates.Ready,
+                        task.WatchPath,
+                        ct,
+                        cause: $"remote-claim-environment-retry:{claimFailure.Attempt}/{claimFailure.MaximumAttempts}",
+                        authorityWrite: laneWrite,
+                        suppressProductExecution: true);
+                    if (retryMove.Status != MoveJobStatus.Success)
+                        return Results.Conflict(new RemoteRunCompletionResponse(
+                            req.TaskKey,
+                            reportedOutcome,
+                            task.State,
+                            $"Environment retry lane move refused: {retryMove.Status} {retryMove.Message}",
+                            RunAttemptId: attemptId));
+
+                    loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogWarning(
+                        "remote-claim-environment-retry project={Project} task={TaskKey} runner={Runner} attempt={Attempt}/{MaximumAttempts} reason={Reason}",
+                        task.ProjectName,
+                        req.TaskKey,
+                        source,
+                        claimFailure.Attempt,
+                        claimFailure.MaximumAttempts,
+                        claimFailure.Reason);
+                    return Results.Ok(new RemoteRunCompletionResponse(
+                        req.TaskKey,
+                        reportedOutcome,
+                        TaskStates.Ready,
+                        reason,
+                        RunAttemptId: attemptId));
+                }
+
+                var escalated = await humanReviewEscalation.EscalateAsync(
+                    task.Id,
+                    task.WatchPath,
+                    task.ProjectName,
+                    HumanReviewEscalationCategories.RemoteClaimEnvironment,
+                    reason,
+                    ct,
+                    laneWrite);
+                if (escalated.Status != MoveJobStatus.Success)
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey,
+                        reportedOutcome,
+                        task.State,
+                        $"Environment escalation lane move refused: {escalated.Status} {escalated.Message}",
+                        RunAttemptId: attemptId));
+
+                timeline.Append(
+                    escalated.NewFolderPath ?? task.FolderPath,
+                    TimelineEventKinds.OrchestratorEscalated,
+                    TimelineActors.System,
+                    reason,
+                    runId: attemptId,
+                    details: new Dictionary<string, string>
+                    {
+                        ["category"] = HumanReviewEscalationCategories.RemoteClaimEnvironment,
+                        ["attempt"] = claimFailure.Attempt.ToString(),
+                        ["maximumAttempts"] = claimFailure.MaximumAttempts.ToString(),
+                        ["reason"] = claimFailure.Reason,
+                    });
+                loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogError(
+                    "remote-claim-environment-escalated project={Project} task={TaskKey} runner={Runner} attempt={Attempt}/{MaximumAttempts} reason={Reason}",
+                    task.ProjectName,
+                    req.TaskKey,
+                    source,
+                    claimFailure.Attempt,
+                    claimFailure.MaximumAttempts,
+                    claimFailure.Reason);
+                return Results.Ok(new RemoteRunCompletionResponse(
+                    req.TaskKey,
+                    reportedOutcome,
+                    TaskStates.Escalated,
+                    reason,
+                    RunAttemptId: attemptId));
+            }
+
+            remoteClaimFailures.Reset(task);
+
             if (isEpicPlanning)
             {
                 // Epic planning is source-read-only and owns no ReviewSubject.
@@ -779,6 +909,60 @@ public static class LeaseEndpoints
                 }
                 return Results.Ok(new RemoteRunCompletionResponse(
                     req.TaskKey, reportedOutcome, TaskStates.AutoReview,
+                    RunAttemptId: attemptId));
+            }
+
+            if (targetState == TaskStates.Escalated)
+            {
+                var (category, reason) = outcome switch
+                {
+                    "blocked" => (
+                        HumanReviewEscalationCategories.AgentBlocked,
+                        string.IsNullOrWhiteSpace(reportedReason)
+                            ? "Remote agent emitted TASK_BLOCKED without a stated reason; inspect the run log before deciding."
+                            : $"Remote agent emitted TASK_BLOCKED: {reportedReason}"),
+                    "needsinput" => (
+                        HumanReviewEscalationCategories.AgentNeedsInput,
+                        string.IsNullOrWhiteSpace(reportedReason)
+                            ? "Remote agent emitted TASK_NEEDS_INPUT without a stated question; inspect the run log before deciding."
+                            : $"Remote agent emitted TASK_NEEDS_INPUT: {reportedReason}"),
+                    _ => (
+                        HumanReviewEscalationCategories.OrchestratorInconclusive,
+                        string.IsNullOrWhiteSpace(reportedReason)
+                            ? "Remote run ended without a terminal sentinel or a diagnostic."
+                            : reportedReason),
+                };
+                var escalated = await humanReviewEscalation.EscalateAsync(
+                    task.Id,
+                    task.WatchPath,
+                    task.ProjectName,
+                    category,
+                    reason,
+                    ct,
+                    laneWrite);
+                if (escalated.Status != MoveJobStatus.Success)
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey,
+                        reportedOutcome,
+                        task.State,
+                        $"Escalation lane move refused: {escalated.Status} {escalated.Message}",
+                        RunAttemptId: attemptId));
+                timeline.Append(
+                    escalated.NewFolderPath ?? task.FolderPath,
+                    TimelineEventKinds.OrchestratorEscalated,
+                    TimelineActors.System,
+                    reason,
+                    runId: attemptId,
+                    details: new Dictionary<string, string>
+                    {
+                        ["category"] = category,
+                        ["reason"] = reason,
+                    });
+                return Results.Ok(new RemoteRunCompletionResponse(
+                    req.TaskKey,
+                    reportedOutcome,
+                    TaskStates.Escalated,
+                    reason,
                     RunAttemptId: attemptId));
             }
 

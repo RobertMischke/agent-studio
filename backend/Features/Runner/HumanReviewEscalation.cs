@@ -13,6 +13,14 @@ public static class HumanReviewEscalationCategories
     public const string WatchdogKill = "watchdog-kill";
     public const string PermissionBlocked = "permission-blocked";
     public const string EnvironmentBlocker = "environment-blocker";
+    /// <summary>A remote coding claim could not prepare its repository or
+    /// execution environment after the durable per-task retry budget.</summary>
+    public const string RemoteClaimEnvironment = "remote-claim-environment";
+    /// <summary>The remote agent explicitly reported BLOCKED. This is an
+    /// intervention request, never evidenced delivery awaiting approval.</summary>
+    public const string AgentBlocked = "agent-blocked";
+    /// <summary>The remote agent explicitly requested an operator choice.</summary>
+    public const string AgentNeedsInput = "agent-needs-input";
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
     /// <summary>A task worktree remained locked after bounded cleanup retries.
@@ -177,10 +185,17 @@ public sealed class HumanReviewEscalation
     /// </summary>
     public async Task<MoveJobOutcome> EscalateAsync(
         string jobId, string watchPath, string project,
-        string category, string reason, CancellationToken ct = default)
+        string category, string reason, CancellationToken ct = default,
+        AttemptWriteReference? authorityWrite = null)
     {
         var beforeFolder = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
-        var outcome = await _transitions.MoveAsync(jobId, TaskStates.Escalated, watchPath, ct);
+        var outcome = await _transitions.MoveAsync(
+            jobId,
+            TaskStates.Escalated,
+            watchPath,
+            ct,
+            authorityWrite: authorityWrite,
+            suppressProductExecution: authorityWrite is not null);
         if (outcome.Status == MoveJobStatus.Success)
         {
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);
@@ -309,7 +324,9 @@ public sealed class HumanReviewEscalation
             if (File.Exists(path))
             {
                 var existing = File.ReadAllText(path);
-                if (!string.IsNullOrWhiteSpace(existing)) return; // never clobber a real summary
+                if (!string.IsNullOrWhiteSpace(existing)
+                    && !IsPendingPlaceholder(existing))
+                    return; // never clobber a real summary
             }
             Directory.CreateDirectory(folderPath);
             File.WriteAllText(path, BuildStatusStub(category, reason, HasPartialResults(folderPath)));
@@ -320,6 +337,15 @@ public sealed class HumanReviewEscalation
             // unwritable status.md must not crash the runner.
             _logger.LogWarning(ex, "HumanReviewEscalation: failed to write status.md stub at {Path}", path);
         }
+    }
+
+    private static bool IsPendingPlaceholder(string status)
+    {
+        var value = status.Replace("\r", string.Empty).Trim();
+        return value.Equals("Result: pending.", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("Result: pending", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("- Result: pending.", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("- Result: pending", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

@@ -191,6 +191,25 @@ public sealed class HumanReviewEscalationTests : IDisposable
         Assert.Equal(ReviewDecisionKind.Escalate, latest!.Kind);
     }
 
+    [Fact]
+    public void RecordVerdictAndStatus_ReplacesPendingPlaceholderWithEscalationReason()
+    {
+        const string jobId = "pending-before-run";
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, jobId);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "status.md"), "Result: pending.");
+
+        var funnel = BuildFunnel();
+        funnel.RecordVerdictAndStatus(
+            ProjectName, jobId, folder,
+            HumanReviewEscalationCategories.RemoteClaimEnvironment,
+            "clone failed: 403 agent-orc/website");
+
+        var status = File.ReadAllText(Path.Combine(folder, "status.md"));
+        Assert.Contains(HumanReviewEscalationCategories.RemoteClaimEnvironment, status);
+        Assert.Contains("clone failed: 403 agent-orc/website", status);
+    }
+
     private void WriteJob(string state, string slug)
     {
         var dir = Path.Combine(_watchPath, state, slug);

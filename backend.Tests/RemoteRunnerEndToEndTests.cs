@@ -350,6 +350,187 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Remote_blocked_without_reason_goes_to_escalated_with_a_stated_diagnostic()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote blocked", "Try the requested operation.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"),
+            CancellationToken.None);
+        Assert.True(lease.Granted);
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease!.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Blocked",
+            Reason: null,
+            Source: ProjectName,
+            AttemptId: lease.Lease.AttemptId,
+            AuthorityEpoch: lease.Lease.AuthorityEpoch,
+            IdempotencyKey: "blocked-without-reason"), CancellationToken.None);
+
+        Assert.NotNull(completion);
+        Assert.Equal(TaskStates.Escalated, completion!.TargetState);
+        Assert.Contains("without a stated reason", completion.Message, StringComparison.OrdinalIgnoreCase);
+        var folder = Path.Combine(_watchPath, TaskStates.Escalated, TaskKey);
+        Assert.True(Directory.Exists(folder));
+        var status = File.ReadAllText(Path.Combine(folder, "status.md"));
+        Assert.Contains("agent-blocked", status);
+        Assert.Contains("without a stated reason", status, StringComparison.OrdinalIgnoreCase);
+        var decision = Assert.Single(ReviewDecisionLog.ReadAll(_workspace, ProjectName));
+        Assert.Equal(ReviewDecisionKind.Escalate, decision.Kind);
+        Assert.Contains("[agent-blocked]", decision.Reason);
+    }
+
+    [Fact]
+    public async Task Remote_claim_environment_failure_retries_twice_then_escalates_with_last_reason()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "Clone failure budget", "Implement the task.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/website.git");
+
+        for (var attempt = 1; attempt <= RemoteClaimFailureBudget.MaxAttempts; attempt++)
+        {
+            var claim = await client.ClaimAsync(new RClaim(
+                RunnerId,
+                ProjectName,
+                "hetzner-test",
+                4242,
+                "remote-runner",
+                IdempotencyKey: $"environment-claim-{attempt}"),
+                CancellationToken.None);
+            Assert.Equal(RClaimStatus.Claimed, claim.Status);
+
+            var completion = await client.CompleteRunAsync(new RRemoteComplete(
+                claim.TaskKey!,
+                claim.Lease!.LeaseId,
+                claim.Lease.FencingToken,
+                RunnerId,
+                "EnvironmentFailure",
+                Reason: "clone failed: 403 agent-orc/website",
+                Source: ProjectName,
+                AttemptId: claim.Lease.AttemptId,
+                AuthorityEpoch: claim.Lease.AuthorityEpoch,
+                IdempotencyKey: $"environment-completion-{attempt}"), CancellationToken.None);
+            await client.ReleaseLeaseAsync(new RRelease(
+                claim.TaskKey!,
+                claim.Lease.LeaseId,
+                claim.Lease.FencingToken,
+                RunnerId,
+                claim.Lease.AttemptId,
+                claim.Lease.AuthorityEpoch,
+                $"environment-release-{attempt}"), CancellationToken.None);
+
+            var expectedState = attempt < RemoteClaimFailureBudget.MaxAttempts
+                ? TaskStates.Ready
+                : TaskStates.Escalated;
+            Assert.Equal(expectedState, completion!.TargetState);
+            Assert.True(Directory.Exists(Path.Combine(_watchPath, expectedState, TaskKey)));
+        }
+
+        var escalated = Path.Combine(_watchPath, TaskStates.Escalated, TaskKey);
+        var status = File.ReadAllText(Path.Combine(escalated, "status.md"));
+        Assert.Contains("remote-claim-environment", status);
+        Assert.Contains("3/3", status);
+        Assert.Contains("clone failed: 403 agent-orc/website", status);
+
+        var noFourthClaim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"),
+            CancellationToken.None);
+        Assert.Equal(RClaimStatus.Empty, noFourthClaim.Status);
+    }
+
+    [Fact]
+    public async Task Remote_runner_reports_clone_failure_instead_of_releasing_an_unexplained_claim()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "Clone failure handoff", "Implement the task.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/website.git");
+        var claim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"),
+            CancellationToken.None);
+
+        var options = RunnerOptions("unused-after-clone-failure");
+        var logs = new List<string>();
+        var runner = new RTaskRunner(options, client, logs.Add);
+        var missingOrigin = Path.Combine(_workspace, "missing-origin.git");
+
+        var exit = await runner.RunClaimedAsync(
+            claim.TaskKey!,
+            claim.Lease!,
+            CancellationToken.None,
+            claim.ProjectId,
+            missingOrigin,
+            "main",
+            claim.TaskKind);
+
+        Assert.Equal(1, exit);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+        Assert.Contains(logs, line =>
+            line.Contains("EnvironmentFailure", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("clone failed", StringComparison.OrdinalIgnoreCase));
+        var taskJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.Ready, TaskKey, "task.json"));
+        Assert.Contains("\"attempts\": 1", taskJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Remote_runner_counts_unstartable_cli_as_pre_agent_environment_failure()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "CLI environment failure", "Implement the task.");
+        var origin = await SeedOriginAsync();
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/example/cli-environment.git");
+        var claim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"),
+            CancellationToken.None);
+
+        var logs = new List<string>();
+        var runner = new RTaskRunner(
+            RunnerOptions(Path.Combine(_workspace, "missing-cli")),
+            client,
+            logs.Add);
+
+        var exit = await runner.RunClaimedAsync(
+            claim.TaskKey!,
+            claim.Lease!,
+            CancellationToken.None,
+            claim.ProjectId,
+            origin,
+            "main",
+            claim.TaskKind);
+
+        Assert.Equal(1, exit);
+        var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, TaskKey);
+        Assert.True(Directory.Exists(readyFolder));
+        var taskJson = File.ReadAllText(Path.Combine(readyFolder, "task.json"));
+        Assert.Contains("\"attempts\": 1", taskJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("environment preparation failed", taskJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(logs, line =>
+            line.Contains("EnvironmentFailure", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Remote_done_without_fenced_result_sha_fails_closed_before_review()
     {
         SeedTask(TaskStates.Progress, TaskKey, "Remote done", "Make a trivial change.");
@@ -503,8 +684,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             IdempotencyKey: "cleanup-blocked-1",
             GateItems: [gate]), ct);
 
-        Assert.Equal(TaskStates.HumanReview, completion!.TargetState);
-        var moved = Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey);
+        Assert.Equal(TaskStates.Escalated, completion!.TargetState);
+        var moved = Path.Combine(_watchPath, TaskStates.Escalated, TaskKey);
         Assert.Contains(gate, File.ReadAllText(Path.Combine(moved, "orchestrator-follow-up.md")));
         var projection = await http.GetFromJsonAsync<AttemptAuthorityProjection>(
             $"/api/attempts/tasks/{TaskKey}", ApiJson, ct);
@@ -963,6 +1144,25 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             new { executionRunner = ProjectName, remoteExecutionEnabled = true });
         assignment.EnsureSuccessStatusCode();
     }
+
+    private ROptions RunnerOptions(string cliBin) => new()
+    {
+        ServerUrl = "http://in-process",
+        RunnerId = RunnerId,
+        RunnerName = ProjectName,
+        Hostname = "hetzner-test",
+        BackendName = "remote-runner",
+        WorkDir = Path.Combine(_workspace, "remote-runner-work"),
+        StateDir = Path.Combine(_workspace, "remote-runner-work", ".runner-state"),
+        BaseBranch = "main",
+        CliBin = cliBin,
+        CliArgs = "",
+        TtlSeconds = 120,
+        HeartbeatSeconds = 30,
+        RunTimeoutSeconds = 30,
+        HostMaxParallelism = 1,
+        PollSeconds = 1,
+    };
 
     private void SeedTask(
         string state, string key, string title, string promptBody,
