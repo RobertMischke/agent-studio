@@ -144,6 +144,7 @@ public static class LeaseEndpoints
             AgentStudio.Clients.HostTelemetryStore telemetry,
             AccessSecurityStore accessSecurity,
             HumanReviewEscalation humanReviewEscalation,
+            IConfiguration configuration,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
@@ -185,8 +186,6 @@ public static class LeaseEndpoints
                         : client.RetireRequestedAt is not null
                             ? "runner is draining and will retire after active work finishes"
                             : "runner is draining; no new leases are admitted"));
-            if (req.AvailableSlots <= 0)
-                return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "telemetry recorded; no free host slots"));
             await ClaimGate.WaitAsync(ct);
             try
             {
@@ -256,12 +255,20 @@ public static class LeaseEndpoints
                 var allWithArchive = scanner.ScanAllJobsWithArchive();
                 var waitsOn = TaskReferenceIndex.Build(allWithArchive);
                 var recoveredSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var activeTaskKeys = req.ActiveTaskKeys is null
+                    ? null
+                    : req.ActiveTaskKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var requeueGraceSeconds = Math.Clamp(
+                    configuration.GetValue("Runner:RemoteRequeue:GraceSeconds", 120),
+                    1,
+                    900);
+                var now = DateTime.UtcNow;
 
-                // A daemon restart releases its lease but may leave the card in
-                // Progress. Requeue only server-assigned remote work whose lease
-                // is now free; the next claim mints a higher fence. This covers
-                // both coding tasks and Epic planning without touching locally
-                // owned Progress cards.
+                // A daemon or server restart may leave the card in Progress while
+                // its original CLI still runs. A free lease is therefore not
+                // enough to requeue: wait through the authority grace and require
+                // this assigned runner poll to answer that the task is absent
+                // from its active process set.
                 foreach (var interrupted in scanner.ScanAllJobs().Where(t => t.State == TaskStates.Progress))
                 {
                     var project = settings.Get(interrupted.ProjectName);
@@ -273,6 +280,22 @@ public static class LeaseEndpoints
                         continue;
                     var interruptedKey = interrupted.Key ?? interrupted.TaskKey ?? interrupted.Id;
                     if (leases.Peek(interruptedKey).Outcome != "Free") continue;
+                    var inspection = leases.Inspect(interruptedKey);
+                    var lastAuthorityActivity = inspection.Lease?.LastHeartbeatAt
+                                                ?? interrupted.EnteredLaneAt;
+                    var requeueDecision = RemoteRunRequeuePolicy.Decide(
+                        new RemoteRunRequeueFacts(
+                            Math.Max(0, (now - lastAuthorityActivity.ToUniversalTime()).TotalSeconds),
+                            requeueGraceSeconds,
+                            RunnerRespondedWithActiveSet: activeTaskKeys is not null,
+                            RunnerReportsTaskActive: activeTaskKeys?.Contains(interruptedKey) == true));
+                    if (requeueDecision.Action != RemoteRunRequeueAction.Requeue)
+                    {
+                        logger.LogInformation(
+                            "remote-runner-requeue-deferred task={TaskKey} runner={Runner} reason={Reason} detail={Detail}",
+                            interruptedKey, req.RunnerName, requeueDecision.ReasonCode, requeueDecision.Detail);
+                        continue;
+                    }
                     var recoveryWrite = leases.CurrentWriteReference(
                         interruptedKey,
                         $"lane-recovery:{interruptedKey}:{req.RunnerId.Trim()}");
@@ -310,6 +333,11 @@ public static class LeaseEndpoints
                     if (recoveryWrite is not null)
                         recoveredSources[interruptedKey] = recoveryWrite.AttemptId;
                 }
+
+                if (req.AvailableSlots <= 0)
+                    return Results.Ok(new RunnerClaimResponse(
+                        RunnerClaimStatus.Empty,
+                        Message: "runner status recorded; no free host slots"));
 
                 var eligible = scanner.ScanAllJobs()
                     .Where(t => t.State == TaskStates.Ready)

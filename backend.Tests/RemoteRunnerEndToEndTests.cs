@@ -987,24 +987,39 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     [Theory]
     [InlineData(TaskKinds.Task)]
     [InlineData(TaskKinds.Epic)]
-    public async Task Remote_claim_recovers_progress_card_after_lease_is_released(string kind)
+    public async Task Remote_claim_requeues_only_after_grace_and_runner_confirms_inactive(string kind)
     {
         SeedTask(TaskStates.Ready, TaskKey, "Restart recovery", "Prompt.", kind: kind);
-        using var factory = BuildFactory();
+        using var factory = BuildFactory(remoteRequeueGraceSeconds: 1);
         using var http = factory.CreateClient();
         using var client = new RClient(http, RunnerId);
         await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
         await AssignRemoteAsync(http);
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
         var first = await client.ClaimAsync(new RClaim(
-            RunnerId, ProjectName, "host", 1, "remote-runner"), CancellationToken.None);
+            RunnerId, ProjectName, "host", 1, "remote-runner",
+            ActiveTaskKeys: []), CancellationToken.None);
         await client.ReleaseLeaseAsync(new RRelease(
             first.TaskKey!, first.Lease!.LeaseId, first.Lease.FencingToken, RunnerId,
             first.Lease.AttemptId, first.Lease.AuthorityEpoch,
             $"release:{first.Lease.AttemptId}"), CancellationToken.None);
 
+        var insideGrace = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "host", 2, "remote-runner",
+            ActiveTaskKeys: []), CancellationToken.None);
+        Assert.Equal(RClaimStatus.Empty, insideGrace.Status);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+
+        await Task.Delay(TimeSpan.FromMilliseconds(1100));
+        var runnerStillActive = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "host", 2, "remote-runner",
+            ActiveTaskKeys: [first.TaskKey!]), CancellationToken.None);
+        Assert.Equal(RClaimStatus.Empty, runnerStillActive.Status);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+
         var recovered = await client.ClaimAsync(new RClaim(
-            RunnerId, ProjectName, "host", 2, "remote-runner"), CancellationToken.None);
+            RunnerId, ProjectName, "host", 2, "remote-runner",
+            ActiveTaskKeys: []), CancellationToken.None);
 
         Assert.Equal(RClaimStatus.Claimed, recovered.Status);
         Assert.Equal(TaskKey, recovered.JobId);
@@ -1098,7 +1113,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     private WebApplicationFactory<Program> BuildFactory(
-        IAtomicJsonFileWriter? writer = null) =>
+        IAtomicJsonFileWriter? writer = null,
+        int? remoteRequeueGraceSeconds = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -1113,6 +1129,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                         ["WatchPaths:0:RootPath"] = _watchPath,
                         ["WatchPaths:0:RepositoryPath"] = _watchPath,
                         ["ReviewDecisionOrchestrator:Enabled"] = "false",
+                        ["Runner:RemoteRequeue:GraceSeconds"] =
+                            remoteRequeueGraceSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     });
                 });
                 if (writer is not null)

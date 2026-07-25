@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace AgentRunner;
 
@@ -34,11 +35,24 @@ public static class ProcessRunner
         Action<string>? onStdErr = null,
         IReadOnlyDictionary<string, string?>? environment = null,
         bool clearEnvironment = false,
+        bool isolateProcessGroup = false,
         CancellationToken ct = default)
     {
+        var actualFileName = fileName;
+        IReadOnlyList<string> actualArguments = arguments;
+        if (isolateProcessGroup && OperatingSystem.IsLinux())
+        {
+            var setsid = File.Exists("/usr/bin/setsid") ? "/usr/bin/setsid"
+                : File.Exists("/bin/setsid") ? "/bin/setsid"
+                : throw new InvalidOperationException(
+                    "Agent CLI process-group isolation requires the Linux 'setsid' utility.");
+            actualFileName = setsid;
+            actualArguments = [fileName, .. arguments];
+        }
+
         var psi = new ProcessStartInfo
         {
-            FileName = fileName,
+            FileName = actualFileName,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             RedirectStandardInput = stdin != null,
@@ -47,7 +61,7 @@ public static class ProcessRunner
             WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory,
         };
         if (clearEnvironment) psi.Environment.Clear();
-        foreach (var arg in arguments) psi.ArgumentList.Add(arg);
+        foreach (var arg in actualArguments) psi.ArgumentList.Add(arg);
         if (environment != null)
             foreach (var (key, value) in environment)
                 psi.Environment[key] = value;
@@ -103,7 +117,7 @@ public static class ProcessRunner
         }
         catch (OperationCanceledException)
         {
-            TryKill(process);
+            TryKill(process, isolateProcessGroup);
             throw;
         }
 
@@ -113,11 +127,28 @@ public static class ProcessRunner
         return new ProcessResult(process.ExitCode, outBuf.ToString(), errBuf.ToString());
     }
 
-    private static void TryKill(Process process)
+    private static void TryKill(Process process, bool isolatedProcessGroup)
     {
+        if (isolatedProcessGroup && OperatingSystem.IsLinux())
+        {
+            try
+            {
+                if (!process.HasExited)
+                    _ = kill(-process.Id, SigKill);
+            }
+            catch
+            {
+                // Fall through to the runtime's descendant-tree kill.
+            }
+        }
         try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
         catch { /* best effort: the run is already being torn down */ }
     }
+
+    private const int SigKill = 9;
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int kill(int pid, int signal);
 }
 
 /// <summary>

@@ -103,7 +103,8 @@ public sealed record RunnerClaimRequest(
     AgentStudio.Clients.HostTelemetrySample? Telemetry = null,
     int AvailableSlots = 1,
     int? ActiveSlots = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    IReadOnlyList<string>? ActiveTaskKeys = null);
 
 /// <summary>Typed status handed back by one daemon pickup poll.</summary>
 public enum RunnerClaimStatus

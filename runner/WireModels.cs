@@ -107,7 +107,8 @@ public sealed record RunnerClaimRequest(
     HostTelemetrySample? Telemetry = null,
     int AvailableSlots = 1,
     int? ActiveSlots = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    IReadOnlyList<string>? ActiveTaskKeys = null);
 
 /// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>
 public sealed record HostTelemetrySample(
