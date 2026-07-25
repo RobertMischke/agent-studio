@@ -136,6 +136,9 @@ static void PrintUsage()
           --cli <bin>             Agent CLI binary            (RUNNER_CLI_BIN)
           --cli-args "<args>"     Headless CLI args           (RUNNER_CLI_ARGS)
           --auth-token-file <p>   Protected credential file  (RUNNER_AUTH_TOKEN_FILE)
+          --tls-certificate-sha256 <hex>
+                                  Private-CA/rehearsal certificate pin
+                                                            (RUNNER_TLS_CERTIFICATE_SHA256)
           --ttl <seconds>         Requested lease TTL         (RUNNER_TTL_SECONDS)
           --max-parallelism <n>   Daemon host slots            (RUNNER_MAX_PARALLELISM, default 2)
           --poll-seconds <n>      Empty-queue poll delay       (RUNNER_POLL_SECONDS, default 5)

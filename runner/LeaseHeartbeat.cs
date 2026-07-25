@@ -44,7 +44,8 @@ public sealed class LeaseHeartbeat
     public async Task RunAsync(CancellationTokenSource stopRun, CancellationToken shutdown)
     {
         var interval = TimeSpan.FromSeconds(Math.Max(5, _options.HeartbeatSeconds));
-        var authorityExpiresAt = _lease.ExpiresAt;
+        var authorityExpiresAt = _lease.ExpiresAt.ToUniversalTime();
+        var uncertaintyMargin = TimeSpan.FromSeconds(Math.Max(1, interval.TotalSeconds));
         try
         {
             while (!stopRun.IsCancellationRequested && !shutdown.IsCancellationRequested)
@@ -71,18 +72,22 @@ public sealed class LeaseHeartbeat
                 }
                 catch (Exception ex)
                 {
-                    // A transient network error is not proof of a takeover while
-                    // the last acknowledged lease window is still open. Once that
-                    // window closes, continuing the process would be an unfenced
-                    // split brain, so fail closed and reap it.
-                    if (DateTime.UtcNow >= authorityExpiresAt)
+                    // A transient network error is not proof of a takeover. It
+                    // does, however, consume the bounded server-issued authority
+                    // window. Stop before the last known expiry minus one renewal
+                    // interval so suspend, clock, and transport uncertainty cannot
+                    // turn an unreachable Task Server into autonomous execution.
+                    var stopBefore = authorityExpiresAt - uncertaintyMargin;
+                    if (DateTime.UtcNow >= stopBefore)
                     {
                         MarkLeaseLost(
                             stopRun,
-                            $"renewal could not be confirmed before lease expiry {authorityExpiresAt:o}: {ex.Message}");
+                            "renewal safety boundary reached: task-server-unavailable; " +
+                            $"stop-before={stopBefore:o}; cancelling and reaping the active process generation: {ex.Message}");
                         return;
                     }
-                    _log($"heartbeat error (will retry): {ex.Message}");
+
+                    _log($"heartbeat error (will retry before {stopBefore:o}): {ex.Message}");
                     await _delay(interval, stopRun.Token);
                     continue;
                 }
@@ -93,7 +98,7 @@ public sealed class LeaseHeartbeat
                     return;
                 }
                 if (resp.Lease is not null)
-                    authorityExpiresAt = resp.Lease.ExpiresAt;
+                    authorityExpiresAt = resp.Lease.ExpiresAt.ToUniversalTime();
                 _inventory?.Apply(resp.ReconciliationActions);
                 await _delay(interval, stopRun.Token);
             }

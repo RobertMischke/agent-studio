@@ -7,9 +7,30 @@ var taskServerUrl = builder.Configuration["TaskServer:BaseUrl"]
 builder.Services.AddHttpClient("task-server", client =>
 {
     client.BaseAddress = new Uri(taskServerUrl);
+    var bearerToken = builder.Configuration["TaskServer:BearerToken"];
+    if (!string.IsNullOrWhiteSpace(bearerToken))
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
     client.DefaultRequestHeaders.Add(TaskServerProtocol.HeaderName, TaskServerProtocol.Current.ToString());
     client.DefaultRequestHeaders.Add(TaskServerProtocol.ClientVersionHeaderName,
         typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0");
+})
+.ConfigurePrimaryHttpMessageHandler(() =>
+{
+    var expectedFingerprint = builder.Configuration["TaskServer:TlsServerCertificateSha256"]?.Trim();
+    if (string.IsNullOrWhiteSpace(expectedFingerprint))
+        return new HttpClientHandler();
+    return new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = (_, certificate, _, errors) =>
+            certificate is not null
+            && (errors & ~System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors) == 0
+            && certificate.NotBefore.ToUniversalTime() <= DateTime.UtcNow
+            && certificate.NotAfter.ToUniversalTime() >= DateTime.UtcNow
+            && string.Equals(
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(certificate.RawData)),
+                expectedFingerprint,
+                StringComparison.OrdinalIgnoreCase),
+    };
 });
 
 var app = builder.Build();

@@ -154,6 +154,19 @@ public class RunnerOptionsTests
         => Assert.Throws<ArgumentException>(() => RunnerOptions.Parse([
             "--server", "https://tasks.example.com", "--auth-token", "rnr.test.secret-value-long-enough"]));
 
+    [Fact]
+    public void Private_ca_certificate_pin_is_not_treated_as_a_secret()
+    {
+        using var token = new TemporaryTokenFile();
+        var fingerprint = new string('A', 64);
+        var (options, _, _, _) = RunnerOptions.Parse([
+            "--server", "https://tasks.example.com",
+            "--auth-token-file", token.Path,
+            "--tls-certificate-sha256", fingerprint]);
+
+        Assert.Equal(fingerprint, options.TlsServerCertificateSha256);
+    }
+
     private sealed class TemporaryTokenFile : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "runner-token-" + Guid.NewGuid().ToString("N"));

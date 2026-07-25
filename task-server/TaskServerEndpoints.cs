@@ -41,6 +41,9 @@ public static class TaskServerEndpoints
         api.MapGet("/projects/{projectId}/tasks/{taskIdentity}/attempts", async (
             string projectId, string taskIdentity, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.ListAttemptsAsync(projectId, taskIdentity, ct)));
+        api.MapGet("/projects/{projectId}/tasks/{taskIdentity}/history", async (
+            string projectId, string taskIdentity, long? after, TaskServerStore store, CancellationToken ct)
+            => await InvokeNullableAsync(() => store.GetTaskHistoryAsync(projectId, taskIdentity, after ?? 0, ct)));
         api.MapPost("/projects/{projectId}/tasks", async (
             HttpContext context, string projectId, CreateTaskRequest request, TaskServerStore store, CancellationToken ct)
             => await InvokeAsync(() => store.CreateTaskAsync(projectId, request, Actor(context), ct), StatusCodes.Status201Created));

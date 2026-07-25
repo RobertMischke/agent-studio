@@ -11,6 +11,10 @@ public sealed class TaskServerOptions
     public int ResultRetentionDays { get; set; } = 30;
     public int InvariantReconciliationSeconds { get; set; } = 30;
     public int InventoryGraceSeconds { get; set; } = 120;
+    public int MaximumEventPayloadBytes { get; set; } = 256 * 1024;
+    public bool RequireAuthentication { get; set; }
+    public string? StudioBearerToken { get; set; }
+    public string? RunnerBearerToken { get; set; }
 
     public string ResolveDataDirectory()
     {

@@ -160,10 +160,28 @@ public sealed class TaskServerStoreTests
             Assert.Equal(TaskServerMode.Maintenance, store.Mode);
             Assert.Equal(serverId, store.ServerId);
             Assert.Single(await store.ListTasksAsync(project.ProjectId, default));
-            Assert.Single(await store.ListEventsAsync(runId, 0, default));
+            var restoredEvents = await store.ListEventsAsync(runId, 0, default);
+            Assert.Equal(3, restoredEvents.Count);
+            Assert.Contains(restoredEvents, item => item.Kind == LifecycleEventKinds.RunCompleted);
+            Assert.Contains(restoredEvents, item => item.Kind == LifecycleEventKinds.PostProcessingCompleted);
             Assert.Single(await store.ListArtifactsAsync(runId, default));
             Assert.Contains(await store.ListAuditAsync(0, default), record => record.Action == "run.claimed");
             Assert.Equal(task.TaskId, (await store.GetTaskAsync(project.ProjectId, task.TaskKey, default))!.TaskId);
+            var history = await store.GetTaskHistoryAsync(project.ProjectId, task.TaskKey, 0, default);
+            Assert.NotNull(history);
+            Assert.Single(history.Runs);
+            Assert.Equal(restoredEvents, history.Events);
+            Assert.Single(history.Artifacts);
+            Assert.Contains(history.Audit, record => record.Action == "run.completed");
+            Assert.Equal(restoredEvents[^1].Cursor, history.LastCursor);
+
+            var incremental = await store.GetTaskHistoryAsync(
+                project.ProjectId,
+                task.TaskKey,
+                restoredEvents[0].Cursor,
+                default);
+            Assert.NotNull(incremental);
+            Assert.All(incremental.Events, item => Assert.True(item.Cursor > restoredEvents[0].Cursor));
         });
     }
 
@@ -451,6 +469,40 @@ public sealed class TaskServerStoreTests
         Assert.Equal(ExecutionOutcomeKind.AuthenticationFailure, timeline.OutcomeDecision!.Outcome);
         Assert.Equal(ExecutionRecoveryAction.WaitForCapabilityRecovery, timeline.OutcomeDecision.RecoveryAction);
         Assert.Equal("HTTP 401 Missing bearer authentication", timeline.OutcomeDecision.RawFacts.StdErr);
+    }
+
+    [Fact]
+    public async Task Typed_event_payloads_fail_before_persistence_when_the_bound_is_exceeded()
+    {
+        using var temp = new TempDirectory();
+        var store = new TaskServerStore(
+            Options.Create(new TaskServerOptions
+            {
+                DataDirectory = temp.Path,
+                MaximumEventPayloadBytes = 128,
+            }),
+            TimeProvider.System);
+        await store.InitializeAsync();
+        await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "test",
+            default);
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => store.IngestEventAsync(
+            claim.Run!.RunId,
+            new EventIngestRequest(
+                "evt-oversized",
+                LifecycleEventKinds.ToolTrace,
+                new string('x', 129),
+                "oversized-event",
+                claim.Lease!.Fence),
+            "runner-a",
+            default));
+
+        Assert.Contains("128-byte limit", error.Message);
+        Assert.Empty(await store.ListEventsAsync(claim.Run!.RunId, 0, default));
     }
 
     [Fact]

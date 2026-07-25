@@ -1,86 +1,797 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Runtime.Versioning;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using AgentStudio.TaskServer.Contracts;
 using Xunit;
 
 namespace TaskServer.Tests;
 
-// MachineBound 22.07.: startet drei echte Dienste (task-server, studio-bff, runner) als
-// Prozesse und bindet freie Ports - per Definition maschinengebunden, darf nicht im Gate laufen.
 [Trait("Category", "MachineBound")]
 public sealed class TopologyTests
 {
-    [Fact(Timeout = 60000)]
-    public async Task Task_server_studio_bff_and_runner_have_independent_process_lifecycles()
+    [Fact(Timeout = 90000)]
+    public async Task Client_off_golden_path_replays_canonical_history_without_owning_review_reissue()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
+
         var root = ProtocolTests.RepositoryRoot();
         using var data = new TempDirectory();
         using var runnerWork = new TempDirectory();
+        using var repository = new TempDirectory();
+        using var fixture = new TempDirectory();
+        var bareRepository = await CreateBareRepositoryAsync(repository.Path);
+        var fakeCli = await CreateFakeCliAsync(fixture.Path);
+        var releaseFile = Path.Combine(fixture.Path, "release");
+        var invocationCounter = Path.Combine(fixture.Path, "invocations");
         var serverUrl = $"http://127.0.0.1:{FreePort()}";
         var studioUrl = $"http://127.0.0.1:{FreePort()}";
-        using var server = Start(root, "task-server/TaskServer.csproj",
+
+        using var server = StartBuilt(
+            root,
+            "task-server",
+            "agent-task-server.dll",
             "--urls", serverUrl,
-            "--TaskServer:DataDirectory", data.Path);
-        var serverPid = server.Process.Id;
-        await WaitForAsync(serverUrl + "/readyz");
+            "--TaskServer:DataDirectory", data.Path,
+            "--TaskServer:MinimumLeaseSeconds", "5",
+            "--TaskServer:MaximumLeaseSeconds", "30");
+        await WaitForHttpAsync(serverUrl + "/readyz", server);
 
-        using var serverClient = new HttpClient { BaseAddress = new Uri(serverUrl) };
-        var initial = await serverClient.GetFromJsonAsync<TaskServerStatusDto>("/api/v1/management/status");
-        Assert.NotNull(initial);
+        using var studio = StartStudio(root, studioUrl, serverUrl);
+        await WaitForHttpAsync(studioUrl + "/healthz", studio);
+        using var studioClient = Client(studioUrl);
+        var workspace = await PostAsync<CreateWorkspaceRequest, WorkspaceDto>(
+            studioClient,
+            "/api/v1/workspaces",
+            new CreateWorkspaceRequest("Topology proof"));
+        var project = await PostAsync<CreateProjectRequest, ProjectDto>(
+            studioClient,
+            "/api/v1/projects",
+            new CreateProjectRequest(workspace.WorkspaceId, "Agent Studio", "TOP"));
+        var task = await PostAsync<CreateTaskRequest, TaskDto>(
+            studioClient,
+            $"/api/v1/projects/{project.ProjectId}/tasks",
+            new CreateTaskRequest(
+                "Client-off lifecycle proof",
+                "Produce bounded typed evidence and finish with the required terminal sentinel.",
+                "2-ready"));
 
-        using var studio = Start(root, "studio-bff/StudioBff.csproj",
-            "--urls", studioUrl,
-            "--TaskServer:BaseUrl", serverUrl);
-        await WaitForAsync(studioUrl + "/healthz");
-        using var studioClient = new HttpClient { BaseAddress = new Uri(studioUrl) };
-        var throughStudio = await studioClient.GetFromJsonAsync<TaskServerStatusDto>("/api/v1/management/status");
-        Assert.Equal(initial.ServerId, throughStudio!.ServerId);
-
-        using var runner = Start(root, "runner/AgentRunner.csproj",
+        using var runner = StartBuilt(
+            root,
+            "runner",
+            "agent-runner.dll",
+            new Dictionary<string, string?>
+            {
+                ["RUNNER_HEARTBEAT_SECONDS"] = "5",
+                ["RUNNER_RUN_TIMEOUT_SECONDS"] = "45",
+                ["TOPOLOGY_RELEASE_FILE"] = releaseFile,
+                ["TOPOLOGY_INVOCATION_COUNTER"] = invocationCounter,
+            },
             "--poll",
             "--server", serverUrl,
             "--runner-id", "topology-runner",
             "--runner-name", "topology-runner",
+            "--hostname", "topology-host",
+            "--git-remote", bareRepository,
             "--workdir", runnerWork.Path,
+            "--cli", "/bin/sh",
+            "--cli-args", fakeCli,
+            "--ttl", "15",
+            "--max-parallelism", "1",
             "--poll-seconds", "1");
-        await WaitForAuditAsync(serverClient, "runner.registered");
-        Assert.False(runner.Process.HasExited);
 
+        using var serverClient = Client(serverUrl);
+        await WaitForAuditCountAsync(serverClient, "run.claimed", 1, runner);
+        var activeHistory = await serverClient.GetFromJsonAsync<TaskHistoryDto>(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
+        Assert.NotNull(activeHistory);
+        var activeRun = Assert.Single(activeHistory.Runs);
+        AssertIndependentParents(studio.Process, server.Process, runner.Process);
+
+        var serverPid = server.Process.Id;
+        var runnerPid = runner.Process.Id;
         studio.Stop();
-        Assert.False(server.Process.HasExited);
-        Assert.False(runner.Process.HasExited);
-        var whileDetached = await serverClient.GetFromJsonAsync<TaskServerStatusDto>("/api/v1/management/status");
-        Assert.Equal(initial.ServerId, whileDetached!.ServerId);
+        AssertHealthy(server, serverPid);
+        AssertHealthy(runner, runnerPid);
 
-        using var restartedStudio = Start(root, "studio-bff/StudioBff.csproj",
+        for (var restart = 0; restart < 3; restart++)
+        {
+            using var replacementStudio = StartStudio(root, studioUrl, serverUrl);
+            await WaitForHttpAsync(studioUrl + "/healthz", replacementStudio);
+            using var replacementClient = Client(studioUrl);
+            var status = await replacementClient.GetFromJsonAsync<TaskServerStatusDto>("/api/v1/management/status");
+            Assert.NotNull(status);
+            var replayedActive = await replacementClient.GetFromJsonAsync<TaskHistoryDto>(
+                $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
+            Assert.NotNull(replayedActive);
+            var replayedRun = Assert.Single(replayedActive.Runs);
+            Assert.Equal(activeRun.RunId, replayedRun.RunId);
+            Assert.Equal(activeRun.Fence, replayedRun.Fence);
+            Assert.Equal("3-progress", replayedActive.Task.State);
+            AssertHealthy(server, serverPid);
+            AssertHealthy(runner, runnerPid);
+            replacementStudio.Stop();
+        }
+
+        await File.WriteAllTextAsync(releaseFile, "continue");
+        await WaitForAuditCountAsync(serverClient, "run.completed", 1, runner, TimeSpan.FromSeconds(45));
+        await WaitForTaskStateAsync(
+            serverClient,
+            project.ProjectId,
+            task.TaskKey,
+            "4-auto-review",
+            runner,
+            TimeSpan.FromSeconds(20));
+
+        using var freshStudio = StartStudio(root, studioUrl, serverUrl);
+        await WaitForHttpAsync(studioUrl + "/healthz", freshStudio);
+        using var freshClient = Client(studioUrl);
+        var history = await freshClient.GetFromJsonAsync<TaskHistoryDto>(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
+
+        Assert.NotNull(history);
+        Assert.Equal(task.TaskId, history.Task.TaskId);
+        Assert.Equal("4-auto-review", history.Task.State);
+        Assert.Single(history.Runs);
+        Assert.Single(history.Events, item =>
+            item.Kind == LifecycleEventKinds.AgentMessage
+            && item.PayloadJson.Contains("agent_message", StringComparison.Ordinal));
+        Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.ToolTrace);
+        Assert.Contains(history.Events, item =>
+            item.Kind == LifecycleEventKinds.AgentMessage
+            && item.PayloadJson.Contains("attempt 1 complete", StringComparison.Ordinal));
+        Assert.Contains(history.Events, item => item.Kind == LifecycleEventKinds.RunnerTrace);
+        Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.RunCompleted);
+        Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.PostProcessingCompleted);
+        Assert.DoesNotContain(history.Events, item => item.Kind == LifecycleEventKinds.Reissued);
+        Assert.DoesNotContain(history.Events, item => item.Kind == LifecycleEventKinds.TerminalHandoff);
+        Assert.Single(history.Artifacts);
+        Assert.StartsWith("results/proof-attempt-", history.Artifacts[0].Name);
+        Assert.Equal(history.Events.Max(item => item.Cursor), history.LastCursor);
+        Assert.Contains(history.Audit, item => item.Action == "run.claimed");
+        Assert.Single(history.Audit, item => item.Action == "run.completed");
+
+        var replayAfterFirstRun = await freshClient.GetFromJsonAsync<TaskHistoryDto>(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history?after=" +
+            history.Events.First(item => item.Kind == LifecycleEventKinds.AgentMessage).Cursor);
+        Assert.NotNull(replayAfterFirstRun);
+        Assert.All(replayAfterFirstRun.Events, item =>
+            Assert.True(item.Cursor > history.Events.First(e => e.Kind == LifecycleEventKinds.AgentMessage).Cursor));
+        Assert.Contains(replayAfterFirstRun.Events, item => item.Kind == LifecycleEventKinds.RunCompleted);
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task Server_outage_and_runner_restart_fail_closed_until_no_overlap_is_proven()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = ProtocolTests.RepositoryRoot();
+        using var data = new TempDirectory();
+        using var runnerWork = new TempDirectory();
+        using var repository = new TempDirectory();
+        using var fixture = new TempDirectory();
+        var bareRepository = await CreateBareRepositoryAsync(repository.Path);
+        var fakeCli = await CreateFakeCliAsync(fixture.Path);
+        var releaseFile = Path.Combine(fixture.Path, "release");
+        var invocationCounter = Path.Combine(fixture.Path, "invocations");
+        var serverUrl = $"http://127.0.0.1:{FreePort()}";
+
+        using var firstServer = StartBuilt(
+            root,
+            "task-server",
+            "agent-task-server.dll",
+            "--urls", serverUrl,
+            "--TaskServer:DataDirectory", data.Path,
+            "--TaskServer:MinimumLeaseSeconds", "5",
+            "--TaskServer:MaximumLeaseSeconds", "15");
+        await WaitForHttpAsync(serverUrl + "/readyz", firstServer);
+        using var client = Client(serverUrl);
+        var (project, task) = await SeedReadyTaskAsync(client, "OUT");
+
+        using var originalRunner = StartBuilt(
+            root,
+            "runner",
+            "agent-runner.dll",
+            new Dictionary<string, string?>
+            {
+                ["RUNNER_HEARTBEAT_SECONDS"] = "5",
+                ["RUNNER_RUN_TIMEOUT_SECONDS"] = "60",
+                ["TOPOLOGY_RELEASE_FILE"] = releaseFile,
+                ["TOPOLOGY_INVOCATION_COUNTER"] = invocationCounter,
+            },
+            "--poll",
+            "--server", serverUrl,
+            "--runner-id", "outage-runner",
+            "--runner-name", "outage-runner",
+            "--hostname", "outage-host",
+            "--git-remote", bareRepository,
+            "--workdir", runnerWork.Path,
+            "--cli", "/bin/sh",
+            "--cli-args", fakeCli,
+            "--ttl", "10",
+            "--max-parallelism", "1",
+            "--poll-seconds", "1");
+        await WaitForAuditCountAsync(client, "run.claimed", 1, originalRunner);
+
+        firstServer.Stop();
+        await WaitForOutputAsync(
+            originalRunner,
+            "renewal safety boundary reached: task-server-unavailable",
+            TimeSpan.FromSeconds(15));
+        AssertHealthy(originalRunner, originalRunner.Process.Id);
+
+        using var restartedServer = StartBuilt(
+            root,
+            "task-server",
+            "agent-task-server.dll",
+            "--urls", serverUrl,
+            "--TaskServer:DataDirectory", data.Path,
+            "--TaskServer:MinimumLeaseSeconds", "5",
+            "--TaskServer:MaximumLeaseSeconds", "15");
+        await WaitForHttpAsync(serverUrl + "/readyz", restartedServer);
+        using var restartedClient = Client(serverUrl);
+        var quarantined = await restartedClient.GetFromJsonAsync<TaskHistoryDto>(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
+        Assert.NotNull(quarantined);
+        var interruptedRun = Assert.Single(quarantined.Runs);
+        Assert.Contains(quarantined.Events, item =>
+            item.Kind == LifecycleEventKinds.TaskServerUnavailable);
+        Assert.Contains(quarantined.Events, item =>
+            item.Kind == LifecycleEventKinds.ProcessUnknown
+            && item.PayloadJson.Contains("positive-no-overlap-evidence-required", StringComparison.Ordinal));
+        Assert.Equal("3-progress", quarantined.Task.State);
+
+        using (var contender = ProtocolClient(serverUrl))
+        {
+            await PutAsync(
+                contender,
+                "/api/v1/runners/contender",
+                new RegisterRunnerRequest(
+                    "contender",
+                    "contender-host",
+                    "contender-before-proof",
+                    "1.0.0",
+                    TaskServerProtocol.Current));
+            var denied = await PostAsync<ClaimRequest, ClaimResponse>(
+                contender,
+                "/api/v1/runners/contender/claims",
+                new ClaimRequest("contender", "contender-before-proof", 10));
+            Assert.Equal("empty", denied.Status);
+        }
+
+        originalRunner.Stop();
+        Assert.True(originalRunner.Process.HasExited);
+        await PostAsync<ResolveUnknownAttemptRequest, LeaseResponse>(
+            restartedClient,
+            $"/api/v1/management/attempts/{interruptedRun.RunId}/resolve-unknown",
+            new ResolveUnknownAttemptRequest(
+                $"runner pid {originalRunner.Process.Id} exited and its process tree was reaped",
+                "requeue"));
+
+        await File.WriteAllTextAsync(releaseFile, "continue");
+        using var replacementRunner = StartBuilt(
+            root,
+            "runner",
+            "agent-runner.dll",
+            new Dictionary<string, string?>
+            {
+                ["RUNNER_HEARTBEAT_SECONDS"] = "5",
+                ["RUNNER_RUN_TIMEOUT_SECONDS"] = "30",
+                ["TOPOLOGY_RELEASE_FILE"] = releaseFile,
+                ["TOPOLOGY_INVOCATION_COUNTER"] = invocationCounter,
+            },
+            "--poll",
+            "--server", serverUrl,
+            "--runner-id", "replacement-runner",
+            "--runner-name", "replacement-runner",
+            "--hostname", "replacement-host",
+            "--git-remote", bareRepository,
+            "--workdir", runnerWork.Path,
+            "--cli", "/bin/sh",
+            "--cli-args", fakeCli,
+            "--ttl", "10",
+            "--max-parallelism", "1",
+            "--poll-seconds", "1");
+        await WaitForAuditCountAsync(restartedClient, "run.completed", 1, replacementRunner, TimeSpan.FromSeconds(30));
+        await WaitForTaskStateAsync(
+            restartedClient,
+            project.ProjectId,
+            task.TaskKey,
+            "4-auto-review",
+            replacementRunner,
+            TimeSpan.FromSeconds(10));
+
+        var recovered = await restartedClient.GetFromJsonAsync<TaskHistoryDto>(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
+        Assert.NotNull(recovered);
+        Assert.Equal(2, recovered.Runs.Count);
+        Assert.True(recovered.Runs[1].Fence > recovered.Runs[0].Fence);
+        Assert.Contains(recovered.Events, item => item.Kind == LifecycleEventKinds.RunnerUnavailable);
+        Assert.Contains(recovered.Events, item => item.Kind == LifecycleEventKinds.NoOverlapProven);
+        Assert.Contains(recovered.Events, item => item.Kind == LifecycleEventKinds.RunCompleted);
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task Brief_runner_transport_interruption_replays_typed_events_idempotently()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = ProtocolTests.RepositoryRoot();
+        using var data = new TempDirectory();
+        using var runnerWork = new TempDirectory();
+        using var repository = new TempDirectory();
+        using var fixture = new TempDirectory();
+        var bareRepository = await CreateBareRepositoryAsync(repository.Path);
+        var fakeCli = await CreateFakeCliAsync(fixture.Path);
+        var phaseFile = Path.Combine(fixture.Path, "phase");
+        var finishFile = Path.Combine(fixture.Path, "finish");
+        var invocationCounter = Path.Combine(fixture.Path, "invocations");
+        var serverPort = FreePort();
+        var proxyPort = FreePort();
+        var serverUrl = $"http://127.0.0.1:{serverPort}";
+        var proxyUrl = $"http://127.0.0.1:{proxyPort}";
+
+        using var server = StartBuilt(
+            root,
+            "task-server",
+            "agent-task-server.dll",
+            "--urls", serverUrl,
+            "--TaskServer:DataDirectory", data.Path,
+            "--TaskServer:MinimumLeaseSeconds", "5",
+            "--TaskServer:MaximumLeaseSeconds", "30");
+        await WaitForHttpAsync(serverUrl + "/readyz", server);
+        using var client = Client(serverUrl);
+        var (project, task) = await SeedReadyTaskAsync(client, "NET");
+        var secondTask = await PostAsync<CreateTaskRequest, TaskDto>(
+            client,
+            $"/api/v1/projects/{project.ProjectId}/tasks",
+            new CreateTaskRequest("Must remain unclaimed during partition", null, "2-ready"));
+
+        await using var proxy = new InterruptibleTcpProxy(proxyPort, serverPort);
+        await proxy.ResumeAsync();
+        using var runner = StartBuilt(
+            root,
+            "runner",
+            "agent-runner.dll",
+            new Dictionary<string, string?>
+            {
+                ["RUNNER_HEARTBEAT_SECONDS"] = "5",
+                ["RUNNER_RUN_TIMEOUT_SECONDS"] = "45",
+                ["TOPOLOGY_PHASE_FILE"] = phaseFile,
+                ["TOPOLOGY_FINISH_FILE"] = finishFile,
+                ["TOPOLOGY_INVOCATION_COUNTER"] = invocationCounter,
+            },
+            "--poll",
+            "--server", proxyUrl,
+            "--runner-id", "transport-runner",
+            "--runner-name", "transport-runner",
+            "--hostname", "transport-host",
+            "--git-remote", bareRepository,
+            "--workdir", runnerWork.Path,
+            "--cli", "/bin/sh",
+            "--cli-args", fakeCli,
+            "--ttl", "20",
+            "--max-parallelism", "1",
+            "--poll-seconds", "1");
+        await WaitForFileAsync(phaseFile, runner, TimeSpan.FromSeconds(20));
+
+        await proxy.PauseAsync();
+        await WaitForOutputAsync(runner, "log ingest failed, will retry", TimeSpan.FromSeconds(8));
+        var stillReady = await client.GetFromJsonAsync<TaskDto>(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{secondTask.TaskKey}");
+        Assert.Equal("2-ready", stillReady!.State);
+
+        await proxy.ResumeAsync();
+        await Task.Delay(300);
+        await File.WriteAllTextAsync(finishFile, "finish");
+        await WaitForTaskStateAsync(
+            client,
+            project.ProjectId,
+            task.TaskKey,
+            "4-auto-review",
+            runner,
+            TimeSpan.FromSeconds(20));
+
+        var history = await client.GetFromJsonAsync<TaskHistoryDto>(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
+        Assert.NotNull(history);
+        Assert.Single(history.Events, item =>
+            item.Kind == LifecycleEventKinds.AgentMessage
+            && item.PayloadJson.Contains("spooled while disconnected", StringComparison.Ordinal));
+        Assert.Single(history.Events, item =>
+            item.Kind == LifecycleEventKinds.ToolTrace
+            && item.PayloadJson.Contains("transport-fixture", StringComparison.Ordinal));
+        Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.RunnerDisconnected);
+        Assert.Single(history.Events, item => item.Kind == LifecycleEventKinds.RunnerReconnected);
+        Assert.Equal(
+            history.Events.Count,
+            history.Events.Select(item => item.IdempotencyKey).Distinct(StringComparer.Ordinal).Count());
+        Assert.Single(history.Artifacts);
+        Assert.Contains(history.Events, item => item.Kind == LifecycleEventKinds.RunCompleted);
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task Https_topology_authenticates_studio_and_runner_event_streams()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = ProtocolTests.RepositoryRoot();
+        using var data = new TempDirectory();
+        using var runnerWork = new TempDirectory();
+        using var repository = new TempDirectory();
+        using var fixture = new TempDirectory();
+        Directory.CreateDirectory(fixture.Path);
+        var bareRepository = await CreateBareRepositoryAsync(repository.Path);
+        var fakeCli = await CreateFakeCliAsync(fixture.Path);
+        var releaseFile = Path.Combine(fixture.Path, "release");
+        await File.WriteAllTextAsync(releaseFile, "continue");
+        var invocationCounter = Path.Combine(fixture.Path, "invocations");
+        var certificatePath = Path.Combine(fixture.Path, "topology-server.pfx");
+        const string certificatePassword = "topology-rehearsal";
+        using var certificate = CreateServerCertificate();
+        await File.WriteAllBytesAsync(
+            certificatePath,
+            certificate.Export(X509ContentType.Pfx, certificatePassword));
+        var certificateSha = Convert.ToHexString(SHA256.HashData(certificate.RawData));
+        var studioToken = $"studio.{Guid.NewGuid():N}";
+        var runnerToken = $"runner.{Guid.NewGuid():N}";
+        var serverUrl = $"https://127.0.0.1:{FreePort()}";
+        var studioUrl = $"http://127.0.0.1:{FreePort()}";
+
+        using var server = StartBuilt(
+            root,
+            "task-server",
+            "agent-task-server.dll",
+            new Dictionary<string, string?>
+            {
+                ["ASPNETCORE_Kestrel__Certificates__Default__Path"] = certificatePath,
+                ["ASPNETCORE_Kestrel__Certificates__Default__Password"] = certificatePassword,
+                ["TaskServer__RequireAuthentication"] = "true",
+                ["TaskServer__StudioBearerToken"] = studioToken,
+                ["TaskServer__RunnerBearerToken"] = runnerToken,
+            },
+            "--urls", serverUrl,
+            "--TaskServer:DataDirectory", data.Path);
+        await WaitForHttpsAsync(serverUrl + "/readyz", server, certificateSha);
+
+        using var studio = StartBuilt(
+            root,
+            "studio-bff",
+            "agent-studio-bff.dll",
+            "--urls", studioUrl,
+            "--TaskServer:BaseUrl", serverUrl,
+            "--TaskServer:BearerToken", studioToken,
+            "--TaskServer:TlsServerCertificateSha256", certificateSha);
+        await WaitForHttpAsync(studioUrl + "/healthz", studio);
+        using var studioClient = Client(studioUrl);
+        var (project, task) = await SeedReadyTaskAsync(studioClient, "TLS");
+
+        using var anonymousHandler = PinnedHandler(certificateSha);
+        using var anonymous = new HttpClient(anonymousHandler, disposeHandler: false)
+        {
+            BaseAddress = new Uri(serverUrl),
+            Timeout = TimeSpan.FromSeconds(5),
+        };
+        var deniedRead = await anonymous.GetAsync(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
+        Assert.Equal(HttpStatusCode.Unauthorized, deniedRead.StatusCode);
+
+        using var runner = StartBuilt(
+            root,
+            "runner",
+            "agent-runner.dll",
+            new Dictionary<string, string?>
+            {
+                ["RUNNER_AUTH_TOKEN"] = runnerToken,
+                ["RUNNER_TLS_CERTIFICATE_SHA256"] = certificateSha,
+                ["RUNNER_HEARTBEAT_SECONDS"] = "5",
+                ["RUNNER_RUN_TIMEOUT_SECONDS"] = "30",
+                ["TOPOLOGY_RELEASE_FILE"] = releaseFile,
+                ["TOPOLOGY_INVOCATION_COUNTER"] = invocationCounter,
+            },
+            "--poll",
+            "--server", serverUrl,
+            "--runner-id", "tls-runner",
+            "--runner-name", "tls-runner",
+            "--hostname", "tls-host",
+            "--git-remote", bareRepository,
+            "--workdir", runnerWork.Path,
+            "--cli", "/bin/sh",
+            "--cli-args", fakeCli,
+            "--ttl", "15",
+            "--max-parallelism", "1",
+            "--poll-seconds", "1");
+
+        await WaitForTaskStateAsync(
+            studioClient,
+            project.ProjectId,
+            task.TaskKey,
+            "4-auto-review",
+            runner,
+            TimeSpan.FromSeconds(30));
+        var history = await studioClient.GetFromJsonAsync<TaskHistoryDto>(
+            $"/api/v1/projects/{project.ProjectId}/tasks/{task.TaskKey}/history");
+        Assert.NotNull(history);
+        var run = Assert.Single(history.Runs);
+        Assert.Contains(history.Events, item => item.Kind == LifecycleEventKinds.AgentMessage);
+        Assert.Contains(history.Events, item => item.Kind == LifecycleEventKinds.ToolTrace);
+
+        var deniedStream = await anonymous.GetAsync($"/api/v1/runs/{run.RunId}/events");
+        Assert.Equal(HttpStatusCode.Unauthorized, deniedStream.StatusCode);
+        using var authenticated = new HttpClient(anonymousHandler, disposeHandler: false)
+        {
+            BaseAddress = new Uri(serverUrl),
+            Timeout = TimeSpan.FromSeconds(5),
+        };
+        authenticated.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", studioToken);
+        authenticated.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+        authenticated.DefaultRequestHeaders.Add(
+            TaskServerProtocol.ClientVersionHeaderName,
+            "topology-studio");
+        var authenticatedEvents = await authenticated.GetFromJsonAsync<List<EventDto>>(
+            $"/api/v1/runs/{run.RunId}/events");
+        Assert.NotNull(authenticatedEvents);
+        Assert.Equal(history.Events.Count, authenticatedEvents.Count);
+    }
+
+    private static async Task<(ProjectDto Project, TaskDto Task)> SeedReadyTaskAsync(
+        HttpClient client,
+        string prefix)
+    {
+        var workspace = await PostAsync<CreateWorkspaceRequest, WorkspaceDto>(
+            client,
+            "/api/v1/workspaces",
+            new CreateWorkspaceRequest($"{prefix} workspace"));
+        var project = await PostAsync<CreateProjectRequest, ProjectDto>(
+            client,
+            "/api/v1/projects",
+            new CreateProjectRequest(workspace.WorkspaceId, $"{prefix} project", prefix));
+        var task = await PostAsync<CreateTaskRequest, TaskDto>(
+            client,
+            $"/api/v1/projects/{project.ProjectId}/tasks",
+            new CreateTaskRequest(
+                "Failure topology proof",
+                "Remain active until the harness releases the fixture.",
+                "2-ready"));
+        return (project, task);
+    }
+
+    private static RunningProcess StartStudio(string root, string studioUrl, string serverUrl)
+        => StartBuilt(
+            root,
+            "studio-bff",
+            "agent-studio-bff.dll",
             "--urls", studioUrl,
             "--TaskServer:BaseUrl", serverUrl);
-        await WaitForAsync(studioUrl + "/healthz");
-        var afterRestart = await studioClient.GetFromJsonAsync<TaskServerStatusDto>("/api/v1/management/status");
-        Assert.Equal(initial.ServerId, afterRestart!.ServerId);
-        Assert.Equal(serverPid, server.Process.Id);
+
+    private static async Task<string> CreateBareRepositoryAsync(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        var bare = Path.Combine(directory, "origin.git");
+        var seed = Path.Combine(directory, "seed");
+        await RunAsync("git", ["init", "--bare", bare], directory);
+        await RunAsync("git", ["init", "-b", "main", seed], directory);
+        await File.WriteAllTextAsync(Path.Combine(seed, "README.md"), "topology fixture\n");
+        await RunAsync("git", ["-c", "user.name=Topology Harness", "-c", "user.email=topology@example.invalid", "add", "."], seed);
+        await RunAsync("git", ["-c", "user.name=Topology Harness", "-c", "user.email=topology@example.invalid", "commit", "-m", "fixture"], seed);
+        await RunAsync("git", ["remote", "add", "origin", bare], seed);
+        await RunAsync("git", ["push", "-u", "origin", "main"], seed);
+        await RunAsync("git", ["symbolic-ref", "HEAD", "refs/heads/main"], bare);
+        return bare;
     }
 
-    private static async Task WaitForAuditAsync(HttpClient client, string action)
+    [SupportedOSPlatform("linux")]
+    private static async Task<string> CreateFakeCliAsync(string directory)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(15);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "topology-agent.sh");
+        await File.WriteAllTextAsync(path, """
+            #!/bin/sh
+            set -eu
+            input_count=0
+            if [ -f "$TOPOLOGY_INVOCATION_COUNTER" ]; then
+              input_count=$(cat "$TOPOLOGY_INVOCATION_COUNTER")
+            fi
+            attempt=$((input_count + 1))
+            printf '%s' "$attempt" > "$TOPOLOGY_INVOCATION_COUNTER"
+            if [ -n "${TOPOLOGY_PHASE_FILE:-}" ]; then
+              printf '{"type":"agent_message","text":"spooled while disconnected"}\n'
+              printf '{"type":"tool","name":"transport-fixture"}\n'
+              printf 'ready\n' > "$TOPOLOGY_PHASE_FILE"
+              while [ ! -f "$TOPOLOGY_FINISH_FILE" ]; do
+                sleep 0.05
+              done
+              mkdir -p "$JOB_RESULTS_DIR"
+              printf 'transport replay artifact\n' > "$JOB_RESULTS_DIR/proof-attempt-$attempt.txt"
+              printf '[[TASK_DONE]]\n'
+              exit 0
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              while [ ! -f "$TOPOLOGY_RELEASE_FILE" ]; do
+                sleep 0.05
+              done
+            fi
+            mkdir -p "$JOB_RESULTS_DIR"
+            printf 'artifact from attempt %s\n' "$attempt" > "$JOB_RESULTS_DIR/proof-attempt-$attempt.txt"
+            printf '{"type":"agent_message","text":"attempt %s complete"}\n' "$attempt"
+            printf '{"type":"tool","name":"fixture-tool","attempt":%s}\n' "$attempt"
+            if [ "$attempt" -eq 1 ]; then
+              printf '[[TASK_BLOCKED:bounded-review-reissue]]\n'
+            else
+              printf '[[TASK_DONE]]\n'
+            fi
+            """);
+        File.SetUnixFileMode(
+            path,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return path;
+    }
+
+    private static X509Certificate2 CreateServerCertificate()
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=agent-studio-topology",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        var names = new SubjectAlternativeNameBuilder();
+        names.AddIpAddress(IPAddress.Loopback);
+        names.AddDnsName("localhost");
+        request.CertificateExtensions.Add(names.Build());
+        request.CertificateExtensions.Add(
+            new X509BasicConstraintsExtension(false, false, 0, false));
+        request.CertificateExtensions.Add(
+            new X509KeyUsageExtension(
+                X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
+                false));
+        request.CertificateExtensions.Add(
+            new X509EnhancedKeyUsageExtension(
+                [new Oid("1.3.6.1.5.5.7.3.1")],
+                false));
+        using var ephemeral = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-5),
+            DateTimeOffset.UtcNow.AddDays(2));
+        return X509CertificateLoader.LoadPkcs12(
+            ephemeral.Export(X509ContentType.Pfx, "copy"),
+            "copy",
+            X509KeyStorageFlags.Exportable);
+    }
+
+    private static void AssertIndependentParents(Process studio, Process server, Process runner)
+    {
+        Assert.NotEqual(studio.Id, ParentPid(server.Id));
+        Assert.NotEqual(studio.Id, ParentPid(runner.Id));
+        Assert.NotEqual(server.Id, ParentPid(runner.Id));
+        Assert.NotEqual(runner.Id, ParentPid(server.Id));
+        Assert.Equal(Environment.ProcessId, ParentPid(studio.Id));
+        Assert.Equal(Environment.ProcessId, ParentPid(server.Id));
+        Assert.Equal(Environment.ProcessId, ParentPid(runner.Id));
+    }
+
+    private static int ParentPid(int pid)
+    {
+        var line = File.ReadLines($"/proc/{pid}/status")
+            .Single(value => value.StartsWith("PPid:", StringComparison.Ordinal));
+        return int.Parse(line.AsSpan("PPid:".Length).Trim());
+    }
+
+    private static void AssertHealthy(RunningProcess process, int expectedPid)
+    {
+        Assert.Equal(expectedPid, process.Process.Id);
+        Assert.False(process.Process.HasExited, process.ToString());
+    }
+
+    private static async Task<TResponse> PostAsync<TRequest, TResponse>(
+        HttpClient client,
+        string path,
+        TRequest request)
+    {
+        using var response = await client.PostAsJsonAsync(path, request);
+        var detail = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, $"{path} returned {(int)response.StatusCode}: {detail}");
+        return System.Text.Json.JsonSerializer.Deserialize<TResponse>(
+            detail,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+    }
+
+    private static async Task PutAsync<TRequest>(HttpClient client, string path, TRequest request)
+    {
+        using var response = await client.PutAsJsonAsync(path, request);
+        var detail = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, $"{path} returned {(int)response.StatusCode}: {detail}");
+    }
+
+    private static async Task WaitForAuditCountAsync(
+        HttpClient client,
+        string action,
+        int expected,
+        RunningProcess process,
+        TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(20));
         while (DateTime.UtcNow < deadline)
         {
+            AssertHealthy(process, process.Process.Id);
             var records = await client.GetFromJsonAsync<List<AuditRecordDto>>("/api/v1/management/audit");
-            if (records?.Any(record => record.Action == action) == true) return;
-            await Task.Delay(150);
+            if (records?.Count(record => record.Action == action) >= expected) return;
+            await Task.Delay(100);
         }
-        throw new TimeoutException($"Audit action '{action}' was not observed.");
+        throw new TimeoutException(
+            $"Audit action '{action}' was not observed {expected} time(s). Process output:{Environment.NewLine}{process}");
     }
 
-    private static async Task WaitForAsync(string url)
+    private static async Task WaitForTaskStateAsync(
+        HttpClient client,
+        string projectId,
+        string taskKey,
+        string expected,
+        RunningProcess process,
+        TimeSpan timeout)
     {
-        using var client = new HttpClient();
-        var deadline = DateTime.UtcNow.AddSeconds(15);
+        var deadline = DateTime.UtcNow.Add(timeout);
+        while (DateTime.UtcNow < deadline)
+        {
+            AssertHealthy(process, process.Process.Id);
+            var task = await client.GetFromJsonAsync<TaskDto>(
+                $"/api/v1/projects/{projectId}/tasks/{taskKey}");
+            if (task?.State == expected) return;
+            await Task.Delay(100);
+        }
+        throw new TimeoutException(
+            $"Task '{taskKey}' did not reach '{expected}'. Process output:{Environment.NewLine}{process}");
+    }
+
+    private static async Task WaitForOutputAsync(
+        RunningProcess process,
+        string expected,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow.Add(timeout);
+        while (DateTime.UtcNow < deadline)
+        {
+            AssertHealthy(process, process.Process.Id);
+            if (process.Contains(expected)) return;
+            await Task.Delay(100);
+        }
+        throw new TimeoutException(
+            $"Process output did not contain '{expected}'.{Environment.NewLine}{process}");
+    }
+
+    private static async Task WaitForFileAsync(
+        string path,
+        RunningProcess process,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow.Add(timeout);
+        while (DateTime.UtcNow < deadline)
+        {
+            AssertHealthy(process, process.Process.Id);
+            if (File.Exists(path)) return;
+            await Task.Delay(50);
+        }
+        throw new TimeoutException(
+            $"Process did not create '{path}'.{Environment.NewLine}{process}");
+    }
+
+    private static async Task WaitForHttpAsync(string url, RunningProcess process)
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var deadline = DateTime.UtcNow.AddSeconds(20);
         Exception? last = null;
         while (DateTime.UtcNow < deadline)
         {
+            AssertHealthy(process, process.Process.Id);
             try
             {
                 using var response = await client.GetAsync(url);
@@ -92,11 +803,69 @@ public sealed class TopologyTests
             }
             await Task.Delay(100);
         }
-        throw new TimeoutException($"Process did not become ready at {url}: {last?.Message}");
+        throw new TimeoutException(
+            $"Process did not become ready at {url}: {last?.Message}{Environment.NewLine}{process}");
     }
 
-    private static RunningProcess Start(string root, string project, params string[] arguments)
+    private static async Task WaitForHttpsAsync(
+        string url,
+        RunningProcess process,
+        string expectedCertificateSha256)
     {
+        using var handler = PinnedHandler(expectedCertificateSha256);
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(2) };
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        Exception? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            AssertHealthy(process, process.Process.Id);
+            try
+            {
+                using var response = await client.GetAsync(url);
+                if (response.IsSuccessStatusCode) return;
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+                last = exception;
+            }
+            await Task.Delay(100);
+        }
+        throw new TimeoutException(
+            $"HTTPS process did not become ready at {url}: {last?.Message}{Environment.NewLine}{process}");
+    }
+
+    private static HttpClientHandler PinnedHandler(string expectedCertificateSha256)
+        => new()
+        {
+            ServerCertificateCustomValidationCallback = (_, certificate, _, _) =>
+                certificate is not null
+                && string.Equals(
+                    Convert.ToHexString(SHA256.HashData(certificate.RawData)),
+                    expectedCertificateSha256,
+                    StringComparison.OrdinalIgnoreCase),
+        };
+
+    private static RunningProcess StartBuilt(
+        string root,
+        string projectDirectory,
+        string assemblyName,
+        params string[] arguments)
+        => StartBuilt(root, projectDirectory, assemblyName, null, arguments);
+
+    private static RunningProcess StartBuilt(
+        string root,
+        string projectDirectory,
+        string assemblyName,
+        IReadOnlyDictionary<string, string?>? environment,
+        params string[] arguments)
+    {
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent?.Name ?? "Debug";
+        var assembly = Path.Combine(root, projectDirectory, "bin", configuration, "net10.0", assemblyName);
+        if (!File.Exists(assembly))
+            throw new FileNotFoundException(
+                $"Built topology component was not found. Build the solution before the topology test: {assembly}",
+                assembly);
+
         var start = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = root,
@@ -104,19 +873,48 @@ public sealed class TopologyTests
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        start.ArgumentList.Add("run");
-        start.ArgumentList.Add("--project");
-        start.ArgumentList.Add(project);
-        start.ArgumentList.Add("--no-build");
-        start.ArgumentList.Add("--");
+        start.ArgumentList.Add(assembly);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
-        var process = Process.Start(start) ?? throw new InvalidOperationException($"Could not start {project}.");
+        if (environment is not null)
+            foreach (var (key, value) in environment)
+                start.Environment[key] = value;
+        var process = Process.Start(start)
+            ?? throw new InvalidOperationException($"Could not start {assemblyName}.");
         var running = new RunningProcess(process);
         process.OutputDataReceived += (_, eventArgs) => running.Append(eventArgs.Data);
         process.ErrorDataReceived += (_, eventArgs) => running.Append(eventArgs.Data);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         return running;
+    }
+
+    private static async Task RunAsync(string file, IReadOnlyList<string> arguments, string workingDirectory)
+    {
+        var start = new ProcessStartInfo(file)
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)
+            ?? throw new InvalidOperationException($"Could not start {file}.");
+        var stdout = await process.StandardOutput.ReadToEndAsync();
+        var stderr = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        Assert.True(process.ExitCode == 0, $"{file} exited {process.ExitCode}.{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}");
+    }
+
+    private static HttpClient Client(string baseUrl)
+        => new() { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(5) };
+
+    private static HttpClient ProtocolClient(string baseUrl)
+    {
+        var client = Client(baseUrl);
+        client.DefaultRequestHeaders.Add(TaskServerProtocol.HeaderName, TaskServerProtocol.Current.ToString());
+        client.DefaultRequestHeaders.Add(TaskServerProtocol.ClientVersionHeaderName, "topology-harness");
+        return client;
     }
 
     private static int FreePort()
@@ -146,11 +944,121 @@ public sealed class TopologyTests
             Process.WaitForExit(5000);
         }
 
+        public bool Contains(string text)
+        {
+            lock (_output)
+                return _output.Any(line => line.Contains(text, StringComparison.Ordinal));
+        }
+
         public void Dispose() => Stop();
 
         public override string ToString()
         {
-            lock (_output) return string.Join(Environment.NewLine, _output.TakeLast(30));
+            lock (_output) return string.Join(Environment.NewLine, _output.TakeLast(80));
         }
+    }
+
+    private sealed class InterruptibleTcpProxy(int listenPort, int targetPort) : IAsyncDisposable
+    {
+        private readonly object _gate = new();
+        private readonly List<Task> _connections = [];
+        private TcpListener? _listener;
+        private CancellationTokenSource? _generation;
+        private Task? _acceptLoop;
+
+        public Task ResumeAsync()
+        {
+            lock (_gate)
+            {
+                if (_listener is not null)
+                    return Task.CompletedTask;
+                _generation = new CancellationTokenSource();
+                _listener = new TcpListener(IPAddress.Loopback, listenPort);
+                _listener.Start();
+                _acceptLoop = AcceptLoopAsync(_listener, _generation.Token);
+            }
+            return Task.CompletedTask;
+        }
+
+        public async Task PauseAsync()
+        {
+            TcpListener? listener;
+            CancellationTokenSource? generation;
+            Task? acceptLoop;
+            Task[] connections;
+            lock (_gate)
+            {
+                listener = _listener;
+                generation = _generation;
+                acceptLoop = _acceptLoop;
+                _listener = null;
+                _generation = null;
+                _acceptLoop = null;
+                connections = _connections.ToArray();
+                _connections.Clear();
+            }
+
+            generation?.Cancel();
+            listener?.Stop();
+            if (acceptLoop is not null)
+                await IgnoreCancellationAsync(acceptLoop);
+            if (connections.Length > 0)
+                await IgnoreCancellationAsync(Task.WhenAll(connections));
+            generation?.Dispose();
+        }
+
+        private async Task AcceptLoopAsync(TcpListener listener, CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                TcpClient client;
+                try
+                {
+                    client = await listener.AcceptTcpClientAsync(ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (SocketException) when (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var connection = ForwardAsync(client, ct);
+                lock (_gate) _connections.Add(connection);
+            }
+        }
+
+        private async Task ForwardAsync(TcpClient inbound, CancellationToken ct)
+        {
+            using (inbound)
+            using (var outbound = new TcpClient())
+            {
+                await outbound.ConnectAsync(IPAddress.Loopback, targetPort, ct);
+                await using var inboundStream = inbound.GetStream();
+                await using var outboundStream = outbound.GetStream();
+                var request = inboundStream.CopyToAsync(outboundStream, ct);
+                var response = outboundStream.CopyToAsync(inboundStream, ct);
+                await Task.WhenAny(request, response);
+            }
+        }
+
+        private static async Task IgnoreCancellationAsync(Task task)
+        {
+            try
+            {
+                await task;
+            }
+            catch (Exception exception) when (
+                exception is OperationCanceledException
+                    or IOException
+                    or SocketException
+                    or ObjectDisposedException)
+            {
+            }
+        }
+
+        public async ValueTask DisposeAsync() => await PauseAsync();
     }
 }

@@ -1,12 +1,14 @@
 # Task Server deployment and recovery
 
-Status: initial separated-service contract, AGT-2192, 2026-07-17.
+Status: separated-service and topology release contract, AGT-2192/AGT-2196,
+2026-07-24.
 
 This runbook implements the Task Server boundary from
 [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md).
 The service is the durable task and orchestration authority. Agent Studio and
-Agent Runner are clients. Do not expose this initial service beyond loopback or
-an SSH-only private tunnel until AGT-2193 supplies authentication and TLS.
+Agent Runner are clients. Internet-reachable deployments require HTTPS,
+authenticated mode, protected credentials, and the broader AGT-2193 controls
+in [networked Task Server](networked-task-server.md).
 
 ## Package and process boundary
 
@@ -65,6 +67,10 @@ environment variables.
 | `TaskServer:MaximumLeaseSeconds` | Upper clamp for Runner leases | `600` |
 | `TaskServer:InvariantReconciliationSeconds` | Interval for Tranche 0 invariant comparison | `30` |
 | `TaskServer:InventoryGraceSeconds` | Minimum age before inventory mismatches are actionable | `120` |
+| `TaskServer:MaximumEventPayloadBytes` | Hard UTF-8 size limit for one typed event payload | `262144` |
+| `TaskServer:RequireAuthentication` | Require distinct Studio and Runner bearer credentials on `/api/v1` | `false` |
+| `TaskServer:StudioBearerToken` | Studio/BFF read and management credential | unset |
+| `TaskServer:RunnerBearerToken` | Runner registration, claim, renew, event, artifact, and completion credential | unset |
 
 - `GET /healthz` proves the process is live.
 - `GET /readyz` succeeds only after schema integrity and durable lease/fence
@@ -76,6 +82,18 @@ environment variables.
 - `GET /api/v1/protocol` publishes the compatibility range. Runner requests
   must carry `X-Task-Protocol-Version`. An unsupported or missing version gets
   HTTP 426 before registration or claim.
+- `GET /api/v1/projects/{projectId}/tasks/{taskIdentity}/history?after={cursor}`
+  is the canonical reconnect projection. It includes every run, cursor-ordered
+  typed events after the requested cursor, artifacts, related audit records,
+  and the last returned cursor.
+
+Authenticated mode fails startup unless both credentials are configured.
+Studio BFF sends `TaskServer:BearerToken`; Agent Runner reads its secret from
+`RUNNER_AUTH_TOKEN_FILE` or `RUNNER_AUTH_TOKEN`. A private-CA or rehearsal
+deployment may pin the Task Server leaf certificate by SHA-256 through
+`TaskServer:TlsServerCertificateSha256` on the BFF and
+`RUNNER_TLS_CERTIFICATE_SHA256` on the Runner. Public deployments should use
+the operating-system trust store.
 
 For a zero-argument local profile, set `TASK_SERVER_PROFILE=local-compatibility`.
 The service listens on `127.0.0.1:5031` and uses the current user's application
@@ -199,3 +217,24 @@ The automated acceptance suite rehearses inventory, freeze enforcement,
 transactional import, integrity verification, backup/restore, evidence Git
 preservation, restart fencing, protocol rejection, and separate process
 lifecycle.
+
+## Release topology rehearsal
+
+The release-blocking harness is intentionally separate from browser E2E. Build
+the deployables once, then run the topology and compatibility gate:
+
+```bash
+dotnet build agent-taskboard.sln
+dotnet test runner.Tests/AgentRunner.Tests.csproj \
+  --no-build \
+  --filter "FullyQualifiedName~AgentRunner.Tests.LogShipperCapTests|FullyQualifiedName~AgentRunner.Tests.BoundedOutputBufferTests"
+dotnet test task-server.Tests/TaskServer.Tests.csproj \
+  --no-build \
+  --filter "FullyQualifiedName~TaskServer.Tests.TopologyTests|FullyQualifiedName~TaskServer.Tests.ProtocolTests" \
+  --logger "console;verbosity=normal"
+```
+
+The test owns only its exact child PIDs and temporary directories. It never
+sweeps by process name. Its parent-PID assertions require Task Server, Studio
+BFF, and Runner to be siblings owned by the harness, so stopping Studio cannot
+implicitly stop either service.

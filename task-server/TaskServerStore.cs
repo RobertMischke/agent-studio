@@ -63,6 +63,41 @@ public sealed partial class TaskServerStore
             // A server restart cannot infer that an old runner process stopped.
             // Preserve its fence and fail the attempt closed until an explicit,
             // audited recovery releases it.
+            var restartMarker = Guid.NewGuid().ToString("N");
+            await ExecuteAsync(connection, """
+                INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+                SELECT 'evt_unavailable_' || id || '_' || $marker,
+                       id,
+                       task_id,
+                       $unavailableKind,
+                       $payload,
+                       'task-server-unavailable:' || id || ':' || $marker,
+                       fence,
+                       $now
+                  FROM runs
+                 WHERE status = 'running';
+                INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+                SELECT 'evt_restart_' || id || '_' || $marker,
+                       id,
+                       task_id,
+                       $kind,
+                       $payload,
+                       'task-server-restart:' || id || ':' || $marker,
+                       fence,
+                       $now
+                  FROM runs
+                 WHERE status = 'running';
+                """, cancellationToken,
+                ("$marker", restartMarker),
+                ("$unavailableKind", LifecycleEventKinds.TaskServerUnavailable),
+                ("$kind", LifecycleEventKinds.ProcessUnknown),
+                ("$payload", JsonSerializer.Serialize(new
+                {
+                    failure = "task-server-unavailable",
+                    authority = "fail-closed",
+                    replacementAdmission = "positive-no-overlap-evidence-required",
+                })),
+                ("$now", Iso(UtcNow)));
             await ExecuteAsync(connection, """
                 UPDATE leases
                    SET status = 'process-unknown'
@@ -212,6 +247,102 @@ public sealed partial class TaskServerStore
             """, ("$project", projectId), ("$identity", taskIdentity));
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadTask(reader) : null;
+    }
+
+    public async Task<TaskHistoryDto?> GetTaskHistoryAsync(
+        string projectId,
+        string taskIdentity,
+        long after,
+        CancellationToken ct)
+    {
+        await using var connection = await OpenReadyAsync(ct);
+        TaskDto? task;
+        await using (var taskCommand = Command(connection, """
+            SELECT id, project_id, task_key, title, state, version, created_at, updated_at, body
+              FROM tasks
+             WHERE project_id = $project AND (id = $identity OR task_key = upper($identity));
+            """, ("$project", projectId), ("$identity", taskIdentity)))
+        await using (var taskReader = await taskCommand.ExecuteReaderAsync(ct))
+            task = await taskReader.ReadAsync(ct) ? ReadTask(taskReader) : null;
+        if (task is null) return null;
+
+        var runs = new List<RunDto>();
+        await using (var runCommand = Command(connection, """
+            SELECT id, task_id, status, runner_id, fence, created_at, started_at, finished_at,
+                   result_sha, repository_id
+              FROM runs WHERE task_id = $task ORDER BY created_at, id;
+            """, ("$task", task.TaskId)))
+        await using (var runReader = await runCommand.ExecuteReaderAsync(ct))
+        {
+            while (await runReader.ReadAsync(ct))
+            {
+                runs.Add(new RunDto(
+                    runReader.GetString(0),
+                    runReader.GetString(1),
+                    runReader.GetString(2),
+                    runReader.IsDBNull(3) ? null : runReader.GetString(3),
+                    runReader.IsDBNull(4) ? null : runReader.GetInt64(4),
+                    Parse(runReader.GetString(5)),
+                    runReader.IsDBNull(6) ? null : Parse(runReader.GetString(6)),
+                    runReader.IsDBNull(7) ? null : Parse(runReader.GetString(7)),
+                    runReader.IsDBNull(8) ? null : runReader.GetString(8),
+                    runReader.IsDBNull(9) ? null : runReader.GetString(9)));
+            }
+        }
+
+        var events = new List<EventDto>();
+        await using (var eventCommand = Command(connection, """
+            SELECT cursor, event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at, sequence
+              FROM events
+             WHERE task_id = $task AND cursor > $after
+             ORDER BY cursor
+             LIMIT 1000;
+            """, ("$task", task.TaskId), ("$after", after)))
+        await using (var eventReader = await eventCommand.ExecuteReaderAsync(ct))
+            while (await eventReader.ReadAsync(ct)) events.Add(ReadEvent(eventReader));
+
+        var artifacts = new List<ArtifactDto>();
+        await using (var artifactCommand = Command(connection, """
+            SELECT a.id, a.run_id, a.name, a.media_type, a.sha256, a.size_bytes,
+                   a.idempotency_key, a.fence, a.created_at, a.sequence
+              FROM artifacts a
+              JOIN runs r ON r.id = a.run_id
+             WHERE r.task_id = $task
+             ORDER BY a.created_at, a.id;
+            """, ("$task", task.TaskId)))
+        await using (var artifactReader = await artifactCommand.ExecuteReaderAsync(ct))
+            while (await artifactReader.ReadAsync(ct)) artifacts.Add(ReadArtifact(artifactReader));
+
+        var audit = new List<AuditRecordDto>();
+        await using (var auditCommand = Command(connection, """
+            SELECT sequence, occurred_at, actor_id, action, target_type, target_id, detail_json
+              FROM audit
+             WHERE target_id = $task
+                OR target_id IN (SELECT id FROM runs WHERE task_id = $task)
+             ORDER BY sequence;
+            """, ("$task", task.TaskId)))
+        await using (var auditReader = await auditCommand.ExecuteReaderAsync(ct))
+        {
+            while (await auditReader.ReadAsync(ct))
+            {
+                audit.Add(new AuditRecordDto(
+                    auditReader.GetInt64(0),
+                    Parse(auditReader.GetString(1)),
+                    auditReader.GetString(2),
+                    auditReader.GetString(3),
+                    auditReader.GetString(4),
+                    auditReader.GetString(5),
+                    auditReader.GetString(6)));
+            }
+        }
+
+        return new TaskHistoryDto(
+            task,
+            runs,
+            events,
+            artifacts,
+            audit,
+            events.Count == 0 ? after : events[^1].Cursor);
     }
 
     public async Task<IReadOnlyList<TaskDto>> ListTasksAsync(string projectId, CancellationToken ct)
@@ -867,6 +998,34 @@ public sealed partial class TaskServerStore
                     ? "coding canary completed with an immutable result handoff"
                     : "coding canary reached an authoritative typed terminal without a capability failure",
                 ct);
+            await AppendLifecycleEventAsync(
+                connection,
+                transaction,
+                runId,
+                lease.TaskId,
+                lease.Fence,
+                LifecycleEventKinds.RunCompleted,
+                new
+                {
+                    request.Outcome,
+                    request.Summary,
+                    authority = "task-server",
+                    nextState = "4-auto-review",
+                },
+                ct);
+            await AppendLifecycleEventAsync(
+                connection,
+                transaction,
+                runId,
+                lease.TaskId,
+                lease.Fence,
+                LifecycleEventKinds.PostProcessingCompleted,
+                new
+                {
+                    artifacts = "canonical-store",
+                    reviewAuthority = "deployed-backend",
+                },
+                ct);
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,
                 JsonSerializer.Serialize(new
                 {
@@ -897,6 +1056,9 @@ public sealed partial class TaskServerStore
     public async Task<EventDto> IngestEventAsync(string runId, EventIngestRequest request, string actorId, CancellationToken ct)
     {
         RequireWritable();
+        if (Encoding.UTF8.GetByteCount(request.PayloadJson) > _options.MaximumEventPayloadBytes)
+            throw new ArgumentException(
+                $"Event payload exceeds the {_options.MaximumEventPayloadBytes}-byte limit.");
         EventDto? result = null;
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
@@ -1221,6 +1383,36 @@ public sealed partial class TaskServerStore
                 UPDATE runs SET status = 'interrupted', finished_at = $now WHERE id = $run;
                 UPDATE tasks SET state = $state, version = version + 1, updated_at = $now WHERE id = $task;
                 """, ct, transaction, ("$run", runId), ("$now", Iso(UtcNow)), ("$state", targetState), ("$task", lease.TaskId));
+            await AppendLifecycleEventAsync(
+                connection,
+                transaction,
+                runId,
+                lease.TaskId,
+                lease.Fence,
+                LifecycleEventKinds.RunnerUnavailable,
+                new
+                {
+                    runnerId = lease.RunnerId,
+                    instanceId = lease.InstanceId,
+                    request.ContainmentProof,
+                    observation = "The previous Runner generation is positively unavailable.",
+                },
+                ct);
+            await AppendLifecycleEventAsync(
+                connection,
+                transaction,
+                runId,
+                lease.TaskId,
+                lease.Fence,
+                LifecycleEventKinds.NoOverlapProven,
+                new
+                {
+                    request.ContainmentProof,
+                    request.Resolution,
+                    targetState,
+                    previousState = "process-unknown",
+                },
+                ct);
             await AuditAsync(connection, transaction, actorId, "attempt.unknown.resolved", "run", runId,
                 JsonSerializer.Serialize(new { request.ContainmentProof, request.Resolution, lease.Fence }), ct);
             resolved = lease with { Status = "fenced" };
@@ -2377,6 +2569,29 @@ public sealed partial class TaskServerStore
             """, ct, transaction,
             ("$at", Iso(UtcNow)), ("$actor", string.IsNullOrWhiteSpace(actorId) ? "anonymous-local" : actorId),
             ("$action", action), ("$type", targetType), ("$target", targetId), ("$detail", detailJson));
+
+    private async Task AppendLifecycleEventAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        string taskId,
+        long fence,
+        string kind,
+        object payload,
+        CancellationToken ct)
+        => await ExecuteAsync(connection, """
+            INSERT INTO events(event_id, run_id, task_id, kind, payload_json, idempotency_key, fence, occurred_at)
+            VALUES ($event, $run, $task, $kind, $payload, $key, $fence, $occurred)
+            ON CONFLICT(idempotency_key) DO NOTHING;
+            """, ct, transaction,
+            ("$event", $"evt_{Guid.NewGuid():N}"),
+            ("$run", runId),
+            ("$task", taskId),
+            ("$kind", kind),
+            ("$payload", JsonSerializer.Serialize(payload)),
+            ("$key", $"task-server:{runId}:{kind}"),
+            ("$fence", fence),
+            ("$occurred", Iso(UtcNow)));
 
     private static SqliteCommand Command(SqliteConnection connection, string sql, params (string Name, object? Value)[] parameters)
         => Command(connection, sql, null, parameters);

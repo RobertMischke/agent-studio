@@ -150,6 +150,11 @@ cannot erase an operator decision.
 
 ## Key Code
 
+- `task-server/TaskServerStore.cs` and `TaskServerEndpoints.cs`: separated
+  control-plane task, run, lease, event, artifact, audit, and canonical replay
+  store. The path-free
+  `GET /api/v1/projects/{projectId}/tasks/{taskIdentity}/history` projection is
+  the reconnect source for detached Studio clients.
 - `backend/Endpoints/Tasks/*`: task CRUD, runner, files, git, review evidence,
   merge, pipeline, and query endpoints.
 - `backend/Services/TaskAccess/*`: typed read/list/mutate/transition/subscribe

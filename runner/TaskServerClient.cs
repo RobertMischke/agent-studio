@@ -32,7 +32,24 @@ public sealed class TaskServerClient : IDisposable
     public TaskServerClient(RunnerOptions options)
     {
         _options = options;
-        _http = new HttpClient { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
+        HttpMessageHandler handler = new HttpClientHandler();
+        if (!string.IsNullOrWhiteSpace(options.TlsServerCertificateSha256))
+        {
+            var expectedFingerprint = options.TlsServerCertificateSha256;
+            handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = (_, certificate, _, errors) =>
+                    certificate is not null
+                    && (errors & ~System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors) == 0
+                    && certificate.NotBefore.ToUniversalTime() <= DateTime.UtcNow
+                    && certificate.NotAfter.ToUniversalTime() >= DateTime.UtcNow
+                    && string.Equals(
+                        Convert.ToHexString(SHA256.HashData(certificate.RawData)),
+                        expectedFingerprint,
+                        StringComparison.OrdinalIgnoreCase),
+            };
+        }
+        _http = new HttpClient(handler) { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
         _configuredClientId = options.ClientId;
         _usesServiceCredential = !string.IsNullOrWhiteSpace(options.AuthToken);
         if (!string.IsNullOrWhiteSpace(options.AuthToken))
@@ -615,11 +632,12 @@ public sealed class TaskServerClient : IDisposable
         foreach (var line in req.Lines)
         {
             var key = $"runner-log:{authority.RunId}:{line.Timestamp:O}:{appended}:{Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(line.Text)))[..12]}";
+            var kind = ClassifyV1Event(line);
             await PostJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
                 $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
                 new Contract.EventIngestRequest(
                     $"evt_{Guid.NewGuid():N}",
-                    "runner.output",
+                    kind,
                     JsonSerializer.Serialize(line, Json),
                     key,
                     authority.Lease.FencingToken,
@@ -628,6 +646,41 @@ public sealed class TaskServerClient : IDisposable
             appended++;
         }
         return new LogIngestResponse(req.TaskKey, appended);
+    }
+
+    private static string ClassifyV1Event(CliOutputLine line)
+    {
+        if (string.Equals(line.Stream, "system", StringComparison.OrdinalIgnoreCase))
+        {
+            if (line.Text.Contains("runner transport disconnected", StringComparison.Ordinal))
+                return Contract.LifecycleEventKinds.RunnerDisconnected;
+            if (line.Text.Contains("runner transport reconnected", StringComparison.Ordinal))
+                return Contract.LifecycleEventKinds.RunnerReconnected;
+            return Contract.LifecycleEventKinds.RunnerTrace;
+        }
+        if (!string.Equals(line.Stream, "stdout", StringComparison.OrdinalIgnoreCase))
+            return "runner.diagnostic";
+
+        try
+        {
+            using var document = JsonDocument.Parse(line.Text);
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("type", out var typeElement))
+            {
+                var type = typeElement.GetString();
+                if (type is not null
+                    && (type.Contains("tool", StringComparison.OrdinalIgnoreCase)
+                        || type.Contains("command", StringComparison.OrdinalIgnoreCase)))
+                    return Contract.LifecycleEventKinds.ToolTrace;
+            }
+        }
+        catch (JsonException)
+        {
+            // Plain agent text is still a typed agent-message event. The raw
+            // line remains inside the bounded event payload for canonical replay.
+        }
+
+        return Contract.LifecycleEventKinds.AgentMessage;
     }
 
     public async Task<ArtifactIngestResponse?> UploadArtifactsAsync(ArtifactIngestRequest req, CancellationToken ct)
@@ -761,12 +814,19 @@ public sealed class TaskServerClient : IDisposable
                 return;
             }
             default:
+                var eventKind = $"runner.{item.Kind}";
+                if (string.Equals(item.Kind, "log", StringComparison.Ordinal))
+                {
+                    var line = JsonSerializer.Deserialize<CliOutputLine>(item.PayloadJson, Json)
+                               ?? throw new InvalidDataException("Durable log payload is empty.");
+                    eventKind = ClassifyV1Event(line);
+                }
                 await SendJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
                     HttpMethod.Post,
                     $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
                     new Contract.EventIngestRequest(
                         $"evt_{HashId(item.IdempotencyKey)}",
-                        $"runner.{item.Kind}",
+                        eventKind,
                         item.PayloadJson,
                         item.IdempotencyKey,
                         authority.Fence,

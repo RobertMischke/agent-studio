@@ -44,6 +44,13 @@ public sealed class RunnerOptions
     /// <summary>Runner service credential sent as Authorization on every networked-profile request.</summary>
     public string? AuthToken { get; init; }
 
+    /// <summary>
+    /// Optional SHA-256 pin for a private or rehearsal Task Server certificate.
+    /// Public deployments should normally rely on the operating-system trust
+    /// store; the pin keeps CI and private-CA topologies explicit and fail closed.
+    /// </summary>
+    public string? TlsServerCertificateSha256 { get; init; }
+
     /// <summary>Fallback git remote for one-shot runs and claims from older servers.</summary>
     public string? GitRemote { get; init; }
 
@@ -191,6 +198,11 @@ public sealed class RunnerOptions
             BackendName = Val("backend-name", "RUNNER_BACKEND_NAME", "remote-runner"),
             Role = Val("role", "RUNNER_ROLE", "coding").Trim().ToLowerInvariant(),
             AuthToken = authToken.Length > 0 ? authToken : null,
+            TlsServerCertificateSha256 = Val(
+                "tls-certificate-sha256",
+                "RUNNER_TLS_CERTIFICATE_SHA256").Trim() is { Length: > 0 } certificateSha
+                    ? certificateSha
+                    : null,
             GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE").Trim() is { Length: > 0 } gitRemote ? gitRemote : null,
             GitPushRemote = Val("git-push-remote", "RUNNER_GIT_PUSH_REMOTE").Trim() is { Length: > 0 } gitPushRemote ? gitPushRemote : null,
             WorkDir = Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")),

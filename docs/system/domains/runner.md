@@ -133,6 +133,10 @@ state.
   boundary: the Task Server never substitutes its checkout or local
   `session-events.jsonl` for the ReviewSubject. Legacy tasks without attempt
   authority continue through the established local compatibility path.
+- `task-server.Tests/TopologyTests.cs`: release-blocking sibling-process
+  harness for Studio detach, canonical history replay, renewal safety stop,
+  Task Server restart quarantine, Runner replacement after positive
+  no-overlap proof, and authenticated HTTPS event transport.
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
   (AGT-2003, canonicalized by AGT-2182): read-time projection of the active
   persisted RunAttempt lease onto `TaskInfo.Runner`
@@ -218,6 +222,12 @@ state.
   Missing or mismatched processes are actively released and returned to Ready;
   DB lease presence alone is never process-liveness evidence. systemd must use
   `KillMode=process`.
+- A failed lease renewal consumes the last server-issued authority window.
+  The standalone Runner stops before the known expiry minus one renewal
+  interval, cancels the CLI process tree, and does not turn transport loss into
+  autonomous authority. Task Server restart records `process-unknown`; only
+  positive containment or infrastructure-fencing proof permits a higher-fence
+  replacement.
 
 - A fresh `2-ready` Epic is remotely claimable as an Epic planning run. It
   occupies a normal host slot and holds the same fenced lease, heartbeat,
